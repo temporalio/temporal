@@ -69,7 +69,7 @@ func newTimerQueueActiveProcessor(
 	rateLimiter quotas.RateLimiter,
 	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	singleProcessor bool,
 ) *timerQueueActiveProcessorImpl {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -219,7 +219,7 @@ func newTimerQueueFailoverProcessor(
 	rateLimiter quotas.RateLimiter,
 	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 ) (func(ackLevel tasks.Key) error, *timerQueueActiveProcessorImpl) {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {

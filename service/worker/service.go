@@ -85,7 +85,7 @@ type (
 
 		membershipMonitor membership.Monitor
 
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 
 		status           int32
 		stopC            chan struct{}
@@ -140,7 +140,7 @@ func NewService(
 	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,

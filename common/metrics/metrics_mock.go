@@ -60,10 +60,10 @@ func (m *MockMetricsHandler) EXPECT() *MockMetricsHandlerMockRecorder {
 }
 
 // Counter mocks base method.
-func (m *MockMetricsHandler) Counter(arg0 string) CounterMetric {
+func (m *MockMetricsHandler) Counter(arg0 string) CounterIface {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Counter", arg0)
-	ret0, _ := ret[0].(CounterMetric)
+	ret0, _ := ret[0].(CounterIface)
 	return ret0
 }
 
@@ -74,10 +74,10 @@ func (mr *MockMetricsHandlerMockRecorder) Counter(arg0 interface{}) *gomock.Call
 }
 
 // Gauge mocks base method.
-func (m *MockMetricsHandler) Gauge(arg0 string) GaugeMetric {
+func (m *MockMetricsHandler) Gauge(arg0 string) GaugeIface {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Gauge", arg0)
-	ret0, _ := ret[0].(GaugeMetric)
+	ret0, _ := ret[0].(GaugeIface)
 	return ret0
 }
 
@@ -88,10 +88,10 @@ func (mr *MockMetricsHandlerMockRecorder) Gauge(arg0 interface{}) *gomock.Call {
 }
 
 // Histogram mocks base method.
-func (m *MockMetricsHandler) Histogram(arg0 string, arg1 MetricUnit) HistogramMetric {
+func (m *MockMetricsHandler) Histogram(arg0 string, arg1 MetricUnit) HistogramIface {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Histogram", arg0, arg1)
-	ret0, _ := ret[0].(HistogramMetric)
+	ret0, _ := ret[0].(HistogramIface)
 	return ret0
 }
 
@@ -114,10 +114,10 @@ func (mr *MockMetricsHandlerMockRecorder) Stop(arg0 interface{}) *gomock.Call {
 }
 
 // Timer mocks base method.
-func (m *MockMetricsHandler) Timer(arg0 string) TimerMetric {
+func (m *MockMetricsHandler) Timer(arg0 string) TimerIface {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Timer", arg0)
-	ret0, _ := ret[0].(TimerMetric)
+	ret0, _ := ret[0].(TimerIface)
 	return ret0
 }
 
@@ -128,14 +128,14 @@ func (mr *MockMetricsHandlerMockRecorder) Timer(arg0 interface{}) *gomock.Call {
 }
 
 // WithTags mocks base method.
-func (m *MockMetricsHandler) WithTags(arg0 ...Tag) MetricsHandler {
+func (m *MockMetricsHandler) WithTags(arg0 ...Tag) Handler {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{}
 	for _, a := range arg0 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "WithTags", varargs...)
-	ret0, _ := ret[0].(MetricsHandler)
+	ret0, _ := ret[0].(Handler)
 	return ret0
 }
 

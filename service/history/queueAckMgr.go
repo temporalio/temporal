@@ -49,7 +49,7 @@ type (
 		options        *QueueProcessorOptions
 		processor      processor
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		finishedChan   chan struct{}
 
 		sync.RWMutex

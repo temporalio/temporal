@@ -44,7 +44,7 @@ import (
 func TestArchivalQueueFactory(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	metricsHandler := metrics.NewMockMetricsHandler(ctrl)
-	metricsHandler.EXPECT().WithTags(gomock.Any()).Do(func(tags ...metrics.Tag) metrics.MetricsHandler {
+	metricsHandler.EXPECT().WithTags(gomock.Any()).Do(func(tags ...metrics.Tag) metrics.Handler {
 		require.Len(t, tags, 1)
 		assert.Equal(t, metrics.OperationTagName, tags[0].Key())
 		assert.Equal(t, "ArchivalQueueProcessor", tags[0].Value())

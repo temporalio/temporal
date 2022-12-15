@@ -72,7 +72,7 @@ type (
 		config             *configs.Config
 		workflowCache      wcache.Cache
 		executionMgr       persistence.ExecutionManager
-		metricsHandler     metrics.MetricsHandler
+		metricsHandler     metrics.Handler
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
 		namespaceRegistry  namespace.Registry

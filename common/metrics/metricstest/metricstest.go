@@ -45,7 +45,7 @@ import (
 
 type (
 	Handler struct {
-		metrics.MetricsHandler
+		metrics.Handler
 		exporter *prometheus.Exporter
 	}
 
@@ -93,8 +93,8 @@ func NewHandler(logger log.Logger) (*Handler, error) {
 	otelHandler := metrics.NewOtelMetricsHandler(logger, provider, clientConfig)
 
 	metricsHandler := &Handler{
-		MetricsHandler: otelHandler,
-		exporter:       exporter,
+		Handler:  otelHandler,
+		exporter: exporter,
 	}
 
 	return metricsHandler, nil

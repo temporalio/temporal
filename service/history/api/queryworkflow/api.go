@@ -225,7 +225,7 @@ func queryDirectlyThroughMatching(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
-	scope metrics.MetricsHandler,
+	scope metrics.Handler,
 ) (*historyservice.QueryWorkflowResponse, error) {
 
 	startTime := time.Now().UTC()

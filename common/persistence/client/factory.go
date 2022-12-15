@@ -65,7 +65,7 @@ type (
 		dataStoreFactory DataStoreFactory
 		config           *config.Persistence
 		serializer       serialization.Serializer
-		metricsHandler   metrics.MetricsHandler
+		metricsHandler   metrics.Handler
 		logger           log.Logger
 		clusterName      string
 		ratelimiter      quotas.RequestRateLimiter
@@ -85,7 +85,7 @@ func NewFactory(
 	ratelimiter quotas.RequestRateLimiter,
 	serializer serialization.Serializer,
 	clusterName string,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Factory {
 	return &factoryImpl{

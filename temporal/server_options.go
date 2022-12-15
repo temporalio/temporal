@@ -69,7 +69,7 @@ type (
 		clientFactoryProvider      client.FactoryProvider
 		searchAttributesMapper     searchattribute.Mapper
 		customInterceptors         []grpc.UnaryServerInterceptor
-		metricHandler              metrics.MetricsHandler
+		metricHandler              metrics.Handler
 	}
 )
 

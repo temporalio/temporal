@@ -49,7 +49,7 @@ type (
 	// It is also the context object that get's passed around within the scanner workflows / activities
 	Batcher struct {
 		sdkClientFactory sdk.ClientFactory
-		metricsHandler   metrics.MetricsHandler
+		metricsHandler   metrics.Handler
 		logger           log.Logger
 		rps              dynamicconfig.IntPropertyFnWithNamespaceFilter
 		concurrency      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -58,7 +58,7 @@ type (
 
 // New returns a new instance of batcher daemon Batcher
 func New(
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	rps dynamicconfig.IntPropertyFnWithNamespaceFilter,

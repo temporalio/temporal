@@ -62,7 +62,7 @@ type (
 	activities struct {
 		esClient       esclient.Client
 		saManager      searchattribute.Manager
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		logger         log.Logger
 	}
 )

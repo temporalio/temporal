@@ -64,7 +64,7 @@ type (
 		shutdownCh       chan struct{}
 		config           *configs.Config
 		logger           log.Logger
-		metricHandler    metrics.MetricsHandler
+		metricHandler    metrics.Handler
 		timerProcessor   common.Daemon
 		timerQueueAckMgr timerQueueAckMgr
 		timerGate        timer.Gate

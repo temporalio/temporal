@@ -60,7 +60,7 @@ type (
 		visibilityTaskFilter     taskFilter
 		ownedScheduler           queues.Scheduler // this is the scheduler owned by this visibility queue processor
 		logger                   log.Logger
-		metricHandler            metrics.MetricsHandler
+		metricHandler            metrics.Handler
 
 		// from transferQueueProcessorImpl
 		config   *configs.Config
@@ -78,7 +78,7 @@ func newVisibilityQueueProcessor(
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
 	visibilityMgr manager.VisibilityManager,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	hostRateLimiter quotas.RateLimiter,
 	schedulerRateLimiter queues.SchedulerRateLimiter,
 ) queues.Queue {

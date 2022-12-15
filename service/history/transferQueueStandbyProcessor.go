@@ -67,7 +67,7 @@ func newTransferQueueStandbyProcessor(
 	rateLimiter quotas.RateLimiter,
 	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()

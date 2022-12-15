@@ -147,7 +147,7 @@ func valuesEqual(v1, v2 attribute.Value) bool {
 	return v1.AsInterface() == v2.AsInterface()
 }
 
-func recordMetrics(mp MetricsHandler) {
+func recordMetrics(mp Handler) {
 	c := mp.Counter("hits")
 	g := mp.Gauge("temp")
 

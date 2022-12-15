@@ -66,7 +66,7 @@ type (
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
-		metricHandler             metrics.MetricsHandler
+		metricHandler             metrics.Handler
 		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
 		historyClient             historyservice.HistoryServiceClient
@@ -95,7 +95,7 @@ func newTransferQueueProcessor(
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	hostRateLimiter quotas.RateLimiter,
 	schedulerRateLimiter queues.SchedulerRateLimiter,
 ) queues.Queue {

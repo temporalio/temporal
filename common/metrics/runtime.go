@@ -44,8 +44,8 @@ const (
 
 // RuntimeMetricsReporter A struct containing the state of the RuntimeMetricsReporter.
 type RuntimeMetricsReporter struct {
-	provider          MetricsHandler
-	buildInfoProvider MetricsHandler
+	provider          Handler
+	buildInfoProvider Handler
 	reportInterval    time.Duration
 	started           int32
 	quit              chan struct{}
@@ -56,7 +56,7 @@ type RuntimeMetricsReporter struct {
 
 // NewRuntimeMetricsReporter Creates a new RuntimeMetricsReporter.
 func NewRuntimeMetricsReporter(
-	provider MetricsHandler,
+	provider Handler,
 	reportInterval time.Duration,
 	logger log.Logger,
 	instanceID string,

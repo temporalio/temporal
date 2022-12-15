@@ -111,7 +111,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		historySerializer serialization.Serializer
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		namespaceRegistry namespace.Registry
 		workflowCache     wcache.Cache
 		eventsReapplier   EventsReapplier

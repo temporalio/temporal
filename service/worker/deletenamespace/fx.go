@@ -45,7 +45,7 @@ type (
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
 		historyClient     historyservice.HistoryServiceClient
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		logger            log.Logger
 	}
 
@@ -63,7 +63,7 @@ func newComponent(
 	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) component {
 	return component{

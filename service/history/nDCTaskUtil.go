@@ -73,7 +73,7 @@ func loadMutableStateForTransferTask(
 	ctx context.Context,
 	wfContext workflow.Context,
 	transferTask tasks.Task,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(transferTask, logger)
@@ -117,7 +117,7 @@ func loadMutableStateForTimerTask(
 	ctx context.Context,
 	wfContext workflow.Context,
 	timerTask tasks.Task,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(timerTask, logger)
@@ -136,7 +136,7 @@ func LoadMutableStateForTask(
 	wfContext workflow.Context,
 	task tasks.Task,
 	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 

@@ -68,7 +68,7 @@ func newTimerQueueStandbyTaskExecutor(
 	nDCHistoryResender xdc.NDCHistoryResender,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	clusterName string,
 	config *configs.Config,
 ) queues.Executor {

@@ -90,7 +90,7 @@ type (
 		shardID             int32
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
-		metricsHandler      metrics.MetricsHandler
+		metricsHandler      metrics.Handler
 		eventsCache         events.Cache
 		closeCallback       func(*ContextImpl)
 		config              *configs.Config
@@ -1990,7 +1990,7 @@ func newContext(
 	persistenceShardManager persistence.ShardManager,
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -2090,7 +2090,7 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return s.historyClient
 }
 
-func (s *ContextImpl) GetMetricsHandler() metrics.MetricsHandler {
+func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
 	return s.metricsHandler
 }
 

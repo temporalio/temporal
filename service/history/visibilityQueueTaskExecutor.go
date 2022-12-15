@@ -52,7 +52,7 @@ type (
 		shard          shard.Context
 		cache          wcache.Cache
 		logger         log.Logger
-		metricProvider metrics.MetricsHandler
+		metricProvider metrics.Handler
 		visibilityMgr  manager.VisibilityManager
 
 		ensureCloseBeforeDelete    dynamicconfig.BoolPropertyFn
@@ -67,7 +67,7 @@ func newVisibilityQueueTaskExecutor(
 	workflowCache wcache.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *visibilityQueueTaskExecutor {

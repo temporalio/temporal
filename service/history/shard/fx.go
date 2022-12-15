@@ -62,7 +62,7 @@ func ControllerProvider(
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
 	historyServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,

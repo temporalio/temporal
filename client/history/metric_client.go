@@ -41,7 +41,7 @@ var _ historyservice.HistoryServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
 	client          historyservice.HistoryServiceClient
-	metricsHandler  metrics.MetricsHandler
+	metricsHandler  metrics.Handler
 	logger          log.Logger
 	throttledLogger log.Logger
 }
@@ -49,7 +49,7 @@ type metricClient struct {
 // NewMetricClient creates a new instance of historyservice.HistoryServiceClient that emits metrics
 func NewMetricClient(
 	client historyservice.HistoryServiceClient,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	throttledLogger log.Logger,
 ) historyservice.HistoryServiceClient {
@@ -64,7 +64,7 @@ func NewMetricClient(
 func (c *metricClient) startMetricsRecording(
 	ctx context.Context,
 	operation string,
-) (metrics.MetricsHandler, time.Time) {
+) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.HistoryRoleTagValue))
 	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
@@ -72,7 +72,7 @@ func (c *metricClient) startMetricsRecording(
 }
 
 func (c *metricClient) finishMetricsRecording(
-	handler metrics.MetricsHandler,
+	handler metrics.Handler,
 	startTime time.Time,
 	err error,
 ) {

@@ -150,7 +150,7 @@ type (
 		shard          shard.Context
 		workflowKey    definition.WorkflowKey
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		timeSource     clock.TimeSource
 		config         *configs.Config
 		transaction    Transaction
@@ -924,7 +924,7 @@ func (c *ContextImpl) enforceSizeCheck(
 }
 
 func emitStateTransitionCount(
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	mutableState MutableState,
 ) {
 	if mutableState == nil {

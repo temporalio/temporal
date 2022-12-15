@@ -59,7 +59,7 @@ func newNamespaceReplicationMessageProcessor(
 	sourceCluster string,
 	logger log.Logger,
 	remotePeer adminservice.AdminServiceClient,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	taskExecutor namespace.ReplicationTaskExecutor,
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
@@ -97,7 +97,7 @@ type (
 		logger                    log.Logger
 		remotePeer                adminservice.AdminServiceClient
 		taskExecutor              namespace.ReplicationTaskExecutor
-		metricsHandler            metrics.MetricsHandler
+		metricsHandler            metrics.Handler
 		retryPolicy               backoff.RetryPolicy
 		lastProcessedMessageID    int64
 		lastRetrievedMessageID    int64

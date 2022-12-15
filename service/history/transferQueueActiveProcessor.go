@@ -72,7 +72,7 @@ func newTransferQueueActiveProcessor(
 	rateLimiter quotas.RateLimiter,
 	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	singleProcessor bool,
 ) *transferQueueActiveProcessorImpl {
 	config := shard.GetConfig()
@@ -247,7 +247,7 @@ func newTransferQueueFailoverProcessor(
 	rateLimiter quotas.RateLimiter,
 	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{

@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	NoopMetricsHandler MetricsHandler = newNoopMetricsHandler()
+	NoopMetricsHandler Handler = newNoopMetricsHandler()
 )
 
 type (
@@ -42,33 +42,33 @@ func newNoopMetricsHandler() *noopMetricsHandler { return &noopMetricsHandler{} 
 
 // WithTags creates a new MetricProvder with provided []Tag
 // Tags are merged with registered Tags from the source MetricsHandler
-func (n *noopMetricsHandler) WithTags(...Tag) MetricsHandler {
+func (n *noopMetricsHandler) WithTags(...Tag) Handler {
 	return n
 }
 
 // Counter obtains a counter for the given name and MetricOptions.
-func (*noopMetricsHandler) Counter(string) CounterMetric {
+func (*noopMetricsHandler) Counter(string) CounterIface {
 	return NoopCounterMetricFunc
 }
 
 // Gauge obtains a gauge for the given name and MetricOptions.
-func (*noopMetricsHandler) Gauge(string) GaugeMetric {
+func (*noopMetricsHandler) Gauge(string) GaugeIface {
 	return NoopGaugeMetricFunc
 }
 
 // Timer obtains a timer for the given name and MetricOptions.
-func (*noopMetricsHandler) Timer(string) TimerMetric {
+func (*noopMetricsHandler) Timer(string) TimerIface {
 	return NoopTimerMetricFunc
 }
 
 // Histogram obtains a histogram for the given name and MetricOptions.
-func (*noopMetricsHandler) Histogram(string, MetricUnit) HistogramMetric {
+func (*noopMetricsHandler) Histogram(string, MetricUnit) HistogramIface {
 	return NoopHistogramMetricFunc
 }
 
 func (*noopMetricsHandler) Stop(log.Logger) {}
 
-var NoopCounterMetricFunc = CounterMetricFunc(func(i int64, t ...Tag) {})
-var NoopGaugeMetricFunc = GaugeMetricFunc(func(f float64, t ...Tag) {})
-var NoopTimerMetricFunc = TimerMetricFunc(func(d time.Duration, t ...Tag) {})
-var NoopHistogramMetricFunc = HistogramMetricFunc(func(i int64, t ...Tag) {})
+var NoopCounterMetricFunc = CounterFunc(func(i int64, t ...Tag) {})
+var NoopGaugeMetricFunc = GaugeFunc(func(f float64, t ...Tag) {})
+var NoopTimerMetricFunc = TimerFunc(func(d time.Duration, t ...Tag) {})
+var NoopHistogramMetricFunc = HistogramFunc(func(i int64, t ...Tag) {})

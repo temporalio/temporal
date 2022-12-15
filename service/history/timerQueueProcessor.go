@@ -64,7 +64,7 @@ type (
 		shard                      shard.Context
 		taskAllocator              taskAllocator
 		config                     *configs.Config
-		metricHandler              metrics.MetricsHandler
+		metricHandler              metrics.Handler
 		workflowCache              wcache.Cache
 		scheduler                  queues.Scheduler
 		priorityAssigner           queues.PriorityAssigner
@@ -92,7 +92,7 @@ func newTimerQueueProcessor(
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
-	metricHandler metrics.MetricsHandler,
+	metricHandler metrics.Handler,
 	hostRateLimiter quotas.RateLimiter,
 	schedulerRateLimiter queues.SchedulerRateLimiter,
 ) queues.Queue {

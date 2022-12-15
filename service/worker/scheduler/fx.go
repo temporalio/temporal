@@ -52,7 +52,7 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler metrics.MetricsHandler
+		MetricsHandler metrics.Handler
 		Logger         log.Logger
 		HistoryClient  historyservice.HistoryServiceClient
 		FrontendClient workflowservice.WorkflowServiceClient

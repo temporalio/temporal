@@ -56,7 +56,7 @@ type (
 		// SdkSystemClient is an instance of temporal service client
 		SdkClientFactory sdk.ClientFactory
 		// MetricsHandler is an instance of metrics object for emitting stats
-		MetricsHandler metrics.MetricsHandler
+		MetricsHandler metrics.Handler
 		// Logger is the logger
 		Logger log.Logger
 		// Config contains the configuration for scanner
@@ -71,7 +71,7 @@ type (
 	Processor struct {
 		svcClientFactory sdk.ClientFactory
 		clientBean       client.Bean
-		metricsHandler   metrics.MetricsHandler
+		metricsHandler   metrics.Handler
 		cfg              Config
 		logger           log.Logger
 		currentCluster   string

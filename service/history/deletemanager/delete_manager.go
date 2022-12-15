@@ -82,7 +82,7 @@ type (
 		shard          shard.Context
 		workflowCache  wcache.Cache
 		config         *configs.Config
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		archivalClient archiver.Client
 		timeSource     clock.TimeSource
 	}
@@ -194,7 +194,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	archiveIfEnabled bool,
 	forceDeleteFromOpenVisibility bool,
 	stage *tasks.DeleteWorkflowExecutionStage,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) error {
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
@@ -268,7 +268,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	currentBranchToken []byte,
 	weCtx workflow.Context,
 	ms workflow.MutableState,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) (deletionPromised bool, err error) {
 
 	namespaceRegistryEntry := ms.GetNamespaceEntry()

@@ -49,7 +49,7 @@ type (
 		Logger         log.SnTaggedLogger
 		Collection     *dynamicconfig.Collection
 		HealthServer   *health.Server
-		MetricsHandler metrics.MetricsHandler
+		MetricsHandler metrics.Handler
 
 		Roots []common.Pingable `group:"deadlockDetectorRoots"`
 	}
@@ -65,7 +65,7 @@ type (
 	deadlockDetector struct {
 		logger         log.Logger
 		healthServer   *health.Server
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		config         config
 		roots          []common.Pingable
 		loops          goro.Group

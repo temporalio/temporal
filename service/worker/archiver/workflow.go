@@ -47,7 +47,7 @@ func archivalWorkflow(ctx workflow.Context, carryover []ArchiveRequest) error {
 func archivalWorkflowHelper(
 	ctx workflow.Context,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	config *Config,
 	handler Handler, // enables tests to inject mocks
 	pump Pump, // enables tests to inject mocks

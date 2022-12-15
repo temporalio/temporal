@@ -56,7 +56,7 @@ type (
 		shard               shard.Context
 		executionMgr        persistence.ExecutionManager
 		logger              log.Logger
-		metricHandler       metrics.MetricsHandler
+		metricHandler       metrics.Handler
 		config              *configs.Config
 		timeNow             timeNow
 		updateTimerAckLevel updateTimerAckLevel

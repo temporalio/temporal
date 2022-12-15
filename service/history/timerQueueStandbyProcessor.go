@@ -70,7 +70,7 @@ func newTimerQueueStandbyProcessor(
 	rateLimiter quotas.RateLimiter,
 	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 ) *timerQueueStandbyProcessorImpl {
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(clusterName)

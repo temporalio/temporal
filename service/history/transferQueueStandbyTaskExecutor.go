@@ -72,7 +72,7 @@ func newTransferQueueStandbyTaskExecutor(
 	archivalClient archiver.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	clusterName string,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
