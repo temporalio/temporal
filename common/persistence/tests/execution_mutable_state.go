@@ -79,7 +79,7 @@ func NewExecutionMutableStateSuite(
 		ShardManager: p.NewShardManager(
 			shardStore,
 			serializer,
-			1,
+			1024,
 		),
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,

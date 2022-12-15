@@ -93,6 +93,7 @@ func (s *TestCluster) Config() config.Persistence {
 			"test": {Cassandra: &cfg, FaultInjection: s.faultInjection},
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
+		NumHistoryShards:     1024,
 	}
 }
 
