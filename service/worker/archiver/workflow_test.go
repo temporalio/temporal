@@ -41,7 +41,7 @@ import (
 )
 
 var (
-	workflowTestMetrics *metrics.MockMetricsHandler
+	workflowTestMetrics *metrics.MockHandler
 	workflowTestLogger  log.Logger
 	workflowTestHandler *MockHandler
 	workflowTestPump    *MockPump
@@ -71,7 +71,7 @@ func TestWorkflowSuite(t *testing.T) {
 func (s *workflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
-	workflowTestMetrics = metrics.NewMockMetricsHandler(s.controller)
+	workflowTestMetrics = metrics.NewMockHandler(s.controller)
 	workflowTestLogger = log.NewNoopLogger()
 	workflowTestHandler = NewMockHandler(s.controller)
 	workflowTestPump = NewMockPump(s.controller)
@@ -91,10 +91,10 @@ func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverWorkflowStartedCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	workflowTestMetrics.EXPECT().Timer(metrics.ServiceLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	workflowTestMetrics.EXPECT().Timer(metrics.ArchiverHandleAllRequestsLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
-	pumpedRequestCounter := metrics.NewMockCounterMetric(s.controller)
+	pumpedRequestCounter := metrics.NewMockCounterIface(s.controller)
 	pumpedRequestCounter.EXPECT().Record(int64(3))
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumPumpedRequestsCount.GetMetricName()).Return(pumpedRequestCounter)
-	handledRequestCounter := metrics.NewMockCounterMetric(s.controller)
+	handledRequestCounter := metrics.NewMockCounterIface(s.controller)
 	handledRequestCounter.EXPECT().Record(int64(3))
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumHandledRequestsCount.GetMetricName()).Return(handledRequestCounter)
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverPumpedNotEqualHandledCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
@@ -120,10 +120,10 @@ func (s *workflowSuite) TestArchivalWorkflow_Exit_TimeoutWithoutSignals() {
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverWorkflowStartedCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	workflowTestMetrics.EXPECT().Timer(metrics.ServiceLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	workflowTestMetrics.EXPECT().Timer(metrics.ArchiverHandleAllRequestsLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
-	pumpedRequestCounter := metrics.NewMockCounterMetric(s.controller)
+	pumpedRequestCounter := metrics.NewMockCounterIface(s.controller)
 	pumpedRequestCounter.EXPECT().Record(int64(0))
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumPumpedRequestsCount.GetMetricName()).Return(pumpedRequestCounter)
-	handledRequestCounter := metrics.NewMockCounterMetric(s.controller)
+	handledRequestCounter := metrics.NewMockCounterIface(s.controller)
 	handledRequestCounter.EXPECT().Record(int64(0))
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumHandledRequestsCount.GetMetricName()).Return(handledRequestCounter)
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverWorkflowStoppingCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
@@ -148,10 +148,10 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverWorkflowStartedCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	workflowTestMetrics.EXPECT().Timer(metrics.ServiceLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	workflowTestMetrics.EXPECT().Timer(metrics.ArchiverHandleAllRequestsLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
-	pumpedRequestCounter := metrics.NewMockCounterMetric(s.controller)
+	pumpedRequestCounter := metrics.NewMockCounterIface(s.controller)
 	pumpedRequestCounter.EXPECT().Record(int64(5))
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumPumpedRequestsCount.GetMetricName()).Return(pumpedRequestCounter)
-	handledRequestCounter := metrics.NewMockCounterMetric(s.controller)
+	handledRequestCounter := metrics.NewMockCounterIface(s.controller)
 	handledRequestCounter.EXPECT().Record(int64(5))
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumHandledRequestsCount.GetMetricName()).Return(handledRequestCounter)
 	workflowTestHandler.EXPECT().Start()

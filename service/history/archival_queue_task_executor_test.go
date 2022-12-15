@@ -154,7 +154,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				p.ExpectedErrorSubstrings = []string{"history URI", "parse"}
 				p.ExpectArchive = false
 				p.ExpectAddTask = false
-				mockCounter := metrics.NewMockCounterMetric(p.Controller)
+				mockCounter := metrics.NewMockCounterIface(p.Controller)
 				mockCounter.EXPECT().Record(
 					int64(1),
 					metrics.NamespaceTag(tests.Namespace.String()),
@@ -170,7 +170,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				p.ExpectedErrorSubstrings = []string{"visibility URI", "parse"}
 				p.ExpectArchive = false
 				p.ExpectAddTask = false
-				mockCounter := metrics.NewMockCounterMetric(p.Controller)
+				mockCounter := metrics.NewMockCounterIface(p.Controller)
 				mockCounter.EXPECT().Record(
 					int64(1),
 					metrics.NamespaceTag(tests.Namespace.String()),
@@ -222,7 +222,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			}
 			p.ExpectArchive = true
 			p.ExpectAddTask = true
-			p.MetricsHandler = metrics.NewMockMetricsHandler(p.Controller)
+			p.MetricsHandler = metrics.NewMockHandler(p.Controller)
 			p.MutableStateExists = true
 
 			c.Configure(&p)
@@ -418,7 +418,7 @@ type params struct {
 	GetNamespaceByIDError      error
 	HistoryURI                 string
 	VisibilityURI              string
-	MetricsHandler             *metrics.MockMetricsHandler
+	MetricsHandler             *metrics.MockHandler
 	MutableStateExists         bool
 	ArchiveError               error
 }
