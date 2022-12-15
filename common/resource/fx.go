@@ -64,7 +64,6 @@ import (
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
@@ -350,14 +349,7 @@ func HistoryClientProvider(clientBean client.Bean) historyservice.HistoryService
 	historyClient := history.NewRetryableClient(
 		historyRawClient,
 		common.CreateHistoryClientRetryPolicy(),
-		func(err error) bool {
-			if err.Error() == interceptor.ErrNamespaceHandover.Error() {
-				// prevent retrying namespace handover unavailable error
-				// in when calling history service
-				return false
-			}
-			return common.IsServiceClientTransientError(err)
-		},
+		common.IsServiceClientTransientError,
 	)
 	return historyClient
 }

@@ -35,10 +35,6 @@ import (
 )
 
 func IsRetryableError(err error) bool {
-	if err == consts.ErrNamespaceHandover {
-		return false
-	}
-
 	return err == consts.ErrStaleState ||
 		err == consts.ErrLocateCurrentWorkflowExecution ||
 		err == consts.ErrBufferedQueryCleared ||

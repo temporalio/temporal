@@ -2577,7 +2577,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockShard.EXPECT().GetClusterMetadata().Return(mockClusterMetadata).AnyTimes()
 			mockMutableState.EXPECT().GetLastWriteVersion().Return(tests.Version, nil).AnyTimes()
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
-			mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespaceEntry.Name(), nil)
+			mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil)
 			mockShard.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
 			if c.MultiCursorQueue {
 				var highWatermarkTaskId int64
