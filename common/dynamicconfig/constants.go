@@ -531,14 +531,9 @@ const (
 	ArchivalProcessorMaxPollRPS = "history.archivalProcessorMaxPollRPS"
 	// ArchivalProcessorMaxPollHostRPS is max poll rate per second for all archivalQueueProcessor on a host
 	ArchivalProcessorMaxPollHostRPS = "history.archivalProcessorMaxPollHostRPS"
-	// ArchivalTaskMaxRetryCount is max times of retry for archivalQueueProcessor
-	ArchivalTaskMaxRetryCount = "history.archivalTaskMaxRetryCount"
 	// ArchivalProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for
 	// archivalQueueProcessor
 	ArchivalProcessorSchedulerWorkerCount = "history.archivalProcessorSchedulerWorkerCount"
-	// ArchivalProcessorSchedulerRoundRobinWeights is the priority round robin weights by archival task scheduler for
-	// all namespaces
-	ArchivalProcessorSchedulerRoundRobinWeights = "history.archivalProcessorSchedulerRoundRobinWeights"
 	// ArchivalProcessorMaxPollInterval max poll interval for archivalQueueProcessor
 	ArchivalProcessorMaxPollInterval = "history.archivalProcessorMaxPollInterval"
 	// ArchivalProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -550,9 +545,15 @@ const (
 	// ArchivalProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for
 	// archivalQueueProcessor
 	ArchivalProcessorPollBackoffInterval = "history.archivalProcessorPollBackoffInterval"
+	// ArchivalProcessorArchiveDelay is the delay before archivalQueueProcessor starts to process archival tasks
+	ArchivalProcessorArchiveDelay = "history.archivalProcessorArchiveDelay"
+	// ArchivalProcessorRetryWarningLimit is the number of times an archival task may be retried before we log a warning
+	ArchivalProcessorRetryWarningLimit = "history.archivalProcessorRetryLimitWarning"
 
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
+	// ReplicatorMaxSkipTaskCount is maximum number of tasks that can be skipped during tasks pagination due to not meeting filtering conditions (e.g. missed namespace).
+	ReplicatorMaxSkipTaskCount = "history.replicatorMaxSkipTaskCount"
 	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor
 	ReplicatorTaskWorkerCount = "history.replicatorTaskWorkerCount"
 	// ReplicatorTaskMaxRetryCount is max times of retry for ReplicatorProcessor
@@ -659,6 +660,8 @@ const (
 	ReplicationTaskProcessorHostQPS = "history.ReplicationTaskProcessorHostQPS"
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
+	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
+	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 
 	// keys for worker
 

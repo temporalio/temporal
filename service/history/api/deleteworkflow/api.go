@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -43,7 +44,7 @@ func Invoke(
 	request *historyservice.DeleteWorkflowExecutionRequest,
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	workflowDeleteManager workflow.DeleteManager,
+	workflowDeleteManager deletemanager.DeleteManager,
 ) (_ *historyservice.DeleteWorkflowExecutionResponse, retError error) {
 	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
 		ctx,

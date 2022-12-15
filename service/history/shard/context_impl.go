@@ -133,8 +133,9 @@ type (
 		scheduledTaskMaxReadLevelMap       map[string]time.Time // cluster -> scheduledTaskMaxReadLevel
 
 		// exist only in memory
-		remoteClusterInfos map[string]*remoteClusterInfo
-		handoverNamespaces map[namespace.Name]*namespaceHandOverInfo // keyed on namespace name
+		remoteClusterInfos      map[string]*remoteClusterInfo
+		handoverNamespaces      map[namespace.Name]*namespaceHandOverInfo // keyed on namespace name
+		acquireShardRetryPolicy backoff.RetryPolicy
 	}
 
 	remoteClusterInfo struct {
@@ -1665,7 +1666,9 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		// Cancel lifecycle context as soon as we know we're shutting down
 		s.lifecycleCancel()
 		// This will cause the controller to remove this shard from the map and then call s.finishStop()
-		go s.closeCallback(s)
+		if s.closeCallback != nil {
+			go s.closeCallback(s)
+		}
 	}
 
 	setStateStopped := func() {
@@ -1950,8 +1953,10 @@ func (s *ContextImpl) acquireShard() {
 	// lifecycleCtx. The persistence operations called here use lifecycleCtx as their context,
 	// so if we were blocked in any of them, they should return immediately with a context
 	// canceled error.
-	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).
-		WithExpirationInterval(5 * time.Minute)
+	policy := s.acquireShardRetryPolicy
+	if policy == nil {
+		policy = backoff.NewExponentialRetryPolicy(1 * time.Second).WithExpirationInterval(5 * time.Minute)
+	}
 
 	// Remember this value across attempts
 	ownershipChanged := false
@@ -2013,7 +2018,14 @@ func (s *ContextImpl) acquireShard() {
 	}
 
 	// keep retrying except ShardOwnershipLostError or lifecycle context ended
-	acquireShardRetryable := func(err error) bool {
+	acquireShardRetryable := func(err error) (isRetryable bool) {
+		defer func() {
+			s.contextTaggedLogger.Error(
+				"Error acquiring shard",
+				tag.Error(err),
+				tag.IsRetryable(isRetryable),
+			)
+		}()
 		if s.lifecycleCtx.Err() != nil {
 			return false
 		}
@@ -2025,7 +2037,7 @@ func (s *ContextImpl) acquireShard() {
 	}
 	err := backoff.ThrottleRetry(op, policy, acquireShardRetryable)
 	if err != nil {
-		// We got an unretryable error (perhaps context cancelled or ShardOwnershipLostError).
+		// We got an non-retryable error, e.g. ShardOwnershipLostError
 		s.contextTaggedLogger.Error("Couldn't acquire shard", tag.Error(err))
 
 		// On any error, initiate shutting down the shard. If we already changed state

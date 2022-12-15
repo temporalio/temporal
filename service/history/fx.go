@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/cache"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 )
 
@@ -66,6 +67,7 @@ var Module = fx.Options(
 	resource.Module,
 	workflow.Module,
 	shard.Module,
+	cache.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(RetryableInterceptorProvider),

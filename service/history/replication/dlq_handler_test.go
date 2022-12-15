@@ -46,10 +46,11 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -117,8 +118,8 @@ func (s *dlqHandlerSuite) SetupTest() {
 
 	s.replicationMessageHandler = newDLQHandler(
 		s.mockShard,
-		workflow.NewMockDeleteManager(s.controller),
-		workflow.NewMockCache(s.controller),
+		deletemanager.NewMockDeleteManager(s.controller),
+		wcache.NewMockCache(s.controller),
 		s.mockClientBean,
 		s.taskExecutors,
 		func(params TaskExecutorParams) TaskExecutor {

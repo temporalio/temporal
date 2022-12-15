@@ -177,6 +177,16 @@ func (ns *Namespace) ClusterNames() []string {
 	return out
 }
 
+// IsOnCluster returns true is namespace is registered on cluster otherwise false.
+func (ns *Namespace) IsOnCluster(clusterName string) bool {
+	for _, namespaceCluster := range ns.replicationConfig.Clusters {
+		if namespaceCluster == clusterName {
+			return true
+		}
+	}
+	return false
+}
+
 // ConfigVersion return the namespace config version
 func (ns *Namespace) ConfigVersion() int64 {
 	return ns.configVersion

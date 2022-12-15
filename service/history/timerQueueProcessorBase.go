@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -57,7 +57,7 @@ type (
 	timerQueueProcessorBase struct {
 		operation        string
 		shard            shard.Context
-		cache            workflow.Cache
+		cache            wcache.Cache
 		executionManager persistence.ExecutionManager
 		status           int32
 		shutdownWG       sync.WaitGroup
@@ -85,7 +85,7 @@ type (
 func newTimerQueueProcessorBase(
 	operation string,
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	timerProcessor common.Daemon,
 	timerQueueAckMgr timerQueueAckMgr,
 	timerGate timer.Gate,

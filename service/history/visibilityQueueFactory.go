@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (
@@ -101,7 +101,7 @@ func NewVisibilityQueueFactory(
 
 func (f *visibilityQueueFactory) CreateQueue(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 ) queues.Queue {
 	if f.HostScheduler != nil && f.Config.VisibilityProcessorEnableMultiCursor() {
 		logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)

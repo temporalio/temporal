@@ -409,7 +409,7 @@ func AdminListGossipMembers(c *cli.Context) error {
 	}
 
 	members := response.MembershipInfo.Rings
-	if roleFlag != primitives.AllServices {
+	if roleFlag != string(primitives.AllServices) {
 		all := members
 
 		members = members[:0]

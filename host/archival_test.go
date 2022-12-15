@@ -27,11 +27,15 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -43,6 +47,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -54,7 +59,33 @@ const (
 	retryBackoffTime = 500 * time.Millisecond
 )
 
-func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
+type archivalSuite struct {
+	*require.Assertions
+	IntegrationBase
+}
+
+func (s *archivalSuite) SetupSuite() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.RetentionTimerJitterDuration: time.Second,
+	}
+	s.setupSuite("testdata/integration_test_cluster.yaml")
+}
+
+func (s *archivalSuite) TearDownSuite() {
+	s.tearDownSuite()
+}
+
+func (s *archivalSuite) SetupTest() {
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
+}
+
+func TestArchivalSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(archivalSuite))
+}
+
+func (s *archivalSuite) TestArchival_TimerQueueProcessor() {
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
@@ -74,7 +105,7 @@ func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
 	s.True(s.isMutableStateDeleted(namespaceID, execution))
 }
 
-func (s *integrationSuite) TestArchival_ContinueAsNew() {
+func (s *archivalSuite) TestArchival_ContinueAsNew() {
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
@@ -96,7 +127,7 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 	}
 }
 
-func (s *integrationSuite) TestArchival_ArchiverWorker() {
+func (s *archivalSuite) TestArchival_ArchiverWorker() {
 	s.T().SkipNow() // flaky test, skip for now, will reimplement archival feature.
 
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
@@ -117,7 +148,7 @@ func (s *integrationSuite) TestArchival_ArchiverWorker() {
 	s.True(s.isMutableStateDeleted(namespaceID, execution))
 }
 
-func (s *integrationSuite) TestVisibilityArchival() {
+func (s *archivalSuite) TestVisibilityArchival() {
 	s.True(s.testCluster.archiverBase.metadata.GetVisibilityConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
@@ -170,7 +201,7 @@ func (s *IntegrationBase) getNamespaceID(namespace string) string {
 	return namespaceResp.NamespaceInfo.GetId()
 }
 
-func (s *integrationSuite) isHistoryArchived(namespace string, execution *commonpb.WorkflowExecution) bool {
+func (s *archivalSuite) isHistoryArchived(namespace string, execution *commonpb.WorkflowExecution) bool {
 	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.archivalNamespace,
 		Execution: execution,
@@ -186,7 +217,7 @@ func (s *integrationSuite) isHistoryArchived(namespace string, execution *common
 	return false
 }
 
-func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) bool {
+func (s *archivalSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) bool {
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
 		s.testClusterConfig.HistoryConfig.NumHistoryShards)
@@ -205,7 +236,7 @@ func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecutio
 	return false
 }
 
-func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *commonpb.WorkflowExecution) bool {
+func (s *archivalSuite) isMutableStateDeleted(namespaceID string, execution *commonpb.WorkflowExecution) bool {
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
 		s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetWorkflowExecutionRequest{
@@ -225,7 +256,7 @@ func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *
 	return false
 }
 
-func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceID string, numActivities, numRuns int) []string {
+func (s *archivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceID string, numActivities, numRuns int) []string {
 	identity := "worker1"
 	activityName := "activity_type1"
 	workflowType := &commonpb.WorkflowType{

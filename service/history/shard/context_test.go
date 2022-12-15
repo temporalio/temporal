@@ -27,6 +27,7 @@ package shard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -36,6 +37,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
@@ -53,7 +55,7 @@ type (
 		*require.Assertions
 
 		controller           *gomock.Controller
-		mockShard            Context
+		mockShard            *ContextTest
 		mockClusterMetadata  *cluster.MockMetadata
 		mockShardManager     *persistence.MockShardManager
 		mockExecutionManager *persistence.MockExecutionManager
@@ -157,7 +159,7 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 	)
 
 	// clear shardInfo and load from persistence
-	shardContextImpl := s.mockShard.(*ContextTest)
+	shardContextImpl := s.mockShard
 	shardContextImpl.shardInfo = nil
 	err := shardContextImpl.loadShardMetadata(convert.BoolPtr(false))
 	s.NoError(err)
@@ -211,7 +213,7 @@ func (s *contextSuite) TestTimerMaxReadLevelUpdate_SingleProcessor() {
 
 	// update in single processor mode
 	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, true)
-	scheduledTaskMaxReadLevelMap := s.mockShard.(*ContextTest).scheduledTaskMaxReadLevelMap
+	scheduledTaskMaxReadLevelMap := s.mockShard.scheduledTaskMaxReadLevelMap
 	s.Len(scheduledTaskMaxReadLevelMap, 2)
 	s.True(scheduledTaskMaxReadLevelMap[cluster.TestCurrentClusterName].After(now))
 	s.True(scheduledTaskMaxReadLevelMap[cluster.TestAlternativeClusterName].After(now))
@@ -364,4 +366,57 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageHistory, stage)
+}
+
+func (s *contextSuite) TestAcquireShardOwnershipLostErrorIsNotRetried() {
+	s.mockShard.state = contextStateAcquiring
+	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).
+		WithMaximumAttempts(5)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	s.mockShard.acquireShard()
+
+	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+}
+
+func (s *contextSuite) TestAcquireShardNonOwnershipLostErrorIsRetried() {
+	s.mockShard.state = contextStateAcquiring
+	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).
+		WithMaximumAttempts(5)
+	// TODO: make this 5 times instead of 6 when retry policy is fixed
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(fmt.Errorf("temp error")).Times(6)
+
+	s.mockShard.acquireShard()
+
+	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+}
+
+func (s *contextSuite) TestAcquireShardEventuallySucceeds() {
+	s.mockShard.state = contextStateAcquiring
+	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).
+		WithMaximumAttempts(5)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(fmt.Errorf("temp error")).Times(3)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).MinTimes(1)
+
+	s.mockShard.acquireShard()
+
+	s.Assert().Equal(contextStateAcquired, s.mockShard.state)
+}
+
+func (s *contextSuite) TestAcquireShardNoError() {
+	s.mockShard.state = contextStateAcquiring
+	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).
+		WithMaximumAttempts(5)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).MinTimes(1)
+
+	s.mockShard.acquireShard()
+
+	s.Assert().Equal(contextStateAcquired, s.mockShard.state)
 }

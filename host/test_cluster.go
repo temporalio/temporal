@@ -144,10 +144,10 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		panic(fmt.Sprintf("unknown store type: %v", options.Persistence.StoreType))
 	}
 
+	options.Persistence.FaultInjection = &options.FaultInjection
+	// If the fault injection rate command line flag is set, override the fault injection rate in the config.
 	if TestFlags.PersistenceFaultInjectionRate > 0 {
-		options.Persistence.FaultInjection = &config.FaultInjection{Rate: TestFlags.PersistenceFaultInjectionRate}
-	} else if options.Persistence.FaultInjection == nil {
-		options.Persistence.FaultInjection = &config.FaultInjection{Rate: 0}
+		options.Persistence.FaultInjection.Rate = TestFlags.PersistenceFaultInjectionRate
 	}
 
 	testBase := persistencetests.NewTestBase(&options.Persistence)

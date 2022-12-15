@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 var (
@@ -50,7 +51,7 @@ type (
 	Workflow interface {
 		GetContext() workflow.Context
 		GetMutableState() workflow.MutableState
-		GetReleaseFn() workflow.ReleaseCacheFunc
+		GetReleaseFn() wcache.ReleaseCacheFunc
 		GetVectorClock() (int64, int64, error)
 		HappensAfter(that Workflow) (bool, error)
 		Revive() error
@@ -65,7 +66,7 @@ type (
 		ctx          context.Context
 		context      workflow.Context
 		mutableState workflow.MutableState
-		releaseFn    workflow.ReleaseCacheFunc
+		releaseFn    wcache.ReleaseCacheFunc
 	}
 )
 
@@ -75,7 +76,7 @@ func NewWorkflow(
 	clusterMetadata cluster.Metadata,
 	context workflow.Context,
 	mutableState workflow.MutableState,
-	releaseFn workflow.ReleaseCacheFunc,
+	releaseFn wcache.ReleaseCacheFunc,
 ) *WorkflowImpl {
 
 	return &WorkflowImpl{
@@ -97,7 +98,7 @@ func (r *WorkflowImpl) GetMutableState() workflow.MutableState {
 	return r.mutableState
 }
 
-func (r *WorkflowImpl) GetReleaseFn() workflow.ReleaseCacheFunc {
+func (r *WorkflowImpl) GetReleaseFn() wcache.ReleaseCacheFunc {
 	return r.releaseFn
 }
 

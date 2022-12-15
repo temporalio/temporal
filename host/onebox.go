@@ -207,7 +207,7 @@ func (c *temporalImpl) enableWorker() bool {
 }
 
 func (c *temporalImpl) Start() error {
-	hosts := make(map[string][]string)
+	hosts := make(map[primitives.ServiceName][]string)
 	hosts[primitives.FrontendService] = []string{c.FrontendGRPCAddress()}
 	hosts[primitives.MatchingService] = []string{c.MatchingGRPCServiceAddress()}
 	hosts[primitives.HistoryService] = c.HistoryServiceAddress()
@@ -363,7 +363,7 @@ func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
 }
 
-func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
 	serviceName := primitives.FrontendService
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
@@ -386,8 +386,8 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Supply(
 			stoppedCh,
 			persistenceConfig,
+			serviceName,
 		),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.FrontendGRPCAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
@@ -451,7 +451,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 }
 
 func (c *temporalImpl) startHistory(
-	hosts map[string][]string,
+	hosts map[primitives.ServiceName][]string,
 	startWG *sync.WaitGroup,
 ) {
 	serviceName := primitives.HistoryService
@@ -476,9 +476,9 @@ func (c *temporalImpl) startHistory(
 			fx.Supply(
 				stoppedCh,
 				persistenceConfig,
+				serviceName,
 			),
 			fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
-			fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
@@ -545,7 +545,7 @@ func (c *temporalImpl) startHistory(
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
 	serviceName := primitives.MatchingService
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
@@ -561,9 +561,9 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Supply(
 			stoppedCh,
 			persistenceConfig,
+			serviceName,
 		),
 		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(newRPCFactoryImpl),
@@ -607,7 +607,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
+func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
 	serviceName := primitives.WorkerService
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
@@ -641,9 +641,9 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Supply(
 			stoppedCh,
 			persistenceConfig,
+			serviceName,
 		),
 		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
@@ -763,7 +763,7 @@ func sdkClientFactoryProvider(
 }
 
 type rpcFactoryImpl struct {
-	serviceName  string
+	serviceName  primitives.ServiceName
 	grpcHostPort string
 	logger       log.Logger
 	frontendURL  string
@@ -792,9 +792,9 @@ func (c *rpcFactoryImpl) CreateInternodeGRPCConnection(hostName string) *grpc.Cl
 	return c.CreateGRPCConnection(hostName)
 }
 
-func newRPCFactoryImpl(sName resource.ServiceName, grpcHostPort listenHostPort, logger log.Logger, resolver membership.GRPCResolver) common.RPCFactory {
+func newRPCFactoryImpl(sn primitives.ServiceName, grpcHostPort listenHostPort, logger log.Logger, resolver membership.GRPCResolver) common.RPCFactory {
 	return &rpcFactoryImpl{
-		serviceName:  string(sName),
+		serviceName:  sn,
 		grpcHostPort: string(grpcHostPort),
 		logger:       logger,
 		frontendURL:  resolver.MakeURL(primitives.FrontendService),

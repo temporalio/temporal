@@ -22,9 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination cache_mock.go
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination cache_mock.go
 
-package workflow
+package cache
 
 import (
 	"context"
@@ -35,7 +35,6 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -55,8 +55,8 @@ type (
 			ctx context.Context,
 			namespaceID namespace.ID,
 			execution commonpb.WorkflowExecution,
-			caller CallerType,
-		) (Context, ReleaseCacheFunc, error)
+			caller workflow.CallerType,
+		) (workflow.Context, ReleaseCacheFunc, error)
 	}
 
 	CacheImpl struct {
@@ -97,8 +97,8 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
-	caller CallerType,
-) (Context, ReleaseCacheFunc, error) {
+	caller workflow.CallerType,
+) (workflow.Context, ReleaseCacheFunc, error) {
 
 	if err := c.validateWorkflowExecutionInfo(ctx, namespaceID, &execution); err != nil {
 		return nil, nil, err
@@ -129,21 +129,21 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	execution commonpb.WorkflowExecution,
 	handler metrics.MetricsHandler,
 	forceClearContext bool,
-	caller CallerType,
-) (Context, ReleaseCacheFunc, error) {
+	caller workflow.CallerType,
+) (workflow.Context, ReleaseCacheFunc, error) {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
-	workflowCtx, cacheHit := c.Get(key).(Context)
+	workflowCtx, cacheHit := c.Get(key).(workflow.Context)
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = NewContext(c.shard, key, c.logger)
+		workflowCtx = workflow.NewContext(c.shard, key, c.logger)
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 			return nil, nil, err
 		}
-		workflowCtx = elem.(Context)
+		workflowCtx = elem.(workflow.Context)
 	}
 
 	// TODO This will create a closure on every request.
@@ -162,9 +162,9 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 
 func (c *CacheImpl) makeReleaseFunc(
 	key definition.WorkflowKey,
-	context Context,
+	context workflow.Context,
 	forceClearContext bool,
-	caller CallerType,
+	caller workflow.CallerType,
 ) func(error) {
 
 	status := cacheNotReleased

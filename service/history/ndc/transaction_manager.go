@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 // NOTE: terminology
@@ -154,7 +154,7 @@ type (
 	transactionMgrImpl struct {
 		shard             shard.Context
 		namespaceRegistry namespace.Registry
-		historyCache      workflow.Cache
+		workflowCache     wcache.Cache
 		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
 		serializer        serialization.Serializer
@@ -172,7 +172,7 @@ var _ transactionMgr = (*transactionMgrImpl)(nil)
 
 func newTransactionMgr(
 	shard shard.Context,
-	historyCache workflow.Cache,
+	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	logger log.Logger,
 ) *transactionMgrImpl {
@@ -180,14 +180,14 @@ func newTransactionMgr(
 	transactionMgr := &transactionMgrImpl{
 		shard:             shard,
 		namespaceRegistry: shard.GetNamespaceRegistry(),
-		historyCache:      historyCache,
+		workflowCache:     workflowCache,
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionManager:  shard.GetExecutionManager(),
 		serializer:        shard.GetPayloadSerializer(),
 		metricsHandler:    shard.GetMetricsHandler(),
 		workflowResetter: NewWorkflowResetter(
 			shard,
-			historyCache,
+			workflowCache,
 			logger,
 		),
 		eventsReapplier: eventsReapplier,
@@ -437,7 +437,7 @@ func (r *transactionMgrImpl) loadWorkflow(
 ) (Workflow, error) {
 
 	// we need to check the current workflow execution
-	weContext, release, err := r.historyCache.GetOrCreateWorkflowExecution(
+	weContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{

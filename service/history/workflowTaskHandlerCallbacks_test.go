@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -105,7 +106,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = mockShard.GetLogger()
 
-	historyCache := workflow.NewCache(mockShard)
+	workflowCache := wcache.NewCache(mockShard)
 	h := &historyEngineImpl{
 		currentClusterName: mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              mockShard,
@@ -125,7 +126,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
-		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, historyCache),
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, workflowCache),
 	}
 
 	s.workflowTaskHandlerCallback = newWorkflowTaskHandlerCallback(h)
