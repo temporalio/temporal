@@ -199,13 +199,13 @@ func (a *interceptor) getMetricsHandler(
 	operation string,
 	namespace string,
 ) metrics.Handler {
-	var handler metrics.Handler
+	var metricsHandler metrics.Handler
 	if namespace != "" {
-		handler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(namespace))
+		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(namespace))
 	} else {
-		handler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceUnknownTag())
+		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceUnknownTag())
 	}
-	return handler
+	return metricsHandler
 }
 
 func TLSInfoFormContext(ctx context.Context) *credentials.TLSInfo {

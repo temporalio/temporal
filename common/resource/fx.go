@@ -82,9 +82,9 @@ type (
 	RuntimeMetricsReporterParams struct {
 		fx.In
 
-		Provider   metrics.Handler
-		Logger     log.SnTaggedLogger
-		InstanceID InstanceID `optional:"true"`
+		MetricHandler metrics.Handler
+		Logger        log.SnTaggedLogger
+		InstanceID    InstanceID `optional:"true"`
 	}
 )
 
@@ -297,7 +297,7 @@ func RuntimeMetricsReporterProvider(
 	params RuntimeMetricsReporterParams,
 ) *metrics.RuntimeMetricsReporter {
 	return metrics.NewRuntimeMetricsReporter(
-		params.Provider,
+		params.MetricHandler,
 		time.Minute,
 		params.Logger,
 		string(params.InstanceID),

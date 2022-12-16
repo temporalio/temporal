@@ -63,13 +63,13 @@ func (c *metricClient) startMetricsRecording(
 	operation string,
 ) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
-	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.AdminRoleTagValue))
-	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
-	return handler, time.Now().UTC()
+	metricsHandler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.AdminRoleTagValue))
+	metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	return metricsHandler, time.Now().UTC()
 }
 
 func (c *metricClient) finishMetricsRecording(
-	handler metrics.Handler,
+	metricsHandler metrics.Handler,
 	startTime time.Time,
 	err error,
 ) {
@@ -86,7 +86,7 @@ func (c *metricClient) finishMetricsRecording(
 		default:
 			c.throttledLogger.Info("admin client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		handler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
+		metricsHandler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	handler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
+	metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
 }

@@ -225,11 +225,13 @@ func queryDirectlyThroughMatching(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
-	scope metrics.Handler,
+	metricsHandler metrics.Handler,
 ) (*historyservice.QueryWorkflowResponse, error) {
 
 	startTime := time.Now().UTC()
-	defer func() { scope.Timer(metrics.DirectQueryDispatchLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() {
+		metricsHandler.Timer(metrics.DirectQueryDispatchLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
@@ -246,10 +248,10 @@ func queryDirectlyThroughMatching(
 		stickyContext, cancel := context.WithTimeout(context.Background(), timestamp.DurationValue(msResp.GetStickyTaskQueueScheduleToStartTimeout()))
 		stickyStartTime := time.Now().UTC()
 		matchingResp, err := rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
-		scope.Timer(metrics.DirectQueryDispatchStickyLatency.GetMetricName()).Record(time.Since(stickyStartTime))
+		metricsHandler.Timer(metrics.DirectQueryDispatchStickyLatency.GetMetricName()).Record(time.Since(stickyStartTime))
 		cancel()
 		if err == nil {
-			scope.Counter(metrics.DirectQueryDispatchStickySuccessCount.GetMetricName()).Record(1)
+			metricsHandler.Counter(metrics.DirectQueryDispatchStickySuccessCount.GetMetricName()).Record(1)
 			return &historyservice.QueryWorkflowResponse{
 				Response: &workflowservice.QueryWorkflowResponse{
 					QueryResult:   matchingResp.GetQueryResult(),
@@ -266,17 +268,17 @@ func queryDirectlyThroughMatching(
 				NamespaceId: namespaceID,
 				Execution:   queryRequest.GetExecution(),
 			}, shard, workflowConsistencyChecker)
-			scope.Timer(metrics.DirectQueryDispatchClearStickinessLatency.GetMetricName()).Record(time.Since(clearStickinessStartTime))
+			metricsHandler.Timer(metrics.DirectQueryDispatchClearStickinessLatency.GetMetricName()).Record(time.Since(clearStickinessStartTime))
 			cancel()
 			if err != nil && err != consts.ErrWorkflowCompleted {
 				return nil, err
 			}
-			scope.Counter(metrics.DirectQueryDispatchClearStickinessSuccessCount.GetMetricName()).Record(1)
+			metricsHandler.Counter(metrics.DirectQueryDispatchClearStickinessSuccessCount.GetMetricName()).Record(1)
 		}
 	}
 
 	if err := common.IsValidContext(ctx); err != nil {
-		scope.Counter(metrics.DirectQueryDispatchTimeoutBeforeNonStickyCount.GetMetricName()).Record(1)
+		metricsHandler.Counter(metrics.DirectQueryDispatchTimeoutBeforeNonStickyCount.GetMetricName()).Record(1)
 		return nil, err
 	}
 
@@ -288,11 +290,11 @@ func queryDirectlyThroughMatching(
 
 	nonStickyStartTime := time.Now().UTC()
 	matchingResp, err := matchingClient.QueryWorkflow(ctx, nonStickyMatchingRequest)
-	scope.Timer(metrics.DirectQueryDispatchNonStickyLatency.GetMetricName()).Record(time.Since(nonStickyStartTime))
+	metricsHandler.Timer(metrics.DirectQueryDispatchNonStickyLatency.GetMetricName()).Record(time.Since(nonStickyStartTime))
 	if err != nil {
 		return nil, err
 	}
-	scope.Counter(metrics.DirectQueryDispatchNonStickySuccessCount.GetMetricName()).Record(1)
+	metricsHandler.Counter(metrics.DirectQueryDispatchNonStickySuccessCount.GetMetricName()).Record(1)
 	return &historyservice.QueryWorkflowResponse{
 		Response: &workflowservice.QueryWorkflowResponse{
 			QueryResult:   matchingResp.GetQueryResult(),
