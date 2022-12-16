@@ -292,7 +292,7 @@ func OverrideStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
 	operation string,
 	shard shard.Context,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) {
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity

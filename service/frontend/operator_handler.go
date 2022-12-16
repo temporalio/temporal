@@ -73,7 +73,7 @@ type (
 		esConfig               *esclient.Config
 		esClient               esclient.Client
 		sdkClientFactory       sdk.ClientFactory
-		metricsHandler         metrics.MetricsHandler
+		metricsHandler         metrics.Handler
 		saProvider             searchattribute.Provider
 		saManager              searchattribute.Manager
 		healthServer           *health.Server
@@ -90,7 +90,7 @@ type (
 		EsClient               esclient.Client
 		Logger                 log.Logger
 		sdkClientFactory       sdk.ClientFactory
-		MetricsHandler         metrics.MetricsHandler
+		MetricsHandler         metrics.Handler
 		SaProvider             searchattribute.Provider
 		SaManager              searchattribute.Manager
 		healthServer           *health.Server
@@ -507,7 +507,7 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 }
 
 // startRequestProfile initiates recording of request metrics
-func (h *OperatorHandlerImpl) startRequestProfile(operation string) (metrics.MetricsHandler, time.Time) {
+func (h *OperatorHandlerImpl) startRequestProfile(operation string) (metrics.Handler, time.Time) {
 	metricsScope := h.metricsHandler.WithTags(metrics.OperationTag(operation))
 	metricsScope.Counter(metrics.ServiceRequests.GetMetricName()).Record(1)
 	return metricsScope, time.Now().UTC()

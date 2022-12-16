@@ -62,7 +62,7 @@ type (
 		workflowCache                 wcache.Cache
 		resender                      xdc.NDCHistoryResender
 		taskExecutorProvider          TaskExecutorProvider
-		metricsHandler                metrics.MetricsHandler
+		metricsHandler                metrics.Handler
 		logger                        log.Logger
 
 		taskProcessorLock sync.RWMutex

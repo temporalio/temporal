@@ -4035,7 +4035,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 func (wh *WorkflowHandler) getRawHistory(
 	ctx context.Context,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	firstEventID int64,
@@ -4097,7 +4097,7 @@ func (wh *WorkflowHandler) getRawHistory(
 
 func (wh *WorkflowHandler) getHistory(
 	ctx context.Context,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespaceID namespace.ID,
 	namespace namespace.Name,
 	execution commonpb.WorkflowExecution,
@@ -4176,7 +4176,7 @@ func (wh *WorkflowHandler) getHistory(
 
 func (wh *WorkflowHandler) getHistoryReverse(
 	ctx context.Context,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespaceID namespace.ID,
 	namespace namespace.Name,
 	execution commonpb.WorkflowExecution,
@@ -4662,7 +4662,7 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	return nil
 }
 
-func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.MetricsHandler {
+func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Handler {
 	return interceptor.GetMetricsHandlerFromContext(ctx, wh.logger)
 }
 

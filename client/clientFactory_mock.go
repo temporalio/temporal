@@ -179,7 +179,7 @@ func (m *MockFactoryProvider) EXPECT() *MockFactoryProviderMockRecorder {
 }
 
 // NewFactory mocks base method.
-func (m *MockFactoryProvider) NewFactory(rpcFactory common.RPCFactory, monitor membership.Monitor, metricsHandler metrics.MetricsHandler, dc *dynamicconfig.Collection, numberOfHistoryShards int32, logger, throttledLogger log.Logger) Factory {
+func (m *MockFactoryProvider) NewFactory(rpcFactory common.RPCFactory, monitor membership.Monitor, metricsHandler metrics.Handler, dc *dynamicconfig.Collection, numberOfHistoryShards int32, logger, throttledLogger log.Logger) Factory {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewFactory", rpcFactory, monitor, metricsHandler, dc, numberOfHistoryShards, logger, throttledLogger)
 	ret0, _ := ret[0].(Factory)

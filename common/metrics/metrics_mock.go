@@ -36,140 +36,140 @@ import (
 	log "go.temporal.io/server/common/log"
 )
 
-// MockMetricsHandler is a mock of MetricsHandler interface.
-type MockMetricsHandler struct {
+// MockHandler is a mock of Handler interface.
+type MockHandler struct {
 	ctrl     *gomock.Controller
-	recorder *MockMetricsHandlerMockRecorder
+	recorder *MockHandlerMockRecorder
 }
 
-// MockMetricsHandlerMockRecorder is the mock recorder for MockMetricsHandler.
-type MockMetricsHandlerMockRecorder struct {
-	mock *MockMetricsHandler
+// MockHandlerMockRecorder is the mock recorder for MockHandler.
+type MockHandlerMockRecorder struct {
+	mock *MockHandler
 }
 
-// NewMockMetricsHandler creates a new mock instance.
-func NewMockMetricsHandler(ctrl *gomock.Controller) *MockMetricsHandler {
-	mock := &MockMetricsHandler{ctrl: ctrl}
-	mock.recorder = &MockMetricsHandlerMockRecorder{mock}
+// NewMockHandler creates a new mock instance.
+func NewMockHandler(ctrl *gomock.Controller) *MockHandler {
+	mock := &MockHandler{ctrl: ctrl}
+	mock.recorder = &MockHandlerMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockMetricsHandler) EXPECT() *MockMetricsHandlerMockRecorder {
+func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
 	return m.recorder
 }
 
 // Counter mocks base method.
-func (m *MockMetricsHandler) Counter(arg0 string) CounterMetric {
+func (m *MockHandler) Counter(arg0 string) CounterIface {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Counter", arg0)
-	ret0, _ := ret[0].(CounterMetric)
+	ret0, _ := ret[0].(CounterIface)
 	return ret0
 }
 
 // Counter indicates an expected call of Counter.
-func (mr *MockMetricsHandlerMockRecorder) Counter(arg0 interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) Counter(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Counter", reflect.TypeOf((*MockMetricsHandler)(nil).Counter), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Counter", reflect.TypeOf((*MockHandler)(nil).Counter), arg0)
 }
 
 // Gauge mocks base method.
-func (m *MockMetricsHandler) Gauge(arg0 string) GaugeMetric {
+func (m *MockHandler) Gauge(arg0 string) GaugeIface {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Gauge", arg0)
-	ret0, _ := ret[0].(GaugeMetric)
+	ret0, _ := ret[0].(GaugeIface)
 	return ret0
 }
 
 // Gauge indicates an expected call of Gauge.
-func (mr *MockMetricsHandlerMockRecorder) Gauge(arg0 interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) Gauge(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Gauge", reflect.TypeOf((*MockMetricsHandler)(nil).Gauge), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Gauge", reflect.TypeOf((*MockHandler)(nil).Gauge), arg0)
 }
 
 // Histogram mocks base method.
-func (m *MockMetricsHandler) Histogram(arg0 string, arg1 MetricUnit) HistogramMetric {
+func (m *MockHandler) Histogram(arg0 string, arg1 MetricUnit) HistogramIface {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Histogram", arg0, arg1)
-	ret0, _ := ret[0].(HistogramMetric)
+	ret0, _ := ret[0].(HistogramIface)
 	return ret0
 }
 
 // Histogram indicates an expected call of Histogram.
-func (mr *MockMetricsHandlerMockRecorder) Histogram(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) Histogram(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Histogram", reflect.TypeOf((*MockMetricsHandler)(nil).Histogram), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Histogram", reflect.TypeOf((*MockHandler)(nil).Histogram), arg0, arg1)
 }
 
 // Stop mocks base method.
-func (m *MockMetricsHandler) Stop(arg0 log.Logger) {
+func (m *MockHandler) Stop(arg0 log.Logger) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Stop", arg0)
 }
 
 // Stop indicates an expected call of Stop.
-func (mr *MockMetricsHandlerMockRecorder) Stop(arg0 interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) Stop(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockMetricsHandler)(nil).Stop), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockHandler)(nil).Stop), arg0)
 }
 
 // Timer mocks base method.
-func (m *MockMetricsHandler) Timer(arg0 string) TimerMetric {
+func (m *MockHandler) Timer(arg0 string) TimerIface {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Timer", arg0)
-	ret0, _ := ret[0].(TimerMetric)
+	ret0, _ := ret[0].(TimerIface)
 	return ret0
 }
 
 // Timer indicates an expected call of Timer.
-func (mr *MockMetricsHandlerMockRecorder) Timer(arg0 interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) Timer(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Timer", reflect.TypeOf((*MockMetricsHandler)(nil).Timer), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Timer", reflect.TypeOf((*MockHandler)(nil).Timer), arg0)
 }
 
 // WithTags mocks base method.
-func (m *MockMetricsHandler) WithTags(arg0 ...Tag) MetricsHandler {
+func (m *MockHandler) WithTags(arg0 ...Tag) Handler {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{}
 	for _, a := range arg0 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "WithTags", varargs...)
-	ret0, _ := ret[0].(MetricsHandler)
+	ret0, _ := ret[0].(Handler)
 	return ret0
 }
 
 // WithTags indicates an expected call of WithTags.
-func (mr *MockMetricsHandlerMockRecorder) WithTags(arg0 ...interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) WithTags(arg0 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTags", reflect.TypeOf((*MockMetricsHandler)(nil).WithTags), arg0...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTags", reflect.TypeOf((*MockHandler)(nil).WithTags), arg0...)
 }
 
-// MockCounterMetric is a mock of CounterMetric interface.
-type MockCounterMetric struct {
+// MockCounterIface is a mock of CounterIface interface.
+type MockCounterIface struct {
 	ctrl     *gomock.Controller
-	recorder *MockCounterMetricMockRecorder
+	recorder *MockCounterIfaceMockRecorder
 }
 
-// MockCounterMetricMockRecorder is the mock recorder for MockCounterMetric.
-type MockCounterMetricMockRecorder struct {
-	mock *MockCounterMetric
+// MockCounterIfaceMockRecorder is the mock recorder for MockCounterIface.
+type MockCounterIfaceMockRecorder struct {
+	mock *MockCounterIface
 }
 
-// NewMockCounterMetric creates a new mock instance.
-func NewMockCounterMetric(ctrl *gomock.Controller) *MockCounterMetric {
-	mock := &MockCounterMetric{ctrl: ctrl}
-	mock.recorder = &MockCounterMetricMockRecorder{mock}
+// NewMockCounterIface creates a new mock instance.
+func NewMockCounterIface(ctrl *gomock.Controller) *MockCounterIface {
+	mock := &MockCounterIface{ctrl: ctrl}
+	mock.recorder = &MockCounterIfaceMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockCounterMetric) EXPECT() *MockCounterMetricMockRecorder {
+func (m *MockCounterIface) EXPECT() *MockCounterIfaceMockRecorder {
 	return m.recorder
 }
 
 // Record mocks base method.
-func (m *MockCounterMetric) Record(arg0 int64, arg1 ...Tag) {
+func (m *MockCounterIface) Record(arg0 int64, arg1 ...Tag) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
@@ -179,37 +179,37 @@ func (m *MockCounterMetric) Record(arg0 int64, arg1 ...Tag) {
 }
 
 // Record indicates an expected call of Record.
-func (mr *MockCounterMetricMockRecorder) Record(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+func (mr *MockCounterIfaceMockRecorder) Record(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Record", reflect.TypeOf((*MockCounterMetric)(nil).Record), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Record", reflect.TypeOf((*MockCounterIface)(nil).Record), varargs...)
 }
 
-// MockGaugeMetric is a mock of GaugeMetric interface.
-type MockGaugeMetric struct {
+// MockGaugeIface is a mock of GaugeIface interface.
+type MockGaugeIface struct {
 	ctrl     *gomock.Controller
-	recorder *MockGaugeMetricMockRecorder
+	recorder *MockGaugeIfaceMockRecorder
 }
 
-// MockGaugeMetricMockRecorder is the mock recorder for MockGaugeMetric.
-type MockGaugeMetricMockRecorder struct {
-	mock *MockGaugeMetric
+// MockGaugeIfaceMockRecorder is the mock recorder for MockGaugeIface.
+type MockGaugeIfaceMockRecorder struct {
+	mock *MockGaugeIface
 }
 
-// NewMockGaugeMetric creates a new mock instance.
-func NewMockGaugeMetric(ctrl *gomock.Controller) *MockGaugeMetric {
-	mock := &MockGaugeMetric{ctrl: ctrl}
-	mock.recorder = &MockGaugeMetricMockRecorder{mock}
+// NewMockGaugeIface creates a new mock instance.
+func NewMockGaugeIface(ctrl *gomock.Controller) *MockGaugeIface {
+	mock := &MockGaugeIface{ctrl: ctrl}
+	mock.recorder = &MockGaugeIfaceMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockGaugeMetric) EXPECT() *MockGaugeMetricMockRecorder {
+func (m *MockGaugeIface) EXPECT() *MockGaugeIfaceMockRecorder {
 	return m.recorder
 }
 
 // Record mocks base method.
-func (m *MockGaugeMetric) Record(arg0 float64, arg1 ...Tag) {
+func (m *MockGaugeIface) Record(arg0 float64, arg1 ...Tag) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
@@ -219,37 +219,37 @@ func (m *MockGaugeMetric) Record(arg0 float64, arg1 ...Tag) {
 }
 
 // Record indicates an expected call of Record.
-func (mr *MockGaugeMetricMockRecorder) Record(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+func (mr *MockGaugeIfaceMockRecorder) Record(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Record", reflect.TypeOf((*MockGaugeMetric)(nil).Record), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Record", reflect.TypeOf((*MockGaugeIface)(nil).Record), varargs...)
 }
 
-// MockTimerMetric is a mock of TimerMetric interface.
-type MockTimerMetric struct {
+// MockTimerIface is a mock of TimerIface interface.
+type MockTimerIface struct {
 	ctrl     *gomock.Controller
-	recorder *MockTimerMetricMockRecorder
+	recorder *MockTimerIfaceMockRecorder
 }
 
-// MockTimerMetricMockRecorder is the mock recorder for MockTimerMetric.
-type MockTimerMetricMockRecorder struct {
-	mock *MockTimerMetric
+// MockTimerIfaceMockRecorder is the mock recorder for MockTimerIface.
+type MockTimerIfaceMockRecorder struct {
+	mock *MockTimerIface
 }
 
-// NewMockTimerMetric creates a new mock instance.
-func NewMockTimerMetric(ctrl *gomock.Controller) *MockTimerMetric {
-	mock := &MockTimerMetric{ctrl: ctrl}
-	mock.recorder = &MockTimerMetricMockRecorder{mock}
+// NewMockTimerIface creates a new mock instance.
+func NewMockTimerIface(ctrl *gomock.Controller) *MockTimerIface {
+	mock := &MockTimerIface{ctrl: ctrl}
+	mock.recorder = &MockTimerIfaceMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockTimerMetric) EXPECT() *MockTimerMetricMockRecorder {
+func (m *MockTimerIface) EXPECT() *MockTimerIfaceMockRecorder {
 	return m.recorder
 }
 
 // Record mocks base method.
-func (m *MockTimerMetric) Record(arg0 time.Duration, arg1 ...Tag) {
+func (m *MockTimerIface) Record(arg0 time.Duration, arg1 ...Tag) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
@@ -259,37 +259,37 @@ func (m *MockTimerMetric) Record(arg0 time.Duration, arg1 ...Tag) {
 }
 
 // Record indicates an expected call of Record.
-func (mr *MockTimerMetricMockRecorder) Record(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+func (mr *MockTimerIfaceMockRecorder) Record(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Record", reflect.TypeOf((*MockTimerMetric)(nil).Record), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Record", reflect.TypeOf((*MockTimerIface)(nil).Record), varargs...)
 }
 
-// MockHistogramMetric is a mock of HistogramMetric interface.
-type MockHistogramMetric struct {
+// MockHistogramIface is a mock of HistogramIface interface.
+type MockHistogramIface struct {
 	ctrl     *gomock.Controller
-	recorder *MockHistogramMetricMockRecorder
+	recorder *MockHistogramIfaceMockRecorder
 }
 
-// MockHistogramMetricMockRecorder is the mock recorder for MockHistogramMetric.
-type MockHistogramMetricMockRecorder struct {
-	mock *MockHistogramMetric
+// MockHistogramIfaceMockRecorder is the mock recorder for MockHistogramIface.
+type MockHistogramIfaceMockRecorder struct {
+	mock *MockHistogramIface
 }
 
-// NewMockHistogramMetric creates a new mock instance.
-func NewMockHistogramMetric(ctrl *gomock.Controller) *MockHistogramMetric {
-	mock := &MockHistogramMetric{ctrl: ctrl}
-	mock.recorder = &MockHistogramMetricMockRecorder{mock}
+// NewMockHistogramIface creates a new mock instance.
+func NewMockHistogramIface(ctrl *gomock.Controller) *MockHistogramIface {
+	mock := &MockHistogramIface{ctrl: ctrl}
+	mock.recorder = &MockHistogramIfaceMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockHistogramMetric) EXPECT() *MockHistogramMetricMockRecorder {
+func (m *MockHistogramIface) EXPECT() *MockHistogramIfaceMockRecorder {
 	return m.recorder
 }
 
 // Record mocks base method.
-func (m *MockHistogramMetric) Record(arg0 int64, arg1 ...Tag) {
+func (m *MockHistogramIface) Record(arg0 int64, arg1 ...Tag) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
@@ -299,8 +299,8 @@ func (m *MockHistogramMetric) Record(arg0 int64, arg1 ...Tag) {
 }
 
 // Record indicates an expected call of Record.
-func (mr *MockHistogramMetricMockRecorder) Record(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+func (mr *MockHistogramIfaceMockRecorder) Record(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Record", reflect.TypeOf((*MockHistogramMetric)(nil).Record), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Record", reflect.TypeOf((*MockHistogramIface)(nil).Record), varargs...)
 }

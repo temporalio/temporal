@@ -81,7 +81,7 @@ type (
 		historyEngine           shard.Engine
 		historySerializer       serialization.Serializer
 		config                  *configs.Config
-		metricsHandler          metrics.MetricsHandler
+		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		replicationTaskExecutor TaskExecutor
 
@@ -112,7 +112,7 @@ func NewTaskProcessor(
 	shard shard.Context,
 	historyEngine shard.Engine,
 	config *configs.Config,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	replicationTaskFetcher taskFetcher,
 	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,

@@ -53,7 +53,7 @@ type clientSuite struct {
 	archiverProvider   *provider.MockArchiverProvider
 	historyArchiver    *carchiver.MockHistoryArchiver
 	visibilityArchiver *carchiver.MockVisibilityArchiver
-	metricsHandler     *metrics.MockMetricsHandler
+	metricsHandler     *metrics.MockHandler
 	sdkClientFactory   *sdk.MockClientFactory
 	sdkClient          *mocksdk.MockClient
 	client             *client
@@ -70,7 +70,7 @@ func (s *clientSuite) SetupTest() {
 	s.archiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.historyArchiver = carchiver.NewMockHistoryArchiver(s.controller)
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)
-	s.metricsHandler = metrics.NewMockMetricsHandler(s.controller)
+	s.metricsHandler = metrics.NewMockHandler(s.controller)
 	s.metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverClientScope)).Return(s.metricsHandler)
 	s.sdkClient = mocksdk.NewMockClient(s.controller)
 	s.sdkClientFactory = sdk.NewMockClientFactory(s.controller)

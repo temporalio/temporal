@@ -68,7 +68,7 @@ type (
 		adminClient    adminservice.AdminServiceClient
 		registry       namespace.Registry
 		rateLimiter    quotas.RateLimiter
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		logger         log.Logger
 		isInTest       bool
 		// only clean up history branches that older than this age
@@ -114,7 +114,7 @@ func NewScavenger(
 	historyDataMinAge dynamicconfig.DurationPropertyFn,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
 	enableRetentionVerification dynamicconfig.BoolPropertyFn,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Scavenger {
 

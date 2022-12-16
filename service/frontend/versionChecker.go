@@ -47,7 +47,7 @@ const VersionCheckInterval = 24 * time.Hour
 type VersionChecker struct {
 	config                 *Config
 	shutdownChan           chan struct{}
-	metricsHandler         metrics.MetricsHandler
+	metricsHandler         metrics.Handler
 	clusterMetadataManager persistence.ClusterMetadataManager
 	startOnce              sync.Once
 	stopOnce               sync.Once
@@ -56,7 +56,7 @@ type VersionChecker struct {
 
 func NewVersionChecker(
 	config *Config,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
 ) *VersionChecker {

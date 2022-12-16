@@ -184,7 +184,7 @@ func WithChainedFrontendGrpcInterceptors(
 
 // WithCustomerMetricsProvider sets a custom implementation of the metrics.MetricsHandler interface
 // metrics.MetricsHandler is the base interface for publishing metric events
-func WithCustomMetricsHandler(provider metrics.MetricsHandler) ServerOption {
+func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.metricHandler = provider
 	})

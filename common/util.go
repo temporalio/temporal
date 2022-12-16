@@ -598,7 +598,7 @@ func CheckEventBlobSizeLimit(
 	namespace string,
 	workflowID string,
 	runID string,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	blobSizeViolationOperationTag tag.ZapTag,
 ) error {

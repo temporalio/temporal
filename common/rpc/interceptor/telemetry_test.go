@@ -37,7 +37,7 @@ import (
 func TestEmitActionMetric(t *testing.T) {
 	controller := gomock.NewController(t)
 	register := namespace.NewMockRegistry(controller)
-	metricsHandler := metrics.NewMockMetricsHandler(controller)
+	metricsHandler := metrics.NewMockHandler(controller)
 	telemetry := NewTelemetryInterceptor(register, metricsHandler, log.NewNoopLogger())
 
 	testCases := []struct {

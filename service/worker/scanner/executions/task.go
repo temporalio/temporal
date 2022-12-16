@@ -62,7 +62,7 @@ type (
 		registry         namespace.Registry
 		historyClient    historyservice.HistoryServiceClient
 		adminClient      adminservice.AdminServiceClient
-		metricsHandler   metrics.MetricsHandler
+		metricsHandler   metrics.Handler
 		logger           log.Logger
 		scavenger        *Scavenger
 
@@ -81,7 +81,7 @@ func newTask(
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
@@ -270,7 +270,7 @@ func (t *task) handleFailures(
 func printValidationResult(
 	mutableState *MutableState,
 	results []MutableStateValidationResult,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
 	metricsHandler.Counter(metrics.ScavengerValidationRequestsCount.GetMetricName()).Record(1)

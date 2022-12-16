@@ -74,7 +74,7 @@ type activitiesSuite struct {
 	mockExecutionMgr *persistence.MockExecutionManager
 
 	logger             log.Logger
-	metricsHandler     *metrics.MockMetricsHandler
+	metricsHandler     *metrics.MockHandler
 	archiverProvider   *provider.MockArchiverProvider
 	historyArchiver    *carchiver.MockHistoryArchiver
 	visibilityArchiver *carchiver.MockVisibilityArchiver
@@ -90,7 +90,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.mockExecutionMgr = persistence.NewMockExecutionManager(s.controller)
 
 	s.logger = log.NewNoopLogger()
-	s.metricsHandler = metrics.NewMockMetricsHandler(s.controller)
+	s.metricsHandler = metrics.NewMockHandler(s.controller)
 	s.archiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.historyArchiver = carchiver.NewMockHistoryArchiver(s.controller)
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)

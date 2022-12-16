@@ -54,7 +54,7 @@ func NewArchivalQueueTaskExecutor(
 	shardContext shard.Context,
 	workflowCache cache.Cache,
 	relocatableAttributesFetcher workflow.RelocatableAttributesFetcher,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) queues.Executor {
 	return &archivalQueueTaskExecutor{
@@ -72,7 +72,7 @@ type archivalQueueTaskExecutor struct {
 	archiver                     archival.Archiver
 	shardContext                 shard.Context
 	workflowCache                cache.Cache
-	metricsHandler               metrics.MetricsHandler
+	metricsHandler               metrics.Handler
 	logger                       log.Logger
 	relocatableAttributesFetcher workflow.RelocatableAttributesFetcher
 }

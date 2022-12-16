@@ -67,13 +67,13 @@ type localStoreTlsProvider struct {
 	ticker         *time.Ticker
 	logger         log.Logger
 	stop           chan bool
-	metricsHandler metrics.MetricsHandler
+	metricsHandler metrics.Handler
 }
 
 var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
 var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
-func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.MetricsHandler, logger log.Logger, certProviderFactory CertProviderFactory,
+func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.Handler, logger log.Logger, certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
 
 	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil, tlsConfig.RefreshInterval, logger)

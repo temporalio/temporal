@@ -73,7 +73,7 @@ type (
 		NamespaceCache    *namespace.MockRegistry
 		TimeSource        clock.TimeSource
 		PayloadSerializer serialization.Serializer
-		MetricsHandler    metrics.MetricsHandler
+		MetricsHandler    metrics.Handler
 		ArchivalMetadata  *archiver.MockArchivalMetadata
 		ArchiverProvider  *provider.MockArchiverProvider
 
@@ -275,7 +275,7 @@ func (t *Test) GetPayloadSerializer() serialization.Serializer {
 }
 
 // GetMetricsHandler for testing
-func (t *Test) GetMetricsHandler() metrics.MetricsHandler {
+func (t *Test) GetMetricsHandler() metrics.Handler {
 	return t.MetricsHandler
 }
 

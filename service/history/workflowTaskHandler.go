@@ -79,7 +79,7 @@ type (
 
 		logger            log.Logger
 		namespaceRegistry namespace.Registry
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		config            *configs.Config
 		shard             shard.Context
 		tokenSerializer   common.TaskTokenSerializer
@@ -113,7 +113,7 @@ func newWorkflowTaskHandler(
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 	shard shard.Context,
 	searchAttributesMapper searchattribute.Mapper,

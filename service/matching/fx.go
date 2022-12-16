@@ -71,7 +71,7 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
@@ -118,7 +118,7 @@ func HandlerProvider(
 	historyClient historyservice.HistoryServiceClient,
 	matchingRawClient resource.MatchingRawClient,
 	matchingServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 ) *Handler {

@@ -61,7 +61,7 @@ func NewManager(
 	enableWriteToSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFn,
 
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
 	stdVisibilityManager, err := NewStandardManager(
@@ -161,7 +161,7 @@ func NewStandardManager(
 	standardVisibilityPersistenceMaxReadQPS dynamicconfig.IntPropertyFn,
 	standardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
 
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
 
@@ -193,7 +193,7 @@ func NewAdvancedManager(
 	advancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFn,
 
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
 	if defaultIndexName == "" {
@@ -224,7 +224,7 @@ func newVisibilityManager(
 	store store.VisibilityStore,
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	tag metrics.Tag,
 	logger log.Logger,
 ) manager.VisibilityManager {
@@ -291,7 +291,7 @@ func newAdvancedVisibilityStore(
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapper searchattribute.Mapper,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFn,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) store.VisibilityStore {
 	if esClient == nil {

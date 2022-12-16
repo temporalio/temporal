@@ -72,7 +72,7 @@ type (
 		historyClient     historyservice.HistoryServiceClient
 		frontendClient    workflowservice.WorkflowServiceClient
 		logger            log.Logger
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 	}
 
 	replicationStatus struct {

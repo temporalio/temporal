@@ -41,14 +41,14 @@ var _ workflowservice.WorkflowServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
 	client          workflowservice.WorkflowServiceClient
-	metricsHandler  metrics.MetricsHandler
+	metricsHandler  metrics.Handler
 	throttledLogger log.Logger
 }
 
 // NewMetricClient creates a new instance of workflowservice.WorkflowServiceClient that emits metrics
 func NewMetricClient(
 	client workflowservice.WorkflowServiceClient,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	throttledLogger log.Logger,
 ) workflowservice.WorkflowServiceClient {
 	return &metricClient{
@@ -61,7 +61,7 @@ func NewMetricClient(
 func (c *metricClient) startMetricsRecording(
 	ctx context.Context,
 	operation string,
-) (metrics.MetricsHandler, time.Time) {
+) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.FrontendRoleTagValue))
 	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
@@ -69,7 +69,7 @@ func (c *metricClient) startMetricsRecording(
 }
 
 func (c *metricClient) finishMetricsRecording(
-	handler metrics.MetricsHandler,
+	handler metrics.Handler,
 	startTime time.Time,
 	err error,
 ) {
