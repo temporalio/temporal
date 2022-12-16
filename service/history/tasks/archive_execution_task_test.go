@@ -25,53 +25,30 @@
 package tasks
 
 import (
+	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
-var _ Task = (*ArchiveExecutionTask)(nil)
-
-type (
-	// ArchiveExecutionTask is the task which archives both the history and visibility of a workflow execution and then
-	// produces a retention timer task to delete the data. See "Durable Archival" for more info.
-	ArchiveExecutionTask struct {
-		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
+func TestArchiveExecutionTask(t *testing.T) {
+	workflowKey := definition.NewWorkflowKey("namespace", "workflowID", "runID")
+	visibilityTimestamp := time.Now()
+	taskID := int64(123)
+	version := int64(456)
+	task := &ArchiveExecutionTask{
+		WorkflowKey:         workflowKey,
+		VisibilityTimestamp: visibilityTimestamp,
+		TaskID:              taskID,
+		Version:             version,
 	}
-)
-
-func (a *ArchiveExecutionTask) GetKey() Key {
-	return NewKey(a.VisibilityTimestamp, a.TaskID)
-}
-
-func (a *ArchiveExecutionTask) GetTaskID() int64 {
-	return a.TaskID
-}
-
-func (a *ArchiveExecutionTask) GetVisibilityTime() time.Time {
-	return a.VisibilityTimestamp
-}
-
-func (a *ArchiveExecutionTask) GetVersion() int64 {
-	return a.Version
-}
-
-func (a *ArchiveExecutionTask) GetCategory() Category {
-	return CategoryArchival
-}
-
-func (a *ArchiveExecutionTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION
-}
-
-func (a *ArchiveExecutionTask) SetTaskID(id int64) {
-	a.TaskID = id
-}
-
-func (a *ArchiveExecutionTask) SetVisibilityTime(timestamp time.Time) {
-	a.VisibilityTimestamp = timestamp
+	assert.Equal(t, NewKey(visibilityTimestamp, taskID), task.GetKey())
+	assert.Equal(t, taskID, task.GetTaskID())
+	assert.Equal(t, visibilityTimestamp, task.GetVisibilityTime())
+	assert.Equal(t, version, task.GetVersion())
+	assert.Equal(t, CategoryArchival, task.GetCategory())
+	assert.Equal(t, enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
 }
