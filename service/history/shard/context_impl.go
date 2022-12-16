@@ -664,7 +664,7 @@ func (s *ContextImpl) AddTasks(
 	s.wUnlock()
 
 	if OperationPossiblySucceeded(err) {
-		engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
+		engine.NotifyNewTasks(request.Tasks)
 	}
 
 	return err
@@ -1032,7 +1032,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	var newTasks map[tasks.Category][]tasks.Task
 	defer func() {
 		if OperationPossiblySucceeded(retErr) && newTasks != nil {
-			engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), newTasks)
+			engine.NotifyNewTasks(newTasks)
 		}
 	}()
 
@@ -1731,13 +1731,7 @@ func (s *ContextImpl) notifyQueueProcessor() {
 		fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
 	}
 
-	// TODO: with multi-cursor, we don't need the for loop
-	for clusterName, info := range s.clusterMetadata.GetAllClusterInfo() {
-		if !info.Enabled {
-			continue
-		}
-		engine.NotifyNewTasks(clusterName, fakeTasks)
-	}
+	engine.NotifyNewTasks(fakeTasks)
 }
 
 func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {

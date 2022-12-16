@@ -204,7 +204,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		currentEventsSeq,
 		resetSnapshot,
 		resetEventsSeq,
-		"active-cluster-name",
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
 
 	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentMutation, currentEventsSeq, resetWorkflow)

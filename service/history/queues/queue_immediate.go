@@ -135,7 +135,7 @@ func (p *immediateQueue) Stop() {
 	p.queueBase.Stop()
 }
 
-func (p *immediateQueue) NotifyNewTasks(_ string, tasks []tasks.Task) {
+func (p *immediateQueue) NotifyNewTasks(tasks []tasks.Task) {
 	if len(tasks) == 0 {
 		return
 	}

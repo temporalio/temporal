@@ -174,7 +174,6 @@ func (r *workflowRebuilderImpl) persistToDB(
 	if err := r.transaction.SetWorkflowExecution(
 		ctx,
 		resetWorkflowSnapshot,
-		mutableState.GetNamespaceEntry().ActiveClusterName(),
 	); err != nil {
 		return err
 	}

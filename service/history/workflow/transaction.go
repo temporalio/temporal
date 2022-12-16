@@ -38,7 +38,6 @@ type (
 			createMode persistence.CreateWorkflowMode,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
-			clusterName string,
 		) (int64, error)
 
 		ConflictResolveWorkflowExecution(
@@ -50,7 +49,6 @@ type (
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
 			currentWorkflowMutation *persistence.WorkflowMutation,
 			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
-			clusterName string,
 		) (int64, int64, int64, error)
 
 		UpdateWorkflowExecution(
@@ -60,13 +58,11 @@ type (
 			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
-			clusterName string,
 		) (int64, int64, error)
 
 		SetWorkflowExecution(
 			ctx context.Context,
 			workflowSnapshot *persistence.WorkflowSnapshot,
-			clusterName string,
 		) error
 	}
 )
