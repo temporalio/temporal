@@ -63,6 +63,8 @@ var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
 	frontendPackagePrefix        = "/temporal.api.workflowservice.v1.WorkflowService/"
+	operatorServicePrefix        = "/temporal.api.operatorservice.v1.OperatorService/"
+	adminServicePrefix           = "/temporal.server.api.adminservice.v1.AdminService/"
 
 	grpcActions = map[string]struct{}{
 		metrics.FrontendQueryWorkflowScope:                    {},
@@ -102,16 +104,29 @@ func NewTelemetryInterceptor(
 
 // Use this method to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *TelemetryInterceptor) overrideOperationTag(operation string, req interface{}) string {
-	// GetWorkflowExecutionHistory method handles both long poll and regular calls.
-	// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
-	// remove this "if" case when that is done.
-	if operation == metrics.FrontendGetWorkflowExecutionHistoryScope {
-		request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
-		if request.GetWaitNewEvent() {
-			return metrics.FrontendPollWorkflowExecutionHistoryScope
+func (ti *TelemetryInterceptor) overrideOperationTag(fullName, operation string, req interface{}) string {
+	if strings.HasPrefix(fullName, frontendPackagePrefix) {
+		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
+		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
+		// remove this "if" case when that is done.
+		if operation == metrics.FrontendGetWorkflowExecutionHistoryScope {
+			request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
+			if request.GetWaitNewEvent() {
+				return metrics.FrontendPollWorkflowExecutionHistoryScope
+			}
 		}
+		return operation
 	}
+
+	// prepend Operator prefix to Operator APIs
+	if strings.HasPrefix(fullName, operatorServicePrefix) {
+		return "Operator" + operation
+	}
+	// prepend Admin prefix to Admin APIs
+	if strings.HasPrefix(fullName, adminServicePrefix) {
+		return "Admin" + operation
+	}
+
 	return operation
 }
 
@@ -221,7 +236,7 @@ func (ti *TelemetryInterceptor) metricsHandlerLogTags(
 	methodName string,
 ) (metrics.Handler, []tag.Tag) {
 
-	overridedMethodName := ti.overrideOperationTag(methodName, req)
+	overridedMethodName := ti.overrideOperationTag(fullMethod, methodName, req)
 
 	nsName := GetNamespace(ti.namespaceRegistry, req)
 	if nsName == "" {
