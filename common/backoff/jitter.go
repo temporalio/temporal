@@ -58,9 +58,6 @@ func Jitter[T int64 | float64 | time.Duration](input T, coefficient float64) T {
 		if i == 0 {
 			return input
 		}
-		//base := int64(float64(input) * (1 - coefficient))
-		//addon := rand.Int63n(2 * (i - base))
-		//return T(base + addon)
 		base = float64(i) * (1 - coefficient)
 		addon = rand.Float64() * 2 * (float64(i) - base)
 	case float64:
