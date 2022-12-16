@@ -46,6 +46,8 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
+var errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
+
 type (
 	timerQueueTaskExecutorBase struct {
 		currentClusterName string
