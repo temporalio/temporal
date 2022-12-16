@@ -57,7 +57,7 @@ type (
 		cache              wcache.Cache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
-		metricHandler      metrics.MetricsHandler
+		metricHandler      metrics.Handler
 		config             *configs.Config
 	}
 )
@@ -68,7 +68,7 @@ func newTimerQueueTaskExecutorBase(
 	deleteManager deletemanager.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricHandler metrics.MetricsHandler,
+	metricHandler metrics.Handler,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{

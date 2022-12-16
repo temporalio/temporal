@@ -94,7 +94,7 @@ func ConfigProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	persistenceConfig *config.Persistence,
 	serviceConfig *Config,
 	esConfig *esclient.Config,

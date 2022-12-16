@@ -103,7 +103,7 @@ func NewNamespacePriorityScheduler(
 	namespaceRegistry namespace.Registry,
 	rateLimiter SchedulerRateLimiter,
 	timeSource clock.TimeSource,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Scheduler {
 	taskChannelKeyFn := func(e Executable) TaskChannelKey {

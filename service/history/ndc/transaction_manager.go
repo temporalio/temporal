@@ -158,7 +158,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
 		serializer        serialization.Serializer
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		workflowResetter  WorkflowResetter
 		eventsReapplier   EventsReapplier
 		logger            log.Logger

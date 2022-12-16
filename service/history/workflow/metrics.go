@@ -33,7 +33,7 @@ import (
 )
 
 func emitWorkflowHistoryStats(
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespace namespace.Name,
 	historySize int,
 	historyCount int,
@@ -45,7 +45,7 @@ func emitWorkflowHistoryStats(
 }
 
 func emitMutableStateStatus(
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	stats *persistence.MutableStateStatistics,
 ) {
 	if stats == nil {
@@ -81,7 +81,7 @@ func emitMutableStateStatus(
 }
 
 func emitWorkflowCompletionStats(
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespace namespace.Name,
 	taskQueue string,
 	status enumspb.WorkflowExecutionStatus,

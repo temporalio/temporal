@@ -114,7 +114,7 @@ type (
 		historyClient               historyservice.HistoryServiceClient
 		sdkClientFactory            sdk.ClientFactory
 		membershipMonitor           membership.Monitor
-		metricsHandler              metrics.MetricsHandler
+		metricsHandler              metrics.Handler
 		namespaceRegistry           namespace.Registry
 		saProvider                  searchattribute.Provider
 		saManager                   searchattribute.Manager
@@ -141,7 +141,7 @@ type (
 		sdkClientFactory                    sdk.ClientFactory
 		MembershipMonitor                   membership.Monitor
 		ArchiverProvider                    provider.ArchiverProvider
-		MetricsHandler                      metrics.MetricsHandler
+		MetricsHandler                      metrics.Handler
 		NamespaceRegistry                   namespace.Registry
 		SaProvider                          searchattribute.Provider
 		SaManager                           searchattribute.Manager
@@ -1675,7 +1675,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 }
 
 // startRequestProfile initiates recording of request metrics
-func (adh *AdminHandler) startRequestProfile(operation string) (metrics.MetricsHandler, time.Time) {
+func (adh *AdminHandler) startRequestProfile(operation string) (metrics.Handler, time.Time) {
 	metricsScope := adh.metricsHandler.WithTags(metrics.OperationTag(operation))
 	metricsScope.Counter(metrics.ServiceRequests.GetMetricName()).Record(1)
 	return metricsScope, time.Now().UTC()

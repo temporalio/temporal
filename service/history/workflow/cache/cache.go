@@ -63,7 +63,7 @@ type (
 		cache.Cache
 		shard          shard.Context
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		config         *configs.Config
 	}
 
@@ -127,7 +127,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
-	handler metrics.MetricsHandler,
+	handler metrics.Handler,
 	forceClearContext bool,
 	caller workflow.CallerType,
 ) (workflow.Context, ReleaseCacheFunc, error) {

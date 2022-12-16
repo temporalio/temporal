@@ -108,7 +108,7 @@ func NewServiceProvider(
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
 	grpcListener net.Listener,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 ) *Service {
 	return NewService(
@@ -145,7 +145,7 @@ func GrpcServerOptionsProvider(
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
 	customInterceptors []grpc.UnaryServerInterceptor,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) []grpc.ServerOption {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -234,7 +234,7 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 
 func TelemetryInterceptorProvider(
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
@@ -340,7 +340,7 @@ func PersistenceRateLimitingParamsProvider(
 func VisibilityManagerProvider(
 	logger log.Logger,
 	persistenceConfig *config.Persistence,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	serviceConfig *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
@@ -405,7 +405,7 @@ func AdminHandlerProvider(
 	sdkClientFactory sdk.ClientFactory,
 	membershipMonitor membership.Monitor,
 	archiverProvider provider.ArchiverProvider,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
@@ -453,7 +453,7 @@ func OperatorHandlerProvider(
 	esClient esclient.Client,
 	logger log.SnTaggedLogger,
 	sdkClientFactory sdk.ClientFactory,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
@@ -497,7 +497,7 @@ func HandlerProvider(
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient resource.MatchingClient,
 	archiverProvider provider.ArchiverProvider,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,

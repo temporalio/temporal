@@ -46,7 +46,7 @@ type (
 		fx.In
 		EsClient       esclient.Client
 		Manager        searchattribute.Manager
-		MetricsHandler metrics.MetricsHandler
+		MetricsHandler metrics.Handler
 		Logger         log.Logger
 	}
 
