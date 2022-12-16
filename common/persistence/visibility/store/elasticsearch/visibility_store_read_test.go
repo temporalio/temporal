@@ -60,7 +60,7 @@ type (
 		visibilityStore            *visibilityStore
 		mockESClient               *client.MockClient
 		mockProcessor              *MockProcessor
-		mockMetricsHandler         *metrics.MockMetricsHandler
+		mockMetricsHandler         *metrics.MockHandler
 		mockSearchAttributesMapper *searchattribute.MockMapper
 	}
 )
@@ -121,7 +121,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFn(false)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMetricsHandler = metrics.NewMockMetricsHandler(s.controller)
+	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)

@@ -251,7 +251,7 @@ func TestArchiver(t *testing.T) {
 			archiverProvider := provider.NewMockArchiverProvider(controller)
 			historyArchiver := carchiver.NewMockHistoryArchiver(controller)
 			visibilityArchiver := carchiver.NewMockVisibilityArchiver(controller)
-			metricsHandler := metrics.NewMockMetricsHandler(controller)
+			metricsHandler := metrics.NewMockHandler(controller)
 			metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverClientScope)).Return(metricsHandler)
 			sdkClient := mocksdk.NewMockClient(controller)
 			sdkClientFactory := sdk.NewMockClientFactory(controller)
@@ -282,8 +282,8 @@ func TestArchiver(t *testing.T) {
 
 			archiver := NewArchiver(archiverProvider, logRecorder, metricsHandler, rateLimiter)
 			_, err = archiver.Archive(ctx, &Request{
-				HistoryURI:    historyURI.String(),
-				VisibilityURI: visibilityURI.String(),
+				HistoryURI:    historyURI,
+				VisibilityURI: visibilityURI,
 				Targets:       c.Targets,
 			})
 

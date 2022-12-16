@@ -62,7 +62,7 @@ type (
 		eventsMgr      persistence.ExecutionManager
 		disabled       bool
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		shardID        int32
 	}
 )
@@ -81,7 +81,7 @@ func NewEventsCache(
 	eventsMgr persistence.ExecutionManager,
 	disabled bool,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *CacheImpl {
 	opts := &cache.Options{}
 	opts.InitialCapacity = initialCount

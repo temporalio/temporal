@@ -789,9 +789,7 @@ func (s *scheduler) startWorkflow(
 	ctx := workflow.WithLocalActivityOptions(s.ctx, options)
 
 	req := &schedspb.StartWorkflowRequest{
-		NamespaceId: s.State.NamespaceId,
 		Request: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                s.State.Namespace,
 			WorkflowId:               workflowID,
 			WorkflowType:             newWorkflow.WorkflowType,
 			TaskQueue:                newWorkflow.TaskQueue,
@@ -851,8 +849,6 @@ func (s *scheduler) refreshWorkflows(executions []*commonpb.WorkflowExecution) {
 	futures := make([]workflow.Future, len(executions))
 	for i, ex := range executions {
 		req := &schedspb.WatchWorkflowRequest{
-			Namespace:   s.State.Namespace,
-			NamespaceId: s.State.NamespaceId,
 			// Note: do not send runid here so that we always get the latest one
 			Execution:           &commonpb.WorkflowExecution{WorkflowId: ex.WorkflowId},
 			FirstExecutionRunId: ex.RunId,
@@ -880,8 +876,6 @@ func (s *scheduler) startLongPollWatcher(ex *commonpb.WorkflowExecution) {
 		HeartbeatTimeout: 65 * time.Second,
 	})
 	req := &schedspb.WatchWorkflowRequest{
-		Namespace:   s.State.Namespace,
-		NamespaceId: s.State.NamespaceId,
 		// Note: do not send runid here so that we always get the latest one
 		Execution:           &commonpb.WorkflowExecution{WorkflowId: ex.WorkflowId},
 		FirstExecutionRunId: ex.RunId,
@@ -894,12 +888,10 @@ func (s *scheduler) startLongPollWatcher(ex *commonpb.WorkflowExecution) {
 func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
 	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
 	areq := &schedspb.CancelWorkflowRequest{
-		NamespaceId: s.State.NamespaceId,
-		Namespace:   s.State.Namespace,
-		RequestId:   s.newUUIDString(),
-		Identity:    s.identity(),
-		Execution:   ex,
-		Reason:      "cancelled by schedule overlap policy",
+		RequestId: s.newUUIDString(),
+		Identity:  s.identity(),
+		Execution: ex,
+		Reason:    "cancelled by schedule overlap policy",
 	}
 	err := workflow.ExecuteLocalActivity(ctx, s.a.CancelWorkflow, areq).Get(s.ctx, nil)
 	if err != nil {
@@ -912,12 +904,10 @@ func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
 func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
 	areq := &schedspb.TerminateWorkflowRequest{
-		NamespaceId: s.State.NamespaceId,
-		Namespace:   s.State.Namespace,
-		RequestId:   s.newUUIDString(),
-		Identity:    s.identity(),
-		Execution:   ex,
-		Reason:      "terminated by schedule overlap policy",
+		RequestId: s.newUUIDString(),
+		Identity:  s.identity(),
+		Execution: ex,
+		Reason:    "terminated by schedule overlap policy",
 	}
 	err := workflow.ExecuteLocalActivity(ctx, s.a.TerminateWorkflow, areq).Get(s.ctx, nil)
 	if err != nil {

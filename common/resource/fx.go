@@ -82,9 +82,9 @@ type (
 	RuntimeMetricsReporterParams struct {
 		fx.In
 
-		Provider   metrics.MetricsHandler
-		Logger     log.SnTaggedLogger
-		InstanceID InstanceID `optional:"true"`
+		MetricHandler metrics.Handler
+		Logger        log.SnTaggedLogger
+		InstanceID    InstanceID `optional:"true"`
 	}
 )
 
@@ -187,7 +187,7 @@ func SearchAttributeManagerProvider(
 
 func NamespaceRegistryProvider(
 	logger log.SnTaggedLogger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -205,7 +205,7 @@ func ClientFactoryProvider(
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	dynamicCollection *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
 	logger log.SnTaggedLogger,
@@ -297,7 +297,7 @@ func RuntimeMetricsReporterProvider(
 	params RuntimeMetricsReporterParams,
 ) *metrics.RuntimeMetricsReporter {
 	return metrics.NewRuntimeMetricsReporter(
-		params.Provider,
+		params.MetricHandler,
 		time.Minute,
 		params.Logger,
 		string(params.InstanceID),
@@ -306,7 +306,7 @@ func RuntimeMetricsReporterProvider(
 
 func VisibilityBootstrapContainerProvider(
 	logger log.SnTaggedLogger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 ) *archiver.VisibilityBootstrapContainer {
 	return &archiver.VisibilityBootstrapContainer{
@@ -318,7 +318,7 @@ func VisibilityBootstrapContainerProvider(
 
 func HistoryBootstrapContainerProvider(
 	logger log.SnTaggedLogger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 	executionManager persistence.ExecutionManager,
 ) *archiver.HistoryBootstrapContainer {
@@ -391,7 +391,7 @@ func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
 func SdkClientFactoryProvider(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
 	resolver membership.GRPCResolver,
 ) (sdk.ClientFactory, error) {

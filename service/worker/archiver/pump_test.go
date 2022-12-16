@@ -39,7 +39,7 @@ import (
 )
 
 var (
-	pumpTestMetrics *metrics.MockMetricsHandler
+	pumpTestMetrics *metrics.MockHandler
 	pumpTestLogger  *log.MockLogger
 )
 
@@ -62,7 +62,7 @@ func (s *pumpSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
 
 func (s *pumpSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	pumpTestMetrics = metrics.NewMockMetricsHandler(s.controller)
+	pumpTestMetrics = metrics.NewMockHandler(s.controller)
 	pumpTestMetrics.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc)
 	pumpTestMetrics.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverPumpScope)).Return(pumpTestMetrics)
 	pumpTestLogger = log.NewMockLogger(s.controller)

@@ -194,7 +194,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
 				namespaceEntry.ID().String(), tests.WorkflowID, tests.RunID,
 			)).AnyTimes()
-			mutableState.EXPECT().GetCurrentBranchToken().Return(nil, nil)
+			mutableState.EXPECT().GetCurrentBranchToken().Return(nil, nil).AnyTimes()
 			retentionTimerDelay := time.Second
 			cfg := &configs.Config{
 				DurableArchivalEnabled: func() bool {
@@ -211,7 +211,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			var allTasks []tasks.Task
 			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
 				allTasks = append(allTasks, ts...)
-			})
+			}).AnyTimes()
 
 			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg)
 			err := taskGenerator.GenerateWorkflowCloseTasks(&historypb.HistoryEvent{

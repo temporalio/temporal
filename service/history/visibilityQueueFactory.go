@@ -59,28 +59,24 @@ type (
 func NewVisibilityQueueFactory(
 	params visibilityQueueFactoryParams,
 ) QueueFactory {
-	var hostScheduler queues.Scheduler
-	if params.Config.VisibilityProcessorEnablePriorityTaskScheduler() {
-		hostScheduler = queues.NewNamespacePriorityScheduler(
-			params.ClusterMetadata.GetCurrentClusterName(),
-			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:                 params.Config.VisibilityProcessorSchedulerWorkerCount,
-				ActiveNamespaceWeights:      params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
-				StandbyNamespaceWeights:     params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
-				EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
-				MaxDispatchThrottleDuration: HostSchedulerMaxDispatchThrottleDuration,
-			},
-			params.NamespaceRegistry,
-			params.SchedulerRateLimiter,
-			params.TimeSource,
-			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
-			params.Logger,
-		)
-	}
 	return &visibilityQueueFactory{
 		visibilityQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler:        hostScheduler,
+			HostScheduler: queues.NewNamespacePriorityScheduler(
+				params.ClusterMetadata.GetCurrentClusterName(),
+				queues.NamespacePrioritySchedulerOptions{
+					WorkerCount:                 params.Config.VisibilityProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:      params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights:     params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+					EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
+					MaxDispatchThrottleDuration: HostSchedulerMaxDispatchThrottleDuration,
+				},
+				params.NamespaceRegistry,
+				params.SchedulerRateLimiter,
+				params.TimeSource,
+				params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
+				params.Logger,
+			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
@@ -103,58 +99,45 @@ func (f *visibilityQueueFactory) CreateQueue(
 	shard shard.Context,
 	workflowCache wcache.Cache,
 ) queues.Queue {
-	if f.HostScheduler != nil && f.Config.VisibilityProcessorEnableMultiCursor() {
-		logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
+	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 
-		executor := newVisibilityQueueTaskExecutor(
-			shard,
-			workflowCache,
-			f.VisibilityMgr,
-			logger,
-			f.MetricsHandler,
-			f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
-			f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
-		)
-
-		return queues.NewImmediateQueue(
-			shard,
-			tasks.CategoryVisibility,
-			f.HostScheduler,
-			f.HostPriorityAssigner,
-			executor,
-			&queues.Options{
-				ReaderOptions: queues.ReaderOptions{
-					BatchSize:            f.Config.VisibilityTaskBatchSize,
-					MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
-					PollBackoffInterval:  f.Config.VisibilityProcessorPollBackoffInterval,
-				},
-				MonitorOptions: queues.MonitorOptions{
-					PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
-					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
-					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
-				},
-				MaxPollRPS:                          f.Config.VisibilityProcessorMaxPollRPS,
-				MaxPollInterval:                     f.Config.VisibilityProcessorMaxPollInterval,
-				MaxPollIntervalJitterCoefficient:    f.Config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
-				CheckpointInterval:                  f.Config.VisibilityProcessorUpdateAckInterval,
-				CheckpointIntervalJitterCoefficient: f.Config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
-				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
-				TaskMaxRetryCount:                   f.Config.VisibilityTaskMaxRetryCount,
-			},
-			f.HostReaderRateLimiter,
-			logger,
-			f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
-		)
-	}
-
-	return newVisibilityQueueProcessor(
+	executor := newVisibilityQueueTaskExecutor(
 		shard,
 		workflowCache,
+		f.VisibilityMgr,
+		logger,
+		f.MetricsHandler,
+		f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
+		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
+	)
+
+	return queues.NewImmediateQueue(
+		shard,
+		tasks.CategoryVisibility,
 		f.HostScheduler,
 		f.HostPriorityAssigner,
-		f.VisibilityMgr,
-		f.MetricsHandler,
-		f.HostRateLimiter,
-		f.SchedulerRateLimiter,
+		executor,
+		&queues.Options{
+			ReaderOptions: queues.ReaderOptions{
+				BatchSize:            f.Config.VisibilityTaskBatchSize,
+				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
+				PollBackoffInterval:  f.Config.VisibilityProcessorPollBackoffInterval,
+			},
+			MonitorOptions: queues.MonitorOptions{
+				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
+				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
+			},
+			MaxPollRPS:                          f.Config.VisibilityProcessorMaxPollRPS,
+			MaxPollInterval:                     f.Config.VisibilityProcessorMaxPollInterval,
+			MaxPollIntervalJitterCoefficient:    f.Config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
+			CheckpointInterval:                  f.Config.VisibilityProcessorUpdateAckInterval,
+			CheckpointIntervalJitterCoefficient: f.Config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
+			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			TaskMaxRetryCount:                   f.Config.VisibilityTaskMaxRetryCount,
+		},
+		f.HostReaderRateLimiter,
+		logger,
+		f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 	)
 }

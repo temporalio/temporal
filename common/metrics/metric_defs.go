@@ -1369,14 +1369,18 @@ var (
 	VersionCheckLatency                      = NewTimerDef("version_check_latency")
 
 	// History
-	CacheRequests                                     = NewCounterDef("cache_requests")
-	CacheFailures                                     = NewCounterDef("cache_errors")
-	CacheLatency                                      = NewTimerDef("cache_latency")
-	CacheMissCounter                                  = NewCounterDef("cache_miss")
-	HistoryEventNotificationQueueingLatency           = NewTimerDef("history_event_notification_queueing_latency")
-	HistoryEventNotificationFanoutLatency             = NewTimerDef("history_event_notification_fanout_latency")
-	HistoryEventNotificationInFlightMessageGauge      = NewGaugeDef("history_event_notification_inflight_message_gauge")
-	HistoryEventNotificationFailDeliveryCount         = NewCounterDef("history_event_notification_fail_delivery_count")
+	CacheRequests                                = NewCounterDef("cache_requests")
+	CacheFailures                                = NewCounterDef("cache_errors")
+	CacheLatency                                 = NewTimerDef("cache_latency")
+	CacheMissCounter                             = NewCounterDef("cache_miss")
+	HistoryEventNotificationQueueingLatency      = NewTimerDef("history_event_notification_queueing_latency")
+	HistoryEventNotificationFanoutLatency        = NewTimerDef("history_event_notification_fanout_latency")
+	HistoryEventNotificationInFlightMessageGauge = NewGaugeDef("history_event_notification_inflight_message_gauge")
+	HistoryEventNotificationFailDeliveryCount    = NewCounterDef("history_event_notification_fail_delivery_count")
+	// ArchivalTaskInvalidURI is emitted by the archival queue task executor when the history or visibility URI for an
+	// archival task is not a valid URI.
+	// We may emit this metric several times for a single task if the task is retried.
+	ArchivalTaskInvalidURI                            = NewCounterDef("archival_task_invalid_uri")
 	ArchiverClientSendSignalCount                     = NewCounterDef("archiver_client_sent_signal")
 	ArchiverClientSendSignalFailureCount              = NewCounterDef("archiver_client_send_signal_error")
 	ArchiverClientHistoryRequestCount                 = NewCounterDef("archiver_client_history_request")

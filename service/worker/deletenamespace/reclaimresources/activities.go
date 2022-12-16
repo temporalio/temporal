@@ -44,7 +44,7 @@ type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		logger            log.Logger
 	}
 )
@@ -52,7 +52,7 @@ type (
 func NewActivities(
 	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{

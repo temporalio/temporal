@@ -47,7 +47,7 @@ type (
 	handler struct {
 		ctx            workflow.Context
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		concurrency    int
 		requestCh      workflow.Channel
 		resultCh       workflow.Channel
@@ -58,7 +58,7 @@ type (
 func NewHandler(
 	ctx workflow.Context,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	concurrency int,
 	requestCh workflow.Channel,
 ) Handler {

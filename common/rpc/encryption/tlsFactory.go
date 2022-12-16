@@ -87,7 +87,7 @@ type (
 // Otherwise, it defaults to using localStoreCertProvider
 func NewTLSConfigProviderFromConfig(
 	encryptionSettings config.RootTLS,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {

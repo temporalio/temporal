@@ -80,7 +80,7 @@ type (
 		timeSource                 clock.TimeSource
 		namespaceRegistry          namespace.Registry
 		tokenSerializer            common.TaskTokenSerializer
-		metricsHandler             metrics.MetricsHandler
+		metricsHandler             metrics.Handler
 		logger                     log.Logger
 		throttledLogger            log.Logger
 		commandAttrValidator       *commandAttrValidator

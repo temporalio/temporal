@@ -53,7 +53,7 @@ type VisibilityManagerSuite struct {
 
 	visibilityManager manager.VisibilityManager
 	visibilityStore   *store.MockVisibilityStore
-	metricsHandler    *metrics.MockMetricsHandler
+	metricsHandler    *metrics.MockHandler
 }
 
 var (
@@ -75,7 +75,7 @@ func (s *VisibilityManagerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.visibilityStore = store.NewMockVisibilityStore(s.controller)
-	s.metricsHandler = metrics.NewMockMetricsHandler(s.controller)
+	s.metricsHandler = metrics.NewMockHandler(s.controller)
 	s.visibilityManager = newVisibilityManager(
 		s.visibilityStore,
 		dynamicconfig.GetIntPropertyFn(1),

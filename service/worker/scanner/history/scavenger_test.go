@@ -58,7 +58,7 @@ type (
 		controller *gomock.Controller
 
 		logger        log.Logger
-		metricHandler metrics.MetricsHandler
+		metricHandler metrics.Handler
 
 		numShards int32
 

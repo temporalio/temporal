@@ -177,7 +177,7 @@ type (
 		config          *configs.Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
-		metricsHandler  metrics.MetricsHandler
+		metricsHandler  metrics.Handler
 	}
 )
 

@@ -61,7 +61,7 @@ type (
 		controller          *gomock.Controller
 		mockFrontendHandler *workflowservicemock.MockWorkflowServiceServer
 		mockAuthorizer      *MockAuthorizer
-		mockMetricsHandler  *metrics.MockMetricsHandler
+		mockMetricsHandler  *metrics.MockHandler
 		interceptor         grpc.UnaryServerInterceptor
 		handler             grpc.UnaryHandler
 		mockClaimMapper     *MockClaimMapper
@@ -79,7 +79,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
 	s.mockAuthorizer = NewMockAuthorizer(s.controller)
-	s.mockMetricsHandler = metrics.NewMockMetricsHandler(s.controller)
+	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.AuthorizationScope)).Return(s.mockMetricsHandler)
 	s.mockMetricsHandler.EXPECT().Timer(metrics.ServiceAuthorizationLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	s.mockClaimMapper = NewMockClaimMapper(s.controller)
