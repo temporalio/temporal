@@ -609,9 +609,8 @@ func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVe
 
 func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace) {
 	s.wLock()
-	defer s.wUnlock()
 
-	maxReplicationTaskID := s.immediateTaskExclusiveMaxReadLevel
+	maxReplicationTaskID := s.immediateTaskExclusiveMaxReadLevel - 1
 	if s.errorByState() != nil {
 		// if shard state is not acquired, we don't know that's the max taskID
 		// as there might be in-flight requests
@@ -646,6 +645,9 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 			delete(s.handoverNamespaces, k)
 		}
 	}
+	s.wUnlock()
+
+	s.notifyReplicationQueueProcessor(maxReplicationTaskID)
 }
 
 func (s *ContextImpl) AddTasks(
@@ -1786,19 +1788,47 @@ func (s *ContextImpl) notifyQueueProcessor() {
 
 func (s *ContextImpl) updateHandoverNamespacePendingTaskID() {
 	s.wLock()
-	defer s.wUnlock()
 
 	if s.errorByState() != nil {
 		// if not in acquired state, this function will be called again
 		// later when shard is re-acquired.
+		s.wUnlock()
 		return
 	}
 
+	maxReplicationTaskID := s.immediateTaskExclusiveMaxReadLevel - 1
 	for namespaceName, handoverInfo := range s.handoverNamespaces {
 		if handoverInfo.MaxReplicationTaskID == pendingMaxReplicationTaskID {
-			s.handoverNamespaces[namespaceName].MaxReplicationTaskID = s.immediateTaskExclusiveMaxReadLevel
+			s.handoverNamespaces[namespaceName].MaxReplicationTaskID = maxReplicationTaskID
 		}
 	}
+	s.wUnlock()
+
+	s.notifyReplicationQueueProcessor(maxReplicationTaskID)
+}
+
+func (s *ContextImpl) notifyReplicationQueueProcessor(taskID int64) {
+	// Replication ack level won't exceed the max taskID it received via task notification.
+	// Since here we want it's ack level to advance to at least the input taskID, we need to
+	// trigger an fake notification.
+
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	engine, err := s.engineFuture.Get(cancelledCtx)
+	if err != nil {
+		s.contextTaggedLogger.Warn("tried to notify replication queue processor when engine is not ready")
+		return
+	}
+
+	fakeReplicationTask := tasks.NewFakeTask(definition.WorkflowKey{}, tasks.CategoryReplication, tasks.MinimumKey.FireTime)
+	fakeReplicationTask.SetTaskID(taskID)
+
+	// cluster name parameter doesn't apply to replication processor
+	// also this parameter will be removed now that we are using multi-cursor impl.
+	engine.NotifyNewTasks("", map[tasks.Category][]tasks.Task{
+		tasks.CategoryReplication: {fakeReplicationTask},
+	})
 }
 
 func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
