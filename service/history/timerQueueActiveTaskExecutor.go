@@ -60,8 +60,6 @@ import (
 type (
 	timerQueueActiveTaskExecutor struct {
 		*timerQueueTaskExecutorBase
-
-		queueProcessor *timerQueueActiveProcessorImpl
 	}
 )
 
@@ -69,7 +67,6 @@ func newTimerQueueActiveTaskExecutor(
 	shard shard.Context,
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
-	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,
 	config *configs.Config,
@@ -85,7 +82,6 @@ func newTimerQueueActiveTaskExecutor(
 			metricProvider,
 			config,
 		),
-		queueProcessor: queueProcessor,
 	}
 }
 
@@ -606,16 +602,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	}
 
 	now := t.shard.GetTimeSource().Now()
-	err = context.UpdateWorkflowExecutionAsActive(ctx, now)
-	if err != nil {
-		if shard.IsShardOwnershipLostError(err) && t.queueProcessor != nil {
-			// Shard is stolen.  Stop timer processing to reduce duplicates
-			t.queueProcessor.Stop()
-		}
-		return err
-	}
-
-	return nil
+	return context.UpdateWorkflowExecutionAsActive(ctx, now)
 }
 
 func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
