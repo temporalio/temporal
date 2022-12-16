@@ -265,7 +265,7 @@ func (p *queueBase) Start() {
 	p.rescheduler.Start()
 	p.readerGroup.Start()
 
-	p.checkpointTimer = time.NewTimer(backoff.JitDuration(
+	p.checkpointTimer = time.NewTimer(backoff.Jitter(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
 	))
@@ -442,7 +442,7 @@ func (p *queueBase) resetCheckpointTimer(checkPointErr error) {
 	}
 
 	p.checkpointRetrier.Reset()
-	p.checkpointTimer.Reset(backoff.JitDuration(
+	p.checkpointTimer.Reset(backoff.Jitter(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
 	))

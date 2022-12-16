@@ -146,7 +146,7 @@ func (p *immediateQueue) NotifyNewTasks(_ string, tasks []tasks.Task) {
 func (p *immediateQueue) processEventLoop() {
 	defer p.shutdownWG.Done()
 
-	pollTimer := time.NewTimer(backoff.JitDuration(
+	pollTimer := time.NewTimer(backoff.Jitter(
 		p.options.MaxPollInterval(),
 		p.options.MaxPollIntervalJitterCoefficient(),
 	))
@@ -171,7 +171,7 @@ func (p *immediateQueue) processEventLoop() {
 func (p *immediateQueue) processPollTimer(pollTimer *time.Timer) {
 	p.processNewRange()
 
-	pollTimer.Reset(backoff.JitDuration(
+	pollTimer.Reset(backoff.Jitter(
 		p.options.MaxPollInterval(),
 		p.options.MaxPollIntervalJitterCoefficient(),
 	))

@@ -198,7 +198,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			}
 			// We schedule the archival task for a random time in the near future to avoid sending a surge of tasks
 			// to the archival system at the same time
-			delay := backoff.JitDuration(r.config.ArchivalProcessorArchiveDelay(), archivalDelayJitterCoefficient) / 2
+			delay := backoff.Jitter(r.config.ArchivalProcessorArchiveDelay(), archivalDelayJitterCoefficient) / 2
 			if delay > retention {
 				delay = retention
 			}
@@ -258,7 +258,7 @@ func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time, 
 		return err
 	}
 
-	retentionJitterDuration := backoff.JitDuration(r.config.RetentionTimerJitterDuration(), 1) / 2
+	retentionJitterDuration := backoff.FullJitter(r.config.RetentionTimerJitterDuration())
 	deleteTime := closeTime.Add(retention).Add(retentionJitterDuration)
 	r.mutableState.AddTasks(&tasks.DeleteHistoryEventTask{
 		// TaskID is set by shard

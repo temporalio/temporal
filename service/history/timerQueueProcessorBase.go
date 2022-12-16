@@ -214,13 +214,13 @@ func (t *timerQueueProcessorBase) notifyNewTimer(
 }
 
 func (t *timerQueueProcessorBase) internalProcessor() error {
-	pollTimer := time.NewTimer(backoff.JitDuration(
+	pollTimer := time.NewTimer(backoff.Jitter(
 		t.config.TimerProcessorMaxPollInterval(),
 		t.config.TimerProcessorMaxPollIntervalJitterCoefficient(),
 	))
 	defer pollTimer.Stop()
 
-	updateAckTimer := time.NewTimer(backoff.JitDuration(
+	updateAckTimer := time.NewTimer(backoff.Jitter(
 		t.config.TimerProcessorUpdateAckInterval(),
 		t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
 	))
@@ -261,7 +261,7 @@ eventLoop:
 				t.timerGate.Update(*nextFireTime)
 			}
 		case <-pollTimer.C:
-			pollTimer.Reset(backoff.JitDuration(
+			pollTimer.Reset(backoff.Jitter(
 				t.config.TimerProcessorMaxPollInterval(),
 				t.config.TimerProcessorMaxPollIntervalJitterCoefficient(),
 			))
@@ -275,7 +275,7 @@ eventLoop:
 				}
 			}
 		case <-updateAckTimer.C:
-			updateAckTimer.Reset(backoff.JitDuration(
+			updateAckTimer.Reset(backoff.Jitter(
 				t.config.TimerProcessorUpdateAckInterval(),
 				t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
 			))

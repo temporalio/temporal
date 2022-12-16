@@ -29,36 +29,47 @@ import (
 	"time"
 )
 
-// JitDuration return random duration from (1-coefficient)*duration to (1+coefficient)*duration, inclusive, exclusive
-func JitDuration(duration time.Duration, coefficient float64) time.Duration {
-	validateCoefficient(coefficient)
+const fullCoefficient float64 = 1
 
-	return time.Duration(JitInt64(duration.Nanoseconds(), coefficient))
+// FullJitter return random number from 0 to input, inclusive, exclusive
+func FullJitter[T int64 | float64 | time.Duration](input T) T {
+	return Jitter(input, fullCoefficient) / 2
 }
 
-// JitInt64 return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
-func JitInt64(input int64, coefficient float64) int64 {
+// Jitter return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
+func Jitter[T int64 | float64 | time.Duration](input T, coefficient float64) T {
 	validateCoefficient(coefficient)
 
-	if input == 0 {
-		return 0
-	}
 	if coefficient == 0 {
 		return input
 	}
 
-	base := int64(float64(input) * (1 - coefficient))
-	addon := rand.Int63n(2 * (input - base))
-	return base + addon
-}
-
-// JitFloat64 return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
-func JitFloat64(input float64, coefficient float64) float64 {
-	validateCoefficient(coefficient)
-
-	base := input * (1 - coefficient)
-	addon := rand.Float64() * 2 * (input - base)
-	return base + addon
+	var base float64
+	var addon float64
+	switch i := any(input).(type) {
+	case time.Duration:
+		input64 := i.Nanoseconds()
+		if input64 == 0 {
+			return input
+		}
+		base = float64(input64) * (1 - coefficient)
+		addon = rand.Float64() * 2 * (float64(input64) - base)
+	case int64:
+		if i == 0 {
+			return input
+		}
+		//base := int64(float64(input) * (1 - coefficient))
+		//addon := rand.Int63n(2 * (i - base))
+		//return T(base + addon)
+		base = float64(i) * (1 - coefficient)
+		addon = rand.Float64() * 2 * (float64(i) - base)
+	case float64:
+		base = i * (1 - coefficient)
+		addon = rand.Float64() * 2 * (i - base)
+	default:
+		panic("The jitter type is not supported")
+	}
+	return T(base + addon)
 }
 
 func validateCoefficient(coefficient float64) {

@@ -53,7 +53,7 @@ func (s *jitterSuite) TestJitInt64() {
 	upperBound := int64(float64(input) * (1 + coefficient))
 
 	for i := 0; i < 1048576; i++ {
-		result := JitInt64(input, coefficient)
+		result := Jitter(input, coefficient)
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)
 	}
@@ -66,7 +66,7 @@ func (s *jitterSuite) TestJitFloat64() {
 	upperBound := float64(input) * (1 + coefficient)
 
 	for i := 0; i < 1048576; i++ {
-		result := JitFloat64(input, coefficient)
+		result := Jitter(input, coefficient)
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)
 	}
@@ -79,14 +79,14 @@ func (s *jitterSuite) TestJitDuration() {
 	upperBound := time.Duration(int64(float64(input.Nanoseconds()) * (1 + coefficient)))
 
 	for i := 0; i < 1048576; i++ {
-		result := JitDuration(input, coefficient)
+		result := Jitter(input, coefficient)
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)
 	}
 }
 
 func (s *jitterSuite) TestJit_InputZeroValue() {
-	s.Zero(JitDuration(0, rand.Float64()))
-	s.Zero(JitInt64(0, rand.Float64()))
-	s.Zero(JitFloat64(0, rand.Float64()))
+	s.Zero(Jitter(time.Duration(0), rand.Float64()))
+	s.Zero(Jitter(int64(0), rand.Float64()))
+	s.Zero(Jitter(float64(0), rand.Float64()))
 }
