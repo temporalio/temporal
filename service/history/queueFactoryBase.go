@@ -72,7 +72,7 @@ type (
 		ClusterMetadata      cluster.Metadata
 		Config               *configs.Config
 		TimeSource           clock.TimeSource
-		MetricsHandler       metrics.MetricsHandler
+		MetricsHandler       metrics.Handler
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
 	}

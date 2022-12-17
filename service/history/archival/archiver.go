@@ -93,7 +93,7 @@ type (
 
 	archiver struct {
 		archiverProvider provider.ArchiverProvider
-		metricsHandler   metrics.MetricsHandler
+		metricsHandler   metrics.Handler
 		logger           log.Logger
 		rateLimiter      quotas.RateLimiter
 	}
@@ -108,7 +108,7 @@ const (
 func NewArchiver(
 	archiverProvider provider.ArchiverProvider,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	rateLimiter quotas.RateLimiter,
 ) Archiver {
 	return &archiver{

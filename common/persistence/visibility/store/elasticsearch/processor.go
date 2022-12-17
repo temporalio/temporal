@@ -66,7 +66,7 @@ type (
 		client                  client.Client
 		mapToAckFuture          collection.ConcurrentTxMap // used to map ES request to ack channel
 		logger                  log.Logger
-		metricsHandler          metrics.MetricsHandler
+		metricsHandler          metrics.Handler
 		indexerConcurrency      uint32
 	}
 
@@ -104,7 +104,7 @@ func NewProcessor(
 	cfg *ProcessorConfig,
 	esClient client.Client,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *processorImpl {
 
 	p := &processorImpl{
@@ -413,13 +413,13 @@ func newAckFuture() *ackFuture {
 	}
 }
 
-func (a *ackFuture) recordAdd(metricsHandler metrics.MetricsHandler) {
+func (a *ackFuture) recordAdd(metricsHandler metrics.Handler) {
 	addedAt := time.Now().UTC()
 	a.addedAt.Store(addedAt)
 	metricsHandler.Timer(metrics.ElasticsearchBulkProcessorWaitAddLatency.GetMetricName()).Record(addedAt.Sub(a.createdAt))
 }
 
-func (a *ackFuture) recordStart(metricsHandler metrics.MetricsHandler) {
+func (a *ackFuture) recordStart(metricsHandler metrics.Handler) {
 	a.startedAt = time.Now().UTC()
 	addedAt := a.addedAt.Load().(time.Time)
 	if !addedAt.IsZero() {
@@ -427,7 +427,7 @@ func (a *ackFuture) recordStart(metricsHandler metrics.MetricsHandler) {
 	}
 }
 
-func (a *ackFuture) done(ack bool, metricsHandler metrics.MetricsHandler) {
+func (a *ackFuture) done(ack bool, metricsHandler metrics.Handler) {
 	a.future.Set(ack, nil)
 	doneAt := time.Now().UTC()
 	if !a.createdAt.IsZero() {

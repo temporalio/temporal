@@ -35,50 +35,50 @@ import (
 
 type (
 	replayMetricsClient struct {
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		ctx            workflow.Context
 	}
 )
 
 // NewReplayMetricsClient creates a metrics client which is aware of temporal's replay mode
-func NewReplayMetricsClient(metricsHandler metrics.MetricsHandler, ctx workflow.Context) metrics.MetricsHandler {
+func NewReplayMetricsClient(metricsHandler metrics.Handler, ctx workflow.Context) metrics.Handler {
 	return &replayMetricsClient{
 		metricsHandler: metricsHandler,
 		ctx:            ctx,
 	}
 }
 
-func (r *replayMetricsClient) WithTags(tags ...metrics.Tag) metrics.MetricsHandler {
+func (r *replayMetricsClient) WithTags(tags ...metrics.Tag) metrics.Handler {
 	if workflow.IsReplaying(r.ctx) {
 		return r
 	}
 	return NewReplayMetricsClient(r.metricsHandler.WithTags(tags...), r.ctx)
 }
 
-func (r *replayMetricsClient) Counter(s string) metrics.CounterMetric {
+func (r *replayMetricsClient) Counter(s string) metrics.CounterIface {
 	if workflow.IsReplaying(r.ctx) {
-		return metrics.CounterMetricFunc(func(i int64, t ...metrics.Tag) {})
+		return metrics.CounterFunc(func(i int64, t ...metrics.Tag) {})
 	}
 	return r.metricsHandler.Counter(s)
 }
 
-func (r *replayMetricsClient) Gauge(s string) metrics.GaugeMetric {
+func (r *replayMetricsClient) Gauge(s string) metrics.GaugeIface {
 	if workflow.IsReplaying(r.ctx) {
-		return metrics.GaugeMetricFunc(func(i float64, t ...metrics.Tag) {})
+		return metrics.GaugeFunc(func(i float64, t ...metrics.Tag) {})
 	}
 	return r.metricsHandler.Gauge(s)
 }
 
-func (r *replayMetricsClient) Timer(s string) metrics.TimerMetric {
+func (r *replayMetricsClient) Timer(s string) metrics.TimerIface {
 	if workflow.IsReplaying(r.ctx) {
-		return metrics.TimerMetricFunc(func(ti time.Duration, t ...metrics.Tag) {})
+		return metrics.TimerFunc(func(ti time.Duration, t ...metrics.Tag) {})
 	}
 	return r.metricsHandler.Timer(s)
 }
 
-func (r *replayMetricsClient) Histogram(s string, unit metrics.MetricUnit) metrics.HistogramMetric {
+func (r *replayMetricsClient) Histogram(s string, unit metrics.MetricUnit) metrics.HistogramIface {
 	if workflow.IsReplaying(r.ctx) {
-		return metrics.HistogramMetricFunc(func(i int64, t ...metrics.Tag) {})
+		return metrics.HistogramFunc(func(i int64, t ...metrics.Tag) {})
 	}
 	return r.metricsHandler.Histogram(s, unit)
 }

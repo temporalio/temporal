@@ -68,7 +68,7 @@ type (
 
 	NotifierImpl struct {
 		timeSource     clock.TimeSource
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		// internal status indicator
 		status int32
 		// stop signal channel
@@ -118,7 +118,7 @@ func NewNotification(
 
 func NewNotifier(
 	timeSource clock.TimeSource,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	workflowIDToShardID func(namespace.ID, string) int32,
 ) *NotifierImpl {
 

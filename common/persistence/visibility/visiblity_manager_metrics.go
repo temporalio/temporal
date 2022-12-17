@@ -40,7 +40,7 @@ import (
 var _ manager.VisibilityManager = (*visibilityManagerMetrics)(nil)
 
 type visibilityManagerMetrics struct {
-	metricHandler            metrics.MetricsHandler
+	metricHandler            metrics.Handler
 	logger                   log.Logger
 	delegate                 manager.VisibilityManager
 	visibilityTypeMetricsTag metrics.Tag
@@ -48,7 +48,7 @@ type visibilityManagerMetrics struct {
 
 func NewVisibilityManagerMetrics(
 	delegate manager.VisibilityManager,
-	metricHandler metrics.MetricsHandler,
+	metricHandler metrics.Handler,
 	logger log.Logger,
 	visibilityTypeMetricsTag metrics.Tag,
 ) *visibilityManagerMetrics {
@@ -219,13 +219,13 @@ func (m *visibilityManagerMetrics) GetWorkflowExecution(
 	return response, m.updateErrorMetric(handler, err)
 }
 
-func (m *visibilityManagerMetrics) tagScope(operation string) (metrics.MetricsHandler, time.Time) {
+func (m *visibilityManagerMetrics) tagScope(operation string) (metrics.Handler, time.Time) {
 	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityTypeMetricsTag)
 	taggedHandler.Counter(metrics.VisibilityPersistenceRequests.GetMetricName()).Record(1)
 	return taggedHandler, time.Now().UTC()
 }
 
-func (m *visibilityManagerMetrics) updateErrorMetric(handler metrics.MetricsHandler, err error) error {
+func (m *visibilityManagerMetrics) updateErrorMetric(handler metrics.Handler, err error) error {
 	if err == nil {
 		return nil
 	}

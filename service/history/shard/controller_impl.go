@@ -77,8 +77,8 @@ type (
 		clientBean                  client.Bean
 		historyClient               historyservice.HistoryServiceClient
 		historyServiceResolver      membership.ServiceResolver
-		taggedMetricsHandler        metrics.MetricsHandler
-		metricsHandler              metrics.MetricsHandler
+		taggedMetricsHandler        metrics.Handler
+		metricsHandler              metrics.Handler
 		payloadSerializer           serialization.Serializer
 		timeSource                  clock.TimeSource
 		namespaceRegistry           namespace.Registry

@@ -68,7 +68,7 @@ func newTimerQueueActiveTaskExecutor(
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {

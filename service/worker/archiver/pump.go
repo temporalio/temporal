@@ -51,7 +51,7 @@ type (
 	pump struct {
 		ctx            workflow.Context
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		carryover      []ArchiveRequest
 		timeout        time.Duration
 		requestLimit   int
@@ -64,7 +64,7 @@ type (
 func NewPump(
 	ctx workflow.Context,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	carryover []ArchiveRequest,
 	timeout time.Duration,
 	requestLimit int,

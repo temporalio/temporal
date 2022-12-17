@@ -94,7 +94,7 @@ type (
 		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
-		metricsHandler       metrics.MetricsHandler
+		metricsHandler       metrics.Handler
 		taskQueuesLock       sync.RWMutex                     // locks mutation of taskQueues
 		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
 		taskQueueCount       map[taskQueueCounterKey]int      // per-namespace task queue counter
@@ -129,7 +129,7 @@ func NewEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
@@ -893,7 +893,7 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, 
 func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordWorkflowTaskStartedResponse,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *matchingservice.PollWorkflowTaskQueueResponse {
 
 	var serializedToken []byte
@@ -938,7 +938,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *matchingservice.PollActivityTaskQueueResponse {
 
 	scheduledEvent := historyResponse.ScheduledEvent
@@ -1026,7 +1026,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 }
 
 func (e *matchingEngineImpl) emitForwardedSourceStats(
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	isTaskForwarded bool,
 	pollForwardedSource string,
 ) {

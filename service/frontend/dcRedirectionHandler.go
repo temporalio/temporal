@@ -52,7 +52,7 @@ type (
 		frontendHandler    Handler
 		logger             log.Logger
 		clientBean         client.Bean
-		metricsHandler     metrics.MetricsHandler
+		metricsHandler     metrics.Handler
 		timeSource         clock.TimeSource
 	}
 )
@@ -63,7 +63,7 @@ func NewDCRedirectionHandler(
 	policy config.DCRedirectionPolicy,
 	logger log.Logger,
 	clientBean client.Bean,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
@@ -1834,13 +1834,13 @@ func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(
 	operation string,
-) (metrics.MetricsHandler, time.Time) {
+) (metrics.Handler, time.Time) {
 
 	return handler.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.ServiceRoleTag(metrics.DCRedirectionRoleTagValue)), handler.timeSource.Now()
 }
 
 func (handler *DCRedirectionHandlerImpl) afterCall(
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	startTime time.Time,
 	cluster string,
 	retError *error,

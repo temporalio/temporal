@@ -44,7 +44,7 @@ type (
 	Scavenger struct {
 		db             p.TaskManager
 		executor       executor.Executor
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		logger         log.Logger
 		stats          stats
 		status         int32
@@ -101,7 +101,7 @@ var (
 // two conditions
 //   - either all task queues are processed successfully (or)
 //   - Stop() method is called to stop the scavenger
-func NewScavenger(db p.TaskManager, metricsHandler metrics.MetricsHandler, logger log.Logger) *Scavenger {
+func NewScavenger(db p.TaskManager, metricsHandler metrics.Handler, logger log.Logger) *Scavenger {
 	stopC := make(chan struct{})
 	taskExecutor := executor.NewFixedSizePoolExecutor(
 		taskQueueBatchSize, executorMaxDeferredTasks, metricsHandler, metrics.TaskQueueScavengerScope)

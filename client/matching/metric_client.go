@@ -46,7 +46,7 @@ var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
 	client          matchingservice.MatchingServiceClient
-	metricsHandler  metrics.MetricsHandler
+	metricsHandler  metrics.Handler
 	logger          log.Logger
 	throttledLogger log.Logger
 }
@@ -54,7 +54,7 @@ type metricClient struct {
 // NewMetricClient creates a new instance of matchingservice.MatchingServiceClient that emits metrics
 func NewMetricClient(
 	client matchingservice.MatchingServiceClient,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	throttledLogger log.Logger,
 ) matchingservice.MatchingServiceClient {
@@ -171,7 +171,7 @@ func (c *metricClient) QueryWorkflow(
 }
 
 func (c *metricClient) emitForwardedSourceStats(
-	handler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	forwardedFrom string,
 	taskQueue *taskqueuepb.TaskQueue,
 ) {
@@ -182,10 +182,10 @@ func (c *metricClient) emitForwardedSourceStats(
 	isChildPartition := strings.HasPrefix(taskQueue.GetName(), taskQueuePartitionPrefix)
 	switch {
 	case forwardedFrom != "":
-		handler.Counter(metrics.MatchingClientForwardedCounter.GetMetricName()).Record(1)
+		metricsHandler.Counter(metrics.MatchingClientForwardedCounter.GetMetricName()).Record(1)
 	default:
 		if isChildPartition {
-			handler.Counter(metrics.MatchingClientInvalidTaskQueueName.GetMetricName()).Record(1)
+			metricsHandler.Counter(metrics.MatchingClientInvalidTaskQueueName.GetMetricName()).Record(1)
 		}
 	}
 }
@@ -193,7 +193,7 @@ func (c *metricClient) emitForwardedSourceStats(
 func (c *metricClient) startMetricsRecording(
 	ctx context.Context,
 	operation string,
-) (metrics.MetricsHandler, time.Time) {
+) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.MatchingRoleTagValue))
 	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
@@ -201,7 +201,7 @@ func (c *metricClient) startMetricsRecording(
 }
 
 func (c *metricClient) finishMetricsRecording(
-	handler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	startTime time.Time,
 	err error,
 ) {
@@ -218,7 +218,7 @@ func (c *metricClient) finishMetricsRecording(
 		default:
 			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		handler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
+		metricsHandler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	handler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
+	metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
 }

@@ -43,7 +43,7 @@ import (
 type (
 	activities struct {
 		metadataManager persistence.MetadataManager
-		metricsHandler  metrics.MetricsHandler
+		metricsHandler  metrics.Handler
 		logger          log.Logger
 	}
 
@@ -55,7 +55,7 @@ type (
 
 func NewActivities(
 	metadataManager persistence.MetadataManager,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *activities {
 	return &activities{

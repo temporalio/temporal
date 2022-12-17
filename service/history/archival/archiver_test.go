@@ -251,7 +251,7 @@ func TestArchiver(t *testing.T) {
 			archiverProvider := provider.NewMockArchiverProvider(controller)
 			historyArchiver := carchiver.NewMockHistoryArchiver(controller)
 			visibilityArchiver := carchiver.NewMockVisibilityArchiver(controller)
-			metricsHandler := metrics.NewMockMetricsHandler(controller)
+			metricsHandler := metrics.NewMockHandler(controller)
 			metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverClientScope)).Return(metricsHandler)
 			sdkClient := mocksdk.NewMockClient(controller)
 			sdkClientFactory := sdk.NewMockClientFactory(controller)

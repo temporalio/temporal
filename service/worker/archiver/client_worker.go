@@ -60,7 +60,7 @@ type (
 	// BootstrapContainer contains everything need for bootstrapping
 	BootstrapContainer struct {
 		SdkClientFactory sdk.ClientFactory
-		MetricsHandler   metrics.MetricsHandler
+		MetricsHandler   metrics.Handler
 		Logger           log.Logger
 		HistoryV2Manager persistence.ExecutionManager
 		NamespaceCache   namespace.Registry
@@ -99,7 +99,7 @@ const (
 // TODO: remove these and move to Fx
 var (
 	globalLogger         log.Logger
-	globalMetricsHandler metrics.MetricsHandler
+	globalMetricsHandler metrics.Handler
 	globalConfig         *Config
 )
 

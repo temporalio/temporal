@@ -157,7 +157,7 @@ func (a *interceptor) authorize(
 	ctx context.Context,
 	claims *Claims,
 	callTarget *CallTarget,
-	metricsHandler metrics.MetricsHandler) (Result, error) {
+	metricsHandler metrics.Handler) (Result, error) {
 	startTime := time.Now().UTC()
 	defer func() {
 		metricsHandler.Timer(metrics.ServiceAuthorizationLatency.GetMetricName()).Record(time.Since(startTime))
@@ -172,7 +172,7 @@ func (a *interceptor) logAuthError(err error) {
 type interceptor struct {
 	authorizer     Authorizer
 	claimMapper    ClaimMapper
-	metricsHandler metrics.MetricsHandler
+	metricsHandler metrics.Handler
 	logger         log.Logger
 	audienceGetter JWTAudienceMapper
 }
@@ -181,7 +181,7 @@ type interceptor struct {
 func NewAuthorizationInterceptor(
 	claimMapper ClaimMapper,
 	authorizer Authorizer,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	audienceGetter JWTAudienceMapper,
 ) grpc.UnaryServerInterceptor {
@@ -198,14 +198,14 @@ func NewAuthorizationInterceptor(
 func (a *interceptor) getMetricsHandler(
 	operation string,
 	namespace string,
-) metrics.MetricsHandler {
-	var handler metrics.MetricsHandler
+) metrics.Handler {
+	var metricsHandler metrics.Handler
 	if namespace != "" {
-		handler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(namespace))
+		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(namespace))
 	} else {
-		handler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceUnknownTag())
+		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceUnknownTag())
 	}
-	return handler
+	return metricsHandler
 }
 
 func TLSInfoFormContext(ctx context.Context) *credentials.TLSInfo {

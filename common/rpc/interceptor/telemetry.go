@@ -47,7 +47,7 @@ type (
 
 	TelemetryInterceptor struct {
 		namespaceRegistry namespace.Registry
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		logger            log.Logger
 	}
 )
@@ -90,7 +90,7 @@ var (
 
 func NewTelemetryInterceptor(
 	namespaceRegistry namespace.Registry,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
@@ -162,7 +162,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	methodName string,
 	fullName string,
 	req interface{},
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	result interface{},
 ) {
 	if _, ok := grpcActions[methodName]; !ok || !strings.HasPrefix(fullName, frontendPackagePrefix) {
@@ -219,7 +219,7 @@ func (ti *TelemetryInterceptor) metricsHandlerLogTags(
 	req interface{},
 	fullMethod string,
 	methodName string,
-) (metrics.MetricsHandler, []tag.Tag) {
+) (metrics.Handler, []tag.Tag) {
 
 	overridedMethodName := ti.overrideOperationTag(methodName, req)
 
@@ -233,7 +233,7 @@ func (ti *TelemetryInterceptor) metricsHandlerLogTags(
 }
 
 func (ti *TelemetryInterceptor) handleError(
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
 	err error,
 ) {
@@ -284,8 +284,8 @@ func (ti *TelemetryInterceptor) handleError(
 func GetMetricsHandlerFromContext(
 	ctx context.Context,
 	logger log.Logger,
-) metrics.MetricsHandler {
-	handler, ok := ctx.Value(metricsCtxKey).(metrics.MetricsHandler)
+) metrics.Handler {
+	handler, ok := ctx.Value(metricsCtxKey).(metrics.Handler)
 	if !ok {
 		logger.Error("unable to get metrics scope")
 		return metrics.NoopMetricsHandler

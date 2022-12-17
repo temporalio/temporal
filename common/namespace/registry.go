@@ -154,7 +154,7 @@ type (
 		persistence             Persistence
 		globalNamespacesEnabled bool
 		clock                   Clock
-		metricsHandler          metrics.MetricsHandler
+		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		lastRefreshTime         atomic.Value
 		refreshInterval         dynamicconfig.DurationPropertyFn
@@ -184,7 +184,7 @@ func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
 	refreshInterval dynamicconfig.DurationPropertyFn,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Registry {
 	reg := &registry{

@@ -46,7 +46,7 @@ type (
 
 		monitor        Monitor
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		maxReaderCount dynamicconfig.IntPropertyFn
 	}
 )
@@ -54,7 +54,7 @@ type (
 func newMitigator(
 	monitor Monitor,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	maxReaderCount dynamicconfig.IntPropertyFn,
 ) *mitigatorImpl {
 	return &mitigatorImpl{

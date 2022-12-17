@@ -76,7 +76,7 @@ type (
 		processor                Processor
 		processorAckTimeout      dynamicconfig.DurationPropertyFn
 		disableOrderByClause     dynamicconfig.BoolPropertyFn
-		metricsHandler           metrics.MetricsHandler
+		metricsHandler           metrics.Handler
 	}
 
 	visibilityPageToken struct {
@@ -105,7 +105,7 @@ func NewVisibilityStore(
 	processor Processor,
 	processorAckTimeout dynamicconfig.DurationPropertyFn,
 	disableOrderByClause dynamicconfig.BoolPropertyFn,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *visibilityStore {
 
 	return &visibilityStore{

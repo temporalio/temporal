@@ -51,7 +51,7 @@ type (
 		PersistenceNamespaceMaxQPS PersistenceNamespaceMaxQps
 		EnablePriorityRateLimiting EnablePriorityRateLimiting
 		ClusterName                ClusterName
-		MetricsHandler             metrics.MetricsHandler
+		MetricsHandler             metrics.Handler
 		Logger                     log.Logger
 	}
 

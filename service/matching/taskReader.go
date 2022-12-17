@@ -305,7 +305,7 @@ func (tr *taskReader) logger() log.Logger {
 	return tr.tlMgr.logger
 }
 
-func (tr *taskReader) taggedMetricsHandler() metrics.MetricsHandler {
+func (tr *taskReader) taggedMetricsHandler() metrics.Handler {
 	return tr.tlMgr.metricsHandler
 }
 

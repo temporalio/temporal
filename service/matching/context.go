@@ -36,7 +36,7 @@ import (
 
 type handlerContext struct {
 	context.Context
-	metricsHandler metrics.MetricsHandler
+	metricsHandler metrics.Handler
 	logger         log.Logger
 }
 
@@ -44,7 +44,7 @@ func newHandlerContext(
 	ctx context.Context,
 	namespace namespace.Name,
 	taskQueue *taskqueuepb.TaskQueue,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	operation string,
 	logger log.Logger,
 ) *handlerContext {

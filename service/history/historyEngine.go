@@ -109,7 +109,7 @@ type (
 		replicationProcessorMgr    common.Daemon
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
-		metricsHandler             metrics.MetricsHandler
+		metricsHandler             metrics.Handler
 		logger                     log.Logger
 		throttledLogger            log.Logger
 		config                     *configs.Config

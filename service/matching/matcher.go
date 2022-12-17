@@ -60,8 +60,8 @@ type TaskMatcher struct {
 	rateLimiter quotas.RateLimiter
 
 	fwdr           *Forwarder
-	metricsHandler metrics.MetricsHandler // namespace metric scope
-	numPartitions  func() int             // number of task queue partitions
+	metricsHandler metrics.Handler // namespace metric scope
+	numPartitions  func() int      // number of task queue partitions
 }
 
 const (
@@ -72,7 +72,7 @@ const (
 // newTaskMatcher returns an task matcher instance. The returned instance can be
 // used by task producers and consumers to find a match. Both sync matches and non-sync
 // matches should use this implementation
-func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.MetricsHandler) *TaskMatcher {
+func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler) *TaskMatcher {
 	dynamicRateBurst := quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
 		int(defaultTaskDispatchRPS),

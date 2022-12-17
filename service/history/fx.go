@@ -95,7 +95,7 @@ func ServiceProvider(
 	logger log.SnTaggedLogger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
 ) *Service {
@@ -181,7 +181,7 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
@@ -225,7 +225,7 @@ func PersistenceRateLimitingParamsProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	persistenceConfig *config.Persistence,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceConfig *configs.Config,
@@ -260,7 +260,7 @@ func VisibilityManagerProvider(
 
 func EventNotifierProvider(
 	timeSource clock.TimeSource,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 ) events.Notifier {
 	return events.NewNotifier(
@@ -274,7 +274,7 @@ func ArchivalClientProvider(
 	archiverProvider provider.ArchiverProvider,
 	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 ) warchiver.Client {
 	return warchiver.NewClient(
