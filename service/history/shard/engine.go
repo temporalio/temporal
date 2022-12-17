@@ -89,6 +89,6 @@ type (
 		UpdateWorkflow(ctx context.Context, request *historyservice.UpdateWorkflowRequest) (*historyservice.UpdateWorkflowResponse, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
-		NotifyNewTasks(clusterName string, tasks map[tasks.Category][]tasks.Task)
+		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)
 	}
 )

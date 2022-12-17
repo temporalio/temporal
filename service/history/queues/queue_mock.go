@@ -97,15 +97,15 @@ func (mr *MockQueueMockRecorder) LockTaskProcessing() *gomock.Call {
 }
 
 // NotifyNewTasks mocks base method.
-func (m *MockQueue) NotifyNewTasks(clusterName string, tasks []tasks.Task) {
+func (m *MockQueue) NotifyNewTasks(tasks []tasks.Task) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTasks", clusterName, tasks)
+	m.ctrl.Call(m, "NotifyNewTasks", tasks)
 }
 
 // NotifyNewTasks indicates an expected call of NotifyNewTasks.
-func (mr *MockQueueMockRecorder) NotifyNewTasks(clusterName, tasks interface{}) *gomock.Call {
+func (mr *MockQueueMockRecorder) NotifyNewTasks(tasks interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockQueue)(nil).NotifyNewTasks), clusterName, tasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockQueue)(nil).NotifyNewTasks), tasks)
 }
 
 // Start mocks base method.

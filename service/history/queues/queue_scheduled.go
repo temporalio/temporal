@@ -160,7 +160,7 @@ func (p *scheduledQueue) Stop() {
 	p.queueBase.Stop()
 }
 
-func (p *scheduledQueue) NotifyNewTasks(_ string, tasks []tasks.Task) {
+func (p *scheduledQueue) NotifyNewTasks(tasks []tasks.Task) {
 	if len(tasks) == 0 {
 		return
 	}
