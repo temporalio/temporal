@@ -250,7 +250,9 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 		pageItems = append(pageItems, item)
 		if len(pageItems) == pageSize || !iter.HasNext() {
 			if isTableView {
-				printTable(pageItems)
+				if err := printTable(pageItems); err != nil {
+					return err
+				}
 			} else {
 				prettyPrintJSONObject(pageItems)
 			}
