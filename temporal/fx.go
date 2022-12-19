@@ -279,8 +279,8 @@ func (s ServerFx) Start() error {
 	return s.app.Start(context.Background())
 }
 
-func (s ServerFx) Stop() {
-	s.app.Stop(context.Background())
+func (s ServerFx) Stop() error {
+	return s.app.Stop(context.Background())
 }
 
 func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName, stopChan chan struct{}) {
@@ -765,8 +765,7 @@ func ServerLifetimeHooks(
 				return svr.Start()
 			},
 			OnStop: func(ctx context.Context) error {
-				svr.Stop()
-				return nil
+				return svr.Stop()
 			},
 		},
 	)
@@ -880,8 +879,7 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
 		tp := otelsdktrace.NewTracerProvider(opts...)
 		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
-			tp.Shutdown(ctx)
-			return nil // do not pass this up to fx
+			return tp.Shutdown(ctx)
 		}})
 		return tp
 	}),

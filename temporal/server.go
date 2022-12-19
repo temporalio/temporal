@@ -39,7 +39,7 @@ const (
 type (
 	Server interface {
 		Start() error
-		Stop()
+		Stop() error
 	}
 )
 
