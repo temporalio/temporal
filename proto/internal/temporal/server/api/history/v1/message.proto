@@ -31,15 +31,10 @@ import "dependencies/gogoproto/gogo.proto";
 import "temporal/api/history/v1/message.proto";
 
 message TransientWorkflowTaskInfo {
-    //TODO (mmcshane): remove these deprecated fields after v1.18 is released
+    reserved 1;
+    reserved 2;
 
-    // Rather than use this field, instead add the event to the history_suffix list.
-    temporal.api.history.v1.HistoryEvent scheduled_event = 1 [deprecated = true];
-    // Rather than use this field, instead add the event to the history_suffix list.
-    temporal.api.history.v1.HistoryEvent started_event = 2 [deprecated = true];
-
-    // A list of history events that are to be appended to the "real" workflow
-    // history.
+    // A list of history events that are to be appended to the "real" workflow history.
     repeated temporal.api.history.v1.HistoryEvent history_suffix = 3;
 }
 
