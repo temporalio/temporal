@@ -244,7 +244,7 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 		Items:  []map[string]*elastic.BulkResponseItem{mSuccess},
 	}
 
-	queuedRequestHistogram := metrics.NewMockHistogramMetric(s.controller)
+	queuedRequestHistogram := metrics.NewMockHistogramIface(s.controller)
 	s.mockMetricHandler.EXPECT().Histogram(
 		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(),
 		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricUnit(),
@@ -293,7 +293,7 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	queuedRequestHistogram := metrics.NewMockHistogramMetric(s.controller)
+	queuedRequestHistogram := metrics.NewMockHistogramIface(s.controller)
 	s.mockMetricHandler.EXPECT().Histogram(
 		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(),
 		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricUnit(),
