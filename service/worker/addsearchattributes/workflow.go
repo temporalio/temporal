@@ -156,12 +156,12 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 }
 
 func (a *activities) isRetryableError(err error) bool {
-	var httpStatusCode int
-	if err, isElasticErr := err.(*elastic.Error); isElasticErr {
-		httpStatusCode = err.Status
+	var esErr *elastic.Error
+	if !errors.As(err, &esErr) {
+		return true
 	}
 
-	switch httpStatusCode {
+	switch esErr.Status {
 	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict:
 		return false
 	default:

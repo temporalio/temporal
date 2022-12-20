@@ -30,6 +30,7 @@ package elasticsearch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -217,8 +218,9 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 	if err != nil {
 		const logFirstNRequests = 5
 		var httpStatus int
-		if err, isElasticErr := err.(*elastic.Error); isElasticErr {
-			httpStatus = err.Status
+		var esErr *elastic.Error
+		if errors.As(err, &esErr) {
+			httpStatus = esErr.Status
 		}
 
 		var logRequests strings.Builder
