@@ -113,7 +113,6 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 			s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
 			s.Equal(config.ESProcessorBulkSize(), input.BulkSize)
 			s.Equal(config.ESProcessorFlushInterval(), input.FlushInterval)
-			s.NotNil(input.Backoff)
 			s.NotNil(input.AfterFunc)
 
 			bulkProcessor := client.NewMockBulkProcessor(s.controller)
