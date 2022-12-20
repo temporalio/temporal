@@ -49,11 +49,10 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
 )
 
 const (
-	persistenceName = "elasticsearch"
+	PersistenceName = "elasticsearch"
 
 	delimiter                    = "~"
 	pointInTimeKeepAliveInterval = "1m"
@@ -128,7 +127,7 @@ func (s *visibilityStore) Close() {
 }
 
 func (s *visibilityStore) GetName() string {
-	return persistenceName
+	return PersistenceName
 }
 
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
@@ -232,32 +231,30 @@ func (s *visibilityStore) addBulkIndexRequestAndWait(
 }
 
 func (s *visibilityStore) addBulkRequestAndWait(
-	ctx context.Context,
+	_ context.Context,
 	bulkRequest *client.BulkableRequest,
 	visibilityTaskKey string,
 ) error {
 	s.checkProcessor()
 
 	// Add method is blocking. If bulk processor is busy flushing previous bulk, request will wait here.
-	// Therefore, ackTimeoutTimer in fact wait for request to be committed after it was added to bulk processor.
-	// TODO: this also means ctx is not respected if bulk processor is busy. Shall we make Add non-blocking or
-	// respecting the context?
-	future := s.processor.Add(bulkRequest, visibilityTaskKey)
+	ackF := s.processor.Add(bulkRequest, visibilityTaskKey)
 
-	ackTimeout := s.processorAckTimeout()
-	if deadline, ok := ctx.Deadline(); ok {
-		ackTimeout = util.Min(ackTimeout, time.Until(deadline))
-	}
-	subCtx, subCtxCancelFn := context.WithTimeout(context.Background(), ackTimeout)
-	defer subCtxCancelFn()
-
-	ack, err := future.Get(subCtx)
-
-	if errors.Is(err, context.DeadlineExceeded) {
-		return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
-	}
+	// processorAckTimeout is a maximum duration for bulk processor to commit the bulk and unblock the `ackF`.
+	// Default value is 30s and this timeout should never have happened,
+	// because Elasticsearch must process a bulk within 30s.
+	// Parent context is not respected here because it has shorter timeout (3s),
+	// which might already expired here due to wait at Add method above.
+	ctx, cancel := context.WithTimeout(context.Background(), s.processorAckTimeout())
+	defer cancel()
+	ack, err := ackF.Get(ctx)
 
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timed out waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
+		}
+		// Returns non-retryable Internal error here because these errors are unexpected.
+		// Visibility task processor retries all errors though, therefore new request will be generated for the same task.
 		return serviceerror.NewInternal(fmt.Sprintf("visibility task %s received error %v", visibilityTaskKey, err))
 	}
 
@@ -900,7 +897,7 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 	// Very important line. See finishParseJSONValue bellow.
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
-		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()) //.Record(1)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to unmarshal JSON from Elasticsearch document(%s): %v", docID, err))
 	}
 
