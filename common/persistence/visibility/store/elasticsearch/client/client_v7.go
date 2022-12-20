@@ -228,6 +228,7 @@ func (c *clientImpl) RunBulkProcessor(ctx context.Context, p *BulkProcessorParam
 		Backoff(p.Backoff).
 		Before(p.BeforeFunc).
 		After(p.AfterFunc).
+		RetryItemStatusCodes(retryItemStatusCodes...).
 		Do(ctx)
 
 	return newBulkProcessor(esBulkProcessor), err

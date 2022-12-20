@@ -28,6 +28,27 @@ import (
 	"github.com/olivere/elastic/v7"
 )
 
+var (
+	// retryItemStatusCodes is an array of status codes that indicate that a bulk
+	// response line item should be retried. Should match default value from
+	// elastic.defaultRetryItemStatusCodes.
+	// 408 - Request Timeout
+	// 429 - Too Many Requests
+	// 503 - Service Unavailable
+	// 507 - Insufficient Storage
+	retryItemStatusCodes = []int{408, 429, 503, 507}
+)
+
+// IsRetryableStatus check if httpsStatus is retryable.
+func IsRetryableStatus(httpStatus int) bool {
+	for _, code := range retryItemStatusCodes {
+		if httpStatus == code {
+			return true
+		}
+	}
+	return false
+}
+
 func HttpStatus(err error) int {
 	switch e := err.(type) {
 	case *elastic.Error:
@@ -35,21 +56,6 @@ func HttpStatus(err error) int {
 	default:
 		return 0
 	}
-}
-
-// IsRetryableStatus is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
-// responses with these status will be kept in queue and retried until success
-// 408 - Request Timeout
-// 429 - Too Many Requests
-// 500 - Node not connected
-// 503 - Service Unavailable
-// 507 - Insufficient Storage
-func IsRetryableStatus(httpStatus int) bool {
-	switch httpStatus {
-	case 408, 429, 500, 503, 507:
-		return true
-	}
-	return false
 }
 
 func IsRetryableError(err error) bool {

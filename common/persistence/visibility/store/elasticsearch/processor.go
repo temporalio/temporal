@@ -275,7 +275,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Record(1, metrics.HttpStatusTag(responseItem.Status))
 			p.notifyResult(visibilityTaskKey, false)
 		default: // bulk processor will retry
-			p.logger.Warn("ES request retried.",
+			p.logger.Warn("ES request will be retried by bulk processor.",
 				tag.ESResponseStatus(responseItem.Status),
 				tag.ESResponseError(extractErrorReason(responseItem)),
 				tag.Key(visibilityTaskKey),
