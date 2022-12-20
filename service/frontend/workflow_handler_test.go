@@ -597,7 +597,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolic
 		RetryPolicy:              &commonpb.RetryPolicy{},
 		RequestId:                uuid.New(),
 	}
-	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Error(err)
 	s.Equal(&commonpb.RetryPolicy{
 		BackoffCoefficient: 2.0,
 		InitialInterval:    timestamp.DurationPtr(time.Second),
@@ -623,7 +624,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNo
 		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
 		RequestId:                uuid.New(),
 	}
-	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Error(err)
 	s.Nil(startWorkflowExecutionRequest.RetryPolicy)
 }
 
