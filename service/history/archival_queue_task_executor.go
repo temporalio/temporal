@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -115,7 +116,7 @@ func (e *archivalQueueTaskExecutor) processArchiveExecutionTask(ctx context.Cont
 	if err != nil {
 		return err
 	}
-	return e.addDeletionTask(ctx, logger, task)
+	return e.addDeletionTask(ctx, logger, task, request.CloseTime)
 }
 
 // getArchiveTaskRequest returns an archival request for the given archive execution task.
@@ -230,7 +231,12 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 }
 
 // addDeletionTask adds a task to delete workflow history events from primary storage.
-func (e *archivalQueueTaskExecutor) addDeletionTask(ctx context.Context, logger log.Logger, task *tasks.ArchiveExecutionTask) error {
+func (e *archivalQueueTaskExecutor) addDeletionTask(
+	ctx context.Context,
+	logger log.Logger,
+	task *tasks.ArchiveExecutionTask,
+	closeTime *time.Time,
+) error {
 	mutableState, err := e.loadAndVersionCheckMutableState(ctx, logger, task)
 	if err != nil {
 		return err
@@ -244,13 +250,9 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(ctx context.Context, logger 
 		mutableState,
 		e.shardContext.GetConfig(),
 	)
-	closeTime, err := mutableState.GetWorkflowCloseTime(ctx)
-	if err != nil {
-		return err
-	}
 	err = taskGenerator.GenerateDeleteHistoryEventTask(*closeTime, true)
 	if err != nil {
-		return nil
+		return err
 	}
 	err = e.shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID:     e.shardContext.GetShardID(),
