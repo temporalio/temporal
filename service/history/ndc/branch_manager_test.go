@@ -193,7 +193,8 @@ func (s *branchMgrSuite) TestClearTransientWorkflowTask() {
 
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasTransientWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().ClearTransientWorkflowTask().Return(nil).AnyTimes()
 
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -285,7 +286,8 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissingEve
 
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasTransientWorkflowTask().Return(false).AnyTimes()
+	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
 		context.Background(),
@@ -316,7 +318,8 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEvent
 	s.NoError(err)
 
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasTransientWorkflowTask().Return(false).AnyTimes()
+	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
@@ -357,7 +360,8 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissing
 	newBranchToken := []byte("some random new branch token")
 
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasTransientWorkflowTask().Return(false).AnyTimes()
+	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
@@ -416,7 +420,8 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_MissingEv
 	})
 
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasTransientWorkflowTask().Return(false).AnyTimes()
+	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
