@@ -4078,9 +4078,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 
-		suffix := extractHistorySuffix(transientWorkflowTaskInfo)
-
-		for _, event := range suffix {
+		for _, event := range transientWorkflowTaskInfo.HistorySuffix {
 			blob, err := wh.payloadSerializer.SerializeEvent(event, enumspb.ENCODING_TYPE_PROTO3)
 			if err != nil {
 				return nil, nil, err
@@ -4161,7 +4159,7 @@ func (wh *WorkflowHandler) getHistory(
 				tag.Error(err))
 		}
 		// Append the transient workflow task events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, extractHistorySuffix(transientWorkflowTaskInfo)...)
+		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
 	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
@@ -4277,8 +4275,7 @@ func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	eventIDOffset int64,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 ) error {
-	suffix := extractHistorySuffix(transientWorkflowTaskInfo)
-	for i, event := range suffix {
+	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
 		expectedEventID := eventIDOffset + int64(i)
 		if event.GetEventId() != expectedEventID {
 			return serviceerror.NewInternal(
@@ -4291,24 +4288,6 @@ func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	}
 
 	return nil
-}
-
-func extractHistorySuffix(transientWorkflowTask *historyspb.TransientWorkflowTaskInfo) []*historypb.HistoryEvent {
-	// TODO (mmcshane): remove this function after v1.18 is release as we will
-	// be able to just use transientWorkflowTask.HistorySuffix directly and the other
-	// fields will be removed.
-
-	suffix := transientWorkflowTask.HistorySuffix
-	if len(suffix) == 0 {
-		// HistorySuffix is a new field - we may still need to handle
-		// instances that carry the separate ScheduledEvent and StartedEvent
-		// fields
-
-		// One might be tempted to check for nil here but the old code did not
-		// make that check and we aim to preserve compatiblity
-		suffix = append(suffix, transientWorkflowTask.ScheduledEvent, transientWorkflowTask.StartedEvent)
-	}
-	return suffix
 }
 
 func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {

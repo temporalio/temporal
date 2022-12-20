@@ -726,12 +726,8 @@ func (m *workflowTaskStateMachine) CreateTransientWorkflowTaskEvents(
 			},
 		}
 
-		// TODO (mmcshane): remove population of ScheduledEvent and StartedEvent
-		// after v1.18 is released
 		transientWorkflowTask = &historyspb.TransientWorkflowTaskInfo{
-			ScheduledEvent: scheduledEvent,
-			StartedEvent:   startedEvent,
-			HistorySuffix:  append(historySuffix, scheduledEvent, startedEvent),
+			HistorySuffix: append(historySuffix, scheduledEvent, startedEvent),
 		}
 	}
 
