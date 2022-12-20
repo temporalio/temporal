@@ -138,7 +138,7 @@ type (
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
-		CreateTransientWorkflowTask(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
+		GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
 		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
@@ -193,6 +193,7 @@ type (
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskQueueEnabled() bool
+		TaskQueue() *taskqueuepb.TaskQueue
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool

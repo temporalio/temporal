@@ -209,7 +209,7 @@ type Config struct {
 	// Workflow task settings
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any workflow tasks
+	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any commands
 	// So that workflow task will be scheduled to another worker(by clear stickyness)
 	WorkflowTaskHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	WorkflowTaskCriticalAttempts dynamicconfig.IntPropertyFn

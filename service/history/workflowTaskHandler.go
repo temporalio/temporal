@@ -117,6 +117,7 @@ func newWorkflowTaskHandler(
 	config *configs.Config,
 	shard shard.Context,
 	searchAttributesMapper searchattribute.Mapper,
+	hasBufferedEvents bool,
 ) *workflowTaskHandlerImpl {
 
 	return &workflowTaskHandlerImpl{
@@ -124,7 +125,7 @@ func newWorkflowTaskHandler(
 		workflowTaskCompletedID: workflowTaskCompletedID,
 
 		// internal state
-		hasBufferedEvents:               mutableState.HasBufferedEvents(),
+		hasBufferedEvents:               hasBufferedEvents,
 		workflowTaskFailedCause:         nil,
 		activityNotStartedCancelled:     false,
 		newMutableState:                 nil,

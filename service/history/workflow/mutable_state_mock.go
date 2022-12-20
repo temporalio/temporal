@@ -886,20 +886,6 @@ func (mr *MockMutableStateMockRecorder) ContinueAsNewMinBackoff(backoffDuration 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContinueAsNewMinBackoff", reflect.TypeOf((*MockMutableState)(nil).ContinueAsNewMinBackoff), backoffDuration)
 }
 
-// CreateTransientWorkflowTask mocks base method.
-func (m *MockMutableState) CreateTransientWorkflowTask(workflowTask *WorkflowTaskInfo, identity string) *v19.TransientWorkflowTaskInfo {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTransientWorkflowTask", workflowTask, identity)
-	ret0, _ := ret[0].(*v19.TransientWorkflowTaskInfo)
-	return ret0
-}
-
-// CreateTransientWorkflowTask indicates an expected call of CreateTransientWorkflowTask.
-func (mr *MockMutableStateMockRecorder) CreateTransientWorkflowTask(workflowTask, identity interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).CreateTransientWorkflowTask), workflowTask, identity)
-}
-
 // DeleteSignalRequested mocks base method.
 func (m *MockMutableState) DeleteSignalRequested(requestID string) {
 	m.ctrl.T.Helper()
@@ -1432,6 +1418,20 @@ func (m *MockMutableState) GetStartVersion() (int64, error) {
 func (mr *MockMutableStateMockRecorder) GetStartVersion() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStartVersion", reflect.TypeOf((*MockMutableState)(nil).GetStartVersion))
+}
+
+// GetTransientWorkflowTaskInfo mocks base method.
+func (m *MockMutableState) GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *v19.TransientWorkflowTaskInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTransientWorkflowTaskInfo", workflowTask, identity)
+	ret0, _ := ret[0].(*v19.TransientWorkflowTaskInfo)
+	return ret0
+}
+
+// GetTransientWorkflowTaskInfo indicates an expected call of GetTransientWorkflowTaskInfo.
+func (mr *MockMutableStateMockRecorder) GetTransientWorkflowTaskInfo(workflowTask, identity interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransientWorkflowTaskInfo", reflect.TypeOf((*MockMutableState)(nil).GetTransientWorkflowTaskInfo), workflowTask, identity)
 }
 
 // GetUpdateCondition mocks base method.
@@ -2420,6 +2420,20 @@ func (m *MockMutableState) StartTransaction(entry *namespace.Namespace) (bool, e
 func (mr *MockMutableStateMockRecorder) StartTransaction(entry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransaction", reflect.TypeOf((*MockMutableState)(nil).StartTransaction), entry)
+}
+
+// TaskQueue mocks base method.
+func (m *MockMutableState) TaskQueue() *v14.TaskQueue {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TaskQueue")
+	ret0, _ := ret[0].(*v14.TaskQueue)
+	return ret0
+}
+
+// TaskQueue indicates an expected call of TaskQueue.
+func (mr *MockMutableStateMockRecorder) TaskQueue() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueue", reflect.TypeOf((*MockMutableState)(nil).TaskQueue))
 }
 
 // UpdateActivity mocks base method.
