@@ -271,11 +271,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	}
 
 	scheduleTime := m.ms.timeSource.Now().UTC()
+	attempt := m.ms.executionInfo.WorkflowTaskAttempt
 	// TaskQueue should already be set from workflow execution started event.
 	taskQueue := m.ms.TaskQueue()
 	// DefaultWorkflowTaskTimeout should already be set from workflow execution started event.
-	startToCloseTimeout := m.getStartToCloseTimeout(m.ms.executionInfo.DefaultWorkflowTaskTimeout, m.ms.executionInfo.WorkflowTaskAttempt)
-	attempt := m.ms.executionInfo.WorkflowTaskAttempt
+	startToCloseTimeout := m.getStartToCloseTimeout(m.ms.executionInfo.DefaultWorkflowTaskTimeout, attempt)
 
 	var scheduledEvent *historypb.HistoryEvent
 	var scheduledEventID int64
