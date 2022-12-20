@@ -481,6 +481,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.config,
 			handler.shard,
 			handler.searchAttributesMapper,
+			hasUnhandledEvents,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -726,7 +727,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	response.ScheduledTime = workflowTask.ScheduledTime
 	response.StartedTime = workflowTask.StartedTime
 
-	response.TransientWorkflowTask = ms.CreateTransientWorkflowTask(workflowTask, identity)
+	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {

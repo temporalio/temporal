@@ -607,6 +607,19 @@ func (ms *MutableStateImpl) IsStickyTaskQueueEnabled() bool {
 	return ms.executionInfo.StickyTaskQueue != ""
 }
 
+func (e *MutableStateImpl) TaskQueue() *taskqueuepb.TaskQueue {
+	if e.IsStickyTaskQueueEnabled() {
+		return &taskqueuepb.TaskQueue{
+			Name: e.executionInfo.StickyTaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+		}
+	}
+	return &taskqueuepb.TaskQueue{
+		Name: e.executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+}
+
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
 	wType := &commonpb.WorkflowType{}
 	wType.Name = ms.executionInfo.WorkflowTypeName
@@ -1304,7 +1317,7 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 		return serviceerror.NewInternal("cannot clear transient workflow task when there are buffered events")
 	}
 	// no buffered event
-	resetWorkflowTaskInfo := &WorkflowTaskInfo{
+	emptyWorkflowTaskInfo := &WorkflowTaskInfo{
 		Version:             common.EmptyVersion,
 		ScheduledEventID:    common.EmptyEventID,
 		StartedEventID:      common.EmptyEventID,
@@ -1317,7 +1330,7 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 		TaskQueue:             nil,
 		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
 	}
-	ms.workflowTaskManager.UpdateWorkflowTask(resetWorkflowTaskInfo)
+	ms.workflowTaskManager.UpdateWorkflowTask(emptyWorkflowTaskInfo)
 	return nil
 }
 
@@ -1774,11 +1787,11 @@ func (ms *MutableStateImpl) ReplicateWorkflowTaskStartedEvent(
 	return ms.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID, startedEventID, requestID, timestamp)
 }
 
-func (ms *MutableStateImpl) CreateTransientWorkflowTask(
+func (ms *MutableStateImpl) GetTransientWorkflowTaskInfo(
 	workflowTask *WorkflowTaskInfo,
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
-	return ms.workflowTaskManager.CreateTransientWorkflowTaskEvents(workflowTask, identity)
+	return ms.workflowTaskManager.GetTransientWorkflowTaskInfo(workflowTask, identity)
 }
 
 // add BinaryCheckSum for the first workflowTaskCompletedID for auto-reset
