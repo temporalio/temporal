@@ -83,7 +83,9 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 }
 
 func (s *visibilityArchiverSuite) TearDownSuite() {
-	os.RemoveAll(s.testQueryDirectory)
+	if err := os.RemoveAll(s.testQueryDirectory); err != nil {
+		s.Fail("Failed to remove test query directory %v: %v", s.testQueryDirectory, err)
+	}
 }
 
 func (s *visibilityArchiverSuite) SetupTest() {
