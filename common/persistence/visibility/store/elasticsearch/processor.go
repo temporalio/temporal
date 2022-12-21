@@ -30,6 +30,7 @@ package elasticsearch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -93,10 +94,7 @@ type (
 var _ Processor = (*processorImpl)(nil)
 
 const (
-	// retry configs for es bulk processor
-	esProcessorInitialRetryInterval = 200 * time.Millisecond
-	esProcessorMaxRetryInterval     = 20 * time.Second
-	visibilityProcessorName         = "visibility-processor"
+	visibilityProcessorName = "visibility-processor"
 )
 
 // NewProcessor create new processorImpl
@@ -119,7 +117,6 @@ func NewProcessor(
 			BulkActions:   cfg.ESProcessorBulkActions(),
 			BulkSize:      cfg.ESProcessorBulkSize(),
 			FlushInterval: cfg.ESProcessorFlushInterval(),
-			Backoff:       elastic.NewExponentialBackoff(esProcessorInitialRetryInterval, esProcessorMaxRetryInterval),
 		},
 	}
 	p.bulkProcessorParameters.AfterFunc = p.bulkAfterAction
@@ -220,8 +217,12 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
 		const logFirstNRequests = 5
-		httpStatus := client.HttpStatus(err)
-		isRetryable := client.IsRetryableStatus(httpStatus)
+		var httpStatus int
+		var esErr *elastic.Error
+		if errors.As(err, &esErr) {
+			httpStatus = esErr.Status
+		}
+
 		var logRequests strings.Builder
 		for i, request := range requests {
 			if i < logFirstNRequests {
@@ -229,16 +230,13 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				logRequests.WriteRune('\n')
 			}
 			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Record(1, metrics.HttpStatusTag(httpStatus))
-
-			if !isRetryable {
-				visibilityTaskKey := p.extractVisibilityTaskKey(request)
-				if visibilityTaskKey == "" {
-					continue
-				}
-				p.notifyResult(visibilityTaskKey, false)
+			visibilityTaskKey := p.extractVisibilityTaskKey(request)
+			if visibilityTaskKey == "" {
+				continue
 			}
+			p.notifyResult(visibilityTaskKey, false)
 		}
-		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.IsRetryable(isRetryable), tag.RequestCount(len(requests)), tag.ESRequest(logRequests.String()))
+		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.RequestCount(len(requests)), tag.ESRequest(logRequests.String()))
 		return
 	}
 
@@ -262,10 +260,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 			continue
 		}
 
-		switch {
-		case isSuccess(responseItem):
-			p.notifyResult(visibilityTaskKey, true)
-		case !client.IsRetryableStatus(responseItem.Status):
+		if !isSuccess(responseItem) {
 			p.logger.Error("ES request failed.",
 				tag.ESResponseStatus(responseItem.Status),
 				tag.ESResponseError(extractErrorReason(responseItem)),
@@ -274,15 +269,10 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.ESRequest(request.String()))
 			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Record(1, metrics.HttpStatusTag(responseItem.Status))
 			p.notifyResult(visibilityTaskKey, false)
-		default: // bulk processor will retry
-			p.logger.Warn("ES request retried.",
-				tag.ESResponseStatus(responseItem.Status),
-				tag.ESResponseError(extractErrorReason(responseItem)),
-				tag.Key(visibilityTaskKey),
-				tag.ESDocID(docID),
-				tag.ESRequest(request.String()))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorRetries.GetMetricName()).Record(1, metrics.HttpStatusTag(responseItem.Status))
+			continue
 		}
+
+		p.notifyResult(visibilityTaskKey, true)
 	}
 
 	// Record how many documents are waiting to be flushed to Elasticsearch after this bulk is committed.

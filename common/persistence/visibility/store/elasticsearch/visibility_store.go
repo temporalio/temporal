@@ -254,14 +254,15 @@ func (s *visibilityStore) addBulkRequestAndWait(
 			return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timed out waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
 		}
 		// Returns non-retryable Internal error here because these errors are unexpected.
-		// Visibility task processor retries all errors though, therefore new request will be generated for the same task.
+		// Visibility task processor retries all errors though, therefore new request will be generated for the same visibility task.
 		return serviceerror.NewInternal(fmt.Sprintf("visibility task %s received error %v", visibilityTaskKey, err))
 	}
 
 	if !ack {
-		// Returns non-retryable Internal error here because NACK from bulk processor means that this request can't be processed.
-		// Visibility task processor retries all errors though, therefore new request will be generated for the same task.
-		return serviceerror.NewInternal(fmt.Sprintf("visibility task %s received NACK", visibilityTaskKey))
+		// Returns retryable Unavailable error here because NACK from bulk processor
+		// means that this request wasn't processed successfully and needs to be retried.
+		// Visibility task processor retries all errors anyway, therefore new request will be generated for the same visibility task.
+		return serviceerror.NewUnavailable(fmt.Sprintf("visibility task %s received NACK", visibilityTaskKey))
 	}
 	return nil
 }

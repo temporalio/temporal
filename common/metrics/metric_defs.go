@@ -1670,7 +1670,6 @@ var (
 	BatcherOperationFailures                                  = NewCounterDef("batcher_operation_errors")
 	ElasticsearchBulkProcessorRequests                        = NewCounterDef("elasticsearch_bulk_processor_requests")
 	ElasticsearchBulkProcessorQueuedRequests                  = NewDimensionlessHistogramDef("elasticsearch_bulk_processor_queued_requests")
-	ElasticsearchBulkProcessorRetries                         = NewCounterDef("elasticsearch_bulk_processor_retries")
 	ElasticsearchBulkProcessorFailures                        = NewCounterDef("elasticsearch_bulk_processor_errors")
 	ElasticsearchBulkProcessorCorruptedData                   = NewCounterDef("elasticsearch_bulk_processor_corrupted_data")
 	ElasticsearchBulkProcessorDuplicateRequest                = NewCounterDef("elasticsearch_bulk_processor_duplicate_request")

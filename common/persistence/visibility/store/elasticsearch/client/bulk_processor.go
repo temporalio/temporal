@@ -52,7 +52,6 @@ type (
 		BulkActions   int
 		BulkSize      int
 		FlushInterval time.Duration
-		Backoff       elastic.Backoff
 		BeforeFunc    elastic.BulkBeforeFunc
 		AfterFunc     elastic.BulkAfterFunc
 	}
