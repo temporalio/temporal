@@ -48,8 +48,6 @@ import (
 	"go.temporal.io/server/service/history/tests"
 )
 
-const namespaceCacheRefreshInterval = 10 * time.Second
-
 type (
 	executableSuite struct {
 		suite.Suite
@@ -142,21 +140,9 @@ func (s *executableSuite) TestHandleErr_ErrTaskVersionMismatch() {
 }
 
 func (s *executableSuite) TestHandleErr_NamespaceNotActiveError() {
-	now := time.Now().UTC()
 	err := serviceerror.NewNamespaceNotActive("", "", "")
 
-	s.timeSource.Update(now.Add(-namespaceCacheRefreshInterval * time.Duration(3)))
-	executable := s.newTestExecutable()
-	s.timeSource.Update(now)
-	s.NoError(executable.HandleErr(err))
-
-	s.timeSource.Update(now.Add(-namespaceCacheRefreshInterval * time.Duration(3)))
-	executable = s.newTestExecutable()
-	s.timeSource.Update(now)
-	s.Equal(err, executable.HandleErr(err))
-
-	executable = s.newTestExecutable()
-	s.Equal(err, executable.HandleErr(err))
+	s.Equal(err, s.newTestExecutable().HandleErr(err))
 }
 
 func (s *executableSuite) TestHandleErr_RandomErr() {
