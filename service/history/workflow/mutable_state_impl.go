@@ -607,15 +607,15 @@ func (ms *MutableStateImpl) IsStickyTaskQueueEnabled() bool {
 	return ms.executionInfo.StickyTaskQueue != ""
 }
 
-func (e *MutableStateImpl) TaskQueue() *taskqueuepb.TaskQueue {
-	if e.IsStickyTaskQueueEnabled() {
+func (ms *MutableStateImpl) TaskQueue() *taskqueuepb.TaskQueue {
+	if ms.IsStickyTaskQueueEnabled() {
 		return &taskqueuepb.TaskQueue{
-			Name: e.executionInfo.StickyTaskQueue,
+			Name: ms.executionInfo.StickyTaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
 		}
 	}
 	return &taskqueuepb.TaskQueue{
-		Name: e.executionInfo.TaskQueue,
+		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 }
@@ -1294,25 +1294,18 @@ func (ms *MutableStateImpl) GetInFlightWorkflowTask() (*WorkflowTaskInfo, bool) 
 	return ms.workflowTaskManager.GetInFlightWorkflowTask()
 }
 
-func (ms *MutableStateImpl) HasTransientWorkflowTask() bool {
-	workflowTask, ok := ms.GetInFlightWorkflowTask()
-	if !ok {
-		return false
-	}
-	return workflowTask.ScheduledEventID >= ms.GetNextEventID()
+func (ms *MutableStateImpl) IsTransientWorkflowTask() bool {
+	return ms.executionInfo.WorkflowTaskAttempt > 1
 }
 
 func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
-	workflowTask, ok := ms.GetInFlightWorkflowTask()
-	if !ok {
+	if !ms.HasInFlightWorkflowTask() {
 		return serviceerror.NewInternal("cannot clear transient workflow task when task is missing")
 	}
-
-	if workflowTask.ScheduledEventID < ms.GetNextEventID() {
+	if !ms.IsTransientWorkflowTask() {
 		return serviceerror.NewInternal("cannot clear transient workflow task when task is not transient")
 	}
-	// workflowTask.ScheduledEventID >= ms.GetNextEventID()
-	// this is transient workflow
+	// this is transient workflow task
 	if ms.HasBufferedEvents() {
 		return serviceerror.NewInternal("cannot clear transient workflow task when there are buffered events")
 	}
@@ -1791,6 +1784,9 @@ func (ms *MutableStateImpl) GetTransientWorkflowTaskInfo(
 	workflowTask *WorkflowTaskInfo,
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
+	if !ms.IsTransientWorkflowTask() {
+		return nil
+	}
 	return ms.workflowTaskManager.GetTransientWorkflowTaskInfo(workflowTask, identity)
 }
 

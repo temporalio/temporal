@@ -1622,20 +1622,6 @@ func (mr *MockMutableStateMockRecorder) HasProcessedOrPendingWorkflowTask() *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasProcessedOrPendingWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasProcessedOrPendingWorkflowTask))
 }
 
-// HasTransientWorkflowTask mocks base method.
-func (m *MockMutableState) HasTransientWorkflowTask() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasTransientWorkflowTask")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// HasTransientWorkflowTask indicates an expected call of HasTransientWorkflowTask.
-func (mr *MockMutableStateMockRecorder) HasTransientWorkflowTask() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasTransientWorkflowTask))
-}
-
 // IsCancelRequested mocks base method.
 func (m *MockMutableState) IsCancelRequested() bool {
 	m.ctrl.T.Helper()
@@ -1704,6 +1690,20 @@ func (m *MockMutableState) IsStickyTaskQueueEnabled() bool {
 func (mr *MockMutableStateMockRecorder) IsStickyTaskQueueEnabled() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStickyTaskQueueEnabled", reflect.TypeOf((*MockMutableState)(nil).IsStickyTaskQueueEnabled))
+}
+
+// IsTransientWorkflowTask mocks base method.
+func (m *MockMutableState) IsTransientWorkflowTask() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsTransientWorkflowTask")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsTransientWorkflowTask indicates an expected call of IsTransientWorkflowTask.
+func (mr *MockMutableStateMockRecorder) IsTransientWorkflowTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).IsTransientWorkflowTask))
 }
 
 // IsWorkflowExecutionRunning mocks base method.
