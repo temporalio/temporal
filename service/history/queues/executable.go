@@ -283,6 +283,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
+	if common.IsNamespaceHandoverErr(err) {
+		e.taggedMetricsHandler.Counter(metrics.TaskNamespaceHandoverCounter.GetMetricName()).Record(1)
+		return err
+	}
+
 	if common.IsErrorType[*serviceerror.NamespaceNotActive](err) {
 		// TODO remove this error check special case after multi-cursor is enabled by default,
 		// since the new task life cycle will not give up until task processed / verified
@@ -328,7 +333,8 @@ func (e *executableImpl) IsRetryableError(err error) bool {
 	// TODO: change ErrTaskRetry to a better name
 	return !errors.Is(err, consts.ErrTaskRetry) &&
 		!errors.Is(err, consts.ErrWorkflowBusy) &&
-		!errors.Is(err, consts.ErrDependencyTaskNotCompleted)
+		!errors.Is(err, consts.ErrDependencyTaskNotCompleted) &&
+		!common.IsNamespaceHandoverErr(err)
 }
 
 func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
@@ -453,7 +459,8 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	}
 
 	return !errors.Is(err, consts.ErrTaskRetry) &&
-		!errors.Is(err, consts.ErrDependencyTaskNotCompleted)
+		!errors.Is(err, consts.ErrDependencyTaskNotCompleted) &&
+		!common.IsNamespaceHandoverErr(err)
 }
 
 func (e *executableImpl) rescheduleTime(
@@ -463,12 +470,14 @@ func (e *executableImpl) rescheduleTime(
 	// elapsedTime (the first parameter in ComputeNextDelay) is not relevant here
 	// since reschedule policy has no expiration interval.
 
-	if errors.Is(err, consts.ErrTaskRetry) {
+	if errors.Is(err, consts.ErrTaskRetry) || common.IsNamespaceHandoverErr(err) {
 		// using a different reschedule policy to slow down retry
-		// as the error means mutable state is not ready to handle the task,
+		// as the error means mutable state or namespace is not ready to handle the task,
 		// need to wait for replication.
 		return e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
-	} else if err == consts.ErrDependencyTaskNotCompleted {
+	}
+
+	if err == consts.ErrDependencyTaskNotCompleted {
 		return e.timeSource.Now().Add(dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 

@@ -1430,6 +1430,7 @@ var (
 	TaskWorkflowBusyCounter                           = NewCounterDef("task_errors_workflow_busy")
 	TaskNotActiveCounter                              = NewCounterDef("task_errors_not_active_counter")
 	TaskLimitExceededCounter                          = NewCounterDef("task_errors_limit_exceeded_counter")
+	TaskNamespaceHandoverCounter                      = NewCounterDef("task_errors_namespace_handover")
 	TaskScheduleToStartLatency                        = NewTimerDef("task_schedule_to_start_latency")
 	TransferTaskMissingEventCounter                   = NewCounterDef("transfer_task_missing_event_counter")
 	TaskBatchCompleteCounter                          = NewCounterDef("task_batch_complete_counter")

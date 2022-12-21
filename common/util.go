@@ -150,6 +150,11 @@ var (
 	ErrContextTimeoutNotSet = serviceerror.NewInvalidArgument("Context timeout is not set.")
 )
 
+var (
+	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
+	ErrNamespaceHandover = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
+)
+
 // AwaitWaitGroup calls Wait on the given wait
 // Returns true if the Wait() call succeeded before the timeout
 // Returns false if the Wait() did not return before the timeout
@@ -336,6 +341,10 @@ func IsServiceClientTransientError(err error) bool {
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
+	if err.Error() == ErrNamespaceHandover.Error() {
+		return false
+	}
+
 	switch err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.Unavailable:
@@ -356,6 +365,23 @@ func IsStickyWorkerUnavailable(err error) bool {
 // IsResourceExhausted checks if the error is a service busy error.
 func IsResourceExhausted(err error) bool {
 	return IsErrorType[*serviceerror.ResourceExhausted](err)
+}
+
+// IsNamespaceHandoverErr checks if the error is namespace handover error.
+// NOTE: we can't directly check if err == ErrNamespaceHandover because the
+// check won't pass if the error is returned by an RPC call.
+// (status field in the ErrNamespaceHandover is empty and doesn't equal to the one
+// in the returned rpc error).
+func IsNamespaceHandoverErr(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if err.Error() == ErrNamespaceHandover.Error() {
+		return true
+	}
+
+	return IsNamespaceHandoverErr(errors.Unwrap(err))
 }
 
 // IsErrorType checks if any error in the error chain matches error type T

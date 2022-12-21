@@ -370,8 +370,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			}
 
 			if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-				maxTaskID, _ := e.replicationAckMgr.GetMaxTaskInfo()
-				e.shard.UpdateHandoverNamespaces(nextNamespaces, maxTaskID)
+				e.shard.UpdateHandoverNamespaces(nextNamespaces)
 			}
 
 			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
