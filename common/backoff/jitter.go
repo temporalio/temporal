@@ -44,28 +44,8 @@ func Jitter[T int64 | float64 | time.Duration](input T, coefficient float64) T {
 		return input
 	}
 
-	var base float64
-	var addon float64
-	switch i := any(input).(type) {
-	case time.Duration:
-		input64 := i.Nanoseconds()
-		if input64 == 0 {
-			return input
-		}
-		base = float64(input64) * (1 - coefficient)
-		addon = rand.Float64() * 2 * (float64(input64) - base)
-	case int64:
-		if i == 0 {
-			return input
-		}
-		base = float64(i) * (1 - coefficient)
-		addon = rand.Float64() * 2 * (float64(i) - base)
-	case float64:
-		base = i * (1 - coefficient)
-		addon = rand.Float64() * 2 * (i - base)
-	default:
-		panic("The jitter type is not supported")
-	}
+    base := float64(input) * (1 - coefficient)
+	addon := rand.Float64() * 2 * (float64(input) - base)
 	return T(base + addon)
 }
 
