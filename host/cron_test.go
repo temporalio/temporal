@@ -410,7 +410,7 @@ func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
 			s.Equal(lcr, "pass")
 			s.NotNil(workflow.GetLastError(ctx))
 			s.Equal(workflow.GetLastError(ctx).Error(), "second error")
-			workflow.Sleep(ctx, 10*time.Second) // cause wft timeout
+			s.NoError(workflow.Sleep(ctx, 10*time.Second)) // cause wft timeout
 			panic("should have been timed out on server already")
 
 		case 4:
