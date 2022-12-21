@@ -469,6 +469,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
@@ -480,6 +481,7 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
