@@ -341,7 +341,7 @@ func IsServiceClientTransientError(err error) bool {
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
-	if err.Error() == ErrNamespaceHandover.Error() {
+	if IsNamespaceHandoverErr(err) {
 		return false
 	}
 
