@@ -278,7 +278,7 @@ func TestArchiver(t *testing.T) {
 					Return(c.ArchiveVisibilityErr)
 			}
 			rateLimiter := quotas.NewMockRateLimiter(controller)
-			rateLimiter.EXPECT().WaitN(gomock.Any(), 2).Return(c.RateLimiterWaitErr)
+			rateLimiter.EXPECT().WaitN(gomock.Any(), len(c.Targets)).Return(c.RateLimiterWaitErr)
 
 			archiver := NewArchiver(archiverProvider, logRecorder, metricsHandler, rateLimiter)
 			_, err = archiver.Archive(ctx, &Request{
