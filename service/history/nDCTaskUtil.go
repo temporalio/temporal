@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -209,4 +210,16 @@ func getNamespaceTagByID(
 	}
 
 	return metrics.NamespaceTag(namespaceName.String())
+}
+
+func getNamespaceTagAndReplicationStateByID(
+	registry namespace.Registry,
+	namespaceID string,
+) (metrics.Tag, enumspb.ReplicationState) {
+	namespace, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
+	if err != nil {
+		return metrics.NamespaceUnknownTag(), enumspb.REPLICATION_STATE_UNSPECIFIED
+	}
+
+	return metrics.NamespaceTag(namespace.Name().String()), namespace.ReplicationState()
 }
