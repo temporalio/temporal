@@ -145,9 +145,9 @@ type (
 		namespaceRegistry    namespace.Registry
 		logger               log.Logger
 		matchingClient       matchingservice.MatchingServiceClient
-		metricsHandler       metrics.MetricsHandler
+		metricsHandler       metrics.Handler
 		namespace            namespace.Name
-		taggedMetricsHandler metrics.MetricsHandler // namespace/taskqueue tagged metric scope
+		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a

@@ -421,10 +421,10 @@ func (mr *MockContextMockRecorder) GetMaxTaskIDForCurrentRangeID() *gomock.Call 
 }
 
 // GetMetricsHandler mocks base method.
-func (m *MockContext) GetMetricsHandler() metrics.MetricsHandler {
+func (m *MockContext) GetMetricsHandler() metrics.Handler {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetricsHandler")
-	ret0, _ := ret[0].(metrics.MetricsHandler)
+	ret0, _ := ret[0].(metrics.Handler)
 	return ret0
 }
 

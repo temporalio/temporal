@@ -106,34 +106,41 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 }
 
 func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
-	if m.HasPendingWorkflowTask() || m.ms.GetExecutionInfo().WorkflowTaskAttempt == 1 {
+	// When workflow task fails/timeout it gets removed from mutable state, but attempt count is incremented.
+	// If attempt count was incremented and now is greater than 1, then next workflow task should be created as transient.
+	// This method will do it only if there is no other workflow task and next workflow task should be transient.
+	if m.HasPendingWorkflowTask() || !m.ms.IsTransientWorkflowTask() {
 		return nil, nil
 	}
 
-	// the schedule ID for this workflow task is guaranteed to be wrong
-	// since the next event ID is assigned at the very end of when
-	// all events are applied for replication.
-	// this is OK
-	// 1. if a failover happen just after this transient workflow task,
-	// AddWorkflowTaskStartedEvent will handle the correction of schedule ID
-	// and set the attempt to 1
-	// 2. if no failover happen during the life time of this transient workflow task
-	// then ReplicateWorkflowTaskScheduledEvent will overwrite everything
-	// including the workflow task schedule ID
+	// Because this method is called from ApplyEvents, where nextEventID is updated at the very end of the func,
+	// ScheduledEventID for this workflow task is guaranteed to be wrong.
+	// But this is OK. Whatever ScheduledEventID value is set here it will be stored in mutable state
+	// and returned to the caller. It must be the same value because it will be used to look up
+	// workflow task from mutable state.
+	// There are 2 possible scenarios:
+	//   1. If a failover happen just after this transient workflow task is scheduled with wrong ScheduledEventID,
+	//   then AddWorkflowTaskStartedEvent will handle the correction of ScheduledEventID,
+	//   and set the attempt to 1 (convert transient workflow task to normal workflow task).
+	//   2. If no failover happen during the lifetime of this transient workflow task
+	//   then ReplicateWorkflowTaskScheduledEvent will overwrite everything
+	//   including the workflow task ScheduledEventID.
 	//
-	// regarding workflow task timeout calculation:
-	// 1. the attempt will be set to 1, so we still use default worflow task timeout
-	// 2. ReplicateWorkflowTaskScheduledEvent will overwrite everything including workflowTaskTimeout
+	// Regarding workflow task timeout calculation:
+	//   1. Attempt will be set to 1, so we still use default workflow task timeout.
+	//   2. ReplicateWorkflowTaskScheduledEvent will overwrite everything including WorkflowTaskTimeout.
 	workflowTask := &WorkflowTaskInfo{
 		Version:             m.ms.GetCurrentVersion(),
 		ScheduledEventID:    m.ms.GetNextEventID(),
 		StartedEventID:      common.EmptyEventID,
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: m.ms.GetExecutionInfo().DefaultWorkflowTaskTimeout,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: m.ms.GetExecutionInfo().TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Attempt:             m.ms.GetExecutionInfo().WorkflowTaskAttempt,
-		ScheduledTime:       timestamp.TimePtr(m.ms.timeSource.Now()),
-		StartedTime:         timestamp.UnixOrZeroTimePtr(0),
+		// Task queue is always of kind NORMAL because transient workflow task is created only for
+		// failed/timed out workflow task and fail/timeout clears stickiness.
+		TaskQueue:     m.ms.TaskQueue(),
+		Attempt:       m.ms.GetExecutionInfo().WorkflowTaskAttempt,
+		ScheduledTime: timestamp.TimePtr(m.ms.timeSource.Now()),
+		StartedTime:   timestamp.UnixOrZeroTimePtr(0),
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -148,26 +155,29 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 	requestID string,
 	timestamp time.Time,
 ) (*WorkflowTaskInfo, error) {
-	// Replicator calls it with a nil workflow task info, and it is safe to always lookup the workflow task in this case as it
-	// does not have to deal with transient workflow task case.
-	var ok bool
+	// When this function is called from ApplyEvents, workflowTask is nil.
+	// It is safe to look up the workflow task as it does not have to deal with transient workflow task case.
 	if workflowTask == nil {
+		var ok bool
 		workflowTask, ok = m.GetWorkflowTaskInfo(scheduledEventID)
 		if !ok {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find workflow task: %v", scheduledEventID))
 		}
-		// setting workflow task attempt to 1 for workflow task replication
-		// this mainly handles transient workflow task completion
-		// for transient workflow task, active side will write 2 batch in a "transaction"
-		// 1. workflow task scheduled & workflow task started
-		// 2. workflow task completed & other events
-		// since we need to treat each individual event batch as one transaction
-		// certain "magic" needs to be done, i.e. setting attempt to 1 so
-		// if first batch is replicated, but not the second one, workflow task can be correctly timed out
+		// Transient workflow task events are not replicated but attempt count in mutable state
+		// can be updated from previous workflow task failed/timeout event.
+		// During replication, "active" side will send 2 batches:
+		//   1. WorkflowTaskScheduledEvent and WorkflowTaskStartedEvent
+		//   2. WorkflowTaskCompletedEvents & other events
+		// Each batch is like a transaction but there is no guarantee that all batches will be delivered before failover is happened.
+		// Therefore, we need to support case when 1st batch is replicated but 2nd is not.
+		// If previous workflow task was failed/timed out, mutable state will have attempt count > 1.
+		// Because attempt count controls whether workflow task is transient or not,
+		// "standby" side would consider this workflow task as transient, while it is actually not.
+		// To prevent this attempt count is reset to 1, workflow task will be treated as normal workflow task,
+		// and will be timed out or completed correctly.
 		workflowTask.Attempt = 1
 	}
 
-	// Update mutable workflow task state
 	workflowTask = &WorkflowTaskInfo{
 		Version:               version,
 		ScheduledEventID:      scheduledEventID,
@@ -201,7 +211,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskTimedOutEvent(
 	timeoutType enumspb.TimeoutType,
 ) error {
 	incrementAttempt := true
-	// Do not increment workflow task attempt in the case of sticky timeout to prevent creating next workflow task as transient
+	// Do not increment workflow task attempt in the case of sticky timeout to prevent creating next workflow task as transient.
 	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		incrementAttempt = false
 	}
@@ -250,51 +260,55 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		return nil, m.ms.createInternalServerError(opTag)
 	}
 
-	// Task queue and workflow task timeout should already be set from workflow execution started event
-	taskQueue := &taskqueuepb.TaskQueue{}
-	if m.ms.IsStickyTaskQueueEnabled() {
-		taskQueue.Name = m.ms.executionInfo.StickyTaskQueue
-		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-	} else {
-		taskQueue.Name = m.ms.executionInfo.TaskQueue
-		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
-	}
+	// Create real WorkflowTaskScheduledEvent when workflow task:
+	//  - is not transient (is not continuously failing)
+	//  and
+	//  - is not speculative.
+	createWorkflowTaskScheduledEvent := !m.ms.IsTransientWorkflowTask()
 
-	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for transient
-	// workflow task and will cause in timeout processing to not work for transient workflow tasks
+	// If while scheduling a workflow task and new events has come, then this workflow task cannot be a transient/speculative.
+	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for
+	// transient/speculative workflow task and will cause in timeout processing to not work for transient workflow tasks.
 	if m.ms.HasBufferedEvents() {
-		// if creating a workflow task and in the meantime events are flushed from buffered events
-		// then this workflow task cannot be a transient workflow task.
 		m.ms.executionInfo.WorkflowTaskAttempt = 1
+		createWorkflowTaskScheduledEvent = true
 		m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch())
-	} else if m.ms.executionInfo.WorkflowTaskAttempt > 1 {
+	}
+	if !createWorkflowTaskScheduledEvent {
 		lastWriteVersion, err := m.ms.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
 		}
 
+		// If failover happened during transient workflow task,
+		// then reset the attempt to 1, and not use transient workflow task.
 		if m.ms.GetCurrentVersion() != lastWriteVersion {
-			// during transient workflow task cannot allow version changes
-			// mark the attempt to be 1 to NOT use transient workflow task
 			m.ms.executionInfo.WorkflowTaskAttempt = 1
+			createWorkflowTaskScheduledEvent = true
 		}
 	}
 
-	var newWorkflowTaskEvent *historypb.HistoryEvent
-	scheduledEventID := m.ms.GetNextEventID() // we will generate the schedule event later for repeatedly failing workflow tasks
-	// Avoid creating new history events when workflow tasks are continuously failing
-	scheduledTime := m.ms.timeSource.Now().UTC()
+	scheduleTime := m.ms.timeSource.Now().UTC()
 	attempt := m.ms.executionInfo.WorkflowTaskAttempt
+	// TaskQueue should already be set from workflow execution started event.
+	taskQueue := m.ms.TaskQueue()
+	// DefaultWorkflowTaskTimeout should already be set from workflow execution started event.
 	startToCloseTimeout := m.getStartToCloseTimeout(m.ms.executionInfo.DefaultWorkflowTaskTimeout, attempt)
-	if attempt == 1 {
-		newWorkflowTaskEvent = m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
+
+	var scheduledEvent *historypb.HistoryEvent
+	var scheduledEventID int64
+
+	if createWorkflowTaskScheduledEvent {
+		scheduledEvent = m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			taskQueue,
 			startToCloseTimeout,
 			attempt,
-			m.ms.timeSource.Now(),
+			scheduleTime,
 		)
-		scheduledEventID = newWorkflowTaskEvent.GetEventId()
-		scheduledTime = timestamp.TimeValue(newWorkflowTaskEvent.GetEventTime())
+		scheduledEventID = scheduledEvent.GetEventId()
+	} else {
+		// WorkflowTaskScheduledEvent will be created later.
+		scheduledEventID = m.ms.GetNextEventID()
 	}
 
 	workflowTask, err := m.ReplicateWorkflowTaskScheduledEvent(
@@ -303,7 +317,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		taskQueue,
 		startToCloseTimeout,
 		attempt,
-		&scheduledTime,
+		&scheduleTime,
 		originalScheduledTimestamp,
 	)
 	if err != nil {
@@ -381,35 +395,41 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		return nil, nil, m.ms.createInternalServerError(opTag)
 	}
 
-	var event *historypb.HistoryEvent
 	scheduledEventID = workflowTask.ScheduledEventID
 	startedEventID := scheduledEventID + 1
 	startTime := m.ms.timeSource.Now()
-	// First check to see if new events came since transient workflowTask was scheduled
-	if workflowTask.Attempt > 1 && (workflowTask.ScheduledEventID != m.ms.GetNextEventID() || workflowTask.Version != m.ms.GetCurrentVersion()) {
-		// Also create a new WorkflowTaskScheduledEvent since new events came in when it was scheduled
+	workflowTaskScheduledEventCreated := !m.ms.IsTransientWorkflowTask()
+
+	// If new events came since transient/speculative workflow task was scheduled
+	// or failover happened during lifetime of transient workflow task,
+	// transient/speculative workflow task needs to be converted to normal workflow task,
+	// i.e. WorkflowTaskScheduledEvent needs to be created now.
+	if !workflowTaskScheduledEventCreated &&
+		(workflowTask.ScheduledEventID != m.ms.GetNextEventID() || workflowTask.Version != m.ms.GetCurrentVersion()) {
+
+		workflowTask.Attempt = 1
+		workflowTaskScheduledEventCreated = true
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			taskQueue,
 			workflowTask.WorkflowTaskTimeout,
-			1,
-			m.ms.timeSource.Now(),
+			workflowTask.Attempt,
+			startTime,
 		)
 		scheduledEventID = scheduledEvent.GetEventId()
-		workflowTask.Attempt = 1
 	}
 
-	// Avoid creating new history events when workflow tasks are continuously failing
-	if workflowTask.Attempt == 1 {
-		// Now create WorkflowTaskStartedEvent
-		event = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
+	// Create WorkflowTaskStartedEvent only if WorkflowTaskScheduledEvent was created.
+	// (it wasn't created for transient/speculative workflow task).
+	var startedEvent *historypb.HistoryEvent
+	if workflowTaskScheduledEventCreated {
+		startedEvent = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
 			requestID,
 			identity,
-			m.ms.timeSource.Now(),
+			startTime,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
-		startedEventID = event.GetEventId()
-		startTime = timestamp.TimeValue(event.GetEventTime())
+		startedEventID = startedEvent.GetEventId()
 	}
 
 	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(workflowTask, m.ms.GetCurrentVersion(), scheduledEventID, startedEventID, requestID, startTime)
@@ -422,7 +442,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	); err != nil {
 		return nil, nil, err
 	}
-	return event, workflowTask, err
+	return startedEvent, workflowTask, err
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
@@ -443,15 +463,15 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		return nil, m.ms.createInternalServerError(opTag)
 	}
 
+	// Capture if WorkflowTaskScheduled and WorkflowTaskStarted events were created
+	// before calling m.beforeAddWorkflowTaskCompletedEvent() because it will delete workflow task info from mutable state.
+	workflowTaskScheduledStartedEventsCreated := !m.ms.IsTransientWorkflowTask()
 	m.beforeAddWorkflowTaskCompletedEvent()
-	if workflowTask.Attempt > 1 {
-		// Create corresponding WorkflowTaskSchedule and WorkflowTaskStarted events for workflow tasks we have been retrying
-		taskQueue := &taskqueuepb.TaskQueue{
-			Name: m.ms.executionInfo.TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}
+
+	if !workflowTaskScheduledStartedEventsCreated {
+		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for transient/speculative workflow tasks.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
-			taskQueue,
+			m.ms.TaskQueue(),
 			workflowTask.WorkflowTaskTimeout,
 			workflowTask.Attempt,
 			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
@@ -515,8 +535,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 	}
 
 	var event *historypb.HistoryEvent
-	// Only emit WorkflowTaskFailedEvent for the very first time
-	if workflowTask.Attempt == 1 {
+	// Only emit WorkflowTaskFailedEvent if workflow task is not transient.
+	if !m.ms.IsTransientWorkflowTask() {
 		event = m.ms.hBuilder.AddWorkflowTaskFailedEvent(
 			attr.ScheduledEventId,
 			attr.StartedEventId,
@@ -558,8 +578,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	}
 
 	var event *historypb.HistoryEvent
-	// Avoid creating new history events when workflow tasks are continuously timing out
-	if workflowTask.Attempt == 1 {
+	// Avoid creating WorkflowTaskTimedOut history event when workflow task is transient.
+	if !m.ms.IsTransientWorkflowTask() {
 		event = m.ms.hBuilder.AddWorkflowTaskTimedOutEvent(
 			scheduledEventID,
 			startedEventID,
@@ -576,7 +596,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 func (m *workflowTaskStateMachine) FailWorkflowTask(
 	incrementAttempt bool,
 ) {
-	// clear stickiness whenever workflow task fails
+	// Increment attempts only if workflow task is failing on non-sticky task queue.
+	// If it was stick task queue, clear stickiness first and try again before creating transient workflow tas.
 	incrementAttempt = incrementAttempt && !m.ms.IsStickyTaskQueueEnabled()
 	m.ms.ClearStickyness()
 
@@ -656,7 +677,7 @@ func (m *workflowTaskStateMachine) GetPendingWorkflowTask() (*WorkflowTaskInfo, 
 }
 
 func (m *workflowTaskStateMachine) HasInFlightWorkflowTask() bool {
-	return m.ms.executionInfo.WorkflowTaskStartedEventId > 0
+	return m.ms.executionInfo.WorkflowTaskStartedEventId != common.EmptyEventID
 }
 
 func (m *workflowTaskStateMachine) GetInFlightWorkflowTask() (*WorkflowTaskInfo, bool) {
@@ -684,70 +705,46 @@ func (m *workflowTaskStateMachine) GetWorkflowTaskInfo(
 	return nil, false
 }
 
-func (m *workflowTaskStateMachine) CreateTransientWorkflowTaskEvents(
+func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 	workflowTask *WorkflowTaskInfo,
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
 
-	var historySuffix []*historypb.HistoryEvent
-
-	var transientWorkflowTask *historyspb.TransientWorkflowTaskInfo
-	if workflowTask.Attempt > 1 {
-		// This workflowTask is retried from mutable state
-		// Also return schedule and started which are not written to history yet
-		scheduledEvent := &historypb.HistoryEvent{
-			EventId:   workflowTask.ScheduledEventID,
-			EventTime: workflowTask.ScheduledTime,
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-			Version:   m.ms.currentVersion,
-			Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
-				WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-					TaskQueue: &taskqueuepb.TaskQueue{
-						Name: m.ms.executionInfo.TaskQueue,
-						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-					},
-					StartToCloseTimeout: workflowTask.WorkflowTaskTimeout,
-					Attempt:             workflowTask.Attempt,
-				},
+	// Create scheduled and started events which are not written to the history yet.
+	scheduledEvent := &historypb.HistoryEvent{
+		EventId:   workflowTask.ScheduledEventID,
+		EventTime: workflowTask.ScheduledTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Version:   m.ms.currentVersion,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
+			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+				TaskQueue:           m.ms.TaskQueue(),
+				StartToCloseTimeout: workflowTask.WorkflowTaskTimeout,
+				Attempt:             workflowTask.Attempt,
 			},
-		}
-
-		startedEvent := &historypb.HistoryEvent{
-			EventId:   workflowTask.StartedEventID,
-			EventTime: workflowTask.StartedTime,
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-			Version:   m.ms.currentVersion,
-			Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
-				WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-					ScheduledEventId: workflowTask.ScheduledEventID,
-					Identity:         identity,
-					RequestId:        workflowTask.RequestID,
-				},
-			},
-		}
-
-		// TODO (mmcshane): remove population of ScheduledEvent and StartedEvent
-		// after v1.18 is released
-		transientWorkflowTask = &historyspb.TransientWorkflowTaskInfo{
-			ScheduledEvent: scheduledEvent,
-			StartedEvent:   startedEvent,
-			HistorySuffix:  append(historySuffix, scheduledEvent, startedEvent),
-		}
+		},
 	}
 
-	return transientWorkflowTask
+	startedEvent := &historypb.HistoryEvent{
+		EventId:   workflowTask.StartedEventID,
+		EventTime: workflowTask.StartedTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		Version:   m.ms.currentVersion,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
+			WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+				ScheduledEventId: workflowTask.ScheduledEventID,
+				Identity:         identity,
+				RequestId:        workflowTask.RequestID,
+			},
+		},
+	}
+
+	return &historyspb.TransientWorkflowTaskInfo{
+		HistorySuffix: []*historypb.HistoryEvent{scheduledEvent, startedEvent},
+	}
 }
 
 func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *WorkflowTaskInfo {
-	taskQueue := &taskqueuepb.TaskQueue{}
-	if m.ms.IsStickyTaskQueueEnabled() {
-		taskQueue.Name = m.ms.executionInfo.StickyTaskQueue
-		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-	} else {
-		taskQueue.Name = m.ms.executionInfo.TaskQueue
-		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
-	}
-
 	return &WorkflowTaskInfo{
 		Version:               m.ms.executionInfo.WorkflowTaskVersion,
 		ScheduledEventID:      m.ms.executionInfo.WorkflowTaskScheduledEventId,
@@ -757,7 +754,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *WorkflowTaskInfo {
 		Attempt:               m.ms.executionInfo.WorkflowTaskAttempt,
 		StartedTime:           m.ms.executionInfo.WorkflowTaskStartedTime,
 		ScheduledTime:         m.ms.executionInfo.WorkflowTaskScheduledTime,
-		TaskQueue:             taskQueue,
+		TaskQueue:             m.ms.TaskQueue(),
 		OriginalScheduledTime: m.ms.executionInfo.WorkflowTaskOriginalScheduledTime,
 	}
 }

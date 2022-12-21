@@ -49,12 +49,13 @@ type Group struct {
 // If the supplied func does not abide by `ctx.Done()` of the provided
 // `context.Context` then `Wait()` on this `Group` will hang until all functions
 // exit on their own (possibly never).
+// NOTE: Errors returned by the supplied function are ignored.
 func (g *Group) Go(f func(ctx context.Context) error) {
 	g.initOnce.Do(g.init)
 	g.wg.Add(1)
 	go func() {
 		defer g.wg.Done()
-		f(g.ctx)
+		_ = f(g.ctx)
 	}()
 }
 

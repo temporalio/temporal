@@ -22,36 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package tasks
 
 import (
-	"github.com/olivere/elastic/v7"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/definition"
 )
 
-func HttpStatus(err error) int {
-	switch e := err.(type) {
-	case *elastic.Error:
-		return e.Status
-	default:
-		return 0
+func TestArchiveExecutionTask(t *testing.T) {
+	workflowKey := definition.NewWorkflowKey("namespace", "workflowID", "runID")
+	visibilityTimestamp := time.Now()
+	taskID := int64(123)
+	version := int64(456)
+	task := &ArchiveExecutionTask{
+		WorkflowKey:         workflowKey,
+		VisibilityTimestamp: visibilityTimestamp,
+		TaskID:              taskID,
+		Version:             version,
 	}
-}
-
-// IsRetryableStatus is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
-// responses with these status will be kept in queue and retried until success
-// 408 - Request Timeout
-// 429 - Too Many Requests
-// 500 - Node not connected
-// 503 - Service Unavailable
-// 507 - Insufficient Storage
-func IsRetryableStatus(httpStatus int) bool {
-	switch httpStatus {
-	case 408, 429, 500, 503, 507:
-		return true
-	}
-	return false
-}
-
-func IsRetryableError(err error) bool {
-	return IsRetryableStatus(HttpStatus(err))
+	assert.Equal(t, NewKey(visibilityTimestamp, taskID), task.GetKey())
+	assert.Equal(t, taskID, task.GetTaskID())
+	assert.Equal(t, visibilityTimestamp, task.GetVisibilityTime())
+	assert.Equal(t, version, task.GetVersion())
+	assert.Equal(t, CategoryArchival, task.GetCategory())
+	assert.Equal(t, enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
 }

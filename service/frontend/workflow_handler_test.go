@@ -294,21 +294,13 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 		transientCount int
 	}{
 		{
-			name: "Legacy",
-			taskInfo: historyspb.TransientWorkflowTaskInfo{
-				ScheduledEvent: &historypb.HistoryEvent{EventId: 3},
-				StartedEvent:   &historypb.HistoryEvent{EventId: 4},
-			},
-			transientCount: 2,
-		},
-		{
 			name: "HistorySuffix",
 			taskInfo: historyspb.TransientWorkflowTaskInfo{
 				HistorySuffix: []*historypb.HistoryEvent{
-					&historypb.HistoryEvent{EventId: 3},
-					&historypb.HistoryEvent{EventId: 4},
-					&historypb.HistoryEvent{EventId: 5},
-					&historypb.HistoryEvent{EventId: 6},
+					{EventId: 3},
+					{EventId: 4},
+					{EventId: 5},
+					{EventId: 6},
 				},
 			},
 			transientCount: 4,
@@ -597,7 +589,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolic
 		RetryPolicy:              &commonpb.RetryPolicy{},
 		RequestId:                uuid.New(),
 	}
-	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Error(err)
 	s.Equal(&commonpb.RetryPolicy{
 		BackoffCoefficient: 2.0,
 		InitialInterval:    timestamp.DurationPtr(time.Second),
@@ -623,7 +616,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNo
 		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
 		RequestId:                uuid.New(),
 	}
-	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Error(err)
 	s.Nil(startWorkflowExecutionRequest.RetryPolicy)
 }
 
@@ -1553,13 +1547,15 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTra
 		NextEventId:      5,
 		PersistenceToken: persistenceToken,
 		TransientWorkflowTask: &historyspb.TransientWorkflowTaskInfo{
-			ScheduledEvent: &historypb.HistoryEvent{
-				EventId:   5,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-			},
-			StartedEvent: &historypb.HistoryEvent{
-				EventId:   6,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			HistorySuffix: []*historypb.HistoryEvent{
+				{
+					EventId:   5,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+				},
+				{
+					EventId:   6,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+				},
 			},
 		},
 		BranchToken: branchToken,

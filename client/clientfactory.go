@@ -63,7 +63,7 @@ type (
 		NewFactory(
 			rpcFactory common.RPCFactory,
 			monitor membership.Monitor,
-			metricsHandler metrics.MetricsHandler,
+			metricsHandler metrics.Handler,
 			dc *dynamicconfig.Collection,
 			numberOfHistoryShards int32,
 			logger log.Logger,
@@ -77,7 +77,7 @@ type (
 	rpcClientFactory struct {
 		rpcFactory            common.RPCFactory
 		monitor               membership.Monitor
-		metricsHandler        metrics.MetricsHandler
+		metricsHandler        metrics.Handler
 		dynConfig             *dynamicconfig.Collection
 		numberOfHistoryShards int32
 		logger                log.Logger
@@ -101,7 +101,7 @@ func NewFactoryProvider() FactoryProvider {
 func (p *factoryProviderImpl) NewFactory(
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	dc *dynamicconfig.Collection,
 	numberOfHistoryShards int32,
 	logger log.Logger,

@@ -94,7 +94,7 @@ type (
 		shardID             int32
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
-		metricsHandler      metrics.MetricsHandler
+		metricsHandler      metrics.Handler
 		eventsCache         events.Cache
 		closeCallback       func(*ContextImpl)
 		config              *configs.Config
@@ -685,7 +685,7 @@ func (s *ContextImpl) AddTasks(
 	s.wUnlock()
 
 	if OperationPossiblySucceeded(err) {
-		engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
+		engine.NotifyNewTasks(request.Tasks)
 	}
 
 	return err
@@ -1069,7 +1069,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	var newTasks map[tasks.Category][]tasks.Task
 	defer func() {
 		if OperationPossiblySucceeded(retErr) && newTasks != nil {
-			engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), newTasks)
+			engine.NotifyNewTasks(newTasks)
 		}
 	}()
 
@@ -1777,13 +1777,7 @@ func (s *ContextImpl) notifyQueueProcessor() {
 		fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
 	}
 
-	// TODO: with multi-cursor, we don't need the for loop
-	for clusterName, info := range s.clusterMetadata.GetAllClusterInfo() {
-		if !info.Enabled {
-			continue
-		}
-		engine.NotifyNewTasks(clusterName, fakeTasks)
-	}
+	engine.NotifyNewTasks(fakeTasks)
 }
 
 func (s *ContextImpl) updateHandoverNamespacePendingTaskID() {
@@ -1824,9 +1818,7 @@ func (s *ContextImpl) notifyReplicationQueueProcessor(taskID int64) {
 	fakeReplicationTask := tasks.NewFakeTask(definition.WorkflowKey{}, tasks.CategoryReplication, tasks.MinimumKey.FireTime)
 	fakeReplicationTask.SetTaskID(taskID)
 
-	// cluster name parameter doesn't apply to replication processor
-	// also this parameter will be removed now that we are using multi-cursor impl.
-	engine.NotifyNewTasks("", map[tasks.Category][]tasks.Task{
+	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{
 		tasks.CategoryReplication: {fakeReplicationTask},
 	})
 }
@@ -2087,7 +2079,7 @@ func newContext(
 	persistenceShardManager persistence.ShardManager,
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -2187,7 +2179,7 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return s.historyClient
 }
 
-func (s *ContextImpl) GetMetricsHandler() metrics.MetricsHandler {
+func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
 	return s.metricsHandler
 }
 

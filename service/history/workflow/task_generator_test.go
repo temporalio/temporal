@@ -242,6 +242,11 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			}
 			require.NotNil(t, closeExecutionTask)
 			assert.Equal(t, p.DeleteAfterClose, closeExecutionTask.DeleteAfterClose)
+			assert.Equal(
+				t,
+				p.DurableArchivalEnabled && !p.DeleteAfterClose,
+				closeExecutionTask.CanSkipVisibilityArchival,
+			)
 
 			if p.ExpectCloseExecutionVisibilityTask {
 				assert.NotNil(t, closeExecutionVisibilityTask)

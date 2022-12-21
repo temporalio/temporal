@@ -30,6 +30,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
@@ -179,7 +180,9 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(cfg)
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	}()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,
@@ -212,7 +215,9 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(cfg)
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	}()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,
@@ -245,7 +250,9 @@ func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
 func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(cfg)
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	}()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,
@@ -268,7 +275,9 @@ func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
 func TestSQLiteFileTaskQueueSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(cfg)
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	}()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,
@@ -291,7 +300,9 @@ func TestSQLiteFileTaskQueueSuite(t *testing.T) {
 func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(cfg)
-	defer os.Remove(cfg.DatabaseName)
+	defer func() {
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	}()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,

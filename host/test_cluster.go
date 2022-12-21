@@ -31,6 +31,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -309,12 +310,16 @@ func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
 	tc.SetFaultInjectionRate(0)
-	err := tc.host.Stop()
+	errs := tc.host.Stop()
 	tc.host = nil
 	tc.testBase.TearDownWorkflowStore()
-	os.RemoveAll(tc.archiverBase.historyStoreDirectory)
-	os.RemoveAll(tc.archiverBase.visibilityStoreDirectory)
-	return err
+	if err := os.RemoveAll(tc.archiverBase.historyStoreDirectory); err != nil {
+		errs = multierr.Combine(errs, err)
+	}
+	if err := os.RemoveAll(tc.archiverBase.visibilityStoreDirectory); err != nil {
+		errs = multierr.Combine(errs, err)
+	}
+	return errs
 }
 
 // GetFrontendClient returns a frontend client from the test cluster

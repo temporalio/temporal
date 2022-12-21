@@ -52,7 +52,7 @@ type (
 		shard          shard.Context
 		cache          wcache.Cache
 		logger         log.Logger
-		metricProvider metrics.MetricsHandler
+		metricProvider metrics.Handler
 		visibilityMgr  manager.VisibilityManager
 
 		ensureCloseBeforeDelete    dynamicconfig.BoolPropertyFn
@@ -67,7 +67,7 @@ func newVisibilityQueueTaskExecutor(
 	workflowCache wcache.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *visibilityQueueTaskExecutor {
@@ -334,10 +334,10 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
-	ctx context.Context,
+	parentCtx context.Context,
 	task *tasks.CloseExecutionVisibilityTask,
 ) (retError error) {
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(parentCtx, taskTimeout)
 	defer cancel()
 
 	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
@@ -411,8 +411,13 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return err
 	}
 
+	// Elasticsearch bulk processor doesn't respect context timeout
+	// because under heavy load bulk flush might take longer than taskTimeout.
+	// Therefore, ctx timeout might be already expired
+	// and parentCtx (which doesn't have timeout) must be used everywhere bellow.
+
 	if t.enableCloseWorkflowCleanup(namespaceEntry.Name().String()) {
-		return t.cleanupExecutionInfo(ctx, task)
+		return t.cleanupExecutionInfo(parentCtx, task)
 	}
 	return nil
 }
@@ -515,6 +520,9 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	ctx context.Context,
 	task *tasks.CloseExecutionVisibilityTask,
 ) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err

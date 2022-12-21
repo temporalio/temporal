@@ -249,7 +249,7 @@ type Service struct {
 
 	logger                         log.Logger
 	grpcListener                   net.Listener
-	metricsHandler                 metrics.MetricsHandler
+	metricsHandler                 metrics.Handler
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 }
 
@@ -264,7 +264,7 @@ func NewService(
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	grpcListener net.Listener,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{

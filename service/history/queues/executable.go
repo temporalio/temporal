@@ -121,8 +121,8 @@ type (
 		lastActiveness                bool
 		resourceExhaustedCount        int
 		logger                        log.Logger
-		metricsHandler                metrics.MetricsHandler
-		taggedMetricsHandler          metrics.MetricsHandler
+		metricsHandler                metrics.Handler
+		taggedMetricsHandler          metrics.Handler
 		criticalRetryAttempt          dynamicconfig.IntPropertyFn
 		namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 		filter                        TaskFilter
@@ -146,7 +146,7 @@ func NewExecutable(
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	criticalRetryAttempt dynamicconfig.IntPropertyFn,
 	namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn,
 ) Executable {

@@ -159,13 +159,14 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
+	closeExecutionTask := &tasks.CloseExecutionTask{
+		// TaskID, Visiblitytimestamp is set by shard
+		WorkflowKey:      r.mutableState.GetWorkflowKey(),
+		Version:          currentVersion,
+		DeleteAfterClose: deleteAfterClose,
+	}
 	closeTasks := []tasks.Task{
-		&tasks.CloseExecutionTask{
-			// TaskID, Visiblitytimestamp is set by shard
-			WorkflowKey:      r.mutableState.GetWorkflowKey(),
-			Version:          currentVersion,
-			DeleteAfterClose: deleteAfterClose,
-		},
+		closeExecutionTask,
 	}
 
 	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.
@@ -205,6 +206,9 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
 			archiveTime := closeEvent.GetEventTime().Add(delay)
 
+			// We can skip visibility archival in the close execution task if we are using the durable archival flow.
+			// The visibility archival will be handled by the archival queue.
+			closeExecutionTask.CanSkipVisibilityArchival = true
 			task := &tasks.ArchiveExecutionTask{
 				// TaskID is set by the shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),

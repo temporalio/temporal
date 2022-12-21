@@ -45,7 +45,7 @@ type (
 )
 
 func (a *ArchiveExecutionTask) GetKey() Key {
-	return NewImmediateKey(a.TaskID)
+	return NewKey(a.VisibilityTimestamp, a.TaskID)
 }
 
 func (a *ArchiveExecutionTask) GetTaskID() int64 {

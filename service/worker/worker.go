@@ -98,7 +98,9 @@ func (wm *workerManager) Start() {
 	}
 
 	for _, w := range wm.workers {
-		w.Start()
+		if err := w.Start(); err != nil {
+			wm.logger.Fatal("Unable to start worker", tag.Error(err))
+		}
 	}
 
 	wm.logger.Info("", tag.ComponentWorkerManager, tag.LifeCycleStarted)

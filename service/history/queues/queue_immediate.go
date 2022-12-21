@@ -59,7 +59,7 @@ func NewImmediateQueue(
 	options *Options,
 	hostRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *immediateQueue {
 	paginationFnProvider := func(r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -135,7 +135,7 @@ func (p *immediateQueue) Stop() {
 	p.queueBase.Stop()
 }
 
-func (p *immediateQueue) NotifyNewTasks(_ string, tasks []tasks.Task) {
+func (p *immediateQueue) NotifyNewTasks(tasks []tasks.Task) {
 	if len(tasks) == 0 {
 		return
 	}

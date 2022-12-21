@@ -98,7 +98,7 @@ type (
 	}
 
 	client struct {
-		metricsHandler   metrics.MetricsHandler
+		metricsHandler   metrics.Handler
 		logger           log.Logger
 		sdkClientFactory sdk.ClientFactory
 		numWorkflows     dynamicconfig.IntPropertyFn
@@ -122,7 +122,7 @@ const (
 
 // NewClient creates a new Client
 func NewClient(
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	numWorkflows dynamicconfig.IntPropertyFn,

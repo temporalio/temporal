@@ -27,7 +27,6 @@ package archival
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -244,6 +243,7 @@ func TestArchiver(t *testing.T) {
 			},
 		},
 	} {
+		c := c // capture range variable
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
@@ -251,7 +251,7 @@ func TestArchiver(t *testing.T) {
 			archiverProvider := provider.NewMockArchiverProvider(controller)
 			historyArchiver := carchiver.NewMockHistoryArchiver(controller)
 			visibilityArchiver := carchiver.NewMockVisibilityArchiver(controller)
-			metricsHandler := metrics.NewMockMetricsHandler(controller)
+			metricsHandler := metrics.NewMockHandler(controller)
 			metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverClientScope)).Return(metricsHandler)
 			sdkClient := mocksdk.NewMockClient(controller)
 			sdkClientFactory := sdk.NewMockClientFactory(controller)
@@ -324,9 +324,9 @@ func (r *errorLogRecorder) Error(msg string, tags ...tag.Tag) {
 	for _, t := range tags {
 		if t.Key() == "error" {
 			value := t.Value()
-			message, ok := value.(fmt.Stringer)
+			message, ok := value.(string)
 			require.True(r.T, ok)
-			r.ErrorMessages = append(r.ErrorMessages, message.String())
+			r.ErrorMessages = append(r.ErrorMessages, message)
 		}
 	}
 }

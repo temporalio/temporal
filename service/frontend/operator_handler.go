@@ -73,7 +73,7 @@ type (
 		esConfig               *esclient.Config
 		esClient               esclient.Client
 		sdkClientFactory       sdk.ClientFactory
-		metricsHandler         metrics.MetricsHandler
+		metricsHandler         metrics.Handler
 		saProvider             searchattribute.Provider
 		saManager              searchattribute.Manager
 		healthServer           *health.Server
@@ -90,7 +90,7 @@ type (
 		EsClient               esclient.Client
 		Logger                 log.Logger
 		sdkClientFactory       sdk.ClientFactory
-		MetricsHandler         metrics.MetricsHandler
+		MetricsHandler         metrics.Handler
 		SaProvider             searchattribute.Provider
 		SaManager              searchattribute.Manager
 		healthServer           *health.Server
@@ -425,6 +425,17 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	scope, startTime := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
 	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
+	var isClusterNameExist bool
+	for clusterName := range h.clusterMetadata.GetAllClusterInfo() {
+		if clusterName == request.GetClusterName() {
+			isClusterNameExist = true
+			break
+		}
+	}
+	if !isClusterNameExist {
+		return nil, serviceerror.NewNotFound("The cluster to be deleted cannot be found in clusters cache.")
+	}
+
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
@@ -507,7 +518,7 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 }
 
 // startRequestProfile initiates recording of request metrics
-func (h *OperatorHandlerImpl) startRequestProfile(operation string) (metrics.MetricsHandler, time.Time) {
+func (h *OperatorHandlerImpl) startRequestProfile(operation string) (metrics.Handler, time.Time) {
 	metricsScope := h.metricsHandler.WithTags(metrics.OperationTag(operation))
 	metricsScope.Counter(metrics.ServiceRequests.GetMetricName()).Record(1)
 	return metricsScope, time.Now().UTC()

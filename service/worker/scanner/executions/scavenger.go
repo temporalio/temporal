@@ -64,7 +64,7 @@ type (
 		rateLimiter                 quotas.RateLimiter
 		perShardQPS                 dynamicconfig.IntPropertyFn
 		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
-		metricsHandler              metrics.MetricsHandler
+		metricsHandler              metrics.Handler
 		logger                      log.Logger
 
 		stopC  chan struct{}
@@ -93,7 +93,7 @@ func NewScavenger(
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Scavenger {
 	return &Scavenger{

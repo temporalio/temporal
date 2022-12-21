@@ -884,9 +884,11 @@ func (s *clientIntegrationSuite) Test_StickyWorkerRestartWorkflowTask() {
 	for _, tt := range testCases {
 		s.Run(tt.name, func() {
 			workflowFn := func(ctx workflow.Context) (string, error) {
-				workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+				if err := workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 					return "query works", nil
-				})
+				}); err != nil {
+					return "", err
+				}
 
 				signalCh := workflow.GetSignalChannel(ctx, "test")
 				var msg string
@@ -1293,9 +1295,11 @@ func (s *clientIntegrationSuite) Test_BufferedQuery() {
 	workflowFn := func(ctx workflow.Context) error {
 		wfStarted.Done()
 		status := "init"
-		workflow.SetQueryHandler(ctx, "foo", func() (string, error) {
+		if err := workflow.SetQueryHandler(ctx, "foo", func() (string, error) {
 			return status, nil
-		})
+		}); err != nil {
+			return err
+		}
 		ctx1 := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
 			ScheduleToCloseTimeout: 10 * time.Second,
 		})
@@ -1305,9 +1309,7 @@ func (s *clientIntegrationSuite) Test_BufferedQuery() {
 		err1 := f1.Get(ctx1, nil)
 		status = "done"
 
-		workflow.Sleep(ctx, 5*time.Second)
-
-		return err1
+		return multierr.Combine(err1, workflow.Sleep(ctx, 5*time.Second))
 	}
 
 	s.worker.RegisterWorkflow(workflowFn)
@@ -1335,13 +1337,14 @@ func (s *clientIntegrationSuite) Test_BufferedQuery() {
 		// sleep 2s to make sure DescribeMutableState is called after QueryWorkflow
 		time.Sleep(2 * time.Second)
 		// make DescribeMutableState call, which force mutable state to reload from db
-		s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		_, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      workflowRun.GetRunID(),
 			},
 		})
+		s.Assert().NoError(err)
 	}()
 
 	// this query will be buffered in mutable state because workflow task is in-flight.

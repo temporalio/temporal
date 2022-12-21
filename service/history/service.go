@@ -59,7 +59,7 @@ type (
 		grpcListener                   net.Listener
 		membershipMonitor              membership.Monitor
 		faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
-		metricsHandler                 metrics.MetricsHandler
+		metricsHandler                 metrics.Handler
 		healthServer                   *health.Server
 	}
 )
@@ -72,7 +72,7 @@ func NewService(
 	logger log.Logger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
 ) *Service {

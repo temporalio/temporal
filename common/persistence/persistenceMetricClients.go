@@ -41,7 +41,7 @@ import (
 
 type (
 	metricEmitter struct {
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		logger         log.Logger
 	}
 
@@ -84,7 +84,7 @@ var _ ClusterMetadataManager = (*clusterMetadataPersistenceClient)(nil)
 var _ Queue = (*queuePersistenceClient)(nil)
 
 // NewShardPersistenceMetricsClient creates a client to manage shards
-func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler metrics.MetricsHandler, logger log.Logger) ShardManager {
+func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler metrics.Handler, logger log.Logger) ShardManager {
 	return &shardPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -95,7 +95,7 @@ func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler m
 }
 
 // NewExecutionPersistenceMetricsClient creates a client to manage executions
-func NewExecutionPersistenceMetricsClient(persistence ExecutionManager, metricsHandler metrics.MetricsHandler, logger log.Logger) ExecutionManager {
+func NewExecutionPersistenceMetricsClient(persistence ExecutionManager, metricsHandler metrics.Handler, logger log.Logger) ExecutionManager {
 	return &executionPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -106,7 +106,7 @@ func NewExecutionPersistenceMetricsClient(persistence ExecutionManager, metricsH
 }
 
 // NewTaskPersistenceMetricsClient creates a client to manage tasks
-func NewTaskPersistenceMetricsClient(persistence TaskManager, metricsHandler metrics.MetricsHandler, logger log.Logger) TaskManager {
+func NewTaskPersistenceMetricsClient(persistence TaskManager, metricsHandler metrics.Handler, logger log.Logger) TaskManager {
 	return &taskPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -117,7 +117,7 @@ func NewTaskPersistenceMetricsClient(persistence TaskManager, metricsHandler met
 }
 
 // NewMetadataPersistenceMetricsClient creates a MetadataManager client to manage metadata
-func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricsHandler metrics.MetricsHandler, logger log.Logger) MetadataManager {
+func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricsHandler metrics.Handler, logger log.Logger) MetadataManager {
 	return &metadataPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -128,7 +128,7 @@ func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricsHan
 }
 
 // NewClusterMetadataPersistenceMetricsClient creates a ClusterMetadataManager client to manage cluster metadata
-func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManager, metricsHandler metrics.MetricsHandler, logger log.Logger) ClusterMetadataManager {
+func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManager, metricsHandler metrics.Handler, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -139,7 +139,7 @@ func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManag
 }
 
 // NewQueuePersistenceMetricsClient creates a client to manage queue
-func NewQueuePersistenceMetricsClient(persistence Queue, metricsHandler metrics.MetricsHandler, logger log.Logger) Queue {
+func NewQueuePersistenceMetricsClient(persistence Queue, metricsHandler metrics.Handler, logger log.Logger) Queue {
 	return &queuePersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -1148,7 +1148,7 @@ func (p *metricEmitter) recordRequestMetrics(operation string, caller string, st
 	updateErrorMetric(handler, p.logger, operation, err)
 }
 
-func updateErrorMetric(handler metrics.MetricsHandler, logger log.Logger, operation string, err error) {
+func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation string, err error) {
 	if err != nil {
 		handler.Counter(metrics.PersistenceErrorWithType.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 		switch err := err.(type) {

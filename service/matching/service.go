@@ -54,7 +54,7 @@ type Service struct {
 	membershipMonitor              membership.Monitor
 	grpcListener                   net.Listener
 	runtimeMetricsReporter         *metrics.RuntimeMetricsReporter
-	metricsHandler                 metrics.MetricsHandler
+	metricsHandler                 metrics.Handler
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 	healthServer                   *health.Server
 }
@@ -67,7 +67,7 @@ func NewService(
 	grpcListener net.Listener,
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
 	handler *Handler,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
 ) *Service {

@@ -1899,7 +1899,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	}
 	worker1.RegisterWorkflow(testWorkflowFn)
 	worker1.RegisterActivity(activityWithHB)
-	worker1.Start()
+	s.NoError(worker1.Start())
 
 	// Start a workflow
 	startTime := time.Now()
@@ -1954,7 +1954,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	// start worker2
 	worker2.RegisterWorkflow(testWorkflowFn)
 	worker2.RegisterActivity(activityWithHB)
-	worker2.Start()
+	s.NoError(worker2.Start())
 	defer worker2.Stop()
 
 	// ExecuteWorkflow return existing running workflow if it already started
@@ -1998,7 +1998,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	}
 
 	worker1.RegisterWorkflow(testWorkflowFn)
-	worker1.Start()
+	s.NoError(worker1.Start())
 
 	// Start wf1 (in local ns)
 	workflowID := "local-ns-wf-1"
@@ -2353,7 +2353,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	}
 
 	worker1.RegisterWorkflow(testWorkflowFn)
-	worker1.Start()
+	s.NoError(worker1.Start())
 
 	// Start wf1
 	workflowID := "force-replication-test-wf-1"
@@ -2438,7 +2438,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.Equal(clusterName[1], nsResp.ReplicationConfig.ActiveClusterName)
 
 	worker2.RegisterWorkflow(testWorkflowFn)
-	worker2.Start()
+	s.NoError(worker2.Start())
 
 	// Test reset workflow in cluster 2
 	resetResp, err := client2.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
@@ -2477,7 +2477,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	}
 
 	worker1.RegisterWorkflow(testWorkflowFn)
-	worker1.Start()
+	s.NoError(worker1.Start())
 
 	// Start wf1
 	workflowID := "force-replication-test-reset-wf-1"

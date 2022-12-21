@@ -792,7 +792,7 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			mutableState := workflow.NewMockMutableState(ctrl)
 			logger := log.NewMockLogger(ctrl)
-			metricsHandler := metrics.NewMockMetricsHandler(ctrl)
+			metricsHandler := metrics.NewMockHandler(ctrl)
 
 			workflowKey := definition.NewWorkflowKey(
 				"test-namespace-id",
@@ -823,7 +823,7 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 			mutableState.EXPECT().GetPendingSignalExternalInfos().Return(signalInfos)
 
 			if len(c.ExpectedMetric) > 0 {
-				counterMetric := metrics.NewMockCounterMetric(ctrl)
+				counterMetric := metrics.NewMockCounterIface(ctrl)
 				metricsHandler.EXPECT().Counter(c.ExpectedMetric).Return(counterMetric)
 				counterMetric.EXPECT().Record(int64(1))
 			}

@@ -109,7 +109,7 @@ type (
 		replicationProcessorMgr    common.Daemon
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
-		metricsHandler             metrics.MetricsHandler
+		metricsHandler             metrics.Handler
 		logger                     log.Logger
 		throttledLogger            log.Logger
 		config                     *configs.Config
@@ -407,7 +407,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				for category := range e.queueProcessors {
 					fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
 				}
-				e.NotifyNewTasks(e.currentClusterName, fakeTasks)
+				e.NotifyNewTasks(fakeTasks)
 			}
 
 			_ = e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
@@ -691,7 +691,7 @@ func (e *historyEngineImpl) SyncShardStatus(
 	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
 	e.shard.SetCurrentTime(clusterName, now)
 	for _, processor := range e.queueProcessors {
-		processor.NotifyNewTasks(clusterName, []tasks.Task{})
+		processor.NotifyNewTasks([]tasks.Task{})
 	}
 	return nil
 }
@@ -721,7 +721,6 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 }
 
 func (e *historyEngineImpl) NotifyNewTasks(
-	clusterName string,
 	newTasks map[tasks.Category][]tasks.Task,
 ) {
 	for category, tasksByCategory := range newTasks {
@@ -735,7 +734,7 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		}
 
 		if len(tasksByCategory) > 0 {
-			e.queueProcessors[category].NotifyNewTasks(clusterName, tasksByCategory)
+			e.queueProcessors[category].NotifyNewTasks(tasksByCategory)
 		}
 	}
 }
