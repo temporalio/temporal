@@ -224,7 +224,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
-	cluster := NewTemporal(temporalParams)
+	cluster := newTemporal(temporalParams)
 	if err := cluster.Start(); err != nil {
 		return nil, err
 	}
