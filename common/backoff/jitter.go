@@ -26,7 +26,6 @@ package backoff
 
 import (
 	"math/rand"
-	"time"
 )
 
 const fullCoefficient float64 = 1
@@ -37,14 +36,14 @@ func FullJitter[T ~int64 | ~int | ~float64](input T) T {
 }
 
 // Jitter return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
-func Jitter[T int64 | float64 | time.Duration](input T, coefficient float64) T {
+func Jitter[T ~int64 | ~int | ~float64](input T, coefficient float64) T {
 	validateCoefficient(coefficient)
 
 	if coefficient == 0 {
 		return input
 	}
 
-    base := float64(input) * (1 - coefficient)
+	base := float64(input) * (1 - coefficient)
 	addon := rand.Float64() * 2 * (float64(input) - base)
 	return T(base + addon)
 }
