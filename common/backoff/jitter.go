@@ -32,7 +32,7 @@ import (
 const fullCoefficient float64 = 1
 
 // FullJitter return random number from 0 to input, inclusive, exclusive
-func FullJitter[T int64 | float64 | time.Duration](input T) T {
+func FullJitter[T ~int64 | ~int | ~float64](input T) T {
 	return Jitter(input, fullCoefficient) / 2
 }
 
