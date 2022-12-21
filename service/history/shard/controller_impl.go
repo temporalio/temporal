@@ -455,12 +455,6 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 }
 
 func IsShardOwnershipLostError(err error) bool {
-	switch err.(type) {
-	case *persistence.ShardOwnershipLostError:
-		return true
-	case *serviceerrors.ShardOwnershipLost:
-		return true
-	}
-
-	return false
+	return common.IsErrorType[*persistence.ShardOwnershipLostError](err) ||
+		common.IsErrorType[*serviceerrors.ShardOwnershipLost](err)
 }

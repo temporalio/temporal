@@ -28,6 +28,7 @@ package queues
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -250,41 +251,39 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 	e.resourceExhaustedCount = 0
 
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+	if common.IsErrorType[*serviceerror.NotFound](err) ||
+		common.IsErrorType[*serviceerror.NamespaceNotFound](err) {
+		// This means that workflow or namespace is deleted,
+		// and it is safe to drop the task (=ignore the error).
 		return nil
 	}
 
-	// This means that namespace is deleted, and it is safe to drop the task (=ignore the error).
-	if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-		return nil
-	}
-
-	if err == consts.ErrDependencyTaskNotCompleted {
+	if errors.Is(err, consts.ErrDependencyTaskNotCompleted) {
 		e.taggedMetricsHandler.Counter(metrics.TasksDependencyTaskNotCompleted.GetMetricName()).Record(1)
 		return err
 	}
 
-	if err == consts.ErrTaskRetry {
+	if errors.Is(err, consts.ErrTaskRetry) {
 		e.taggedMetricsHandler.Counter(metrics.TaskStandbyRetryCounter.GetMetricName()).Record(1)
 		return err
 	}
 
-	if err == consts.ErrWorkflowBusy {
+	if errors.Is(err, consts.ErrWorkflowBusy) {
 		e.taggedMetricsHandler.Counter(metrics.TaskWorkflowBusyCounter.GetMetricName()).Record(1)
 		return err
 	}
 
-	if err == consts.ErrTaskDiscarded {
+	if errors.Is(err, consts.ErrTaskDiscarded) {
 		e.taggedMetricsHandler.Counter(metrics.TaskDiscarded.GetMetricName()).Record(1)
 		return nil
 	}
 
-	if err == consts.ErrTaskVersionMismatch {
+	if errors.Is(err, consts.ErrTaskVersionMismatch) {
 		e.taggedMetricsHandler.Counter(metrics.TaskVersionMisMatch.GetMetricName()).Record(1)
 		return nil
 	}
 
-	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
+	if common.IsErrorType[*serviceerror.NamespaceNotActive](err) {
 		// TODO remove this error check special case after multi-cursor is enabled by default,
 		// since the new task life cycle will not give up until task processed / verified
 		// Currently, only run this check if filter is not nil which means we are running the old
@@ -318,14 +317,18 @@ func (e *executableImpl) IsRetryableError(err error) bool {
 
 	// don't retry immediately for resource exhausted which may incur more load
 	// context deadline exceed may also suggested downstream is overloaded, so don't retry immediately
-	if common.IsResourceExhausted(err) || common.IsContextDeadlineExceededErr(err) {
+	if common.IsResourceExhausted(err) ||
+		common.IsContextDeadlineExceededErr(err) ||
+		common.IsContextCanceledErr(err) {
 		return false
 	}
 
 	// ErrTaskRetry means mutable state is not ready for standby task processing
 	// there's no point for retrying the task immediately which will hold the worker corouinte
 	// TODO: change ErrTaskRetry to a better name
-	return err != consts.ErrTaskRetry && err != consts.ErrWorkflowBusy && err != consts.ErrDependencyTaskNotCompleted
+	return !errors.Is(err, consts.ErrTaskRetry) &&
+		!errors.Is(err, consts.ErrWorkflowBusy) &&
+		!errors.Is(err, consts.ErrDependencyTaskNotCompleted)
 }
 
 func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
@@ -449,7 +452,8 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 		return false
 	}
 
-	return err != consts.ErrTaskRetry && err != consts.ErrDependencyTaskNotCompleted
+	return !errors.Is(err, consts.ErrTaskRetry) &&
+		!errors.Is(err, consts.ErrDependencyTaskNotCompleted)
 }
 
 func (e *executableImpl) rescheduleTime(
@@ -459,7 +463,7 @@ func (e *executableImpl) rescheduleTime(
 	// elapsedTime (the first parameter in ComputeNextDelay) is not relevant here
 	// since reschedule policy has no expiration interval.
 
-	if err == consts.ErrTaskRetry {
+	if errors.Is(err, consts.ErrTaskRetry) {
 		// using a different reschedule policy to slow down retry
 		// as the error means mutable state is not ready to handle the task,
 		// need to wait for replication.

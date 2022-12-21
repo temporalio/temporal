@@ -355,11 +355,13 @@ func IsStickyWorkerUnavailable(err error) bool {
 
 // IsResourceExhausted checks if the error is a service busy error.
 func IsResourceExhausted(err error) bool {
-	switch err.(type) {
-	case *serviceerror.ResourceExhausted:
-		return true
-	}
-	return false
+	return IsErrorType[*serviceerror.ResourceExhausted](err)
+}
+
+// IsErrorType checks if any error in the error chain matches error type T
+func IsErrorType[T error](err error) bool {
+	var target T
+	return errors.As(err, &target)
 }
 
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
