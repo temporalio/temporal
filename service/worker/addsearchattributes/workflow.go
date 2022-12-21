@@ -28,8 +28,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -140,7 +142,8 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 	_, err := a.esClient.PutMapping(ctx, params.IndexName, params.CustomAttributesToAdd)
 	if err != nil {
 		a.metricsHandler.Counter(metrics.AddSearchAttributesFailuresCount.GetMetricName()).Record(1)
-		if esclient.IsRetryableError(err) {
+
+		if a.isRetryableError(err) {
 			a.logger.Error("Unable to update Elasticsearch mapping (retryable error).", tag.ESIndex(params.IndexName), tag.Error(err))
 			return fmt.Errorf("%w: %v", ErrUnableToUpdateESMapping, err)
 		}
@@ -150,6 +153,20 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 	a.logger.Info("Elasticsearch mapping created.", tag.ESIndex(params.IndexName), tag.ESMapping(params.CustomAttributesToAdd))
 
 	return nil
+}
+
+func (a *activities) isRetryableError(err error) bool {
+	var esErr *elastic.Error
+	if !errors.As(err, &esErr) {
+		return true
+	}
+
+	switch esErr.Status {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict:
+		return false
+	default:
+		return true
+	}
 }
 
 func (a *activities) WaitForYellowStatusActivity(ctx context.Context, indexName string) error {

@@ -29,7 +29,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -72,12 +71,5 @@ func Test_BuildPutMappingBody(t *testing.T) {
 
 	for _, test := range tests {
 		assert.Equal(test.expected, fmt.Sprintf("%v", buildMappingBody(test.input)))
-	}
-}
-
-func TestIsResponseRetryable(t *testing.T) {
-	status := []int{408, 429, 500, 503, 507}
-	for _, code := range status {
-		require.True(t, IsRetryableStatus(code))
 	}
 }
