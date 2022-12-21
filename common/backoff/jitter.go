@@ -31,12 +31,12 @@ import (
 const fullCoefficient float64 = 1
 
 // FullJitter return random number from 0 to input, inclusive, exclusive
-func FullJitter[T ~int64 | ~int | ~float64](input T) T {
+func FullJitter[T ~int64 | ~int | ~int32 | ~float64 | ~float32](input T) T {
 	return Jitter(input, fullCoefficient) / 2
 }
 
 // Jitter return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
-func Jitter[T ~int64 | ~int | ~float64](input T, coefficient float64) T {
+func Jitter[T ~int64 | ~int | ~int32 | ~float64 | ~float32](input T, coefficient float64) T {
 	validateCoefficient(coefficient)
 
 	if coefficient == 0 {
