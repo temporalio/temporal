@@ -106,7 +106,10 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 }
 
 func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
-	if !m.ms.IsTransientWorkflowTask() {
+	// When workflow task fails/timeout it gets removed from mutable state, but attempt count is incremented.
+	// If attempt count was incremented and now is greater than 1, then next workflow task should be created as transient.
+	// This method will do it only if there is no other workflow task and next workflow task should be transient.
+	if m.HasPendingWorkflowTask() || !m.ms.IsTransientWorkflowTask() {
 		return nil, nil
 	}
 
@@ -132,10 +135,12 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 		StartedEventID:      common.EmptyEventID,
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: m.ms.GetExecutionInfo().DefaultWorkflowTaskTimeout,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: m.ms.GetExecutionInfo().TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Attempt:             m.ms.GetExecutionInfo().WorkflowTaskAttempt,
-		ScheduledTime:       timestamp.TimePtr(m.ms.timeSource.Now()),
-		StartedTime:         timestamp.UnixOrZeroTimePtr(0),
+		// Task queue is always of kind NORMAL because transient workflow task is created only for
+		// failed/timed out workflow task and fail/timeout clears stickiness.
+		TaskQueue:     m.ms.TaskQueue(),
+		Attempt:       m.ms.GetExecutionInfo().WorkflowTaskAttempt,
+		ScheduledTime: timestamp.TimePtr(m.ms.timeSource.Now()),
+		StartedTime:   timestamp.UnixOrZeroTimePtr(0),
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -206,7 +211,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskTimedOutEvent(
 	timeoutType enumspb.TimeoutType,
 ) error {
 	incrementAttempt := true
-	// Do not increment workflow task attempt in the case of sticky timeout to prevent creating next workflow task as transient
+	// Do not increment workflow task attempt in the case of sticky timeout to prevent creating next workflow task as transient.
 	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		incrementAttempt = false
 	}
@@ -459,7 +464,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	}
 
 	// Capture if WorkflowTaskScheduled and WorkflowTaskStarted events were created
-	// before calling m.beforeAddWorkflowTaskCompletedEvent() because it will delete workflow task info form mutable state.
+	// before calling m.beforeAddWorkflowTaskCompletedEvent() because it will delete workflow task info from mutable state.
 	workflowTaskScheduledStartedEventsCreated := !m.ms.IsTransientWorkflowTask()
 	m.beforeAddWorkflowTaskCompletedEvent()
 
@@ -591,7 +596,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 func (m *workflowTaskStateMachine) FailWorkflowTask(
 	incrementAttempt bool,
 ) {
-	// clear stickiness whenever workflow task fails
+	// Increment attempts only if workflow task is failing on non-sticky task queue.
+	// If it was stick task queue, clear stickiness first and try again before creating transient workflow tas.
 	incrementAttempt = incrementAttempt && !m.ms.IsStickyTaskQueueEnabled()
 	m.ms.ClearStickyness()
 
@@ -704,8 +710,7 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
 
-	// This workflowTask is retried from mutable state
-	// Also return schedule and started which are not written to history yet
+	// Create scheduled and started events which are not written to the history yet.
 	scheduledEvent := &historypb.HistoryEvent{
 		EventId:   workflowTask.ScheduledEventID,
 		EventTime: workflowTask.ScheduledTime,
@@ -713,10 +718,7 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		Version:   m.ms.currentVersion,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: m.ms.executionInfo.TaskQueue,
-					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
+				TaskQueue:           m.ms.TaskQueue(),
 				StartToCloseTimeout: workflowTask.WorkflowTaskTimeout,
 				Attempt:             workflowTask.Attempt,
 			},
