@@ -64,7 +64,9 @@ func (s *clientIntegrationSuite) TestMaxBufferedEventsLimit() {
 			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
 		})
 		f1 := workflow.ExecuteLocalActivity(ctx1, localActivityFn)
-		f1.Get(ctx, nil)
+		if err := f1.Get(ctx, nil); err != nil {
+			return 0, err
+		}
 
 		sigCh := workflow.GetSignalChannel(ctx, "test-signal")
 

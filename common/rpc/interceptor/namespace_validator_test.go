@@ -200,14 +200,14 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 		{
 			state:            enumspb.NAMESPACE_STATE_REGISTERED,
 			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
-			expectedErr:      errNamespaceHandover,
+			expectedErr:      common.ErrNamespaceHandover,
 			method:           "/temporal/StartWorkflowExecution",
 			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		// DescribeNamespace
 		{
 			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
-			expectedErr: ErrNamespaceNotSet,
+			expectedErr: errNamespaceNotSet,
 			method:      "/temporal/DescribeNamespace",
 			req:         &workflowservice.DescribeNamespaceRequest{},
 		},
@@ -232,7 +232,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
-			expectedErr: ErrNamespaceNotSet,
+			expectedErr: errNamespaceNotSet,
 			method:      "/temporal/RegisterNamespace",
 			req:         &workflowservice.RegisterNamespaceRequest{},
 		},

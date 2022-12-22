@@ -513,15 +513,17 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	s.engine.RequestCancelWorkflowExecution(NewContext(), &workflowservice.RequestCancelWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.RunId,
-		},
-		Identity:  identity,
-		RequestId: uuid.New(),
-	})
+	_, err := s.engine.RequestCancelWorkflowExecution(NewContext(),
+		&workflowservice.RequestCancelWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      we.RunId,
+			},
+			Identity:  identity,
+			RequestId: uuid.New(),
+		})
+	s.NoError(err)
 
 	childCancelled := false
 	var initiatedEvent *historypb.HistoryEvent
@@ -620,7 +622,7 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	}
 
 	s.Logger.Info("Process first workflow task which starts and request cancels child workflow")
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task.", err.Error())
