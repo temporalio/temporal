@@ -37,7 +37,6 @@ import (
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 )
 
 // SetupSchemaTestBase is the base test suite for all tests
@@ -58,10 +57,7 @@ func (tb *SetupSchemaTestBase) SetupSuiteBase(db DB, pluginName string) {
 	tb.Logger = log.NewTestLogger()
 	tb.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	tb.DBName = fmt.Sprintf("setup_test_%v", tb.rand.Int63())
-	err := db.CreateDatabase(tb.DBName)
-	if err != nil {
-		tb.Logger.Fatal("error creating database, ", tag.Error(err))
-	}
+	db.CreateDatabase(tb.DBName)
 	tb.db = db
 	tb.pluginName = pluginName
 }
