@@ -43,7 +43,6 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	sqltests "go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	"go.temporal.io/server/common/resolver"
-	//_ "go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/environment"
 )
 
