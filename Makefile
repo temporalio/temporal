@@ -59,9 +59,13 @@ endef
 
 TEST_TIMEOUT := 20m
 
+# TODO: INTEG_TEST should be functional tests
 INTEG_TEST_ROOT        := ./host
 INTEG_TEST_XDC_ROOT    := ./host/xdc
 INTEG_TEST_NDC_ROOT    := ./host/ndc
+
+INTEGRATION_TEST_ROOT := ./common/persistence/tests
+DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -75,7 +79,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 # TODO (jeremy): Replace below with build tags and `go test ./...` for targets
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
-UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
+UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)% $(INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)%,$(TEST_DIRS))
 
 # go.opentelemetry.io/otel/sdk/metric@v0.31.0 - there are breaking changes in v0.32.0.
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
@@ -87,6 +91,8 @@ PINNED_DEPENDENCIES := \
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
 UNIT_COVER_PROFILE         := $(COVER_ROOT)/unit_coverprofile.out
+INTEGRATION_COVER_PROFILE  := $(COVER_ROOT)/integration_coverprofile.out
+DB_TOOL_COVER_PROFILE      := $(COVER_ROOT)/db_tool_coverprofile.out
 INTEG_COVER_PROFILE        := $(COVER_ROOT)/integ_$(PERSISTENCE_DRIVER)_coverprofile.out
 INTEG_XDC_COVER_PROFILE    := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
 INTEG_NDC_COVER_PROFILE    := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
@@ -275,13 +281,20 @@ build-tests:
 	@printf $(COLOR) "Build tests..."
 	@go test -exec="true" -count=0 -tags=esintegration $(TEST_DIRS)
 
-unit-test:
+unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS),\
 		@go test $(UNIT_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log \
 	$(NEWLINE))
 	@! grep -q "^--- FAIL" test.log
 
+db-integration-test: clean-test-results
+	@printf $(COLOR) "Run integration tests..."
+	@go test $(INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
+	@go test $(DB_TOOL_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
+	@! grep -q "^--- FAIL" test.log
+
+# TODO: rename it to functional-test
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
@@ -291,6 +304,7 @@ integration-test: clean-test-results
 	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
+# TODO: rename it to functional-test
 integration-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
@@ -300,7 +314,7 @@ integration-with-fault-injection-test: clean-test-results
 	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-test: unit-test integration-test integration-with-fault-injection-test
+test: unit-test db-integration-test integration-test integration-with-fault-injection-test
 
 ##### Coverage #####
 $(COVER_ROOT):
@@ -315,14 +329,22 @@ unit-test-coverage: $(COVER_ROOT)
 		grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) || true \
 	$(NEWLINE))
 
+db-integration-test-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run integration tests with coverage..."
+	@go test $(INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEGRATION_COVER_PROFILE)
+	@go test $(DB_TOOL_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEG_TEST_COVERPKG) -coverprofile=$(DB_TOOL_COVER_PROFILE)
+
+# TODO: rename it to functional-test
 integration-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration tests with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@go test $(INTEG_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_COVER_PROFILE)
 
+# TODO: rename it to functional-test
 integration-test-xdc-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_XDC_COVER_PROFILE)
 
+# TODO: rename it to functional-test
 integration-test-ndc-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@go test $(INTEG_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)

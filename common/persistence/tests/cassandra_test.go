@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 )
@@ -133,5 +134,42 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	}
 
 	s := NewTaskQueueTaskSuite(t, taskQueueStore, testData.Logger)
+	suite.Run(t, s)
+}
+
+func TestCassandraVisibilityPersistence(t *testing.T) {
+	s := &VisibilityPersistenceSuite{
+		TestBase: persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{}),
+	}
+	suite.Run(t, s)
+}
+
+// TODO: Merge persistence-tests into the tests directory.
+
+func TestCassandraHistoryV2Persistence(t *testing.T) {
+	s := new(persistencetests.HistoryV2PersistenceSuite)
+	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestCassandraMetadataPersistenceV2(t *testing.T) {
+	s := new(persistencetests.MetadataPersistenceSuiteV2)
+	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestCassandraQueuePersistence(t *testing.T) {
+	s := new(persistencetests.QueuePersistenceSuite)
+	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestCassandraClusterMetadataPersistence(t *testing.T) {
+	s := new(persistencetests.ClusterMetadataManagerSuite)
+	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
