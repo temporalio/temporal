@@ -18,10 +18,10 @@ steps:
     command: "make unit-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
-#    plugins:
-#      - docker-compose#v3.8.0:
-#          run: unit-test
-#          config: ./develop/buildkite/docker-compose.yml
+    plugins:
+      - docker-compose#v3.8.0:
+          run: build
+          config: ./develop/buildkite/docker-compose.yml
 
   - label: ":golang: integration test"
     agents:
