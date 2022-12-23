@@ -277,7 +277,8 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 			task.forwardedFrom = req.GetForwardedSource()
 			close(pollSigC)
 			time.Sleep(10 * time.Millisecond)
-			t.rootMatcher.OfferQuery(ctx, task)
+			_, err := t.rootMatcher.OfferQuery(ctx, task)
+			t.Assert().NoError(err)
 		},
 	).Return(&matchingservice.QueryWorkflowResponse{QueryResult: payloads.EncodeString("answer")}, nil)
 
@@ -386,7 +387,8 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-		t.matcher.Poll(ctx)
+		_, err := t.matcher.Poll(ctx)
+		t.Assert().NoError(err)
 		cancel()
 	}()
 
