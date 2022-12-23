@@ -76,17 +76,6 @@ import (
 	"go.temporal.io/server/temporal"
 )
 
-// Temporal hosts all of temporal services in one process
-type Temporal interface {
-	Start() error
-	Stop()
-	GetAdminClient() adminservice.AdminServiceClient
-	GetFrontendClient() workflowservice.WorkflowServiceClient
-	GetHistoryClient() historyservice.HistoryServiceClient
-	GetExecutionManager() persistence.ExecutionManager
-	RefreshNamespaceCache()
-}
-
 type (
 	temporalImpl struct {
 		frontendService *frontend.Service
@@ -168,8 +157,8 @@ type (
 	listenHostPort string
 )
 
-// NewTemporal returns an instance that hosts full temporal in one process
-func NewTemporal(params *TemporalParams) *temporalImpl {
+// newTemporal returns an instance that hosts full temporal in one process
+func newTemporal(params *TemporalParams) *temporalImpl {
 	testDCClient := newTestDCClient(dynamicconfig.NewNoopClient())
 	for k, v := range params.DynamicConfigOverrides {
 		testDCClient.OverrideValue(k, v)
