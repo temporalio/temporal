@@ -120,7 +120,7 @@ func TestDefaultLogger(t *testing.T) {
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	w.Close()
+	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
@@ -150,7 +150,7 @@ func TestThrottleLogger(t *testing.T) {
 	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShardContext).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	w.Close()
+	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
@@ -179,7 +179,7 @@ func TestEmptyMsg(t *testing.T) {
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	w.Close()
+	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
