@@ -127,7 +127,7 @@ func (s *pagingIteratorSuite) TestIteration_Err_NotBegining() {
 
 	phase := 0
 	outputs := [][]interface{}{
-		[]interface{}{1, 2, 3, 4, 5},
+		{1, 2, 3, 4, 5},
 	}
 	tokens := [][]byte{
 		[]byte("some random token 1"),
