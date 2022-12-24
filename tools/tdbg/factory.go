@@ -39,6 +39,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -193,11 +194,15 @@ func fetchCACert(pathOrUrl string) (caPool *x509.CertPool, err error) {
 	}
 
 	if strings.HasPrefix(pathOrUrl, "https://") {
-		resp, err := netClient.Get(pathOrUrl)
+		var resp *http.Response
+		resp, err = netClient.Get(pathOrUrl)
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
+		defer func() {
+			// see https://pkg.go.dev/go.uber.org/multierr#hdr-Deferred_Functions
+			err = multierr.Combine(err, resp.Body.Close())
+		}()
 		caBytes, err = io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err

@@ -47,7 +47,9 @@ func TestSetupSchemaTestSuite(t *testing.T) {
 }
 
 func (s *SetupSchemaTestSuite) SetupSuite() {
-	os.Setenv("CASSANDRA_HOST", environment.GetCassandraAddress())
+	if err := os.Setenv("CASSANDRA_HOST", environment.GetCassandraAddress()); err != nil {
+		s.Logger.Fatal("Failed to set CASSANDRA_HOST", tag.Error(err))
+	}
 	client, err := newTestCQLClient(systemKeyspace)
 	if err != nil {
 		s.Logger.Fatal("Error creating CQLClient", tag.Error(err))
