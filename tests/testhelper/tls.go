@@ -138,10 +138,12 @@ func GenerateSelfSignedCA(filePath string) (*tls.Certificate, error) {
 		return nil, err
 	}
 
-	pemEncodeToFile(filePath, &pem.Block{
+	if err := pemEncodeToFile(filePath, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caCert.Certificate[0],
-	})
+	}); err != nil {
+		return nil, err
+	}
 	return caCert, nil
 }
 
@@ -162,7 +164,9 @@ func GenerateServerCert(
 		Type:  "CERTIFICATE",
 		Bytes: serverCert.Certificate[0],
 	}
-	pemEncodeToFile(certPubFile, certPEM)
+	if err := pemEncodeToFile(certPubFile, certPEM); err != nil {
+		return nil, err
+	}
 
 	keyPEM := &pem.Block{
 		Type:  "RSA PRIVATE KEY",
