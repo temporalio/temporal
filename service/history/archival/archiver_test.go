@@ -280,7 +280,7 @@ func TestArchiver(t *testing.T) {
 					Return(c.ArchiveVisibilityErr)
 			}
 			rateLimiter := quotas.NewMockRateLimiter(controller)
-			rateLimiter.EXPECT().WaitN(gomock.Any(), 2).Return(c.RateLimiterWaitErr)
+			rateLimiter.EXPECT().WaitN(gomock.Any(), len(c.Targets)).Return(c.RateLimiterWaitErr)
 
 			// we need this channel to get the Archiver which is created asynchronously
 			archivers := make(chan Archiver, 1)

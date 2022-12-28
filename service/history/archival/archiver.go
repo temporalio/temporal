@@ -143,14 +143,15 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 		metricsScope.Timer(metrics.ArchiverArchiveLatency.GetMetricName()).
 			Record(time.Since(start), metrics.StringTag("status", status))
 	}(time.Now())
-	if err := a.rateLimiter.WaitN(ctx, 2); err != nil {
+	numTargets := len(request.Targets)
+	if err := a.rateLimiter.WaitN(ctx, numTargets); err != nil {
 		return nil, &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
 			Message: fmt.Sprintf("archival rate limited: %s", err.Error()),
 		}
 	}
 	var wg sync.WaitGroup
-	errs := make([]error, len(request.Targets))
+	errs := make([]error, numTargets)
 	for i, target := range request.Targets {
 		wg.Add(1)
 		i := i
