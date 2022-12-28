@@ -30,4 +30,5 @@ import (
 
 var Module = fx.Options(
 	fx.Populate(&taskGeneratorProvider),
+	fx.Provide(RelocatableAttributesFetcherProvider),
 )

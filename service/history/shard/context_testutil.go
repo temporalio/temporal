@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
@@ -100,7 +101,7 @@ func NewTestContext(
 		maxTaskSequenceNumber:              (shardInfo.RangeId + 1) << int64(config.RangeSizeBits),
 		scheduledTaskMaxReadLevelMap:       make(map[string]time.Time),
 		remoteClusterInfos:                 make(map[string]*remoteClusterInfo),
-		handoverNamespaces:                 make(map[string]*namespaceHandOverInfo),
+		handoverNamespaces:                 make(map[namespace.Name]*namespaceHandOverInfo),
 
 		clusterMetadata:         resourceTest.ClusterMetadata,
 		timeSource:              resourceTest.TimeSource,

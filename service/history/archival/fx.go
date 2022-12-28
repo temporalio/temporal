@@ -22,39 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporal
+package archival
 
 import (
-	"time"
+	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/configs"
 )
 
-const (
-	mismatchLogMessage  = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
-	serviceStartTimeout = time.Duration(15) * time.Second
-	serviceStopTimeout  = time.Duration(60) * time.Second
+var Module = fx.Options(
+	fx.Provide(NewArchiver),
+	fx.Provide(func(config *configs.Config) quotas.RateLimiter {
+		return quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(config.ArchivalBackendMaxRPS))
+	}),
 )
-
-type (
-	Server interface {
-		Start() error
-		Stop() error
-	}
-)
-
-// Services is the list of all valid temporal services as strings (needs to be strings to keep
-// ServerOptions interface stable)
-var (
-	Services = []string{
-		string(primitives.FrontendService),
-		string(primitives.HistoryService),
-		string(primitives.MatchingService),
-		string(primitives.WorkerService),
-	}
-)
-
-// NewServer returns a new instance of server that serves one or many services.
-func NewServer(opts ...ServerOption) (Server, error) {
-	return NewServerFx(opts...)
-}

@@ -89,10 +89,25 @@ func (t *visibilityQueueTaskExecutor) Execute(
 ) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetVisibilityTaskTypeTagValue(task)
+	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
+		t.shard.GetNamespaceRegistry(),
+		task.GetNamespaceID(),
+	)
 	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
+	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
+		// TODO: exclude task types here if we believe it's safe & necessary to execute
+		// them during namespace handover.
+		// Visibility tasks should all be safe, but close execution task
+		// might do a setWorkflowExecution to clean up memo and search attributes, which
+		// will be blocked by shard context during ns handover
+		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
+		// be returned from task executor
+		return metricsTags, true, consts.ErrNamespaceHandover
 	}
 
 	var err error

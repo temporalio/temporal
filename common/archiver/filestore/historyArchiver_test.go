@@ -92,7 +92,9 @@ func (s *historyArchiverSuite) SetupSuite() {
 }
 
 func (s *historyArchiverSuite) TearDownSuite() {
-	os.RemoveAll(s.testGetDirectory)
+	if err := os.RemoveAll(s.testGetDirectory); err != nil {
+		s.Fail("Failed to remove test directory %v: %v", s.testGetDirectory, err)
+	}
 }
 
 func (s *historyArchiverSuite) SetupTest() {

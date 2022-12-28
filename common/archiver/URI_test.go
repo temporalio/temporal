@@ -99,8 +99,8 @@ func (s *URISuite) TestURI() {
 			hostname:  "localhost",
 			port:      "8080",
 			query: map[string][]string{
-				"key1": []string{"value1", "value2"},
-				"key2": []string{"value3"},
+				"key1": {"value1", "value2"},
+				"key2": {"value3"},
 			},
 		},
 		{
@@ -124,8 +124,8 @@ func (s *URISuite) TestURI() {
 			scheme:    "test",
 			opaque:    "opaque",
 			query: map[string][]string{
-				"key1": []string{"value1", "value2"},
-				"key2": []string{"value3"},
+				"key1": {"value1", "value2"},
+				"key2": {"value3"},
 			},
 		},
 	}

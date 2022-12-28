@@ -256,8 +256,8 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 	cfg := s.newConfig()
 	baseEvents := []*historypb.HistoryEvent{
-		&historypb.HistoryEvent{EventId: 1},
-		&historypb.HistoryEvent{EventId: 2},
+		{EventId: 1},
+		{EventId: 2},
 	}
 
 	// Needed to execute test but not relevant
@@ -2576,7 +2576,8 @@ func listArchivedWorkflowExecutionsTestRequest() *workflowservice.ListArchivedWo
 func TestContextNearDeadline(t *testing.T) {
 	assert.False(t, contextNearDeadline(context.Background(), longPollTailRoom))
 
-	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*500)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+	defer cancel()
 	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
 }

@@ -114,7 +114,9 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 
 	putObjectFn := func(_ aws.Context, input *s3.PutObjectInput, _ ...request.Option) (*s3.PutObjectOutput, error) {
 		buf := new(bytes.Buffer)
-		buf.ReadFrom(input.Body)
+		if _, err := buf.ReadFrom(input.Body); err != nil {
+			return nil, err
+		}
 		fs[*input.Bucket+*input.Key] = buf.Bytes()
 		return &s3.PutObjectOutput{}, nil
 	}

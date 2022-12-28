@@ -59,7 +59,10 @@ func (m *SqlStore) GetName() string {
 
 func (m *SqlStore) Close() {
 	if m.Db != nil {
-		m.Db.Close()
+		err := m.Db.Close()
+		if err != nil {
+			m.logger.Error("Error closing SQL database", tag.Error(err))
+		}
 	}
 }
 
