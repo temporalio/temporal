@@ -22,13 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package archival
 
 import (
 	"go.uber.org/fx"
+
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/configs"
 )
 
 var Module = fx.Options(
-	fx.Populate(&taskGeneratorProvider),
-	fx.Provide(RelocatableAttributesFetcherProvider),
+	fx.Provide(NewArchiver),
+	fx.Provide(func(config *configs.Config) quotas.RateLimiter {
+		return quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(config.ArchivalBackendMaxRPS))
+	}),
 )

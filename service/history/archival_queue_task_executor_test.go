@@ -496,7 +496,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				a,
 				shardContext,
 				workflowCache,
-				workflow.NewRelocatableAttributesFetcher(visibilityManager),
+				workflow.RelocatableAttributesFetcherProvider(visibilityManager),
 				p.MetricsHandler,
 				logger,
 			)
