@@ -195,7 +195,7 @@ func Invoke(
 		}
 	}
 
-	relocatableAttributes, err := workflow.NewRelocatableAttributesFetcher(persistenceVisibilityMgr).Fetch(ctx, mutableState)
+	relocatableAttributes, err := workflow.RelocatableAttributesFetcherProvider(persistenceVisibilityMgr).Fetch(ctx, mutableState)
 	if err != nil {
 		shard.GetLogger().Error(
 			"Failed to fetch relocatable attributes",
