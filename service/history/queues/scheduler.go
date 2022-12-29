@@ -114,14 +114,20 @@ func NewNamespacePriorityScheduler(
 	}
 	channelWeightFn := func(key TaskChannelKey) int {
 		namespaceWeights := options.ActiveNamespaceWeights
+		namespaceName := namespace.EmptyName
 
-		namespace, _ := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
-		if !namespace.ActiveInCluster(currentClusterName) {
-			namespaceWeights = options.StandbyNamespaceWeights
+		namespace, err := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
+		if err == nil {
+			namespaceName = namespace.Name()
+			if !namespace.ActiveInCluster(currentClusterName) {
+				namespaceWeights = options.StandbyNamespaceWeights
+			}
 		}
+		// if namespace not found, treat is as active namespace and
+		// use default active namespace weight
 
 		return configs.ConvertDynamicConfigValueToWeights(
-			namespaceWeights(namespace.Name().String()),
+			namespaceWeights(namespaceName.String()),
 			logger,
 		)[key.Priority]
 	}
