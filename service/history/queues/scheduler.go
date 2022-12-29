@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -122,9 +123,14 @@ func NewNamespacePriorityScheduler(
 			if !namespace.ActiveInCluster(currentClusterName) {
 				namespaceWeights = options.StandbyNamespaceWeights
 			}
+		} else {
+			// if namespace not found, treat is as active namespace and
+			// use default active namespace weight
+			logger.Warn("Unable to find namespace, using active namespace task channel weight",
+				tag.WorkflowNamespaceID(key.NamespaceID),
+				tag.Error(err),
+			)
 		}
-		// if namespace not found, treat is as active namespace and
-		// use default active namespace weight
 
 		return configs.ConvertDynamicConfigValueToWeights(
 			namespaceWeights(namespaceName.String()),
