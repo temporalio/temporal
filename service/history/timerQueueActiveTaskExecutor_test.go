@@ -1474,7 +1474,6 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.timerQueueActiveTaskExecutor,
 		nil,
 		nil,
@@ -1483,7 +1482,6 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 		nil,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
 		nil,
 	)
 }

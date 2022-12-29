@@ -503,7 +503,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			executable := queues.NewExecutable(
 				queues.DefaultReaderId,
 				task,
-				nil,
 				executor,
 				nil,
 				nil,
@@ -512,7 +511,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				namespaceRegistry,
 				nil,
 				metrics.NoopMetricsHandler,
-				nil,
 				nil,
 			)
 			err := executable.Execute()

@@ -633,7 +633,6 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.visibilityQueueTaskExecutor,
 		nil,
 		nil,
@@ -642,7 +641,6 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 		nil,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
 		nil,
 	)
 }

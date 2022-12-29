@@ -1295,7 +1295,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.transferQueueStandbyTaskExecutor,
 		nil,
 		nil,
@@ -1304,7 +1303,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		nil,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
 		nil,
 	)
 }

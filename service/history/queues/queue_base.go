@@ -164,7 +164,6 @@ func newQueueBase(
 		return NewExecutable(
 			readerID,
 			t,
-			nil,
 			executor,
 			scheduler,
 			rescheduler,
@@ -174,7 +173,6 @@ func newQueueBase(
 			logger,
 			metricsHandler,
 			options.TaskMaxRetryCount,
-			shard.GetConfig().NamespaceCacheRefreshInterval,
 		)
 	}
 
