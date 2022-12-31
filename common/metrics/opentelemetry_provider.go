@@ -29,12 +29,13 @@ import (
 	"net/http"
 	"time"
 
-	"go.opentelemetry.io/otel/exporters/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
-	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/metric/unit"
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -49,7 +50,7 @@ type (
 	}
 
 	openTelemetryProviderImpl struct {
-		exporter *prometheus.Exporter
+		exporter *exporters.Exporter
 		meter    metric.Meter
 		config   *PrometheusConfig
 		server   *http.Server
@@ -61,27 +62,52 @@ func NewOpenTelemetryProvider(
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
 ) (*openTelemetryProviderImpl, error) {
-
-	c := controller.New(
-		processor.NewFactory(
-			NewOtelAggregatorSelector(
-				clientConfig.PerUnitHistogramBoundaries,
-			),
-			aggregation.CumulativeTemporalitySelector(),
-			processor.WithMemory(true),
-		),
-		controller.WithResource(resource.Empty()),
-	)
-	exporter, err := prometheus.New(prometheus.Config{}, c)
-
+	exporter, err := exporters.New(exporters.WithRegisterer(prometheus.NewRegistry()))
 	if err != nil {
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
 		return nil, err
 	}
 
-	metricServer := initPrometheusListener(prometheusConfig, logger, exporter)
-
-	meter := c.Meter("temporal")
+	provider := sdkmetrics.NewMeterProvider(
+		sdkmetrics.WithReader(exporter),
+		sdkmetrics.WithView(
+			sdkmetrics.NewView(
+				sdkmetrics.Instrument{
+					Kind: sdkmetrics.InstrumentKindSyncHistogram,
+					Unit: unit.Bytes,
+				},
+				sdkmetrics.Stream{
+					Aggregation: aggregation.ExplicitBucketHistogram{
+						Boundaries: clientConfig.PerUnitHistogramBoundaries[string(unit.Bytes)],
+					},
+				},
+			),
+			sdkmetrics.NewView(
+				sdkmetrics.Instrument{
+					Kind: sdkmetrics.InstrumentKindSyncHistogram,
+					Unit: unit.Dimensionless,
+				},
+				sdkmetrics.Stream{
+					Aggregation: aggregation.ExplicitBucketHistogram{
+						Boundaries: clientConfig.PerUnitHistogramBoundaries[string(unit.Dimensionless)],
+					},
+				},
+			),
+			sdkmetrics.NewView(
+				sdkmetrics.Instrument{
+					Kind: sdkmetrics.InstrumentKindSyncHistogram,
+					Unit: unit.Milliseconds,
+				},
+				sdkmetrics.Stream{
+					Aggregation: aggregation.ExplicitBucketHistogram{
+						Boundaries: clientConfig.PerUnitHistogramBoundaries[string(unit.Milliseconds)],
+					},
+				},
+			),
+		),
+	)
+	metricServer := initPrometheusListener(prometheusConfig, logger)
+	meter := provider.Meter("temporal")
 	reporter := &openTelemetryProviderImpl{
 		exporter: exporter,
 		meter:    meter,
@@ -92,14 +118,14 @@ func NewOpenTelemetryProvider(
 	return reporter, nil
 }
 
-func initPrometheusListener(config *PrometheusConfig, logger log.Logger, exporter *prometheus.Exporter) *http.Server {
+func initPrometheusListener(config *PrometheusConfig, logger log.Logger) *http.Server {
 	handlerPath := config.HandlerPath
 	if handlerPath == "" {
 		handlerPath = "/metrics"
 	}
 
 	handler := http.NewServeMux()
-	handler.HandleFunc(handlerPath, exporter.ServeHTTP)
+	handler.HandleFunc(handlerPath, promhttp.Handler().ServeHTTP)
 
 	if config.ListenAddress == "" {
 		logger.Fatal("Listen address must be specified.", tag.Address(config.ListenAddress))

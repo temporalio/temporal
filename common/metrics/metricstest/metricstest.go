@@ -33,10 +33,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
-	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	"go.opentelemetry.io/otel/sdk/resource"
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
@@ -69,26 +66,13 @@ func MustNewHandler(logger log.Logger) *Handler {
 }
 
 func NewHandler(logger log.Logger) (*Handler, error) {
-	ctrl := controller.New(
-		processor.NewFactory(
-			metrics.NewOtelAggregatorSelector(nil),
-			aggregation.CumulativeTemporalitySelector(),
-			processor.WithMemory(true),
-		),
-		controller.WithResource(resource.Empty()),
-		// Set collect period to 0 otherwise Snapshot() will potentially
-		// return an old view of metrics.
-		controller.WithCollectPeriod(0),
-	)
-
-	exporter, err := prometheus.New(prometheus.Config{}, ctrl)
+	exporter, err := prometheus.New()
 	if err != nil {
 		return nil, err
 	}
 
-	provider := &otelProvider{
-		meter: ctrl.Meter("temporal"),
-	}
+	provider := sdkmetrics.NewMeterProvider(sdkmetrics.WithReader(exporter))
+	meter := provider.Meter("temporal")
 	clientConfig := metrics.ClientConfig{}
 	otelHandler := metrics.NewOtelMetricsHandler(logger, provider, clientConfig)
 
@@ -105,7 +89,7 @@ func (*Handler) Stop(log.Logger) {}
 func (mh *Handler) Snapshot() (Snapshot, error) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/metrics", nil)
-	mh.exporter.ServeHTTP(rec, req)
+	mh.exporter..ServeHTTP(rec, req)
 
 	var tp expfmt.TextParser
 	families, err := tp.TextToMetricFamilies(rec.Body)
