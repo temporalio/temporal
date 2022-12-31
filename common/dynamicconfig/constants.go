@@ -522,6 +522,10 @@ const (
 	ArchivalProcessorArchiveDelay = "history.archivalProcessorArchiveDelay"
 	// ArchivalProcessorRetryWarningLimit is the number of times an archival task may be retried before we log a warning
 	ArchivalProcessorRetryWarningLimit = "history.archivalProcessorRetryLimitWarning"
+	// ArchivalBackendMaxRPS is the maximum rate of requests per second to the archival backend
+	ArchivalBackendMaxRPS = "history.archivalBackendMaxRPS"
+	// DurableArchivalEnabled is the flag to enable durable archival
+	DurableArchivalEnabled = "history.durableArchivalEnabled"
 
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"

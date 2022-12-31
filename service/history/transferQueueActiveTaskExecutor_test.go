@@ -2797,7 +2797,6 @@ func (s *transferQueueActiveTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.transferQueueActiveTaskExecutor,
 		nil,
 		nil,
@@ -2806,7 +2805,6 @@ func (s *transferQueueActiveTaskExecutorSuite) newTaskExecutable(
 		nil,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
 		nil,
 	)
 }

@@ -496,14 +496,13 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				a,
 				shardContext,
 				workflowCache,
-				workflow.NewRelocatableAttributesFetcher(visibilityManager),
+				workflow.RelocatableAttributesFetcherProvider(visibilityManager),
 				p.MetricsHandler,
 				logger,
 			)
 			executable := queues.NewExecutable(
 				queues.DefaultReaderId,
 				task,
-				nil,
 				executor,
 				nil,
 				nil,
@@ -512,7 +511,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				namespaceRegistry,
 				nil,
 				metrics.NoopMetricsHandler,
-				nil,
 				nil,
 			)
 			err := executable.Execute()

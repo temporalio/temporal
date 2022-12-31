@@ -22,47 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package archival
 
 import (
-	"os"
+	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tools/common/schema/test"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/configs"
 )
 
-type (
-	SetupSchemaTestSuite struct {
-		test.SetupSchemaTestBase
-		client *cqlClient
-	}
+var Module = fx.Options(
+	fx.Provide(NewArchiver),
+	fx.Provide(func(config *configs.Config) quotas.RateLimiter {
+		return quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(config.ArchivalBackendMaxRPS))
+	}),
 )
-
-func (s *SetupSchemaTestSuite) SetupSuite() {
-	if err := os.Setenv("CASSANDRA_HOST", environment.GetCassandraAddress()); err != nil {
-		s.Logger.Fatal("Failed to set CASSANDRA_HOST", tag.Error(err))
-	}
-	client, err := newTestCQLClient(systemKeyspace)
-	if err != nil {
-		s.Logger.Fatal("Error creating CQLClient", tag.Error(err))
-	}
-	s.client = client
-	s.SetupSuiteBase(client, "")
-}
-
-func (s *SetupSchemaTestSuite) TearDownSuite() {
-	s.TearDownSuiteBase()
-}
-
-func (s *SetupSchemaTestSuite) TestCreateKeyspace() {
-	s.Nil(RunTool([]string{"./tool", "create", "-k", "foobar123", "--rf", "1"}))
-	err := s.client.dropKeyspace("foobar123")
-	s.Nil(err)
-}
-
-func (s *SetupSchemaTestSuite) TestSetupSchema() {
-	client, err := newTestCQLClient(s.DBName)
-	s.Nil(err)
-	s.RunSetupTest(buildCLIOptions(), client, "-k", createTestCQLFileContent(), []string{"tasks", "events"})
-}

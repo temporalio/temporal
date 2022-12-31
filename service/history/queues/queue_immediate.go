@@ -157,7 +157,9 @@ func (p *immediateQueue) processEventLoop() {
 		case <-p.shutdownCh:
 			return
 		case <-p.notifyCh:
-			p.processNewRange()
+			if err := p.processNewRange(); err != nil {
+				p.logger.Error("Unable to process new range", tag.Error(err))
+			}
 		case <-pollTimer.C:
 			p.processPollTimer(pollTimer)
 		case <-p.checkpointTimer.C:
@@ -169,7 +171,9 @@ func (p *immediateQueue) processEventLoop() {
 }
 
 func (p *immediateQueue) processPollTimer(pollTimer *time.Timer) {
-	p.processNewRange()
+	if err := p.processNewRange(); err != nil {
+		p.logger.Error("Unable to process new range", tag.Error(err))
+	}
 
 	pollTimer.Reset(backoff.JitDuration(
 		p.options.MaxPollInterval(),

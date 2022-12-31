@@ -112,12 +112,11 @@ INTEG_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/commo
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
-	@go install golang.org/x/lint/golint@latest
 	@go install golang.org/x/tools/cmd/goimports@latest
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.3.2
-	@go install github.com/kisielk/errcheck@v1.6.1
 	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.32.3
 	@go install github.com/bufbuild/buf/cmd/buf@v1.6.0
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1
+
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -228,27 +227,7 @@ copyright:
 
 lint:
 	@printf $(COLOR) "Run linter..."
-	@golint ./...
-
-vet:
-	@printf $(COLOR) "Run go vet..."
-	@go vet ./... || true
-
-goimports-check:
-	@printf $(COLOR) "Run goimports checks..."
-	@GO_IMPORTS_OUTPUT=$$(goimports -l .); if [ -n "$${GO_IMPORTS_OUTPUT}" ]; then echo "$${GO_IMPORTS_OUTPUT}" && echo "Please run 'make goimports'" && exit 1; fi
-
-goimports:
-	@printf $(COLOR) "Run goimports..."
-	@goimports -w .
-
-staticcheck:
-	@printf $(COLOR) "Run staticcheck..."
-	@staticcheck ./...
-
-errcheck:
-	@printf $(COLOR) "Run errcheck..."
-	@errcheck ./... || true
+	@golangci-lint run
 
 api-linter:
 	@printf $(COLOR) "Run api-linter..."
@@ -270,7 +249,7 @@ shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
 	@shellcheck $(ALL_SCRIPTS)
 
-check: copyright-check goimports-check lint vet staticcheck errcheck
+check: copyright-check
 
 ##### Tests #####
 clean-test-results:

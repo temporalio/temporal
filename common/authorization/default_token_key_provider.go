@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"go.uber.org/multierr"
 	"gopkg.in/square/go-jose.v2"
 
 	"go.temporal.io/server/common/config"
@@ -160,13 +161,15 @@ func (a *defaultTokenKeyProvider) updateKeysFromURI(
 	uri string,
 	rsaKeys map[string]*rsa.PublicKey,
 	ecKeys map[string]*ecdsa.PublicKey,
-) error {
+) (err error) {
 
 	resp, err := http.Get(uri)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err = multierr.Combine(err, resp.Body.Close())
+	}()
 
 	jwks := jose.JSONWebKeySet{}
 	err = json.NewDecoder(resp.Body).Decode(&jwks)

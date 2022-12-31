@@ -295,6 +295,7 @@ type Config struct {
 	ArchivalProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	ArchivalProcessorArchiveDelay                       dynamicconfig.DurationPropertyFn
 	ArchivalProcessorRetryWarningLimit                  dynamicconfig.IntPropertyFn
+	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
 }
 
 const (
@@ -424,10 +425,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		NumArchiveSystemWorkflows: dc.GetIntProperty(dynamicconfig.NumArchiveSystemWorkflows, 1000),
 		ArchiveRequestRPS:         dc.GetIntProperty(dynamicconfig.ArchiveRequestRPS, 300), // should be much smaller than frontend RPS
 		ArchiveSignalTimeout:      dc.GetDurationProperty(dynamicconfig.ArchiveSignalTimeout, 300*time.Millisecond),
-		DurableArchivalEnabled: func() bool {
-			// Always return false for now until durable archival is tested end-to-end
-			return false
-		},
+		DurableArchivalEnabled:    dc.GetBoolProperty(dynamicconfig.DurableArchivalEnabled, false),
 
 		BlobSizeLimitError:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
@@ -525,6 +523,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ArchivalProcessorPollBackoffInterval: dc.GetDurationProperty(dynamicconfig.ArchivalProcessorPollBackoffInterval, 5*time.Second),
 		ArchivalProcessorArchiveDelay:        dc.GetDurationProperty(dynamicconfig.ArchivalProcessorArchiveDelay, 5*time.Minute),
 		ArchivalProcessorRetryWarningLimit:   dc.GetIntProperty(dynamicconfig.ArchivalProcessorRetryWarningLimit, 100),
+		ArchivalBackendMaxRPS:                dc.GetFloat64Property(dynamicconfig.ArchivalBackendMaxRPS, 10000.0),
 	}
 
 	return cfg

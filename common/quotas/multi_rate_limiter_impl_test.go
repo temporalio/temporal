@@ -199,7 +199,8 @@ func (s *multiStageRateLimiterSuite) TestWaitN_AlreadyExpired() {
 }
 
 func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Error() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	numToken := 4
 
 	firstReservationDelay := 2 * time.Second
@@ -244,7 +245,8 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Cancell
 }
 
 func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_NoError() {
-	ctx, _ := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
 	numToken := 4
 
 	firstReservationDelay := 2 * time.Second

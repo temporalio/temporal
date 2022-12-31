@@ -295,7 +295,7 @@ func (s *queueBaseSuite) TestStartStop() {
 
 	s.mockRescheduler.EXPECT().Start().Times(1)
 	base.Start()
-	base.processNewRange()
+	s.NoError(base.processNewRange())
 
 	<-doneCh
 	<-base.checkpointTimer.C
@@ -344,7 +344,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 	)
 	s.True(base.nonReadableScope.Range.Equals(NewRange(tasks.MinimumKey, tasks.MaximumKey)))
 
-	base.processNewRange()
+	s.NoError(base.processNewRange())
 	defaultReader, ok := base.readerGroup.ReaderByID(DefaultReaderId)
 	s.True(ok)
 	scopes := defaultReader.Scopes()
