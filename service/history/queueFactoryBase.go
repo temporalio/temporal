@@ -78,11 +78,8 @@ type (
 	}
 
 	QueueFactoryBase struct {
-		HostScheduler        queues.Scheduler
-		HostPriorityAssigner queues.PriorityAssigner
-		HostRateLimiter      quotas.RateLimiter
-
-		// used by multi-cursor queue reader
+		HostScheduler         queues.Scheduler
+		HostPriorityAssigner  queues.PriorityAssigner
 		HostReaderRateLimiter quotas.RequestRateLimiter
 	}
 

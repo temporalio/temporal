@@ -84,18 +84,6 @@ func (mr *MockQueueMockRecorder) FailoverNamespace(namespaceIDs interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailoverNamespace", reflect.TypeOf((*MockQueue)(nil).FailoverNamespace), namespaceIDs)
 }
 
-// LockTaskProcessing mocks base method.
-func (m *MockQueue) LockTaskProcessing() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "LockTaskProcessing")
-}
-
-// LockTaskProcessing indicates an expected call of LockTaskProcessing.
-func (mr *MockQueueMockRecorder) LockTaskProcessing() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LockTaskProcessing", reflect.TypeOf((*MockQueue)(nil).LockTaskProcessing))
-}
-
 // NotifyNewTasks mocks base method.
 func (m *MockQueue) NotifyNewTasks(tasks []tasks.Task) {
 	m.ctrl.T.Helper()
@@ -130,16 +118,4 @@ func (m *MockQueue) Stop() {
 func (mr *MockQueueMockRecorder) Stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockQueue)(nil).Stop))
-}
-
-// UnlockTaskProcessing mocks base method.
-func (m *MockQueue) UnlockTaskProcessing() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UnlockTaskProcessing")
-}
-
-// UnlockTaskProcessing indicates an expected call of UnlockTaskProcessing.
-func (mr *MockQueueMockRecorder) UnlockTaskProcessing() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlockTaskProcessing", reflect.TypeOf((*MockQueue)(nil).UnlockTaskProcessing))
 }
