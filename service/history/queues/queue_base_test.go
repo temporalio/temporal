@@ -85,7 +85,6 @@ var testQueueOptions = &Options{
 	CheckpointInterval:                  dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond),
 	CheckpointIntervalJitterCoefficient: dynamicconfig.GetFloatPropertyFn(0.15),
 	MaxReaderCount:                      dynamicconfig.GetIntPropertyFn(5),
-	TaskMaxRetryCount:                   dynamicconfig.GetIntPropertyFn(100),
 }
 
 func TestQueueBaseSuite(t *testing.T) {

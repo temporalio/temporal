@@ -38,7 +38,6 @@ import (
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -222,6 +221,5 @@ func (s *executableSuite) newTestExecutable() Executable {
 		s.mockNamespaceRegistry,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
-		dynamicconfig.GetIntPropertyFn(100),
 	)
 }
