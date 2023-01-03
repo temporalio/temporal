@@ -37,7 +37,5 @@ type (
 		Category() tasks.Category
 		NotifyNewTasks(tasks []tasks.Task)
 		FailoverNamespace(namespaceIDs map[string]struct{})
-		LockTaskProcessing()
-		UnlockTaskProcessing()
 	}
 )

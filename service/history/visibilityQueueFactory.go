@@ -78,11 +78,6 @@ func NewVisibilityQueueFactory(
 				params.Logger,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
-			HostRateLimiter: NewQueueHostRateLimiter(
-				params.Config.VisibilityProcessorMaxPollHostRPS,
-				params.Config.PersistenceMaxQPS,
-				visibilityQueuePersistenceMaxRPSRatio,
-			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.VisibilityProcessorMaxPollHostRPS,
@@ -100,6 +95,14 @@ func (f *visibilityQueueFactory) CreateQueue(
 	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
+	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope))
+
+	rescheduler := queues.NewRescheduler(
+		f.HostScheduler,
+		shard.GetTimeSource(),
+		logger,
+		metricsHandler,
+	)
 
 	executor := newVisibilityQueueTaskExecutor(
 		shard,
@@ -115,6 +118,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		shard,
 		tasks.CategoryVisibility,
 		f.HostScheduler,
+		rescheduler,
 		f.HostPriorityAssigner,
 		executor,
 		&queues.Options{
@@ -138,6 +142,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 		},
 		f.HostReaderRateLimiter,
 		logger,
-		f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
+		metricsHandler,
 	)
 }
