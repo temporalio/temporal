@@ -54,12 +54,13 @@ func NewImmediateQueue(
 	shard shard.Context,
 	category tasks.Category,
 	scheduler Scheduler,
+	rescheduler Rescheduler,
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
 	hostRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *immediateQueue {
 	paginationFnProvider := func(r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -90,6 +91,7 @@ func NewImmediateQueue(
 			category,
 			paginationFnProvider,
 			scheduler,
+			rescheduler,
 			priorityAssigner,
 			executor,
 			options,
@@ -135,7 +137,7 @@ func (p *immediateQueue) Stop() {
 	p.queueBase.Stop()
 }
 
-func (p *immediateQueue) NotifyNewTasks(_ string, tasks []tasks.Task) {
+func (p *immediateQueue) NotifyNewTasks(tasks []tasks.Task) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -157,7 +159,9 @@ func (p *immediateQueue) processEventLoop() {
 		case <-p.shutdownCh:
 			return
 		case <-p.notifyCh:
-			p.processNewRange()
+			if err := p.processNewRange(); err != nil {
+				p.logger.Error("Unable to process new range", tag.Error(err))
+			}
 		case <-pollTimer.C:
 			p.processPollTimer(pollTimer)
 		case <-p.checkpointTimer.C:
@@ -169,7 +173,9 @@ func (p *immediateQueue) processEventLoop() {
 }
 
 func (p *immediateQueue) processPollTimer(pollTimer *time.Timer) {
-	p.processNewRange()
+	if err := p.processNewRange(); err != nil {
+		p.logger.Error("Unable to process new range", tag.Error(err))
+	}
 
 	pollTimer.Reset(backoff.JitDuration(
 		p.options.MaxPollInterval(),

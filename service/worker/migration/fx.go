@@ -48,7 +48,7 @@ type (
 		HistoryClient     historyservice.HistoryServiceClient
 		FrontendClient    workflowservice.WorkflowServiceClient
 		Logger            log.Logger
-		MetricsHandler    metrics.MetricsHandler
+		MetricsHandler    metrics.Handler
 	}
 
 	fxResult struct {

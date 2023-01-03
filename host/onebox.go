@@ -27,14 +27,13 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
 	"go.uber.org/fx"
+	"go.uber.org/multierr"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
@@ -76,17 +75,6 @@ import (
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/temporal"
 )
-
-// Temporal hosts all of temporal services in one process
-type Temporal interface {
-	Start() error
-	Stop()
-	GetAdminClient() adminservice.AdminServiceClient
-	GetFrontendClient() workflowservice.WorkflowServiceClient
-	GetHistoryClient() historyservice.HistoryServiceClient
-	GetExecutionManager() persistence.ExecutionManager
-	RefreshNamespaceCache()
-}
 
 type (
 	temporalImpl struct {
@@ -169,8 +157,8 @@ type (
 	listenHostPort string
 )
 
-// NewTemporal returns an instance that hosts full temporal in one process
-func NewTemporal(params *TemporalParams) *temporalImpl {
+// newTemporal returns an instance that hosts full temporal in one process
+func newTemporal(params *TemporalParams) *temporalImpl {
 	testDCClient := newTestDCClient(dynamicconfig.NewNoopClient())
 	for k, v := range params.DynamicConfigOverrides {
 		testDCClient.OverrideValue(k, v)
@@ -244,38 +232,28 @@ func (c *temporalImpl) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	var errs []string
+	var errs error
 
 	if c.enableWorker() {
 		c.shutdownWG.Add(1)
-		err := c.workerApp.Stop(ctx)
-		if err != nil {
-			errs = append(errs, err.Error())
-		}
+		errs = multierr.Combine(errs, c.workerApp.Stop(ctx))
 	}
 
 	c.shutdownWG.Add(3)
 
-	c.frontendApp.Stop(ctx)
+	if err := c.frontendApp.Stop(ctx); err != nil {
+		return err
+	}
 	for _, historyApp := range c.historyApps {
-		err := historyApp.Stop(ctx)
-		if err != nil {
-			errs = append(errs, err.Error())
-		}
+		errs = multierr.Combine(errs, historyApp.Stop(ctx))
 	}
 
-	err := c.matchingApp.Stop(ctx)
-	if err != nil {
-		errs = append(errs, err.Error())
-	}
+	errs = multierr.Combine(errs, c.matchingApp.Stop(ctx))
 
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
 
-	if len(errs) > 0 {
-		return errors.New("shutdown errors: " + strings.Join(errs, "; "))
-	}
-	return nil
+	return errs
 }
 
 func (c *temporalImpl) FrontendGRPCAddress() string {
@@ -400,7 +378,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(sdkClientFactoryProvider),
-		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
+		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return nil }),
 		fx.Provide(func() authorization.ClaimMapper { return nil }),
@@ -444,7 +422,9 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 	c.adminClient = NewAdminClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
-	feApp.Start(context.Background())
+	if err := feApp.Start(context.Background()); err != nil {
+		c.logger.Fatal("unable to start frontend service", tag.Error(err))
+	}
 
 	startWG.Done()
 	<-c.shutdownCh
@@ -479,7 +459,7 @@ func (c *temporalImpl) startHistory(
 				persistenceConfig,
 				serviceName,
 			),
-			fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
+			fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
 			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
@@ -539,7 +519,9 @@ func (c *temporalImpl) startHistory(
 		c.historyServices = append(c.historyServices, historyService)
 		c.historyNamespaceRegistries = append(c.historyNamespaceRegistries, namespaceRegistry)
 
-		app.Start(context.Background())
+		if err := app.Start(context.Background()); err != nil {
+			c.logger.Fatal("unable to start history service", tag.Error(err))
+		}
 	}
 
 	startWG.Done()
@@ -565,7 +547,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 			persistenceConfig,
 			serviceName,
 		),
-		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
+		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(newRPCFactoryImpl),
@@ -603,7 +585,9 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 	c.matchingApp = app
 	c.matchingService = matchingService
 	c.matchingNamespaceRegistry = namespaceRegistry
-	app.Start(context.Background())
+	if err := app.Start(context.Background()); err != nil {
+		c.logger.Fatal("unable to start matching service", tag.Error(err))
+	}
 
 	startWG.Done()
 	<-c.shutdownCh
@@ -646,7 +630,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 			persistenceConfig,
 			serviceName,
 		),
-		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
+		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
@@ -683,7 +667,9 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 	c.workerApp = app
 	c.workerService = workerService
 	c.workerNamespaceRegistry = namespaceRegistry
-	app.Start(context.Background())
+	if err := app.Start(context.Background()); err != nil {
+		c.logger.Fatal("unable to start worker service", tag.Error(err))
+	}
 
 	startWG.Done()
 	<-c.shutdownCh
@@ -755,7 +741,7 @@ func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, erro
 
 func sdkClientFactoryProvider(
 	resolver membership.GRPCResolver,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) sdk.ClientFactory {
 	return sdk.NewClientFactory(

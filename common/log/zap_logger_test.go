@@ -62,6 +62,8 @@ func (s *LogSuite) TestParseLogLevel() {
 	s.Equal(zap.WarnLevel, parseZapLevel("warn"))
 	s.Equal(zap.ErrorLevel, parseZapLevel("error"))
 	s.Equal(zap.FatalLevel, parseZapLevel("fatal"))
+	s.Equal(zap.DPanicLevel, parseZapLevel("dpanic"))
+	s.Equal(zap.PanicLevel, parseZapLevel("panic"))
 	s.Equal(zap.InfoLevel, parseZapLevel("unknown"))
 }
 
@@ -77,6 +79,27 @@ func (s *LogSuite) TestNewLogger() {
 	s.NotNil(log)
 	_, err := os.Stat(dir + "/test.log")
 	s.Nil(err)
+	log.DPanic("Development default is false; should not panic here!")
+	s.Panics(nil, func() {
+		log.Panic("Must Panic")
+	})
+
+	cfg = Config{
+		Level:       "info",
+		OutputFile:  dir + "/test.log",
+		Development: true,
+	}
+	log = BuildZapLogger(cfg)
+	s.NotNil(log)
+	_, err = os.Stat(dir + "/test.log")
+	s.Nil(err)
+	s.Panics(nil, func() {
+		log.DPanic("Must panic!")
+	})
+	s.Panics(nil, func() {
+		log.Panic("Must panic!")
+	})
+
 }
 
 func TestDefaultLogger(t *testing.T) {
@@ -97,7 +120,7 @@ func TestDefaultLogger(t *testing.T) {
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	w.Close()
+	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
@@ -127,7 +150,7 @@ func TestThrottleLogger(t *testing.T) {
 	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShardContext).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	w.Close()
+	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
@@ -156,7 +179,7 @@ func TestEmptyMsg(t *testing.T) {
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	w.Close()
+	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")

@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/quotas"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
@@ -119,9 +118,9 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
-	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	config := tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContextWithTimeSource(
@@ -184,27 +183,6 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard,
 		s.workflowCache,
 		s.mockDeleteManager,
-		newTimerQueueActiveProcessor(
-			s.mockShard,
-			s.workflowCache,
-			nil,
-			nil,
-			s.mockDeleteManager,
-			s.mockMatchingClient,
-			newTaskAllocator(s.mockShard),
-			s.mockShard.Resource.ClientBean,
-			quotas.NewDefaultOutgoingRateLimiter(
-				func() float64 { return float64(config.TimerProcessorMaxPollRPS()) },
-			),
-			quotas.NewRequestRateLimiterAdapter(
-				quotas.NewDefaultOutgoingRateLimiter(
-					func() float64 { return float64(config.TaskSchedulerMaxQPS()) },
-				),
-			),
-			s.logger,
-			metrics.NoopMetricsHandler,
-			false,
-		),
 		s.logger,
 		metrics.NoopMetricsHandler,
 		config,
@@ -1496,7 +1474,6 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.timerQueueActiveTaskExecutor,
 		nil,
 		nil,
@@ -1505,7 +1482,6 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 		nil,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
 		nil,
 	)
 }

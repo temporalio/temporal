@@ -508,7 +508,7 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 			atomic.AddInt32(&runs, 1)
 			return 0
 		})
-		workflow.Sleep(ctx, 10*time.Second) // longer than execution timeout
+		s.NoError(workflow.Sleep(ctx, 10*time.Second)) // longer than execution timeout
 		return nil
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})

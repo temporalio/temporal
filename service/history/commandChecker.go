@@ -78,7 +78,7 @@ type (
 		mutableState              workflow.MutableState
 		searchAttributesValidator *searchattribute.Validator
 		executionStats            *persistencespb.ExecutionStats
-		metricsHandler            metrics.MetricsHandler
+		metricsHandler            metrics.Handler
 		logger                    log.Logger
 	}
 )
@@ -108,7 +108,7 @@ func newWorkflowSizeChecker(
 	mutableState workflow.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *workflowSizeChecker {
 	return &workflowSizeChecker{

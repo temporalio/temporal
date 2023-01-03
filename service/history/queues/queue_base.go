@@ -89,7 +89,7 @@ type (
 		monitor        *monitorImpl
 		mitigator      *mitigatorImpl
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 
 		paginationFnProvider  PaginationFnProvider
 		executableInitializer ExecutableInitializer
@@ -125,12 +125,13 @@ func newQueueBase(
 	category tasks.Category,
 	paginationFnProvider PaginationFnProvider,
 	scheduler Scheduler,
+	rescheduler Rescheduler,
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
 	hostReaderRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *queueBase {
 	var readerScopes map[int32][]Scope
 	var exclusiveReaderHighWatermark tasks.Key
@@ -150,12 +151,6 @@ func newQueueBase(
 	}
 
 	timeSource := shard.GetTimeSource()
-	rescheduler := NewRescheduler(
-		scheduler,
-		timeSource,
-		logger,
-		metricsHandler,
-	)
 
 	monitor := newMonitor(category.Type(), &options.MonitorOptions)
 	mitigator := newMitigator(monitor, logger, metricsHandler, options.MaxReaderCount)
@@ -164,7 +159,6 @@ func newQueueBase(
 		return NewExecutable(
 			readerID,
 			t,
-			nil,
 			executor,
 			scheduler,
 			rescheduler,
@@ -174,7 +168,6 @@ func newQueueBase(
 			logger,
 			metricsHandler,
 			options.TaskMaxRetryCount,
-			shard.GetConfig().NamespaceCacheRefreshInterval,
 		)
 	}
 
@@ -286,14 +279,6 @@ func (p *queueBase) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
 	p.rescheduler.Reschedule(namespaceIDs)
-}
-
-func (p *queueBase) LockTaskProcessing() {
-	// no-op
-}
-
-func (p *queueBase) UnlockTaskProcessing() {
-	// no-op
 }
 
 func (p *queueBase) processNewRange() error {

@@ -79,7 +79,7 @@ type (
 
 		logger            log.Logger
 		namespaceRegistry namespace.Registry
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		config            *configs.Config
 		shard             shard.Context
 		tokenSerializer   common.TaskTokenSerializer
@@ -113,10 +113,11 @@ func newWorkflowTaskHandler(
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 	shard shard.Context,
 	searchAttributesMapper searchattribute.Mapper,
+	hasBufferedEvents bool,
 ) *workflowTaskHandlerImpl {
 
 	return &workflowTaskHandlerImpl{
@@ -124,7 +125,7 @@ func newWorkflowTaskHandler(
 		workflowTaskCompletedID: workflowTaskCompletedID,
 
 		// internal state
-		hasBufferedEvents:               mutableState.HasBufferedEvents(),
+		hasBufferedEvents:               hasBufferedEvents,
 		workflowTaskFailedCause:         nil,
 		activityNotStartedCancelled:     false,
 		newMutableState:                 nil,

@@ -62,7 +62,7 @@ type (
 		GetEventsCache() events.Cache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
-		GetMetricsHandler() metrics.MetricsHandler
+		GetMetricsHandler() metrics.Handler
 		GetTimeSource() clock.TimeSource
 
 		GetEngine(ctx context.Context) (Engine, error)
@@ -104,7 +104,7 @@ type (
 
 		GetNamespaceNotificationVersion() int64
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
-		UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace, maxRepTaskID int64)
+		UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
 

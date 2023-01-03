@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
@@ -44,7 +45,7 @@ type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		logger            log.Logger
 	}
 )
@@ -52,7 +53,7 @@ type (
 func NewActivities(
 	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{
@@ -63,7 +64,7 @@ func NewActivities(
 	}
 }
 func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, error) {
-	return strings.Contains(a.visibilityManager.GetName(), "elasticsearch"), nil
+	return strings.Contains(a.visibilityManager.GetName(), elasticsearch.PersistenceName), nil
 }
 
 func (a *Activities) CountExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (int64, error) {

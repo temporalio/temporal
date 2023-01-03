@@ -145,9 +145,9 @@ type (
 		namespaceRegistry    namespace.Registry
 		logger               log.Logger
 		matchingClient       matchingservice.MatchingServiceClient
-		metricsHandler       metrics.MetricsHandler
+		metricsHandler       metrics.Handler
 		namespace            namespace.Name
-		taggedMetricsHandler metrics.MetricsHandler // namespace/taskqueue tagged metric scope
+		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -308,7 +308,9 @@ func (c *taskQueueManagerImpl) Stop() {
 		ctx, cancel := c.newIOContext()
 		defer cancel()
 
-		c.db.UpdateState(ctx, ackLevel)
+		if err := c.db.UpdateState(ctx, ackLevel); err != nil {
+			c.logger.Error("Failed to update task queue state", tag.Error(err))
+		}
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.metadataPoller.Stop()

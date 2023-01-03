@@ -127,7 +127,7 @@ type (
 		TLSConfigProvider       encryption.TLSConfigProvider
 		EsConfig                *esclient.Config
 		EsClient                esclient.Client
-		MetricsHandler          metrics.MetricsHandler
+		MetricsHandler          metrics.Handler
 	}
 )
 
@@ -280,8 +280,8 @@ func (s ServerFx) Start() error {
 	return s.app.Start(context.Background())
 }
 
-func (s ServerFx) Stop() {
-	s.app.Stop(context.Background())
+func (s ServerFx) Stop() error {
+	return s.app.Stop(context.Background())
 }
 
 func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName, stopChan chan struct{}) {
@@ -309,7 +309,7 @@ type (
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
-		MetricsHandler             metrics.MetricsHandler
+		MetricsHandler             metrics.Handler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
@@ -368,7 +368,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(func() metrics.MetricsHandler {
+		fx.Provide(func() metrics.Handler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
@@ -431,7 +431,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(func() metrics.MetricsHandler {
+		fx.Provide(func() metrics.Handler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
@@ -521,8 +521,8 @@ func frontendServiceProvider(
 			}
 			return log.With(params.Logger, tags...)
 		}),
-		fx.Provide(func() metrics.MetricsHandler {
-			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(displayServiceName))
+		fx.Provide(func() metrics.Handler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
@@ -581,8 +581,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(func() metrics.MetricsHandler {
+		fx.Provide(func() metrics.Handler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
@@ -800,8 +799,7 @@ func ServerLifetimeHooks(
 				return svr.Start()
 			},
 			OnStop: func(ctx context.Context) error {
-				svr.Stop()
-				return nil
+				return svr.Stop()
 			},
 		},
 	)
@@ -920,8 +918,7 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
 		tp := otelsdktrace.NewTracerProvider(opts...)
 		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
-			tp.Shutdown(ctx)
-			return nil // do not pass this up to fx
+			return tp.Shutdown(ctx)
 		}})
 		return tp
 	}),

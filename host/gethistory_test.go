@@ -701,7 +701,7 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse_MultipleBranches() {
 		err1 = f1.Get(ctx1, nil)
 		s.NoError(err1)
 
-		workflow.Sleep(ctx, time.Second*2)
+		s.NoError(workflow.Sleep(ctx, time.Second*2))
 
 		f2 := workflow.ExecuteActivity(ctx1, activityFn)
 		err2 = f2.Get(ctx1, nil)

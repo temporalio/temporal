@@ -125,7 +125,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 		ctx := testCase.setupIncomingCtx()
 
 		var resultingCtx context.Context
-		s.interceptor.Intercept(
+		_, err := s.interceptor.Intercept(
 			ctx,
 			testCase.request,
 			&grpc.UnaryServerInfo{},
@@ -134,6 +134,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 				return nil, nil
 			},
 		)
+		s.NoError(err)
 
 		actualCallerName := headers.GetCallerInfo(resultingCtx).CallerName
 		s.Equal(testCase.expectedCallerName, actualCallerName)
@@ -186,7 +187,7 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 		ctx := testCase.setupIncomingCtx()
 
 		var resultingCtx context.Context
-		s.interceptor.Intercept(
+		_, err := s.interceptor.Intercept(
 			ctx,
 			testCase.request,
 			&grpc.UnaryServerInfo{},
@@ -195,6 +196,7 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 				return nil, nil
 			},
 		)
+		s.NoError(err)
 
 		actualCallerType := headers.GetCallerInfo(resultingCtx).CallerType
 		s.Equal(testCase.expectedCallerType, actualCallerType)
@@ -259,7 +261,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 		ctx := testCase.setupIncomingCtx()
 
 		var resultingCtx context.Context
-		s.interceptor.Intercept(
+		_, err := s.interceptor.Intercept(
 			ctx,
 			testCase.request,
 			serverInfo,
@@ -268,6 +270,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 				return nil, nil
 			},
 		)
+		s.NoError(err)
 
 		actualCallOrigin := headers.GetCallerInfo(resultingCtx).CallOrigin
 		s.Equal(testCase.expectedCallOrigin, actualCallOrigin)

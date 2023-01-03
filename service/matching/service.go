@@ -54,7 +54,7 @@ type Service struct {
 	membershipMonitor              membership.Monitor
 	grpcListener                   net.Listener
 	runtimeMetricsReporter         *metrics.RuntimeMetricsReporter
-	metricsHandler                 metrics.MetricsHandler
+	metricsHandler                 metrics.Handler
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 	healthServer                   *health.Server
 }
@@ -67,7 +67,7 @@ func NewService(
 	grpcListener net.Listener,
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
 	handler *Handler,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
 ) *Service {
@@ -118,7 +118,9 @@ func (s *Service) Stop() {
 
 	// remove self from membership ring and wait for traffic to drain
 	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
-	s.membershipMonitor.EvictSelf()
+	if err := s.membershipMonitor.EvictSelf(); err != nil {
+		s.logger.Error("ShutdownHandler: Failed to evict self from membership ring", tag.Error(err))
+	}
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	s.logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(s.config.ShutdownDrainDuration())

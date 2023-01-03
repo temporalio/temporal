@@ -181,9 +181,9 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 		// Send signals during workflow task
 		if sendSignal {
-			s.sendSignal(s.namespace, workflowExecution, "signalC", nil, identity)
-			s.sendSignal(s.namespace, workflowExecution, "signalD", nil, identity)
-			s.sendSignal(s.namespace, workflowExecution, "signalE", nil, identity)
+			s.NoError(s.sendSignal(s.namespace, workflowExecution, "signalC", nil, identity))
+			s.NoError(s.sendSignal(s.namespace, workflowExecution, "signalD", nil, identity))
+			s.NoError(s.sendSignal(s.namespace, workflowExecution, "signalE", nil, identity))
 			sendSignal = false
 		}
 

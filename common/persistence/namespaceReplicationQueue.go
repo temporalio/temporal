@@ -58,7 +58,7 @@ func NewNamespaceReplicationQueue(
 	queue Queue,
 	serializer serialization.Serializer,
 	clusterName string,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (NamespaceReplicationQueue, error) {
 
@@ -90,7 +90,7 @@ type (
 	namespaceReplicationQueueImpl struct {
 		queue               Queue
 		clusterName         string
-		metricsHandler      metrics.MetricsHandler
+		metricsHandler      metrics.Handler
 		logger              log.Logger
 		ackLevelUpdated     bool
 		ackNotificationChan chan bool

@@ -22,36 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package archival
 
 import (
-	"github.com/olivere/elastic/v7"
+	"go.uber.org/fx"
+
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/configs"
 )
 
-func HttpStatus(err error) int {
-	switch e := err.(type) {
-	case *elastic.Error:
-		return e.Status
-	default:
-		return 0
-	}
-}
-
-// IsRetryableStatus is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
-// responses with these status will be kept in queue and retried until success
-// 408 - Request Timeout
-// 429 - Too Many Requests
-// 500 - Node not connected
-// 503 - Service Unavailable
-// 507 - Insufficient Storage
-func IsRetryableStatus(httpStatus int) bool {
-	switch httpStatus {
-	case 408, 429, 500, 503, 507:
-		return true
-	}
-	return false
-}
-
-func IsRetryableError(err error) bool {
-	return IsRetryableStatus(HttpStatus(err))
-}
+var Module = fx.Options(
+	fx.Provide(NewArchiver),
+	fx.Provide(func(config *configs.Config) quotas.RateLimiter {
+		return quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(config.ArchivalBackendMaxRPS))
+	}),
+)

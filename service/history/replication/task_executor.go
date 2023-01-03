@@ -74,7 +74,7 @@ type (
 		historyEngine      shard.Engine
 		deleteManager      deletemanager.DeleteManager
 		workflowCache      wcache.Cache
-		metricsHandler     metrics.MetricsHandler
+		metricsHandler     metrics.Handler
 		logger             log.Logger
 	}
 )

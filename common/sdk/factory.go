@@ -75,7 +75,7 @@ var (
 func NewClientFactory(
 	hostPort string,
 	tlsConfig *tls.Config,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *clientFactory {
 	return &clientFactory{

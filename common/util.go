@@ -150,6 +150,11 @@ var (
 	ErrContextTimeoutNotSet = serviceerror.NewInvalidArgument("Context timeout is not set.")
 )
 
+var (
+	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
+	ErrNamespaceHandover = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
+)
+
 // AwaitWaitGroup calls Wait on the given wait
 // Returns true if the Wait() call succeeded before the timeout
 // Returns false if the Wait() did not return before the timeout
@@ -336,6 +341,10 @@ func IsServiceClientTransientError(err error) bool {
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
+	if err.Error() == ErrNamespaceHandover.Error() {
+		return false
+	}
+
 	switch err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.Unavailable:
@@ -598,7 +607,7 @@ func CheckEventBlobSizeLimit(
 	namespace string,
 	workflowID string,
 	runID string,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	blobSizeViolationOperationTag tag.ZapTag,
 ) error {

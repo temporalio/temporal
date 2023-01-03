@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -103,7 +104,7 @@ func NewNamespacePriorityScheduler(
 	namespaceRegistry namespace.Registry,
 	rateLimiter SchedulerRateLimiter,
 	timeSource clock.TimeSource,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Scheduler {
 	taskChannelKeyFn := func(e Executable) TaskChannelKey {
@@ -114,14 +115,25 @@ func NewNamespacePriorityScheduler(
 	}
 	channelWeightFn := func(key TaskChannelKey) int {
 		namespaceWeights := options.ActiveNamespaceWeights
+		namespaceName := namespace.EmptyName
 
-		namespace, _ := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
-		if !namespace.ActiveInCluster(currentClusterName) {
-			namespaceWeights = options.StandbyNamespaceWeights
+		namespace, err := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
+		if err == nil {
+			namespaceName = namespace.Name()
+			if !namespace.ActiveInCluster(currentClusterName) {
+				namespaceWeights = options.StandbyNamespaceWeights
+			}
+		} else {
+			// if namespace not found, treat is as active namespace and
+			// use default active namespace weight
+			logger.Warn("Unable to find namespace, using active namespace task channel weight",
+				tag.WorkflowNamespaceID(key.NamespaceID),
+				tag.Error(err),
+			)
 		}
 
 		return configs.ConvertDynamicConfigValueToWeights(
-			namespaceWeights(namespace.Name().String()),
+			namespaceWeights(namespaceName.String()),
 			logger,
 		)[key.Priority]
 	}

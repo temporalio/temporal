@@ -70,7 +70,6 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	createMode persistence.CreateWorkflowMode,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
-	clusterName string,
 ) (int64, error) {
 
 	engine, err := t.shard.GetEngine(ctx)
@@ -86,7 +85,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		NewWorkflowEvents:   newWorkflowEventsSeq,
 	})
 	if shard.OperationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
+		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 	}
 	if err != nil {
 		return 0, err
@@ -108,7 +107,6 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
-	clusterName string,
 ) (int64, int64, int64, error) {
 
 	engine, err := t.shard.GetEngine(ctx)
@@ -128,9 +126,9 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		CurrentWorkflowEvents:   currentWorkflowEventsSeq,
 	})
 	if shard.OperationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot, clusterName)
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
-		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, clusterName)
+		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot)
+		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
 	}
 	if err != nil {
 		return 0, 0, 0, err
@@ -164,7 +162,6 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
-	clusterName string,
 ) (int64, int64, error) {
 
 	engine, err := t.shard.GetEngine(ctx)
@@ -181,8 +178,8 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		NewWorkflowEvents:      newWorkflowEventsSeq,
 	})
 	if shard.OperationPossiblySucceeded(err) {
-		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, clusterName)
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
+		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
+		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 	}
 	if err != nil {
 		return 0, 0, err
@@ -205,7 +202,6 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 func (t *TransactionImpl) SetWorkflowExecution(
 	ctx context.Context,
 	workflowSnapshot *persistence.WorkflowSnapshot,
-	clusterName string,
 ) error {
 
 	engine, err := t.shard.GetEngine(ctx)
@@ -218,7 +214,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 		SetWorkflowSnapshot: *workflowSnapshot,
 	})
 	if shard.OperationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, workflowSnapshot, clusterName)
+		NotifyWorkflowSnapshotTasks(engine, workflowSnapshot)
 	}
 	if err != nil {
 		return err
@@ -507,23 +503,21 @@ func setWorkflowExecution(
 func NotifyWorkflowSnapshotTasks(
 	engine shard.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
-	clusterName string,
 ) {
 	if workflowSnapshot == nil {
 		return
 	}
-	engine.NotifyNewTasks(clusterName, workflowSnapshot.Tasks)
+	engine.NotifyNewTasks(workflowSnapshot.Tasks)
 }
 
 func NotifyWorkflowMutationTasks(
 	engine shard.Engine,
 	workflowMutation *persistence.WorkflowMutation,
-	clusterName string,
 ) {
 	if workflowMutation == nil {
 		return
 	}
-	engine.NotifyNewTasks(clusterName, workflowMutation.Tasks)
+	engine.NotifyNewTasks(workflowMutation.Tasks)
 }
 
 func NotifyNewHistorySnapshotEvent(

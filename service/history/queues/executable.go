@@ -66,11 +66,6 @@ type (
 		// active/standby queue processing logic
 		Execute(context.Context, Executable) (tags []metrics.Tag, isActive bool, err error)
 	}
-
-	// TaskFilter determines if the given task should be executed
-	// TODO: remove after merging active/standby queue processor
-	// task should always be executed as active or verified as standby
-	TaskFilter func(task tasks.Task) bool
 )
 
 var (
@@ -114,31 +109,25 @@ type (
 		timeSource        clock.TimeSource
 		namespaceRegistry namespace.Registry
 
-		readerID                      int32
-		loadTime                      time.Time
-		scheduledTime                 time.Time
-		userLatency                   time.Duration
-		lastActiveness                bool
-		resourceExhaustedCount        int
-		logger                        log.Logger
-		metricsHandler                metrics.MetricsHandler
-		taggedMetricsHandler          metrics.MetricsHandler
-		criticalRetryAttempt          dynamicconfig.IntPropertyFn
-		namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
-		filter                        TaskFilter
-		shouldProcess                 bool
+		readerID               int32
+		loadTime               time.Time
+		scheduledTime          time.Time
+		userLatency            time.Duration
+		lastActiveness         bool
+		resourceExhaustedCount int
+		logger                 log.Logger
+		metricsHandler         metrics.Handler
+		taggedMetricsHandler   metrics.Handler
+		criticalRetryAttempt   dynamicconfig.IntPropertyFn
 	}
 )
 
-// TODO: Remove filter, queueType, and namespaceCacheRefreshInterval
-// parameters after deprecating old queue processing logic.
-// CriticalRetryAttempt probably should also be removed as it's only
+// TODO: CriticalRetryAttempt probably should be removed as it's only
 // used for emiting logs and metrics when # of attempts is high, and
 // doesn't have to be a dynamic config.
 func NewExecutable(
 	readerID int32,
 	task tasks.Task,
-	filter TaskFilter,
 	executor Executor,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
@@ -146,9 +135,8 @@ func NewExecutable(
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	criticalRetryAttempt dynamicconfig.IntPropertyFn,
-	namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn,
 ) Executable {
 	executable := &executableImpl{
 		Task:              task,
@@ -168,11 +156,9 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsHandler:                metricsHandler,
-		taggedMetricsHandler:          metricsHandler,
-		criticalRetryAttempt:          criticalRetryAttempt,
-		filter:                        filter,
-		namespaceCacheRefreshInterval: namespaceCacheRefreshInterval,
+		metricsHandler:       metricsHandler,
+		taggedMetricsHandler: metricsHandler,
+		criticalRetryAttempt: criticalRetryAttempt,
 	}
 	executable.updatePriority()
 	return executable
@@ -181,15 +167,6 @@ func NewExecutable(
 func (e *executableImpl) Execute() error {
 	if e.State() == ctasks.TaskStateCancelled {
 		return nil
-	}
-
-	// this filter should also contain the logic for overriding
-	// results from task allocator (force executing some standby task types)
-	e.shouldProcess = true
-	if e.filter != nil {
-		if e.shouldProcess = e.filter(e.Task); !e.shouldProcess {
-			return nil
-		}
 	}
 
 	ctx := metrics.AddMetricsContext(context.Background())
@@ -284,18 +261,16 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
-		// TODO remove this error check special case after multi-cursor is enabled by default,
-		// since the new task life cycle will not give up until task processed / verified
-		// Currently, only run this check if filter is not nil which means we are running the old
-		// active/passive queue logic.
-		if e.filter != nil && e.timeSource.Now().Sub(e.loadTime) > 2*e.namespaceCacheRefreshInterval() {
-			e.taggedMetricsHandler.Counter(metrics.TaskNotActiveCounter.GetMetricName()).Record(1)
-			return nil
-		}
+	if err.Error() == consts.ErrNamespaceHandover.Error() {
+		e.taggedMetricsHandler.Counter(metrics.TaskNamespaceHandoverCounter.GetMetricName()).Record(1)
+		err = consts.ErrNamespaceHandover
+		return err
+	}
 
+	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		// error is expected when there's namespace failover,
 		// so don't count it into task failures.
+		e.taggedMetricsHandler.Counter(metrics.TaskNotActiveCounter.GetMetricName()).Record(1)
 		return err
 	}
 
@@ -325,7 +300,10 @@ func (e *executableImpl) IsRetryableError(err error) bool {
 	// ErrTaskRetry means mutable state is not ready for standby task processing
 	// there's no point for retrying the task immediately which will hold the worker corouinte
 	// TODO: change ErrTaskRetry to a better name
-	return err != consts.ErrTaskRetry && err != consts.ErrWorkflowBusy && err != consts.ErrDependencyTaskNotCompleted
+	return err != consts.ErrTaskRetry &&
+		err != consts.ErrWorkflowBusy &&
+		err != consts.ErrDependencyTaskNotCompleted &&
+		err != consts.ErrNamespaceHandover
 }
 
 func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
@@ -353,19 +331,17 @@ func (e *executableImpl) Ack() {
 
 	e.state = ctasks.TaskStateAcked
 
-	if e.shouldProcess {
-		e.taggedMetricsHandler.Timer(metrics.TaskLoadLatency.GetMetricName()).Record(
-			e.loadTime.Sub(e.GetVisibilityTime()),
-			metrics.QueueReaderIDTag(e.readerID),
-		)
-		e.taggedMetricsHandler.Histogram(metrics.TaskAttempt.GetMetricName(), metrics.TaskAttempt.GetMetricUnit()).Record(int64(e.attempt))
+	e.taggedMetricsHandler.Timer(metrics.TaskLoadLatency.GetMetricName()).Record(
+		e.loadTime.Sub(e.GetVisibilityTime()),
+		metrics.QueueReaderIDTag(e.readerID),
+	)
+	e.taggedMetricsHandler.Histogram(metrics.TaskAttempt.GetMetricName(), metrics.TaskAttempt.GetMetricUnit()).Record(int64(e.attempt))
 
-		priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
-		priorityTaggedProvider.Timer(metrics.TaskLatency.GetMetricName()).Record(time.Since(e.loadTime))
+	priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
+	priorityTaggedProvider.Timer(metrics.TaskLatency.GetMetricName()).Record(time.Since(e.loadTime))
 
-		readerIDTaggedProvider := priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))
-		readerIDTaggedProvider.Timer(metrics.TaskQueueLatency.GetMetricName()).Record(time.Since(e.GetVisibilityTime()))
-	}
+	readerIDTaggedProvider := priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))
+	readerIDTaggedProvider.Timer(metrics.TaskQueueLatency.GetMetricName()).Record(time.Since(e.GetVisibilityTime()))
 }
 
 func (e *executableImpl) Nack(err error) {
@@ -449,7 +425,9 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 		return false
 	}
 
-	return err != consts.ErrTaskRetry && err != consts.ErrDependencyTaskNotCompleted
+	return err != consts.ErrTaskRetry &&
+		err != consts.ErrDependencyTaskNotCompleted &&
+		err != consts.ErrNamespaceHandover
 }
 
 func (e *executableImpl) rescheduleTime(
@@ -459,12 +437,14 @@ func (e *executableImpl) rescheduleTime(
 	// elapsedTime (the first parameter in ComputeNextDelay) is not relevant here
 	// since reschedule policy has no expiration interval.
 
-	if err == consts.ErrTaskRetry {
+	if err == consts.ErrTaskRetry || err == consts.ErrNamespaceHandover {
 		// using a different reschedule policy to slow down retry
-		// as the error means mutable state is not ready to handle the task,
+		// as the error means mutable state or namespace is not ready to handle the task,
 		// need to wait for replication.
 		return e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
-	} else if err == consts.ErrDependencyTaskNotCompleted {
+	}
+
+	if err == consts.ErrDependencyTaskNotCompleted {
 		return e.timeSource.Now().Add(dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 

@@ -44,37 +44,37 @@ const (
 
 // RuntimeMetricsReporter A struct containing the state of the RuntimeMetricsReporter.
 type RuntimeMetricsReporter struct {
-	provider          MetricsHandler
-	buildInfoProvider MetricsHandler
-	reportInterval    time.Duration
-	started           int32
-	quit              chan struct{}
-	logger            log.Logger
-	lastNumGC         uint32
-	buildTime         time.Time
+	handler          Handler
+	buildInfoHandler Handler
+	reportInterval   time.Duration
+	started          int32
+	quit             chan struct{}
+	logger           log.Logger
+	lastNumGC        uint32
+	buildTime        time.Time
 }
 
 // NewRuntimeMetricsReporter Creates a new RuntimeMetricsReporter.
 func NewRuntimeMetricsReporter(
-	provider MetricsHandler,
+	handler Handler,
 	reportInterval time.Duration,
 	logger log.Logger,
 	instanceID string,
 ) *RuntimeMetricsReporter {
 	if len(instanceID) > 0 {
-		provider = provider.WithTags(StringTag(instance, instanceID))
+		handler = handler.WithTags(StringTag(instance, instanceID))
 	}
 	var memstats runtime.MemStats
 	runtime.ReadMemStats(&memstats)
 
 	return &RuntimeMetricsReporter{
-		provider:       provider,
+		handler:        handler,
 		reportInterval: reportInterval,
 		logger:         logger,
 		lastNumGC:      memstats.NumGC,
 		quit:           make(chan struct{}),
 		buildTime:      build.InfoData.GitTime,
-		buildInfoProvider: provider.WithTags(
+		buildInfoHandler: handler.WithTags(
 			StringTag(gitRevisionTag, build.InfoData.GitRevision),
 			StringTag(buildDateTag, build.InfoData.GitTime.Format(time.RFC3339)),
 			StringTag(buildPlatformTag, build.InfoData.GoArch),
@@ -89,32 +89,32 @@ func (r *RuntimeMetricsReporter) report() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	r.provider.Gauge(NumGoRoutinesGauge).Record(float64(runtime.NumGoroutine()))
-	r.provider.Gauge(GoMaxProcsGauge).Record(float64(runtime.GOMAXPROCS(0)))
-	r.provider.Gauge(MemoryAllocatedGauge).Record(float64(memStats.Alloc))
-	r.provider.Gauge(MemoryHeapGauge).Record(float64(memStats.HeapAlloc))
-	r.provider.Gauge(MemoryHeapIdleGauge).Record(float64(memStats.HeapIdle))
-	r.provider.Gauge(MemoryHeapInuseGauge).Record(float64(memStats.HeapInuse))
-	r.provider.Gauge(MemoryStackGauge).Record(float64(memStats.StackInuse))
+	r.handler.Gauge(NumGoRoutinesGauge).Record(float64(runtime.NumGoroutine()))
+	r.handler.Gauge(GoMaxProcsGauge).Record(float64(runtime.GOMAXPROCS(0)))
+	r.handler.Gauge(MemoryAllocatedGauge).Record(float64(memStats.Alloc))
+	r.handler.Gauge(MemoryHeapGauge).Record(float64(memStats.HeapAlloc))
+	r.handler.Gauge(MemoryHeapIdleGauge).Record(float64(memStats.HeapIdle))
+	r.handler.Gauge(MemoryHeapInuseGauge).Record(float64(memStats.HeapInuse))
+	r.handler.Gauge(MemoryStackGauge).Record(float64(memStats.StackInuse))
 
 	// memStats.NumGC is a perpetually incrementing counter (unless it wraps at 2^32)
 	num := memStats.NumGC
 	lastNum := atomic.SwapUint32(&r.lastNumGC, num) // reset for the next iteration
 	if delta := num - lastNum; delta > 0 {
-		r.provider.Histogram(NumGCCounter, Bytes).Record(int64(delta))
+		r.handler.Histogram(NumGCCounter, Bytes).Record(int64(delta))
 		if delta > 255 {
 			// too many GCs happened, the timestamps buffer got wrapped around. Report only the last 256
 			lastNum = num - 256
 		}
 		for i := lastNum; i != num; i++ {
 			pause := memStats.PauseNs[i%256]
-			r.provider.Timer(GcPauseMsTimer).Record(time.Duration(pause))
+			r.handler.Timer(GcPauseMsTimer).Record(time.Duration(pause))
 		}
 	}
 
 	// report build info
-	r.buildInfoProvider.Gauge(buildInfoMetricName).Record(1.0)
-	r.buildInfoProvider.Gauge(buildAgeMetricName).Record(float64(time.Since(r.buildTime)))
+	r.buildInfoHandler.Gauge(buildInfoMetricName).Record(1.0)
+	r.buildInfoHandler.Gauge(buildAgeMetricName).Record(float64(time.Since(r.buildTime)))
 }
 
 // Start Starts the reporter thread that periodically emits metrics.

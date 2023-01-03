@@ -61,7 +61,7 @@ type (
 			r resolver.ServiceResolver,
 			clusterName string,
 			logger log.Logger,
-			metricsHandler metrics.MetricsHandler,
+			metricsHandler metrics.Handler,
 		) DataStoreFactory
 	}
 )
@@ -72,7 +72,7 @@ func DataStoreFactoryProvider(
 	config *config.Persistence,
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) (DataStoreFactory, *FaultInjectionDataStoreFactory) {
 
 	var dataStoreFactory DataStoreFactory

@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -60,8 +61,6 @@ import (
 type (
 	timerQueueActiveTaskExecutor struct {
 		*timerQueueTaskExecutorBase
-
-		queueProcessor *timerQueueActiveProcessorImpl
 	}
 )
 
@@ -69,9 +68,8 @@ func newTimerQueueActiveTaskExecutor(
 	shard shard.Context,
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
-	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -85,7 +83,6 @@ func newTimerQueueActiveTaskExecutor(
 			metricProvider,
 			config,
 		),
-		queueProcessor: queueProcessor,
 	}
 }
 
@@ -95,10 +92,22 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 ) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
+	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
+		t.shard.GetNamespaceRegistry(),
+		task.GetNamespaceID(),
+	)
 	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
+	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
+		// TODO: exclude task types here if we believe it's safe & necessary to execute
+		// them during namespace handover.
+		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
+		// be returned from task executor
+		return metricsTags, true, consts.ErrNamespaceHandover
 	}
 
 	var err error
@@ -606,16 +615,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	}
 
 	now := t.shard.GetTimeSource().Now()
-	err = context.UpdateWorkflowExecutionAsActive(ctx, now)
-	if err != nil {
-		if shard.IsShardOwnershipLostError(err) && t.queueProcessor != nil {
-			// Shard is stolen.  Stop timer processing to reduce duplicates
-			t.queueProcessor.Stop()
-		}
-		return err
-	}
-
-	return nil
+	return context.UpdateWorkflowExecutionAsActive(ctx, now)
 }
 
 func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(

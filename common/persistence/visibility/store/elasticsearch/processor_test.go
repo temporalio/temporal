@@ -50,7 +50,7 @@ type processorSuite struct {
 	controller        *gomock.Controller
 	esProcessor       *processorImpl
 	mockBulkProcessor *client.MockBulkProcessor
-	mockMetricHandler *metrics.MockMetricsHandler
+	mockMetricHandler *metrics.MockHandler
 	mockESClient      *client.MockClient
 }
 
@@ -79,7 +79,7 @@ func (s *processorSuite) SetupTest() {
 		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 
-	s.mockMetricHandler = metrics.NewMockMetricsHandler(s.controller)
+	s.mockMetricHandler = metrics.NewMockHandler(s.controller)
 	s.mockMetricHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ElasticsearchBulkProcessor)).
 		Return(s.mockMetricHandler).AnyTimes()
 	s.mockBulkProcessor = client.NewMockBulkProcessor(s.controller)
@@ -113,7 +113,6 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 			s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
 			s.Equal(config.ESProcessorBulkSize(), input.BulkSize)
 			s.Equal(config.ESProcessorFlushInterval(), input.FlushInterval)
-			s.NotNil(input.Backoff)
 			s.NotNil(input.AfterFunc)
 
 			bulkProcessor := client.NewMockBulkProcessor(s.controller)
@@ -244,6 +243,12 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 		Items:  []map[string]*elastic.BulkResponseItem{mSuccess},
 	}
 
+	queuedRequestHistogram := metrics.NewMockHistogramIface(s.controller)
+	s.mockMetricHandler.EXPECT().Histogram(
+		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(),
+		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricUnit(),
+	).Return(queuedRequestHistogram)
+	queuedRequestHistogram.EXPECT().Record(int64(0))
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorRequestLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	mapVal := newAckFuture()
 	s.esProcessor.mapToAckFuture.Put(testKey, mapVal)
@@ -287,10 +292,16 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
+	queuedRequestHistogram := metrics.NewMockHistogramIface(s.controller)
+	s.mockMetricHandler.EXPECT().Histogram(
+		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(),
+		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricUnit(),
+	).Return(queuedRequestHistogram)
+	queuedRequestHistogram.EXPECT().Record(int64(0))
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorRequestLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	mapVal := newAckFuture()
 	s.esProcessor.mapToAckFuture.Put(testKey, mapVal)
-	counterMetric := metrics.NewMockCounterMetric(s.controller)
+	counterMetric := metrics.NewMockCounterIface(s.controller)
 	s.mockMetricHandler.EXPECT().Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Return(counterMetric)
 	counterMetric.EXPECT().Record(int64(1), metrics.HttpStatusTag(400))
 
@@ -327,7 +338,7 @@ func (s *processorSuite) TestBulkAfterAction_Error() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	counterMetric := metrics.NewMockCounterMetric(s.controller)
+	counterMetric := metrics.NewMockCounterIface(s.controller)
 	s.mockMetricHandler.EXPECT().Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Return(counterMetric)
 	counterMetric.EXPECT().Record(int64(1), metrics.HttpStatusTag(400))
 	s.esProcessor.bulkAfterAction(0, requests, response, &elastic.Error{Status: 400})
@@ -343,21 +354,15 @@ func (s *processorSuite) TestBulkBeforeAction() {
 		Doc(map[string]interface{}{searchattribute.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
-	counterMetric := metrics.NewMockCounterMetric(s.controller)
+	counterMetric := metrics.NewMockCounterIface(s.controller)
 	s.mockMetricHandler.EXPECT().Counter(metrics.ElasticsearchBulkProcessorRequests.GetMetricName()).Return(counterMetric)
 	counterMetric.EXPECT().Record(int64(1))
-	bulkSizeHistogram := metrics.NewMockHistogramMetric(s.controller)
+	bulkSizeHistogram := metrics.NewMockHistogramIface(s.controller)
 	s.mockMetricHandler.EXPECT().Histogram(
 		metrics.ElasticsearchBulkProcessorBulkSize.GetMetricName(),
 		metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit(),
 	).Return(bulkSizeHistogram)
 	bulkSizeHistogram.EXPECT().Record(int64(1))
-	queuedRequestHistorgram := metrics.NewMockHistogramMetric(s.controller)
-	s.mockMetricHandler.EXPECT().Histogram(
-		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(),
-		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricUnit(),
-	).Return(queuedRequestHistorgram)
-	queuedRequestHistorgram.EXPECT().Record(int64(0))
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorWaitAddLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorWaitStartLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	mapVal := newAckFuture()
@@ -484,7 +489,7 @@ func (s *processorSuite) TestErrorReasonFromResponse() {
 func (s *processorSuite) Test_End2End() {
 	docsCount := 1000
 	parallelFactor := 10
-	version := int64(2208) //random
+	version := int64(2208) // random
 
 	request := &client.BulkableRequest{}
 	bulkIndexRequests := make([]elastic.BulkableRequest, docsCount)
@@ -533,16 +538,16 @@ func (s *processorSuite) Test_End2End() {
 
 	// Emulate bulk commit.
 
-	counterMetric := metrics.NewMockCounterMetric(s.controller)
+	counterMetric := metrics.NewMockCounterIface(s.controller)
 	s.mockMetricHandler.EXPECT().Counter(metrics.ElasticsearchBulkProcessorRequests.GetMetricName()).Return(counterMetric)
 	counterMetric.EXPECT().Record(int64(docsCount))
-	queuedRequestsHistogram := metrics.NewMockHistogramMetric(s.controller)
+	queuedRequestsHistogram := metrics.NewMockHistogramIface(s.controller)
 	s.mockMetricHandler.EXPECT().Histogram(
 		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(),
 		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricUnit(),
 	).Return(queuedRequestsHistogram)
 	queuedRequestsHistogram.EXPECT().Record(int64(0))
-	bulkSizeHistogram := metrics.NewMockHistogramMetric(s.controller)
+	bulkSizeHistogram := metrics.NewMockHistogramIface(s.controller)
 	s.mockMetricHandler.EXPECT().Histogram(
 		metrics.ElasticsearchBulkProcessorBulkSize.GetMetricName(),
 		metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit(),

@@ -48,7 +48,7 @@ type (
 	Handler struct {
 		engine            Engine
 		config            *Config
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		logger            log.Logger
 		startWG           sync.WaitGroup
 		throttledLogger   log.Logger
@@ -73,7 +73,7 @@ func NewHandler(
 	historyClient historyservice.HistoryServiceClient,
 	matchingRawClient matchingservice.MatchingServiceClient,
 	matchingServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 ) *Handler {

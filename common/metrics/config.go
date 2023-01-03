@@ -448,7 +448,7 @@ func newPrometheusScope(
 }
 
 // MetricsHandlerFromConfig is used at startup to construct a MetricsHandler
-func MetricsHandlerFromConfig(logger log.Logger, c *Config) MetricsHandler {
+func MetricsHandlerFromConfig(logger log.Logger, c *Config) Handler {
 	if c == nil {
 		return NoopMetricsHandler
 	}

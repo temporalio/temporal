@@ -49,13 +49,19 @@ func (s *clientSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	file, _ := json.MarshalIndent(&fakeData{data: "example"}, "", " ")
 
-	os.MkdirAll("/tmp/temporal_archival/development", os.ModePerm)
+	path := "/tmp/temporal_archival/development"
+	if err := os.MkdirAll(path, os.ModePerm); err != nil {
+		s.FailNowf("Failed to create directory %s: %v", path, err)
+	}
 	s.Require().NoError(os.WriteFile("/tmp/temporal_archival/development/myfile.history", file, 0644))
 }
 
 func (s *clientSuite) TearDownTest() {
 	s.controller.Finish()
-	os.Remove("/tmp/temporal_archival/development/myfile.history")
+	name := "/tmp/temporal_archival/development/myfile.history"
+	if err := os.Remove(name); err != nil {
+		s.Failf("Failed to remove file %s: %v", name, err)
+	}
 }
 
 func TestClientSuite(t *testing.T) {

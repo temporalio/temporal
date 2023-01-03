@@ -55,7 +55,7 @@ type (
 		mockRescheduler *MockRescheduler
 
 		logger                log.Logger
-		metricsHandler        metrics.MetricsHandler
+		metricsHandler        metrics.Handler
 		executableInitializer ExecutableInitializer
 		monitor               *monitorImpl
 	}
@@ -77,7 +77,7 @@ func (s *readerSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 
 	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
+		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),

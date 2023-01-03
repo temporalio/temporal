@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -73,7 +74,7 @@ func loadMutableStateForTransferTask(
 	ctx context.Context,
 	wfContext workflow.Context,
 	transferTask tasks.Task,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(transferTask, logger)
@@ -117,7 +118,7 @@ func loadMutableStateForTimerTask(
 	ctx context.Context,
 	wfContext workflow.Context,
 	timerTask tasks.Task,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(timerTask, logger)
@@ -136,7 +137,7 @@ func LoadMutableStateForTask(
 	wfContext workflow.Context,
 	task tasks.Task,
 	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 
@@ -209,4 +210,16 @@ func getNamespaceTagByID(
 	}
 
 	return metrics.NamespaceTag(namespaceName.String())
+}
+
+func getNamespaceTagAndReplicationStateByID(
+	registry namespace.Registry,
+	namespaceID string,
+) (metrics.Tag, enumspb.ReplicationState) {
+	namespace, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
+	if err != nil {
+		return metrics.NamespaceUnknownTag(), enumspb.REPLICATION_STATE_UNSPECIFIED
+	}
+
+	return metrics.NamespaceTag(namespace.Name().String()), namespace.ReplicationState()
 }

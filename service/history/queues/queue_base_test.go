@@ -64,7 +64,7 @@ type (
 		options        *Options
 		rateLimiter    quotas.RequestRateLimiter
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 	}
 )
 
@@ -140,6 +140,7 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 		tasks.CategoryTransfer,
 		nil,
 		s.mockScheduler,
+		s.mockRescheduler,
 		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
@@ -224,6 +225,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 		tasks.CategoryTransfer,
 		nil,
 		s.mockScheduler,
+		s.mockRescheduler,
 		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
@@ -284,6 +286,7 @@ func (s *queueBaseSuite) TestStartStop() {
 		tasks.CategoryTransfer,
 		paginationFnProvider,
 		s.mockScheduler,
+		s.mockRescheduler,
 		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
@@ -291,11 +294,10 @@ func (s *queueBaseSuite) TestStartStop() {
 		s.logger,
 		s.metricsHandler,
 	)
-	base.rescheduler = s.mockRescheduler // replace with mock to verify Start/Stop
 
 	s.mockRescheduler.EXPECT().Start().Times(1)
 	base.Start()
-	base.processNewRange()
+	s.NoError(base.processNewRange())
 
 	<-doneCh
 	<-base.checkpointTimer.C
@@ -335,6 +337,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 		tasks.CategoryTimer,
 		nil,
 		s.mockScheduler,
+		s.mockRescheduler,
 		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
@@ -344,7 +347,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 	)
 	s.True(base.nonReadableScope.Range.Equals(NewRange(tasks.MinimumKey, tasks.MaximumKey)))
 
-	base.processNewRange()
+	s.NoError(base.processNewRange())
 	defaultReader, ok := base.readerGroup.ReaderByID(DefaultReaderId)
 	s.True(ok)
 	scopes := defaultReader.Scopes()
@@ -392,6 +395,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 		tasks.CategoryTimer,
 		nil,
 		s.mockScheduler,
+		s.mockRescheduler,
 		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
@@ -465,6 +469,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 		tasks.CategoryTimer,
 		nil,
 		s.mockScheduler,
+		s.mockRescheduler,
 		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
@@ -553,6 +558,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 		tasks.CategoryTimer,
 		nil,
 		s.mockScheduler,
+		s.mockRescheduler,
 		NewNoopPriorityAssigner(),
 		nil,
 		s.options,

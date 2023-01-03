@@ -123,7 +123,7 @@ func (s *contextSuite) TestAddTasks_Success() {
 	}
 
 	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), addTasksRequest).Return(nil)
-	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), tasks)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(tasks)
 
 	err := s.mockShard.AddTasks(context.Background(), addTasksRequest)
 	s.NoError(err)
@@ -205,14 +205,17 @@ func (s *contextSuite) TestTimerMaxReadLevelUpdate_SingleProcessor() {
 	s.timeSource.Update(now)
 
 	// make sure the scheduledTaskMaxReadLevelMap has value for both current cluster and alternative cluster
-	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
-	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestAlternativeClusterName, false)
+	_, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
+	s.NoError(err)
+	_, err = s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestAlternativeClusterName, false)
+	s.NoError(err)
 
 	now = time.Now().Add(time.Minute)
 	s.timeSource.Update(now)
 
 	// update in single processor mode
-	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, true)
+	_, err = s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, true)
+	s.NoError(err)
 	scheduledTaskMaxReadLevelMap := s.mockShard.scheduledTaskMaxReadLevelMap
 	s.Len(scheduledTaskMaxReadLevelMap, 2)
 	s.True(scheduledTaskMaxReadLevelMap[cluster.TestCurrentClusterName].After(now))
@@ -229,7 +232,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
 	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil)
-	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any())
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any())
 	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
@@ -311,7 +314,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 	branchToken := []byte("branchToken")
 
 	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil)
-	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any())
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any())
 	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(errors.New("some error"))
 	stage := tasks.DeleteWorkflowExecutionStageNone
 	err := s.mockShard.DeleteWorkflowExecution(
@@ -401,7 +404,7 @@ func (s *contextSuite) TestAcquireShardEventuallySucceeds() {
 		Return(fmt.Errorf("temp error")).Times(3)
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
-	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).MinTimes(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MinTimes(1)
 
 	s.mockShard.acquireShard()
 
@@ -414,7 +417,7 @@ func (s *contextSuite) TestAcquireShardNoError() {
 		WithMaximumAttempts(5)
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
-	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).MinTimes(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MinTimes(1)
 
 	s.mockShard.acquireShard()
 

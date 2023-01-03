@@ -26,7 +26,6 @@ package interceptor
 
 import (
 	"context"
-	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -49,9 +48,8 @@ type (
 )
 
 var (
-	ErrNamespaceNotSet            = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errNamespaceNotSet            = serviceerror.NewInvalidArgument("Namespace not set on request.")
 	errNamespaceTooLong           = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
-	errNamespaceHandover          = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
 	errTaskTokenNotSet            = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 
@@ -170,20 +168,20 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 		// Special case for DescribeNamespace API which should read namespace directly from database.
 		// Therefore, it must bypass namespace registry and validator.
 		if request.GetId() == "" && namespaceName.IsEmpty() {
-			return nil, ErrNamespaceNotSet
+			return nil, errNamespaceNotSet
 		}
 		return nil, nil
 	case *workflowservice.RegisterNamespaceRequest:
 		// Special case for RegisterNamespace API. `namespaceName` is name of namespace that about to be registered.
 		// There is no namespace entry for it, therefore, it must bypass namespace registry and validator.
 		if namespaceName.IsEmpty() {
-			return nil, ErrNamespaceNotSet
+			return nil, errNamespaceNotSet
 		}
 		return nil, nil
 	default:
 		// All other APIs.
 		if namespaceName.IsEmpty() {
-			return nil, ErrNamespaceNotSet
+			return nil, errNamespaceNotSet
 		}
 		return ni.namespaceRegistry.GetNamespace(namespaceName)
 	}
@@ -215,7 +213,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req inter
 	}
 
 	if namespaceID.IsEmpty() {
-		return nil, ErrNamespaceNotSet
+		return nil, errNamespaceNotSet
 	}
 	return ni.namespaceRegistry.GetNamespaceByID(namespaceID)
 }
@@ -266,5 +264,5 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 		return nil
 	}
 
-	return errNamespaceHandover
+	return common.ErrNamespaceHandover
 }

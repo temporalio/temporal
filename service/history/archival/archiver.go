@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -61,18 +60,20 @@ type (
 		BranchToken          []byte
 		NextEventID          int64
 		CloseFailoverVersion int64
-		HistoryURI           string
+		// HistoryURI is the URI of the history archival backend.
+		HistoryURI carchiver.URI
 
 		// visibility archival
 		WorkflowTypeName string
-		StartTime        time.Time
-		ExecutionTime    time.Time
-		CloseTime        time.Time
+		StartTime        *time.Time
+		ExecutionTime    *time.Time
+		CloseTime        *time.Time
 		Status           enumspb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *commonpb.Memo
 		SearchAttributes *commonpb.SearchAttributes
-		VisibilityURI    string
+		// VisibilityURI is the URI of the visibility archival backend.
+		VisibilityURI carchiver.URI
 
 		// archival targets: history and/or visibility
 		Targets       []Target
@@ -92,7 +93,7 @@ type (
 
 	archiver struct {
 		archiverProvider provider.ArchiverProvider
-		metricsHandler   metrics.MetricsHandler
+		metricsHandler   metrics.Handler
 		logger           log.Logger
 		rateLimiter      quotas.RateLimiter
 	}
@@ -107,7 +108,7 @@ const (
 func NewArchiver(
 	archiverProvider provider.ArchiverProvider,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	rateLimiter quotas.RateLimiter,
 ) Archiver {
 	return &archiver{
@@ -142,15 +143,15 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 		metricsScope.Timer(metrics.ArchiverArchiveLatency.GetMetricName()).
 			Record(time.Since(start), metrics.StringTag("status", status))
 	}(time.Now())
-	if err := a.rateLimiter.WaitN(ctx, 2); err != nil {
+	numTargets := len(request.Targets)
+	if err := a.rateLimiter.WaitN(ctx, numTargets); err != nil {
 		return nil, &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
 			Message: fmt.Sprintf("archival rate limited: %s", err.Error()),
 		}
 	}
-
 	var wg sync.WaitGroup
-	errs := make([]error, len(request.Targets))
+	errs := make([]error, numTargets)
 	for i, target := range request.Targets {
 		wg.Add(1)
 		i := i
@@ -178,21 +179,16 @@ func (a *archiver) archiveHistory(ctx context.Context, request *Request, logger 
 		logger,
 		tag.ArchivalRequestBranchToken(request.BranchToken),
 		tag.ArchivalRequestCloseFailoverVersion(request.CloseFailoverVersion),
-		tag.ArchivalURI(request.HistoryURI),
+		tag.ArchivalURI(request.HistoryURI.String()),
 	)
 	defer a.recordArchiveTargetResult(logger, time.Now(), TargetHistory, &err)
 
-	URI, err := carchiver.NewURI(request.HistoryURI)
+	historyArchiver, err := a.archiverProvider.GetHistoryArchiver(request.HistoryURI.Scheme(), request.CallerService)
 	if err != nil {
 		return err
 	}
 
-	historyArchiver, err := a.archiverProvider.GetHistoryArchiver(URI.Scheme(), request.CallerService)
-	if err != nil {
-		return err
-	}
-
-	return historyArchiver.Archive(ctx, URI, &carchiver.ArchiveHistoryRequest{
+	return historyArchiver.Archive(ctx, request.HistoryURI, &carchiver.ArchiveHistoryRequest{
 		ShardID:              request.ShardID,
 		NamespaceID:          request.NamespaceID,
 		Namespace:            request.Namespace,
@@ -207,16 +203,11 @@ func (a *archiver) archiveHistory(ctx context.Context, request *Request, logger 
 func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logger log.Logger) (err error) {
 	logger = log.With(
 		logger,
-		tag.ArchivalURI(request.VisibilityURI),
+		tag.ArchivalURI(request.VisibilityURI.String()),
 	)
 	defer a.recordArchiveTargetResult(logger, time.Now(), TargetVisibility, &err)
 
-	uri, err := carchiver.NewURI(request.VisibilityURI)
-	if err != nil {
-		return err
-	}
-
-	visibilityArchiver, err := a.archiverProvider.GetVisibilityArchiver(uri.Scheme(), request.CallerService)
+	visibilityArchiver, err := a.archiverProvider.GetVisibilityArchiver(request.VisibilityURI.Scheme(), request.CallerService)
 	if err != nil {
 		return err
 	}
@@ -226,20 +217,20 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 	if err != nil {
 		return err
 	}
-	return visibilityArchiver.Archive(ctx, uri, &archiverspb.VisibilityRecord{
+	return visibilityArchiver.Archive(ctx, request.VisibilityURI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
 		WorkflowId:         request.WorkflowID,
 		RunId:              request.RunID,
 		WorkflowTypeName:   request.WorkflowTypeName,
-		StartTime:          timestamp.TimePtr(request.StartTime),
-		ExecutionTime:      timestamp.TimePtr(request.ExecutionTime),
-		CloseTime:          timestamp.TimePtr(request.CloseTime),
+		StartTime:          request.StartTime,
+		ExecutionTime:      request.ExecutionTime,
+		CloseTime:          request.CloseTime,
 		Status:             request.Status,
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
 		SearchAttributes:   searchAttributes,
-		HistoryArchivalUri: request.HistoryURI,
+		HistoryArchivalUri: request.HistoryURI.String(),
 	})
 }
 
