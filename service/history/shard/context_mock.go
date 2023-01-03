@@ -718,15 +718,15 @@ func (mr *MockContextMockRecorder) UpdateFailoverLevel(category, failoverID, lev
 }
 
 // UpdateHandoverNamespaces mocks base method.
-func (m *MockContext) UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace) {
+func (m *MockContext) UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateHandoverNamespaces", newNamespaces)
+	m.ctrl.Call(m, "UpdateHandoverNamespaces", ns, deletedFromDb)
 }
 
 // UpdateHandoverNamespaces indicates an expected call of UpdateHandoverNamespaces.
-func (mr *MockContextMockRecorder) UpdateHandoverNamespaces(newNamespaces interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateHandoverNamespaces(ns, deletedFromDb interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespaces", reflect.TypeOf((*MockContext)(nil).UpdateHandoverNamespaces), newNamespaces)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespaces", reflect.TypeOf((*MockContext)(nil).UpdateHandoverNamespaces), ns, deletedFromDb)
 }
 
 // UpdateNamespaceNotificationVersion mocks base method.

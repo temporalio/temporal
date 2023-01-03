@@ -104,7 +104,7 @@ type (
 
 		GetNamespaceNotificationVersion() int64
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
-		UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace)
+		UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
 

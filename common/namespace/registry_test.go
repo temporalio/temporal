@@ -209,7 +209,7 @@ func (s *registrySuite) TestListNamespace() {
 	s.Equal(entry2, entryByID2)
 }
 
-func (s *registrySuite) TestRegisterCallback_CatchUp() {
+func (s *registrySuite) TestRegisterStateChangeCallback_CatchUp() {
 	namespaceNotificationVersion := int64(0)
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -265,10 +265,6 @@ func (s *registrySuite) TestRegisterCallback_CatchUp() {
 	entry2 := namespace.FromPersistentState(namespaceRecord2)
 	namespaceNotificationVersion++
 
-	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
-		&persistence.GetMetadataResponse{
-			NotificationVersion: namespaceNotificationVersion,
-		}, nil)
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:       namespace.CacheRefreshPageSize,
 		IncludeDeleted: true,
@@ -284,27 +280,19 @@ func (s *registrySuite) TestRegisterCallback_CatchUp() {
 	s.registry.Start()
 	defer s.registry.Stop()
 
-	prepareCallbackInvoked := false
 	var entriesNotification []*namespace.Namespace
-	// we are not testing catching up, so make this really large
-	currentNamespaceNotificationVersion := int64(0)
-	s.registry.RegisterNamespaceChangeCallback(
+	s.registry.RegisterStateChangeCallback(
 		"0",
-		currentNamespaceNotificationVersion,
-		func() {
-			prepareCallbackInvoked = true
-		},
-		func(prevNamespaces []*namespace.Namespace, nextNamespaces []*namespace.Namespace) {
-			s.Equal(len(prevNamespaces), len(nextNamespaces))
-			for index := range prevNamespaces {
-				s.Nil(prevNamespaces[index])
-			}
-			entriesNotification = nextNamespaces
+		func(ns *namespace.Namespace, deletedFromDb bool) {
+			s.False(deletedFromDb)
+			entriesNotification = append(entriesNotification, ns)
 		},
 	)
 
-	// the order matters here, should be ordered by notification version
-	s.True(prepareCallbackInvoked)
+	s.Len(entriesNotification, 2)
+	if entriesNotification[0].NotificationVersion() > entriesNotification[1].NotificationVersion() {
+		entriesNotification[0], entriesNotification[1] = entriesNotification[1], entriesNotification[0]
+	}
 	s.Equal([]*namespace.Namespace{entry1, entry2}, entriesNotification)
 }
 
@@ -364,10 +352,6 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	entry2Old := namespace.FromPersistentState(namespaceRecord2Old)
 	namespaceNotificationVersion++
 
-	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
-		&persistence.GetMetadataResponse{
-			NotificationVersion: namespaceNotificationVersion,
-		}, nil)
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:       namespace.CacheRefreshPageSize,
 		IncludeDeleted: true,
@@ -421,33 +405,28 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1New := namespace.FromPersistentState(namespaceRecord1New)
 	namespaceNotificationVersion++
 
-	prepareCallbackInvoked := false
-	var entriesOld []*namespace.Namespace
-	var entriesNew []*namespace.Namespace
-	// we are not testing catching up, so make this really large
-	currentNamespaceNotificationVersion := int64(9999999)
-	s.registry.RegisterNamespaceChangeCallback(
+	var entries []*namespace.Namespace
+
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	s.registry.RegisterStateChangeCallback(
 		"0",
-		currentNamespaceNotificationVersion,
-		func() {
-			prepareCallbackInvoked = true
-		},
-		func(prevNamespaces []*namespace.Namespace, nextNamespaces []*namespace.Namespace) {
-			entriesOld = prevNamespaces
-			entriesNew = nextNamespaces
+		func(ns *namespace.Namespace, deletedFromDb bool) {
+			defer wg.Done()
+			s.False(deletedFromDb)
+			entries = append(entries, ns)
 		},
 	)
-	s.False(prepareCallbackInvoked)
-	s.Empty(entriesOld)
-	s.Empty(entriesNew)
+	wg.Wait()
 
-	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
-		&persistence.GetMetadataResponse{
-			NotificationVersion: namespaceNotificationVersion,
-		}, nil)
+	s.Len(entries, 2)
+	if entries[0].NotificationVersion() > entries[1].NotificationVersion() {
+		entries[0], entries[1] = entries[1], entries[0]
+	}
+	s.Equal([]*namespace.Namespace{entry1Old, entry2Old}, entries)
+
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:       namespace.CacheRefreshPageSize,
 		IncludeDeleted: true,
@@ -459,15 +438,15 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		NextPageToken: nil,
 	}, nil)
 
-	s.registry.Refresh()
+	entries = []*namespace.Namespace{}
 
-	// the order matters here: the record 2 got updated first, thus with a lower notification version
-	// the record 1 got updated later, thus a higher notification version.
-	// making sure notifying from lower to higher version helps the shard to keep track the
-	// namespace change events
-	s.True(prepareCallbackInvoked)
-	s.Equal([]*namespace.Namespace{entry2Old, entry1Old}, entriesOld)
-	s.Equal([]*namespace.Namespace{entry2New, entry1New}, entriesNew)
+	wg.Add(1)
+	s.registry.Refresh()
+	wg.Wait()
+
+	// entry1 only has descrption update, so won't trigger the state change callback
+	s.Len(entries, 1)
+	s.Equal([]*namespace.Namespace{entry2New}, entries)
 }
 
 func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
