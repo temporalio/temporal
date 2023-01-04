@@ -300,8 +300,8 @@ unit-test-coverage: $(COVER_ROOT)
 
 db-integration-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration tests with coverage..."
-	@go test $(INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEGRATION_COVER_PROFILE)
-	@go test $(DB_TOOL_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEG_TEST_COVERPKG) -coverprofile=$(DB_TOOL_COVER_PROFILE)
+	@go test $(INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -coverpkg="./common/..." -coverprofile=$(INTEGRATION_COVER_PROFILE)
+	@go test $(DB_TOOL_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -coverpkg="./tools/..." -coverprofile=$(DB_TOOL_COVER_PROFILE)
 
 # TODO: rename it to functional-test
 integration-test-coverage: $(COVER_ROOT)
