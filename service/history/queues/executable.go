@@ -89,9 +89,9 @@ const (
 	// resourceExhaustedResubmitMaxAttempts is the same as resubmitMaxAttempts but only applies to resource
 	// exhausted error
 	resourceExhaustedResubmitMaxAttempts = 1
-	// taskCriticalAttempts, if exceeded, task attempts metrics and critical processing error log will be emitted
+	// taskCriticalLogMetricAttempts, if exceeded, task attempts metrics and critical processing error log will be emitted
 	// while task is retrying
-	taskCriticalAttempts = 30
+	taskCriticalLogMetricAttempts = 30
 )
 
 type (
@@ -208,9 +208,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			defer e.Unlock()
 
 			e.attempt++
-			if e.attempt > taskCriticalAttempts {
+			if e.attempt > taskCriticalLogMetricAttempts {
 				e.taggedMetricsHandler.Histogram(metrics.TaskAttempt.GetMetricName(), metrics.TaskAttempt.GetMetricUnit()).Record(int64(e.attempt))
-				e.logger.Error("Critical error processing task, retrying.", tag.Error(err), tag.OperationCritical)
+				e.logger.Error("Critical error processing task, retrying.", tag.Attempt(int32(e.attempt)), tag.Error(err), tag.OperationCritical)
 			}
 		}
 	}()
