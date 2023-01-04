@@ -275,7 +275,7 @@ func (s *archivalSuite) isArchived(namespace string, execution *commonpb.Workflo
 					execution.GetRunId(),
 				),
 			},
-			searchattribute.NameTypeMap{},
+			searchattribute.IndexSearchAttributes{},
 		)
 		if err != nil {
 			continue

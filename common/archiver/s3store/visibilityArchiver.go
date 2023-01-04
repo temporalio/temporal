@@ -168,7 +168,7 @@ func (v *visibilityArchiver) Query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *archiver.QueryVisibilityRequest,
-	saTypeMap searchattribute.NameTypeMap,
+	saTypeMap searchattribute.IndexSearchAttributes,
 ) (*archiver.QueryVisibilityResponse, error) {
 
 	if err := SoftValidateURI(URI); err != nil {
@@ -201,7 +201,7 @@ func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
-	saTypeMap searchattribute.NameTypeMap,
+	saTypeMap searchattribute.IndexSearchAttributes,
 ) (*archiver.QueryVisibilityResponse, error) {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()

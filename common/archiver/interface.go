@@ -133,7 +133,7 @@ type (
 		// For example, it can be  some SQL-like syntax query string.
 		// Your implementation is responsible for parsing and validating the query, and also returning all visibility records that match the query.
 		// Currently the maximum context timeout passed into the method is 3 minutes, so it's acceptable if this method takes some time to run.
-		Query(ctx context.Context, uri URI, request *QueryVisibilityRequest, saTypeMap searchattribute.NameTypeMap) (*QueryVisibilityResponse, error)
+		Query(ctx context.Context, uri URI, request *QueryVisibilityRequest, saTypeMap searchattribute.IndexSearchAttributes) (*QueryVisibilityResponse, error)
 		// ValidateURI is used to define what a valid URI for an implementation is.
 		ValidateURI(uri URI) error
 	}

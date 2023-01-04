@@ -865,7 +865,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`)
 	// test for open
-	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestIndexSearchAttributes, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -889,7 +889,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "StartTime": "2021-06-11T15:04:07.980-07:00",
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`)
-	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestIndexSearchAttributes, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -909,7 +909,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	// test for error case
 	docSource = []byte(`corrupted data`)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
-	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestIndexSearchAttributes, testNamespace)
 	s.Error(err)
 	s.Nil(info)
 }
@@ -924,10 +924,10 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
           "CustomIntField": [111,222],
           "CustomBoolField": true,
           "UnknownField": "random"}`)
-	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestIndexSearchAttributes, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
-	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap)
+	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 
 	s.Len(customSearchAttributes, 7)
@@ -973,7 +973,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 			return "AliasOf" + fieldName, nil
 		}).Times(6)
 
-	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestIndexSearchAttributes, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 
@@ -992,7 +992,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 		func(fieldName string, namespace string) (string, error) {
 			return "", serviceerror.NewUnavailable("error")
 		})
-	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
+	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestIndexSearchAttributes, testNamespace)
 	s.Error(err)
 	s.Nil(info)
 

@@ -159,7 +159,7 @@ func (v *visibilityArchiver) Query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *archiver.QueryVisibilityRequest,
-	saTypeMap searchattribute.NameTypeMap,
+	saTypeMap searchattribute.IndexSearchAttributes,
 ) (*archiver.QueryVisibilityResponse, error) {
 
 	if err := v.ValidateURI(URI); err != nil {
@@ -196,7 +196,7 @@ func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
-	saTypeMap searchattribute.NameTypeMap,
+	saTypeMap searchattribute.IndexSearchAttributes,
 ) (*archiver.QueryVisibilityResponse, error) {
 
 	token := new(queryVisibilityToken)

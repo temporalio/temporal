@@ -252,7 +252,7 @@ func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*h
 	return lastFailoverVersion != request.CloseFailoverVersion || lastEventID+1 != request.NextEventID
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.NameTypeMap) (*workflowpb.WorkflowExecutionInfo, error) {
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.IndexSearchAttributes) (*workflowpb.WorkflowExecutionInfo, error) {
 	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, &saTypeMap)
 	if err != nil {
 		return nil, err

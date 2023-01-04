@@ -33,7 +33,7 @@ type (
 )
 
 var (
-	TestNameTypeMap = NameTypeMap{
+	TestIndexSearchAttributes = IndexSearchAttributes{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
 			"CustomTextField":     enumspb.INDEXED_VALUE_TYPE_TEXT,
@@ -49,6 +49,6 @@ func NewTestProvider() *TestProvider {
 	return &TestProvider{}
 }
 
-func (s *TestProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
-	return TestNameTypeMap, nil
+func (s *TestProvider) GetSearchAttributes(_ string, _ bool) (IndexSearchAttributes, error) {
+	return TestIndexSearchAttributes, nil
 }

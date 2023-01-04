@@ -53,7 +53,7 @@ func (s *StringifySuite) TearDownTest() {
 }
 
 func (s *StringifySuite) Test_Stringify() {
-	typeMap := NameTypeMap{
+	typeMap := IndexSearchAttributes{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
@@ -98,7 +98,7 @@ func (s *StringifySuite) Test_Stringify() {
 }
 
 func (s *StringifySuite) Test_Stringify_Array() {
-	typeMap := NameTypeMap{
+	typeMap := IndexSearchAttributes{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
@@ -147,7 +147,7 @@ func (s *StringifySuite) Test_Parse_ValidTypeMap() {
 		"key1": "val1",
 		"key2": "2",
 		"key3": "true",
-	}, &NameTypeMap{
+	}, &IndexSearchAttributes{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
@@ -182,7 +182,7 @@ func (s *StringifySuite) Test_Parse_WrongTypesInTypeMap() {
 	sa, err := Parse(map[string]string{
 		"key1": "val1",
 		"key2": "2",
-	}, &NameTypeMap{
+	}, &IndexSearchAttributes{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"key1": enumspb.INDEXED_VALUE_TYPE_INT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_TEXT,
@@ -199,7 +199,7 @@ func (s *StringifySuite) Test_Parse_MissedFieldsInTypeMap() {
 	sa, err := Parse(map[string]string{
 		"key1": "val1",
 		"key2": "2",
-	}, &NameTypeMap{
+	}, &IndexSearchAttributes{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"key3": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
@@ -217,7 +217,7 @@ func (s *StringifySuite) Test_Parse_Array() {
 	sa, err := Parse(map[string]string{
 		"key1": ` ["val1", "val2"] `,
 		"key2": "[2,3,4]",
-	}, &NameTypeMap{
+	}, &IndexSearchAttributes{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,

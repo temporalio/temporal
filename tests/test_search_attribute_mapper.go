@@ -42,7 +42,7 @@ func NewSearchAttributeTestMapper() *SearchAttributeTestMapper {
 }
 
 func (t *SearchAttributeTestMapper) GetAlias(fieldName string, namespace string) (string, error) {
-	if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
+	if _, err := searchattribute.TestIndexSearchAttributes.GetType(fieldName); err == nil {
 		return "AliasFor" + fieldName, nil
 	}
 	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("fieldname '%s' has no search-attribute defined for '%s' namespace", fieldName, namespace))
@@ -51,7 +51,7 @@ func (t *SearchAttributeTestMapper) GetAlias(fieldName string, namespace string)
 func (t *SearchAttributeTestMapper) GetFieldName(alias string, namespace string) (string, error) {
 	if strings.HasPrefix(alias, "AliasFor") {
 		fieldName := strings.TrimPrefix(alias, "AliasFor")
-		if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
+		if _, err := searchattribute.TestIndexSearchAttributes.GetType(fieldName); err == nil {
 			return fieldName, nil
 		}
 	}

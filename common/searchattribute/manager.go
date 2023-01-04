@@ -56,8 +56,8 @@ type (
 	}
 
 	cache struct {
-		// indexName -> NameTypeMap
-		searchAttributes map[string]NameTypeMap
+		// indexName -> IndexSearchAttributes
+		searchAttributes map[string]IndexSearchAttributes
 		dbVersion        int64
 		expireOn         time.Time
 	}
@@ -73,7 +73,7 @@ func NewManager(
 
 	var saCache atomic.Value
 	saCache.Store(cache{
-		searchAttributes: map[string]NameTypeMap{},
+		searchAttributes: map[string]IndexSearchAttributes{},
 		dbVersion:        0,
 		expireOn:         time.Time{},
 	})
@@ -91,7 +91,7 @@ func NewManager(
 func (m *managerImpl) GetSearchAttributes(
 	indexName string,
 	forceRefreshCache bool,
-) (NameTypeMap, error) {
+) (IndexSearchAttributes, error) {
 
 	now := m.timeSource.Now()
 	saCache := m.cache.Load().(cache)
@@ -104,7 +104,7 @@ func (m *managerImpl) GetSearchAttributes(
 			saCache, err = m.refreshCache(saCache, now)
 			if err != nil {
 				m.cacheUpdateMutex.Unlock()
-				return NameTypeMap{}, err
+				return IndexSearchAttributes{}, err
 			}
 		}
 		m.cacheUpdateMutex.Unlock()
@@ -112,7 +112,7 @@ func (m *managerImpl) GetSearchAttributes(
 
 	indexSearchAttributes, ok := saCache.searchAttributes[indexName]
 	if !ok {
-		return NameTypeMap{}, nil
+		return IndexSearchAttributes{}, nil
 	}
 
 	return indexSearchAttributes, nil
@@ -154,7 +154,7 @@ func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) 
 	}
 
 	saCache = cache{
-		searchAttributes: buildIndexNameTypeMap(clusterMetadata.GetIndexSearchAttributes()),
+		searchAttributes: buildIndexSearchAttributes(clusterMetadata.GetIndexSearchAttributes()),
 		expireOn:         now.Add(cacheRefreshInterval),
 		dbVersion:        clusterMetadata.Version,
 	}

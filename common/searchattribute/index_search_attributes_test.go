@@ -34,7 +34,7 @@ import (
 
 func Test_IsValid(t *testing.T) {
 	assert := assert.New(t)
-	typeMap := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+	typeMap := IndexSearchAttributes{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
@@ -47,7 +47,7 @@ func Test_IsValid(t *testing.T) {
 	isDefined = typeMap.IsDefined("key1")
 	assert.True(isDefined)
 
-	isDefined = NameTypeMap{}.IsDefined("key1")
+	isDefined = IndexSearchAttributes{}.IsDefined("key1")
 	assert.False(isDefined)
 	isDefined = typeMap.IsDefined("key4")
 	assert.False(isDefined)
@@ -57,7 +57,7 @@ func Test_IsValid(t *testing.T) {
 
 func Test_GetType(t *testing.T) {
 	assert := assert.New(t)
-	typeMap := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+	typeMap := IndexSearchAttributes{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
@@ -82,7 +82,7 @@ func Test_GetType(t *testing.T) {
 	assert.Error(err)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 
-	ivt, err = NameTypeMap{}.GetType("key1")
+	ivt, err = IndexSearchAttributes{}.GetType("key1")
 	assert.Error(err)
 	assert.True(errors.Is(err, ErrInvalidName))
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)

@@ -887,7 +887,7 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 	return doc, nil
 }
 
-func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, saTypeMap searchattribute.NameTypeMap, namespace namespace.Name) (*store.InternalWorkflowExecutionInfo, error) {
+func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, saTypeMap searchattribute.IndexSearchAttributes, namespace namespace.Name) (*store.InternalWorkflowExecutionInfo, error) {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
 		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
 		return serviceerror.NewInternal(fmt.Sprintf("Unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))

@@ -41,7 +41,7 @@ const (
 
 type (
 	Provider interface {
-		GetSearchAttributes(indexName string, forceRefreshCache bool) (NameTypeMap, error)
+		GetSearchAttributes(indexName string, forceRefreshCache bool) (IndexSearchAttributes, error)
 	}
 
 	Manager interface {
@@ -57,7 +57,7 @@ var (
 
 // ApplyTypeMap set type for all valid search attributes which don't have it.
 // It doesn't do any validation and just skip invalid or already set search attributes.
-func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeMap) {
+func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap IndexSearchAttributes) {
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
 		_, metadataHasValueType := saPayload.Metadata[MetadataType]
 		if metadataHasValueType {

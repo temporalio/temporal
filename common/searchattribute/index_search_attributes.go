@@ -33,7 +33,7 @@ import (
 )
 
 type (
-	NameTypeMap struct {
+	IndexSearchAttributes struct {
 		// customSearchAttributes are defined by cluster admin per cluster level and passed and stored in SearchAttributes object.
 		customSearchAttributes map[string]enumspb.IndexedValueType
 	}
@@ -47,17 +47,19 @@ const (
 	customCategory
 )
 
-func buildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.IndexSearchAttributes) map[string]NameTypeMap {
-	indexNameTypeMap := make(map[string]NameTypeMap, len(indexSearchAttributes))
-	for indexName, customSearchAttributes := range indexSearchAttributes {
-		indexNameTypeMap[indexName] = NameTypeMap{
+func buildIndexSearchAttributes(
+	input map[string]*persistencespb.IndexSearchAttributes,
+) map[string]IndexSearchAttributes {
+	indexSearchAttributes := make(map[string]IndexSearchAttributes, len(input))
+	for indexName, customSearchAttributes := range input {
+		indexSearchAttributes[indexName] = IndexSearchAttributes{
 			customSearchAttributes: customSearchAttributes.GetCustomSearchAttributes(),
 		}
 	}
-	return indexNameTypeMap
+	return indexSearchAttributes
 }
 
-func (m NameTypeMap) System() map[string]enumspb.IndexedValueType {
+func (m IndexSearchAttributes) System() map[string]enumspb.IndexedValueType {
 	allSystem := make(map[string]enumspb.IndexedValueType, len(system)+len(predefined))
 	for saName, saType := range system {
 		allSystem[saName] = saType
@@ -68,11 +70,11 @@ func (m NameTypeMap) System() map[string]enumspb.IndexedValueType {
 	return allSystem
 }
 
-func (m NameTypeMap) Custom() map[string]enumspb.IndexedValueType {
+func (m IndexSearchAttributes) Custom() map[string]enumspb.IndexedValueType {
 	return m.customSearchAttributes
 }
 
-func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
+func (m IndexSearchAttributes) All() map[string]enumspb.IndexedValueType {
 	allSearchAttributes := make(map[string]enumspb.IndexedValueType, len(system)+len(m.customSearchAttributes)+len(predefined))
 	for saName, saType := range system {
 		allSearchAttributes[saName] = saType
@@ -87,12 +89,12 @@ func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
 }
 
 // GetType returns type of search attribute from type map.
-func (m NameTypeMap) GetType(name string) (enumspb.IndexedValueType, error) {
+func (m IndexSearchAttributes) GetType(name string) (enumspb.IndexedValueType, error) {
 	return m.getType(name, systemCategory|predefinedCategory|customCategory)
 }
 
 // GetType returns type of search attribute from type map.
-func (m NameTypeMap) getType(name string, cat category) (enumspb.IndexedValueType, error) {
+func (m IndexSearchAttributes) getType(name string, cat category) (enumspb.IndexedValueType, error) {
 	if cat|customCategory == cat && len(m.customSearchAttributes) != 0 {
 		if t, isCustom := m.customSearchAttributes[name]; isCustom {
 			return t, nil
@@ -111,7 +113,7 @@ func (m NameTypeMap) getType(name string, cat category) (enumspb.IndexedValueTyp
 	return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidName, name)
 }
 
-func (m NameTypeMap) IsDefined(name string) bool {
+func (m IndexSearchAttributes) IsDefined(name string) bool {
 	if _, err := m.GetType(name); err == nil {
 		return true
 	}

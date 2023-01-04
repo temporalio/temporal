@@ -42,7 +42,7 @@ func Test_Encode_Success(t *testing.T) {
 		"key4": nil,
 		"key5": []string{"val2", "val3"},
 		"key6": []string{},
-	}, &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+	}, &IndexSearchAttributes{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
@@ -100,7 +100,7 @@ func Test_Encode_Error(t *testing.T) {
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
-	}, &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+	}, &IndexSearchAttributes{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key4": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
@@ -119,7 +119,7 @@ func Test_Encode_Error(t *testing.T) {
 func Test_Decode_Success(t *testing.T) {
 	assert := assert.New(t)
 
-	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+	typeMap := &IndexSearchAttributes{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
@@ -167,7 +167,7 @@ func Test_Decode_Success(t *testing.T) {
 
 func Test_Decode_NilMap(t *testing.T) {
 	assert := assert.New(t)
-	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+	typeMap := &IndexSearchAttributes{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
@@ -199,7 +199,7 @@ func Test_Decode_NilMap(t *testing.T) {
 func Test_Decode_Error(t *testing.T) {
 	assert := assert.New(t)
 
-	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+	typeMap := &IndexSearchAttributes{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
@@ -211,7 +211,7 @@ func Test_Decode_Error(t *testing.T) {
 	}, typeMap)
 	assert.NoError(err)
 
-	vals, err := Decode(sa, &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+	vals, err := Decode(sa, &IndexSearchAttributes{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key4": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,

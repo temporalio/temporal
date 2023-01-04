@@ -32,6 +32,6 @@ func NewSystemProvider() *SystemProvider {
 	return &SystemProvider{}
 }
 
-func (s *SystemProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
-	return NameTypeMap{}, nil
+func (s *SystemProvider) GetSearchAttributes(_ string, _ bool) (IndexSearchAttributes, error) {
+	return IndexSearchAttributes{}, nil
 }

@@ -133,7 +133,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 	}
 
 	// Elasticsearch is not configured
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestIndexSearchAttributes, nil).AnyTimes()
 	testCases3 := []test{
 		{
 			Name: "reserved key (empty index)",
@@ -169,7 +169,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 		},
 	}
 
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestIndexSearchAttributes, nil).AnyTimes()
 	testCases2 := []test{
 		{
 			Name: "reserved key (ES configured)",
@@ -252,7 +252,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
 
 	// Elasticsearch is not configured
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "").Return(map[string]string{"col": "type"}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestIndexSearchAttributes, nil).AnyTimes()
 
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.NoError(err)
@@ -266,13 +266,13 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
 	}
 
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestIndexSearchAttributes, nil)
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
 
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.NameTypeMap{}, errors.New("random error"))
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.IndexSearchAttributes{}, errors.New("random error"))
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.Error(err)
 	s.Nil(resp)
@@ -309,7 +309,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 	}
 
 	// Elasticsearch is not configured
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestIndexSearchAttributes, nil).AnyTimes()
 	testCases3 := []test{
 		{
 			Name: "reserved search attribute (empty index)",
@@ -345,7 +345,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 		},
 	}
 
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestIndexSearchAttributes, nil).AnyTimes()
 	testCases2 := []test{
 		{
 			Name: "reserved search attribute (ES configured)",

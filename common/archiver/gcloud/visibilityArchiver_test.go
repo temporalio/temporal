@@ -35,8 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common/searchattribute"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
@@ -44,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -164,7 +163,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidVisibilityURI() {
 		Query:       "WorkflowType='type::example' AND CloseTime='2020-02-05T11:00:00Z' AND SearchPrecision='Day'",
 	}
 
-	_, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
+	_, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestIndexSearchAttributes)
 	s.Error(err)
 }
 
@@ -212,7 +211,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 		NamespaceID: "some random namespaceID",
 		PageSize:    10,
 		Query:       "some invalid query",
-	}, searchattribute.TestNameTypeMap)
+	}, searchattribute.TestIndexSearchAttributes)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -239,7 +238,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 		PageSize:      1,
 		NextPageToken: []byte{1, 2, 3},
 	}
-	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestIndexSearchAttributes)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -273,12 +272,12 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 		Query:       "parsed by mockParser",
 	}
 
-	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[0])
 }
@@ -317,25 +316,25 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 		Query:       "parsed by mockParser",
 	}
 
-	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.NotNil(response)
 	s.NotNil(response.NextPageToken)
 	s.Len(response.Executions, 2)
-	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[0])
-	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
-	response, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
+	response, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[0])
 }

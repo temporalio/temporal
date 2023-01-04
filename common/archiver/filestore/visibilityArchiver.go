@@ -144,7 +144,7 @@ func (v *visibilityArchiver) Query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *archiver.QueryVisibilityRequest,
-	saTypeMap searchattribute.NameTypeMap,
+	saTypeMap searchattribute.IndexSearchAttributes,
 ) (*archiver.QueryVisibilityResponse, error) {
 	if err := v.ValidateURI(URI); err != nil {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
@@ -180,7 +180,7 @@ func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
-	saTypeMap searchattribute.NameTypeMap,
+	saTypeMap searchattribute.IndexSearchAttributes,
 ) (*archiver.QueryVisibilityResponse, error) {
 	var token *queryVisibilityToken
 	if request.nextPageToken != nil {
@@ -341,7 +341,7 @@ func matchQuery(record *archiverspb.VisibilityRecord, query *parsedQuery) bool {
 	return true
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.NameTypeMap) (*workflowpb.WorkflowExecutionInfo, error) {
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.IndexSearchAttributes) (*workflowpb.WorkflowExecutionInfo, error) {
 	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, &saTypeMap)
 	if err != nil {
 		return nil, err

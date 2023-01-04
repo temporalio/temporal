@@ -44,7 +44,7 @@ import (
 // In case of error, it will continue to next search attribute and return last error.
 // Single values are converted using strconv, arrays are converted using json.Marshal.
 // Search attributes with `nil` values are skipped.
-func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap) (map[string]string, error) {
+func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *IndexSearchAttributes) (map[string]string, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
 	}
@@ -103,7 +103,7 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap
 // typeMap can be nil (values will be parsed with strconv and MetadataType field won't be set).
 // In case of error, it will continue to next search attribute and return last error.
 // Single values are parsed using strconv, arrays are parsed using json.Unmarshal.
-func Parse(searchAttributesStr map[string]string, typeMap *NameTypeMap) (*commonpb.SearchAttributes, error) {
+func Parse(searchAttributesStr map[string]string, typeMap *IndexSearchAttributes) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributesStr) == 0 {
 		return nil, nil
 	}

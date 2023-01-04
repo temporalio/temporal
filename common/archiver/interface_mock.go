@@ -151,7 +151,7 @@ func (mr *MockVisibilityArchiverMockRecorder) Archive(ctx, uri, request interfac
 }
 
 // Query mocks base method.
-func (m *MockVisibilityArchiver) Query(ctx context.Context, uri URI, request *QueryVisibilityRequest, saTypeMap searchattribute.NameTypeMap) (*QueryVisibilityResponse, error) {
+func (m *MockVisibilityArchiver) Query(ctx context.Context, uri URI, request *QueryVisibilityRequest, saTypeMap searchattribute.IndexSearchAttributes) (*QueryVisibilityResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Query", ctx, uri, request, saTypeMap)
 	ret0, _ := ret[0].(*QueryVisibilityResponse)

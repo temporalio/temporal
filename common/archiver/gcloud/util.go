@@ -139,7 +139,7 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 	return token, err
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.NameTypeMap) (*workflowpb.WorkflowExecutionInfo, error) {
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.IndexSearchAttributes) (*workflowpb.WorkflowExecutionInfo, error) {
 	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, &saTypeMap)
 	if err != nil {
 		return nil, err

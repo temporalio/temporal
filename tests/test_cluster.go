@@ -195,7 +195,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	err := testBase.SearchAttributesManager.SaveSearchAttributes(
 		context.Background(),
 		options.ESConfig.GetVisibilityIndex(),
-		searchattribute.TestNameTypeMap.Custom(),
+		searchattribute.TestIndexSearchAttributes.Custom(),
 	)
 	if err != nil {
 		return nil, err

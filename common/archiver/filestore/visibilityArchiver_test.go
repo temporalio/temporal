@@ -39,8 +39,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"go.temporal.io/server/common/searchattribute"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
@@ -49,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/tests/testutils"
 )
 
@@ -340,14 +339,14 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidURI() {
 		NamespaceID: testNamespaceID,
 		PageSize:    1,
 	}
-	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestIndexSearchAttributes)
 	s.Error(err)
 	s.Nil(response)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidRequest() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
-	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, &archiver.QueryVisibilityRequest{}, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, &archiver.QueryVisibilityRequest{}, searchattribute.TestIndexSearchAttributes)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -361,7 +360,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 		NamespaceID: "some random namespaceID",
 		PageSize:    10,
 		Query:       "some invalid query",
-	}, searchattribute.TestNameTypeMap)
+	}, searchattribute.TestIndexSearchAttributes)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -379,7 +378,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
 		Query:       "parsed by mockParser",
 		PageSize:    1,
 	}
-	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request, searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Empty(response.Executions)
@@ -400,7 +399,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 		PageSize:      1,
 		NextPageToken: []byte{1, 2, 3},
 	}
-	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, request, searchattribute.TestIndexSearchAttributes)
 	s.Error(err)
 	s.Nil(response)
 }
@@ -421,12 +420,12 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	}
 	URI, err := archiver.NewURI("file://" + s.testQueryDirectory)
 	s.NoError(err)
-	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	ei, err := convertToExecutionInfo(s.visibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err := convertToExecutionInfo(s.visibilityRecords[0], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[0])
 }
@@ -447,25 +446,25 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	}
 	URI, err := archiver.NewURI("file://" + s.testQueryDirectory)
 	s.NoError(err)
-	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
+	response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.NotNil(response)
 	s.NotNil(response.NextPageToken)
 	s.Len(response.Executions, 2)
-	ei, err := convertToExecutionInfo(s.visibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err := convertToExecutionInfo(s.visibilityRecords[0], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[0])
-	ei, err = convertToExecutionInfo(s.visibilityRecords[1], searchattribute.TestNameTypeMap)
+	ei, err = convertToExecutionInfo(s.visibilityRecords[1], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
-	response, err = visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
+	response, err = visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.NotNil(response)
 	s.Nil(response.NextPageToken)
 	s.Len(response.Executions, 1)
-	ei, err = convertToExecutionInfo(s.visibilityRecords[3], searchattribute.TestNameTypeMap)
+	ei, err = convertToExecutionInfo(s.visibilityRecords[3], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[0])
 }
@@ -495,17 +494,17 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	}
 	executions := []*workflowpb.WorkflowExecutionInfo{}
 	for len(executions) == 0 || request.NextPageToken != nil {
-		response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
+		response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestIndexSearchAttributes)
 		s.NoError(err)
 		s.NotNil(response)
 		executions = append(executions, response.Executions...)
 		request.NextPageToken = response.NextPageToken
 	}
 	s.Len(executions, 2)
-	ei, err := convertToExecutionInfo(s.visibilityRecords[0], searchattribute.TestNameTypeMap)
+	ei, err := convertToExecutionInfo(s.visibilityRecords[0], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, executions[0])
-	ei, err = convertToExecutionInfo(s.visibilityRecords[1], searchattribute.TestNameTypeMap)
+	ei, err = convertToExecutionInfo(s.visibilityRecords[1], searchattribute.TestIndexSearchAttributes)
 	s.NoError(err)
 	s.Equal(ei, executions[1])
 }

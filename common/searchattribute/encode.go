@@ -34,7 +34,7 @@ import (
 // Encode encodes map of search attribute values to search attributes.
 // typeMap can be nil (then MetadataType field won't be set).
 // In case of error, it will continue to next search attribute and return last error.
-func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*commonpb.SearchAttributes, error) {
+func Encode(searchAttributes map[string]interface{}, typeMap *IndexSearchAttributes) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes) == 0 {
 		return nil, nil
 	}
@@ -67,7 +67,7 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 // 1. type from typeMap,
 // 2. if typeMap is nil, type from MetadataType field is used.
 // In case of error, it will continue to next search attribute and return last error.
-func Decode(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap) (map[string]interface{}, error) {
+func Decode(searchAttributes *commonpb.SearchAttributes, typeMap *IndexSearchAttributes) (map[string]interface{}, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
 	}

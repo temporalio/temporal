@@ -263,7 +263,7 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 	// Needed to execute test but not relevant
 	s.mockSearchAttributesProvider.EXPECT().
 		GetSearchAttributes(cfg.ESIndexName, false).
-		Return(searchattribute.NameTypeMap{}, nil).
+		Return(searchattribute.IndexSearchAttributes{}, nil).
 		AnyTimes()
 
 	// Install a test namespace into mock namespace registry
@@ -1403,7 +1403,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		Size:          1,
 	}, nil)
 
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestIndexSearchAttributes, nil)
 	s.mockSearchAttributesMapper.EXPECT().GetAlias("CustomKeywordField", namespace.String()).Return("AliasOfCustomKeyword", nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -1495,7 +1495,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	}, nil).Times(2)
 
 	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestIndexSearchAttributes, nil).AnyTimes()
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1708,7 +1708,7 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	ctx := context.Background()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestIndexSearchAttributes, nil)
 	resp, err := wh.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)

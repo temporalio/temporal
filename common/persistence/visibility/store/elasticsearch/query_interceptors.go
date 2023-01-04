@@ -41,7 +41,7 @@ type (
 	nameInterceptor struct {
 		namespace               namespace.Name
 		index                   string
-		searchAttributesTypeMap searchattribute.NameTypeMap
+		searchAttributesTypeMap searchattribute.IndexSearchAttributes
 		searchAttributesMapper  searchattribute.Mapper
 		seenNamespaceDivision   bool
 	}
@@ -51,7 +51,7 @@ type (
 func newNameInterceptor(
 	namespace namespace.Name,
 	index string,
-	saTypeMap searchattribute.NameTypeMap,
+	saTypeMap searchattribute.IndexSearchAttributes,
 	searchAttributesMapper searchattribute.Mapper,
 ) *nameInterceptor {
 	return &nameInterceptor{

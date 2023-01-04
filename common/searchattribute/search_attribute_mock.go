@@ -60,10 +60,10 @@ func (m *MockProvider) EXPECT() *MockProviderMockRecorder {
 }
 
 // GetSearchAttributes mocks base method.
-func (m *MockProvider) GetSearchAttributes(indexName string, forceRefreshCache bool) (NameTypeMap, error) {
+func (m *MockProvider) GetSearchAttributes(indexName string, forceRefreshCache bool) (IndexSearchAttributes, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSearchAttributes", indexName, forceRefreshCache)
-	ret0, _ := ret[0].(NameTypeMap)
+	ret0, _ := ret[0].(IndexSearchAttributes)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -98,10 +98,10 @@ func (m *MockManager) EXPECT() *MockManagerMockRecorder {
 }
 
 // GetSearchAttributes mocks base method.
-func (m *MockManager) GetSearchAttributes(indexName string, forceRefreshCache bool) (NameTypeMap, error) {
+func (m *MockManager) GetSearchAttributes(indexName string, forceRefreshCache bool) (IndexSearchAttributes, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSearchAttributes", indexName, forceRefreshCache)
-	ret0, _ := ret[0].(NameTypeMap)
+	ret0, _ := ret[0].(IndexSearchAttributes)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
