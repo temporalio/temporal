@@ -102,7 +102,8 @@ type (
 
 		GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error)
 
-		GetNamespaceNotificationVersion() int64
+		// TODO: deprecate UpdateNamespaceNotificationVersion in v1.21 and remove
+		// NamespaceNotificationVersion from shardInfo proto blob
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
 		UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool)
 

@@ -136,9 +136,9 @@ type (
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 		// Refresh forces an immediate refresh of the namespace cache and blocks until it's complete.
 		Refresh()
-		// Registers callback for namespace state changes. This is regrettably
-		// different from the above RegisterNamespaceChangeCallback because we
-		// need different semantics.
+		// Registers callback for namespace state changes.
+		// StateChangeCallbackFn will be invoked for a new/deleted namespace or namespace that has
+		// State, ReplicationState, ActiveCluster, or isGlobalNamespace config changed.
 		RegisterStateChangeCallback(key any, cb StateChangeCallbackFn)
 		UnregisterStateChangeCallback(key any)
 	}

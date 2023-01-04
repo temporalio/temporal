@@ -588,13 +588,6 @@ func (s *ContextImpl) GetAllFailoverLevels(category tasks.Category) map[string]p
 	return ret
 }
 
-func (s *ContextImpl) GetNamespaceNotificationVersion() int64 {
-	s.rLock()
-	defer s.rUnlock()
-
-	return s.shardInfo.NamespaceNotificationVersion
-}
-
 func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error {
 	s.wLock()
 	defer s.wUnlock()

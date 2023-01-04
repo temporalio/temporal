@@ -276,9 +276,9 @@ func (p *queueBase) Category() tasks.Category {
 }
 
 func (p *queueBase) FailoverNamespace(
-	namespaceIDs map[string]struct{},
+	namespaceID string,
 ) {
-	p.rescheduler.Reschedule(namespaceIDs)
+	p.rescheduler.Reschedule(namespaceID)
 }
 
 func (p *queueBase) processNewRange() error {

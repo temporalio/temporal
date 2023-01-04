@@ -434,20 +434,6 @@ func (mr *MockContextMockRecorder) GetMetricsHandler() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsHandler", reflect.TypeOf((*MockContext)(nil).GetMetricsHandler))
 }
 
-// GetNamespaceNotificationVersion mocks base method.
-func (m *MockContext) GetNamespaceNotificationVersion() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceNotificationVersion")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetNamespaceNotificationVersion indicates an expected call of GetNamespaceNotificationVersion.
-func (mr *MockContextMockRecorder) GetNamespaceNotificationVersion() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceNotificationVersion", reflect.TypeOf((*MockContext)(nil).GetNamespaceNotificationVersion))
-}
-
 // GetNamespaceRegistry mocks base method.
 func (m *MockContext) GetNamespaceRegistry() namespace.Registry {
 	m.ctrl.T.Helper()
