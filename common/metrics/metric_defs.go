@@ -1562,7 +1562,6 @@ var (
 	ShardControllerLockLatency                        = NewTimerDef("shard_controller_lock_latency")
 	ShardLockLatency                                  = NewTimerDef("shard_lock_latency")
 	NamespaceRegistryLockLatency                      = NewTimerDef("namespace_registry_lock_latency")
-	NamespaceRegistryCallbackLockLatency              = NewTimerDef("namespace_registry_callback_lock_latency")
 	ClosedWorkflowBufferEventCount                    = NewCounterDef("closed_workflow_buffer_event_counter")
 
 	// Matching
