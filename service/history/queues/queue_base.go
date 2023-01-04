@@ -124,6 +124,7 @@ func newQueueBase(
 	category tasks.Category,
 	paginationFnProvider PaginationFnProvider,
 	scheduler Scheduler,
+	rescheduler Rescheduler,
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
@@ -149,12 +150,6 @@ func newQueueBase(
 	}
 
 	timeSource := shard.GetTimeSource()
-	rescheduler := NewRescheduler(
-		scheduler,
-		timeSource,
-		logger,
-		metricsHandler,
-	)
 
 	monitor := newMonitor(category.Type(), &options.MonitorOptions)
 	mitigator := newMitigator(monitor, logger, metricsHandler, options.MaxReaderCount)
@@ -282,14 +277,6 @@ func (p *queueBase) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
 	p.rescheduler.Reschedule(namespaceIDs)
-}
-
-func (p *queueBase) LockTaskProcessing() {
-	// no-op
-}
-
-func (p *queueBase) UnlockTaskProcessing() {
-	// no-op
 }
 
 func (p *queueBase) processNewRange() error {

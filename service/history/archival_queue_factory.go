@@ -112,11 +112,6 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams, hostScheduler queues
 	return QueueFactoryBase{
 		HostScheduler:        hostScheduler,
 		HostPriorityAssigner: queues.NewPriorityAssigner(),
-		HostRateLimiter: NewQueueHostRateLimiter(
-			params.Config.ArchivalProcessorMaxPollHostRPS,
-			params.Config.PersistenceMaxQPS,
-			archivalQueuePersistenceMaxRPSRatio,
-		),
 		HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 			NewHostRateLimiterRateFn(
 				params.Config.ArchivalProcessorMaxPollHostRPS,
@@ -152,10 +147,20 @@ func (f *archivalQueueFactory) newArchivalTaskExecutor(shard shard.Context, work
 // newScheduledQueue creates a new scheduled queue for the given shard with archival-specific configurations.
 func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor queues.Executor) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentArchivalQueue)
+	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope))
+
+	rescheduler := queues.NewRescheduler(
+		f.HostScheduler,
+		shard.GetTimeSource(),
+		logger,
+		metricsHandler,
+	)
+
 	return queues.NewScheduledQueue(
 		shard,
 		tasks.CategoryArchival,
 		f.HostScheduler,
+		rescheduler,
 		f.HostPriorityAssigner,
 		executor,
 		&queues.Options{
@@ -178,6 +183,6 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		},
 		f.HostReaderRateLimiter,
 		logger,
-		f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope)),
+		metricsHandler,
 	)
 }
