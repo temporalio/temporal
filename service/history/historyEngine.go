@@ -353,18 +353,8 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 	e.shard.GetNamespaceRegistry().RegisterNamespaceChangeCallback(
 		e,
 		0, /* always want callback so UpdateHandoverNamespaces() can be called after shard reload */
-		func() {
-			for _, queueProcessor := range e.queueProcessors {
-				queueProcessor.LockTaskProcessing()
-			}
-		},
+		func() {},
 		func(prevNamespaces []*namespace.Namespace, nextNamespaces []*namespace.Namespace) {
-			defer func() {
-				for _, queueProcessor := range e.queueProcessors {
-					queueProcessor.UnlockTaskProcessing()
-				}
-			}()
-
 			if len(nextNamespaces) == 0 {
 				return
 			}
