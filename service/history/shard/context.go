@@ -75,9 +75,7 @@ type (
 		GenerateTaskIDs(number int) ([]int64, error)
 
 		GetImmediateQueueExclusiveHighReadWatermark() tasks.Key
-		// TODO: remove cluster and singleProcessorMode parameter after deprecating old task procesing logic
-		// In multi-cursor world, there's only one maxReadLevel for scheduled queue for all clusters.
-		UpdateScheduledQueueExclusiveHighReadWatermark(cluster string, singleProcessorMode bool) (tasks.Key, error)
+		UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error)
 		GetQueueAckLevel(category tasks.Category) tasks.Key
 		UpdateQueueAckLevel(category tasks.Category, ackLevel tasks.Key) error
 		GetQueueClusterAckLevel(category tasks.Category, cluster string) tasks.Key
