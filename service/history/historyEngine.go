@@ -268,20 +268,12 @@ func (e *historyEngineImpl) Start() {
 	e.logger.Info("", tag.LifeCycleStarting)
 	defer e.logger.Info("", tag.LifeCycleStarted)
 
+	e.registerNamespaceStateChangeCallback()
+
 	for _, queueProcessor := range e.queueProcessors {
 		queueProcessor.Start()
 	}
 	e.replicationProcessorMgr.Start()
-
-	// failover callback will try to create a failover queue processor to scan all inflight tasks
-	// if domain needs to be failovered. However, in the multicursor queue logic, the scan range
-	// can't be retrieved before the processor is started. If failover callback is registered
-	// before queue processor is started, it may result in a deadline as to create the failover queue,
-	// queue processor need to be started.
-	//
-	// Ideally, when both timer and transfer queues enabled single cursor mode, we don't have to register
-	// the callback. However, currently namespace migration is relying on the callback to UpdateHandoverNamespaces
-	e.registerNamespaceFailoverCallback()
 }
 
 // Stop the service.
@@ -305,7 +297,7 @@ func (e *historyEngineImpl) Stop() {
 	e.shard.GetNamespaceRegistry().UnregisterStateChangeCallback(e)
 }
 
-func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
+func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 
 	e.shard.GetNamespaceRegistry().RegisterStateChangeCallback(e, func(ns *namespace.Namespace, deletedFromDb bool) {
 		if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
