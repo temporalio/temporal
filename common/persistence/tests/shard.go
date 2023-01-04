@@ -43,6 +43,8 @@ type (
 		suite.Suite
 		*require.Assertions
 
+		ShardID int32
+
 		ShardManager p.ShardManager
 		Logger       log.Logger
 
@@ -78,6 +80,8 @@ func (s *ShardSuite) TearDownSuite() {
 func (s *ShardSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
+
+	s.ShardID++
 }
 
 func (s *ShardSuite) TearDownTest() {
@@ -85,12 +89,11 @@ func (s *ShardSuite) TearDownTest() {
 }
 
 func (s *ShardSuite) TestGetOrCreateShard_Create() {
-	shardID := int32(1)
 	rangeID := rand.Int63()
-	shardInfo := RandomShardInfo(shardID, rangeID)
+	shardInfo := RandomShardInfo(s.ShardID, rangeID)
 
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
-		ShardID:          shardID,
+		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
 	s.NoError(err)
@@ -99,39 +102,37 @@ func (s *ShardSuite) TestGetOrCreateShard_Create() {
 }
 
 func (s *ShardSuite) TestGetOrCreateShard_Get() {
-	shardID := int32(2)
 	rangeID := rand.Int63()
-	shardInfo := RandomShardInfo(shardID, rangeID)
+	shardInfo := RandomShardInfo(s.ShardID, rangeID)
 
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
-		ShardID:          shardID,
+		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
 	s.NoError(err)
 	s.Equal(shardInfo, resp.ShardInfo)
 
 	resp, err = s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
-		ShardID:          shardID,
-		InitialShardInfo: RandomShardInfo(shardID, rand.Int63()),
+		ShardID:          s.ShardID,
+		InitialShardInfo: RandomShardInfo(s.ShardID, rand.Int63()),
 	})
 	s.NoError(err)
 	s.Equal(shardInfo, resp.ShardInfo)
 }
 
 func (s *ShardSuite) TestUpdateShard_OwnershipLost() {
-	shardID := int32(3)
 	rangeID := rand.Int63()
-	shardInfo := RandomShardInfo(shardID, rangeID)
+	shardInfo := RandomShardInfo(s.ShardID, rangeID)
 
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
-		ShardID:          shardID,
+		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
 	s.NoError(err)
 	s.Equal(shardInfo, resp.ShardInfo)
 
 	updateRangeID := rand.Int63()
-	updateShardInfo := RandomShardInfo(shardID, rand.Int63())
+	updateShardInfo := RandomShardInfo(s.ShardID, rand.Int63())
 	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
 		ShardInfo:       updateShardInfo,
 		PreviousRangeID: updateRangeID,
@@ -139,7 +140,7 @@ func (s *ShardSuite) TestUpdateShard_OwnershipLost() {
 	s.IsType(&p.ShardOwnershipLostError{}, err)
 
 	resp, err = s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
-		ShardID:          shardID,
+		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
 	s.NoError(err)
@@ -147,18 +148,17 @@ func (s *ShardSuite) TestUpdateShard_OwnershipLost() {
 }
 
 func (s *ShardSuite) TestUpdateShard_Success() {
-	shardID := int32(4)
 	rangeID := rand.Int63()
-	shardInfo := RandomShardInfo(shardID, rangeID)
+	shardInfo := RandomShardInfo(s.ShardID, rangeID)
 
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
-		ShardID:          shardID,
+		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
 	s.NoError(err)
 	s.Equal(shardInfo, resp.ShardInfo)
 
-	updateShardInfo := RandomShardInfo(shardID, rangeID+1)
+	updateShardInfo := RandomShardInfo(s.ShardID, rangeID+1)
 	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
 		ShardInfo:       updateShardInfo,
 		PreviousRangeID: rangeID,
@@ -166,7 +166,7 @@ func (s *ShardSuite) TestUpdateShard_Success() {
 	s.NoError(err)
 
 	resp, err = s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
-		ShardID:          shardID,
+		ShardID:          s.ShardID,
 		InitialShardInfo: shardInfo,
 	})
 	s.NoError(err)
