@@ -274,9 +274,7 @@ db-integration-test: clean-test-results
 # TODO: rename it to functional-test
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
-	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
-		@go test $(INTEG_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log \
-	$(NEWLINE))
+	@go test $(INTEG_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
 	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
@@ -284,9 +282,7 @@ integration-test: clean-test-results
 # TODO: rename it to functional-test
 integration-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
-		@go test $(INTEG_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log \
-	$(NEWLINE))
+	@go test $(INTEG_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
 	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
