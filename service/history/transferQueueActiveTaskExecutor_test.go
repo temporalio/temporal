@@ -2805,6 +2805,5 @@ func (s *transferQueueActiveTaskExecutorSuite) newTaskExecutable(
 		nil,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
 	)
 }

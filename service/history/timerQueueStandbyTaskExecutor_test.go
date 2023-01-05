@@ -1545,6 +1545,5 @@ func (s *timerQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		nil,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
 	)
 }

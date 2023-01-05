@@ -511,7 +511,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				namespaceRegistry,
 				nil,
 				metrics.NoopMetricsHandler,
-				nil,
 			)
 			err := executable.Execute()
 			if len(p.ExpectedErrorSubstrings) > 0 {
