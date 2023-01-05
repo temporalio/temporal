@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -90,6 +89,9 @@ const (
 	// resourceExhaustedResubmitMaxAttempts is the same as resubmitMaxAttempts but only applies to resource
 	// exhausted error
 	resourceExhaustedResubmitMaxAttempts = 1
+	// taskCriticalLogMetricAttempts, if exceeded, task attempts metrics and critical processing error log will be emitted
+	// while task is retrying
+	taskCriticalLogMetricAttempts = 30
 )
 
 type (
@@ -118,7 +120,6 @@ type (
 		logger                 log.Logger
 		metricsHandler         metrics.Handler
 		taggedMetricsHandler   metrics.Handler
-		criticalRetryAttempt   dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -136,7 +137,6 @@ func NewExecutable(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	criticalRetryAttempt dynamicconfig.IntPropertyFn,
 ) Executable {
 	executable := &executableImpl{
 		Task:              task,
@@ -158,7 +158,6 @@ func NewExecutable(
 		),
 		metricsHandler:       metricsHandler,
 		taggedMetricsHandler: metricsHandler,
-		criticalRetryAttempt: criticalRetryAttempt,
 	}
 	executable.updatePriority()
 	return executable
@@ -209,9 +208,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			defer e.Unlock()
 
 			e.attempt++
-			if e.attempt > e.criticalRetryAttempt() {
+			if e.attempt > taskCriticalLogMetricAttempts {
 				e.taggedMetricsHandler.Histogram(metrics.TaskAttempt.GetMetricName(), metrics.TaskAttempt.GetMetricUnit()).Record(int64(e.attempt))
-				e.logger.Error("Critical error processing task, retrying.", tag.Error(err), tag.OperationCritical)
+				e.logger.Error("Critical error processing task, retrying.", tag.Attempt(int32(e.attempt)), tag.Error(err), tag.OperationCritical)
 			}
 		}
 	}()

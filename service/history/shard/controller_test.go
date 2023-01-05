@@ -594,9 +594,9 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	mockEngine := NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
-	s.setupMocksForAcquireShard(0, mockEngine, 5, 6, false)
+	s.setupMocksForAcquireShard(1, mockEngine, 5, 6, false)
 
-	shard, err := s.shardController.getOrCreateShardContext(0)
+	shard, err := s.shardController.getOrCreateShardContext(1)
 	s.NoError(err)
 	s.Equal(1, len(s.shardController.ShardIDs()))
 
@@ -618,7 +618,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 	mockEngine := NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
-	shardID := int32(0)
+	shardID := int32(1)
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil)
 
 	ready := make(chan struct{})
@@ -638,7 +638,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 		})
 
 	// get shard, will start initializing in background
-	shard, err := s.shardController.getOrCreateShardContext(0)
+	shard, err := s.shardController.getOrCreateShardContext(1)
 	s.NoError(err)
 
 	<-ready
@@ -659,7 +659,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 	mockEngine := NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
-	shardID := int32(0)
+	shardID := int32(1)
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil)
 	// return success from GetOrCreateShard
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
@@ -691,7 +691,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 		})
 
 	// get shard, will start initializing in background
-	shard, err := s.shardController.getOrCreateShardContext(0)
+	shard, err := s.shardController.getOrCreateShardContext(1)
 	s.NoError(err)
 
 	<-ready
@@ -832,6 +832,17 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	s.Eventually(func() bool {
 		return atomic.LoadInt64(&engineStarts) == atomic.LoadInt64(&engineStops)
 	}, 1*time.Second, 50*time.Millisecond, "engine start/stop")
+}
+
+func (s *controllerSuite) Test_GetOrCreateShard_InvalidShardID() {
+	numShards := int32(2)
+	s.config.NumberOfShards = numShards
+
+	_, err := s.shardController.getOrCreateShardContext(0)
+	s.ErrorIs(err, invalidShardIdLowerBound)
+
+	_, err = s.shardController.getOrCreateShardContext(3)
+	s.ErrorIs(err, invalidShardIdUpperBound)
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(

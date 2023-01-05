@@ -193,7 +193,6 @@ func (f *timerQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TimerProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
-			TaskMaxRetryCount:                   f.Config.TimerTaskMaxRetryCount,
 		},
 		f.HostReaderRateLimiter,
 		logger,

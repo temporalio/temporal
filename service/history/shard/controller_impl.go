@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -56,6 +57,11 @@ import (
 
 const (
 	shardControllerMembershipUpdateListenerName = "ShardController"
+)
+
+var (
+	invalidShardIdLowerBound = serviceerror.NewInvalidArgument("shard Id cannot be equal or lower than zero")
+	invalidShardIdUpperBound = serviceerror.NewInvalidArgument("shard Id cannot be larger than max shard count")
 )
 
 type (
@@ -211,6 +217,17 @@ func (c *ControllerImpl) CloseShardByID(shardID int32) {
 	}
 }
 
+func (c *ControllerImpl) ShardIDs() []int32 {
+	c.RLock()
+	defer c.RUnlock()
+
+	ids := make([]int32, 0, len(c.historyShards))
+	for id := range c.historyShards {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
 	startTime := time.Now().UTC()
 	defer func() {
@@ -231,6 +248,10 @@ func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
 // if necessary. If a shard context is created, it will initialize in the background.
 // This function won't block on rangeid lease acquisition.
 func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, error) {
+	err := c.validateShardId(shardID)
+	if err != nil {
+		return nil, err
+	}
 	c.RLock()
 	if shard, ok := c.historyShards[shardID]; ok {
 		if shard.isValid() {
@@ -443,15 +464,14 @@ func (c *ControllerImpl) doShutdown() {
 	c.historyShards = nil
 }
 
-func (c *ControllerImpl) ShardIDs() []int32 {
-	c.RLock()
-	defer c.RUnlock()
-
-	ids := make([]int32, 0, len(c.historyShards))
-	for id := range c.historyShards {
-		ids = append(ids, id)
+func (c *ControllerImpl) validateShardId(shardID int32) error {
+	if shardID <= 0 {
+		return invalidShardIdLowerBound
 	}
-	return ids
+	if shardID > c.config.NumberOfShards {
+		return invalidShardIdUpperBound
+	}
+	return nil
 }
 
 func IsShardOwnershipLostError(err error) bool {
