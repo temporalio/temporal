@@ -581,6 +581,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Provide(func() metrics.Handler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
@@ -879,7 +880,6 @@ var ServiceTracingModule = fx.Options(
 		fx.Annotate(
 			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
 				// map "internal-frontend" to "frontend" for the purpose of tracing
-				// TODO: is this what we want to do?
 				if rsn == primitives.InternalFrontendService {
 					rsn = primitives.FrontendService
 				}
