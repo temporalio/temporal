@@ -64,7 +64,7 @@ INTEG_TEST_ROOT        := ./host
 INTEG_TEST_XDC_ROOT    := ./host/xdc
 INTEG_TEST_NDC_ROOT    := ./host/ndc
 
-INTEGRATION_TEST_ROOT := ./common/persistence/tests
+PERSISTENCE_INTEGRATION_TEST_ROOT := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 
 PROTO_ROOT := proto
@@ -79,7 +79,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 # TODO (jeremy): Replace below with build tags and `go test ./...` for targets
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
-UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)% $(INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)%,$(TEST_DIRS))
+UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)% $(PERSISTENCE_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)%,$(TEST_DIRS))
 
 # go.opentelemetry.io/otel/sdk/metric@v0.31.0 - there are breaking changes in v0.32.0.
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
@@ -267,7 +267,7 @@ unit-test: clean-test-results
 
 db-integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
-	@go test $(INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
+	@go test $(PERSISTENCE_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
 	@go test $(DB_TOOL_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
@@ -300,7 +300,7 @@ unit-test-coverage: $(COVER_ROOT)
 
 db-integration-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration tests with coverage..."
-	@go test $(INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -coverpkg="./common/..." -coverprofile=$(INTEGRATION_COVER_PROFILE)
+	@go test $(PERSISTENCE_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -coverpkg="./common/..." -coverprofile=$(INTEGRATION_COVER_PROFILE)
 	@go test $(DB_TOOL_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -coverpkg="./tools/..." -coverprofile=$(DB_TOOL_COVER_PROFILE)
 
 # TODO: rename it to functional-test
