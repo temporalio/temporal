@@ -20,7 +20,19 @@ steps:
       - ".coverage/*.out"
     plugins:
       - docker-compose#v3.8.0:
-          run: unit-test
+          run: build
+          config: ./develop/buildkite/docker-compose.yml
+
+  - label: ":golang: integration test"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make db-integration-test-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    plugins:
+      - docker-compose#v3.8.0:
+          run: db-integration-test
           config: ./develop/buildkite/docker-compose.yml
 
   - label: ":golang: integration test with cassandra"
