@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/tests/testhelper"
+	"go.temporal.io/server/tests/testutils"
 )
 
 const (
@@ -85,17 +85,17 @@ type localStoreRPCSuite struct {
 	internodeRefreshCertDir string
 	frontendRefreshCertDir  string
 
-	internodeChain        testhelper.CertChain
-	frontendChain         testhelper.CertChain
-	frontendAltChain      testhelper.CertChain
+	internodeChain        testutils.CertChain
+	frontendChain         testutils.CertChain
+	frontendAltChain      testutils.CertChain
 	frontendRollingCerts  []*tls.Certificate
-	internodeRefreshChain testhelper.CertChain
+	internodeRefreshChain testutils.CertChain
 	internodeRefreshCA    *tls.Certificate
-	frontendRefreshChain  testhelper.CertChain
+	frontendRefreshChain  testutils.CertChain
 	frontendRefreshCA     *tls.Certificate
 
 	frontendClientCertDir string
-	frontendClientChain   testhelper.CertChain
+	frontendClientChain   testutils.CertChain
 
 	membershipConfig               config.Membership
 	frontendConfigServerTLS        config.GroupTLS
@@ -142,37 +142,37 @@ func (s *localStoreRPCSuite) SetupSuite() {
 
 	s.frontendCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontend")
 	s.NoError(err)
-	s.frontendChain, err = testhelper.GenerateTestChain(s.frontendCertDir, localhostIPv4)
+	s.frontendChain, err = testutils.GenerateTestChain(s.frontendCertDir, localhostIPv4)
 	s.NoError(err)
 
 	s.internodeCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteInternode")
 	s.NoError(err)
-	s.internodeChain, err = testhelper.GenerateTestChain(s.internodeCertDir, localhostIPv4)
+	s.internodeChain, err = testutils.GenerateTestChain(s.internodeCertDir, localhostIPv4)
 	s.NoError(err)
 
 	s.frontendAltCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendAlt")
 	s.NoError(err)
-	s.frontendAltChain, err = testhelper.GenerateTestChain(s.frontendAltCertDir, localhost)
+	s.frontendAltChain, err = testutils.GenerateTestChain(s.frontendAltCertDir, localhost)
 	s.NoError(err)
 
 	s.frontendClientCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendClient")
 	s.NoError(err)
-	s.frontendClientChain, err = testhelper.GenerateTestChain(s.frontendClientCertDir, localhostIPv4)
+	s.frontendClientChain, err = testutils.GenerateTestChain(s.frontendClientCertDir, localhostIPv4)
 	s.NoError(err)
 
 	s.frontendRollingCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendRolling")
 	s.NoError(err)
-	s.frontendRollingCerts, s.dynamicCACertPool, s.wrongCACertPool, err = testhelper.GenerateTestCerts(s.frontendRollingCertDir, localhostIPv4, 2)
+	s.frontendRollingCerts, s.dynamicCACertPool, s.wrongCACertPool, err = testutils.GenerateTestCerts(s.frontendRollingCertDir, localhostIPv4, 2)
 	s.NoError(err)
 
 	s.internodeRefreshCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteInternodeRefresh")
 	s.NoError(err)
-	s.internodeRefreshChain, s.internodeRefreshCA, err = testhelper.GenerateTestChainWithSN(s.internodeRefreshCertDir, localhostIPv4, internodeServerCertSerialNumber)
+	s.internodeRefreshChain, s.internodeRefreshCA, err = testutils.GenerateTestChainWithSN(s.internodeRefreshCertDir, localhostIPv4, internodeServerCertSerialNumber)
 	s.NoError(err)
 
 	s.frontendRefreshCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendRefresh")
 	s.NoError(err)
-	s.frontendRefreshChain, s.frontendRefreshCA, err = testhelper.GenerateTestChainWithSN(s.frontendRefreshCertDir, localhostIPv4, frontendServerCertSerialNumber)
+	s.frontendRefreshChain, s.frontendRefreshCA, err = testutils.GenerateTestChainWithSN(s.frontendRefreshCertDir, localhostIPv4, frontendServerCertSerialNumber)
 	s.NoError(err)
 
 	s.membershipConfig = config.Membership{
@@ -205,7 +205,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	}
 	s.frontendConfigRootCAOnly = config.GroupTLS{
 		Client: config.ClientTLS{
-			RootCAData: []string{testhelper.ConvertFileToBase64(s.frontendChain.CaPubFile)},
+			RootCAData: []string{testutils.ConvertFileToBase64(s.frontendChain.CaPubFile)},
 		},
 	}
 	s.frontendConfigRootCAForceTLS = s.frontendConfigRootCAOnly
@@ -216,7 +216,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 			RequireClientAuth: true,
 		},
 		Client: config.ClientTLS{
-			RootCAData: []string{testhelper.ConvertFileToBase64(s.frontendAltChain.CaPubFile)},
+			RootCAData: []string{testutils.ConvertFileToBase64(s.frontendAltChain.CaPubFile)},
 		},
 	}
 	s.systemWorkerOnly = config.WorkerTLS{
@@ -241,11 +241,11 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	}
 	s.internodeConfigServerTLS = config.GroupTLS{
 		Server: config.ServerTLS{
-			CertData: testhelper.ConvertFileToBase64(s.internodeChain.CertPubFile),
-			KeyData:  testhelper.ConvertFileToBase64(s.internodeChain.CertKeyFile),
+			CertData: testutils.ConvertFileToBase64(s.internodeChain.CertPubFile),
+			KeyData:  testutils.ConvertFileToBase64(s.internodeChain.CertKeyFile),
 		},
 		Client: config.ClientTLS{
-			RootCAData: []string{testhelper.ConvertFileToBase64(s.internodeChain.CaPubFile)},
+			RootCAData: []string{testutils.ConvertFileToBase64(s.internodeChain.CaPubFile)},
 		},
 	}
 	s.internodeConfigAltMutualTLS = config.GroupTLS{
@@ -264,7 +264,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.frontendConfigMutualTLSRefresh = mutualGroupTLSFromChain(s.frontendRefreshChain)
 }
 
-func mutualGroupTLSFromChain(chain testhelper.CertChain) config.GroupTLS {
+func mutualGroupTLSFromChain(chain testutils.CertChain) config.GroupTLS {
 	return config.GroupTLS{
 		Server: config.ServerTLS{
 			CertFile:          chain.CertPubFile,
@@ -619,7 +619,7 @@ func (s *localStoreRPCSuite) testServerTLSRefresh(factory *TestFactory, ca *tls.
 	tlsInfo, err := dialHelloAndGetTLSInfo(s.Suite, host, factory, factory.serverUsage)
 	s.validateTLSInfo(tlsInfo, err, serialNumber) // serial number of server cert before refresh
 
-	srvrCert, err := testhelper.GenerateServerCert(ca, localhostIPv4, serialNumber+100, testhelper.CertFilePath(certDir), testhelper.KeyFilePath(certDir))
+	srvrCert, err := testutils.GenerateServerCert(ca, localhostIPv4, serialNumber+100, testutils.CertFilePath(certDir), testutils.KeyFilePath(certDir))
 	s.NoError(err)
 	s.NotNil(srvrCert)
 

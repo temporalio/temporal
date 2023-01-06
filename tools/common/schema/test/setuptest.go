@@ -29,8 +29,6 @@ import (
 	"math/rand"
 	"time"
 
-	"go.temporal.io/server/tests/testhelper"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli"
@@ -38,6 +36,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/tests/testutils"
 )
 
 // SetupSchemaTestBase is the base test suite for all tests
@@ -86,8 +85,8 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	tb.Nil(err)
 	tb.Equal(0, len(tables))
 
-	tmpDir := testhelper.MkdirTemp(tb.T(), "", "setupSchemaTestDir")
-	sqlFile := testhelper.CreateTemp(tb.T(), tmpDir, "setupSchema.cliOptionsTest")
+	tmpDir := testutils.MkdirTemp(tb.T(), "", "setupSchemaTestDir")
+	sqlFile := testutils.CreateTemp(tb.T(), tmpDir, "setupSchema.cliOptionsTest")
 
 	_, err = sqlFile.WriteString(sqlFileContent)
 	tb.NoError(err)

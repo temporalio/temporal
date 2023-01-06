@@ -28,10 +28,10 @@ import (
 	"os"
 	"testing"
 
-	"go.temporal.io/server/tests/testhelper"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"go.temporal.io/server/tests/testutils"
 )
 
 const fileMode = os.FileMode(0644)
@@ -61,7 +61,7 @@ func (s *LoaderSuite) SetupTest() {
 }
 
 func (s *LoaderSuite) TestBaseYaml() {
-	dir := testhelper.MkdirTemp(s.T(), "", "loader.testBaseYaml")
+	dir := testutils.MkdirTemp(s.T(), "", "loader.testBaseYaml")
 
 	data := buildConfig("", "")
 	err := os.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
@@ -82,7 +82,7 @@ func (s *LoaderSuite) TestBaseYaml() {
 }
 
 func (s *LoaderSuite) TestHierarchy() {
-	dir := testhelper.MkdirTemp(s.T(), "", "loader.testHierarchy")
+	dir := testutils.MkdirTemp(s.T(), "", "loader.testHierarchy")
 
 	s.createFile(dir, "base.yaml", "", "")
 	s.createFile(dir, "development.yaml", "development", "")
