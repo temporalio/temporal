@@ -1303,6 +1303,5 @@ func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		nil,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
 	)
 }

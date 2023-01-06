@@ -116,7 +116,6 @@ type (
 		CheckpointInterval                  dynamicconfig.DurationPropertyFn
 		CheckpointIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 		MaxReaderCount                      dynamicconfig.IntPropertyFn
-		TaskMaxRetryCount                   dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -167,7 +166,6 @@ func newQueueBase(
 			shard.GetNamespaceRegistry(),
 			logger,
 			metricsHandler,
-			options.TaskMaxRetryCount,
 		)
 	}
 

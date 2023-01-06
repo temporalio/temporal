@@ -387,8 +387,6 @@ const (
 
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize = "history.timerTaskBatchSize"
-	// TimerTaskMaxRetryCount is max retry count for timer processor
-	TimerTaskMaxRetryCount = "history.timerTaskMaxRetryCount"
 	// TimerProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for timer processor
 	TimerProcessorSchedulerWorkerCount = "history.timerProcessorSchedulerWorkerCount"
 	// TimerProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights used by timer task scheduler for active namespaces
@@ -430,8 +428,6 @@ const (
 	TransferProcessorMaxPollRPS = "history.transferProcessorMaxPollRPS"
 	// TransferProcessorMaxPollHostRPS is max poll rate per second for all transferQueueProcessor on a host
 	TransferProcessorMaxPollHostRPS = "history.transferProcessorMaxPollHostRPS"
-	// TransferTaskMaxRetryCount is max times of retry for transferQueueProcessor
-	TransferTaskMaxRetryCount = "history.transferTaskMaxRetryCount"
 	// TransferProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for transferQueueProcessor
 	TransferProcessorSchedulerWorkerCount = "history.transferProcessorSchedulerWorkerCount"
 	// TransferProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights used by transfer task scheduler for active namespaces
@@ -463,8 +459,6 @@ const (
 	VisibilityProcessorMaxPollRPS = "history.visibilityProcessorMaxPollRPS"
 	// VisibilityProcessorMaxPollHostRPS is max poll rate per second for all visibilityQueueProcessor on a host
 	VisibilityProcessorMaxPollHostRPS = "history.visibilityProcessorMaxPollHostRPS"
-	// VisibilityTaskMaxRetryCount is max times of retry for visibilityQueueProcessor
-	VisibilityTaskMaxRetryCount = "history.visibilityTaskMaxRetryCount"
 	// VisibilityProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for visibilityQueueProcessor
 	VisibilityProcessorSchedulerWorkerCount = "history.visibilityProcessorSchedulerWorkerCount"
 	// VisibilityProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights by visibility task scheduler for active namespaces
@@ -514,8 +508,6 @@ const (
 	ArchivalProcessorPollBackoffInterval = "history.archivalProcessorPollBackoffInterval"
 	// ArchivalProcessorArchiveDelay is the delay before archivalQueueProcessor starts to process archival tasks
 	ArchivalProcessorArchiveDelay = "history.archivalProcessorArchiveDelay"
-	// ArchivalProcessorRetryWarningLimit is the number of times an archival task may be retried before we log a warning
-	ArchivalProcessorRetryWarningLimit = "history.archivalProcessorRetryLimitWarning"
 	// ArchivalBackendMaxRPS is the maximum rate of requests per second to the archival backend
 	ArchivalBackendMaxRPS = "history.archivalBackendMaxRPS"
 	// DurableArchivalEnabled is the flag to enable durable archival
@@ -527,8 +519,6 @@ const (
 	ReplicatorMaxSkipTaskCount = "history.replicatorMaxSkipTaskCount"
 	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor
 	ReplicatorTaskWorkerCount = "history.replicatorTaskWorkerCount"
-	// ReplicatorTaskMaxRetryCount is max times of retry for ReplicatorProcessor
-	ReplicatorTaskMaxRetryCount = "history.replicatorTaskMaxRetryCount"
 	// ReplicatorProcessorMaxPollRPS is max poll rate per second for ReplicatorProcessor
 	ReplicatorProcessorMaxPollRPS = "history.replicatorProcessorMaxPollRPS"
 	// ReplicatorProcessorMaxPollInterval is max poll interval for ReplicatorProcessor
