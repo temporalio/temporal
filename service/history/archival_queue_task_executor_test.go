@@ -509,6 +509,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				queues.NewNoopPriorityAssigner(),
 				timeSource,
 				namespaceRegistry,
+				mockMetadata,
 				nil,
 				metrics.NoopMetricsHandler,
 			)

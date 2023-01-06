@@ -69,7 +69,7 @@ func (s *sliceSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, metrics.NoopMetricsHandler)
+		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, metrics.NoopMetricsHandler)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
