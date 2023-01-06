@@ -447,15 +447,15 @@ func (e *executableImpl) rescheduleTime(
 		return e.timeSource.Now().Add(dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 
-	backoffPolicy := reschedulePolicy.ComputeNextDelay(0, attempt)
+	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt)
 	if common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon resource exhausted error and pick the longer backoff
 		// duration
-		backoffPolicy = util.Max(backoffPolicy, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
+		backoffDuration = util.Max(backoffDuration, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
 	}
 
-	return e.timeSource.Now().Add(backoffPolicy)
+	return e.timeSource.Now().Add(backoffDuration)
 }
 
 func (e *executableImpl) updatePriority() {
