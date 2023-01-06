@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
@@ -108,7 +109,7 @@ type (
 		clientBean              client.Bean
 		historyClient           historyservice.HistoryServiceClient
 		payloadSerializer       serialization.Serializer
-		timeSource              clock.TimeSource
+		timeSource              cclock.TimeSource
 		namespaceRegistry       namespace.Registry
 		saProvider              searchattribute.Provider
 		saMapper                searchattribute.Mapper

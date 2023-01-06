@@ -169,9 +169,9 @@ func (e *executableImpl) Execute() error {
 	}
 
 	ctx := metrics.AddMetricsContext(context.Background())
-	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+	ns, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
 
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 
 	startTime := e.timeSource.Now()
 
@@ -447,15 +447,15 @@ func (e *executableImpl) rescheduleTime(
 		return e.timeSource.Now().Add(dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 
-	backoff := reschedulePolicy.ComputeNextDelay(0, attempt)
+	backoffPolicy := reschedulePolicy.ComputeNextDelay(0, attempt)
 	if common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon resource exhausted error and pick the longer backoff
 		// duration
-		backoff = util.Max(backoff, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
+		backoffPolicy = util.Max(backoffPolicy, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
 	}
 
-	return e.timeSource.Now().Add(backoff)
+	return e.timeSource.Now().Add(backoffPolicy)
 }
 
 func (e *executableImpl) updatePriority() {
