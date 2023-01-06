@@ -495,6 +495,8 @@ const (
 	HistoryClientVerifyChildExecutionCompletionRecordedScope = "HistoryClientVerifyChildExecutionCompletionRecorded"
 	// HistoryClientReplicateEventsV2Scope tracks RPC calls to history service
 	HistoryClientReplicateEventsV2Scope = "HistoryClientReplicateEventsV2"
+	// HistoryClientReplicateWorkflowStateScope tracks RPC calls to history service
+	HistoryClientReplicateWorkflowStateScope = "HistoryClientReplicateWorkflowState"
 	// HistoryClientSyncShardStatusScope tracks RPC calls to history service
 	HistoryClientSyncShardStatusScope = "HistoryClientSyncShardStatus"
 	// HistoryClientSyncActivityScope tracks RPC calls to history service

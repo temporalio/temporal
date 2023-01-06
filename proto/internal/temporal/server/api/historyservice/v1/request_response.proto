@@ -382,12 +382,15 @@ message ReplicateEventsV2Request {
     temporal.api.common.v1.DataBlob new_run_events = 5;
 }
 
+message ReplicateEventsV2Response {
+}
+
 message ReplicateWorkflowStateRequest {
     temporal.server.api.persistence.v1.WorkflowMutableState workflow_state = 1;
     string remote_cluster = 2;
 }
 
-message ReplicateEventsV2Response {
+message ReplicateWorkflowStateResponse {
 }
 
 message SyncShardStatusRequest {
