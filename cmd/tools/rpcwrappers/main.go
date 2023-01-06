@@ -146,8 +146,7 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 		return fmt.Sprintf("client, err := c.getClientForShardID(%s)", path)
 	}
 	if path := pathToField(t, "WorkflowId", "request", 3); path != "" {
-		path2 := pathToField(t, "NamespaceId", "request", 3)
-		return fmt.Sprintf("client, err := c.getClientForWorkflowID(%s, %s)", path2, path)
+		return fmt.Sprintf("client, err := c.getClientForWorkflowID(request.NamespaceId, %s)", path)
 	}
 	if path := pathToField(t, "TaskToken", "request", 2); path != "" {
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
