@@ -546,10 +546,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
 				bypassTaskGeneration,
 				currentWorkflowTask.OriginalScheduledTime,
-				false,
+				enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 			)
 		} else {
-			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, false)
+			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 		}
 		if err != nil {
 			return nil, err

@@ -74,7 +74,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 	attempt int32,
 	scheduledTime *time.Time,
 	originalScheduledTimestamp *time.Time,
-	isSpeculative bool,
+	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
 
 	// set workflow state to running, since workflow task is scheduled
@@ -100,7 +100,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 		ScheduledTime:         scheduledTime,
 		StartedTime:           nil,
 		OriginalScheduledTime: originalScheduledTimestamp,
-		IsSpeculative:         isSpeculative,
+		Type:                  workflowTaskType,
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -143,7 +143,7 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 		Attempt:       m.ms.GetExecutionInfo().WorkflowTaskAttempt,
 		ScheduledTime: timestamp.TimePtr(m.ms.timeSource.Now()),
 		StartedTime:   timestamp.UnixOrZeroTimePtr(0),
-		IsSpeculative: false,
+		Type:          enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -192,7 +192,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 		ScheduledTime:         workflowTask.ScheduledTime,
 		TaskQueue:             workflowTask.TaskQueue,
 		OriginalScheduledTime: workflowTask.OriginalScheduledTime,
-		IsSpeculative:         workflowTask.IsSpeculative,
+		Type:                  workflowTask.Type,
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -254,7 +254,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
 	originalScheduledTimestamp *time.Time,
-	isSpeculative bool,
+	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if m.HasPendingWorkflowTask() {
@@ -269,14 +269,14 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	//  - is not transient (is not continuously failing)
 	//  and
 	//  - is not speculative.
-	createWorkflowTaskScheduledEvent := !m.ms.IsTransientWorkflowTask() && !isSpeculative
+	createWorkflowTaskScheduledEvent := !m.ms.IsTransientWorkflowTask() && workflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 
 	// If while scheduling a workflow task and new events has come, then this workflow task cannot be a transient/speculative.
 	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for
 	// transient/speculative workflow task and will cause in timeout processing to not work for transient workflow tasks.
 	if m.ms.HasBufferedEvents() {
 		m.ms.executionInfo.WorkflowTaskAttempt = 1
-		isSpeculative = false
+		workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		createWorkflowTaskScheduledEvent = true
 		m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch())
 	}
@@ -290,7 +290,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		// then reset the attempt to 1, and not use transient workflow task.
 		if m.ms.GetCurrentVersion() != lastWriteVersion {
 			m.ms.executionInfo.WorkflowTaskAttempt = 1
-			isSpeculative = false
+			workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 			createWorkflowTaskScheduledEvent = true
 		}
 	}
@@ -326,7 +326,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		attempt,
 		&scheduleTime,
 		originalScheduledTimestamp,
-		isSpeculative,
+		workflowTaskType,
 	)
 	if err != nil {
 		return nil, err
@@ -346,9 +346,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEvent(
 	bypassTaskGeneration bool,
-	isSpeculative bool,
+	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
-	return m.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, timestamp.TimePtr(m.ms.timeSource.Now()), isSpeculative)
+	return m.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, timestamp.TimePtr(m.ms.timeSource.Now()), workflowTaskType)
 }
 
 func (m *workflowTaskStateMachine) AddFirstWorkflowTaskScheduled(
@@ -380,7 +380,7 @@ func (m *workflowTaskStateMachine) AddFirstWorkflowTaskScheduled(
 	} else {
 		if _, err = m.AddWorkflowTaskScheduledEvent(
 			false,
-			false,
+			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 		); err != nil {
 			return err
 		}
@@ -408,7 +408,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	scheduledEventID = workflowTask.ScheduledEventID
 	startedEventID := scheduledEventID + 1
 	startTime := m.ms.timeSource.Now()
-	workflowTaskScheduledEventCreated := !m.ms.IsTransientWorkflowTask() && !workflowTask.IsSpeculative
+	workflowTaskScheduledEventCreated := !m.ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 
 	// If new events came since transient/speculative workflow task was scheduled
 	// or failover happened during lifetime of transient workflow task,
@@ -418,7 +418,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		(workflowTask.ScheduledEventID != m.ms.GetNextEventID() || workflowTask.Version != m.ms.GetCurrentVersion()) {
 
 		workflowTask.Attempt = 1
-		workflowTask.IsSpeculative = false
+		workflowTask.Type = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		workflowTaskScheduledEventCreated = true
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			taskQueue,
@@ -477,7 +477,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 
 	// Capture if WorkflowTaskScheduled and WorkflowTaskStarted events were created
 	// before calling m.beforeAddWorkflowTaskCompletedEvent() because it will delete workflow task info from mutable state.
-	workflowTaskScheduledStartedEventsCreated := !m.ms.IsTransientWorkflowTask() && !workflowTask.IsSpeculative
+	workflowTaskScheduledStartedEventsCreated := !m.ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 	m.beforeAddWorkflowTaskCompletedEvent()
 
 	if !workflowTaskScheduledStartedEventsCreated {
@@ -625,7 +625,7 @@ func (m *workflowTaskStateMachine) FailWorkflowTask(
 		TaskQueue:             nil,
 		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
 		Attempt:               1,
-		IsSpeculative:         false,
+		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 	}
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
@@ -649,7 +649,7 @@ func (m *workflowTaskStateMachine) DeleteWorkflowTask() {
 		TaskQueue: nil,
 		// Keep the last original scheduled Timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
 		OriginalScheduledTime: m.getWorkflowTaskInfo().OriginalScheduledTime,
-		IsSpeculative:         false,
+		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 	}
 	m.UpdateWorkflowTask(resetWorkflowTaskInfo)
 }
@@ -667,9 +667,9 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskStartedTime = workflowTask.StartedTime
 	m.ms.executionInfo.WorkflowTaskScheduledTime = workflowTask.ScheduledTime
 	m.ms.executionInfo.WorkflowTaskOriginalScheduledTime = workflowTask.OriginalScheduledTime
-	m.ms.executionInfo.WorkflowTaskSpeculative = workflowTask.IsSpeculative
+	m.ms.executionInfo.WorkflowTaskType = workflowTask.Type
 
-	// NOTE: do not update taskqueue in execution info
+	// NOTE: do not update task queue in execution info
 
 	m.ms.logger.Debug("Workflow task updated",
 		tag.WorkflowScheduledEventID(workflowTask.ScheduledEventID),
@@ -678,7 +678,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 		tag.WorkflowTaskTimeout(workflowTask.WorkflowTaskTimeout),
 		tag.Attempt(workflowTask.Attempt),
 		tag.WorkflowStartedTimestamp(workflowTask.StartedTime),
-		tag.WorkflowTaskSpeculative(workflowTask.IsSpeculative))
+		tag.WorkflowTaskType(workflowTask.Type.String()))
 }
 
 func (m *workflowTaskStateMachine) HasPendingWorkflowTask() bool {
@@ -732,27 +732,29 @@ func (m *workflowTaskStateMachine) GetWorkflowTaskInfo(
 func (m *workflowTaskStateMachine) tryRestoreSpeculativeWorkflowTask(
 	scheduledEventID int64,
 ) *WorkflowTaskInfo {
-	// ScheduledEventID might be lost (cleared) for speculative workflow task due to shard reload or history service restart.
-	// It is still considered to be valid speculative workflow task if ScheduledEventID from token is equal to the next event ID.
-	if m.ms.executionInfo.WorkflowTaskScheduledEventId == common.EmptyEventID && m.ms.GetNextEventID() == scheduledEventID {
-		workflowTask := &WorkflowTaskInfo{
-			Version:          m.ms.GetCurrentVersion(), // For version check to pass, speculative workflow tasks are not replicated.
-			ScheduledEventID: scheduledEventID,
-			ScheduledTime:    timestamp.TimePtr(m.ms.timeSource.Now().UTC()),
-			IsSpeculative:    true,
+	// TODO (alex): Uncomment this code to support speculative workflow task restoration.
+	/*
+		// ScheduledEventID might be lost (cleared) for speculative workflow task due to shard reload or history service restart.
+		// It is still considered to be valid speculative workflow task if ScheduledEventID from token is equal to the next event ID.
+		if m.ms.executionInfo.WorkflowTaskScheduledEventId == common.EmptyEventID && m.ms.GetNextEventID() == scheduledEventID {
+			workflowTask := &WorkflowTaskInfo{
+				Version:          m.ms.GetCurrentVersion(), // For version check to pass, speculative workflow tasks are not replicated.
+				ScheduledEventID: scheduledEventID,
+				ScheduledTime:    timestamp.TimePtr(m.ms.timeSource.Now().UTC()),
+				Type:             enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE,
 
-			StartedEventID:        common.EmptyEventID,
-			RequestID:             emptyUUID,
-			WorkflowTaskTimeout:   timestamp.DurationFromSeconds(0),
-			StartedTime:           timestamp.UnixOrZeroTimePtr(0),
-			TaskQueue:             nil,
-			OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
-			Attempt:               1,
+				StartedEventID:        common.EmptyEventID,
+				RequestID:             emptyUUID,
+				WorkflowTaskTimeout:   timestamp.DurationFromSeconds(0),
+				StartedTime:           timestamp.UnixOrZeroTimePtr(0),
+				TaskQueue:             nil,
+				OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
+				Attempt:               1,
+			}
+			m.UpdateWorkflowTask(workflowTask)
+			return workflowTask
 		}
-		m.UpdateWorkflowTask(workflowTask)
-		return workflowTask
-	}
-
+	*/
 	return nil
 }
 
@@ -760,11 +762,15 @@ func (m *workflowTaskStateMachine) setSpeculativeWorkflowTaskStartedEventID(
 	workflowTask *WorkflowTaskInfo,
 	startedEventID int64,
 ) {
-	// StartedEventID might be lost (cleared) for speculative workflow task due to shard reload or history service restart.
-	if workflowTask != nil && workflowTask.IsSpeculative && workflowTask.StartedEventID == common.EmptyEventID {
-		workflowTask.StartedEventID = startedEventID
-		m.UpdateWorkflowTask(workflowTask)
-	}
+	// TODO (alex): Uncomment this code to support speculative workflow task restoration.
+
+	/*
+		// StartedEventID might be lost (cleared) for speculative workflow task due to shard reload or history service restart.
+		if workflowTask != nil && workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && workflowTask.StartedEventID == common.EmptyEventID {
+			workflowTask.StartedEventID = startedEventID
+			m.UpdateWorkflowTask(workflowTask)
+		}
+	*/
 }
 
 func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
@@ -818,7 +824,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *WorkflowTaskInfo {
 		ScheduledTime:         m.ms.executionInfo.WorkflowTaskScheduledTime,
 		TaskQueue:             m.ms.TaskQueue(),
 		OriginalScheduledTime: m.ms.executionInfo.WorkflowTaskOriginalScheduledTime,
-		IsSpeculative:         m.ms.executionInfo.WorkflowTaskSpeculative,
+		Type:                  m.ms.executionInfo.WorkflowTaskType,
 	}
 }
 

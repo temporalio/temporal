@@ -1322,7 +1322,7 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 
 		TaskQueue:             nil,
 		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
-		IsSpeculative:         false,
+		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 	}
 	ms.workflowTaskManager.UpdateWorkflowTask(emptyWorkflowTaskInfo)
 	return nil
@@ -1720,26 +1720,26 @@ func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEvent(
 	bypassTaskGeneration bool,
-	isSpeculative bool,
+	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, isSpeculative)
+	return ms.workflowTaskManager.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, workflowTaskType)
 }
 
 // AddWorkflowTaskScheduledEventAsHeartbeat is to record the first WorkflowTaskScheduledEvent during workflow task heartbeat.
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
 	originalScheduledTimestamp *time.Time,
-	isSpeculative bool,
+	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, originalScheduledTimestamp, isSpeculative)
+	return ms.workflowTaskManager.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, originalScheduledTimestamp, workflowTaskType)
 }
 
 func (ms *MutableStateImpl) ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
@@ -1754,9 +1754,9 @@ func (ms *MutableStateImpl) ReplicateWorkflowTaskScheduledEvent(
 	attempt int32,
 	scheduleTimestamp *time.Time,
 	originalScheduledTimestamp *time.Time,
-	isSpeculative bool,
+	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
-	return ms.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeout, attempt, scheduleTimestamp, originalScheduledTimestamp, isSpeculative)
+	return ms.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeout, attempt, scheduleTimestamp, originalScheduledTimestamp, workflowTaskType)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(

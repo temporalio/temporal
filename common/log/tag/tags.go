@@ -611,8 +611,8 @@ func Attempt(attempt int32) ZapTag {
 	return NewInt32("attempt", attempt)
 }
 
-func WorkflowTaskSpeculative(speculative bool) ZapTag {
-	return NewBoolTag("wt-speculative", speculative)
+func WorkflowTaskType(wtType string) ZapTag {
+	return NewStringTag("wt-type", wtType)
 }
 
 // AttemptCount returns tag for AttemptCount
