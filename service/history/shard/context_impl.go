@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/clock"
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
@@ -1291,7 +1290,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	}
 
 	var err error
-	now := clock.NewRealTimeSource().Now()
+	now := cclock.NewRealTimeSource().Now()
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		return nil
 	}
@@ -2088,7 +2087,7 @@ func newContext(
 	historyClient historyservice.HistoryServiceClient,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
+	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
 	saMapper searchattribute.Mapper,
@@ -2190,7 +2189,7 @@ func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
 	return s.metricsHandler
 }
 
-func (s *ContextImpl) GetTimeSource() clock.TimeSource {
+func (s *ContextImpl) GetTimeSource() cclock.TimeSource {
 	return s.timeSource
 }
 
