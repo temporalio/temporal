@@ -202,6 +202,7 @@ func (s *scheduler) run() error {
 			nextSleep = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false)
 		}
 		// try starting workflows in the buffer
+		//nolint:revive
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
@@ -675,6 +676,7 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 }
 
 // processBuffer should return true if there might be more work to do right now.
+//nolint:revive
 func (s *scheduler) processBuffer() bool {
 	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.State.NeedRefresh)
 
