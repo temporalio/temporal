@@ -327,9 +327,9 @@ func (s *scheduler) processTimeRange(
 		// Run this logic in a SideEffect so that we can fix bugs there without breaking
 		// existing schedule workflows.
 		var next getNextTimeResult
-		workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
 			return s.cspec.getNextTime(t1)
-		}).Get(&next)
+		}).Get(&next))
 		t1 = next.Next
 		if t1.IsZero() {
 			return invalidDuration
@@ -917,15 +917,21 @@ func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 
 func (s *scheduler) newUUIDString() string {
 	if len(s.uuidBatch) == 0 {
-		workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
 			out := make([]string, 10)
 			for i := range out {
 				out[i] = uuid.NewString()
 			}
 			return out
-		}).Get(&s.uuidBatch)
+		}).Get(&s.uuidBatch))
 	}
 	next := s.uuidBatch[0]
 	s.uuidBatch = s.uuidBatch[1:]
 	return next
+}
+
+func panicIfErr(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
