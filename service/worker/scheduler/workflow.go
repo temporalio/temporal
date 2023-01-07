@@ -899,6 +899,7 @@ func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
 	}
 	// Note: the local activity has completed (or failed) here but the workflow might take time
 	// to close since a cancel is only a request.
+	// If this failed, that's okay, we'll try it again the next time we try to take an action.
 }
 
 func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
@@ -913,6 +914,9 @@ func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 	if err != nil {
 		s.logger.Error("terminate workflow failed", "workflow", ex.WorkflowId, "error", err)
 	}
+	// Note: the local activity has completed (or failed) here but we'll still wait until we
+	// observe the workflow close (with a watcher) to start the next one.
+	// If this failed, that's okay, we'll try it again the next time we try to take an action.
 }
 
 func (s *scheduler) newUUIDString() string {
