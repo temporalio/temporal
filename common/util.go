@@ -362,6 +362,12 @@ func IsResourceExhausted(err error) bool {
 	return false
 }
 
+// IsInternalError checks if the error is an internal error.
+func IsInternalError(err error) bool {
+	var internalErr *serviceerror.Internal
+	return errors.As(err, &internalErr)
+}
+
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
 func WorkflowIDToHistoryShard(
 	namespaceID string,

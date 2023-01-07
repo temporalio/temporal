@@ -148,3 +148,27 @@ func GetArchivalTaskTypeTagValue(
 		return ""
 	}
 }
+
+func getTaskTypeTagValue(
+	task tasks.Task,
+	isActive bool,
+) string {
+	switch task.GetCategory() {
+	case tasks.CategoryTransfer:
+		if isActive {
+			return GetActiveTransferTaskTypeTagValue(task)
+		}
+		return GetStandbyTransferTaskTypeTagValue(task)
+	case tasks.CategoryTimer:
+		if isActive {
+			return GetActiveTimerTaskTypeTagValue(task)
+		}
+		return GetStandbyTimerTaskTypeTagValue(task)
+	case tasks.CategoryVisibility:
+		return GetVisibilityTaskTypeTagValue(task)
+	case tasks.CategoryArchival:
+		return GetArchivalTaskTypeTagValue(task)
+	default:
+		return task.GetType().String()
+	}
+}

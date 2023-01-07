@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -60,6 +61,7 @@ type (
 		mockScheduler         *MockScheduler
 		mockRescheduler       *MockRescheduler
 		mockNamespaceRegistry *namespace.MockRegistry
+		mockClusterMetadata   *cluster.MockMetadata
 
 		timeSource *clock.EventTimeSource
 	}
@@ -78,8 +80,11 @@ func (s *executableSuite) SetupTest() {
 	s.mockScheduler = NewMockScheduler(s.controller)
 	s.mockRescheduler = NewMockRescheduler(s.controller)
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
+	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.timeSource = clock.NewEventTimeSource()
 }
@@ -121,6 +126,19 @@ func (s *executableSuite) TestExecute_UserLatency() {
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(nil, true, nil)
 	s.NoError(executable.Execute())
 	s.Equal(time.Duration(expectedUserLatency), executable.(*executableImpl).userLatency)
+}
+
+func (s *executableSuite) TestExecute_CapturePanic() {
+	executable := s.newTestExecutable(func(_ tasks.Task) bool {
+		return true
+	})
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(_ context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+			panic("test panic during execution")
+		},
+	)
+	s.Error(executable.Execute())
 }
 
 func (s *executableSuite) TestHandleErr_EntityNotExists() {
@@ -273,6 +291,7 @@ func (s *executableSuite) newTestExecutable(
 		NewNoopPriorityAssigner(),
 		s.timeSource,
 		s.mockNamespaceRegistry,
+		s.mockClusterMetadata,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 		dynamicconfig.GetIntPropertyFn(100),

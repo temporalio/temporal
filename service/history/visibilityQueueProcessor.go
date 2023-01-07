@@ -170,6 +170,7 @@ func newVisibilityQueueProcessor(
 				priorityAssigner,
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
+				shard.GetClusterMetadata(),
 				logger,
 				metricProvider,
 				shard.GetConfig().VisibilityTaskMaxRetryCount,

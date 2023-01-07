@@ -171,6 +171,7 @@ func newQueueBase(
 			priorityAssigner,
 			timeSource,
 			shard.GetNamespaceRegistry(),
+			shard.GetClusterMetadata(),
 			logger,
 			metricsHandler,
 			options.TaskMaxRetryCount,
