@@ -1580,8 +1580,7 @@ func (adh *AdminHandler) validateRemoteClusterMetadata(metadata *adminservice.De
 		large := remoteShardCount
 		small := adh.config.NumHistoryShards
 		if large < small {
-			large = adh.config.NumHistoryShards
-			small = remoteShardCount
+			small, large = large, small
 		}
 		if large%small != 0 {
 			return serviceerror.NewInvalidArgument("Remote cluster shard number and local cluster shard number are not multiples.")

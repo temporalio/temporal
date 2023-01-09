@@ -503,8 +503,7 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 		large := remoteShardCount
 		small := h.config.NumHistoryShards
 		if large < small {
-			large = h.config.NumHistoryShards
-			small = remoteShardCount
+			small, large = large, small
 		}
 		if large%small != 0 {
 			return serviceerror.NewInvalidArgument("Remote cluster shard number and local cluster shard number are not multiples.")
