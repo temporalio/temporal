@@ -69,15 +69,15 @@ func generatePollingShardIDs(localShardId int32, localShardCount int32, remoteSh
 			pollingShards = append(pollingShards, localShardId)
 		}
 		return pollingShards
-	} else {
-		// remoteShardCount > localShardCount, replication poller will poll from multiple remote shard.
-		// The remote shard count and local shard count must be multiples.
-		if remoteShardCount%localShardCount != 0 {
-			panic(fmt.Sprintf("Remote shard count %d and local shard count %d are not multiples.", remoteShardCount, localShardCount))
-		}
-		for i := localShardId; i <= remoteShardCount; i += localShardCount {
-			pollingShards = append(pollingShards, i)
-		}
+	}
+
+	// remoteShardCount > localShardCount, replication poller will poll from multiple remote shard.
+	// The remote shard count and local shard count must be multiples.
+	if remoteShardCount%localShardCount != 0 {
+		panic(fmt.Sprintf("Remote shard count %d and local shard count %d are not multiples.", remoteShardCount, localShardCount))
+	}
+	for i := localShardId; i <= remoteShardCount; i += localShardCount {
+		pollingShards = append(pollingShards, i)
 	}
 	return pollingShards
 }
