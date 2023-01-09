@@ -28,22 +28,21 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/service/history/shard"
 )
 
 type (
 	pollerManagerImpl struct {
-		shard           shard.Context
+		currentShardId  int32
 		clusterMetadata cluster.Metadata
 	}
 )
 
 func newPollerManager(
-	shard shard.Context,
+	currentShardId int32,
 	clusterMetadata cluster.Metadata,
 ) *pollerManagerImpl {
 	return &pollerManagerImpl{
-		shard:           shard,
+		currentShardId:  currentShardId,
 		clusterMetadata: clusterMetadata,
 	}
 }
@@ -59,7 +58,7 @@ func (p pollerManagerImpl) getPollingShardIDs(remoteClusterName string) []int32 
 	if !ok {
 		panic(fmt.Sprintf("Cannot get remote cluster %s info from cluster metadata cache", remoteClusterName))
 	}
-	return generatePollingShardIDs(p.shard.GetShardID(), currentClusterInfo.ShardCount, remoteClusterInfo.ShardCount)
+	return generatePollingShardIDs(p.currentShardId, currentClusterInfo.ShardCount, remoteClusterInfo.ShardCount)
 }
 
 func generatePollingShardIDs(localShardId int32, localShardCount int32, remoteShardCount int32) []int32 {
