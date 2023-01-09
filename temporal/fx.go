@@ -733,10 +733,16 @@ func loadClusterInformationFromStore(ctx context.Context, config *config.Config,
 			return err
 		}
 		metadata := item.(*persistence.GetClusterMetadataResponse)
+		shardCount := metadata.HistoryShardCount
+		if shardCount == 0 {
+			// This is to add backward compatibility to the config based cluster connection.
+			shardCount = config.Persistence.NumHistoryShards
+		}
 		newMetadata := cluster.ClusterInformation{
 			Enabled:                metadata.IsConnectionEnabled,
 			InitialFailoverVersion: metadata.InitialFailoverVersion,
 			RPCAddress:             metadata.ClusterAddress,
+			ShardCount:             shardCount,
 		}
 		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
 			if metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
