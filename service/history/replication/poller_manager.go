@@ -31,11 +31,17 @@ import (
 )
 
 type (
+	pollerManager interface {
+		getPollingShardIDs(remoteClusterName string) []int32
+	}
+
 	pollerManagerImpl struct {
 		currentShardId  int32
 		clusterMetadata cluster.Metadata
 	}
 )
+
+var _ pollerManager = (*pollerManagerImpl)(nil)
 
 func newPollerManager(
 	currentShardId int32,

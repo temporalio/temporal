@@ -74,9 +74,10 @@ type (
 
 	// taskProcessorImpl is responsible for processing replication tasks for a shard.
 	taskProcessorImpl struct {
-		currentCluster          string
+		status int32
+
 		sourceCluster           string
-		status                  int32
+		pollingShardID          int32
 		shard                   shard.Context
 		historyEngine           shard.Engine
 		historySerializer       serialization.Serializer
@@ -109,6 +110,7 @@ type (
 
 // NewTaskProcessor creates a new replication task processor.
 func NewTaskProcessor(
+	pollingShardID int32,
 	shard shard.Context,
 	historyEngine shard.Engine,
 	config *configs.Config,
@@ -117,24 +119,23 @@ func NewTaskProcessor(
 	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
 ) TaskProcessor {
-	shardID := shard.GetShardID()
-	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
-		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID)).
-		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID)).
-		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID)).
-		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
+	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(pollingShardID)).
+		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(pollingShardID)).
+		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(pollingShardID)).
+		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(pollingShardID)).
+		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(pollingShardID))
 
 	// TODO: define separate set of configs for dlq retry
-	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
-		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID)).
-		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID)).
-		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID)).
-		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
+	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(pollingShardID)).
+		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(pollingShardID)).
+		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(pollingShardID)).
+		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(pollingShardID)).
+		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(pollingShardID))
 
 	return &taskProcessorImpl{
-		currentCluster:          shard.GetClusterMetadata().GetCurrentClusterName(),
-		sourceCluster:           replicationTaskFetcher.getSourceCluster(),
 		status:                  common.DaemonStatusInitialized,
+		pollingShardID:          pollingShardID,
+		sourceCluster:           replicationTaskFetcher.getSourceCluster(),
 		shard:                   shard,
 		historyEngine:           historyEngine,
 		historySerializer:       eventSerializer,
@@ -370,6 +371,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 	switch replicationTask.TaskType {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
@@ -401,6 +403,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 		// NOTE: last event vs next event, next event ID is exclusive
 		nextEventID := lastEvent.GetEventId() + 1
 
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
@@ -429,6 +432,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			return nil, err
 		}
 
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
@@ -451,7 +455,7 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	p.requestChan <- &replicationTaskRequest{
 		token: &replicationspb.ReplicationToken{
-			ShardId:                     p.shard.GetShardID(),
+			ShardId:                     p.pollingShardID,
 			LastProcessedMessageId:      p.maxRxProcessedTaskID,
 			LastProcessedVisibilityTime: &p.maxRxProcessedTimestamp,
 			LastRetrievedMessageId:      p.maxRxReceivedTaskID,
@@ -486,7 +490,7 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 		if resp.GetHasMore() {
 			p.rxTaskBackoff = time.Duration(0)
 		} else {
-			p.rxTaskBackoff = p.config.ReplicationTaskProcessorNoTaskRetryWait(p.shard.GetShardID())
+			p.rxTaskBackoff = p.config.ReplicationTaskProcessorNoTaskRetryWait(p.pollingShardID)
 		}
 		return tasks, nil, nil
 
