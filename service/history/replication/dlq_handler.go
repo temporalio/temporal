@@ -340,15 +340,10 @@ func (r *dlqHandlerImpl) getOrCreateTaskExecutor(ctx context.Context, clusterNam
 	if executor, ok := r.taskExecutors[clusterName]; ok {
 		return executor, nil
 	}
-	engine, err := r.shard.GetEngine(ctx)
-	if err != nil {
-		return nil, err
-	}
 	taskExecutor := r.taskExecutorProvider(TaskExecutorParams{
 		RemoteCluster:   clusterName,
 		Shard:           r.shard,
 		HistoryResender: r.resender,
-		HistoryEngine:   engine,
 		DeleteManager:   r.deleteManager,
 		WorkflowCache:   r.workflowCache,
 	})
