@@ -174,21 +174,20 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 		if clusterName == currentClusterName {
 			continue
 		}
-		// The metadata triggers an update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
-		// The callback covers three cases:
-		// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
-
-		if processor, ok := r.taskProcessors[clusterName]; ok {
-			// Case 1 and Case 3
-			processor.Stop()
-			delete(r.taskProcessors, clusterName)
-		}
-
-		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-			// Case 2 and Case 3
-			fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
-			pollingShardIds := r.taskPollerManager.getPollingShardIDs(clusterName)
-			for _, pollingShardId := range pollingShardIds {
+		pollingShardIds := r.taskPollerManager.getPollingShardIDs(clusterName)
+		for _, pollingShardId := range pollingShardIds {
+			perShardTaskProcessorKey := fmt.Sprintf(clusterCallbackKey, clusterName, pollingShardId)
+			// The metadata triggers an update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
+			// The callback covers three cases:
+			// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
+			if processor, ok := r.taskProcessors[perShardTaskProcessorKey]; ok {
+				// Case 1 and Case 3
+				processor.Stop()
+				delete(r.taskProcessors, perShardTaskProcessorKey)
+			}
+			if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+				// Case 2 and Case 3
+				fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
 				replicationTaskProcessor := NewTaskProcessor(
 					pollingShardId,
 					r.shard,
@@ -207,8 +206,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 					r.eventSerializer,
 				)
 				replicationTaskProcessor.Start()
-				key := fmt.Sprintf(clusterCallbackKey, clusterName, pollingShardIds)
-				r.taskProcessors[key] = replicationTaskProcessor
+				r.taskProcessors[perShardTaskProcessorKey] = replicationTaskProcessor
 			}
 		}
 	}
