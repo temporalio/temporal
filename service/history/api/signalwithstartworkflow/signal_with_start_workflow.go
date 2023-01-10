@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -286,7 +287,7 @@ func signalWorkflow(
 
 	// Create a transfer task to schedule a workflow task
 	if !mutableState.HasPendingWorkflowTask() {
-		_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
+		_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 		if err != nil {
 			return err
 		}

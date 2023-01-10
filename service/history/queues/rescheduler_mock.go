@@ -85,15 +85,15 @@ func (mr *MockReschedulerMockRecorder) Len() *gomock.Call {
 }
 
 // Reschedule mocks base method.
-func (m *MockRescheduler) Reschedule(namespaceIDs map[string]struct{}) {
+func (m *MockRescheduler) Reschedule(namespaceID string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Reschedule", namespaceIDs)
+	m.ctrl.Call(m, "Reschedule", namespaceID)
 }
 
 // Reschedule indicates an expected call of Reschedule.
-func (mr *MockReschedulerMockRecorder) Reschedule(namespaceIDs interface{}) *gomock.Call {
+func (mr *MockReschedulerMockRecorder) Reschedule(namespaceID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reschedule", reflect.TypeOf((*MockRescheduler)(nil).Reschedule), namespaceIDs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reschedule", reflect.TypeOf((*MockRescheduler)(nil).Reschedule), namespaceID)
 }
 
 // Start mocks base method.

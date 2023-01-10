@@ -33,6 +33,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -117,6 +118,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 	if !ms.HasPendingWorkflowTask() {
 		if _, err := ms.AddWorkflowTaskScheduledEvent(
 			false,
+			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 		); err != nil {
 			return nil, err
 		}

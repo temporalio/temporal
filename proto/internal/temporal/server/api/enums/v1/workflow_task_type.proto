@@ -1,8 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2021 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,20 +18,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+syntax = "proto3";
 
-import (
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/service/history/tasks"
-)
+package temporal.server.api.enums.v1;
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
+option go_package = "go.temporal.io/server/api/enums/v1;enums";
 
-type (
-	Queue interface {
-		common.Daemon
-		Category() tasks.Category
-		NotifyNewTasks(tasks []tasks.Task)
-		FailoverNamespace(namespaceID string)
-	}
-)
+enum WorkflowTaskType {
+    WORKFLOW_TASK_TYPE_UNSPECIFIED = 0;
+    WORKFLOW_TASK_TYPE_NORMAL = 1;
+    // TODO (alex): TRANSIENT is not current used. Needs to be set when Attempt>1.
+    WORKFLOW_TASK_TYPE_TRANSIENT = 2;
+    WORKFLOW_TASK_TYPE_SPECULATIVE = 3;
+}

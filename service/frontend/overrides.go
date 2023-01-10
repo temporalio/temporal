@@ -45,7 +45,7 @@ func NewOverrides() *Overrides {
 }
 
 func (o *Overrides) shouldForceDisableEagerDispatch(sdkName, sdkVersion string) bool {
-	if sdkName == headers.ClientNamePythonSDK && sdkVersion == "0.1b2" {
+	if sdkName == headers.ClientNamePythonSDK && (sdkVersion == "0.1a1" || sdkVersion == "0.1a2" || sdkVersion == "0.1b1" || sdkVersion == "0.1b2") {
 		return true
 	} else if sdkName == headers.ClientNameTypeScriptSDK {
 		ver, err := semver.Parse(sdkVersion)

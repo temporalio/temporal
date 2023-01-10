@@ -61,7 +61,7 @@ type (
 		// Reschedule triggers an immediate reschedule for provided namespace
 		// ignoring executable's reschedule time.
 		// Used by namespace failover logic
-		Reschedule(namespaceIDs map[string]struct{})
+		Reschedule(namespaceID string)
 
 		// Len returns the total number of task executables waiting to be rescheduled.
 		Len() int
@@ -159,7 +159,7 @@ func (r *reschedulerImpl) Add(
 }
 
 func (r *reschedulerImpl) Reschedule(
-	namespaceIDs map[string]struct{},
+	namespaceID string,
 ) {
 	r.Lock()
 	defer r.Unlock()
@@ -167,7 +167,7 @@ func (r *reschedulerImpl) Reschedule(
 	now := r.timeSource.Now()
 	updatedRescheduleTime := false
 	for key, pq := range r.pqMap {
-		if _, ok := namespaceIDs[key.NamespaceID]; !ok {
+		if key.NamespaceID != namespaceID {
 			continue
 		}
 
