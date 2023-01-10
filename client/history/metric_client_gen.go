@@ -413,6 +413,20 @@ func (c *metricClient) ReplicateEventsV2(
 	return c.client.ReplicateEventsV2(ctx, request, opts...)
 }
 
+func (c *metricClient) ReplicateWorkflowState(
+	ctx context.Context,
+	request *historyservice.ReplicateWorkflowStateRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ReplicateWorkflowStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientReplicateWorkflowStateScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ReplicateWorkflowState(ctx, request, opts...)
+}
+
 func (c *metricClient) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.RequestCancelWorkflowExecutionRequest,
