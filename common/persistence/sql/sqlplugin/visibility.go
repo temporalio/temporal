@@ -33,18 +33,18 @@ import (
 type (
 	// VisibilityRow represents a row in executions_visibility table
 	VisibilityRow struct {
-		NamespaceID      string
-		RunID            string
-		WorkflowTypeName string
-		WorkflowID       string
-		StartTime        time.Time
-		ExecutionTime    time.Time
-		Status           int32
-		CloseTime        *time.Time
-		HistoryLength    *int64
-		Memo             []byte
-		Encoding         string
-		TaskQueue        string
+		NamespaceID      string     `db:"NamespaceId"`
+		RunID            string     `db:"RunId"`
+		WorkflowTypeName string     `db:"WorkflowType"`
+		WorkflowID       string     `db:"WorkflowId"`
+		StartTime        time.Time  `db:"StartTime"`
+		ExecutionTime    time.Time  `db:"ExecutionTime"`
+		Status           int32      `db:"ExecutionStatus"`
+		CloseTime        *time.Time `db:"CloseTime"`
+		HistoryLength    *int64     `db:"HistoryLength"`
+		Memo             []byte     `db:"Memo"`
+		Encoding         string     `db:"MemoEncoding"`
+		TaskQueue        string     `db:"TaskQueue"`
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that

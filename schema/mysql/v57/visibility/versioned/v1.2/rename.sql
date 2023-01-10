@@ -1,0 +1,12 @@
+ALTER TABLE executions_visibility CHANGE COLUMN namespace_id        NamespaceId     CHAR(64) NOT NULL;
+ALTER TABLE executions_visibility CHANGE COLUMN run_id              RunId           CHAR(64) NOT NULL;
+ALTER TABLE executions_visibility CHANGE COLUMN start_time          StartTime       DATETIME(6) NOT NULL;
+ALTER TABLE executions_visibility CHANGE COLUMN execution_time      ExecutionTime   DATETIME(6) NOT NULL;
+ALTER TABLE executions_visibility CHANGE COLUMN workflow_id         WorkflowId      VARCHAR(255) NOT NULL;
+ALTER TABLE executions_visibility CHANGE COLUMN workflow_type_name  WorkflowType    VARCHAR(255) NOT NULL;
+ALTER TABLE executions_visibility CHANGE COLUMN status              ExecutionStatus INT NOT NULL;
+ALTER TABLE executions_visibility CHANGE COLUMN close_time          CloseTime       DATETIME(6) NULL;
+ALTER TABLE executions_visibility CHANGE COLUMN history_length      HistoryLength   BIGINT;
+ALTER TABLE executions_visibility CHANGE COLUMN memo                Memo            BLOB;
+ALTER TABLE executions_visibility CHANGE COLUMN encoding            MemoEncoding    VARCHAR(64) NOT NULL;
+ALTER TABLE executions_visibility CHANGE COLUMN task_queue          TaskQueue       VARCHAR(255) DEFAULT '' NOT NULL;

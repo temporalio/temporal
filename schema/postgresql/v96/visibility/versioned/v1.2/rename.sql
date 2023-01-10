@@ -1,0 +1,11 @@
+ALTER TABLE executions_visibility RENAME COLUMN namespace_id        TO NamespaceId;
+ALTER TABLE executions_visibility RENAME COLUMN run_id              TO RunId;
+ALTER TABLE executions_visibility RENAME COLUMN start_time          TO StartTime;
+ALTER TABLE executions_visibility RENAME COLUMN execution_time      TO ExecutionTime;
+ALTER TABLE executions_visibility RENAME COLUMN workflow_id         TO WorkflowId;
+ALTER TABLE executions_visibility RENAME COLUMN workflow_type_name  TO WorkflowType;
+ALTER TABLE executions_visibility RENAME COLUMN status              TO ExecutionStatus;
+ALTER TABLE executions_visibility RENAME COLUMN close_time          TO CloseTime;
+ALTER TABLE executions_visibility RENAME COLUMN history_length      TO HistoryLength;
+ALTER TABLE executions_visibility RENAME COLUMN encoding            TO MemoEncoding;
+ALTER TABLE executions_visibility RENAME COLUMN task_queue          TO TaskQueue;

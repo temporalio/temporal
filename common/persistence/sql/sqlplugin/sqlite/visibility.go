@@ -37,71 +37,71 @@ import (
 
 const (
 	templateCreateWorkflowExecutionStarted = `INSERT INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding, task_queue) ` +
+		`NamespaceId, WorkflowId, RunId, StartTime, ExecutionTime, WorkflowType, ExecutionStatus, Memo, MemoEncoding, TaskQueue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
-		`ON CONFLICT (namespace_id, run_id) DO NOTHING`
+		`ON CONFLICT (NamespaceId, RunId) DO NOTHING`
 
 	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue) ` +
+		`NamespaceId, WorkflowId, RunId, StartTime, ExecutionTime, WorkflowType, CloseTime, ExecutionStatus, HistoryLength, Memo, MemoEncoding, TaskQueue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) `
 
 	// RunID condition is needed for correct pagination
-	templateConditions = ` AND namespace_id = ?
-		 AND start_time >= ?
-		 AND start_time <= ?
- 		 AND ((run_id > ? and start_time = ?) OR (start_time < ?))
-         ORDER BY start_time DESC, run_id
+	templateConditions = ` AND NamespaceId = ?
+		 AND StartTime >= ?
+		 AND StartTime <= ?
+ 		 AND ((RunId > ? and StartTime = ?) OR (StartTime < ?))
+         ORDER BY StartTime DESC, RunId
 		 LIMIT ?`
 
-	templateConditionsClosedWorkflows = ` AND namespace_id = ?
-	AND close_time >= ?
-	AND close_time <= ?
-	 AND ((run_id > ? and close_time = ?) OR (close_time < ?))
-	ORDER BY close_time DESC, run_id
+	templateConditionsClosedWorkflows = ` AND NamespaceId = ?
+	AND CloseTime >= ?
+	AND CloseTime <= ?
+	 AND ((RunId > ? and CloseTime = ?) OR (CloseTime < ?))
+	ORDER BY CloseTime DESC, RunId
 	LIMIT ?`
 
-	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding, task_queue`
-	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status = 1 `
+	templateOpenFieldNames = `WorkflowId, RunId, StartTime, ExecutionTime, WorkflowType, ExecutionStatus, Memo, MemoEncoding, TaskQueue`
+	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE ExecutionStatus = 1 `
 
-	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, history_length
-		 FROM executions_visibility WHERE status != 1 `
+	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, CloseTime, HistoryLength
+		 FROM executions_visibility WHERE ExecutionStatus != 1 `
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions
 
 	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditionsClosedWorkflows
 
-	templateGetOpenWorkflowExecutionsByType = templateOpenSelect + `AND workflow_type_name = ?` + templateConditions
+	templateGetOpenWorkflowExecutionsByType = templateOpenSelect + `AND WorkflowType = ?` + templateConditions
 
-	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = ?` + templateConditionsClosedWorkflows
+	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND WorkflowType = ?` + templateConditionsClosedWorkflows
 
-	templateGetOpenWorkflowExecutionsByID = templateOpenSelect + `AND workflow_id = ?` + templateConditions
+	templateGetOpenWorkflowExecutionsByID = templateOpenSelect + `AND WorkflowId = ?` + templateConditions
 
-	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = ?` + templateConditionsClosedWorkflows
+	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND WorkflowId = ?` + templateConditionsClosedWorkflows
 
-	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditionsClosedWorkflows
+	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND ExecutionStatus = ?` + templateConditionsClosedWorkflows
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length, task_queue 
+	templateGetClosedWorkflowExecution = `SELECT WorkflowId, RunId, StartTime, ExecutionTime, Memo, MemoEncoding, CloseTime, WorkflowType, ExecutionStatus, HistoryLength, TaskQueue 
 		 FROM executions_visibility
-		 WHERE namespace_id = ? AND status != 1
-		 AND run_id = ?`
+		 WHERE NamespaceId = ? AND ExecutionStatus != 1
+		 AND RunId = ?`
 
 	templateGetWorkflowExecution = `
 		SELECT
-			workflow_id,
-			run_id,
-			start_time,
-			execution_time,
-			memo,
-			encoding,
-			close_time,
-			workflow_type_name,
-			status,
-			history_length,
-			task_queue 
+			WorkflowId,
+			RunId,
+			StartTime,
+			ExecutionTime,
+			Memo,
+			MemoEncoding,
+			CloseTime,
+			WorkflowType,
+			ExecutionStatus,
+			HistoryLength,
+			TaskQueue
 		FROM executions_visibility
-		WHERE namespace_id = ? AND run_id = ?`
+		WHERE NamespaceId = ? AND RunId = ?`
 
-	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id = ? AND run_id = ?"
+	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE NamespaceId = ? AND RunId = ?"
 )
 
 var errCloseParams = errors.New("missing one of {closeTime, historyLength} params")

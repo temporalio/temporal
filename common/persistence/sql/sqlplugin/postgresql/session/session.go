@@ -31,6 +31,7 @@ import (
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
+	"github.com/jmoiron/sqlx/reflectx"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
@@ -94,7 +95,8 @@ func createConnection(
 	}
 
 	// Maps struct names in CamelCase to snake without need for db struct tags.
-	db.MapperFunc(strcase.ToSnake)
+	// For db struct tags, convert to lowercase as PostgreSQL returns lowercase identifiers
+	db.Mapper = reflectx.NewMapperTagFunc("db", strcase.ToSnake, strings.ToLower)
 	return db, nil
 }
 
