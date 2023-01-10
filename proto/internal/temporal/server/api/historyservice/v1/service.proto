@@ -192,7 +192,12 @@ service HistoryService {
     rpc DescribeWorkflowExecution (DescribeWorkflowExecutionRequest) returns (DescribeWorkflowExecutionResponse) {
     }
 
+    // ReplicateEventsV2 replicates workflow history events
     rpc ReplicateEventsV2 (ReplicateEventsV2Request) returns (ReplicateEventsV2Response) {
+    }
+
+    // ReplicateWorkflowState replicates workflow state
+    rpc ReplicateWorkflowState(ReplicateWorkflowStateRequest) returns (ReplicateWorkflowStateResponse) {
     }
 
     // SyncShardStatus sync the status between shards.
@@ -275,7 +280,7 @@ service HistoryService {
     }
 
     // (-- api-linter: core::0134=disabled
-    //     aip.dev/not-precedent: This service does not follow the update method AIP --)
+    //     aip.dev/not-precedent: This service does not follow the update method API --)
     rpc UpdateWorkflow(UpdateWorkflowRequest) returns (UpdateWorkflowResponse) {
     }
 }

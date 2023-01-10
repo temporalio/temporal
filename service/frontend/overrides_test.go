@@ -48,8 +48,8 @@ func TestDisableEagerActivityDispatchForBuggyClients(t *testing.T) {
 		{sdkName: headers.ClientNameGoSDK, sdkVersion: "1.18.1", eagerAllowed: true},
 		{sdkName: headers.ClientNameTypeScriptSDK, sdkVersion: "1.4.1", eagerAllowed: false},
 		{sdkName: headers.ClientNameTypeScriptSDK, sdkVersion: "1.4.4", eagerAllowed: true},
+		{sdkName: headers.ClientNamePythonSDK, sdkVersion: "0.1a1", eagerAllowed: false},
 		{sdkName: headers.ClientNamePythonSDK, sdkVersion: "0.1b2", eagerAllowed: false},
-		{sdkName: headers.ClientNamePythonSDK, sdkVersion: "0.1b1", eagerAllowed: true},
 		{sdkName: headers.ClientNamePythonSDK, sdkVersion: "0.1b3", eagerAllowed: true},
 	}
 	for _, testCase := range cases {
