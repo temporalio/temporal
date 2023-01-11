@@ -62,7 +62,11 @@ func (s *simpleMonitor) WhoAmI() (*membership.HostInfo, error) {
 }
 
 func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {
-	return s.resolvers[service], nil
+	resolver, ok := s.resolvers[service]
+	if !ok {
+		return nil, membership.ErrUnknownService
+	}
+	return resolver, nil
 }
 
 func (s *simpleMonitor) Lookup(service primitives.ServiceName, key string) (*membership.HostInfo, error) {

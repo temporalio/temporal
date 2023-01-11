@@ -105,8 +105,6 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 				}).Get(ctx, nil)
 			}
 		}
-
-		return receivedMsgs, nil
 	}
 
 	s.worker.RegisterWorkflow(workflowFn)

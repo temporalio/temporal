@@ -26,6 +26,7 @@ package resource
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"os"
@@ -93,7 +94,6 @@ type (
 // See LifetimeHooksModule for detail
 var Module = fx.Options(
 	persistenceClient.Module,
-	fx.Provide(SnTaggedLoggerProvider),
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
@@ -136,7 +136,7 @@ var DefaultOptions = fx.Options(
 	fx.Provide(DCRedirectionPolicyProvider),
 )
 
-func SnTaggedLoggerProvider(logger log.Logger, sn primitives.ServiceName) log.SnTaggedLogger {
+func DefaultSnTaggedLoggerProvider(logger log.Logger, sn primitives.ServiceName) log.SnTaggedLogger {
 	return log.With(logger, tag.Service(sn))
 }
 
@@ -395,19 +395,13 @@ func SdkClientFactoryProvider(
 	logger log.SnTaggedLogger,
 	resolver membership.GRPCResolver,
 ) (sdk.ClientFactory, error) {
-	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
+	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
-		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
+		return nil, err
 	}
-
-	hostPort := cfg.PublicClient.HostPort
-	if hostPort == "" {
-		hostPort = resolver.MakeURL(primitives.FrontendService)
-	}
-
 	return sdk.NewClientFactory(
-		hostPort,
-		tlsFrontendConfig,
+		frontendURL,
+		frontendTLSConfig,
 		metricsHandler,
 		logger,
 	), nil
@@ -426,24 +420,70 @@ func RPCFactoryProvider(
 	svcName primitives.ServiceName,
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	dc *dynamicconfig.Collection,
 	resolver membership.GRPCResolver,
 	traceInterceptor telemetry.ClientTraceInterceptor,
-) common.RPCFactory {
+) (common.RPCFactory, error) {
 	svcCfg := cfg.Services[string(svcName)]
-	hostPort := cfg.PublicClient.HostPort
-	if hostPort == "" {
-		hostPort = resolver.MakeURL(primitives.FrontendService)
+	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	if err != nil {
+		return nil, err
 	}
 	return rpc.NewFactory(
 		&svcCfg.RPC,
 		svcName,
 		logger,
 		tlsConfigProvider,
-		dc,
-		hostPort,
+		frontendURL,
+		frontendTLSConfig,
 		[]grpc.UnaryClientInterceptor{
 			grpc.UnaryClientInterceptor(traceInterceptor),
 		},
-	)
+	), nil
+}
+
+func getFrontendConnectionDetails(
+	cfg *config.Config,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	resolver membership.GRPCResolver,
+) (string, *tls.Config, error) {
+	// To simplify the static config, we switch default values based on whether the config
+	// defines an "internal-frontend" service. The default for TLS config can be overridden
+	// with publicClient.forceTLSConfig, and the default for hostPort can be overridden by
+	// explicitly setting hostPort to "membership://internal-frontend" or
+	// "membership://frontend".
+	_, hasIFE := cfg.Services[string(primitives.InternalFrontendService)]
+
+	forceTLS := cfg.PublicClient.ForceTLSConfig
+	if forceTLS == config.ForceTLSConfigAuto {
+		if hasIFE {
+			forceTLS = config.ForceTLSConfigInternode
+		} else {
+			forceTLS = config.ForceTLSConfigFrontend
+		}
+	}
+
+	var frontendTLSConfig *tls.Config
+	var err error
+	switch forceTLS {
+	case config.ForceTLSConfigInternode:
+		frontendTLSConfig, err = tlsConfigProvider.GetInternodeClientConfig()
+	case config.ForceTLSConfigFrontend:
+		frontendTLSConfig, err = tlsConfigProvider.GetFrontendClientConfig()
+	default:
+		err = fmt.Errorf("invalid forceTLSConfig")
+	}
+	if err != nil {
+		return "", nil, fmt.Errorf("unable to load TLS configuration: %w", err)
+	}
+
+	frontendURL := cfg.PublicClient.HostPort
+	if frontendURL == "" {
+		if hasIFE {
+			frontendURL = resolver.MakeURL(primitives.InternalFrontendService)
+		} else {
+			frontendURL = resolver.MakeURL(primitives.FrontendService)
+		}
+	}
+
+	return frontendURL, frontendTLSConfig, nil
 }

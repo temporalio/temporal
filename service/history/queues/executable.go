@@ -172,10 +172,10 @@ func (e *executableImpl) Execute() (retErr error) {
 		return nil
 	}
 
-	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+	ns, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
 	ctx := headers.SetCallerInfo(
 		metrics.AddMetricsContext(context.Background()),
-		headers.NewBackgroundCallerInfo(namespaceName.String()),
+		headers.NewBackgroundCallerInfo(ns.String()),
 	)
 
 	var panicErr error
@@ -476,15 +476,15 @@ func (e *executableImpl) rescheduleTime(
 		return e.timeSource.Now().Add(dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 
-	backoff := reschedulePolicy.ComputeNextDelay(0, attempt)
+	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt)
 	if common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon resource exhausted error and pick the longer backoff
 		// duration
-		backoff = util.Max(backoff, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
+		backoffDuration = util.Max(backoffDuration, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
 	}
 
-	return e.timeSource.Now().Add(backoff)
+	return e.timeSource.Now().Add(backoffDuration)
 }
 
 func (e *executableImpl) updatePriority() {
