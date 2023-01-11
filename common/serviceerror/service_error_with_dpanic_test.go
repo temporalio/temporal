@@ -81,6 +81,7 @@ func (s *ServiceErrorWithDPanicSuite) TestNewDPanicInDev() {
 	_, err := os.Stat(dir + "/test.logger")
 	s.Nil(err)
 	s.Panics(nil, func() {
-		ServiceErrorWithDPanic(logger, "Must panic!")
+		err := ServiceErrorWithDPanic(logger, "Must panic!")
+		s.Nil(err)
 	})
 }
