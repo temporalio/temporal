@@ -469,9 +469,6 @@ func genericFrontendServiceProvider(
 	params ServiceProviderParamsCommon,
 	serviceName primitives.ServiceName,
 ) (ServicesGroupOut, error) {
-	// Use this name for metrics and logs, even if serviceName is internal-frontend
-	displayServiceName := primitives.FrontendService
-
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
@@ -514,14 +511,16 @@ func genericFrontendServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() log.SnTaggedLogger {
-			tags := []tag.Tag{tag.Service(displayServiceName)}
+			// Use "frontend" for logs even if serviceName is "internal-frontend", but add an
+			// extra tag to differentiate.
+			tags := []tag.Tag{tag.Service(primitives.FrontendService)}
 			if serviceName == primitives.InternalFrontendService {
-				// add an extra tag so these can be differentiated
 				tags = append(tags, tag.NewBoolTag("internal-frontend", true))
 			}
 			return log.With(params.Logger, tags...)
 		}),
 		fx.Provide(func() metrics.Handler {
+			// Use either "frontend" or "internal-frontend" for metrics
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
