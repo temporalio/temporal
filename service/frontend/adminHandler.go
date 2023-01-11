@@ -806,12 +806,16 @@ func (adh *AdminHandler) DescribeCluster(
 		var rings []*clusterspb.RingInfo
 		for _, role := range []primitives.ServiceName{
 			primitives.FrontendService,
+			primitives.InternalFrontendService,
 			primitives.HistoryService,
 			primitives.MatchingService,
 			primitives.WorkerService,
 		} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
+				if role == primitives.InternalFrontendService {
+					continue // this one is optional
+				}
 				return nil, err
 			}
 
