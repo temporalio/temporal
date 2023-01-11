@@ -33,14 +33,13 @@ import (
 	"strings"
 	"testing"
 
-	"go.temporal.io/server/tests/testhelper"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/tests/testutils"
 )
 
 type LogSuite struct {
@@ -68,7 +67,7 @@ func (s *LogSuite) TestParseLogLevel() {
 }
 
 func (s *LogSuite) TestNewLogger() {
-	dir := testhelper.MkdirTemp(s.T(), "", "config.testNewLogger")
+	dir := testutils.MkdirTemp(s.T(), "", "config.testNewLogger")
 
 	cfg := Config{
 		Level:      "info",

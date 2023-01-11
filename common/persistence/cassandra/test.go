@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tests/testhelper"
+	"go.temporal.io/server/tests/testutils"
 )
 
 const (
@@ -109,7 +109,7 @@ func (s *TestCluster) SetupTestDatabase() {
 	schemaDir := s.schemaDir + "/"
 
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
-		temporalPackageDir := testhelper.GetRepoRootDirectory()
+		temporalPackageDir := testutils.GetRepoRootDirectory()
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 

@@ -31,18 +31,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"gopkg.in/yaml.v3"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/tests/testhelper"
-
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"gopkg.in/yaml.v3"
+	"go.temporal.io/server/tests/testutils"
 )
 
 type (
@@ -54,7 +54,7 @@ type (
 
 		logger           log.Logger
 		internodeCertDir string
-		internodeChain   testhelper.CertChain
+		internodeChain   testutils.CertChain
 
 		membershipConfig         config.Membership
 		internodeConfigMutualTLS config.GroupTLS
@@ -99,7 +99,7 @@ func (s *RingpopSuite) SetupTest() {
 	var err error
 	s.internodeCertDir, err = os.MkdirTemp("", "RingpopSuiteInternode")
 	s.NoError(err)
-	s.internodeChain, err = testhelper.GenerateTestChain(s.internodeCertDir, localhostIPv4)
+	s.internodeChain, err = testutils.GenerateTestChain(s.internodeCertDir, localhostIPv4)
 	s.NoError(err)
 
 	s.internodeConfigMutualTLS = config.GroupTLS{
@@ -116,11 +116,11 @@ func (s *RingpopSuite) SetupTest() {
 
 	s.internodeConfigServerTLS = config.GroupTLS{
 		Server: config.ServerTLS{
-			CertData: testhelper.ConvertFileToBase64(s.internodeChain.CertPubFile),
-			KeyData:  testhelper.ConvertFileToBase64(s.internodeChain.CertKeyFile),
+			CertData: testutils.ConvertFileToBase64(s.internodeChain.CertPubFile),
+			KeyData:  testutils.ConvertFileToBase64(s.internodeChain.CertKeyFile),
 		},
 		Client: config.ClientTLS{
-			RootCAData: []string{testhelper.ConvertFileToBase64(s.internodeChain.CaPubFile)},
+			RootCAData: []string{testutils.ConvertFileToBase64(s.internodeChain.CaPubFile)},
 		},
 	}
 

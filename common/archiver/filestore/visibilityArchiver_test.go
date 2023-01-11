@@ -32,8 +32,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/tests/testhelper"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -51,6 +49,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/tests/testutils"
 )
 
 const (
@@ -166,7 +165,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 }
 
 func (s *visibilityArchiverSuite) TestArchive_Success() {
-	dir := testhelper.MkdirTemp(s.T(), "", "TestVisibilityArchive")
+	dir := testutils.MkdirTemp(s.T(), "", "TestVisibilityArchive")
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	closeTimestamp := timestamp.TimeNowPtrUtc()
@@ -472,7 +471,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 }
 
 func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
-	dir := testhelper.MkdirTemp(s.T(), "", "TestArchiveAndQuery")
+	dir := testutils.MkdirTemp(s.T(), "", "TestArchiveAndQuery")
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
