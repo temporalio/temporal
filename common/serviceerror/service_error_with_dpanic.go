@@ -25,13 +25,11 @@
 package serviceerror
 
 import (
-	"fmt"
-
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 )
 
 func ServiceErrorWithDPanic(logger log.Logger, msg string) error {
 	logger.DPanic(msg)
-	return serviceerror.NewInternal(fmt.Sprintf(msg))
+	return serviceerror.NewInternal(msg)
 }
