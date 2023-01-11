@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives"
@@ -49,8 +48,9 @@ type RPCFactory struct {
 	config      *config.RPC
 	serviceName primitives.ServiceName
 	logger      log.Logger
-	dc          *dynamicconfig.Collection
-	frontendURL string
+
+	frontendURL       string
+	frontendTLSConfig *tls.Config
 
 	initListener       sync.Once
 	grpcListener       net.Listener
@@ -65,16 +65,16 @@ func NewFactory(
 	sName primitives.ServiceName,
 	logger log.Logger,
 	tlsProvider encryption.TLSConfigProvider,
-	dc *dynamicconfig.Collection,
 	frontendURL string,
+	frontendTLSConfig *tls.Config,
 	clientInterceptors []grpc.UnaryClientInterceptor,
 ) *RPCFactory {
 	return &RPCFactory{
 		config:             cfg,
 		serviceName:        sName,
 		logger:             logger,
-		dc:                 dc,
 		frontendURL:        frontendURL,
+		frontendTLSConfig:  frontendTLSConfig,
 		tlsFactory:         tlsProvider,
 		clientInterceptors: clientInterceptors,
 	}
@@ -201,19 +201,9 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	return d.dial(rpcAddress, tlsClientConfig)
 }
 
-// CreateLocalFrontendGRPCConnection creates connection for internal calls
+// CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
-	var tlsClientConfig *tls.Config
-	var err error
-	if d.tlsFactory != nil {
-		tlsClientConfig, err = d.tlsFactory.GetFrontendClientConfig()
-		if err != nil {
-			d.logger.Fatal("Failed to create tls config for gRPC connection", tag.Error(err))
-			return nil
-		}
-	}
-
-	return d.dial(d.frontendURL, tlsClientConfig)
+	return d.dial(d.frontendURL, d.frontendTLSConfig)
 }
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
