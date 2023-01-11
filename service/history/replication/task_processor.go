@@ -324,14 +324,25 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 func (p *taskProcessorImpl) handleReplicationTask(
 	ctx context.Context,
 	replicationTask *replicationspb.ReplicationTask,
-) error {
+) (retErr error) {
 	_ = p.rateLimiter.Wait(ctx)
 
 	operation := func() error {
-		operation, err := p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
-		p.emitTaskMetrics(operation, err)
+		err := p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
+		p.emitTaskMetrics(replicationTask.GetTaskType(), err)
 		return err
 	}
+
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			retErr = panicErr
+			p.emitTaskMetrics(replicationTask.GetTaskType(), panicErr)
+		}
+	}()
+
+	defer log.CapturePanic(p.logger, &panicErr)
+
 	return backoff.ThrottleRetry(operation, p.taskRetryPolicy, p.isRetryableError)
 }
 
@@ -495,7 +506,23 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 	}
 }
 
-func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
+func (p *taskProcessorImpl) emitTaskMetrics(taskType enumsspb.ReplicationTaskType, err error) {
+	var operation string
+	switch taskType {
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
+		operation = metrics.SyncShardTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
+		operation = metrics.SyncActivityTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
+		operation = metrics.HistoryMetadataReplicationTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
+		operation = metrics.HistoryReplicationTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		operation = metrics.SyncWorkflowStateTaskScope
+	default:
+		operation = metrics.ReplicatorScope
+	}
+
 	metricsScope := p.metricsHandler.WithTags(metrics.OperationTag(operation))
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		metricsScope.Counter(metrics.ServiceErrContextTimeoutCounter.GetMetricName()).Record(1)
