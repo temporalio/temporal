@@ -456,16 +456,16 @@ func MatchingServiceProvider(
 func FrontendServiceProvider(
 	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
-	return frontendServiceProvider(params, primitives.FrontendService)
+	return genericFrontendServiceProvider(params, primitives.FrontendService)
 }
 
 func InternalFrontendServiceProvider(
 	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
-	return frontendServiceProvider(params, primitives.InternalFrontendService)
+	return genericFrontendServiceProvider(params, primitives.InternalFrontendService)
 }
 
-func frontendServiceProvider(
+func genericFrontendServiceProvider(
 	params ServiceProviderParamsCommon,
 	serviceName primitives.ServiceName,
 ) (ServicesGroupOut, error) {
