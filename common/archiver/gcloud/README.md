@@ -1,6 +1,6 @@
 # Google Storage blobstore
 ## Configuration
-See https://cloud.google.com/docs/authentication/production to understand how is made the authentication against google cloud storage
+See https://cloud.google.com/docs/authentication#service-accounts to understand how is made the authentication against google cloud storage
 
 Nowdays we support three different ways in order to let Temporal know where your google keyfile credentials are located
 

@@ -59,13 +59,6 @@ endef
 
 TEST_TIMEOUT := 20m
 
-# TODO: INTEG_TEST should be functional tests
-INTEG_TEST_ROOT        := ./host
-INTEG_TEST_XDC_ROOT    := ./host/xdc
-INTEG_TEST_NDC_ROOT    := ./host/ndc
-
-PERSISTENCE_INTEGRATION_TEST_ROOT := ./common/persistence/tests
-DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -76,10 +69,15 @@ PROTO_OUT := api
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
-# TODO (jeremy): Replace below with build tags and `go test ./...` for targets
+
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
-INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
-UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)% $(PERSISTENCE_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)%,$(TEST_DIRS))
+FUNCTIONAL_TEST_ROOT          := ./tests
+FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
+FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
+DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
+DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
+INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT)
+UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)%,$(TEST_DIRS))
 
 # go.opentelemetry.io/otel/sdk/metric@v0.31.0 - there are breaking changes in v0.32.0.
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
@@ -89,26 +87,26 @@ PINNED_DEPENDENCIES := \
 	github.com/urfave/cli/v2@v2.4.0
 
 # Code coverage output files.
-COVER_ROOT                 := ./.coverage
-UNIT_COVER_PROFILE         := $(COVER_ROOT)/unit_coverprofile.out
-INTEGRATION_COVER_PROFILE  := $(COVER_ROOT)/integration_coverprofile.out
-DB_TOOL_COVER_PROFILE      := $(COVER_ROOT)/db_tool_coverprofile.out
-INTEG_COVER_PROFILE        := $(COVER_ROOT)/integ_$(PERSISTENCE_DRIVER)_coverprofile.out
-INTEG_XDC_COVER_PROFILE    := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
-INTEG_NDC_COVER_PROFILE    := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
-SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary.out
+COVER_ROOT                      := ./.coverage
+UNIT_COVER_PROFILE              := $(COVER_ROOT)/unit_coverprofile.out
+INTEGRATION_COVER_PROFILE       := $(COVER_ROOT)/integration_coverprofile.out
+DB_TOOL_COVER_PROFILE           := $(COVER_ROOT)/db_tool_coverprofile.out
+FUNCTIONAL_COVER_PROFILE        := $(COVER_ROOT)/functional_$(PERSISTENCE_DRIVER)_coverprofile.out
+FUNCTIONAL_XDC_COVER_PROFILE    := $(COVER_ROOT)/functional_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
+FUNCTIONAL_NDC_COVER_PROFILE    := $(COVER_ROOT)/functional_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
+SUMMARY_COVER_PROFILE           := $(COVER_ROOT)/summary.out
 
 # DB
 SQL_USER ?= temporal
 SQL_PASSWORD ?= temporal
 
-# Need the following option to have integration tests count towards coverage. godoc below:
+# Need the following option to have integration and functional tests count towards coverage. godoc below:
 # -coverpkg pkg1,pkg2,pkg3
 #   Apply coverage analysis in each test to the given list of packages.
 #   The default is for each test to analyze only the package being tested.
 #   Packages are specified as import paths.
-INTEG_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..."
-
+INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/...,$(MODULE_ROOT)/tools/..."
+FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/...,$(MODULE_ROOT)/tools/..."
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
@@ -265,29 +263,28 @@ unit-test: clean-test-results
 	@go test $(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-db-integration-test: clean-test-results
-	@printf $(COLOR) "Run integration tests..."
-	@go test $(PERSISTENCE_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
-	@go test $(DB_TOOL_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
-	@! grep -q "^--- FAIL" test.log
-
-# TODO: rename it to functional-test
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
-	@go test $(INTEG_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
-# Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
+	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-# TODO: rename it to functional-test
-integration-with-fault-injection-test: clean-test-results
+functional-test: clean-test-results
+	@printf $(COLOR) "Run functional tests..."
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
+# Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
+	@! grep -q "^--- FAIL" test.log
+
+functional-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	@go test $(INTEG_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-test: unit-test db-integration-test integration-test integration-with-fault-injection-test
+test: unit-test integration-test functional-test functional-with-fault-injection-test
 
 ##### Coverage #####
 $(COVER_ROOT):
@@ -296,27 +293,23 @@ $(COVER_ROOT):
 unit-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run unit tests with coverage..."
 	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
-	@go test ./$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race -coverprofile=$(UNIT_COVER_PROFILE) || exit 1;
+	@go test ./$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(UNIT_COVER_PROFILE) || exit 1;
 
-db-integration-test-coverage: $(COVER_ROOT)
-	@printf $(COLOR) "Run integration tests with coverage..."
-	@go test $(PERSISTENCE_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -coverpkg="./common/..." -coverprofile=$(INTEGRATION_COVER_PROFILE)
-	@go test $(DB_TOOL_INTEGRATION_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -coverpkg="./tools/..." -coverprofile=$(DB_TOOL_COVER_PROFILE)
-
-# TODO: rename it to functional-test
 integration-test-coverage: $(COVER_ROOT)
-	@printf $(COLOR) "Run integration tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(INTEG_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_COVER_PROFILE)
+	@printf $(COLOR) "Run integration tests with coverage..."
+	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(INTEGRATION_COVER_PROFILE)
 
-# TODO: rename it to functional-test
-integration-test-xdc-coverage: $(COVER_ROOT)
-	@printf $(COLOR) "Run integration test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_XDC_COVER_PROFILE)
+functional-test-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_COVER_PROFILE)
 
-# TODO: rename it to functional-test
-integration-test-ndc-coverage: $(COVER_ROOT)
-	@printf $(COLOR) "Run integration test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(INTEG_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)
+functional-test-xdc-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_XDC_COVER_PROFILE)
+
+functional-test-ndc-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_NDC_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
