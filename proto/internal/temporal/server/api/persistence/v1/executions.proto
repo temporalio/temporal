@@ -37,6 +37,7 @@ import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
+import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
 
@@ -87,6 +88,8 @@ message WorkflowExecutionInfo {
     int64 last_workflow_task_started_event_id = 19;
     google.protobuf.Timestamp start_time = 20 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp last_update_time = 21 [(gogoproto.stdtime) = true];
+
+    // Workflow task fields.
     int64 workflow_task_version = 22;
     int64 workflow_task_scheduled_event_id = 23;
     int64 workflow_task_started_event_id = 24;
@@ -94,9 +97,11 @@ message WorkflowExecutionInfo {
     int32 workflow_task_attempt = 26;
     google.protobuf.Timestamp workflow_task_started_time = 27 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp workflow_task_scheduled_time = 28 [(gogoproto.stdtime) = true];
-    bool cancel_requested = 29;
     google.protobuf.Timestamp workflow_task_original_scheduled_time = 30 [(gogoproto.stdtime) = true];
     string workflow_task_request_id = 31;
+    temporal.server.api.enums.v1.WorkflowTaskType workflow_task_type = 68;
+
+    bool cancel_requested = 29;
     string cancel_request_id = 32;
     string sticky_task_queue = 33;
     // (-- api-linter: core::0140::prepositions=disabled

@@ -1301,6 +1301,38 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 	return &historyservice.ReplicateEventsV2Response{}, nil
 }
 
+// ReplicateWorkflowState is called by processor to replicate workflow state for passive namespaces
+func (h *Handler) ReplicateWorkflowState(
+	ctx context.Context,
+	request *historyservice.ReplicateWorkflowStateRequest,
+) (_ *historyservice.ReplicateWorkflowStateResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetWorkflowState().GetExecutionInfo().GetNamespaceId()),
+		request.GetWorkflowState().GetExecutionInfo().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	err = engine.ReplicateWorkflowState(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.ReplicateWorkflowStateResponse{}, nil
+}
+
 // SyncShardStatus is called by processor to sync history shard information from another cluster
 func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) (_ *historyservice.SyncShardStatusResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)

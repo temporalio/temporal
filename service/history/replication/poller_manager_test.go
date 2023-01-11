@@ -22,20 +22,76 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package replication
 
 import (
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/service/history/tasks"
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
-
-type (
-	Queue interface {
-		common.Daemon
-		Category() tasks.Category
-		NotifyNewTasks(tasks []tasks.Task)
-		FailoverNamespace(namespaceID string)
+func TestGetPollingShardIds(t *testing.T) {
+	testCases := []struct {
+		shardID          int32
+		remoteShardCount int32
+		localShardCount  int32
+		expectedPanic    bool
+		expectedShardIDs []int32
+	}{
+		{
+			1,
+			4,
+			4,
+			false,
+			[]int32{1},
+		},
+		{
+			1,
+			2,
+			4,
+			false,
+			[]int32{1},
+		},
+		{
+			3,
+			2,
+			4,
+			false,
+			[]int32{},
+		},
+		{
+			1,
+			16,
+			4,
+			false,
+			[]int32{1, 5, 9, 13},
+		},
+		{
+			4,
+			16,
+			4,
+			false,
+			[]int32{4, 8, 12, 16},
+		},
+		{
+			4,
+			17,
+			4,
+			true,
+			[]int32{},
+		},
 	}
-)
+	for idx, tt := range testCases {
+		t.Run(fmt.Sprintf("Testcase %d", idx), func(t *testing.T) {
+			t.Parallel()
+			defer func() {
+				if r := recover(); tt.expectedPanic && r == nil {
+					t.Errorf("The code did not panic")
+				}
+			}()
+			shardIDs := generatePollingShardIDs(tt.shardID, tt.localShardCount, tt.remoteShardCount)
+			assert.Equal(t, tt.expectedShardIDs, shardIDs)
+		})
+	}
+}
