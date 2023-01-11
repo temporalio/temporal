@@ -327,9 +327,11 @@ func (p *taskProcessorImpl) handleReplicationTask(
 ) (retErr error) {
 	_ = p.rateLimiter.Wait(ctx)
 
+	operationTagValue := p.getOperationTagValue(replicationTask)
+
 	operation := func() error {
 		err := p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
-		p.emitTaskMetrics(replicationTask.GetTaskType(), err)
+		p.emitTaskMetrics(operationTagValue, err)
 		return err
 	}
 
@@ -337,7 +339,7 @@ func (p *taskProcessorImpl) handleReplicationTask(
 	defer func() {
 		if panicErr != nil {
 			retErr = panicErr
-			p.emitTaskMetrics(replicationTask.GetTaskType(), panicErr)
+			p.emitTaskMetrics(operationTagValue, panicErr)
 		}
 	}()
 
@@ -506,23 +508,7 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 	}
 }
 
-func (p *taskProcessorImpl) emitTaskMetrics(taskType enumsspb.ReplicationTaskType, err error) {
-	var operation string
-	switch taskType {
-	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
-		operation = metrics.SyncShardTaskScope
-	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
-		operation = metrics.SyncActivityTaskScope
-	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
-		operation = metrics.HistoryMetadataReplicationTaskScope
-	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-		operation = metrics.HistoryReplicationTaskScope
-	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
-		operation = metrics.SyncWorkflowStateTaskScope
-	default:
-		operation = metrics.ReplicatorScope
-	}
-
+func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 	metricsScope := p.metricsHandler.WithTags(metrics.OperationTag(operation))
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		metricsScope.Counter(metrics.ServiceErrContextTimeoutCounter.GetMetricName()).Record(1)
@@ -551,6 +537,25 @@ func (p *taskProcessorImpl) emitTaskMetrics(taskType enumsspb.ReplicationTaskTyp
 	default:
 	}
 	metricsScope.Counter(metrics.ReplicationTasksFailed.GetMetricName()).Record(1)
+}
+
+func (p *taskProcessorImpl) getOperationTagValue(
+	replicationTask *replicationspb.ReplicationTask,
+) string {
+	switch replicationTask.GetTaskType() {
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
+		return metrics.SyncShardTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
+		return metrics.SyncActivityTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
+		return metrics.HistoryMetadataReplicationTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
+		return metrics.HistoryReplicationTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		return metrics.SyncWorkflowStateTaskScope
+	default:
+		return metrics.ReplicatorScope
+	}
 }
 
 func (p *taskProcessorImpl) isStopped() bool {
