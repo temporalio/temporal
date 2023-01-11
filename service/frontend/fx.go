@@ -270,14 +270,28 @@ func RateLimitInterceptorProvider(
 }
 
 func NamespaceRateLimitInterceptorProvider(
+	serviceName primitives.ServiceName,
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.NamespaceRateLimitInterceptor {
+	var globalNamespaceRPS, globalNamespaceVisibilityRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+
+	switch serviceName {
+	case primitives.FrontendService:
+		globalNamespaceRPS = serviceConfig.GlobalNamespaceRPS
+		globalNamespaceVisibilityRPS = serviceConfig.GlobalNamespaceVisibilityRPS
+	case primitives.InternalFrontendService:
+		globalNamespaceRPS = serviceConfig.InternalFEGlobalNamespaceRPS
+		globalNamespaceVisibilityRPS = serviceConfig.InternalFEGlobalNamespaceVisibilityRPS
+	default:
+		panic("invalid service name")
+	}
+
 	rateFn := func(namespace string) float64 {
 		return namespaceRPS(
 			serviceConfig.MaxNamespaceRPSPerInstance,
-			serviceConfig.GlobalNamespaceRPS,
+			globalNamespaceRPS,
 			frontendServiceResolver,
 			namespace,
 		)
@@ -286,7 +300,7 @@ func NamespaceRateLimitInterceptorProvider(
 	visibilityRateFn := func(namespace string) float64 {
 		return namespaceRPS(
 			serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
-			serviceConfig.GlobalNamespaceVisibilityRPS,
+			globalNamespaceVisibilityRPS,
 			frontendServiceResolver,
 			namespace,
 		)
@@ -393,8 +407,11 @@ func FEReplicatorNamespaceReplicationQueueProvider(
 	return replicatorNamespaceReplicationQueue
 }
 
-func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
-	return membershipMonitor.GetResolver(primitives.FrontendService)
+func ServiceResolverProvider(
+	membershipMonitor membership.Monitor,
+	serviceName primitives.ServiceName,
+) (membership.ServiceResolver, error) {
+	return membershipMonitor.GetResolver(serviceName)
 }
 
 func AdminHandlerProvider(
