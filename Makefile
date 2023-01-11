@@ -293,7 +293,7 @@ $(COVER_ROOT):
 unit-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run unit tests with coverage..."
 	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
-	@go test ./$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race -coverprofile=$(UNIT_COVER_PROFILE) || exit 1;
+	@go test ./$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(UNIT_COVER_PROFILE) || exit 1;
 
 integration-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration tests with coverage..."
