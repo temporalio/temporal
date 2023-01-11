@@ -29,7 +29,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/log"
 )
 
@@ -54,7 +56,7 @@ func (s *serviceErrorWithDPanicSuite) TestNewDPanicInProd() {
 	logger := log.NewZapLogger(log.BuildZapLogger(cfg))
 	s.NotNil(logger)
 
-	err := ServiceErrorWithDPanic(logger, "Must not panic!")
+	err := NewInternalErrorWithDPanic(logger, "Must not panic!")
 	s.NotNil(err)
 	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
@@ -70,7 +72,7 @@ func (s *serviceErrorWithDPanicSuite) TestNewDPanicInDev() {
 	s.NotNil(logger)
 
 	s.Panics(nil, func() {
-		err := ServiceErrorWithDPanic(logger, "Must panic!")
+		err := NewInternalErrorWithDPanic(logger, "Must panic!")
 		s.Nil(err)
 	})
 }
