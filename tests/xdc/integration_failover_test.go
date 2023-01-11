@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !race && !unittest
+//go:build !race
 
 // need to run xdc tests with race detector off because of ringpop bug causing data race issue
 
