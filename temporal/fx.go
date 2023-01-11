@@ -143,6 +143,7 @@ func NewServerFx(opts ...ServerOption) (*ServerFx, error) {
 		fx.Provide(HistoryServiceProvider),
 		fx.Provide(MatchingServiceProvider),
 		fx.Provide(FrontendServiceProvider),
+		fx.Provide(InternalFrontendServiceProvider),
 		fx.Provide(WorkerServiceProvider),
 
 		fx.Provide(ApplyClusterMetadataConfigProvider),
@@ -366,6 +367,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Provide(func() metrics.Handler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
@@ -428,6 +430,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Provide(func() metrics.Handler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
@@ -453,8 +456,19 @@ func MatchingServiceProvider(
 func FrontendServiceProvider(
 	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
-	serviceName := primitives.FrontendService
+	return genericFrontendServiceProvider(params, primitives.FrontendService)
+}
 
+func InternalFrontendServiceProvider(
+	params ServiceProviderParamsCommon,
+) (ServicesGroupOut, error) {
+	return genericFrontendServiceProvider(params, primitives.InternalFrontendService)
+}
+
+func genericFrontendServiceProvider(
+	params ServiceProviderParamsCommon,
+	serviceName primitives.ServiceName,
+) (ServicesGroupOut, error) {
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
@@ -483,11 +497,30 @@ func FrontendServiceProvider(
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
 		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() authorization.ClaimMapper {
+			switch serviceName {
+			case primitives.FrontendService:
+				return params.ClaimMapper
+			case primitives.InternalFrontendService:
+				return authorization.NewNoopClaimMapper()
+			default:
+				panic("Unexpected frontend service name")
+			}
+		}),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(func() log.SnTaggedLogger {
+			// Use "frontend" for logs even if serviceName is "internal-frontend", but add an
+			// extra tag to differentiate.
+			tags := []tag.Tag{tag.Service(primitives.FrontendService)}
+			if serviceName == primitives.InternalFrontendService {
+				tags = append(tags, tag.NewBoolTag("internal-frontend", true))
+			}
+			return log.With(params.Logger, tags...)
+		}),
 		fx.Provide(func() metrics.Handler {
+			// Use either "frontend" or "internal-frontend" for metrics
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
@@ -547,6 +580,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Provide(func() metrics.Handler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 		}),
@@ -844,6 +878,10 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(
 		fx.Annotate(
 			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
+				// map "internal-frontend" to "frontend" for the purpose of tracing
+				if rsn == primitives.InternalFrontendService {
+					rsn = primitives.FrontendService
+				}
 				serviceName := string(rsn)
 				if !strings.HasPrefix(serviceName, "io.temporal.") {
 					serviceName = fmt.Sprintf("io.temporal.%s", serviceName)

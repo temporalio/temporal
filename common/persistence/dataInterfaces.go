@@ -1306,4 +1306,5 @@ const (
 	History
 	Matching
 	Worker
+	InternalFrontend
 )
