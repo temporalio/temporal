@@ -55,6 +55,7 @@ var (
 		"RemoveSignalMutableState":               0,
 		"RemoveTask":                             0,
 		"ReplicateEventsV2":                      0,
+		"ReplicateWorkflowState":                 0,
 		"RequestCancelWorkflowExecution":         0,
 		"ResetStickyTaskQueue":                   0,
 		"ResetWorkflowExecution":                 0,

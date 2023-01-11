@@ -36,6 +36,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -191,6 +192,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				attributes.GetAttempt(),
 				event.GetEventTime(),
 				event.GetEventTime(),
+				enumsspb.WORKFLOW_TASK_TYPE_NORMAL, // speculative workflow tasks are not replicated.
 			)
 			if err != nil {
 				return nil, err

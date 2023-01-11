@@ -247,9 +247,7 @@ func (s *rescheudulerSuite) TestImmdiateReschedule() {
 		return true
 	}).Times(numTask)
 
-	s.rescheduler.Reschedule(map[string]struct{}{
-		namespaceID: {},
-	})
+	s.rescheduler.Reschedule(namespaceID)
 	taskWG.Wait()
 	s.Equal(0, s.rescheduler.Len())
 }
