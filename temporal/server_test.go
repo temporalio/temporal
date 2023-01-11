@@ -34,12 +34,12 @@ import (
 	"go.temporal.io/server/common/config"
 	// need to import this package to register the sqlite plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/tests/testhelper"
+	"go.temporal.io/server/tests/testutils"
 )
 
 // TestNewServer verifies that NewServer doesn't cause any fx errors
 func TestNewServer(t *testing.T) {
-	configDir := path.Join(testhelper.GetRepoRootDirectory(), "config")
+	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
 	cfg, err := config.LoadConfig("development-sqlite", configDir, "")
 	require.NoError(t, err)
 	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-sql.yaml")

@@ -29,14 +29,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap/zaptest"
 
 	"go.temporal.io/server/common/log"
-
-	"go.temporal.io/server/tests/testhelper"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/tests/testutils"
 )
 
 type UpdateTaskTestSuite struct {
@@ -60,13 +58,13 @@ var updateTaskTestData = struct {
 func (s *UpdateTaskTestSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 
-	s.versionsDir = testhelper.MkdirTemp(s.T(), "", "update_schema_test")
+	s.versionsDir = testutils.MkdirTemp(s.T(), "", "update_schema_test")
 
 	for _, d := range updateTaskTestData.versions {
 		s.NoError(os.Mkdir(s.versionsDir+"/"+d, os.FileMode(0444)))
 	}
 
-	s.emptyDir = testhelper.MkdirTemp(s.T(), "", "update_schema_test_empty")
+	s.emptyDir = testutils.MkdirTemp(s.T(), "", "update_schema_test_empty")
 
 	s.logger = log.NewZapLogger(zaptest.NewLogger(s.T()))
 }
@@ -134,7 +132,7 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEmptyDir_ReturnsError() {
 }
 
 func (s *UpdateTaskTestSuite) TestReadManifest() {
-	tmpDir := testhelper.MkdirTemp(s.T(), "", "update_schema_test")
+	tmpDir := testutils.MkdirTemp(s.T(), "", "update_schema_test")
 
 	input := `{
 		"CurrVersion": "0.4",
