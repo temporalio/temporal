@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
@@ -437,9 +438,9 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.WorkerActivitiesPerSecond = dcOptions.WorkerActivitiesPerSecond
 	sdkoptions.MaxConcurrentLocalActivityExecutionSize = dcOptions.MaxConcurrentLocalActivityExecutionSize
 	sdkoptions.WorkerLocalActivitiesPerSecond = dcOptions.WorkerLocalActivitiesPerSecond
-	sdkoptions.MaxConcurrentActivityTaskPollers = dcOptions.MaxConcurrentActivityTaskPollers
+	sdkoptions.MaxConcurrentActivityTaskPollers = util.Max(2, dcOptions.MaxConcurrentActivityTaskPollers)
 	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = dcOptions.MaxConcurrentWorkflowTaskExecutionSize
-	sdkoptions.MaxConcurrentWorkflowTaskPollers = dcOptions.MaxConcurrentWorkflowTaskPollers
+	sdkoptions.MaxConcurrentWorkflowTaskPollers = util.Max(2, dcOptions.MaxConcurrentWorkflowTaskPollers)
 	sdkoptions.StickyScheduleToStartTimeout = dcOptions.StickyScheduleToStartTimeoutDuration
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))

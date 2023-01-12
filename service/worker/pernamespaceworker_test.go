@@ -88,6 +88,10 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 			PerNamespaceWorkerCount: func(ns string) int {
 				return util.Max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 3}[ns])
 			},
+			PerNamespaceWorkerOptions: func(ns string) map[string]any {
+				// TODO: test here
+				return make(map[string]any)
+			},
 		},
 		Components:      []workercommon.PerNSWorkerComponent{s.cmp1, s.cmp2},
 		ClusterMetadata: cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
