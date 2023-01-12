@@ -26,6 +26,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -104,6 +106,19 @@ type (
 		componentSet string
 		client       sdkclient.Client
 		worker       sdkworker.Worker
+	}
+
+	sdkWorkerOptions struct {
+		// Copy of relevant fields from sdkworker.Options
+		MaxConcurrentActivityExecutionSize      int
+		WorkerActivitiesPerSecond               float64
+		MaxConcurrentLocalActivityExecutionSize int
+		WorkerLocalActivitiesPerSecond          float64
+		MaxConcurrentActivityTaskPollers        int
+		MaxConcurrentWorkflowTaskExecutionSize  int
+		MaxConcurrentWorkflowTaskPollers        int
+		StickyScheduleToStartTimeout            string // parse into time.Duration
+		StickyScheduleToStartTimeoutDuration    time.Duration
 	}
 )
 
@@ -249,6 +264,22 @@ func (wm *perNamespaceWorkerManager) getWorkerMultiplicity(ns *namespace.Namespa
 	return multiplicity, nil
 }
 
+func (wm *perNamespaceWorkerManager) getWorkerOptions(ns *namespace.Namespace) sdkWorkerOptions {
+	optionsMap := wm.config.PerNamespaceWorkerOptions(ns.Name().String())
+	var options sdkWorkerOptions
+	b, err := json.Marshal(optionsMap)
+	if err == nil {
+		return options
+	}
+	_ = json.Unmarshal(b, &options) // ignore errors, just use the zero value anyway
+	if len(options.StickyScheduleToStartTimeout) > 0 {
+		if options.StickyScheduleToStartTimeoutDuration, err = timestamp.ParseDuration(options.StickyScheduleToStartTimeout); err != nil {
+			wm.logger.Warn("invalid StickyScheduleToStartTimeout", tag.Error(err))
+		}
+	}
+	return options
+}
+
 // called on namespace state change callback
 func (w *perNamespaceWorker) refreshWithNewNamespace(ns *namespace.Namespace, deleted bool) {
 	w.lock.Lock()
@@ -357,7 +388,11 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 		return errNoWorkerNeeded
 	}
 	// ensure this changes if multiplicity changes
-	componentSet += fmt.Sprintf("%d", multiplicity)
+	componentSet += fmt.Sprintf(",%d", multiplicity)
+
+	// get sdk worker options
+	dcOptions := w.wm.getWorkerOptions(ns)
+	componentSet += fmt.Sprintf(",%+v", dcOptions)
 
 	// we do need a worker, but maybe we have one already
 	w.lock.Lock()
@@ -373,7 +408,7 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 	// create new one. note that even before startWorker returns, the worker may have started
 	// and already called the fatal error handler. we need to set w.client+worker+componentSet
 	// before releasing the lock to keep our state consistent.
-	client, worker, err := w.startWorker(ns, enabledComponents, multiplicity)
+	client, worker, err := w.startWorker(ns, enabledComponents, multiplicity, dcOptions)
 	if err != nil {
 		// TODO: add metric also
 		return err
@@ -389,6 +424,7 @@ func (w *perNamespaceWorker) startWorker(
 	ns *namespace.Namespace,
 	components []workercommon.PerNSWorkerComponent,
 	multiplicity int,
+	dcOptions sdkWorkerOptions,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
 	// this should not block because it uses an existing grpc connection
@@ -398,12 +434,22 @@ func (w *perNamespaceWorker) startWorker(
 	})
 
 	var sdkoptions sdkworker.Options
+
+	// copy from dynamic config
+	sdkoptions.MaxConcurrentActivityExecutionSize = dcOptions.MaxConcurrentActivityExecutionSize
+	sdkoptions.WorkerActivitiesPerSecond = dcOptions.WorkerActivitiesPerSecond
+	sdkoptions.MaxConcurrentLocalActivityExecutionSize = dcOptions.MaxConcurrentLocalActivityExecutionSize
+	sdkoptions.WorkerLocalActivitiesPerSecond = dcOptions.WorkerLocalActivitiesPerSecond
+	sdkoptions.MaxConcurrentActivityTaskPollers = dcOptions.MaxConcurrentActivityTaskPollers
+	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = dcOptions.MaxConcurrentWorkflowTaskExecutionSize
+	sdkoptions.MaxConcurrentWorkflowTaskPollers = dcOptions.MaxConcurrentWorkflowTaskPollers
+	sdkoptions.StickyScheduleToStartTimeout = dcOptions.StickyScheduleToStartTimeoutDuration
+
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
 	sdkoptions.Identity = fmt.Sprintf("server-worker@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
-	// sdk default is 2, we increase it if we're supposed to run with more multiplicity.
-	// other defaults are already large enough.
-	sdkoptions.MaxConcurrentWorkflowTaskPollers = 2 * multiplicity
-	sdkoptions.MaxConcurrentActivityTaskPollers = 2 * multiplicity
+	// increase these if we're supposed to run with more multiplicity
+	sdkoptions.MaxConcurrentWorkflowTaskPollers *= multiplicity
+	sdkoptions.MaxConcurrentActivityTaskPollers *= multiplicity
 	sdkoptions.OnFatalError = w.onFatalError
 
 	// this should not block because the client already has server capabilities

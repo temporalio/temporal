@@ -114,6 +114,7 @@ type (
 		BatcherConcurrency                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PerNamespaceWorkerOptions             dynamicconfig.MapPropertyFnWithNamespaceFilter
 
 		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -315,6 +316,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 		PerNamespaceWorkerCount: dc.GetIntPropertyFilteredByNamespace(
 			dynamicconfig.WorkerPerNamespaceWorkerCount,
 			1,
+		),
+		PerNamespaceWorkerOptions: dc.GetMapPropertyFnWithNamespaceFilter(
+			dynamicconfig.WorkerPerNamespaceWorkerOptions,
+			make(map[string]any),
 		),
 		ThrottledLogRPS: dc.GetIntProperty(
 			dynamicconfig.WorkerThrottledLogRPS,
