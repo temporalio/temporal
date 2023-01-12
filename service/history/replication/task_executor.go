@@ -49,7 +49,7 @@ import (
 
 type (
 	TaskExecutor interface {
-		Execute(ctx context.Context, replicationTask *replicationspb.ReplicationTask, forceApply bool) (string, error)
+		Execute(ctx context.Context, replicationTask *replicationspb.ReplicationTask, forceApply bool) error
 	}
 
 	TaskExecutorParams struct {
@@ -105,32 +105,25 @@ func (e *taskExecutorImpl) Execute(
 	ctx context.Context,
 	replicationTask *replicationspb.ReplicationTask,
 	forceApply bool,
-) (string, error) {
+) error {
 	var err error
-	var operation string
 	switch replicationTask.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 		// Shard status will be sent as part of the Replication message without kafka
-		operation = metrics.SyncShardTaskScope
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
-		operation = metrics.SyncActivityTaskScope
 		err = e.handleActivityTask(ctx, replicationTask, forceApply)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
-		operation = metrics.HistoryMetadataReplicationTaskScope
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-		operation = metrics.HistoryReplicationTaskScope
 		err = e.handleHistoryReplicationTask(ctx, replicationTask, forceApply)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
-		operation = metrics.SyncWorkflowStateTaskScope
 		err = e.handleSyncWorkflowStateTask(ctx, replicationTask, forceApply)
 	default:
 		e.logger.Error("Unknown task type.")
-		operation = metrics.ReplicatorScope
 		err = ErrUnknownReplicationTask
 	}
 
-	return operation, err
+	return err
 }
 
 func (e *taskExecutorImpl) handleActivityTask(
