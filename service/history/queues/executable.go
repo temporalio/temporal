@@ -28,6 +28,9 @@ package queues
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -42,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -178,18 +182,21 @@ func (e *executableImpl) Execute() (retErr error) {
 		headers.NewBackgroundCallerInfo(ns.String()),
 	)
 
-	var panicErr error
 	defer func() {
-		if panicErr != nil {
-			retErr = panicErr
+		if panicObj := recover(); panicObj != nil {
+			err, ok := panicObj.(error)
+			if !ok {
+				err = serviceerror.NewInternal(fmt.Sprintf("panic: %v", panicObj))
+			}
+
+			e.logger.Error("Panic is captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
+			retErr = err
 
 			// we need to guess the metrics tags here as we don't know which execution logic
 			// is actually used which is upto the executor implementation
 			e.taggedMetricsHandler = e.metricsHandler.WithTags(e.estimateTaskMetricTag()...)
 		}
 	}()
-
-	defer log.CapturePanic(e.logger, &panicErr)
 
 	startTime := e.timeSource.Now()
 
@@ -289,6 +296,16 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		// so don't count it into task failures.
 		e.taggedMetricsHandler.Counter(metrics.TaskNotActiveCounter.GetMetricName()).Record(1)
 		return err
+	}
+
+	var deserializationError *serialization.DeserializationError
+	var encodingTypeError *serialization.UnknownEncodingTypeError
+	if errors.As(err, &deserializationError) || errors.As(err, &encodingTypeError) {
+		// likely due to data corruption, emit logs, metrics & drop the task by return nil so that
+		// task will be marked as completed.
+		e.taggedMetricsHandler.Counter(metrics.TaskCorruptionCounter.GetMetricName()).Record(1)
+		e.logger.Error("Drop task due to serialization error", tag.Error(err))
+		return nil
 	}
 
 	e.taggedMetricsHandler.Counter(metrics.TaskFailures.GetMetricName()).Record(1)
