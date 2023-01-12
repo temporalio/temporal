@@ -90,6 +90,7 @@ type (
 		status           int32
 		stopC            chan struct{}
 		sdkClientFactory sdk.ClientFactory
+		sdkWorkerFactory sdk.WorkerFactory
 		esClient         esclient.Client
 		config           *Config
 
@@ -130,6 +131,7 @@ func NewService(
 	logger log.SnTaggedLogger,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
+	sdkWorkerFactory sdk.WorkerFactory,
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
@@ -159,6 +161,7 @@ func NewService(
 		status:                    common.DaemonStatusInitialized,
 		config:                    serviceConfig,
 		sdkClientFactory:          sdkClientFactory,
+		sdkWorkerFactory:          sdkWorkerFactory,
 		esClient:                  esClient,
 		stopC:                     make(chan struct{}),
 		logger:                    logger,
@@ -469,6 +472,7 @@ func (s *Service) startBatcher() {
 		s.metricsHandler,
 		s.logger,
 		s.sdkClientFactory,
+		s.sdkWorkerFactory,
 		s.config.BatcherRPS,
 		s.config.BatcherConcurrency,
 	).Start(); err != nil {
@@ -538,6 +542,7 @@ func (s *Service) startArchiver() {
 		Config:           s.config.ArchiverConfig,
 		ArchiverProvider: s.archiverProvider,
 		SdkClientFactory: s.sdkClientFactory,
+		SdkWorkerFactory: s.sdkWorkerFactory,
 		HistoryClient:    historyClient,
 	}
 	clientWorker := archiver.NewClientWorker(bc)
