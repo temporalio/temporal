@@ -232,7 +232,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 	}
 
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -297,7 +297,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 		int64(456),
 	)
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -330,7 +330,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask() {
 	}
 
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -385,7 +385,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 		int64(456),
 	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -406,6 +406,6 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
 
 	s.mockEngine.EXPECT().ReplicateWorkflowState(gomock.Any(), gomock.Any()).Return(nil)
 
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
