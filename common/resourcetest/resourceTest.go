@@ -160,6 +160,7 @@ func NewTest(
 	historyServiceResolver := membership.NewMockServiceResolver(controller)
 	workerServiceResolver := membership.NewMockServiceResolver(controller)
 	membershipMonitor.EXPECT().GetResolver(primitives.FrontendService).Return(frontendServiceResolver, nil).AnyTimes()
+	membershipMonitor.EXPECT().GetResolver(primitives.InternalFrontendService).Return(nil, membership.ErrUnknownService).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(primitives.MatchingService).Return(matchingServiceResolver, nil).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(primitives.HistoryService).Return(historyServiceResolver, nil).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(primitives.WorkerService).Return(workerServiceResolver, nil).AnyTimes()
