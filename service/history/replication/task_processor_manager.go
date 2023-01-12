@@ -174,7 +174,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 		if clusterName == currentClusterName {
 			continue
 		}
-		pollingShardIds := r.taskPollerManager.getPollingShardIDs(clusterName)
+		pollingShardIds := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
 		for _, pollingShardId := range pollingShardIds {
 			perShardTaskProcessorKey := fmt.Sprintf(clusterCallbackKey, clusterName, pollingShardId)
 			// The metadata triggers an update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
