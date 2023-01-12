@@ -717,4 +717,6 @@ const (
 	WorkerPerNamespaceWorkerOptions = "worker.perNamespaceWorkerOptions"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
+	// WorkerStickyCacheSize controls the sticky cache size for all SDK workers on the worker node
+	WorkerStickyCacheSize = "worker.stickyCacheSize"
 )

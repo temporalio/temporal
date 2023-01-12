@@ -407,8 +407,8 @@ func SdkClientFactoryProvider(
 	), nil
 }
 
-func SdkWorkerFactoryProvider() sdk.WorkerFactory {
-	return sdk.NewWorkerFactory()
+func SdkWorkerFactoryProvider(dc *dynamicconfig.Collection) sdk.WorkerFactory {
+	return sdk.NewWorkerFactory(dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0))
 }
 
 func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {

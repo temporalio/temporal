@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -64,7 +65,10 @@ type (
 		once            sync.Once
 	}
 
-	workerFactory struct{}
+	workerFactory struct {
+		stickyCacheSize dynamicconfig.IntPropertyFn
+		once            sync.Once
+	}
 )
 
 var (
@@ -126,8 +130,10 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 	return f.systemSdkClient
 }
 
-func NewWorkerFactory() *workerFactory {
-	return &workerFactory{}
+func NewWorkerFactory(stickyCacheSize dynamicconfig.IntPropertyFn) *workerFactory {
+	return &workerFactory{
+		stickyCacheSize: stickyCacheSize,
+	}
 }
 
 func (f *workerFactory) New(
@@ -135,5 +141,10 @@ func (f *workerFactory) New(
 	taskQueue string,
 	options sdkworker.Options,
 ) sdkworker.Worker {
+	f.once.Do(func() {
+		if size := f.stickyCacheSize(); size > 0 {
+			sdkworker.SetStickyWorkflowCacheSize(size)
+		}
+	})
 	return sdkworker.New(client, taskQueue, options)
 }
