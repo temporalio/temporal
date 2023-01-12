@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/service/history/shard"
+	hshard "go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -75,7 +75,7 @@ type (
 	}
 
 	queueBase struct {
-		shard shard.Context
+		shard hshard.Context
 
 		status     int32
 		shutdownCh chan struct{}
@@ -120,7 +120,7 @@ type (
 )
 
 func newQueueBase(
-	shard shard.Context,
+	shard hshard.Context,
 	category tasks.Category,
 	paginationFnProvider PaginationFnProvider,
 	scheduler Scheduler,
@@ -164,6 +164,7 @@ func newQueueBase(
 			priorityAssigner,
 			timeSource,
 			shard.GetNamespaceRegistry(),
+			shard.GetClusterMetadata(),
 			logger,
 			metricsHandler,
 		)
@@ -274,9 +275,9 @@ func (p *queueBase) Category() tasks.Category {
 }
 
 func (p *queueBase) FailoverNamespace(
-	namespaceIDs map[string]struct{},
+	namespaceID string,
 ) {
-	p.rescheduler.Reschedule(namespaceIDs)
+	p.rescheduler.Reschedule(namespaceID)
 }
 
 func (p *queueBase) processNewRange() error {

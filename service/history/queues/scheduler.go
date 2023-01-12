@@ -117,14 +117,14 @@ func NewNamespacePriorityScheduler(
 		namespaceWeights := options.ActiveNamespaceWeights
 		namespaceName := namespace.EmptyName
 
-		namespace, err := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
+		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
 		if err == nil {
-			namespaceName = namespace.Name()
-			if !namespace.ActiveInCluster(currentClusterName) {
+			namespaceName = ns.Name()
+			if !ns.ActiveInCluster(currentClusterName) {
 				namespaceWeights = options.StandbyNamespaceWeights
 			}
 		} else {
-			// if namespace not found, treat is as active namespace and
+			// if namespace not found, treat it as active namespace and
 			// use default active namespace weight
 			logger.Warn("Unable to find namespace, using active namespace task channel weight",
 				tag.WorkflowNamespaceID(key.NamespaceID),
@@ -241,36 +241,19 @@ func NewPriorityScheduler(
 
 func (s *schedulerImpl) Start() {
 	if s.channelWeightUpdateCh != nil {
-		s.namespaceRegistry.RegisterNamespaceChangeCallback(
-			s,
-			0,
-			func() {}, // no-op
-			func(oldNamespaces, newNamespaces []*namespace.Namespace) {
-				namespaceFailover := false
-				for idx := range oldNamespaces {
-					if oldNamespaces[idx].FailoverVersion() != newNamespaces[idx].FailoverVersion() {
-						namespaceFailover = true
-						break
-					}
-				}
-
-				if !namespaceFailover {
-					return
-				}
-
-				select {
-				case s.channelWeightUpdateCh <- struct{}{}:
-				default:
-				}
-			},
-		)
+		s.namespaceRegistry.RegisterStateChangeCallback(s, func(ns *namespace.Namespace, deletedFromDb bool) {
+			select {
+			case s.channelWeightUpdateCh <- struct{}{}:
+			default:
+			}
+		})
 	}
 	s.Scheduler.Start()
 }
 
 func (s *schedulerImpl) Stop() {
 	if s.channelWeightUpdateCh != nil {
-		s.namespaceRegistry.UnregisterNamespaceChangeCallback(s)
+		s.namespaceRegistry.UnregisterStateChangeCallback(s)
 
 		// note we can't close the channelWeightUpdateCh here
 		// as callback may still be triggered even after unregister returns

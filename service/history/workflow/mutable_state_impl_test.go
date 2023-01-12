@@ -406,7 +406,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChan
 	})
 	s.NoError(err)
 
-	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc(), enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
 	s.NotNil(wt)
 
@@ -437,7 +437,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	})
 	s.NoError(err)
 
-	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc(), enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
 	s.NotNil(wt)
 
@@ -583,6 +583,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		nil,
 		nil,
+		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -634,6 +635,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		nil,
 		nil,
+		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
 	s.Nil(err)
 	s.NotNil(wt)

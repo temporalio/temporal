@@ -1,0 +1,50 @@
+name: Features Integration
+
+on: # rebuild any PRs and main branch changes
+  pull_request:
+  push:
+    branches:
+      - master
+
+concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-docker-image:
+    uses: temporalio/docker-builds/.github/workflows/docker-build-only.yml@main
+    with:
+      temporal-server-repo-path: ${{github.event.pull_request.head.repo.full_name}}
+      temporal-server-repo-ref: ${{github.event.pull_request.head.ref}}
+
+  feature-tests-ts:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/typescript.yaml@main
+    with:
+      version: 1.5.2
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker
+
+  feature-tests-go:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/go.yaml@main
+    with:
+      version: v1.19.0
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker
+
+  feature-tests-python:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/python.yaml@main
+    with:
+      version: 0.1b4
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker
+
+  feature-tests-java:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/java.yaml@main
+    with:
+      version: v1.17.0
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker

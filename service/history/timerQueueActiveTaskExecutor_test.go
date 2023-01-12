@@ -1479,7 +1479,8 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 		nil,
 		queues.NewNoopPriorityAssigner(),
 		s.mockShard.GetTimeSource(),
-		nil,
+		s.mockNamespaceCache,
+		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
 	)

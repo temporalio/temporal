@@ -434,20 +434,6 @@ func (mr *MockContextMockRecorder) GetMetricsHandler() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsHandler", reflect.TypeOf((*MockContext)(nil).GetMetricsHandler))
 }
 
-// GetNamespaceNotificationVersion mocks base method.
-func (m *MockContext) GetNamespaceNotificationVersion() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceNotificationVersion")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetNamespaceNotificationVersion indicates an expected call of GetNamespaceNotificationVersion.
-func (mr *MockContextMockRecorder) GetNamespaceNotificationVersion() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceNotificationVersion", reflect.TypeOf((*MockContext)(nil).GetNamespaceNotificationVersion))
-}
-
 // GetNamespaceRegistry mocks base method.
 func (m *MockContext) GetNamespaceRegistry() namespace.Registry {
 	m.ctrl.T.Helper()
@@ -718,15 +704,15 @@ func (mr *MockContextMockRecorder) UpdateFailoverLevel(category, failoverID, lev
 }
 
 // UpdateHandoverNamespaces mocks base method.
-func (m *MockContext) UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace) {
+func (m *MockContext) UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateHandoverNamespaces", newNamespaces)
+	m.ctrl.Call(m, "UpdateHandoverNamespaces", ns, deletedFromDb)
 }
 
 // UpdateHandoverNamespaces indicates an expected call of UpdateHandoverNamespaces.
-func (mr *MockContextMockRecorder) UpdateHandoverNamespaces(newNamespaces interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateHandoverNamespaces(ns, deletedFromDb interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespaces", reflect.TypeOf((*MockContext)(nil).UpdateHandoverNamespaces), newNamespaces)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespaces", reflect.TypeOf((*MockContext)(nil).UpdateHandoverNamespaces), ns, deletedFromDb)
 }
 
 // UpdateNamespaceNotificationVersion mocks base method.

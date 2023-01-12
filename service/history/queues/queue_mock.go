@@ -73,15 +73,15 @@ func (mr *MockQueueMockRecorder) Category() *gomock.Call {
 }
 
 // FailoverNamespace mocks base method.
-func (m *MockQueue) FailoverNamespace(namespaceIDs map[string]struct{}) {
+func (m *MockQueue) FailoverNamespace(namespaceID string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "FailoverNamespace", namespaceIDs)
+	m.ctrl.Call(m, "FailoverNamespace", namespaceID)
 }
 
 // FailoverNamespace indicates an expected call of FailoverNamespace.
-func (mr *MockQueueMockRecorder) FailoverNamespace(namespaceIDs interface{}) *gomock.Call {
+func (mr *MockQueueMockRecorder) FailoverNamespace(namespaceID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailoverNamespace", reflect.TypeOf((*MockQueue)(nil).FailoverNamespace), namespaceIDs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailoverNamespace", reflect.TypeOf((*MockQueue)(nil).FailoverNamespace), namespaceID)
 }
 
 // NotifyNewTasks mocks base method.

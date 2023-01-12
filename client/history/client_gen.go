@@ -619,6 +619,30 @@ func (c *clientImpl) ReplicateEventsV2(
 	return response, nil
 }
 
+func (c *clientImpl) ReplicateWorkflowState(
+	ctx context.Context,
+	request *historyservice.ReplicateWorkflowStateRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReplicateWorkflowStateResponse, error) {
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetWorkflowState().GetExecutionInfo().GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+	var response *historyservice.ReplicateWorkflowStateResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ReplicateWorkflowState(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.RequestCancelWorkflowExecutionRequest,
