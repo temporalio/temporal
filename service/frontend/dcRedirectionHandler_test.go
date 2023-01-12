@@ -150,6 +150,10 @@ func (s *dcRedirectionHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *dcRedirectionHandlerSuite) TestPanic() {
+	s.handler.ListScheduleMatchingTimes(context.Background(), &workflowservice.ListScheduleMatchingTimesRequest{})
+}
+
 func (s *dcRedirectionHandlerSuite) TestDescribeTaskQueue() {
 	apiName := "DescribeTaskQueue"
 
