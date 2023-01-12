@@ -94,7 +94,6 @@ type (
 		taskManager       persistence.TaskManager
 		historyClient     historyservice.HistoryServiceClient
 		adminClient       adminservice.AdminServiceClient
-		workerFactory     sdk.WorkerFactory
 		namespaceRegistry namespace.Registry
 	}
 
@@ -122,7 +121,6 @@ func New(
 	historyClient historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
 	registry namespace.Registry,
-	workerFactory sdk.WorkerFactory,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
@@ -134,7 +132,6 @@ func New(
 			taskManager:       taskManager,
 			historyClient:     historyClient,
 			adminClient:       adminClient,
-			workerFactory:     workerFactory,
 			namespaceRegistry: registry,
 		},
 	}
@@ -174,7 +171,7 @@ func (s *Scanner) Start() error {
 	}
 
 	for _, tl := range workerTaskQueueNames {
-		work := s.context.workerFactory.New(s.context.sdkClientFactory.GetSystemClient(), tl, workerOpts)
+		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), tl, workerOpts)
 
 		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})

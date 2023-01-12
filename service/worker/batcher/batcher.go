@@ -49,7 +49,6 @@ type (
 	// It is also the context object that get's passed around within the scanner workflows / activities
 	Batcher struct {
 		sdkClientFactory sdk.ClientFactory
-		sdkWorkerFactory sdk.WorkerFactory
 		metricsHandler   metrics.Handler
 		logger           log.Logger
 		rps              dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -62,13 +61,11 @@ func New(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
-	sdkWorkerFactory sdk.WorkerFactory,
 	rps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) *Batcher {
 	return &Batcher{
 		sdkClientFactory: sdkClientFactory,
-		sdkWorkerFactory: sdkWorkerFactory,
 		metricsHandler:   metricsHandler,
 		logger:           log.With(logger, tag.ComponentBatcher),
 		rps:              rps,
@@ -84,7 +81,7 @@ func (s *Batcher) Start() error {
 		BackgroundActivityContext: ctx,
 	}
 	sdkClient := s.sdkClientFactory.GetSystemClient()
-	batchWorker := s.sdkWorkerFactory.New(sdkClient, taskQueueName, workerOpts)
+	batchWorker := s.sdkClientFactory.NewWorker(sdkClient, taskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivity(&activities{
 		activityDeps: activityDeps{

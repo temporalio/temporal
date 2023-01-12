@@ -153,7 +153,6 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 	} {
 		s.Run(c.Name, func() {
 			ctrl := gomock.NewController(s.T())
-			mockWorkerFactory := sdk.NewMockWorkerFactory(ctrl)
 			mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
 			mockSdkClient := mocksdk.NewMockClient(ctrl)
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
@@ -199,14 +198,13 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				historyservicemock.NewMockHistoryServiceClient(ctrl),
 				mockAdminClient,
 				mockNamespaceRegistry,
-				mockWorkerFactory,
 			)
 			for _, sc := range c.ExpectedScanners {
 				worker := mocksdk.NewMockWorker(ctrl)
 				worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().Start()
-				mockWorkerFactory.EXPECT().New(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
+				mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
 				mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 				mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), sc.WFTypeName, gomock.Any())
 			}

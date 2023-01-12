@@ -65,7 +65,6 @@ type (
 		fx.In
 		Logger            log.Logger
 		SdkClientFactory  sdk.ClientFactory
-		SdkWorkerFactory  sdk.WorkerFactory
 		NamespaceRegistry namespace.Registry
 		HostName          resource.HostName
 		Config            *Config
@@ -79,7 +78,6 @@ type (
 		// from init params or Start
 		logger            log.Logger
 		sdkClientFactory  sdk.ClientFactory
-		sdkWorkerFactory  sdk.WorkerFactory
 		namespaceRegistry namespace.Registry
 		self              *membership.HostInfo
 		hostName          resource.HostName
@@ -130,7 +128,6 @@ func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *p
 	return &perNamespaceWorkerManager{
 		logger:              log.With(params.Logger, tag.ComponentPerNSWorkerManager),
 		sdkClientFactory:    params.SdkClientFactory,
-		sdkWorkerFactory:    params.SdkWorkerFactory,
 		namespaceRegistry:   params.NamespaceRegistry,
 		hostName:            params.HostName,
 		config:              params.Config,
@@ -453,7 +450,7 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.OnFatalError = w.onFatalError
 
 	// this should not block because the client already has server capabilities
-	sdkworker := w.wm.sdkWorkerFactory.New(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
+	sdkworker := w.wm.sdkClientFactory.NewWorker(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	for _, cmp := range components {
 		cmp.Register(sdkworker, ns)
 	}

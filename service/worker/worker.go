@@ -47,7 +47,6 @@ type (
 		status           int32
 		logger           log.Logger
 		sdkClientFactory sdk.ClientFactory
-		sdkWorkerFactory sdk.WorkerFactory
 		workers          []sdkworker.Worker
 		workerComponents []workercommon.WorkerComponent
 	}
@@ -56,7 +55,6 @@ type (
 		fx.In
 		Logger           log.Logger
 		SdkClientFactory sdk.ClientFactory
-		SdkWorkerFactory sdk.WorkerFactory
 		WorkerComponents []workercommon.WorkerComponent `group:"workerComponent"`
 	}
 )
@@ -65,7 +63,6 @@ func NewWorkerManager(params initParams) *workerManager {
 	return &workerManager{
 		logger:           params.Logger,
 		sdkClientFactory: params.SdkClientFactory,
-		sdkWorkerFactory: params.SdkWorkerFactory,
 		workerComponents: params.WorkerComponents,
 	}
 }
@@ -84,7 +81,7 @@ func (wm *workerManager) Start() {
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 	}
 	sdkClient := wm.sdkClientFactory.GetSystemClient()
-	defaultWorker := wm.sdkWorkerFactory.New(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
+	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
 	wm.workers = []sdkworker.Worker{defaultWorker}
 
 	for _, wc := range wm.workerComponents {
@@ -94,7 +91,7 @@ func (wm *workerManager) Start() {
 			wc.Register(defaultWorker)
 		} else {
 			// this worker component requires a dedicated worker
-			dedicatedWorker := wm.sdkWorkerFactory.New(sdkClient, workerOptions.TaskQueue, workerOptions.Options)
+			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, workerOptions.TaskQueue, workerOptions.Options)
 			wc.Register(dedicatedWorker)
 			wm.workers = append(wm.workers, dedicatedWorker)
 		}

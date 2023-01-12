@@ -132,7 +132,6 @@ var DefaultOptions = fx.Options(
 	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(SdkClientFactoryProvider),
-	fx.Provide(SdkWorkerFactoryProvider),
 	fx.Provide(DCRedirectionPolicyProvider),
 )
 
@@ -394,6 +393,7 @@ func SdkClientFactoryProvider(
 	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
 	resolver membership.GRPCResolver,
+	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
 	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -404,11 +404,8 @@ func SdkClientFactoryProvider(
 		frontendTLSConfig,
 		metricsHandler,
 		logger,
+		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
 	), nil
-}
-
-func SdkWorkerFactoryProvider(dc *dynamicconfig.Collection) sdk.WorkerFactory {
-	return sdk.NewWorkerFactory(dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0))
 }
 
 func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {

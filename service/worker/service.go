@@ -90,14 +90,12 @@ type (
 		status           int32
 		stopC            chan struct{}
 		sdkClientFactory sdk.ClientFactory
-		sdkWorkerFactory sdk.WorkerFactory
 		esClient         esclient.Client
 		config           *Config
 
 		workerManager             *workerManager
 		perNamespaceWorkerManager *perNamespaceWorkerManager
 		scanner                   *scanner.Scanner
-		workerFactory             sdk.WorkerFactory
 	}
 
 	// Config contains all the service config for worker
@@ -131,7 +129,6 @@ func NewService(
 	logger log.SnTaggedLogger,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
-	sdkWorkerFactory sdk.WorkerFactory,
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
@@ -150,7 +147,6 @@ func NewService(
 	workerManager *workerManager,
 	perNamespaceWorkerManager *perNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,
-	workerFactory sdk.WorkerFactory,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(primitives.WorkerService)
 	if err != nil {
@@ -161,7 +157,6 @@ func NewService(
 		status:                    common.DaemonStatusInitialized,
 		config:                    serviceConfig,
 		sdkClientFactory:          sdkClientFactory,
-		sdkWorkerFactory:          sdkWorkerFactory,
 		esClient:                  esClient,
 		stopC:                     make(chan struct{}),
 		logger:                    logger,
@@ -184,7 +179,6 @@ func NewService(
 
 		workerManager:             workerManager,
 		perNamespaceWorkerManager: perNamespaceWorkerManager,
-		workerFactory:             workerFactory,
 	}
 	if err := s.initScanner(); err != nil {
 		return nil, err
@@ -472,7 +466,6 @@ func (s *Service) startBatcher() {
 		s.metricsHandler,
 		s.logger,
 		s.sdkClientFactory,
-		s.sdkWorkerFactory,
 		s.config.BatcherRPS,
 		s.config.BatcherConcurrency,
 	).Start(); err != nil {
@@ -499,7 +492,6 @@ func (s *Service) initScanner() error {
 		s.historyClient,
 		adminClient,
 		s.namespaceRegistry,
-		s.workerFactory,
 	)
 	return nil
 }
@@ -542,7 +534,6 @@ func (s *Service) startArchiver() {
 		Config:           s.config.ArchiverConfig,
 		ArchiverProvider: s.archiverProvider,
 		SdkClientFactory: s.sdkClientFactory,
-		SdkWorkerFactory: s.sdkWorkerFactory,
 		HistoryClient:    historyClient,
 	}
 	clientWorker := archiver.NewClientWorker(bc)
