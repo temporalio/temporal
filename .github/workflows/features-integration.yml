@@ -1,4 +1,4 @@
-name: SDK Features Integration
+name: Features Integration
 
 on: # rebuild any PRs and main branch changes
   pull_request:
@@ -19,7 +19,7 @@ jobs:
 
   feature-tests-ts:
     needs: build-docker-image
-    uses: temporalio/sdk-features/.github/workflows/typescript.yaml@main
+    uses: temporalio/features/.github/workflows/typescript.yaml@main
     with:
       version: 1.5.2
       version-is-repo-ref: false
@@ -27,7 +27,7 @@ jobs:
 
   feature-tests-go:
     needs: build-docker-image
-    uses: temporalio/sdk-features/.github/workflows/go.yaml@main
+    uses: temporalio/features/.github/workflows/go.yaml@main
     with:
       version: v1.19.0
       version-is-repo-ref: false
@@ -35,7 +35,7 @@ jobs:
 
   feature-tests-python:
     needs: build-docker-image
-    uses: temporalio/sdk-features/.github/workflows/python.yaml@main
+    uses: temporalio/features/.github/workflows/python.yaml@main
     with:
       version: 0.1b4
       version-is-repo-ref: false
@@ -43,7 +43,7 @@ jobs:
 
   feature-tests-java:
     needs: build-docker-image
-    uses: temporalio/sdk-features/.github/workflows/java.yaml@main
+    uses: temporalio/features/.github/workflows/java.yaml@main
     with:
       version: v1.17.0
       version-is-repo-ref: false
