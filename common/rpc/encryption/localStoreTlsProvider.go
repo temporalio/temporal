@@ -435,10 +435,8 @@ func (s *localStoreTlsProvider) timerCallback() {
 }
 
 func (s *localStoreTlsProvider) checkCertExpiration() {
-	defer func() {
-		var retError error
-		log.CapturePanic(s.logger, &retError)
-	}()
+	var retError error
+	defer log.CapturePanic(s.logger, &retError)
 
 	var errorTime time.Time
 	if s.settings.ExpirationChecks.ErrorWindow != 0 {
