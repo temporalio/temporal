@@ -954,6 +954,4 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 	default:
 		return ErrInvalidNamespaceStateUpdate
 	}
-
-	return nil
 }

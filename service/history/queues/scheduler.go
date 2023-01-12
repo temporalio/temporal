@@ -117,10 +117,10 @@ func NewNamespacePriorityScheduler(
 		namespaceWeights := options.ActiveNamespaceWeights
 		namespaceName := namespace.EmptyName
 
-		namespace, err := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
+		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
 		if err == nil {
-			namespaceName = namespace.Name()
-			if !namespace.ActiveInCluster(currentClusterName) {
+			namespaceName = ns.Name()
+			if !ns.ActiveInCluster(currentClusterName) {
 				namespaceWeights = options.StandbyNamespaceWeights
 			}
 		} else {
