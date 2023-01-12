@@ -121,8 +121,8 @@ type (
 
 	// UnknownEncodingTypeError is an error type for unknown or unsupported encoding type
 	UnknownEncodingTypeError struct {
-		encodingTypeStr      string
-		supportedEncodingStr []string
+		encodingTypeStr     string
+		expectedEncodingStr []string
 	}
 
 	serializerImpl struct {
@@ -261,27 +261,27 @@ func (t *serializerImpl) serialize(p proto.Marshaler, encodingType enumspb.Encod
 // NewUnknownEncodingTypeError returns a new instance of encoding type error
 func NewUnknownEncodingTypeError(
 	encodingTypeStr string,
-	supportedEncoding ...enumspb.EncodingType,
+	expectedEncoding ...enumspb.EncodingType,
 ) error {
-	if len(supportedEncoding) == 0 {
+	if len(expectedEncoding) == 0 {
 		for encodingType := range enumspb.EncodingType_name {
-			supportedEncoding = append(supportedEncoding, enumspb.EncodingType(encodingType))
+			expectedEncoding = append(expectedEncoding, enumspb.EncodingType(encodingType))
 		}
 	}
-	supportedEncodingStr := make([]string, 0, len(supportedEncoding))
-	for _, encodingType := range supportedEncoding {
-		supportedEncodingStr = append(supportedEncodingStr, encodingType.String())
+	expectedEncodingStr := make([]string, 0, len(expectedEncoding))
+	for _, encodingType := range expectedEncoding {
+		expectedEncodingStr = append(expectedEncodingStr, encodingType.String())
 	}
 	return &UnknownEncodingTypeError{
-		encodingTypeStr:      encodingTypeStr,
-		supportedEncodingStr: supportedEncodingStr,
+		encodingTypeStr:     encodingTypeStr,
+		expectedEncodingStr: expectedEncodingStr,
 	}
 }
 
 func (e *UnknownEncodingTypeError) Error() string {
 	return fmt.Sprintf("unknown or unsupported encoding type %v, supported types: %v",
 		e.encodingTypeStr,
-		strings.Join(e.supportedEncodingStr, ","),
+		strings.Join(e.expectedEncodingStr, ","),
 	)
 }
 

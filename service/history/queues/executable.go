@@ -182,7 +182,21 @@ func (e *executableImpl) Execute() (retErr error) {
 		headers.NewBackgroundCallerInfo(namespaceName.String()),
 	)
 
-	defer e.capturePanic(&retErr)
+	defer func() {
+		if panicObj := recover(); panicObj != nil {
+			err, ok := panicObj.(error)
+			if !ok {
+				err = serviceerror.NewInternal(fmt.Sprintf("panic: %v", panicObj))
+			}
+
+			e.logger.Error("Panic is captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
+			retErr = err
+
+			// we need to guess the metrics tags here as we don't know which execution logic
+			// is actually used which is upto the executor implementation
+			e.taggedMetricsHandler = e.metricsHandler.WithTags(e.estimateTaskMetricTag()...)
+		}
+	}()
 
 	startTime := e.timeSource.Now()
 
@@ -517,21 +531,5 @@ func (e *executableImpl) estimateTaskMetricTag() []metrics.Tag {
 		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
-	}
-}
-
-func (e *executableImpl) capturePanic(retError *error) {
-	if panicObj := recover(); panicObj != nil {
-		err, ok := panicObj.(error)
-		if !ok {
-			err = serviceerror.NewInternal(fmt.Sprintf("panic: %v", panicObj))
-		}
-
-		e.logger.Error("Panic is captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
-		*retError = err
-
-		// we need to guess the metrics tags here as we don't know which execution logic
-		// is actually used which is upto the executor implementation
-		e.taggedMetricsHandler = e.metricsHandler.WithTags(e.estimateTaskMetricTag()...)
 	}
 }
