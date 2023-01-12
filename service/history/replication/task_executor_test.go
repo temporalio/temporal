@@ -229,7 +229,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 	}
 
 	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(&historyservice.SyncActivityResponse{}, nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -295,7 +295,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 	)
 
 	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(&historyservice.SyncActivityResponse{}, nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -327,7 +327,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask() {
 		NewRunEvents:        nil,
 	}
 	s.historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(&historyservice.ReplicateEventsV2Response{}, nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -383,7 +383,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 	)
 
 	s.historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(&historyservice.ReplicateEventsV2Response{}, nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
