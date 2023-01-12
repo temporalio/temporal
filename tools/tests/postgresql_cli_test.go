@@ -36,44 +36,6 @@ import (
 	"go.temporal.io/server/tools/sql/clitest"
 )
 
-const (
-	testPostgreSQLExecutionSchemaFile        = "../../schema/postgresql/v96/temporal/schema.sql"
-	testPostgreSQLVisibilitySchemaFile       = "../../schema/postgresql/v96/visibility/schema.sql"
-	testPostgreSQLExecutionSchemaVersionDir  = "../../schema/postgresql/v96/temporal/versioned"
-	testPostgreSQLVisibilitySchemaVersionDir = "../../schema/postgresql/v96/visibility/versioned"
-	testPostgreSQLQuery                      = `
--- test sql file content
-
-CREATE TABLE executions(
-  shard_id INTEGER NOT NULL,
-  namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
-  run_id BYTEA NOT NULL,
-  --
-  next_event_id BIGINT NOT NULL,
-  last_write_version BIGINT NOT NULL,
-  data BYTEA NOT NULL,
-  data_encoding VARCHAR(16) NOT NULL,
-  state BYTEA NOT NULL,
-  state_encoding VARCHAR(16) NOT NULL,
-  PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id)
-);
-
-CREATE TABLE current_executions(
-  shard_id INTEGER NOT NULL,
-  namespace_id BYTEA NOT NULL,
-  workflow_id VARCHAR(255) NOT NULL,
-  --
-  run_id BYTEA NOT NULL,
-  create_request_id VARCHAR(64) NOT NULL,
-  state INTEGER NOT NULL,
-  status INTEGER NOT NULL,
-  last_write_version BIGINT NOT NULL,
-  PRIMARY KEY (shard_id, namespace_id, workflow_id)
-);
-`
-)
-
 func TestPostgreSQLConnTestSuite(t *testing.T) {
 	suite.Run(t, clitest.NewSQLConnTestSuite(
 		environment.GetPostgreSQLAddress(),

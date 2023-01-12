@@ -38,7 +38,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/tests/testhelper"
+	"go.temporal.io/server/tests/testutils"
 )
 
 // TestCluster allows executing cassandra operations in testing.
@@ -99,7 +99,7 @@ func (s *TestCluster) SetupTestDatabase() {
 
 	schemaDir := s.schemaDir + "/"
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
-		temporalPackageDir := testhelper.GetRepoRootDirectory()
+		temporalPackageDir := testutils.GetRepoRootDirectory()
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.sql"))
