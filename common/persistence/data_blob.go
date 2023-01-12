@@ -25,10 +25,10 @@
 package persistence
 
 import (
-	"fmt"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 // NewDataBlob returns a new DataBlob
@@ -40,7 +40,7 @@ func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
 	encodingType, ok := enumspb.EncodingType_value[encodingTypeStr]
 	if !ok || (enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_PROTO3 &&
 		enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_JSON) {
-		panic(fmt.Sprintf("Invalid encoding: %v", encodingTypeStr))
+		panic(serialization.NewUnknownEncodingTypeError(encodingTypeStr, enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3))
 	}
 
 	return &commonpb.DataBlob{
