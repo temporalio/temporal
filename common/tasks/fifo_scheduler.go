@@ -207,6 +207,12 @@ func (f *FIFOScheduler[T]) processTask(
 		}
 
 		select {
+		case <-shutdownCh:
+			return
+		default:
+		}
+
+		select {
 		case task := <-f.tasksChan:
 			f.executeTask(task)
 

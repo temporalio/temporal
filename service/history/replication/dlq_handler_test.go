@@ -292,7 +292,7 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
-	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return("", nil)
+	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(nil)
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.RangeDeleteReplicationTaskFromDLQRequest{
 		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),

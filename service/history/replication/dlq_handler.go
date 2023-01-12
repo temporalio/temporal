@@ -209,7 +209,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 	}
 
 	for _, task := range replicationTasks {
-		if _, err := taskExecutor.Execute(
+		if err := taskExecutor.Execute(
 			ctx,
 			task,
 			true,

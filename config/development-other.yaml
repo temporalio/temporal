@@ -44,6 +44,12 @@ services:
       membershipPort: 9933
       bindOnLocalHost: true
 
+  internal-frontend:
+    rpc:
+      grpcPort: 9236
+      membershipPort: 9936
+      bindOnLocalHost: true
+
   matching:
     rpc:
       grpcPort: 9235
@@ -121,9 +127,6 @@ namespaceDefaults:
     visibility:
       state: "disabled"
       URI: "file:///tmp/temporal_vis_archival/development"
-
-publicClient:
-  hostPort: "localhost:9233"
 
 dynamicConfigClient:
   filepath: "config/dynamicconfig/development-cass.yaml"
