@@ -170,6 +170,8 @@ func (e *taskExecutorImpl) handleActivityTask(
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()
 
+	// This might be extra cost if the workflow belongs to local shard.
+	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 	_, err = e.shardContext.GetHistoryClient().SyncActivity(ctx, request)
 	switch retryErr := err.(type) {
 	case nil:
@@ -209,6 +211,8 @@ func (e *taskExecutorImpl) handleActivityTask(
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
 			return err
 		}
+		// This might be extra cost if the workflow belongs to local shard.
+		// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 		_, err = e.shardContext.GetHistoryClient().SyncActivity(ctx, request)
 		return err
 
@@ -251,6 +255,8 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()
 
+	// This might be extra cost if the workflow belongs to local shard.
+	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 	_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, request)
 	switch retryErr := err.(type) {
 	case nil:
@@ -291,6 +297,8 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 			return err
 		}
 
+		// This might be extra cost if the workflow belongs to local shard.
+		// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 		_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, request)
 		return err
 
@@ -317,6 +325,8 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	ctx, cancel := e.newTaskContext(ctx, executionInfo.NamespaceId)
 	defer cancel()
 
+	// This might be extra cost if the workflow belongs to local shard.
+	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
 		WorkflowState: attr.GetWorkflowState(),
 		RemoteCluster: e.remoteCluster,
