@@ -323,16 +323,6 @@ func (e *DeserializationError) Unwrap() error {
 	return e.wrappedErr
 }
 
-// IsSerializationError checks if a given error is related to serialization
-func IsSerializationError(err error) bool {
-	var serializationError *SerializationError
-	var deserializationError *DeserializationError
-	var encodingTypeError *UnknownEncodingTypeError
-	return errors.As(err, &serializationError) ||
-		errors.As(err, &deserializationError) ||
-		errors.As(err, &encodingTypeError)
-}
-
 func (t *serializerImpl) ShardInfoToBlob(info *persistencespb.ShardInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return ProtoEncodeBlob(info, encodingType)
 }

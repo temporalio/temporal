@@ -28,6 +28,7 @@ package queues
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -283,7 +284,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return err
 	}
 
-	if serialization.IsSerializationError(err) {
+	var deserializationError *serialization.DeserializationError
+	var encodingTypeError *serialization.UnknownEncodingTypeError
+	if errors.As(err, &deserializationError) || errors.As(err, &encodingTypeError) {
 		// likely due to data corruption, emit logs, metrics & drop the task by return nil so that
 		// task will be marked as completed.
 		e.taggedMetricsHandler.Counter(metrics.TaskCorruptionCounter.GetMetricName()).Record(1)
