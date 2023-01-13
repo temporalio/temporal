@@ -119,18 +119,19 @@ func NewTaskProcessor(
 	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
 ) TaskProcessor {
-	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(pollingShardID)).
-		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(pollingShardID)).
-		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(pollingShardID)).
-		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(pollingShardID)).
-		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(pollingShardID))
+	shardID := shard.GetShardID()
+	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
+		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID)).
+		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID)).
+		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID)).
+		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
 	// TODO: define separate set of configs for dlq retry
-	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(pollingShardID)).
-		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(pollingShardID)).
-		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(pollingShardID)).
-		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(pollingShardID)).
-		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(pollingShardID))
+	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
+		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID)).
+		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID)).
+		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID)).
+		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
 	return &taskProcessorImpl{
 		status:                  common.DaemonStatusInitialized,
