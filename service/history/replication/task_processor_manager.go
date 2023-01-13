@@ -190,7 +190,6 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 					RemoteCluster:   clusterName,
 					Shard:           r.shard,
 					HistoryResender: r.resender,
-					HistoryEngine:   r.engine,
 					DeleteManager:   r.deleteMgr,
 					WorkflowCache:   r.workflowCache,
 				}),

@@ -58,7 +58,6 @@ type (
 		RemoteCluster   string // TODO: Remove this remote cluster from executor then it can use singleton.
 		Shard           shard.Context
 		HistoryResender xdc.NDCHistoryResender
-		HistoryEngine   shard.Engine
 		DeleteManager   deletemanager.DeleteManager
 		WorkflowCache   wcache.Cache
 	}
@@ -68,10 +67,9 @@ type (
 	taskExecutorImpl struct {
 		currentCluster     string
 		remoteCluster      string
-		shard              shard.Context
+		shardContext       shard.Context
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
-		historyEngine      shard.Engine
 		deleteManager      deletemanager.DeleteManager
 		workflowCache      wcache.Cache
 		metricsHandler     metrics.Handler
@@ -83,23 +81,21 @@ type (
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func NewTaskExecutor(
 	remoteCluster string,
-	shard shard.Context,
+	shardContext shard.Context,
 	nDCHistoryResender xdc.NDCHistoryResender,
-	historyEngine shard.Engine,
 	deleteManager deletemanager.DeleteManager,
 	workflowCache wcache.Cache,
 ) TaskExecutor {
 	return &taskExecutorImpl{
-		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),
+		currentCluster:     shardContext.GetClusterMetadata().GetCurrentClusterName(),
 		remoteCluster:      remoteCluster,
-		shard:              shard,
-		namespaceRegistry:  shard.GetNamespaceRegistry(),
+		shardContext:       shardContext,
+		namespaceRegistry:  shardContext.GetNamespaceRegistry(),
 		nDCHistoryResender: nDCHistoryResender,
-		historyEngine:      historyEngine,
 		deleteManager:      deleteManager,
 		workflowCache:      workflowCache,
-		metricsHandler:     shard.GetMetricsHandler(),
-		logger:             shard.GetLogger(),
+		metricsHandler:     shardContext.GetMetricsHandler(),
+		logger:             shardContext.GetLogger(),
 	}
 }
 
@@ -167,7 +163,9 @@ func (e *taskExecutorImpl) handleActivityTask(
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()
 
-	err = e.historyEngine.SyncActivity(ctx, request)
+	// This might be extra cost if the workflow belongs to local shard.
+	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
+	_, err = e.shardContext.GetHistoryClient().SyncActivity(ctx, request)
 	switch retryErr := err.(type) {
 	case nil:
 		return nil
@@ -206,7 +204,10 @@ func (e *taskExecutorImpl) handleActivityTask(
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
 			return err
 		}
-		return e.historyEngine.SyncActivity(ctx, request)
+		// This might be extra cost if the workflow belongs to local shard.
+		// Add a wrapper of the history client to call history engine directly if it becomes an issue.
+		_, err = e.shardContext.GetHistoryClient().SyncActivity(ctx, request)
+		return err
 
 	default:
 		return err
@@ -247,7 +248,9 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()
 
-	err = e.historyEngine.ReplicateEventsV2(ctx, request)
+	// This might be extra cost if the workflow belongs to local shard.
+	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
+	_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, request)
 	switch retryErr := err.(type) {
 	case nil:
 		return nil
@@ -287,7 +290,10 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 			return err
 		}
 
-		return e.historyEngine.ReplicateEventsV2(ctx, request)
+		// This might be extra cost if the workflow belongs to local shard.
+		// Add a wrapper of the history client to call history engine directly if it becomes an issue.
+		_, err = e.shardContext.GetHistoryClient().ReplicateEventsV2(ctx, request)
+		return err
 
 	default:
 		return err
@@ -312,10 +318,13 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	ctx, cancel := e.newTaskContext(ctx, executionInfo.NamespaceId)
 	defer cancel()
 
-	return e.historyEngine.ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
+	// This might be extra cost if the workflow belongs to local shard.
+	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
+	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
 		WorkflowState: attr.GetWorkflowState(),
 		RemoteCluster: e.remoteCluster,
 	})
+	return err
 }
 
 func (e *taskExecutorImpl) filterTask(
