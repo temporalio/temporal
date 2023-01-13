@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/clock"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
@@ -122,6 +124,19 @@ func (s *executableSuite) TestExecute_CapturePanic() {
 		},
 	)
 	s.Error(executable.Execute())
+}
+
+func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
+	executable := s.newTestExecutable()
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(_ context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
+		},
+	)
+	err := executable.Execute()
+	s.Error(err)
+	s.NoError(executable.HandleErr(err))
 }
 
 func (s *executableSuite) TestHandleErr_EntityNotExists() {

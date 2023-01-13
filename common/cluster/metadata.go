@@ -104,7 +104,7 @@ type (
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
-		ShardCount int32
+		ShardCount int32  `yaml:"-"` // Ignore this field when loading config.
 		// private field to track cluster information updates
 		version int64
 	}
@@ -401,6 +401,7 @@ func (m *metadataImpl) RegisterMetadataChangeCallback(callbackId any, cb Callbac
 			Enabled:                clusterInfo.Enabled,
 			InitialFailoverVersion: clusterInfo.InitialFailoverVersion,
 			RPCAddress:             clusterInfo.RPCAddress,
+			ShardCount:             clusterInfo.ShardCount,
 			version:                clusterInfo.version,
 		}
 	}
@@ -454,6 +455,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				Enabled:                newClusterInfo.Enabled,
 				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
 				RPCAddress:             newClusterInfo.RPCAddress,
+				ShardCount:             newClusterInfo.ShardCount,
 				version:                newClusterInfo.version,
 			}
 		} else if newClusterInfo.version > oldClusterInfo.version {
@@ -468,12 +470,14 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				Enabled:                oldClusterInfo.Enabled,
 				InitialFailoverVersion: oldClusterInfo.InitialFailoverVersion,
 				RPCAddress:             oldClusterInfo.RPCAddress,
+				ShardCount:             oldClusterInfo.ShardCount,
 				version:                oldClusterInfo.version,
 			}
 			newEntries[clusterName] = &ClusterInformation{
 				Enabled:                newClusterInfo.Enabled,
 				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
 				RPCAddress:             newClusterInfo.RPCAddress,
+				ShardCount:             newClusterInfo.ShardCount,
 				version:                newClusterInfo.version,
 			}
 		}
@@ -577,6 +581,7 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 			Enabled:                getClusterResp.GetIsConnectionEnabled(),
 			InitialFailoverVersion: getClusterResp.GetInitialFailoverVersion(),
 			RPCAddress:             getClusterResp.GetClusterAddress(),
+			ShardCount:             getClusterResp.GetHistoryShardCount(),
 			version:                getClusterResp.Version,
 		}
 	}
