@@ -499,9 +499,15 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
 	}
 	if metadata.GetHistoryShardCount() != h.config.NumHistoryShards {
-		// cluster shard number not equal
-		// TODO: remove this check once we support different shard numbers
-		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to history shard number mismatch")
+		remoteShardCount := metadata.GetHistoryShardCount()
+		large := remoteShardCount
+		small := h.config.NumHistoryShards
+		if large < small {
+			small, large = large, small
+		}
+		if large%small != 0 {
+			return serviceerror.NewInvalidArgument("Remote cluster shard number and local cluster shard number are not multiples.")
+		}
 	}
 	if !metadata.IsGlobalNamespaceEnabled {
 		// remote cluster doesn't support global namespace
