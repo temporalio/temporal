@@ -77,7 +77,7 @@ type (
 		status int32
 
 		sourceCluster           string
-		pollingShardID          int32
+		sourceShardID           int32
 		shard                   shard.Context
 		historyEngine           shard.Engine
 		historySerializer       serialization.Serializer
@@ -110,7 +110,7 @@ type (
 
 // NewTaskProcessor creates a new replication task processor.
 func NewTaskProcessor(
-	pollingShardID int32,
+	sourceShardID int32,
 	shard shard.Context,
 	historyEngine shard.Engine,
 	config *configs.Config,
@@ -135,7 +135,7 @@ func NewTaskProcessor(
 
 	return &taskProcessorImpl{
 		status:                  common.DaemonStatusInitialized,
-		pollingShardID:          pollingShardID,
+		sourceShardID:           sourceShardID,
 		sourceCluster:           replicationTaskFetcher.getSourceCluster(),
 		shard:                   shard,
 		historyEngine:           historyEngine,
@@ -469,7 +469,7 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	p.requestChan <- &replicationTaskRequest{
 		token: &replicationspb.ReplicationToken{
-			ShardId:                     p.pollingShardID,
+			ShardId:                     p.sourceShardID,
 			LastProcessedMessageId:      p.maxRxProcessedTaskID,
 			LastProcessedVisibilityTime: &p.maxRxProcessedTimestamp,
 			LastRetrievedMessageId:      p.maxRxReceivedTaskID,
@@ -504,7 +504,7 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 		if resp.GetHasMore() {
 			p.rxTaskBackoff = time.Duration(0)
 		} else {
-			p.rxTaskBackoff = p.config.ReplicationTaskProcessorNoTaskRetryWait(p.pollingShardID)
+			p.rxTaskBackoff = p.config.ReplicationTaskProcessorNoTaskRetryWait(p.sourceShardID)
 		}
 		return tasks, nil, nil
 

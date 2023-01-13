@@ -174,9 +174,9 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 		if clusterName == currentClusterName {
 			continue
 		}
-		pollingShardIds := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
-		for _, pollingShardId := range pollingShardIds {
-			perShardTaskProcessorKey := fmt.Sprintf(clusterCallbackKey, clusterName, pollingShardId)
+		sourceShardIds := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
+		for _, sourceShardId := range sourceShardIds {
+			perShardTaskProcessorKey := fmt.Sprintf(clusterCallbackKey, clusterName, sourceShardId)
 			// The metadata triggers an update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
 			// The callback covers three cases:
 			// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
@@ -189,7 +189,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 				// Case 2 and Case 3
 				fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
 				replicationTaskProcessor := NewTaskProcessor(
-					pollingShardId,
+					sourceShardId,
 					r.shard,
 					r.engine,
 					r.config,
