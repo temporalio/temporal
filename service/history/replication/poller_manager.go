@@ -70,8 +70,7 @@ func (p pollerManagerImpl) getSourceClusterShardIDs(sourceClusterName string) []
 func generateShardIDs(localShardId int32, localShardCount int32, remoteShardCount int32) []int32 {
 	var pollingShards []int32
 	if remoteShardCount <= localShardCount {
-		if localShardId <= remoteShardCount || remoteShardCount == 0 {
-			// TODO: remove remoteShardCount == 0. This is due to current NDC/XDC functional test setup.
+		if localShardId <= remoteShardCount {
 			pollingShards = append(pollingShards, localShardId)
 		}
 		return pollingShards
