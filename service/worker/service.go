@@ -316,7 +316,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 		),
 		PerNamespaceWorkerOptions: dc.GetMapPropertyFnWithNamespaceFilter(
 			dynamicconfig.WorkerPerNamespaceWorkerOptions,
-			make(map[string]any),
+			map[string]any{},
 		),
 		ThrottledLogRPS: dc.GetIntProperty(
 			dynamicconfig.WorkerThrottledLogRPS,

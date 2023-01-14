@@ -89,8 +89,19 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 				return util.Max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 3}[ns])
 			},
 			PerNamespaceWorkerOptions: func(ns string) map[string]any {
-				// TODO: test here
-				return make(map[string]any)
+				switch ns {
+				case "ns1":
+					return map[string]any{
+						"MaxConcurrentWorkflowTaskPollers": 100,
+					}
+				case "ns2":
+					return map[string]any{
+						"WorkerLocalActivitiesPerSecond": 200.0,
+						"StickyScheduleToStartTimeout":   "7.5s",
+					}
+				default:
+					return map[string]any{}
+				}
 			},
 		},
 		Components:      []workercommon.PerNSWorkerComponent{s.cmp1, s.cmp2},
@@ -210,6 +221,55 @@ func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 
 	wkr1.EXPECT().Stop()
 	cli1.EXPECT().Close()
+}
+
+func (s *perNsWorkerManagerSuite) TestOptions() {
+	ns1 := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+	ns2 := testns("ns2", enumspb.NAMESPACE_STATE_REGISTERED)
+	ns3 := testns("ns3", enumspb.NAMESPACE_STATE_REGISTERED)
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: true,
+	}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: false,
+	}).AnyTimes()
+
+	s.serviceResolver.EXPECT().Lookup(gomock.Any()).Return(membership.NewHostInfo("self", nil), nil).AnyTimes()
+	cli1 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
+	cli2 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns2")).Return(cli2)
+	cli3 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns3")).Return(cli3)
+	wkr := mocksdk.NewMockWorker(s.controller)
+	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
+		s.Equal(100, options.MaxConcurrentWorkflowTaskPollers)
+		s.Equal(2, options.MaxConcurrentActivityTaskPollers)
+		s.Equal(0.0, options.WorkerLocalActivitiesPerSecond)
+	}).Return(wkr)
+	s.cfactory.EXPECT().NewWorker(cli2, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
+		s.Equal(4, options.MaxConcurrentWorkflowTaskPollers)
+		s.Equal(200.0, options.WorkerLocalActivitiesPerSecond)
+		s.Equal(7500*time.Millisecond, options.StickyScheduleToStartTimeout)
+	}).Return(wkr)
+	s.cfactory.EXPECT().NewWorker(cli3, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
+		s.Equal(6, options.MaxConcurrentWorkflowTaskPollers)
+		s.Equal(0.0, options.WorkerLocalActivitiesPerSecond)
+		s.Equal(0*time.Millisecond, options.StickyScheduleToStartTimeout)
+	}).Return(wkr)
+	s.cmp1.EXPECT().Register(wkr, gomock.Any()).AnyTimes()
+	wkr.EXPECT().Start().AnyTimes()
+
+	s.manager.namespaceCallback(ns1, false)
+	s.manager.namespaceCallback(ns2, false)
+	s.manager.namespaceCallback(ns3, false)
+	time.Sleep(50 * time.Millisecond)
+
+	wkr.EXPECT().Stop().AnyTimes()
+	cli1.EXPECT().Close()
+	cli2.EXPECT().Close()
+	cli3.EXPECT().Close()
 }
 
 func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {

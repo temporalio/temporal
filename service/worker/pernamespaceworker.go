@@ -266,7 +266,7 @@ func (wm *perNamespaceWorkerManager) getWorkerOptions(ns *namespace.Namespace) s
 	optionsMap := wm.config.PerNamespaceWorkerOptions(ns.Name().String())
 	var options sdkWorkerOptions
 	b, err := json.Marshal(optionsMap)
-	if err == nil {
+	if err != nil {
 		return options
 	}
 	_ = json.Unmarshal(b, &options) // ignore errors, just use the zero value anyway
