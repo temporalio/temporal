@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/timer"
-	"go.temporal.io/server/service/history/shard"
+	hshard "go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -63,9 +63,10 @@ const (
 )
 
 func NewScheduledQueue(
-	shard shard.Context,
+	shard hshard.Context,
 	category tasks.Category,
 	scheduler Scheduler,
+	rescheduler Rescheduler,
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
@@ -111,6 +112,7 @@ func NewScheduledQueue(
 			category,
 			paginationFnProvider,
 			scheduler,
+			rescheduler,
 			priorityAssigner,
 			executor,
 			options,
@@ -160,7 +162,7 @@ func (p *scheduledQueue) Stop() {
 	p.queueBase.Stop()
 }
 
-func (p *scheduledQueue) NotifyNewTasks(_ string, tasks []tasks.Task) {
+func (p *scheduledQueue) NotifyNewTasks(tasks []tasks.Task) {
 	if len(tasks) == 0 {
 		return
 	}

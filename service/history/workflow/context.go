@@ -360,7 +360,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	NotifyWorkflowSnapshotTasks(engine, newWorkflow, newMutableState.GetNamespaceEntry().ActiveClusterName())
+	NotifyWorkflowSnapshotTasks(engine, newWorkflow)
 	emitStateTransitionCount(c.metricsHandler, newMutableState)
 
 	return nil
@@ -457,7 +457,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		newWorkflowEventsSeq,
 		currentWorkflow,
 		currentWorkflowEventsSeq,
-		resetMutableState.GetNamespaceEntry().ActiveClusterName(),
 	); err != nil {
 		return err
 	} else {
@@ -633,7 +632,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		currentWorkflowEventsSeq,
 		newWorkflow,
 		newWorkflowEventsSeq,
-		c.MutableState.GetNamespaceEntry().ActiveClusterName(),
 	); err != nil {
 		return err
 	} else {
@@ -684,7 +682,6 @@ func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (
 	return c.transaction.SetWorkflowExecution(
 		ctx,
 		resetWorkflowSnapshot,
-		c.MutableState.GetNamespaceEntry().ActiveClusterName(),
 	)
 }
 

@@ -41,7 +41,7 @@ type RelocatableAttributesFetcher interface {
 	) (*RelocatableAttributes, error)
 }
 
-// NewRelocatableAttributesFetcher creates a new instance of a RelocatableAttributesFetcher.
+// RelocatableAttributesFetcherProvider provides a new instance of a RelocatableAttributesFetcher.
 // The manager.VisibilityManager parameter is used to fetch the relocatable attributes from the persistence backend iff
 // we already moved them there out from the mutable state.
 // The visibility manager is not used if the relocatable attributes are still in the mutable state.
@@ -52,7 +52,7 @@ type RelocatableAttributesFetcher interface {
 // Currently, there is no cache, but you may provide a manager.VisibilityManager that supports caching to this function
 // safely.
 // TODO: Add a cache around the visibility manager for the relocatable attributes.
-func NewRelocatableAttributesFetcher(
+func RelocatableAttributesFetcherProvider(
 	visibilityManager manager.VisibilityManager,
 ) RelocatableAttributesFetcher {
 	return &relocatableAttributesFetcher{

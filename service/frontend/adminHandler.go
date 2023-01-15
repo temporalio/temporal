@@ -806,12 +806,16 @@ func (adh *AdminHandler) DescribeCluster(
 		var rings []*clusterspb.RingInfo
 		for _, role := range []primitives.ServiceName{
 			primitives.FrontendService,
+			primitives.InternalFrontendService,
 			primitives.HistoryService,
 			primitives.MatchingService,
 			primitives.WorkerService,
 		} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
+				if role == primitives.InternalFrontendService {
+					continue // this one is optional
+				}
 				return nil, err
 			}
 
@@ -1576,9 +1580,15 @@ func (adh *AdminHandler) validateRemoteClusterMetadata(metadata *adminservice.De
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
 	}
 	if metadata.GetHistoryShardCount() != adh.config.NumHistoryShards {
-		// cluster shard number not equal
-		// TODO: remove this check once we support different shard numbers
-		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to history shard number mismatch")
+		remoteShardCount := metadata.GetHistoryShardCount()
+		large := remoteShardCount
+		small := adh.config.NumHistoryShards
+		if large < small {
+			small, large = large, small
+		}
+		if large%small != 0 {
+			return serviceerror.NewInvalidArgument("Remote cluster shard number and local cluster shard number are not multiples.")
+		}
 	}
 	if !metadata.IsGlobalNamespaceEnabled {
 		// remote cluster doesn't support global namespace

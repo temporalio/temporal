@@ -33,14 +33,13 @@ import (
 	"strings"
 	"testing"
 
-	"go.temporal.io/server/tests/testhelper"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/tests/testutils"
 )
 
 type LogSuite struct {
@@ -68,7 +67,7 @@ func (s *LogSuite) TestParseLogLevel() {
 }
 
 func (s *LogSuite) TestNewLogger() {
-	dir := testhelper.MkdirTemp(s.T(), "", "config.testNewLogger")
+	dir := testutils.MkdirTemp(s.T(), "", "config.testNewLogger")
 
 	cfg := Config{
 		Level:      "info",
@@ -120,7 +119,7 @@ func TestDefaultLogger(t *testing.T) {
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	w.Close()
+	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
@@ -150,7 +149,7 @@ func TestThrottleLogger(t *testing.T) {
 	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShardContext).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	w.Close()
+	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")
@@ -179,7 +178,7 @@ func TestEmptyMsg(t *testing.T) {
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
-	w.Close()
+	require.Nil(t, w.Close())
 	os.Stdout = old // restoring the real stdout
 	out := <-outC
 	sps := strings.Split(preCaller, ":")

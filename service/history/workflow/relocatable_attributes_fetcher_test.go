@@ -126,7 +126,7 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 			}
 			ctx := context.Background()
 
-			fetcher := NewRelocatableAttributesFetcher(visibilityManager)
+			fetcher := RelocatableAttributesFetcherProvider(visibilityManager)
 			info, err := fetcher.Fetch(ctx, mutableState)
 
 			if c.ExpectedErr != nil {

@@ -1044,6 +1044,7 @@ type (
 	}
 
 	// Closeable is an interface for any entity that supports a close operation to release resources
+	// TODO: allow this method to return errors
 	Closeable interface {
 		Close()
 	}
@@ -1305,4 +1306,5 @@ const (
 	History
 	Matching
 	Worker
+	InternalFrontend
 )

@@ -128,8 +128,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
-	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
@@ -1537,16 +1537,14 @@ func (s *timerQueueStandbyTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.timerQueueStandbyTaskExecutor,
 		nil,
 		nil,
 		queues.NewNoopPriorityAssigner(),
 		s.mockShard.GetTimeSource(),
-		nil,
+		s.mockNamespaceCache,
+		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
-		nil,
 	)
 }

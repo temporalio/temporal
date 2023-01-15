@@ -1,0 +1,21 @@
+name: golangci-lint
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.19
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: v1.50.1
+          args: --verbose --timeout 10m --fix=false --new-from-rev=HEAD~ --config=.golangci.yml

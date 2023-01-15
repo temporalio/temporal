@@ -118,9 +118,9 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
-	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	config := tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContextWithTimeSource(
@@ -1474,16 +1474,14 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.timerQueueActiveTaskExecutor,
 		nil,
 		nil,
 		queues.NewNoopPriorityAssigner(),
 		s.mockShard.GetTimeSource(),
-		nil,
+		s.mockNamespaceCache,
+		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
-		nil,
 	)
 }

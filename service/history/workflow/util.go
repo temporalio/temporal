@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
@@ -72,7 +73,7 @@ func ScheduleWorkflowTask(
 		return nil
 	}
 
-	_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
+	_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
 	}

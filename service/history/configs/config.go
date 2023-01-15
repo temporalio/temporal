@@ -98,7 +98,6 @@ type Config struct {
 	// TimerQueueProcessor settings
 	TimerTaskHighPriorityRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
-	TimerTaskMaxRetryCount                           dynamicconfig.IntPropertyFn
 	TimerProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
 	TimerProcessorSchedulerActiveRoundRobinWeights   dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TimerProcessorSchedulerStandbyRoundRobinWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
@@ -110,7 +109,6 @@ type Config struct {
 	TimerProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
 	TimerProcessorMaxPollInterval                    dynamicconfig.DurationPropertyFn
 	TimerProcessorMaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
-	TimerProcessorMaxReschedulerSize                 dynamicconfig.IntPropertyFn
 	TimerProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
 	TimerProcessorMaxTimeShift                       dynamicconfig.DurationPropertyFn
 	TimerProcessorHistoryArchivalSizeLimit           dynamicconfig.IntPropertyFn
@@ -120,7 +118,6 @@ type Config struct {
 	// TransferQueueProcessor settings
 	TransferTaskHighPriorityRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TransferTaskBatchSize                               dynamicconfig.IntPropertyFn
-	TransferTaskMaxRetryCount                           dynamicconfig.IntPropertyFn
 	TransferProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
 	TransferProcessorSchedulerActiveRoundRobinWeights   dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TransferProcessorSchedulerStandbyRoundRobinWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
@@ -132,7 +129,6 @@ type Config struct {
 	TransferProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
 	TransferProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	TransferProcessorCompleteTransferInterval           dynamicconfig.DurationPropertyFn
-	TransferProcessorMaxReschedulerSize                 dynamicconfig.IntPropertyFn
 	TransferProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
 	TransferProcessorVisibilityArchivalTimeLimit        dynamicconfig.DurationPropertyFn
 	TransferProcessorEnsureCloseBeforeDelete            dynamicconfig.BoolPropertyFn
@@ -141,13 +137,11 @@ type Config struct {
 	// TODO: clean up unused replicator settings
 	ReplicatorTaskBatchSize                               dynamicconfig.IntPropertyFn
 	ReplicatorTaskWorkerCount                             dynamicconfig.IntPropertyFn
-	ReplicatorTaskMaxRetryCount                           dynamicconfig.IntPropertyFn
 	ReplicatorProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
 	ReplicatorProcessorMaxPollInterval                    dynamicconfig.DurationPropertyFn
 	ReplicatorProcessorMaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
 	ReplicatorProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
 	ReplicatorProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-	ReplicatorProcessorMaxReschedulerSize                 dynamicconfig.IntPropertyFn
 	ReplicatorProcessorEnablePriorityTaskProcessor        dynamicconfig.BoolPropertyFn
 	ReplicatorProcessorFetchTasksBatchSize                dynamicconfig.IntPropertyFn
 	ReplicatorProcessorMaxSkipTaskCount                   dynamicconfig.IntPropertyFn
@@ -209,7 +203,7 @@ type Config struct {
 	// Workflow task settings
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any workflow tasks
+	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any commands
 	// So that workflow task will be scheduled to another worker(by clear stickyness)
 	WorkflowTaskHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	WorkflowTaskCriticalAttempts dynamicconfig.IntPropertyFn
@@ -252,7 +246,6 @@ type Config struct {
 	// VisibilityQueueProcessor settings
 	VisibilityTaskHighPriorityRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	VisibilityTaskBatchSize                               dynamicconfig.IntPropertyFn
-	VisibilityTaskMaxRetryCount                           dynamicconfig.IntPropertyFn
 	VisibilityProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
 	VisibilityProcessorSchedulerActiveRoundRobinWeights   dynamicconfig.MapPropertyFnWithNamespaceFilter
 	VisibilityProcessorSchedulerStandbyRoundRobinWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
@@ -263,7 +256,6 @@ type Config struct {
 	VisibilityProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
 	VisibilityProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	VisibilityProcessorCompleteTaskInterval               dynamicconfig.DurationPropertyFn
-	VisibilityProcessorMaxReschedulerSize                 dynamicconfig.IntPropertyFn
 	VisibilityProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
 	VisibilityProcessorVisibilityArchivalTimeLimit        dynamicconfig.DurationPropertyFn
 	VisibilityProcessorEnsureCloseBeforeDelete            dynamicconfig.BoolPropertyFn
@@ -294,7 +286,7 @@ type Config struct {
 	ArchivalProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
 	ArchivalProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	ArchivalProcessorArchiveDelay                       dynamicconfig.DurationPropertyFn
-	ArchivalProcessorRetryWarningLimit                  dynamicconfig.IntPropertyFn
+	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
 }
 
 const (
@@ -353,7 +345,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TaskSchedulerNamespaceMaxQPS:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerNamespaceMaxQPS, 0),
 
 		TimerTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
-		TimerTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 20),
 		TimerProcessorSchedulerWorkerCount:               dc.GetIntProperty(dynamicconfig.TimerProcessorSchedulerWorkerCount, 512),
 		TimerProcessorSchedulerActiveRoundRobinWeights:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.TimerProcessorSchedulerActiveRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)),
 		TimerProcessorSchedulerStandbyRoundRobinWeights:  dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.TimerProcessorSchedulerStandbyRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultStandbyTaskPriorityWeight)),
@@ -365,7 +356,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TimerProcessorMaxPollHostRPS:                     dc.GetIntProperty(dynamicconfig.TimerProcessorMaxPollHostRPS, 0),
 		TimerProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxPollInterval, 5*time.Minute),
 		TimerProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.TimerProcessorMaxPollIntervalJitterCoefficient, 0.15),
-		TimerProcessorMaxReschedulerSize:                 dc.GetIntProperty(dynamicconfig.TimerProcessorMaxReschedulerSize, 10000),
 		TimerProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.TimerProcessorPollBackoffInterval, 5*time.Second),
 		TimerProcessorMaxTimeShift:                       dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxTimeShift, 1*time.Second),
 		TimerProcessorHistoryArchivalSizeLimit:           dc.GetIntProperty(dynamicconfig.TimerProcessorHistoryArchivalSizeLimit, 500*1024),
@@ -373,7 +363,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		RetentionTimerJitterDuration:                     dc.GetDurationProperty(dynamicconfig.RetentionTimerJitterDuration, 30*time.Minute),
 
 		TransferTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TransferTaskBatchSize, 100),
-		TransferTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.TransferTaskMaxRetryCount, 20),
 		TransferProcessorSchedulerWorkerCount:               dc.GetIntProperty(dynamicconfig.TransferProcessorSchedulerWorkerCount, 512),
 		TransferProcessorSchedulerActiveRoundRobinWeights:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.TransferProcessorSchedulerActiveRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)),
 		TransferProcessorSchedulerStandbyRoundRobinWeights:  dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.TransferProcessorSchedulerStandbyRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultStandbyTaskPriorityWeight)),
@@ -385,20 +374,17 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TransferProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.TransferProcessorUpdateAckInterval, 30*time.Second),
 		TransferProcessorUpdateAckIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.TransferProcessorUpdateAckIntervalJitterCoefficient, 0.15),
 		TransferProcessorCompleteTransferInterval:           dc.GetDurationProperty(dynamicconfig.TransferProcessorCompleteTransferInterval, 60*time.Second),
-		TransferProcessorMaxReschedulerSize:                 dc.GetIntProperty(dynamicconfig.TransferProcessorMaxReschedulerSize, 10000),
 		TransferProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.TransferProcessorPollBackoffInterval, 5*time.Second),
 		TransferProcessorVisibilityArchivalTimeLimit:        dc.GetDurationProperty(dynamicconfig.TransferProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
 		TransferProcessorEnsureCloseBeforeDelete:            dc.GetBoolProperty(dynamicconfig.TransferProcessorEnsureCloseBeforeDelete, true),
 
 		ReplicatorTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 100),
 		ReplicatorTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.ReplicatorTaskWorkerCount, 10),
-		ReplicatorTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.ReplicatorTaskMaxRetryCount, 100),
 		ReplicatorProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.ReplicatorProcessorMaxPollRPS, 20),
 		ReplicatorProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorMaxPollInterval, 1*time.Minute),
 		ReplicatorProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		ReplicatorProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.ReplicatorProcessorUpdateAckInterval, 5*time.Second),
 		ReplicatorProcessorUpdateAckIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.ReplicatorProcessorUpdateAckIntervalJitterCoefficient, 0.15),
-		ReplicatorProcessorMaxReschedulerSize:                 dc.GetIntProperty(dynamicconfig.ReplicatorProcessorMaxReschedulerSize, 10000),
 		ReplicatorProcessorEnablePriorityTaskProcessor:        dc.GetBoolProperty(dynamicconfig.ReplicatorProcessorEnablePriorityTaskProcessor, false),
 		ReplicatorProcessorFetchTasksBatchSize:                dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 25),
 		ReplicatorProcessorMaxSkipTaskCount:                   dc.GetIntProperty(dynamicconfig.ReplicatorMaxSkipTaskCount, 250),
@@ -424,10 +410,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		NumArchiveSystemWorkflows: dc.GetIntProperty(dynamicconfig.NumArchiveSystemWorkflows, 1000),
 		ArchiveRequestRPS:         dc.GetIntProperty(dynamicconfig.ArchiveRequestRPS, 300), // should be much smaller than frontend RPS
 		ArchiveSignalTimeout:      dc.GetDurationProperty(dynamicconfig.ArchiveSignalTimeout, 300*time.Millisecond),
-		DurableArchivalEnabled: func() bool {
-			// Always return false for now until durable archival is tested end-to-end
-			return false
-		},
+		DurableArchivalEnabled:    dc.GetBoolProperty(dynamicconfig.DurableArchivalEnabled, false),
 
 		BlobSizeLimitError:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
@@ -478,7 +461,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.VisibilityTaskBatchSize, 100),
 		VisibilityProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollRPS, 20),
 		VisibilityProcessorMaxPollHostRPS:                     dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollHostRPS, 0),
-		VisibilityTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.VisibilityTaskMaxRetryCount, 20),
 		VisibilityProcessorSchedulerWorkerCount:               dc.GetIntProperty(dynamicconfig.VisibilityProcessorSchedulerWorkerCount, 512),
 		VisibilityProcessorSchedulerActiveRoundRobinWeights:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityProcessorSchedulerActiveRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)),
 		VisibilityProcessorSchedulerStandbyRoundRobinWeights:  dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityProcessorSchedulerStandbyRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultStandbyTaskPriorityWeight)),
@@ -487,7 +469,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.VisibilityProcessorUpdateAckInterval, 30*time.Second),
 		VisibilityProcessorUpdateAckIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.VisibilityProcessorUpdateAckIntervalJitterCoefficient, 0.15),
 		VisibilityProcessorCompleteTaskInterval:               dc.GetDurationProperty(dynamicconfig.VisibilityProcessorCompleteTaskInterval, 60*time.Second),
-		VisibilityProcessorMaxReschedulerSize:                 dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxReschedulerSize, 10000),
 		VisibilityProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.VisibilityProcessorPollBackoffInterval, 5*time.Second),
 		VisibilityProcessorVisibilityArchivalTimeLimit:        dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
 		VisibilityProcessorEnsureCloseBeforeDelete:            dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnsureCloseBeforeDelete, false),
@@ -498,14 +479,14 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
 		IndexerConcurrency:                dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 100),
 		ESProcessorNumOfWorkers:           dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
-		// Should be not greater than NumberOfShards(512)/NumberOfHistoryNodes(4) * VisibilityTaskWorkerCount(10)/ESProcessorNumOfWorkers(1) divided by workflow distribution factor (2 at least).
+		// Should not be greater than number of visibility task queue workers VisibilityProcessorSchedulerWorkerCount (default 512)
 		// Otherwise, visibility queue processors won't be able to fill up bulk with documents (even under heavy load) and bulk will flush due to interval, not number of actions.
 		ESProcessorBulkActions: dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 500),
 		// 16MB - just a sanity check. With ES document size ~1Kb it should never be reached.
 		ESProcessorBulkSize: dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 16*1024*1024),
 		// Bulk processor will flush every this interval regardless of last flush due to bulk actions.
 		ESProcessorFlushInterval: dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
-		ESProcessorAckTimeout:    dc.GetDurationProperty(dynamicconfig.WorkerESProcessorAckTimeout, 1*time.Minute),
+		ESProcessorAckTimeout:    dc.GetDurationProperty(dynamicconfig.WorkerESProcessorAckTimeout, 30*time.Second),
 
 		EnableCrossNamespaceCommands:  dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
 		EnableActivityEagerExecution:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableActivityEagerExecution, false),
@@ -524,7 +505,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 			ArchivalProcessorUpdateAckIntervalJitterCoefficient, 0.15),
 		ArchivalProcessorPollBackoffInterval: dc.GetDurationProperty(dynamicconfig.ArchivalProcessorPollBackoffInterval, 5*time.Second),
 		ArchivalProcessorArchiveDelay:        dc.GetDurationProperty(dynamicconfig.ArchivalProcessorArchiveDelay, 5*time.Minute),
-		ArchivalProcessorRetryWarningLimit:   dc.GetIntProperty(dynamicconfig.ArchivalProcessorRetryWarningLimit, 100),
+		ArchivalBackendMaxRPS:                dc.GetFloat64Property(dynamicconfig.ArchivalBackendMaxRPS, 10000.0),
 	}
 
 	return cfg

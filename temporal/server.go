@@ -39,7 +39,7 @@ const (
 type (
 	Server interface {
 		Start() error
-		Stop()
+		Stop() error
 	}
 )
 
@@ -48,6 +48,7 @@ type (
 var (
 	Services = []string{
 		string(primitives.FrontendService),
+		string(primitives.InternalFrontendService),
 		string(primitives.HistoryService),
 		string(primitives.MatchingService),
 		string(primitives.WorkerService),

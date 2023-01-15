@@ -192,7 +192,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
 		handoverInfo, hasHandoverInfo := shard.HandoverNamespaces[waitRequest.Namespace]
 		if hasClusterInfo && hasHandoverInfo {
-			if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId || clusterInfo.AckedTaskId >= handoverInfo.HandoverReplicationTaskId {
+			if clusterInfo.AckedTaskId >= handoverInfo.HandoverReplicationTaskId {
 				readyShardCount++
 				continue
 			}

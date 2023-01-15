@@ -241,21 +241,6 @@ func (ns *Namespace) GetCustomData(key string) string {
 	return ns.info.Data[key]
 }
 
-// Len return length
-func (t Namespaces) Len() int {
-	return len(t)
-}
-
-// Swap implements sort.Interface.
-func (t Namespaces) Swap(i, j int) {
-	t[i], t[j] = t[j], t[i]
-}
-
-// Less implements sort.Interface
-func (t Namespaces) Less(i, j int) bool {
-	return t[i].notificationVersion < t[j].notificationVersion
-}
-
 // Retention returns retention duration for this namespace.
 func (ns *Namespace) Retention() time.Duration {
 	if ns.config.Retention == nil {

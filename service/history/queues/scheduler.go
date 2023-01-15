@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -114,14 +115,25 @@ func NewNamespacePriorityScheduler(
 	}
 	channelWeightFn := func(key TaskChannelKey) int {
 		namespaceWeights := options.ActiveNamespaceWeights
+		namespaceName := namespace.EmptyName
 
-		namespace, _ := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
-		if !namespace.ActiveInCluster(currentClusterName) {
-			namespaceWeights = options.StandbyNamespaceWeights
+		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
+		if err == nil {
+			namespaceName = ns.Name()
+			if !ns.ActiveInCluster(currentClusterName) {
+				namespaceWeights = options.StandbyNamespaceWeights
+			}
+		} else {
+			// if namespace not found, treat it as active namespace and
+			// use default active namespace weight
+			logger.Warn("Unable to find namespace, using active namespace task channel weight",
+				tag.WorkflowNamespaceID(key.NamespaceID),
+				tag.Error(err),
+			)
 		}
 
 		return configs.ConvertDynamicConfigValueToWeights(
-			namespaceWeights(namespace.Name().String()),
+			namespaceWeights(namespaceName.String()),
 			logger,
 		)[key.Priority]
 	}
@@ -229,36 +241,19 @@ func NewPriorityScheduler(
 
 func (s *schedulerImpl) Start() {
 	if s.channelWeightUpdateCh != nil {
-		s.namespaceRegistry.RegisterNamespaceChangeCallback(
-			s,
-			0,
-			func() {}, // no-op
-			func(oldNamespaces, newNamespaces []*namespace.Namespace) {
-				namespaceFailover := false
-				for idx := range oldNamespaces {
-					if oldNamespaces[idx].FailoverVersion() != newNamespaces[idx].FailoverVersion() {
-						namespaceFailover = true
-						break
-					}
-				}
-
-				if !namespaceFailover {
-					return
-				}
-
-				select {
-				case s.channelWeightUpdateCh <- struct{}{}:
-				default:
-				}
-			},
-		)
+		s.namespaceRegistry.RegisterStateChangeCallback(s, func(ns *namespace.Namespace, deletedFromDb bool) {
+			select {
+			case s.channelWeightUpdateCh <- struct{}{}:
+			default:
+			}
+		})
 	}
 	s.Scheduler.Start()
 }
 
 func (s *schedulerImpl) Stop() {
 	if s.channelWeightUpdateCh != nil {
-		s.namespaceRegistry.UnregisterNamespaceChangeCallback(s)
+		s.namespaceRegistry.UnregisterStateChangeCallback(s)
 
 		// note we can't close the channelWeightUpdateCh here
 		// as callback may still be triggered even after unregister returns

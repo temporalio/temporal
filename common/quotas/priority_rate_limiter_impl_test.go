@@ -254,7 +254,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_AlreadyExpired() {
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_Error() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
@@ -277,7 +278,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_Error() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
@@ -350,7 +352,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_NoError() {
-	ctx, _ := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
 	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
@@ -371,7 +374,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_NoError() {
-	ctx, _ := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
 	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,

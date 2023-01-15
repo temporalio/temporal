@@ -633,16 +633,14 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.visibilityQueueTaskExecutor,
 		nil,
 		nil,
 		queues.NewNoopPriorityAssigner(),
 		s.mockShard.GetTimeSource(),
-		nil,
+		s.mockShard.GetNamespaceRegistry(),
+		s.mockShard.GetClusterMetadata(),
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
-		nil,
 	)
 }

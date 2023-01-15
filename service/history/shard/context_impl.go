@@ -28,12 +28,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.uber.org/multierr"
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -45,7 +47,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/clock"
+	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
@@ -63,6 +65,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -80,6 +83,8 @@ const (
 
 const (
 	shardIOTimeout = 5 * time.Second
+
+	pendingMaxReplicationTaskID = math.MaxInt64
 )
 
 type (
@@ -103,7 +108,7 @@ type (
 		clientBean              client.Bean
 		historyClient           historyservice.HistoryServiceClient
 		payloadSerializer       serialization.Serializer
-		timeSource              clock.TimeSource
+		timeSource              cclock.TimeSource
 		namespaceRegistry       namespace.Registry
 		saProvider              searchattribute.Provider
 		saMapper                searchattribute.Mapper
@@ -130,7 +135,7 @@ type (
 
 		// exist only in memory
 		remoteClusterInfos      map[string]*remoteClusterInfo
-		handoverNamespaces      map[string]*namespaceHandOverInfo // keyed on namespace name
+		handoverNamespaces      map[namespace.Name]*namespaceHandOverInfo // keyed on namespace name
 		acquireShardRetryPolicy backoff.RetryPolicy
 	}
 
@@ -583,13 +588,6 @@ func (s *ContextImpl) GetAllFailoverLevels(category tasks.Category) map[string]p
 	return ret
 }
 
-func (s *ContextImpl) GetNamespaceNotificationVersion() int64 {
-	s.rLock()
-	defer s.rUnlock()
-
-	return s.shardInfo.NamespaceNotificationVersion
-}
-
 func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error {
 	s.wLock()
 	defer s.wUnlock()
@@ -603,34 +601,45 @@ func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVe
 	return nil
 }
 
-func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace, maxRepTaskID int64) {
-	s.wLock()
-	defer s.wUnlock()
+func (s *ContextImpl) UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool) {
+	nsName := ns.Name()
 
-	newHandoverNamespaces := make(map[string]struct{})
-	for _, ns := range namespaces {
-		if ns.IsGlobalNamespace() && ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
-			nsName := ns.Name().String()
-			newHandoverNamespaces[nsName] = struct{}{}
-			if handover, ok := s.handoverNamespaces[nsName]; ok {
-				if handover.NotificationVersion < ns.NotificationVersion() {
-					handover.NotificationVersion = ns.NotificationVersion()
-					handover.MaxReplicationTaskID = maxRepTaskID
-				}
-			} else {
-				s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
-					NotificationVersion:  ns.NotificationVersion(),
-					MaxReplicationTaskID: maxRepTaskID,
-				}
+	s.wLock()
+	if deletedFromDb {
+		delete(s.handoverNamespaces, ns.Name())
+		s.wUnlock()
+		return
+	}
+
+	maxReplicationTaskID := s.immediateTaskExclusiveMaxReadLevel - 1
+	if s.errorByState() != nil {
+		// if shard state is not acquired, we don't know that's the max taskID
+		// as there might be in-flight requests
+		maxReplicationTaskID = pendingMaxReplicationTaskID
+	}
+
+	// NOTE: replication state field won't be replicated and currently we only update a namespace
+	// to handover state from active cluster, so the second condition will always be true. Adding
+	// it here to be more safe in case above assumption no longer holds in the future.
+	if ns.IsGlobalNamespace() &&
+		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
+		ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
+
+		if handover, ok := s.handoverNamespaces[nsName]; ok {
+			if handover.NotificationVersion < ns.NotificationVersion() {
+				handover.NotificationVersion = ns.NotificationVersion()
+				handover.MaxReplicationTaskID = maxReplicationTaskID
+			}
+		} else {
+			s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
+				NotificationVersion:  ns.NotificationVersion(),
+				MaxReplicationTaskID: maxReplicationTaskID,
 			}
 		}
 	}
-	// delete old handover ns
-	for k := range s.handoverNamespaces {
-		if _, ok := newHandoverNamespaces[k]; !ok {
-			delete(s.handoverNamespaces, k)
-		}
-	}
+
+	s.wUnlock()
+	s.notifyReplicationQueueProcessor(maxReplicationTaskID)
 }
 
 func (s *ContextImpl) AddTasks(
@@ -660,11 +669,15 @@ func (s *ContextImpl) AddTasks(
 		s.wUnlock()
 		return err
 	}
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+		s.wUnlock()
+		return err
+	}
 	err = s.addTasksLocked(ctx, request, namespaceEntry)
 	s.wUnlock()
 
 	if OperationPossiblySucceeded(err) {
-		engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
+		engine.NotifyNewTasks(request.Tasks)
 	}
 
 	return err
@@ -692,6 +705,10 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	defer s.wUnlock()
 
 	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
@@ -737,6 +754,10 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	defer s.wUnlock()
 
 	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
@@ -811,6 +832,10 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		return nil, err
 	}
 
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+		return nil, err
+	}
+
 	transferExclusiveMaxReadLevel := int64(0)
 	if request.CurrentWorkflowMutation != nil {
 		if err := s.allocateTaskIDAndTimestampLocked(
@@ -872,6 +897,10 @@ func (s *ContextImpl) SetWorkflowExecution(
 	defer s.wUnlock()
 
 	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
@@ -1032,7 +1061,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	var newTasks map[tasks.Category][]tasks.Task
 	defer func() {
 		if OperationPossiblySucceeded(retErr) && newTasks != nil {
-			engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), newTasks)
+			engine.NotifyNewTasks(newTasks)
 		}
 	}()
 
@@ -1171,6 +1200,15 @@ func (s *ContextImpl) errorByState() error {
 	}
 }
 
+func (s *ContextImpl) errorByNamespaceStateLocked(
+	namespaceName namespace.Name,
+) error {
+	if _, ok := s.handoverNamespaces[namespaceName]; ok {
+		return consts.ErrNamespaceHandover
+	}
+	return nil
+}
+
 func (s *ContextImpl) generateTaskIDLocked() (int64, error) {
 	if err := s.updateRangeIfNeededLocked(); err != nil {
 		return -1, err
@@ -1243,7 +1281,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	}
 
 	var err error
-	now := clock.NewRealTimeSource().Now()
+	now := cclock.NewRealTimeSource().Now()
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		return nil
 	}
@@ -1436,8 +1474,7 @@ func (s *ContextImpl) handleReadError(err error) error {
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		s.transition(contextRequestStop{})
-		return err
+		return multierr.Combine(err, s.transition(contextRequestStop{}))
 
 	default:
 		return err
@@ -1471,8 +1508,7 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		s.transition(contextRequestStop{})
-		return err
+		return multierr.Combine(err, s.transition(contextRequestStop{}))
 
 	default:
 		// We have no idea if the write failed or will eventually make it to persistence. Try to re-acquire
@@ -1481,8 +1517,7 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 		// reliably check the outcome by performing a read. If we fail, we'll shut down the shard.
 		// Note that reacquiring the shard will cause the max read level to be updated
 		// to the new range (i.e. past newMaxReadLevel).
-		s.transition(contextRequestLost{})
-		return err
+		return multierr.Combine(err, s.transition(contextRequestLost{}))
 	}
 }
 
@@ -1505,18 +1540,24 @@ func (s *ContextImpl) createEngine() Engine {
 
 // start should only be called by the controller.
 func (s *ContextImpl) start() {
-	s.transition(contextRequestAcquire{})
+	if err := s.transition(contextRequestAcquire{}); err != nil {
+		s.contextTaggedLogger.Error("Failed to start shard", tag.Error(err))
+	}
 }
 
 func (s *ContextImpl) Unload() {
-	s.transition(contextRequestStop{})
+	if err := s.transition(contextRequestStop{}); err != nil {
+		s.contextTaggedLogger.Error("Failed to unload shard", tag.Error(err))
+	}
 }
 
 // finishStop should only be called by the controller.
 func (s *ContextImpl) finishStop() {
 	// After this returns, engineFuture.Set may not be called anymore, so if we don't get see
 	// an Engine here, we won't ever have one.
-	s.transition(contextRequestFinishStop{})
+	if err := s.transition(contextRequestFinishStop{}); err != nil {
+		s.contextTaggedLogger.Error("Failed to stop shard", tag.Error(err))
+	}
 
 	// use a context that we know is cancelled so that this doesn't block
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
@@ -1731,13 +1772,50 @@ func (s *ContextImpl) notifyQueueProcessor() {
 		fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
 	}
 
-	// TODO: with multi-cursor, we don't need the for loop
-	for clusterName, info := range s.clusterMetadata.GetAllClusterInfo() {
-		if !info.Enabled {
-			continue
-		}
-		engine.NotifyNewTasks(clusterName, fakeTasks)
+	engine.NotifyNewTasks(fakeTasks)
+}
+
+func (s *ContextImpl) updateHandoverNamespacePendingTaskID() {
+	s.wLock()
+
+	if s.errorByState() != nil {
+		// if not in acquired state, this function will be called again
+		// later when shard is re-acquired.
+		s.wUnlock()
+		return
 	}
+
+	maxReplicationTaskID := s.immediateTaskExclusiveMaxReadLevel - 1
+	for namespaceName, handoverInfo := range s.handoverNamespaces {
+		if handoverInfo.MaxReplicationTaskID == pendingMaxReplicationTaskID {
+			s.handoverNamespaces[namespaceName].MaxReplicationTaskID = maxReplicationTaskID
+		}
+	}
+	s.wUnlock()
+
+	s.notifyReplicationQueueProcessor(maxReplicationTaskID)
+}
+
+func (s *ContextImpl) notifyReplicationQueueProcessor(taskID int64) {
+	// Replication ack level won't exceed the max taskID it received via task notification.
+	// Since here we want it's ack level to advance to at least the input taskID, we need to
+	// trigger an fake notification.
+
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	engine, err := s.engineFuture.Get(cancelledCtx)
+	if err != nil {
+		s.contextTaggedLogger.Warn("tried to notify replication queue processor when engine is not ready")
+		return
+	}
+
+	fakeReplicationTask := tasks.NewFakeTask(definition.WorkflowKey{}, tasks.CategoryReplication, tasks.MinimumKey.FireTime)
+	fakeReplicationTask.SetTaskID(taskID)
+
+	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{
+		tasks.CategoryReplication: {fakeReplicationTask},
+	})
 }
 
 func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
@@ -1855,7 +1933,7 @@ func (s *ContextImpl) GetReplicationStatus(cluster []string) (map[string]*histor
 	}
 
 	for k, v := range s.handoverNamespaces {
-		handoverNamespaces[k] = &historyservice.HandoverNamespaceInfo{
+		handoverNamespaces[k.String()] = &historyservice.HandoverNamespaceInfo{
 			HandoverReplicationTaskId: v.MaxReplicationTaskID,
 		}
 	}
@@ -1933,6 +2011,10 @@ func (s *ContextImpl) acquireShard() {
 			engine = s.createEngine()
 		}
 
+		// NOTE: engine is created & started before setting shard state to acquired.
+		// -> namespace handover callback is registered & called before shard is able to serve traffic
+		// -> information for handover namespace is recorded before shard can servce traffic
+		// -> upon shard reload, no history api or task can go through for ns in handover state
 		err = s.transition(contextRequestAcquired{engine: engine})
 
 		if err != nil {
@@ -1946,6 +2028,8 @@ func (s *ContextImpl) acquireShard() {
 		// we know engineFuture must be ready here, and we can notify queue processor
 		// to trigger a load as queue max level can be updated to a newer value
 		s.notifyQueueProcessor()
+
+		s.updateHandoverNamespacePendingTaskID()
 
 		return nil
 	}
@@ -1975,7 +2059,9 @@ func (s *ContextImpl) acquireShard() {
 
 		// On any error, initiate shutting down the shard. If we already changed state
 		// because we got a ShardOwnershipLostError, this won't do anything.
-		s.transition(contextRequestStop{})
+		if err := s.transition(contextRequestStop{}); err != nil {
+			s.contextTaggedLogger.Error("Error stopping shard", tag.Error(err))
+		}
 	}
 }
 
@@ -1992,7 +2078,7 @@ func newContext(
 	historyClient historyservice.HistoryServiceClient,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
+	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
 	saMapper searchattribute.Mapper,
@@ -2026,7 +2112,7 @@ func newContext(
 		clusterMetadata:         clusterMetadata,
 		archivalMetadata:        archivalMetadata,
 		hostInfoProvider:        hostInfoProvider,
-		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
+		handoverNamespaces:      make(map[namespace.Name]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[Engine](),
@@ -2094,7 +2180,7 @@ func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
 	return s.metricsHandler
 }
 
-func (s *ContextImpl) GetTimeSource() clock.TimeSource {
+func (s *ContextImpl) GetTimeSource() cclock.TimeSource {
 	return s.timeSource
 }
 

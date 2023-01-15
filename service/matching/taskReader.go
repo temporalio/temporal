@@ -201,7 +201,7 @@ Loop:
 
 			// only error here is due to context cancelation which we also
 			// handle above
-			tr.addTasksToBuffer(ctx, tasks)
+			_ = tr.addTasksToBuffer(ctx, tasks)
 			// There maybe more tasks. We yield now, but signal pump to check again later.
 			tr.Signal()
 
