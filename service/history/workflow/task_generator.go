@@ -49,9 +49,9 @@ type (
 			startEvent *historypb.HistoryEvent,
 		) error
 		GenerateWorkflowCloseTasks(
-		// TODO: remove closeEvent parameter
-		// when deprecating the backward compatible logic
-		// for getting close time from close event.
+			// TODO: remove closeEvent parameter
+			// when deprecating the backward compatible logic
+			// for getting close time from close event.
 			closeEvent *historypb.HistoryEvent,
 			deleteAfterClose bool,
 		) error
