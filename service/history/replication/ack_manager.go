@@ -247,12 +247,16 @@ func (p *ackMgrImpl) GetTasks(
 	p.metricsHandler.Histogram(metrics.ReplicationTasksReturned.GetMetricName(), metrics.ReplicationTasksReturned.GetMetricUnit()).
 		Record(int64(len(replicationTasks)))
 
+	replicationEventTime := timestamp.TimePtr(p.shard.GetTimeSource().Now())
+	if len(replicationTasks) > 0 {
+		replicationEventTime = replicationTasks[len(replicationTasks)-1].GetVisibilityTime()
+	}
 	return &replicationspb.ReplicationMessages{
 		ReplicationTasks:       replicationTasks,
 		HasMore:                lastTaskID < maxTaskID,
 		LastRetrievedMessageId: lastTaskID,
 		SyncShardStatus: &replicationspb.SyncShardStatus{
-			StatusTime: timestamp.TimePtr(p.shard.GetTimeSource().Now()),
+			StatusTime: replicationEventTime,
 		},
 	}, nil
 }
@@ -364,7 +368,7 @@ func (p *ackMgrImpl) taskIDsRange(
 
 	now := p.shard.GetTimeSource().Now()
 	if p.sanityCheckTime.IsZero() || p.sanityCheckTime.Before(now) {
-		p.sanityCheckTime = now.Add(backoff.JitDuration(
+		p.sanityCheckTime = now.Add(backoff.Jitter(
 			p.config.ReplicatorProcessorMaxPollInterval(),
 			p.config.ReplicatorProcessorMaxPollIntervalJitterCoefficient(),
 		))

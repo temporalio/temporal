@@ -89,11 +89,6 @@ func NewTransferQueueFactory(
 				params.Logger,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
-			HostRateLimiter: NewQueueHostRateLimiter(
-				params.Config.TransferProcessorMaxPollHostRPS,
-				params.Config.PersistenceMaxQPS,
-				transferQueuePersistenceMaxRPSRatio,
-			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.TransferProcessorMaxPollHostRPS,
@@ -111,6 +106,14 @@ func (f *transferQueueFactory) CreateQueue(
 	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
+	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope))
+
+	rescheduler := queues.NewRescheduler(
+		f.HostScheduler,
+		shard.GetTimeSource(),
+		logger,
+		metricsHandler,
+	)
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 	activeExecutor := newTransferQueueActiveTaskExecutor(
@@ -160,6 +163,7 @@ func (f *transferQueueFactory) CreateQueue(
 		shard,
 		tasks.CategoryTransfer,
 		f.HostScheduler,
+		rescheduler,
 		f.HostPriorityAssigner,
 		executor,
 		&queues.Options{
@@ -179,10 +183,9 @@ func (f *transferQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
-			TaskMaxRetryCount:                   f.Config.TransferTaskMaxRetryCount,
 		},
 		f.HostReaderRateLimiter,
 		logger,
-		f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
+		metricsHandler,
 	)
 }

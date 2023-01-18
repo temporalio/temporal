@@ -205,14 +205,17 @@ func (s *contextSuite) TestTimerMaxReadLevelUpdate_SingleProcessor() {
 	s.timeSource.Update(now)
 
 	// make sure the scheduledTaskMaxReadLevelMap has value for both current cluster and alternative cluster
-	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
-	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestAlternativeClusterName, false)
+	_, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
+	s.NoError(err)
+	_, err = s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestAlternativeClusterName, false)
+	s.NoError(err)
 
 	now = time.Now().Add(time.Minute)
 	s.timeSource.Update(now)
 
 	// update in single processor mode
-	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, true)
+	_, err = s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, true)
+	s.NoError(err)
 	scheduledTaskMaxReadLevelMap := s.mockShard.scheduledTaskMaxReadLevelMap
 	s.Len(scheduledTaskMaxReadLevelMap, 2)
 	s.True(scheduledTaskMaxReadLevelMap[cluster.TestCurrentClusterName].After(now))

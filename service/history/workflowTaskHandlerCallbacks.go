@@ -481,6 +481,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.config,
 			handler.shard,
 			handler.searchAttributesMapper,
+			hasUnhandledEvents,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -545,9 +546,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
 				bypassTaskGeneration,
 				currentWorkflowTask.OriginalScheduledTime,
+				enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 			)
 		} else {
-			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration)
+			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 		}
 		if err != nil {
 			return nil, err
@@ -726,7 +728,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	response.ScheduledTime = workflowTask.ScheduledTime
 	response.StartedTime = workflowTask.StartedTime
 
-	response.TransientWorkflowTask = ms.CreateTransientWorkflowTask(workflowTask, identity)
+	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {

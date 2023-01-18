@@ -440,6 +440,21 @@ func (c *retryableClient) ReplicateEventsV2(
 	return resp, err
 }
 
+func (c *retryableClient) ReplicateWorkflowState(
+	ctx context.Context,
+	request *historyservice.ReplicateWorkflowStateRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReplicateWorkflowStateResponse, error) {
+	var resp *historyservice.ReplicateWorkflowStateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ReplicateWorkflowState(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.RequestCancelWorkflowExecutionRequest,

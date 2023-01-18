@@ -36,8 +36,6 @@ type (
 		common.Daemon
 		Category() tasks.Category
 		NotifyNewTasks(tasks []tasks.Task)
-		FailoverNamespace(namespaceIDs map[string]struct{})
-		LockTaskProcessing()
-		UnlockTaskProcessing()
+		FailoverNamespace(namespaceID string)
 	}
 )

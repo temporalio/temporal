@@ -30,6 +30,7 @@ package elasticsearch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -93,10 +94,7 @@ type (
 var _ Processor = (*processorImpl)(nil)
 
 const (
-	// retry configs for es bulk processor
-	esProcessorInitialRetryInterval = 200 * time.Millisecond
-	esProcessorMaxRetryInterval     = 20 * time.Second
-	visibilityProcessorName         = "visibility-processor"
+	visibilityProcessorName = "visibility-processor"
 )
 
 // NewProcessor create new processorImpl
@@ -119,7 +117,6 @@ func NewProcessor(
 			BulkActions:   cfg.ESProcessorBulkActions(),
 			BulkSize:      cfg.ESProcessorBulkSize(),
 			FlushInterval: cfg.ESProcessorFlushInterval(),
-			Backoff:       elastic.NewExponentialBackoff(esProcessorInitialRetryInterval, esProcessorMaxRetryInterval),
 		},
 	}
 	p.bulkProcessorParameters.AfterFunc = p.bulkAfterAction
@@ -199,8 +196,6 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 	p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorRequests.GetMetricName()).Record(int64(len(requests)))
 	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorBulkSize.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
 		Record(int64(len(requests)))
-	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
-		Record(int64(p.mapToAckFuture.Len() - len(requests)))
 
 	for _, request := range requests {
 		visibilityTaskKey := p.extractVisibilityTaskKey(request)
@@ -208,11 +203,11 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 			continue
 		}
 		_, _, _ = p.mapToAckFuture.GetAndDo(visibilityTaskKey, func(key interface{}, value interface{}) error {
-			future, ok := value.(*ackFuture)
+			ackF, ok := value.(*ackFuture)
 			if !ok {
 				p.logger.Fatal(fmt.Sprintf("mapToAckFuture has item of a wrong type %T (%T expected).", value, &ackFuture{}), tag.Value(key))
 			}
-			future.recordStart(p.metricsHandler)
+			ackF.recordStart(p.metricsHandler)
 			return nil
 		})
 	}
@@ -222,8 +217,12 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
 		const logFirstNRequests = 5
-		httpStatus := client.HttpStatus(err)
-		isRetryable := client.IsRetryableStatus(httpStatus)
+		var httpStatus int
+		var esErr *elastic.Error
+		if errors.As(err, &esErr) {
+			httpStatus = esErr.Status
+		}
+
 		var logRequests strings.Builder
 		for i, request := range requests {
 			if i < logFirstNRequests {
@@ -231,16 +230,13 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				logRequests.WriteRune('\n')
 			}
 			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Record(1, metrics.HttpStatusTag(httpStatus))
-
-			if !isRetryable {
-				visibilityTaskKey := p.extractVisibilityTaskKey(request)
-				if visibilityTaskKey == "" {
-					continue
-				}
-				p.notifyResult(visibilityTaskKey, false)
+			visibilityTaskKey := p.extractVisibilityTaskKey(request)
+			if visibilityTaskKey == "" {
+				continue
 			}
+			p.notifyResult(visibilityTaskKey, false)
 		}
-		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.IsRetryable(isRetryable), tag.RequestCount(len(requests)), tag.ESRequest(logRequests.String()))
+		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.RequestCount(len(requests)), tag.ESRequest(logRequests.String()))
 		return
 	}
 
@@ -264,10 +260,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 			continue
 		}
 
-		switch {
-		case isSuccess(responseItem):
-			p.notifyResult(visibilityTaskKey, true)
-		case !client.IsRetryableStatus(responseItem.Status):
+		if !isSuccess(responseItem) {
 			p.logger.Error("ES request failed.",
 				tag.ESResponseStatus(responseItem.Status),
 				tag.ESResponseError(extractErrorReason(responseItem)),
@@ -276,16 +269,15 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.ESRequest(request.String()))
 			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Record(1, metrics.HttpStatusTag(responseItem.Status))
 			p.notifyResult(visibilityTaskKey, false)
-		default: // bulk processor will retry
-			p.logger.Warn("ES request retried.",
-				tag.ESResponseStatus(responseItem.Status),
-				tag.ESResponseError(extractErrorReason(responseItem)),
-				tag.Key(visibilityTaskKey),
-				tag.ESDocID(docID),
-				tag.ESRequest(request.String()))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorRetries.GetMetricName()).Record(1, metrics.HttpStatusTag(responseItem.Status))
+			continue
 		}
+
+		p.notifyResult(visibilityTaskKey, true)
 	}
+
+	// Record how many documents are waiting to be flushed to Elasticsearch after this bulk is committed.
+	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
+		Record(int64(p.mapToAckFuture.Len()))
 }
 
 func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[string]*elastic.BulkResponseItem {
@@ -307,12 +299,12 @@ func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[s
 func (p *processorImpl) notifyResult(visibilityTaskKey string, ack bool) {
 	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
 	_ = p.mapToAckFuture.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
-		future, ok := value.(*ackFuture)
+		ackF, ok := value.(*ackFuture)
 		if !ok {
 			p.logger.Fatal(fmt.Sprintf("mapToAckFuture has item of a wrong type %T (%T expected).", value, &ackFuture{}), tag.ESKey(visibilityTaskKey))
 		}
 
-		future.done(ack, p.metricsHandler)
+		ackF.done(ack, p.metricsHandler)
 		return true
 	})
 }

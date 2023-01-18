@@ -69,7 +69,7 @@ func (s *utilSuite) TestAcceptStringSliceArgsWithCommas() {
 			},
 		},
 	}
-	app.Run([]string{"testapp", "dostuff",
+	s.NoError(app.Run([]string{"testapp", "dostuff",
 		"--input", `{"field1": 34, "field2": false}`,
-		"--input", `{"numbers": [4,5,6]}`})
+		"--input", `{"numbers": [4,5,6]}`}))
 }

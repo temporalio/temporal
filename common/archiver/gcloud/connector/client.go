@@ -34,6 +34,7 @@ import (
 	"os"
 
 	"cloud.google.com/go/storage"
+	"go.uber.org/multierr"
 	"google.golang.org/api/iterator"
 
 	"go.temporal.io/server/common/archiver"
@@ -125,15 +126,16 @@ func (s *storageWrapper) Exist(ctx context.Context, URI archiver.URI, fileName s
 }
 
 // Get retrieve a file
-func (s *storageWrapper) Get(ctx context.Context, URI archiver.URI, fileName string) ([]byte, error) {
+func (s *storageWrapper) Get(ctx context.Context, URI archiver.URI, fileName string) (fileContent []byte, err error) {
 	bucket := s.client.Bucket(URI.Hostname())
 	reader, err := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName).NewReader(ctx)
-	if err == nil {
-		defer reader.Close()
-		return io.ReadAll(reader)
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, err
+	defer func() {
+		err = multierr.Combine(err, reader.Close())
+	}()
+	return io.ReadAll(reader)
 }
 
 // Query, retieves file names by provided storage query

@@ -87,11 +87,6 @@ func NewTimerQueueFactory(
 				params.Logger,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
-			HostRateLimiter: NewQueueHostRateLimiter(
-				params.Config.TimerProcessorMaxPollHostRPS,
-				params.Config.PersistenceMaxQPS,
-				timerQueuePersistenceMaxRPSRatio,
-			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.TimerProcessorMaxPollHostRPS,
@@ -109,6 +104,7 @@ func (f *timerQueueFactory) CreateQueue(
 	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
+	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope))
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 	workflowDeleteManager := deletemanager.NewDeleteManager(
@@ -117,6 +113,13 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config,
 		f.ArchivalClient,
 		shard.GetTimeSource(),
+	)
+
+	rescheduler := queues.NewRescheduler(
+		f.HostScheduler,
+		shard.GetTimeSource(),
+		logger,
+		metricsHandler,
 	)
 
 	activeExecutor := newTimerQueueActiveTaskExecutor(
@@ -170,6 +173,7 @@ func (f *timerQueueFactory) CreateQueue(
 		shard,
 		tasks.CategoryTimer,
 		f.HostScheduler,
+		rescheduler,
 		f.HostPriorityAssigner,
 		executor,
 		&queues.Options{
@@ -189,10 +193,9 @@ func (f *timerQueueFactory) CreateQueue(
 			CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TimerProcessorUpdateAckIntervalJitterCoefficient,
 			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
-			TaskMaxRetryCount:                   f.Config.TimerTaskMaxRetryCount,
 		},
 		f.HostReaderRateLimiter,
 		logger,
-		f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
+		metricsHandler,
 	)
 }

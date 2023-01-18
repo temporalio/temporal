@@ -5120,7 +5120,7 @@ func addWorkflowExecutionStartedEvent(ms workflow.MutableState, workflowExecutio
 }
 
 func addWorkflowTaskScheduledEvent(ms workflow.MutableState) *workflow.WorkflowTaskInfo {
-	workflowTask, _ := ms.AddWorkflowTaskScheduledEvent(false)
+	workflowTask, _ := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	return workflowTask
 }
 

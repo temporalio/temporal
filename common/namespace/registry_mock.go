@@ -267,18 +267,6 @@ func (mr *MockRegistryMockRecorder) Refresh() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockRegistry)(nil).Refresh))
 }
 
-// RegisterNamespaceChangeCallback mocks base method.
-func (m *MockRegistry) RegisterNamespaceChangeCallback(listenerID any, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterNamespaceChangeCallback", listenerID, initialNotificationVersion, prepareCallback, callback)
-}
-
-// RegisterNamespaceChangeCallback indicates an expected call of RegisterNamespaceChangeCallback.
-func (mr *MockRegistryMockRecorder) RegisterNamespaceChangeCallback(listenerID, initialNotificationVersion, prepareCallback, callback interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterNamespaceChangeCallback", reflect.TypeOf((*MockRegistry)(nil).RegisterNamespaceChangeCallback), listenerID, initialNotificationVersion, prepareCallback, callback)
-}
-
 // RegisterStateChangeCallback mocks base method.
 func (m *MockRegistry) RegisterStateChangeCallback(key any, cb StateChangeCallbackFn) {
 	m.ctrl.T.Helper()
@@ -313,18 +301,6 @@ func (m *MockRegistry) Stop() {
 func (mr *MockRegistryMockRecorder) Stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockRegistry)(nil).Stop))
-}
-
-// UnregisterNamespaceChangeCallback mocks base method.
-func (m *MockRegistry) UnregisterNamespaceChangeCallback(listenerID any) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UnregisterNamespaceChangeCallback", listenerID)
-}
-
-// UnregisterNamespaceChangeCallback indicates an expected call of UnregisterNamespaceChangeCallback.
-func (mr *MockRegistryMockRecorder) UnregisterNamespaceChangeCallback(listenerID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterNamespaceChangeCallback", reflect.TypeOf((*MockRegistry)(nil).UnregisterNamespaceChangeCallback), listenerID)
 }
 
 // UnregisterStateChangeCallback mocks base method.

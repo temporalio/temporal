@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/service/history/shard"
+	hshard "go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -75,7 +75,7 @@ type (
 	}
 
 	queueBase struct {
-		shard shard.Context
+		shard hshard.Context
 
 		status     int32
 		shutdownCh chan struct{}
@@ -116,15 +116,15 @@ type (
 		CheckpointInterval                  dynamicconfig.DurationPropertyFn
 		CheckpointIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 		MaxReaderCount                      dynamicconfig.IntPropertyFn
-		TaskMaxRetryCount                   dynamicconfig.IntPropertyFn
 	}
 )
 
 func newQueueBase(
-	shard shard.Context,
+	shard hshard.Context,
 	category tasks.Category,
 	paginationFnProvider PaginationFnProvider,
 	scheduler Scheduler,
+	rescheduler Rescheduler,
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
@@ -150,12 +150,6 @@ func newQueueBase(
 	}
 
 	timeSource := shard.GetTimeSource()
-	rescheduler := NewRescheduler(
-		scheduler,
-		timeSource,
-		logger,
-		metricsHandler,
-	)
 
 	monitor := newMonitor(category.Type(), &options.MonitorOptions)
 	mitigator := newMitigator(monitor, logger, metricsHandler, options.MaxReaderCount)
@@ -164,17 +158,15 @@ func newQueueBase(
 		return NewExecutable(
 			readerID,
 			t,
-			nil,
 			executor,
 			scheduler,
 			rescheduler,
 			priorityAssigner,
 			timeSource,
 			shard.GetNamespaceRegistry(),
+			shard.GetClusterMetadata(),
 			logger,
 			metricsHandler,
-			options.TaskMaxRetryCount,
-			shard.GetConfig().NamespaceCacheRefreshInterval,
 		)
 	}
 
@@ -265,7 +257,7 @@ func (p *queueBase) Start() {
 	p.rescheduler.Start()
 	p.readerGroup.Start()
 
-	p.checkpointTimer = time.NewTimer(backoff.JitDuration(
+	p.checkpointTimer = time.NewTimer(backoff.Jitter(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
 	))
@@ -283,17 +275,9 @@ func (p *queueBase) Category() tasks.Category {
 }
 
 func (p *queueBase) FailoverNamespace(
-	namespaceIDs map[string]struct{},
+	namespaceID string,
 ) {
-	p.rescheduler.Reschedule(namespaceIDs)
-}
-
-func (p *queueBase) LockTaskProcessing() {
-	// no-op
-}
-
-func (p *queueBase) UnlockTaskProcessing() {
-	// no-op
+	p.rescheduler.Reschedule(namespaceID)
 }
 
 func (p *queueBase) processNewRange() error {
@@ -442,7 +426,7 @@ func (p *queueBase) resetCheckpointTimer(checkPointErr error) {
 	}
 
 	p.checkpointRetrier.Reset()
-	p.checkpointTimer.Reset(backoff.JitDuration(
+	p.checkpointTimer.Reset(backoff.Jitter(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
 	))

@@ -61,7 +61,8 @@ func (s *contextSuite) TestCopyContextValues_ValueCopied() {
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(metadataKey, metadataValue))
 
 	newDeadline := time.Now().Add(time.Hour)
-	newContext, _ := context.WithDeadline(context.Background(), newDeadline)
+	newContext, cancel := context.WithDeadline(context.Background(), newDeadline)
+	defer cancel()
 
 	newContext = CopyContextValues(newContext, ctx)
 

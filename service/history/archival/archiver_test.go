@@ -27,12 +27,12 @@ package archival
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
 	"go.uber.org/multierr"
 
 	carchiver "go.temporal.io/server/common/archiver"
@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/service/history/configs"
 )
 
 func TestArchiver(t *testing.T) {
@@ -244,6 +245,7 @@ func TestArchiver(t *testing.T) {
 			},
 		},
 	} {
+		c := c // capture range variable
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
@@ -278,9 +280,40 @@ func TestArchiver(t *testing.T) {
 					Return(c.ArchiveVisibilityErr)
 			}
 			rateLimiter := quotas.NewMockRateLimiter(controller)
-			rateLimiter.EXPECT().WaitN(gomock.Any(), 2).Return(c.RateLimiterWaitErr)
+			rateLimiter.EXPECT().WaitN(gomock.Any(), len(c.Targets)).Return(c.RateLimiterWaitErr)
 
-			archiver := NewArchiver(archiverProvider, logRecorder, metricsHandler, rateLimiter)
+			// we need this channel to get the Archiver which is created asynchronously
+			archivers := make(chan Archiver, 1)
+			// we make an app here so that we can test that the Module is working as intended
+			app := fx.New(
+				fx.Supply(fx.Annotate(archiverProvider, fx.As(new(provider.ArchiverProvider)))),
+				fx.Supply(fx.Annotate(logRecorder, fx.As(new(log.Logger)))),
+				fx.Supply(fx.Annotate(metricsHandler, fx.As(new(metrics.Handler)))),
+				fx.Supply(&configs.Config{
+					ArchivalBackendMaxRPS: func() float64 {
+						return 42.0
+					},
+				}),
+				Module,
+				fx.Decorate(func(rl quotas.RateLimiter) quotas.RateLimiter {
+					// we need to decorate the rate limiter so that we can use the mock
+					// we also verify that the rate being used is equal to the one in the config
+					assert.Equal(t, 42.0, rl.Rate())
+					return rateLimiter
+				}),
+				fx.Invoke(func(a Archiver) {
+					// after all parameters are provided, we get the Archiver and put it in the channel
+					// so that we can use it in the test
+					archivers <- a
+				}),
+			)
+			require.NoError(t, app.Err())
+			// we need to start the app for fx.Invoke to be called, so that we can get the Archiver
+			require.NoError(t, app.Start(ctx))
+			defer func() {
+				require.NoError(t, app.Stop(ctx))
+			}()
+			archiver := <-archivers
 			_, err = archiver.Archive(ctx, &Request{
 				HistoryURI:    historyURI,
 				VisibilityURI: visibilityURI,
@@ -324,9 +357,9 @@ func (r *errorLogRecorder) Error(msg string, tags ...tag.Tag) {
 	for _, t := range tags {
 		if t.Key() == "error" {
 			value := t.Value()
-			message, ok := value.(fmt.Stringer)
+			message, ok := value.(string)
 			require.True(r.T, ok)
-			r.ErrorMessages = append(r.ErrorMessages, message.String())
+			r.ErrorMessages = append(r.ErrorMessages, message)
 		}
 	}
 }

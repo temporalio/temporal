@@ -343,7 +343,7 @@ testGetBoolPropertyKey:
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {} value: false } newValue: { constraints: {} value: true }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {{Namespace:global-samples-namespace}} value: true } newValue: { constraints: {{Namespace:global-samples-namespace}} value: false }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	client.update()
+	s.NoError(client.update())
 	s.NoError(err)
 	close(doneCh)
 }
@@ -393,7 +393,7 @@ history.defaultActivityRetryPolicy:
 
 	mockLogger.EXPECT().Info("dynamic config changed for the key: history.defaultactivityretrypolicy oldValue: { constraints: {} value: map[BackoffCoefficient:3 InitialIntervalInSeconds:1 MaximumAttempts:0 MaximumIntervalCoefficient:100] } newValue: { constraints: {} value: map[BackoffCoefficient:2 InitialIntervalInSeconds:3 MaximumAttempts:0 MaximumIntervalCoefficient:100] }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	client.update()
+	s.NoError(client.update())
 	s.NoError(err)
 	close(doneCh)
 }
@@ -446,7 +446,7 @@ testGetIntPropertyKey:
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {{Namespace:samples-namespace}} value: 22 }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetintpropertykey oldValue: nil newValue: { constraints: {} value: 2000 }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	client.update()
+	s.NoError(client.update())
 	s.NoError(err)
 	close(doneCh)
 }
@@ -503,7 +503,7 @@ testGetFloat64PropertyKey:
 	reader.EXPECT().ReadFile(gomock.Any()).Return(updatedFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(1)
-	client.update()
+	s.NoError(client.update())
 	s.NoError(err)
 	close(doneCh)
 }

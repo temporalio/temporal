@@ -478,6 +478,70 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	s.EqualValues(1, s.taskManager.getTaskQueueManager(tlID).RangeID())
 }
 
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
+	namespaceID := namespace.ID(uuid.New())
+	taskQueue := &taskqueuepb.TaskQueue{Name: "taskQueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:            namespaceID.String(),
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(0),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+	}
+
+	// add multiple workflow tasks, but matching should not keeping polling new tasks
+	// upon getting namespace handover error when recording start for the first task
+	_, err := s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
+	s.NoError(err)
+	_, err = s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
+	s.NoError(err)
+
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, common.ErrNamespaceHandover).Times(1)
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	})
+	s.Nil(resp)
+	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
+	namespaceID := namespace.ID(uuid.New())
+	taskQueue := &taskqueuepb.TaskQueue{Name: "taskQueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceID.String(),
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+	}
+
+	// add multiple activity tasks, but matching should not keeping polling new tasks
+	// upon getting namespace handover error when recording start for the first task
+	_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
+	s.NoError(err)
+	_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
+	s.NoError(err)
+
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, common.ErrNamespaceHandover).Times(1)
+	resp, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	})
+	s.Nil(resp)
+	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
+}
+
 func (s *matchingEngineSuite) TestAddActivityTasks() {
 	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_ACTIVITY, false)
 }

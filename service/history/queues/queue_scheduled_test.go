@@ -84,23 +84,32 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
+	scheduler := NewPriorityScheduler(
+		PrioritySchedulerOptions{
+			WorkerCount:       dynamicconfig.GetIntPropertyFn(10),
+			EnableRateLimiter: dynamicconfig.GetBoolPropertyFn(true),
+		},
+		NewSchedulerRateLimiter(
+			s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
+			s.mockShard.GetConfig().TaskSchedulerMaxQPS,
+			s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
+			s.mockShard.GetConfig().PersistenceMaxQPS,
+		),
+		s.mockShard.GetTimeSource(),
+		log.NewTestLogger(),
+	)
+	rescheduler := NewRescheduler(
+		scheduler,
+		s.mockShard.GetTimeSource(),
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,
 		tasks.CategoryTimer,
-		NewPriorityScheduler(
-			PrioritySchedulerOptions{
-				WorkerCount:       dynamicconfig.GetIntPropertyFn(10),
-				EnableRateLimiter: dynamicconfig.GetBoolPropertyFn(true),
-			},
-			NewSchedulerRateLimiter(
-				s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
-				s.mockShard.GetConfig().TaskSchedulerMaxQPS,
-				s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
-				s.mockShard.GetConfig().PersistenceMaxQPS,
-			),
-			s.mockShard.GetTimeSource(),
-			log.NewTestLogger(),
-		),
+		scheduler,
+		rescheduler,
 		nil,
 		nil,
 		testQueueOptions,

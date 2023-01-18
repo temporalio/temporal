@@ -425,6 +425,17 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	scope, startTime := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
 	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
+	var isClusterNameExist bool
+	for clusterName := range h.clusterMetadata.GetAllClusterInfo() {
+		if clusterName == request.GetClusterName() {
+			isClusterNameExist = true
+			break
+		}
+	}
+	if !isClusterNameExist {
+		return nil, serviceerror.NewNotFound("The cluster to be deleted cannot be found in clusters cache.")
+	}
+
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
@@ -488,9 +499,15 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
 	}
 	if metadata.GetHistoryShardCount() != h.config.NumHistoryShards {
-		// cluster shard number not equal
-		// TODO: remove this check once we support different shard numbers
-		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to history shard number mismatch")
+		remoteShardCount := metadata.GetHistoryShardCount()
+		large := remoteShardCount
+		small := h.config.NumHistoryShards
+		if large < small {
+			small, large = large, small
+		}
+		if large%small != 0 {
+			return serviceerror.NewInvalidArgument("Remote cluster shard number and local cluster shard number are not multiples.")
+		}
 	}
 	if !metadata.IsGlobalNamespaceEnabled {
 		// remote cluster doesn't support global namespace

@@ -192,7 +192,9 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 			totalUploadSize = totalUploadSize + int64(binary.Size(encodedHistoryPart))
 		}
 
-		saveHistoryIteratorState(ctx, featureCatalog, historyIterator, part, &progress)
+		if err := saveHistoryIteratorState(ctx, featureCatalog, historyIterator, part, &progress); err != nil {
+			return err
+		}
 	}
 
 	handler.Counter(metrics.HistoryArchiverTotalUploadSize.GetMetricName()).Record(totalUploadSize)

@@ -89,10 +89,25 @@ func (t *visibilityQueueTaskExecutor) Execute(
 ) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetVisibilityTaskTypeTagValue(task)
+	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
+		t.shard.GetNamespaceRegistry(),
+		task.GetNamespaceID(),
+	)
 	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
+	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
+		// TODO: exclude task types here if we believe it's safe & necessary to execute
+		// them during namespace handover.
+		// Visibility tasks should all be safe, but close execution task
+		// might do a setWorkflowExecution to clean up memo and search attributes, which
+		// will be blocked by shard context during ns handover
+		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
+		// be returned from task executor
+		return metricsTags, true, consts.ErrNamespaceHandover
 	}
 
 	var err error
@@ -319,10 +334,10 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
-	ctx context.Context,
+	parentCtx context.Context,
 	task *tasks.CloseExecutionVisibilityTask,
 ) (retError error) {
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(parentCtx, taskTimeout)
 	defer cancel()
 
 	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
@@ -396,8 +411,13 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return err
 	}
 
+	// Elasticsearch bulk processor doesn't respect context timeout
+	// because under heavy load bulk flush might take longer than taskTimeout.
+	// Therefore, ctx timeout might be already expired
+	// and parentCtx (which doesn't have timeout) must be used everywhere bellow.
+
 	if t.enableCloseWorkflowCleanup(namespaceEntry.Name().String()) {
-		return t.cleanupExecutionInfo(ctx, task)
+		return t.cleanupExecutionInfo(parentCtx, task)
 	}
 	return nil
 }
@@ -500,6 +520,9 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	ctx context.Context,
 	task *tasks.CloseExecutionVisibilityTask,
 ) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
