@@ -353,7 +353,7 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 	cli2 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli2)
 	wkr2 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli2}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
 	s.cmp1.EXPECT().Register(wkr2, ns)
 	wkr2.EXPECT().Start()
 
@@ -459,7 +459,7 @@ func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 	cli2 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli2)
 	wkr2 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli2}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
 	s.cmp1.EXPECT().Register(wkr2, ns)
 	wkr2.EXPECT().Start()
 
