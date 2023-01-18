@@ -181,7 +181,7 @@ func (s *perNsWorkerManagerSuite) TestEnabled() {
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
 	wkr1.EXPECT().Start()
 
@@ -209,7 +209,7 @@ func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns3")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
 		s.Equal(4, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(4, options.MaxConcurrentActivityTaskPollers)
 	}).Return(wkr1)
@@ -299,8 +299,8 @@ func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns2")).Return(cli2)
 
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
-	s.cfactory.EXPECT().NewWorker(cli2, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli2}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
 
 	s.cmp1.EXPECT().Register(wkr1, ns1)
 	s.cmp1.EXPECT().Register(wkr2, ns2)
@@ -333,7 +333,7 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
 	wkr1.EXPECT().Start()
 
@@ -353,7 +353,7 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 	cli2 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli2)
 	wkr2 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
 	s.cmp1.EXPECT().Register(wkr2, ns)
 	wkr2.EXPECT().Start()
 
@@ -388,7 +388,7 @@ func (s *perNsWorkerManagerSuite) TestMembershipChanged() {
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
 	wkr1.EXPECT().Start()
 
@@ -421,7 +421,7 @@ func (s *perNsWorkerManagerSuite) TestServiceResolverError() {
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
 	wkr1.EXPECT().Start()
 
@@ -448,7 +448,7 @@ func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
 
 	// first try fails to start
@@ -459,7 +459,7 @@ func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 	cli2 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli2)
 	wkr2 := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
 	s.cmp1.EXPECT().Register(wkr2, ns)
 	wkr2.EXPECT().Start()
 
