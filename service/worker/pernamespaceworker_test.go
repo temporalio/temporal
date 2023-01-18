@@ -243,17 +243,17 @@ func (s *perNsWorkerManagerSuite) TestOptions() {
 	cli3 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns3")).Return(cli3)
 	wkr := mocksdk.NewMockWorker(s.controller)
-	s.cfactory.EXPECT().NewWorker(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
 		s.Equal(100, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(2, options.MaxConcurrentActivityTaskPollers)
 		s.Equal(0.0, options.WorkerLocalActivitiesPerSecond)
 	}).Return(wkr)
-	s.cfactory.EXPECT().NewWorker(cli2, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli2}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
 		s.Equal(4, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(200.0, options.WorkerLocalActivitiesPerSecond)
 		s.Equal(7500*time.Millisecond, options.StickyScheduleToStartTimeout)
 	}).Return(wkr)
-	s.cfactory.EXPECT().NewWorker(cli3, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
+	s.cfactory.EXPECT().NewWorker(matchStrict{cli3}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
 		s.Equal(6, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(0.0, options.WorkerLocalActivitiesPerSecond)
 		s.Equal(0*time.Millisecond, options.StickyScheduleToStartTimeout)
@@ -510,3 +510,9 @@ func (ns matchOptions) Matches(v any) bool {
 func (ns matchOptions) String() string {
 	return fmt.Sprintf("namespace=%q", string(ns))
 }
+
+// matchStrict implements shallow matching for gomock (default uses reflect.DeepEqual)
+type matchStrict struct{ v any }
+
+func (m matchStrict) Matches(v any) bool { return v == m.v }
+func (m matchStrict) String() string     { return fmt.Sprintf("%#v", m) }
