@@ -228,7 +228,7 @@ func (p *scheduledQueue) processNewRange() {
 		// in which case no look ahead is needed.
 		// Notification will be sent when shard is reacquired, but
 		// still set a max poll timer here as a catch all case.
-		p.timerGate.Update(p.timeSource.Now().Add(backoff.JitDuration(
+		p.timerGate.Update(p.timeSource.Now().Add(backoff.Jitter(
 			p.options.MaxPollInterval(),
 			p.options.MaxPollIntervalJitterCoefficient(),
 		)))
@@ -253,7 +253,7 @@ func (p *scheduledQueue) lookAheadTask() {
 	}
 
 	lookAheadMinTime := p.nonReadableScope.Range.InclusiveMin.FireTime
-	lookAheadMaxTime := lookAheadMinTime.Add(backoff.JitDuration(
+	lookAheadMaxTime := lookAheadMinTime.Add(backoff.Jitter(
 		p.options.MaxPollInterval(),
 		p.options.MaxPollIntervalJitterCoefficient(),
 	))

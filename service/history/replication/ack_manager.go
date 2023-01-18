@@ -368,7 +368,7 @@ func (p *ackMgrImpl) taskIDsRange(
 
 	now := p.shard.GetTimeSource().Now()
 	if p.sanityCheckTime.IsZero() || p.sanityCheckTime.Before(now) {
-		p.sanityCheckTime = now.Add(backoff.JitDuration(
+		p.sanityCheckTime = now.Add(backoff.Jitter(
 			p.config.ReplicatorProcessorMaxPollInterval(),
 			p.config.ReplicatorProcessorMaxPollIntervalJitterCoefficient(),
 		))
