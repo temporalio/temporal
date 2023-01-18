@@ -67,6 +67,9 @@ const (
 
 	MutableStateCacheTypeTagValue = "mutablestate"
 	EventsCacheTypeTagValue       = "events"
+
+	InvalidHistoryURITagValue    = "invalid_history_uri"
+	InvalidVisibilityURITagValue = "invalid_visibility_uri"
 )
 
 // Common service base metrics
