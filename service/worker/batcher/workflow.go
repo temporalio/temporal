@@ -98,6 +98,8 @@ type (
 		Namespace string
 		// To get the target workflows for processing
 		Query string
+		// Target workflows for processing
+		Executions []*commonpb.WorkflowExecution
 		// Reason for the operation
 		Reason string
 		// Supporting: signal,cancel,terminate
@@ -207,8 +209,8 @@ func validateParams(params BatchParams) error {
 	if params.BatchType == "" ||
 		params.Reason == "" ||
 		params.Namespace == "" ||
-		params.Query == "" {
-		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query")
+		(params.Query == "" && len(params.Executions) == 0) {
+		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query/Execution")
 	}
 	switch params.BatchType {
 	case BatchTypeSignal:

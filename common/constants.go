@@ -61,6 +61,8 @@ const (
 	GetHistoryMaxPageSize = 256
 	// ReadDLQMessagesPageSize is the max page size for read DLQ messages
 	ReadDLQMessagesPageSize = 1000
+	// BatchOperationMaxExecutionSize is the max page size for batch operation on workflow executions
+	BatchOperationMaxExecutionSize = 1000
 )
 
 const (

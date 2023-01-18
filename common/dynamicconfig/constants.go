@@ -245,6 +245,8 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
+	// FrontendMaxExecutionSizeBatchOperationPerNamespace is the max execution size batch operation supports per namespace
+	FrontendMaxExecutionSizeBatchOperationPerNamespace = "frontend.MaxExecutionSizeBatchOperationPerNamespace"
 	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
 	FrontendEnableBatcher = "frontend.enableBatcher"
 

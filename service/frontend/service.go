@@ -164,7 +164,8 @@ type Config struct {
 	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
-	MaxConcurrentBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxConcurrentBatchOperation    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxExecutionSizeBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -233,8 +234,9 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 
 		EnableSchedules: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableSchedules, true),
 
-		EnableBatcher:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableBatcher, true),
-		MaxConcurrentBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
+		EnableBatcher:                  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableBatcher, true),
+		MaxConcurrentBatchOperation:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
+		MaxExecutionSizeBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionSizeBatchOperationPerNamespace, 1000),
 	}
 }
 
