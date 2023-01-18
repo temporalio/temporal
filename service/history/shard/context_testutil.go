@@ -31,6 +31,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
@@ -131,6 +132,11 @@ func (s *ContextTest) SetEngineForTesting(engine Engine) {
 func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
 	// for testing only, will only be called immediately after initialization
 	s.eventsCache = c
+}
+
+// SetHistoryClientForTesting sets history client. Only used by tests.
+func (s *ContextTest) SetHistoryClientForTesting(client historyservice.HistoryServiceClient) {
+	s.historyClient = client
 }
 
 // StopForTest calls private method finishStop(). In general only the controller

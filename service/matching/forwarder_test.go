@@ -278,6 +278,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 	for _, tc := range testCases {
 		adds = 0
 		polls = 0
+		tc := tc
 		t.Run(tc.name, func() {
 			for i := 0; i < concurrency; i++ {
 				wg.Add(1)

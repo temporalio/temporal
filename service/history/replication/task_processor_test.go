@@ -148,6 +148,7 @@ func (s *taskProcessorSuite) SetupTest() {
 	metricsClient := metrics.NoopMetricsHandler
 
 	s.replicationTaskProcessor = NewTaskProcessor(
+		s.shardID,
 		s.mockShard,
 		s.mockEngine,
 		s.config,
