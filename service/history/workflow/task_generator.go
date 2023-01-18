@@ -49,9 +49,9 @@ type (
 			startEvent *historypb.HistoryEvent,
 		) error
 		GenerateWorkflowCloseTasks(
-			// TODO: remove closeEvent parameter
-			// when deprecating the backward compatible logic
-			// for getting close time from close event.
+		// TODO: remove closeEvent parameter
+		// when deprecating the backward compatible logic
+		// for getting close time from close event.
 			closeEvent *historypb.HistoryEvent,
 			deleteAfterClose bool,
 		) error
@@ -148,10 +148,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 	return nil
 }
 
-// archivalDelayJitterCoefficient is a variable because we need to override it to 0 in unit tests to make them
-// deterministic.
-var archivalDelayJitterCoefficient = 1.0
-
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closeEvent *historypb.HistoryEvent,
 	deleteAfterClose bool,
@@ -198,7 +194,8 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			}
 			// We schedule the archival task for a random time in the near future to avoid sending a surge of tasks
 			// to the archival system at the same time
-			delay := backoff.Jitter(r.config.ArchivalProcessorArchiveDelay(), archivalDelayJitterCoefficient) / 2
+
+			delay := backoff.FullJitter(r.config.ArchivalProcessorArchiveDelay())
 			if delay > retention {
 				delay = retention
 			}
