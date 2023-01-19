@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -55,8 +56,8 @@ import (
 )
 
 const (
-	taskTimeout             = time.Second * 3
-	taskGetExecutionTimeout = time.Second
+	taskTimeout             = time.Second * 3 * debug.TimeoutMultiplier
+	taskGetExecutionTimeout = time.Second * debug.TimeoutMultiplier
 	taskHistoryOpTimeout    = 20 * time.Second
 )
 
