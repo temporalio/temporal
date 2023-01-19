@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -86,7 +87,7 @@ func (s *TaskQueueSuite) TearDownSuite() {
 
 func (s *TaskQueueSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.ctx, s.cancel = context.WithTimeout(context.Background(), time.Second*30)
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.stickyTTL = time.Second * 10
 	s.namespaceID = uuid.New().String()

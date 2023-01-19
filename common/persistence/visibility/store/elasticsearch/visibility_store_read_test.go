@@ -42,6 +42,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -117,7 +118,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
-	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute)
+	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier)
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFn(false)
 
 	s.controller = gomock.NewController(s.T())
