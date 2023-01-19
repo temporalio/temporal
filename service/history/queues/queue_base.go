@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -53,7 +54,7 @@ const (
 	// task alert & action
 	nonDefaultReaderMaxPendingTaskCoefficient = 0.8
 
-	queueIOTimeout = 5 * time.Second
+	queueIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
 
 	// Force creating new slice every forceNewSliceDuration
 	// so that the last slice in the default reader won't grow

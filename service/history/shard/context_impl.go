@@ -50,6 +50,7 @@ import (
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -82,7 +83,7 @@ const (
 )
 
 const (
-	shardIOTimeout = 5 * time.Second
+	shardIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
 
 	pendingMaxReplicationTaskID = math.MaxInt64
 )

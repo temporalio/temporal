@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -102,7 +103,7 @@ func NewExecutionMutableStateTaskSuite(
 
 func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
+	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.ShardID++
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{

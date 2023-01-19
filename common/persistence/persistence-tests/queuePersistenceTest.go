@@ -34,6 +34,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -58,7 +59,7 @@ func (s *QueuePersistenceSuite) SetupSuite() {
 func (s *QueuePersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.ctx, s.cancel = context.WithTimeout(context.Background(), time.Second*30)
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 }
 
 func (s *QueuePersistenceSuite) TearDownTest() {
