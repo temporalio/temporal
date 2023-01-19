@@ -154,7 +154,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				p.Retention = 24 * time.Hour
 				p.ArchivalProcessorArchiveDelay = 12 * time.Hour
 
-				p.ExpectedArchiveExecutionTaskVisibilityTimestamp = time.Unix(0, 0).Add(6 * time.Hour)
+				p.ExpectedArchiveExecutionTaskVisibilityTimestamp = time.Unix(0, 0).Add(p.ArchivalProcessorArchiveDelay)
 				p.ExpectCloseExecutionVisibilityTask = true
 				p.ExpectArchiveExecutionTask = true
 			},
