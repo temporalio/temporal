@@ -451,19 +451,19 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.OnFatalError = w.onFatalError
 
 	// this should not block because the client already has server capabilities
-	sdkworker := w.wm.sdkClientFactory.NewWorker(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
+	worker := w.wm.sdkClientFactory.NewWorker(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	for _, cmp := range components {
-		cmp.Register(sdkworker, ns)
+		cmp.Register(worker, ns)
 	}
 
 	// this blocks by calling DescribeNamespace a few times (with a 10s timeout)
-	err := sdkworker.Start()
+	err := worker.Start()
 	if err != nil {
 		client.Close()
 		return nil, nil, err
 	}
 
-	return client, sdkworker, nil
+	return client, worker, nil
 }
 
 func (w *perNamespaceWorker) onFatalError(err error) {
