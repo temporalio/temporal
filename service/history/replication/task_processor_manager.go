@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -49,6 +50,10 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
+const (
+	clusterCallbackKey = "%s-%d" // <cluster name>-<polling shard id>
+)
+
 type (
 	// taskProcessorManagerImpl is to manage replication task processors
 	taskProcessorManagerImpl struct {
@@ -62,6 +67,7 @@ type (
 		workflowCache                 wcache.Cache
 		resender                      xdc.NDCHistoryResender
 		taskExecutorProvider          TaskExecutorProvider
+		taskPollerManager             pollerManager
 		metricsHandler                metrics.Handler
 		logger                        log.Logger
 
@@ -110,6 +116,7 @@ func NewTaskProcessorManager(
 		metricsHandler:       shard.GetMetricsHandler(),
 		taskProcessors:       make(map[string]TaskProcessor),
 		taskExecutorProvider: taskExecutorProvider,
+		taskPollerManager:    newPollerManager(shard.GetShardID(), shard.GetClusterMetadata()),
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
 		shutdownChan:         make(chan struct{}),
 	}
@@ -167,44 +174,46 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 		if clusterName == currentClusterName {
 			continue
 		}
-		// The metadata triggers a update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
-		// The callback covers three cases:
-		// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
-
-		if processor, ok := r.taskProcessors[clusterName]; ok {
-			// Case 1 and Case 3
-			processor.Stop()
-			delete(r.taskProcessors, clusterName)
-		}
-
-		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-			// Case 2 and Case 3
-			fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
-			replicationTaskProcessor := NewTaskProcessor(
-				r.shard,
-				r.engine,
-				r.config,
-				r.shard.GetMetricsHandler(),
-				fetcher,
-				r.taskExecutorProvider(TaskExecutorParams{
-					RemoteCluster:   clusterName,
-					Shard:           r.shard,
-					HistoryResender: r.resender,
-					HistoryEngine:   r.engine,
-					DeleteManager:   r.deleteMgr,
-					WorkflowCache:   r.workflowCache,
-				}),
-				r.eventSerializer,
-			)
-			replicationTaskProcessor.Start()
-			r.taskProcessors[clusterName] = replicationTaskProcessor
+		sourceShardIds := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
+		for _, sourceShardId := range sourceShardIds {
+			perShardTaskProcessorKey := fmt.Sprintf(clusterCallbackKey, clusterName, sourceShardId)
+			// The metadata triggers an update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
+			// The callback covers three cases:
+			// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
+			if processor, ok := r.taskProcessors[perShardTaskProcessorKey]; ok {
+				// Case 1 and Case 3
+				processor.Stop()
+				delete(r.taskProcessors, perShardTaskProcessorKey)
+			}
+			if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+				// Case 2 and Case 3
+				fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
+				replicationTaskProcessor := NewTaskProcessor(
+					sourceShardId,
+					r.shard,
+					r.engine,
+					r.config,
+					r.shard.GetMetricsHandler(),
+					fetcher,
+					r.taskExecutorProvider(TaskExecutorParams{
+						RemoteCluster:   clusterName,
+						Shard:           r.shard,
+						HistoryResender: r.resender,
+						DeleteManager:   r.deleteMgr,
+						WorkflowCache:   r.workflowCache,
+					}),
+					r.eventSerializer,
+				)
+				replicationTaskProcessor.Start()
+				r.taskProcessors[perShardTaskProcessorKey] = replicationTaskProcessor
+			}
 		}
 	}
 }
 
 func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 	shardID := r.shard.GetShardID()
-	cleanupTimer := time.NewTimer(backoff.JitDuration(
+	cleanupTimer := time.NewTimer(backoff.Jitter(
 		r.config.ReplicationTaskProcessorCleanupInterval(shardID),
 		r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 	))
@@ -219,7 +228,7 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 					metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 				)
 			}
-			cleanupTimer.Reset(backoff.JitDuration(
+			cleanupTimer.Reset(backoff.Jitter(
 				r.config.ReplicationTaskProcessorCleanupInterval(shardID),
 				r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 			))

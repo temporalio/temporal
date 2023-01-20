@@ -67,6 +67,9 @@ const (
 
 	MutableStateCacheTypeTagValue = "mutablestate"
 	EventsCacheTypeTagValue       = "events"
+
+	InvalidHistoryURITagValue    = "invalid_history_uri"
+	InvalidVisibilityURITagValue = "invalid_visibility_uri"
 )
 
 // Common service base metrics
@@ -495,6 +498,8 @@ const (
 	HistoryClientVerifyChildExecutionCompletionRecordedScope = "HistoryClientVerifyChildExecutionCompletionRecorded"
 	// HistoryClientReplicateEventsV2Scope tracks RPC calls to history service
 	HistoryClientReplicateEventsV2Scope = "HistoryClientReplicateEventsV2"
+	// HistoryClientReplicateWorkflowStateScope tracks RPC calls to history service
+	HistoryClientReplicateWorkflowStateScope = "HistoryClientReplicateWorkflowState"
 	// HistoryClientSyncShardStatusScope tracks RPC calls to history service
 	HistoryClientSyncShardStatusScope = "HistoryClientSyncShardStatus"
 	// HistoryClientSyncActivityScope tracks RPC calls to history service
@@ -1431,11 +1436,12 @@ var (
 	TaskNotActiveCounter                              = NewCounterDef("task_errors_not_active_counter")
 	TaskLimitExceededCounter                          = NewCounterDef("task_errors_limit_exceeded_counter")
 	TaskNamespaceHandoverCounter                      = NewCounterDef("task_errors_namespace_handover")
+	TaskThrottledCounter                              = NewCounterDef("task_errors_throttled")
+	TaskCorruptionCounter                             = NewCounterDef("task_errors_corruption")
 	TaskScheduleToStartLatency                        = NewTimerDef("task_schedule_to_start_latency")
 	TransferTaskMissingEventCounter                   = NewCounterDef("transfer_task_missing_event_counter")
 	TaskBatchCompleteCounter                          = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks                       = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
-	TaskThrottledCounter                              = NewCounterDef("task_throttled_counter")
 	PendingTasksCounter                               = NewDimensionlessHistogramDef("pending_tasks")
 	QueueScheduleLatency                              = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram                         = NewDimensionlessHistogramDef("queue_reader_count")
@@ -1562,7 +1568,6 @@ var (
 	ShardControllerLockLatency                        = NewTimerDef("shard_controller_lock_latency")
 	ShardLockLatency                                  = NewTimerDef("shard_lock_latency")
 	NamespaceRegistryLockLatency                      = NewTimerDef("namespace_registry_lock_latency")
-	NamespaceRegistryCallbackLockLatency              = NewTimerDef("namespace_registry_callback_lock_latency")
 	ClosedWorkflowBufferEventCount                    = NewCounterDef("closed_workflow_buffer_event_counter")
 
 	// Matching

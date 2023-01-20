@@ -28,6 +28,9 @@ package queues
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -36,11 +39,13 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -110,6 +115,7 @@ type (
 		priorityAssigner  PriorityAssigner
 		timeSource        clock.TimeSource
 		namespaceRegistry namespace.Registry
+		clusterMetadata   cluster.Metadata
 
 		readerID               int32
 		loadTime               time.Time
@@ -135,6 +141,7 @@ func NewExecutable(
 	priorityAssigner PriorityAssigner,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
+	clusterMetadata cluster.Metadata,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) Executable {
@@ -148,6 +155,7 @@ func NewExecutable(
 		priorityAssigner:  priorityAssigner,
 		timeSource:        timeSource,
 		namespaceRegistry: namespaceRegistry,
+		clusterMetadata:   clusterMetadata,
 		readerID:          readerID,
 		loadTime:          util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
 		logger: log.NewLazyLogger(
@@ -163,15 +171,32 @@ func NewExecutable(
 	return executable
 }
 
-func (e *executableImpl) Execute() error {
+func (e *executableImpl) Execute() (retErr error) {
 	if e.State() == ctasks.TaskStateCancelled {
 		return nil
 	}
 
-	ctx := metrics.AddMetricsContext(context.Background())
-	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+	ns, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+	ctx := headers.SetCallerInfo(
+		metrics.AddMetricsContext(context.Background()),
+		headers.NewBackgroundCallerInfo(ns.String()),
+	)
 
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
+	defer func() {
+		if panicObj := recover(); panicObj != nil {
+			err, ok := panicObj.(error)
+			if !ok {
+				err = serviceerror.NewInternal(fmt.Sprintf("panic: %v", panicObj))
+			}
+
+			e.logger.Error("Panic is captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
+			retErr = err
+
+			// we need to guess the metrics tags here as we don't know which execution logic
+			// is actually used which is upto the executor implementation
+			e.taggedMetricsHandler = e.metricsHandler.WithTags(e.estimateTaskMetricTag()...)
+		}
+	}()
 
 	startTime := e.timeSource.Now()
 
@@ -273,6 +298,16 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return err
 	}
 
+	var deserializationError *serialization.DeserializationError
+	var encodingTypeError *serialization.UnknownEncodingTypeError
+	if errors.As(err, &deserializationError) || errors.As(err, &encodingTypeError) {
+		// likely due to data corruption, emit logs, metrics & drop the task by return nil so that
+		// task will be marked as completed.
+		e.taggedMetricsHandler.Counter(metrics.TaskCorruptionCounter.GetMetricName()).Record(1)
+		e.logger.Error("Drop task due to serialization error", tag.Error(err))
+		return nil
+	}
+
 	e.taggedMetricsHandler.Counter(metrics.TaskFailures.GetMetricName()).Record(1)
 
 	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
@@ -293,6 +328,12 @@ func (e *executableImpl) IsRetryableError(err error) bool {
 	// don't retry immediately for resource exhausted which may incur more load
 	// context deadline exceed may also suggested downstream is overloaded, so don't retry immediately
 	if common.IsResourceExhausted(err) || common.IsContextDeadlineExceededErr(err) {
+		return false
+	}
+
+	// Internal error is non-retryable and usually means unexpected error has happened,
+	// e.g. unknown task, corrupted state, panic etc.
+	if common.IsInternalError(err) {
 		return false
 	}
 
@@ -424,6 +465,10 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 		return false
 	}
 
+	if common.IsInternalError(err) {
+		return false
+	}
+
 	return err != consts.ErrTaskRetry &&
 		err != consts.ErrDependencyTaskNotCompleted &&
 		err != consts.ErrNamespaceHandover
@@ -433,13 +478,14 @@ func (e *executableImpl) rescheduleTime(
 	err error,
 	attempt int,
 ) time.Time {
-	// elapsedTime (the first parameter in ComputeNextDelay) is not relevant here
+	// elapsedTime, the first parameter in ComputeNextDelay is not relevant here
 	// since reschedule policy has no expiration interval.
 
-	if err == consts.ErrTaskRetry || err == consts.ErrNamespaceHandover {
+	if err == consts.ErrTaskRetry ||
+		err == consts.ErrNamespaceHandover ||
+		common.IsInternalError(err) {
 		// using a different reschedule policy to slow down retry
-		// as the error means mutable state or namespace is not ready to handle the task,
-		// need to wait for replication.
+		// as immediate retry typically won't resolve the issue.
 		return e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 
@@ -447,15 +493,15 @@ func (e *executableImpl) rescheduleTime(
 		return e.timeSource.Now().Add(dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 
-	backoff := reschedulePolicy.ComputeNextDelay(0, attempt)
+	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt)
 	if common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon resource exhausted error and pick the longer backoff
 		// duration
-		backoff = util.Max(backoff, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
+		backoffDuration = util.Max(backoffDuration, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
 	}
 
-	return e.timeSource.Now().Add(backoff)
+	return e.timeSource.Now().Add(backoffDuration)
 }
 
 func (e *executableImpl) updatePriority() {
@@ -467,5 +513,23 @@ func (e *executableImpl) updatePriority() {
 	e.priority = newPriority
 	if e.priority > e.lowestPriority {
 		e.lowestPriority = e.priority
+	}
+}
+
+func (e *executableImpl) estimateTaskMetricTag() []metrics.Tag {
+	namespaceTag := metrics.NamespaceUnknownTag()
+	isActive := true
+
+	namespace, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
+	if err == nil {
+		namespaceTag = metrics.NamespaceTag(namespace.Name().String())
+		isActive = namespace.ActiveInCluster(e.clusterMetadata.GetCurrentClusterName())
+	}
+
+	taskType := getTaskTypeTagValue(e.Task, isActive)
+	return []metrics.Tag{
+		namespaceTag,
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
 	}
 }

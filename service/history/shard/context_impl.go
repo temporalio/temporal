@@ -47,9 +47,10 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/clock"
+	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -82,7 +83,7 @@ const (
 )
 
 const (
-	shardIOTimeout = 5 * time.Second
+	shardIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
 
 	pendingMaxReplicationTaskID = math.MaxInt64
 )
@@ -108,7 +109,7 @@ type (
 		clientBean              client.Bean
 		historyClient           historyservice.HistoryServiceClient
 		payloadSerializer       serialization.Serializer
-		timeSource              clock.TimeSource
+		timeSource              cclock.TimeSource
 		namespaceRegistry       namespace.Registry
 		saProvider              searchattribute.Provider
 		saMapper                searchattribute.Mapper
@@ -564,13 +565,6 @@ func (s *ContextImpl) GetAllFailoverLevels(category tasks.Category) map[string]p
 	return ret
 }
 
-func (s *ContextImpl) GetNamespaceNotificationVersion() int64 {
-	s.rLock()
-	defer s.rUnlock()
-
-	return s.shardInfo.NamespaceNotificationVersion
-}
-
 func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error {
 	s.wLock()
 	defer s.wUnlock()
@@ -584,8 +578,15 @@ func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVe
 	return nil
 }
 
-func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace) {
+func (s *ContextImpl) UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool) {
+	nsName := ns.Name()
+
 	s.wLock()
+	if deletedFromDb {
+		delete(s.handoverNamespaces, ns.Name())
+		s.wUnlock()
+		return
+	}
 
 	maxReplicationTaskID := s.immediateTaskExclusiveMaxReadLevel - 1
 	if s.errorByState() != nil {
@@ -594,36 +595,27 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 		maxReplicationTaskID = pendingMaxReplicationTaskID
 	}
 
-	currentClustername := s.GetClusterMetadata().GetCurrentClusterName()
-	newHandoverNamespaces := make(map[namespace.Name]struct{})
-	for _, ns := range namespaces {
-		// NOTE: replication state field won't be replicated and currently we only update a namespace
-		// to handover state from active cluster, so the second condition will always be true. Adding
-		// it here to be more safe in case above assumption no longer holds in the future.
-		if ns.IsGlobalNamespace() && ns.ActiveInCluster(currentClustername) && ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
-			nsName := ns.Name()
-			newHandoverNamespaces[nsName] = struct{}{}
-			if handover, ok := s.handoverNamespaces[nsName]; ok {
-				if handover.NotificationVersion < ns.NotificationVersion() {
-					handover.NotificationVersion = ns.NotificationVersion()
-					handover.MaxReplicationTaskID = maxReplicationTaskID
-				}
-			} else {
-				s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
-					NotificationVersion:  ns.NotificationVersion(),
-					MaxReplicationTaskID: maxReplicationTaskID,
-				}
+	// NOTE: replication state field won't be replicated and currently we only update a namespace
+	// to handover state from active cluster, so the second condition will always be true. Adding
+	// it here to be more safe in case above assumption no longer holds in the future.
+	if ns.IsGlobalNamespace() &&
+		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
+		ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
+
+		if handover, ok := s.handoverNamespaces[nsName]; ok {
+			if handover.NotificationVersion < ns.NotificationVersion() {
+				handover.NotificationVersion = ns.NotificationVersion()
+				handover.MaxReplicationTaskID = maxReplicationTaskID
+			}
+		} else {
+			s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
+				NotificationVersion:  ns.NotificationVersion(),
+				MaxReplicationTaskID: maxReplicationTaskID,
 			}
 		}
 	}
-	// delete old handover ns
-	for k := range s.handoverNamespaces {
-		if _, ok := newHandoverNamespaces[k]; !ok {
-			delete(s.handoverNamespaces, k)
-		}
-	}
-	s.wUnlock()
 
+	s.wUnlock()
 	s.notifyReplicationQueueProcessor(maxReplicationTaskID)
 }
 
@@ -1266,7 +1258,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	}
 
 	var err error
-	now := clock.NewRealTimeSource().Now()
+	now := cclock.NewRealTimeSource().Now()
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		return nil
 	}
@@ -2061,7 +2053,7 @@ func newContext(
 	historyClient historyservice.HistoryServiceClient,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
+	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
 	saMapper searchattribute.Mapper,
@@ -2163,7 +2155,7 @@ func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
 	return s.metricsHandler
 }
 
-func (s *ContextImpl) GetTimeSource() clock.TimeSource {
+func (s *ContextImpl) GetTimeSource() cclock.TimeSource {
 	return s.timeSource
 }
 

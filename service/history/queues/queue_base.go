@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -41,7 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/service/history/shard"
+	hshard "go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -53,7 +54,7 @@ const (
 	// task alert & action
 	nonDefaultReaderMaxPendingTaskCoefficient = 0.8
 
-	queueIOTimeout = 5 * time.Second
+	queueIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
 
 	// Force creating new slice every forceNewSliceDuration
 	// so that the last slice in the default reader won't grow
@@ -75,7 +76,7 @@ type (
 	}
 
 	queueBase struct {
-		shard shard.Context
+		shard hshard.Context
 
 		status     int32
 		shutdownCh chan struct{}
@@ -120,7 +121,7 @@ type (
 )
 
 func newQueueBase(
-	shard shard.Context,
+	shard hshard.Context,
 	category tasks.Category,
 	paginationFnProvider PaginationFnProvider,
 	scheduler Scheduler,
@@ -164,6 +165,7 @@ func newQueueBase(
 			priorityAssigner,
 			timeSource,
 			shard.GetNamespaceRegistry(),
+			shard.GetClusterMetadata(),
 			logger,
 			metricsHandler,
 		)
@@ -256,7 +258,7 @@ func (p *queueBase) Start() {
 	p.rescheduler.Start()
 	p.readerGroup.Start()
 
-	p.checkpointTimer = time.NewTimer(backoff.JitDuration(
+	p.checkpointTimer = time.NewTimer(backoff.Jitter(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
 	))
@@ -274,9 +276,9 @@ func (p *queueBase) Category() tasks.Category {
 }
 
 func (p *queueBase) FailoverNamespace(
-	namespaceIDs map[string]struct{},
+	namespaceID string,
 ) {
-	p.rescheduler.Reschedule(namespaceIDs)
+	p.rescheduler.Reschedule(namespaceID)
 }
 
 func (p *queueBase) processNewRange() error {
@@ -422,7 +424,7 @@ func (p *queueBase) resetCheckpointTimer(checkPointErr error) {
 	}
 
 	p.checkpointRetrier.Reset()
-	p.checkpointTimer.Reset(backoff.JitDuration(
+	p.checkpointTimer.Reset(backoff.Jitter(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
 	))

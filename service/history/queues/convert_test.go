@@ -65,7 +65,7 @@ func (s *convertSuite) TestConvertPredicate_Empty() {
 }
 
 func (s *convertSuite) TestConvertPredicate_And() {
-	predicates := []tasks.Predicate{
+	testCases := []tasks.Predicate{
 		predicates.And(
 			predicates.Universal[tasks.Task](),
 			predicates.Empty[tasks.Task](),
@@ -102,13 +102,13 @@ func (s *convertSuite) TestConvertPredicate_And() {
 		),
 	}
 
-	for _, predicate := range predicates {
+	for _, predicate := range testCases {
 		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate)))
 	}
 }
 
 func (s *convertSuite) TestConvertPredicate_Or() {
-	predicates := []tasks.Predicate{
+	testCases := []tasks.Predicate{
 		predicates.Or(
 			predicates.Universal[tasks.Task](),
 			predicates.Empty[tasks.Task](),
@@ -145,13 +145,13 @@ func (s *convertSuite) TestConvertPredicate_Or() {
 		),
 	}
 
-	for _, predicate := range predicates {
+	for _, predicate := range testCases {
 		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate)))
 	}
 }
 
 func (s *convertSuite) TestConvertPredicate_Not() {
-	predicates := []tasks.Predicate{
+	testCases := []tasks.Predicate{
 		predicates.Not(predicates.Universal[tasks.Task]()),
 		predicates.Not(predicates.Empty[tasks.Task]()),
 		predicates.Not(predicates.And[tasks.Task](
@@ -169,25 +169,25 @@ func (s *convertSuite) TestConvertPredicate_Not() {
 		})),
 	}
 
-	for _, predicate := range predicates {
+	for _, predicate := range testCases {
 		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate)))
 	}
 }
 
 func (s *convertSuite) TestConvertPredicate_NamespaceID() {
-	predicates := []tasks.Predicate{
+	testCases := []tasks.Predicate{
 		tasks.NewNamespacePredicate(nil),
 		tasks.NewNamespacePredicate([]string{}),
 		tasks.NewNamespacePredicate([]string{uuid.New(), uuid.New(), uuid.New()}),
 	}
 
-	for _, predicate := range predicates {
+	for _, predicate := range testCases {
 		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate)))
 	}
 }
 
 func (s *convertSuite) TestConvertPredicate_TaskType() {
-	predicates := []tasks.Predicate{
+	testCases := []tasks.Predicate{
 		tasks.NewTypePredicate(nil),
 		tasks.NewTypePredicate([]enumsspb.TaskType{}),
 		tasks.NewTypePredicate([]enumsspb.TaskType{
@@ -197,7 +197,7 @@ func (s *convertSuite) TestConvertPredicate_TaskType() {
 		}),
 	}
 
-	for _, predicate := range predicates {
+	for _, predicate := range testCases {
 		s.Equal(predicate, FromPersistencePredicate(ToPersistencePredicate(predicate)))
 	}
 }

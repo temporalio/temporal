@@ -74,6 +74,18 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			},
 		},
 		{
+			Name: "URIs are not read for empty targets",
+			Configure: func(p *params) {
+				p.HistoryConfig.ClusterEnabled = false
+				p.VisibilityConfig.ClusterEnabled = false
+				// we set the URIs to invalid values which would produce errors if they were read
+				// we should not read these URIs because history and visibility archival are disabled
+				p.HistoryURI = "invalid_uri"
+				p.VisibilityURI = "invalid_uri"
+				p.ExpectArchive = false
+			},
+		},
+		{
 			Name: "history archival disabled for namespace",
 			Configure: func(p *params) {
 				p.HistoryConfig.NamespaceArchivalState = carchiver.ArchivalDisabled
@@ -105,11 +117,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			Configure: func(p *params) {
 				p.VisibilityConfig.NamespaceArchivalState = carchiver.ArchivalDisabled
 				p.HistoryConfig.NamespaceArchivalState = carchiver.ArchivalDisabled
-				p.ExpectedErrorSubstrings = []string{
-					"no archival targets",
-				}
 				p.ExpectArchive = false
-				p.ExpectAddTask = false
 			},
 		},
 		{
@@ -509,6 +517,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				queues.NewNoopPriorityAssigner(),
 				timeSource,
 				namespaceRegistry,
+				mockMetadata,
 				nil,
 				metrics.NoopMetricsHandler,
 			)

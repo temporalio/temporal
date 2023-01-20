@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -38,7 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tests/testhelper"
+	"go.temporal.io/server/tests/testutils"
 )
 
 const (
@@ -76,7 +77,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 		Hosts:          host,
 		Port:           port,
 		MaxConns:       2,
-		ConnectTimeout: 30 * time.Second,
+		ConnectTimeout: 30 * time.Second * debug.TimeoutMultiplier,
 		Keyspace:       keyspace,
 	}
 	result.faultInjection = faultInjection
@@ -109,7 +110,7 @@ func (s *TestCluster) SetupTestDatabase() {
 	schemaDir := s.schemaDir + "/"
 
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
-		temporalPackageDir := testhelper.GetRepoRootDirectory()
+		temporalPackageDir := testutils.GetRepoRootDirectory()
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 

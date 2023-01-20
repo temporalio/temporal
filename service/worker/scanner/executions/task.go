@@ -106,7 +106,7 @@ func newTask(
 
 // Run runs the task
 func (t *task) Run() executor.TaskStatus {
-	time.Sleep(backoff.JitDuration(
+	time.Sleep(backoff.Jitter(
 		taskStartupDelayRatio*time.Duration(t.scavenger.numHistoryShards),
 		taskStartupDelayRandomizationRatio,
 	))
