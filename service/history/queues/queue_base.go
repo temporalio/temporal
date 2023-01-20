@@ -288,10 +288,7 @@ func (p *queueBase) processNewRange() error {
 		newMaxKey = p.shard.GetImmediateQueueExclusiveHighReadWatermark()
 	case tasks.CategoryTypeScheduled:
 		var err error
-		if newMaxKey, err = p.shard.UpdateScheduledQueueExclusiveHighReadWatermark(
-			p.shard.GetClusterMetadata().GetCurrentClusterName(),
-			true,
-		); err != nil {
+		if newMaxKey, err = p.shard.UpdateScheduledQueueExclusiveHighReadWatermark(); err != nil {
 			return err
 		}
 	default:
