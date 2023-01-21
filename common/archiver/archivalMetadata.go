@@ -52,6 +52,7 @@ type (
 		ReadEnabled() bool
 		GetNamespaceDefaultState() enumspb.ArchivalState
 		GetNamespaceDefaultURI() string
+		StaticClusterState() ArchivalState
 	}
 
 	archivalMetadata struct {
@@ -70,6 +71,10 @@ type (
 	// ArchivalState represents the archival state of the cluster
 	ArchivalState int
 )
+
+func (a *archivalConfig) StaticClusterState() ArchivalState {
+	return a.staticClusterState
+}
 
 const (
 	// ArchivalDisabled means this cluster is not configured to handle archival

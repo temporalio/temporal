@@ -55,7 +55,7 @@ type (
 		NewCacheFn                      wcache.NewCacheFn
 		ArchivalClient                  archiver.Client
 		EventSerializer                 serialization.Serializer
-		QueueFactories                  []QueueFactory `group:"queueFactory"`
+		QueueFactories                  []QueueFactory
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
 		TracerProvider                  trace.TracerProvider
