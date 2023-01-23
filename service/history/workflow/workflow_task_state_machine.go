@@ -251,6 +251,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 }
 
 // AddWorkflowTaskScheduledEventAsHeartbeat is to record the first scheduled workflow task during workflow task heartbeat.
+// If bypassTaskGeneration is specified, a transfer task will not be generated.
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
 	originalScheduledTimestamp *time.Time,
@@ -344,6 +345,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	return workflowTask, nil
 }
 
+// AddWorkflowTaskScheduledEvent adds a WorkflowTaskScheduled event to the mutable state and generates a transfer task
+// unless bypassTaskGeneration is specified.
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEvent(
 	bypassTaskGeneration bool,
 	workflowTaskType enumsspb.WorkflowTaskType,
@@ -351,11 +354,14 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEvent(
 	return m.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, timestamp.TimePtr(m.ms.timeSource.Now()), workflowTaskType)
 }
 
+// AddFirstWorkflowTaskScheduled adds the first workflow task scehduled event unless it should be delayed as indicated
+// by the startEvent's FirstWorkflowTaskBackoff.
+// If bypassTaskGeneration is specified, a transfer task will not be created.
+// Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
 func (m *workflowTaskStateMachine) AddFirstWorkflowTaskScheduled(
 	startEvent *historypb.HistoryEvent,
-) error {
-	// handle first workflow task case, i.e. possible delayed workflow task
-	//
+	bypassTaskGeneration bool,
+) (int64, error) {
 	// below handles the following cases:
 	// 1. if not continue as new & if workflow has no parent
 	//   -> schedule workflow task & schedule delayed workflow task
@@ -366,27 +372,25 @@ func (m *workflowTaskStateMachine) AddFirstWorkflowTaskScheduled(
 	// if continue as new
 	//  1. whether has parent workflow or not
 	//   -> schedule workflow task & schedule delayed workflow task
-	//
+
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	workflowTaskBackoffDuration := timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff())
 
-	var err error
 	if workflowTaskBackoffDuration != 0 {
-		if err = m.ms.taskGenerator.GenerateDelayedWorkflowTasks(
+		err := m.ms.taskGenerator.GenerateDelayedWorkflowTasks(
 			startEvent,
-		); err != nil {
-			return err
-		}
+		)
+		return 0, err
 	} else {
-		if _, err = m.AddWorkflowTaskScheduledEvent(
-			false,
+		info, err := m.AddWorkflowTaskScheduledEvent(
+			bypassTaskGeneration,
 			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
-		); err != nil {
-			return err
+		)
+		if err != nil {
+			return 0, err
 		}
+		return info.ScheduledEventID, nil
 	}
-
-	return nil
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(

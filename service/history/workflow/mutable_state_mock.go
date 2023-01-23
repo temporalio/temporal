@@ -350,11 +350,12 @@ func (mr *MockMutableStateMockRecorder) AddFailWorkflowEvent(arg0, arg1, arg2, a
 }
 
 // AddFirstWorkflowTaskScheduled mocks base method.
-func (m *MockMutableState) AddFirstWorkflowTaskScheduled(arg0 *v13.HistoryEvent) error {
+func (m *MockMutableState) AddFirstWorkflowTaskScheduled(arg0 *v13.HistoryEvent, arg1 bool) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddFirstWorkflowTaskScheduled", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "AddFirstWorkflowTaskScheduled", arg0, arg1)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[0].(error)
+	return ret0, ret1
 }
 
 // AddFirstWorkflowTaskScheduled indicates an expected call of AddFirstWorkflowTaskScheduled.

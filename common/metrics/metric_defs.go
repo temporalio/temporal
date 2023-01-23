@@ -1465,6 +1465,7 @@ var (
 	CommandTypeModifyWorkflowPropertiesCounter        = NewCounterDef("modify_workflow_properties_command")
 	CommandTypeChildWorkflowCounter                   = NewCounterDef("child_workflow_command")
 	ActivityEagerExecutionCounter                     = NewCounterDef("activity_eager_execution")
+	WorkflowEagerExecutionCounter                     = NewCounterDef("workflow_eager_execution")
 	EmptyCompletionCommandsCounter                    = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter                 = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                        = NewCounterDef("failed_workflow_tasks")

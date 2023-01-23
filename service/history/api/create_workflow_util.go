@@ -29,6 +29,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -62,7 +63,7 @@ func NewWorkflowWithSignal(
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (WorkflowContext, error) {
+) (WorkflowContext, *workflow.WorkflowTaskInfo, error) {
 	newMutableState, err := CreateMutableState(
 		ctx,
 		shard,
@@ -72,7 +73,7 @@ func NewWorkflowWithSignal(
 		runID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	startEvent, err := newMutableState.AddWorkflowExecutionStartedEvent(
@@ -83,7 +84,7 @@ func NewWorkflowWithSignal(
 		startRequest,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if signalWithStartRequest != nil {
@@ -96,17 +97,34 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
 		); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-
+	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
 	// Generate first workflow task event if not child WF and no first workflow task backoff
-	if err := GenerateFirstWorkflowTask(
+	scheduledEventID, err := GenerateFirstWorkflowTask(
 		newMutableState,
 		startRequest.ParentExecutionInfo,
 		startEvent,
-	); err != nil {
-		return nil, err
+		requestEagerExecution,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var workflowTaskInfo *workflow.WorkflowTaskInfo
+
+	if requestEagerExecution {
+		_, workflowTaskInfo, err = newMutableState.AddWorkflowTaskStartedEvent(
+			scheduledEventID,
+			startRequest.StartRequest.RequestId,
+			startRequest.StartRequest.TaskQueue,
+			startRequest.StartRequest.Identity,
+		)
+		if err != nil {
+			// Unable to add WorkflowTaskStarted event to history
+			return nil, nil, err
+		}
 	}
 
 	newWorkflowContext := workflow.NewContext(
@@ -118,7 +136,7 @@ func NewWorkflowWithSignal(
 		),
 		shard.GetLogger(),
 	)
-	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), workflowTaskInfo, nil
 }
 
 func CreateMutableState(
@@ -146,17 +164,13 @@ func GenerateFirstWorkflowTask(
 	mutableState workflow.MutableState,
 	parentInfo *workflowspb.ParentExecutionInfo,
 	startEvent *historypb.HistoryEvent,
-) error {
-
+	bypassTaskGeneration bool,
+) (int64, error) {
 	if parentInfo == nil {
 		// WorkflowTask is only created when it is not a Child Workflow and no backoff is needed
-		if err := mutableState.AddFirstWorkflowTaskScheduled(
-			startEvent,
-		); err != nil {
-			return err
-		}
+		return mutableState.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
 	}
-	return nil
+	return 0, nil
 }
 
 func NewWorkflowVersionCheck(
@@ -271,6 +285,10 @@ func ValidateStartWorkflowExecutionRequest(
 	}
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
 		return err
+	}
+	// TODO(bergundy): Support this case
+	if request.GetRequestEagerExecution() && request.GetWorkflowIdReusePolicy() == enums.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
+		return serviceerror.NewInvalidArgument("Eager workflow execution not supported for WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING")
 	}
 
 	if err := ValidateStart(

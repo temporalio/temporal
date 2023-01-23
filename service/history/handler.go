@@ -530,7 +530,11 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
+	if response.Clock == nil {
+		// TODO: do we still need to create a new clock with "eager" execution?
+		// We already put the clock in the task token and the response in that case.
+		response.Clock, err = shardContext.NewVectorClock()
+	}
 	if err != nil {
 		return nil, h.convertError(err)
 	}

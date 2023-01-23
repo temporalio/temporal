@@ -44,7 +44,7 @@ require (
 	go.opentelemetry.io/otel/metric v0.33.0
 	go.opentelemetry.io/otel/sdk v1.11.1
 	go.opentelemetry.io/otel/sdk/metric v0.31.0
-	go.temporal.io/api v1.14.1-0.20230123181040-6d7a91e07c31
+	go.temporal.io/api v1.15.0
 	go.temporal.io/sdk v1.19.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.10.0
@@ -55,7 +55,7 @@ require (
 	golang.org/x/oauth2 v0.2.0
 	golang.org/x/time v0.2.0
 	google.golang.org/api v0.103.0
-	google.golang.org/grpc v1.52.0
+	google.golang.org/grpc v1.52.1
 	google.golang.org/grpc/examples v0.0.0-20221201195934-736197138d20
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/validator.v2 v2.0.1
@@ -127,7 +127,7 @@ require (
 	golang.org/x/tools v0.3.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20230119192704-9d59e20e5cd1 // indirect
+	google.golang.org/genproto v0.0.0-20230124163310-31e0e69b6fc2 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect

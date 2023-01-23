@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -68,6 +69,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -5064,6 +5066,40 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		history,
 	)
 	s.NoError(err)
+}
+
+func (s *engineSuite) TestEagerWorkflowDispatch_DoesNotCreateTransferTask() {
+	var recordedTasks []tasks.Task
+
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+		recordedTasks = request.NewWorkflowSnapshot.Tasks[tasks.CategoryTransfer]
+		persistenceResponse := persistence.CreateWorkflowExecutionResponse{NewMutableStateStats: tests.CreateWorkflowExecutionResponse.NewMutableStateStats}
+		return &persistenceResponse, nil
+	})
+
+	interceptor := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(), s.mockShard.GetMetricsHandler(), s.mockShard.Resource.Logger)
+	response, err := interceptor.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			Attempt:     1,
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId:            "test",
+				Namespace:             tests.Namespace.String(),
+				WorkflowType:          &commonpb.WorkflowType{Name: "test"},
+				TaskQueue:             &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "test"},
+				Identity:              "test",
+				RequestId:             "test",
+				RequestEagerExecution: true,
+			},
+		})
+		return response, err
+	})
+	s.NoError(err)
+	s.Equal(len(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events), 3)
+	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[0].EventType, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[1].EventType, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
+	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[2].EventType, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.Equal(len(recordedTasks), 0)
 }
 
 func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
