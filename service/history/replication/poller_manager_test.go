@@ -90,7 +90,7 @@ func TestGetPollingShardIds(t *testing.T) {
 					t.Errorf("The code did not panic")
 				}
 			}()
-			shardIDs := generatePollingShardIDs(tt.shardID, tt.localShardCount, tt.remoteShardCount)
+			shardIDs := generateShardIDs(tt.shardID, tt.localShardCount, tt.remoteShardCount)
 			assert.Equal(t, tt.expectedShardIDs, shardIDs)
 		})
 	}

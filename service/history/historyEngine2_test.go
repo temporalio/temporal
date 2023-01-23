@@ -87,6 +87,7 @@ type (
 		mockTxProcessor         *queues.MockQueue
 		mockTimerProcessor      *queues.MockQueue
 		mockVisibilityProcessor *queues.MockQueue
+		mockArchivalProcessor   *queues.MockQueue
 		mockEventsCache         *events.MockCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
@@ -121,12 +122,15 @@ func (s *engine2Suite) SetupTest() {
 	s.mockTxProcessor = queues.NewMockQueue(s.controller)
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
+	s.mockArchivalProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
+	s.mockArchivalProcessor.EXPECT().Category().Return(tasks.CategoryArchival).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
 	mockShard := shard.NewTestContext(
@@ -177,6 +181,7 @@ func (s *engine2Suite) SetupTest() {
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Queue{
+			s.mockArchivalProcessor.Category():   s.mockArchivalProcessor,
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,

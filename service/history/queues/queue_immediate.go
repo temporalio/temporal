@@ -148,7 +148,7 @@ func (p *immediateQueue) NotifyNewTasks(tasks []tasks.Task) {
 func (p *immediateQueue) processEventLoop() {
 	defer p.shutdownWG.Done()
 
-	pollTimer := time.NewTimer(backoff.JitDuration(
+	pollTimer := time.NewTimer(backoff.Jitter(
 		p.options.MaxPollInterval(),
 		p.options.MaxPollIntervalJitterCoefficient(),
 	))
@@ -177,7 +177,7 @@ func (p *immediateQueue) processPollTimer(pollTimer *time.Timer) {
 		p.logger.Error("Unable to process new range", tag.Error(err))
 	}
 
-	pollTimer.Reset(backoff.JitDuration(
+	pollTimer.Reset(backoff.Jitter(
 		p.options.MaxPollInterval(),
 		p.options.MaxPollIntervalJitterCoefficient(),
 	))

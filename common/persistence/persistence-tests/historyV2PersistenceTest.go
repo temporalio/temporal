@@ -38,6 +38,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/serialization"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -91,7 +92,7 @@ func (s *HistoryV2PersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
-	s.ctx, s.cancel = context.WithTimeout(context.Background(), time.Second*30)
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 }
 
 // TearDownTest implementation

@@ -50,7 +50,12 @@ make bins
 Please check the top of our [Makefile](Makefile) for other useful build targets.
 
 ## Run tests
-Tests require runtime dependencies. They can be run with `start-dependencies` target (uses `docker-compose` internally). Open new terminal window and run:
+We defined three categories of tests.
+* Unit test: Those tests should not have dependencies other than the test target and go mock. We should have unit test coverage as much as possible.
+* Integration test: Those tests cover the integration between the server and the dependencies (Cassandra, SQL, ES etc.). 
+* Functional test: Those tests cover the E2E functionality of Temporal server. They are all under ./tests directory.
+
+Integration and functional tests require runtime dependencies. They can be run with `start-dependencies` target (uses `docker-compose` internally). Open new terminal window and run:
 ```bash
 make start-dependencies
 ```
@@ -68,6 +73,11 @@ make unit-test
 Run all integration tests:
 ```bash
 make integration-test
+```
+
+Run all functional tests:
+```bash
+make functional-test
 ```
 
 Or run all the tests at once:

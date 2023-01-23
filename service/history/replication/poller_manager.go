@@ -31,11 +31,17 @@ import (
 )
 
 type (
+	pollerManager interface {
+		getSourceClusterShardIDs(sourceClusterName string) []int32
+	}
+
 	pollerManagerImpl struct {
 		currentShardId  int32
 		clusterMetadata cluster.Metadata
 	}
 )
+
+var _ pollerManager = (*pollerManagerImpl)(nil)
 
 func newPollerManager(
 	currentShardId int32,
@@ -47,21 +53,21 @@ func newPollerManager(
 	}
 }
 
-func (p pollerManagerImpl) getPollingShardIDs(remoteClusterName string) []int32 {
+func (p pollerManagerImpl) getSourceClusterShardIDs(sourceClusterName string) []int32 {
 	currentCluster := p.clusterMetadata.GetCurrentClusterName()
 	allClusters := p.clusterMetadata.GetAllClusterInfo()
 	currentClusterInfo, ok := allClusters[currentCluster]
 	if !ok {
 		panic("Cannot get current cluster info from cluster metadata cache")
 	}
-	remoteClusterInfo, ok := allClusters[remoteClusterName]
+	remoteClusterInfo, ok := allClusters[sourceClusterName]
 	if !ok {
-		panic(fmt.Sprintf("Cannot get remote cluster %s info from cluster metadata cache", remoteClusterName))
+		panic(fmt.Sprintf("Cannot get source cluster %s info from cluster metadata cache", sourceClusterName))
 	}
-	return generatePollingShardIDs(p.currentShardId, currentClusterInfo.ShardCount, remoteClusterInfo.ShardCount)
+	return generateShardIDs(p.currentShardId, currentClusterInfo.ShardCount, remoteClusterInfo.ShardCount)
 }
 
-func generatePollingShardIDs(localShardId int32, localShardCount int32, remoteShardCount int32) []int32 {
+func generateShardIDs(localShardId int32, localShardCount int32, remoteShardCount int32) []int32 {
 	var pollingShards []int32
 	if remoteShardCount <= localShardCount {
 		if localShardId <= remoteShardCount {

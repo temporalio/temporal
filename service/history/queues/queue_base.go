@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -53,7 +54,7 @@ const (
 	// task alert & action
 	nonDefaultReaderMaxPendingTaskCoefficient = 0.8
 
-	queueIOTimeout = 5 * time.Second
+	queueIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
 
 	// Force creating new slice every forceNewSliceDuration
 	// so that the last slice in the default reader won't grow
@@ -257,7 +258,7 @@ func (p *queueBase) Start() {
 	p.rescheduler.Start()
 	p.readerGroup.Start()
 
-	p.checkpointTimer = time.NewTimer(backoff.JitDuration(
+	p.checkpointTimer = time.NewTimer(backoff.Jitter(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
 	))
@@ -287,10 +288,7 @@ func (p *queueBase) processNewRange() error {
 		newMaxKey = p.shard.GetImmediateQueueExclusiveHighReadWatermark()
 	case tasks.CategoryTypeScheduled:
 		var err error
-		if newMaxKey, err = p.shard.UpdateScheduledQueueExclusiveHighReadWatermark(
-			p.shard.GetClusterMetadata().GetCurrentClusterName(),
-			true,
-		); err != nil {
+		if newMaxKey, err = p.shard.UpdateScheduledQueueExclusiveHighReadWatermark(); err != nil {
 			return err
 		}
 	default:
@@ -426,7 +424,7 @@ func (p *queueBase) resetCheckpointTimer(checkPointErr error) {
 	}
 
 	p.checkpointRetrier.Reset()
-	p.checkpointTimer.Reset(backoff.JitDuration(
+	p.checkpointTimer.Reset(backoff.Jitter(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
 	))

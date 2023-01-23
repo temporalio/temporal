@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -76,7 +77,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 		Hosts:          host,
 		Port:           port,
 		MaxConns:       2,
-		ConnectTimeout: 30 * time.Second,
+		ConnectTimeout: 30 * time.Second * debug.TimeoutMultiplier,
 		Keyspace:       keyspace,
 	}
 	result.faultInjection = faultInjection

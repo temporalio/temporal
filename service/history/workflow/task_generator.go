@@ -148,10 +148,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 	return nil
 }
 
-// archivalDelayJitterCoefficient is a variable because we need to override it to 0 in unit tests to make them
-// deterministic.
-var archivalDelayJitterCoefficient = 1.0
-
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closeEvent *historypb.HistoryEvent,
 	deleteAfterClose bool,
@@ -199,7 +195,8 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			}
 			// We schedule the archival task for a random time in the near future to avoid sending a surge of tasks
 			// to the archival system at the same time
-			delay := backoff.JitDuration(r.config.ArchivalProcessorArchiveDelay(), archivalDelayJitterCoefficient) / 2
+
+			delay := backoff.FullJitter(r.config.ArchivalProcessorArchiveDelay())
 			if delay > retention {
 				delay = retention
 			}
@@ -262,7 +259,7 @@ func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time, 
 		return err
 	}
 
-	retentionJitterDuration := backoff.JitDuration(r.config.RetentionTimerJitterDuration(), 1) / 2
+	retentionJitterDuration := backoff.FullJitter(r.config.RetentionTimerJitterDuration())
 	deleteTime := closeTime.Add(retention).Add(retentionJitterDuration)
 	r.mutableState.AddTasks(&tasks.DeleteHistoryEventTask{
 		// TaskID is set by shard

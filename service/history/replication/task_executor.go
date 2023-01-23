@@ -321,6 +321,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	// This might be extra cost if the workflow belongs to local shard.
 	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
 	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
+		NamespaceId:   namespaceID.String(),
 		WorkflowState: attr.GetWorkflowState(),
 		RemoteCluster: e.remoteCluster,
 	})
