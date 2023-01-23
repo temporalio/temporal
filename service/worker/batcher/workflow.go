@@ -212,6 +212,9 @@ func validateParams(params BatchParams) error {
 		(params.Query == "" && len(params.Executions) == 0) {
 		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
+	if len(params.Query) > 0 && len(params.Executions) > 0 {
+		return fmt.Errorf("batch query and executions are mutually exclusive")
+	}
 	switch params.BatchType {
 	case BatchTypeSignal:
 		if params.SignalParams.SignalName == "" {
