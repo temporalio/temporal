@@ -63,11 +63,10 @@ require (
 	modernc.org/sqlite v1.20.0
 )
 
-require cloud.google.com/go/compute/metadata v0.2.2 // indirect
-
 require (
 	cloud.google.com/go v0.107.0 // indirect
 	cloud.google.com/go/compute v1.13.0 // indirect
+	cloud.google.com/go/compute/metadata v0.2.2 // indirect
 	cloud.google.com/go/iam v0.8.0 // indirect
 	github.com/apache/thrift v0.17.0 // indirect
 	github.com/benbjohnson/clock v1.3.0 // indirect

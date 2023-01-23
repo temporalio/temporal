@@ -3773,6 +3773,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	input := &batcher.BatchParams{
 		Namespace:       request.GetNamespace(),
 		Query:           request.GetVisibilityQuery(),
+		Executions:      request.GetExecutions(),
 		Reason:          request.GetReason(),
 		BatchType:       operationType,
 		TerminateParams: batcher.TerminateParams{},
