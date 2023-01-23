@@ -27,7 +27,6 @@ package shard
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/golang/mock/gomock"
 
@@ -100,7 +99,6 @@ func NewTestContext(
 		taskSequenceNumber:                 shardInfo.RangeId << int64(config.RangeSizeBits),
 		immediateTaskExclusiveMaxReadLevel: shardInfo.RangeId << int64(config.RangeSizeBits),
 		maxTaskSequenceNumber:              (shardInfo.RangeId + 1) << int64(config.RangeSizeBits),
-		scheduledTaskMaxReadLevelMap:       make(map[string]time.Time),
 		remoteClusterInfos:                 make(map[string]*remoteClusterInfo),
 		handoverNamespaces:                 make(map[namespace.Name]*namespaceHandOverInfo),
 

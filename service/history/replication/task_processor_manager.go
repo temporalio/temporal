@@ -213,7 +213,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 
 func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 	shardID := r.shard.GetShardID()
-	cleanupTimer := time.NewTimer(backoff.JitDuration(
+	cleanupTimer := time.NewTimer(backoff.Jitter(
 		r.config.ReplicationTaskProcessorCleanupInterval(shardID),
 		r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 	))
@@ -228,7 +228,7 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 					metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 				)
 			}
-			cleanupTimer.Reset(backoff.JitDuration(
+			cleanupTimer.Reset(backoff.Jitter(
 				r.config.ReplicationTaskProcessorCleanupInterval(shardID),
 				r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 			))

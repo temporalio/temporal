@@ -50,6 +50,7 @@ import (
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -82,7 +83,7 @@ const (
 )
 
 const (
-	shardIOTimeout = 5 * time.Second
+	shardIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
 
 	pendingMaxReplicationTaskID = math.MaxInt64
 )
@@ -131,7 +132,7 @@ type (
 		taskSequenceNumber                 int64
 		maxTaskSequenceNumber              int64
 		immediateTaskExclusiveMaxReadLevel int64
-		scheduledTaskMaxReadLevelMap       map[string]time.Time // cluster -> scheduledTaskMaxReadLevel
+		scheduledTaskMaxReadLevel          time.Time
 
 		// exist only in memory
 		remoteClusterInfos      map[string]*remoteClusterInfo
@@ -294,50 +295,26 @@ func (s *ContextImpl) getScheduledTaskMaxReadLevel(cluster string) tasks.Key {
 	s.rLock()
 	defer s.rUnlock()
 
-	if _, ok := s.scheduledTaskMaxReadLevelMap[cluster]; !ok {
-		s.scheduledTaskMaxReadLevelMap[cluster] = tasks.DefaultFireTime
-	}
-
-	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
+	return tasks.NewKey(s.scheduledTaskMaxReadLevel, 0)
 }
 
-func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark(
-	cluster string,
-	singleProcessorMode bool,
-) (tasks.Key, error) {
+func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error) {
 	s.wLock()
 	defer s.wUnlock()
 
-	if _, ok := s.scheduledTaskMaxReadLevelMap[cluster]; !ok {
-		s.scheduledTaskMaxReadLevelMap[cluster] = tasks.DefaultFireTime
-	}
-
 	if err := s.errorByState(); err != nil {
-		return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0), err
+		return tasks.NewKey(s.scheduledTaskMaxReadLevel, 0), err
 	}
 
 	currentTime := s.timeSource.Now()
-	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		currentTime = s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
-	}
 
 	// Truncation here is just to make sure max read level has the same precision as the old logic
 	// in case existing code can't work correctly with precision higher than 1ms.
 	// Once we validate the rest of the code can worker correctly with higher precision, the truncation should be removed.
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(persistence.ScheduledTaskMinPrecision)
-	if singleProcessorMode {
-		// When generating scheduled tasks, the task's timestamp will be compared to the namespace's active cluster's
-		// maxReadLevel to avoid generatnig a task before maxReadLevel.
-		// But when there's a single procssor, the queue is only using current cluster maxReadLevel.
-		// So update the maxReadLevel map for all clusters to ensure scheduled task won't be lost.
-		for key := range s.scheduledTaskMaxReadLevelMap {
-			s.scheduledTaskMaxReadLevelMap[key] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[key], newMaxReadLevel)
-		}
-	} else {
-		s.scheduledTaskMaxReadLevelMap[cluster] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
-	}
+	s.scheduledTaskMaxReadLevel = util.MaxTime(s.scheduledTaskMaxReadLevel, newMaxReadLevel)
 
-	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0), nil
+	return tasks.NewKey(s.scheduledTaskMaxReadLevel, 0), nil
 }
 
 // NOTE: the ack level returned is inclusive for immediate task category (acked),
@@ -1387,7 +1364,6 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 	transferExclusiveMaxReadLevel *int64,
 ) error {
 	now := s.timeSource.Now()
-	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
 	for category, tasksByCategory := range newTasks {
 		for _, task := range tasksByCategory {
 			// set taskID
@@ -1408,13 +1384,7 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 			// if scheduled task, check if fire time is in the past
 			if category.Type() == tasks.CategoryTypeScheduled {
 				ts := task.GetVisibilityTime()
-				if task.GetVersion() != common.EmptyVersion && category.ID() == tasks.CategoryIDTimer {
-					// cannot use version to determine the corresponding cluster for timer task
-					// this is because during failover, timer task should be created as active
-					// or otherwise, failover + active processing logic may not pick up the task.
-					currentCluster = namespaceEntry.ActiveClusterName()
-				}
-				readCursorTS := s.scheduledTaskMaxReadLevelMap[currentCluster]
+				readCursorTS := s.scheduledTaskMaxReadLevel
 				if ts.Truncate(persistence.ScheduledTaskMinPrecision).Before(readCursorTS) {
 					// make sure scheduled task timestamp is higher than max read level after truncation
 					// as persistence layer may lose precision when persisting the task.
@@ -1426,12 +1396,14 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 						tag.Timestamp(ts),
 						tag.CursorTimestamp(readCursorTS),
 						tag.ValueShardAllocateTimerBeforeRead)
-					task.SetVisibilityTime(s.scheduledTaskMaxReadLevelMap[currentCluster].Add(persistence.ScheduledTaskMinPrecision))
+					task.SetVisibilityTime(s.scheduledTaskMaxReadLevel.Add(persistence.ScheduledTaskMinPrecision))
 				}
 
-				visibilityTs := task.GetVisibilityTime()
 				s.contextTaggedLogger.Debug("Assigning new timer",
-					tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.MaxQueryLevel(readCursorTS))
+					tag.Timestamp(task.GetVisibilityTime()),
+					tag.TaskID(task.GetTaskID()),
+					tag.MaxQueryLevel(readCursorTS),
+				)
 			}
 		}
 	}
@@ -1848,7 +1820,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 	// initialize the cluster current time to be the same as ack level
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
-	scheduledTaskMaxReadLevelMap := make(map[string]time.Time)
+	var scheduledTaskMaxReadLevel time.Time
 	currentClusterName := s.GetClusterMetadata().GetCurrentClusterName()
 	taskCategories := tasks.GetCategories()
 	for clusterName, info := range s.GetClusterMetadata().GetAllClusterInfo() {
@@ -1889,8 +1861,11 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		// Add().Truncate() here is just to make sure max read level has the same precision as the old logic
 		// in case existing code can't work correctly with precision higher than 1ms.
 		// Once we validate the rest of the code can worker correctly with higher precision, the code should simply be
-		// scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime
-		scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision)
+		// scheduledTaskMaxReadLevel = util.MaxTime(scheduledTaskMaxReadLevel, maxReadTime)
+		scheduledTaskMaxReadLevel = util.MaxTime(
+			scheduledTaskMaxReadLevel,
+			maxReadTime.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
+		)
 
 		if clusterName != currentClusterName {
 			remoteClusterInfos[clusterName] = &remoteClusterInfo{CurrentTime: maxReadTime}
@@ -1902,7 +1877,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 	s.shardInfo = updatedShardInfo
 	s.remoteClusterInfos = remoteClusterInfos
-	s.scheduledTaskMaxReadLevelMap = scheduledTaskMaxReadLevelMap
+	s.scheduledTaskMaxReadLevel = scheduledTaskMaxReadLevel
 
 	return nil
 }

@@ -191,7 +191,7 @@ func (p *taskProcessorImpl) Stop() {
 }
 
 func (p *taskProcessorImpl) eventLoop() {
-	syncShardTimer := time.NewTimer(backoff.JitDuration(
+	syncShardTimer := time.NewTimer(backoff.Jitter(
 		p.config.ShardSyncMinInterval(),
 		p.config.ShardSyncTimerJitterCoefficient(),
 	))
@@ -212,7 +212,7 @@ func (p *taskProcessorImpl) eventLoop() {
 					1,
 					metrics.OperationTag(metrics.HistorySyncShardStatusScope))
 			}
-			syncShardTimer.Reset(backoff.JitDuration(
+			syncShardTimer.Reset(backoff.Jitter(
 				p.config.ShardSyncMinInterval(),
 				p.config.ShardSyncTimerJitterCoefficient(),
 			))

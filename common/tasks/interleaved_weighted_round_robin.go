@@ -312,7 +312,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() iwrrChannels[T
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) setupDispatchTimer() {
 	throttleDuration := iwrrMinDispatchThrottleDuration +
-		backoff.JitDuration(s.options.MaxDispatchThrottleDuration-iwrrMinDispatchThrottleDuration, 1)/2
+		backoff.FullJitter(s.options.MaxDispatchThrottleDuration-iwrrMinDispatchThrottleDuration)
 
 	s.dispatchTimerLock.Lock()
 	defer s.dispatchTimerLock.Unlock()

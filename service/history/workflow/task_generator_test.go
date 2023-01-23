@@ -87,8 +87,6 @@ type testParams struct {
 }
 
 func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
-	// we need to set the jitter coefficient to 0 to remove the randomness in the test
-	archivalDelayJitterCoefficient = 0.0
 	for _, c := range []testConfig{
 		{
 			Name: "delete after retention",
@@ -156,7 +154,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				p.Retention = 24 * time.Hour
 				p.ArchivalProcessorArchiveDelay = 12 * time.Hour
 
-				p.ExpectedArchiveExecutionTaskVisibilityTimestamp = time.Unix(0, 0).Add(6 * time.Hour)
+				p.ExpectedArchiveExecutionTaskVisibilityTimestamp = time.Unix(0, 0).Add(p.ArchivalProcessorArchiveDelay)
 				p.ExpectCloseExecutionVisibilityTask = true
 				p.ExpectArchiveExecutionTask = true
 			},
@@ -258,11 +256,8 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				assert.Equal(t, archiveExecutionTask.NamespaceID, namespaceEntry.ID().String())
 				assert.Equal(t, archiveExecutionTask.WorkflowID, tests.WorkflowID)
 				assert.Equal(t, archiveExecutionTask.RunID, tests.RunID)
-				assert.Equal(
-					t,
-					p.ExpectedArchiveExecutionTaskVisibilityTimestamp,
-					archiveExecutionTask.VisibilityTimestamp,
-				)
+				assert.True(t, p.ExpectedArchiveExecutionTaskVisibilityTimestamp.Equal(archiveExecutionTask.VisibilityTimestamp) ||
+					p.ExpectedArchiveExecutionTaskVisibilityTimestamp.After(archiveExecutionTask.VisibilityTimestamp))
 			} else {
 				assert.Nil(t, archiveExecutionTask)
 			}
