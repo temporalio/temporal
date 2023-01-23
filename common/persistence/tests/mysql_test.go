@@ -574,3 +574,11 @@ func TestMySQLVisibilitySuite(t *testing.T) {
 	s := sqltests.NewVisibilitySuite(t, store)
 	suite.Run(t, s)
 }
+
+func TestMySQLClosedConnectionError(t *testing.T) {
+	testData, tearDown := setUpMySQLTest(t)
+	defer tearDown()
+
+	s := NewConnectionSuite(t, testData.Factory)
+	suite.Run(t, s)
+}

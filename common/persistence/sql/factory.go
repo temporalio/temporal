@@ -188,7 +188,7 @@ func (c *DbConn) Close() error {
 	c.refCnt--
 	if c.refCnt == 0 {
 		err := c.DB.Close()
-		c.DB = nil
+		// c.DB = nil //TODO: this is the problem line. first start by removing it and checking that underlying persistence layers return useful errors. if that doesn't work, need to figure out another solution
 		return err
 	}
 	return nil

@@ -581,3 +581,11 @@ func TestPostgreSQLVisibilitySuite(t *testing.T) {
 	s := sqltests.NewVisibilitySuite(t, store)
 	suite.Run(t, s)
 }
+
+func TestPostgreSQLClosedConnectionError(t *testing.T) {
+	testData, tearDown := setUpPostgreSQLTest(t)
+	defer tearDown()
+
+	s := NewConnectionSuite(t, testData.Factory)
+	suite.Run(t, s)
+}
