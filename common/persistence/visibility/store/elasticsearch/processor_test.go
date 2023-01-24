@@ -132,8 +132,8 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 	// Confirm processor does not panic on new requests after stopping
 	request := &client.BulkableRequest{}
 	visibilityTaskKey := "test-key"
-	future := p.Add(request, visibilityTaskKey)
-	s.Nil(future)
+	future1 := p.Add(request, visibilityTaskKey)
+	s.Nil(future1)
 }
 
 func (s *processorSuite) TestAdd() {
