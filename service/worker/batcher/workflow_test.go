@@ -28,8 +28,10 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/testsuite"
 )
 
@@ -62,7 +64,7 @@ func (s *batcherSuite) TestBatchWorkflow_MissingParams() {
 	s.Contains(err.Error(), "must provide required parameters")
 }
 
-func (s *batcherSuite) TestBatchWorkflow_ValidParams() {
+func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query() {
 	var ac *activities
 	s.env.OnActivity(ac.BatchActivity, mock.Anything, mock.Anything).Return(HeartBeatDetails{
 		SuccessCount: 42,
@@ -83,6 +85,37 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams() {
 		Reason:    "test-reason",
 		Namespace: "test-namespace",
 		Query:     "test-query",
+	})
+	err := s.env.GetWorkflowError()
+	s.Require().NoError(err)
+}
+
+func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions() {
+	var ac *activities
+	s.env.OnActivity(ac.BatchActivity, mock.Anything, mock.Anything).Return(HeartBeatDetails{
+		SuccessCount: 42,
+		ErrorCount:   27,
+	}, nil)
+	s.env.OnUpsertMemo(mock.Anything).Run(func(args mock.Arguments) {
+		memo, ok := args.Get(0).(map[string]interface{})
+		s.Require().True(ok)
+		s.Equal(map[string]interface{}{
+			"batch_operation_stats": BatchOperationStats{
+				NumSuccess: 42,
+				NumFailure: 27,
+			},
+		}, memo)
+	}).Once()
+	s.env.ExecuteWorkflow(BatchWorkflow, BatchParams{
+		BatchType: BatchTypeTerminate,
+		Reason:    "test-reason",
+		Namespace: "test-namespace",
+		Executions: []*commonpb.WorkflowExecution{
+			{
+				WorkflowId: uuid.New(),
+				RunId:      uuid.New(),
+			},
+		},
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
