@@ -37,6 +37,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
@@ -47,6 +49,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -143,7 +146,14 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentEventsSize := int64(2333)
 	currentNewEventsSize := int64(3444)
 	currentMutation := &persistence.WorkflowMutation{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{
+				BranchToken: []byte{1, 2, 3},
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 234, Version: 0},
+				},
+			}),
+		},
 	}
 	currentEventsSeq := []*persistence.WorkflowEvents{{
 		NamespaceID: s.namespaceID.String(),
@@ -169,7 +179,14 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	resetEventsSize := int64(1444)
 	resetNewEventsSize := int64(4321)
 	resetSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{
+				BranchToken: []byte{1, 2, 3},
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 123, Version: 0},
+				},
+			}),
+		},
 	}
 	resetEventsSeq := []*persistence.WorkflowEvents{{
 		NamespaceID: s.namespaceID.String(),
@@ -190,8 +207,10 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
+		0,
 		currentMutation,
 		currentEventsSeq,
+		convert.Int64Ptr(0),
 		resetSnapshot,
 		resetEventsSeq,
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
