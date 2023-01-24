@@ -74,7 +74,7 @@ type (
 		TimeSource        clock.TimeSource
 		PayloadSerializer serialization.Serializer
 		MetricsHandler    metrics.Handler
-		ArchivalMetadata  *archiver.MockArchivalMetadata
+		ArchivalMetadata  archiver.MetadataMock
 		ArchiverProvider  *provider.MockArchiverProvider
 
 		// membership infos
@@ -184,7 +184,7 @@ func NewTest(
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: serialization.NewSerializer(),
 		MetricsHandler:    metricsHandler,
-		ArchivalMetadata:  archiver.NewMockArchivalMetadata(controller),
+		ArchivalMetadata:  archiver.NewMetadataMock(controller),
 		ArchiverProvider:  provider.NewMockArchiverProvider(controller),
 
 		// membership infos

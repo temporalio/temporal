@@ -56,5 +56,6 @@ func (p *taskGeneratorProviderImpl) NewTaskGenerator(
 		shard.GetNamespaceRegistry(),
 		mutableState,
 		shard.GetConfig(),
+		shard.GetArchivalMetadata(),
 	)
 }

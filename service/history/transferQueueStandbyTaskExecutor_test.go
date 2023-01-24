@@ -95,7 +95,7 @@ type (
 
 		mockExecutionMgr     *persistence.MockExecutionManager
 		mockArchivalClient   *warchiver.MockClient
-		mockArchivalMetadata *archiver.MockArchivalMetadata
+		mockArchivalMetadata archiver.MetadataMock
 		mockArchiverProvider *provider.MockArchiverProvider
 
 		workflowCache        wcache.Cache
@@ -193,6 +193,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.workflowCache = wcache.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
+
+	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
+	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
 
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
@@ -745,7 +748,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution_CanSki
 						"disabled",
 						"random URI",
 					),
-				)
+				).AnyTimes()
 				s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
 				s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
 			}

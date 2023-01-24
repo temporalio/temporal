@@ -91,15 +91,19 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	}
 
 	if startOver {
-		resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-			Query: batchParams.Query,
-		})
-		if err != nil {
-			metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
-			logger.Error("Failed to get estimate workflow count", tag.Error(err))
-			return HeartBeatDetails{}, err
+		estimateCount := int64(len(batchParams.Executions))
+		if len(batchParams.Query) > 0 {
+			resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+				Query: batchParams.Query,
+			})
+			if err != nil {
+				metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
+				logger.Error("Failed to get estimate workflow count", tag.Error(err))
+				return HeartBeatDetails{}, err
+			}
+			estimateCount = resp.GetCount()
 		}
-		hbd.TotalEstimate = resp.GetCount()
+		hbd.TotalEstimate = estimateCount
 	}
 	rps := a.getOperationRPS(batchParams.RPS)
 	rateLimiter := rate.NewLimiter(rate.Limit(rps), rps)
@@ -110,25 +114,33 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	}
 
 	for {
-		resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			PageSize:      int32(pageSize),
-			NextPageToken: hbd.PageToken,
-			Query:         batchParams.Query,
-		})
-		if err != nil {
-			metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
-			logger.Error("Failed to list workflow executions", tag.Error(err))
-			return HeartBeatDetails{}, err
+		executions := batchParams.Executions
+		pageToken := hbd.PageToken
+		if len(batchParams.Query) > 0 {
+			resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				PageSize:      int32(pageSize),
+				NextPageToken: pageToken,
+				Query:         batchParams.Query,
+			})
+			if err != nil {
+				metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
+				logger.Error("Failed to list workflow executions", tag.Error(err))
+				return HeartBeatDetails{}, err
+			}
+			pageToken = resp.NextPageToken
+			for _, wf := range resp.Executions {
+				executions = append(executions, wf.Execution)
+			}
 		}
-		batchCount := len(resp.Executions)
+
+		batchCount := len(executions)
 		if batchCount <= 0 {
 			break
 		}
-
 		// send all tasks
-		for _, wf := range resp.Executions {
+		for _, wf := range executions {
 			taskCh <- taskDetail{
-				execution: *wf.Execution,
+				execution: *wf,
 				attempts:  1,
 				hbd:       hbd,
 			}
@@ -157,7 +169,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		}
 
 		hbd.CurrentPage++
-		hbd.PageToken = resp.NextPageToken
+		hbd.PageToken = pageToken
 		hbd.SuccessCount += succCount
 		hbd.ErrorCount += errCount
 		activity.RecordHeartbeat(ctx, hbd)
