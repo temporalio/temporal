@@ -38,27 +38,27 @@ func TestParse(t *testing.T) {
 	n, err := Parse("my-basic-tq-name")
 	a.NoError(err)
 	a.Equal("my-basic-tq-name", n.BaseNameString())
-	a.Equal(0, n.partition)
-	a.Equal("", n.versionSet)
+	a.Equal(0, n.Partition())
+	a.Equal("", n.VersionSet())
 	a.Equal("my-basic-tq-name", n.FullName())
 	a.True(n.IsRoot())
-	a.Equal(0, n.Parent(5).partition)
+	a.Equal(0, n.Parent(5).Partition())
 
 	n, err = Parse("/_sys/my-basic-tq-name/23")
 	a.NoError(err)
 	a.Equal("my-basic-tq-name", n.BaseNameString())
-	a.Equal(23, n.partition)
-	a.Equal("", n.versionSet)
+	a.Equal(23, n.Partition())
+	a.Equal("", n.VersionSet())
 	a.Equal("/_sys/my-basic-tq-name/23", n.FullName())
 	a.False(n.IsRoot())
-	a.Equal(4, n.Parent(5).partition)
-	a.Equal(0, n.Parent(32).partition)
+	a.Equal(4, n.Parent(5).Partition())
+	a.Equal(0, n.Parent(32).Partition())
 
 	n, err = Parse("/_sys/my-basic-tq-name/verxyz:23")
 	a.NoError(err)
 	a.Equal("my-basic-tq-name", n.BaseNameString())
-	a.Equal(23, n.partition)
-	a.Equal("verxyz", n.versionSet)
+	a.Equal(23, n.Partition())
+	a.Equal("verxyz", n.VersionSet())
 	a.Equal("/_sys/my-basic-tq-name/verxyz:23", n.FullName())
 }
 
@@ -68,8 +68,8 @@ func TestFromBaseName(t *testing.T) {
 	n, err := FromBaseName("my-basic-tq-name")
 	a.NoError(err)
 	a.Equal("my-basic-tq-name", n.BaseNameString())
-	a.Equal(0, n.partition)
-	a.Equal("", n.versionSet)
+	a.Equal(0, n.Partition())
+	a.Equal("", n.VersionSet())
 
 	_, err = FromBaseName("/_sys/my-basic-tq-name/23")
 	a.Error(err)
@@ -82,7 +82,7 @@ func TestWithPartition(t *testing.T) {
 	a.NoError(err)
 	n = n.WithPartition(23)
 	a.Equal("tq", n.BaseNameString())
-	a.Equal(23, n.partition)
+	a.Equal(23, n.Partition())
 	a.Equal("/_sys/tq/23", n.FullName())
 	a.False(n.IsRoot())
 }
@@ -94,7 +94,7 @@ func TestWithVersionSet(t *testing.T) {
 	a.NoError(err)
 	n = n.WithVersionSet("abc3")
 	a.Equal("tq", n.BaseNameString())
-	a.Equal(0, n.partition)
+	a.Equal(0, n.Partition())
 	a.Equal("/_sys/tq/abc3:0", n.FullName())
 }
 
@@ -105,8 +105,8 @@ func TestWithPartitionAndVersionSet(t *testing.T) {
 	a.NoError(err)
 	n = n.WithPartition(11).WithVersionSet("abc3")
 	a.Equal("tq", n.BaseNameString())
-	a.Equal(11, n.partition)
-	a.Equal("abc3", n.versionSet)
+	a.Equal(11, n.Partition())
+	a.Equal("abc3", n.VersionSet())
 	a.Equal("/_sys/tq/abc3:11", n.FullName())
 }
 

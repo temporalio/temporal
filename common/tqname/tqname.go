@@ -164,6 +164,16 @@ func (tn Name) BaseNameString() string {
 	return tn.baseName
 }
 
+// Partition returns the partition number for a task queue.
+func (tn Name) Partition() int {
+	return tn.partition
+}
+
+// VersionSet returns the version set for a task queue.
+func (tn Name) VersionSet() string {
+	return tn.versionSet
+}
+
 // Parent returns a Name for the parent partition, using the given branching degree.
 func (tn Name) Parent(degree int) Name {
 	if tn.IsRoot() || degree == 0 {
