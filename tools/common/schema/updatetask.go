@@ -41,6 +41,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
@@ -230,7 +231,7 @@ func (task *UpdateTask) parseSQLStmts(dir string, manifest *manifest) ([]string,
 	for _, file := range manifest.SchemaUpdateCqlFiles {
 		path := dir + "/" + file
 		task.logger.Info("Processing schema file: " + path)
-		stmts, err := ParseFile(path)
+		stmts, err := persistence.LoadAndSplitQuery([]string{path})
 		if err != nil {
 			return nil, fmt.Errorf("error parsing file %v, err=%v", path, err)
 		}

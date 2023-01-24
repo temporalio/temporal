@@ -270,12 +270,7 @@ func (mdb *db) SelectFromVisibility(
 		return nil, err
 	}
 	for i := range rows {
-		rows[i].StartTime = mdb.converter.FromSQLiteDateTime(rows[i].StartTime)
-		rows[i].ExecutionTime = mdb.converter.FromSQLiteDateTime(rows[i].ExecutionTime)
-		if rows[i].CloseTime != nil {
-			closeTime := mdb.converter.FromSQLiteDateTime(*rows[i].CloseTime)
-			rows[i].CloseTime = &closeTime
-		}
+		mdb.processRowFromDB(&rows[i])
 	}
 	return rows, nil
 }
@@ -295,5 +290,15 @@ func (mdb *db) GetFromVisibility(
 	if err != nil {
 		return nil, err
 	}
+	mdb.processRowFromDB(&row)
 	return &row, nil
+}
+
+func (mdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) {
+	row.StartTime = mdb.converter.FromSQLiteDateTime(row.StartTime)
+	row.ExecutionTime = mdb.converter.FromSQLiteDateTime(row.ExecutionTime)
+	if row.CloseTime != nil {
+		closeTime := mdb.converter.FromSQLiteDateTime(*row.CloseTime)
+		row.CloseTime = &closeTime
+	}
 }
