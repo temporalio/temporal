@@ -172,6 +172,11 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 
 // Add request to the bulk and return a future object which will receive ack signal when request is processed.
 func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string) *future.FutureImpl[bool] {
+	if p.mapToAckFuture == nil { // mapToAckFuture will be nil iff processor has been shut down
+		p.logger.Warn("Skipping ES request for visibility task key because processor has been shut down.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
+		return nil
+	}
+
 	newFuture := newAckFuture()
 	_, isDup, _ := p.mapToAckFuture.PutOrDo(visibilityTaskKey, newFuture, func(key interface{}, value interface{}) error {
 		existingFuture, ok := value.(*ackFuture)
