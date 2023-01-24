@@ -46,7 +46,7 @@ type (
 	}
 )
 
-func NewConnectionSuite(
+func newConnectionSuite(
 	t *testing.T,
 	factory *sql.Factory,
 ) *connectionSuite {

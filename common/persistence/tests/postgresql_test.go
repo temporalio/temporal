@@ -586,6 +586,6 @@ func TestPostgreSQLClosedConnectionError(t *testing.T) {
 	testData, tearDown := setUpPostgreSQLTest(t)
 	defer tearDown()
 
-	s := NewConnectionSuite(t, testData.Factory)
+	s := newConnectionSuite(t, testData.Factory)
 	suite.Run(t, s)
 }

@@ -579,6 +579,6 @@ func TestMySQLClosedConnectionError(t *testing.T) {
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
-	s := NewConnectionSuite(t, testData.Factory)
+	s := newConnectionSuite(t, testData.Factory)
 	suite.Run(t, s)
 }
