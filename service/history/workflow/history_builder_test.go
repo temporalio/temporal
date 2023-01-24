@@ -39,7 +39,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -2200,9 +2199,9 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:             true,
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:         true,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:                    true,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_REJECTED:                             true,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED:                             true,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:                            true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED:                   true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:                   true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:                  true,
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:                         true,
 	}
 

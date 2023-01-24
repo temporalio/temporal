@@ -1767,10 +1767,10 @@ func (handler *DCRedirectionHandlerImpl) GetWorkerBuildIdOrdering(
 }
 
 // UpdateWorkflow API call
-func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
+func (handler *DCRedirectionHandlerImpl) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkflowRequest,
-) (resp *workflowservice.UpdateWorkflowResponse, retError error) {
+	request *workflowservice.UpdateWorkflowExecutionRequest,
+) (resp *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	var (
 		err     error
 		cluster string
@@ -1787,14 +1787,14 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.UpdateWorkflow(ctx, request)
+			resp, err = handler.frontendHandler.UpdateWorkflowExecution(ctx, request)
 			return err
 		default:
 			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			if err != nil {
 				return err
 			}
-			resp, err = remoteClient.UpdateWorkflow(ctx, request)
+			resp, err = remoteClient.UpdateWorkflowExecution(ctx, request)
 			return err
 		}
 	})

@@ -430,8 +430,8 @@ const (
 	FrontendClientListSchedulesScope = "FrontendClientListSchedules"
 	// FrontendClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to frontend service
 	FrontendClientUpdateWorkerBuildIdOrderingScope = "FrontendClientUpdateWorkerBuildIdOrdering"
-	// FrontendClientUpdateWorkflowScope tracks RPC calls to frontend service
-	FrontendClientUpdateWorkflowScope = "FrontendClientUpdateWorkflow"
+	// FrontendClientUpdateWorkflowExecutionScope tracks RPC calls to frontend service
+	FrontendClientUpdateWorkflowExecutionScope = "FrontendClientUpdateWorkflowExecution"
 	// FrontendClientGetWorkerBuildIdOrderingScope tracks RPC calls to frontend service
 	FrontendClientGetWorkerBuildIdOrderingScope = "FrontendClientGetWorkerBuildIdOrdering"
 	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
@@ -482,8 +482,8 @@ const (
 	HistoryClientRemoveSignalMutableStateScope = "HistoryClientRemoveSignalMutableState"
 	// HistoryClientTerminateWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientTerminateWorkflowExecutionScope = "HistoryClientTerminateWorkflowExecution"
-	// HistoryClientUpdateWorkflowScope tracks RPC calls to history service
-	HistoryClientUpdateWorkflowScope = "HistoryClientUpdateWorkflow"
+	// HistoryClientUpdateWorkflowExecutionScope tracks RPC calls to history service
+	HistoryClientUpdateWorkflowExecutionScope = "HistoryClientUpdateWorkflowExecution"
 	// HistoryClientDeleteWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientDeleteWorkflowExecutionScope = "HistoryClientDeleteWorkflowExecution"
 	// HistoryClientResetWorkflowExecutionScope tracks RPC calls to history service

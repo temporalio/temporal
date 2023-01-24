@@ -617,11 +617,11 @@ message DeleteWorkflowVisibilityRecordResponse {
 
 // (-- api-linter: core::0134=disabled
 //     aip.dev/not-precedent: This service does not follow the update method AIP --)
-message UpdateWorkflowRequest {
+message UpdateWorkflowExecutionRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.UpdateWorkflowRequest request = 2;
+    temporal.api.workflowservice.v1.UpdateWorkflowExecutionRequest request = 2;
 }
 
-message UpdateWorkflowResponse {
-    temporal.api.workflowservice.v1.UpdateWorkflowResponse response = 1;
+message UpdateWorkflowExecutionResponse {
+    temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse response = 1;
 }
