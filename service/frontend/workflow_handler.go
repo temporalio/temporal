@@ -4842,9 +4842,15 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 // This mutates request (but idempotent so safe for retries)
 func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedspb.StartScheduleArgs) {
 	info := scheduler.GetListInfoFromStartArgs(args)
-	p, err := sdk.PreferProtoDataConverter.ToPayload(info)
+	infoBytes, err := info.Marshal()
 	if err != nil {
 		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))
+		return
+	}
+	p, err := sdk.PreferProtoDataConverter.ToPayload(infoBytes)
+	if err != nil {
+		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))
+		return
 	}
 	if request.Memo == nil {
 		request.Memo = &commonpb.Memo{}
