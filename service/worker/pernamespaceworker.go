@@ -428,7 +428,6 @@ func (w *perNamespaceWorker) startWorker(
 	multiplicity int,
 	totalWorkers int,
 	dcOptions sdkWorkerOptions,
-	totalWorkers int,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
 	// this should not block because it uses an existing grpc connection
