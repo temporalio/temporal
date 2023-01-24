@@ -80,8 +80,8 @@ func (s *parentClosePolicyWorkflowSuite) SetupTest() {
 	s.mockClientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(s.mockRemoteClient, nil).AnyTimes()
 
 	s.processor = &Processor{
-		metricsClient: metrics.NoopClient,
-		logger:        log.NewNoopLogger(),
+		metricsHandler: metrics.NoopMetricsHandler,
+		logger:         log.NewNoopLogger(),
 		cfg: Config{
 			MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1000),
 			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1000),

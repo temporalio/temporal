@@ -35,7 +35,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -82,7 +82,7 @@ type (
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
-		historyCache      workflow.Cache
+		workflowCache     wcache.Cache
 		newStateRebuilder stateRebuilderProvider
 		transaction       workflow.Transaction
 		logger            log.Logger
@@ -93,7 +93,7 @@ var _ WorkflowResetter = (*workflowResetterImpl)(nil)
 
 func NewWorkflowResetter(
 	shard shard.Context,
-	historyCache workflow.Cache,
+	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
@@ -101,7 +101,7 @@ func NewWorkflowResetter(
 		namespaceRegistry: shard.GetNamespaceRegistry(),
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionMgr:      shard.GetExecutionManager(),
-		historyCache:      historyCache,
+		workflowCache:     workflowCache,
 		newStateRebuilder: func() StateRebuilder {
 			return NewStateRebuilder(shard, logger)
 		},
@@ -213,7 +213,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err != nil {
 		return err
 	}
-	defer resetWorkflow.GetReleaseFn()(retError)
+	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
 	if err := r.reapplyEventsToResetWorkflow(
 		ctx,
@@ -368,7 +368,6 @@ func (r *workflowResetterImpl) persistToDB(
 			currentWorkflowEventsSeq,
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
-			resetWorkflow.GetMutableState().GetNamespaceEntry().ActiveClusterName(),
 		); err != nil {
 			return err
 		} else {
@@ -460,7 +459,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.clusterMetadata,
 		resetContext,
 		resetMutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	), nil
 }
 
@@ -623,7 +622,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	}
 
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
-		context, release, err := r.historyCache.GetOrCreateWorkflowExecution(
+		context, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 			ctx,
 			namespaceID,
 			commonpb.WorkflowExecution{

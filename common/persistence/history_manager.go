@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/persistence/serialization"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1159,9 +1160,9 @@ func (m *executionManagerImpl) filterHistoryNodes(
 
 		switch {
 		case node.NodeID < lastNodeID:
-			return nil, serviceerror.NewUnavailable("corrupted data, nodeID cannot decrease")
+			return nil, serviceerror.NewDataLoss("corrupted data, nodeID cannot decrease")
 		case node.NodeID == lastNodeID:
-			return nil, serviceerror.NewUnavailable("corrupted data, same nodeID must have smaller txnID")
+			return nil, serviceerror.NewDataLoss("corrupted data, same nodeID must have smaller txnID")
 		default: // row.NodeID > lastNodeID:
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
 			lastTransactionID = node.TransactionID
@@ -1188,7 +1189,7 @@ func (m *executionManagerImpl) filterHistoryNodesReverse(
 
 		switch {
 		case node.NodeID > lastNodeID:
-			return nil, serviceerror.NewUnavailable("corrupted data, nodeID cannot decrease")
+			return nil, serviceerror.NewDataLoss("corrupted data, nodeID cannot decrease")
 		default:
 			lastTransactionID = node.PrevTransactionID
 			lastNodeID = node.NodeID

@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -105,7 +106,7 @@ func (s *workflowSuite) TestGetMethods() {
 		s.mockClusterMetadata,
 		s.mockContext,
 		s.mockMutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 
 	s.Equal(s.mockContext, nDCWorkflow.GetContext())
@@ -113,7 +114,7 @@ func (s *workflowSuite) TestGetMethods() {
 	// NOTE golang does not seem to let people compare functions, easily
 	//  link: https://github.com/stretchr/testify/issues/182
 	// this is a hack to compare 2 functions, being the same
-	expectedReleaseFn := runtime.FuncForPC(reflect.ValueOf(workflow.NoopReleaseFn).Pointer()).Name()
+	expectedReleaseFn := runtime.FuncForPC(reflect.ValueOf(wcache.NoopReleaseFn).Pointer()).Name()
 	actualReleaseFn := runtime.FuncForPC(reflect.ValueOf(nDCWorkflow.GetReleaseFn()).Pointer()).Name()
 	s.Equal(expectedReleaseFn, actualReleaseFn)
 	version, taskID, err := nDCWorkflow.GetVectorClock()
@@ -185,7 +186,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 		s.mockClusterMetadata,
 		s.mockContext,
 		s.mockMutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 
 	incomingMockContext := workflow.NewMockContext(s.controller)
@@ -196,7 +197,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 		s.mockClusterMetadata,
 		incomingMockContext,
 		incomingMockMutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 
 	// cannot suppress by older workflow
@@ -249,7 +250,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		s.mockClusterMetadata,
 		s.mockContext,
 		s.mockMutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 
 	incomingRunID := uuid.New()
@@ -263,7 +264,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		s.mockClusterMetadata,
 		incomingMockContext,
 		incomingMockMutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -338,7 +339,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		s.mockClusterMetadata,
 		s.mockContext,
 		s.mockMutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 
 	incomingRunID := uuid.New()
@@ -352,7 +353,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		s.mockClusterMetadata,
 		incomingMockContext,
 		incomingMockMutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{

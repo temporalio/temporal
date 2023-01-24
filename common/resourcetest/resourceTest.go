@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/clock"
@@ -53,6 +52,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -73,7 +73,7 @@ type (
 		NamespaceCache    *namespace.MockRegistry
 		TimeSource        clock.TimeSource
 		PayloadSerializer serialization.Serializer
-		MetricsClient     metrics.Client
+		MetricsHandler    metrics.Handler
 		ArchivalMetadata  *archiver.MockArchivalMetadata
 		ArchiverProvider  *provider.MockArchiverProvider
 
@@ -159,18 +159,16 @@ func NewTest(
 	matchingServiceResolver := membership.NewMockServiceResolver(controller)
 	historyServiceResolver := membership.NewMockServiceResolver(controller)
 	workerServiceResolver := membership.NewMockServiceResolver(controller)
-	membershipMonitor.EXPECT().GetResolver(common.FrontendServiceName).Return(frontendServiceResolver, nil).AnyTimes()
-	membershipMonitor.EXPECT().GetResolver(common.MatchingServiceName).Return(matchingServiceResolver, nil).AnyTimes()
-	membershipMonitor.EXPECT().GetResolver(common.HistoryServiceName).Return(historyServiceResolver, nil).AnyTimes()
-	membershipMonitor.EXPECT().GetResolver(common.WorkerServiceName).Return(workerServiceResolver, nil).AnyTimes()
+	membershipMonitor.EXPECT().GetResolver(primitives.FrontendService).Return(frontendServiceResolver, nil).AnyTimes()
+	membershipMonitor.EXPECT().GetResolver(primitives.InternalFrontendService).Return(nil, membership.ErrUnknownService).AnyTimes()
+	membershipMonitor.EXPECT().GetResolver(primitives.MatchingService).Return(matchingServiceResolver, nil).AnyTimes()
+	membershipMonitor.EXPECT().GetResolver(primitives.HistoryService).Return(historyServiceResolver, nil).AnyTimes()
+	membershipMonitor.EXPECT().GetResolver(primitives.WorkerService).Return(workerServiceResolver, nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
 	serviceName, _ := metrics.MetricsServiceIdxToServiceName(serviceMetricsIndex)
-	metricClient := metrics.NewClient(
-		metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
-			metrics.ServiceNameTag(serviceName),
-		),
-		serviceMetricsIndex,
+	metricsHandler := metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
+		metrics.ServiceNameTag(serviceName),
 	)
 
 	return &Test{
@@ -185,7 +183,7 @@ func NewTest(
 		NamespaceCache:    namespace.NewMockRegistry(controller),
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: serialization.NewSerializer(),
-		MetricsClient:     metricClient,
+		MetricsHandler:    metricsHandler,
 		ArchivalMetadata:  archiver.NewMockArchivalMetadata(controller),
 		ArchiverProvider:  provider.NewMockArchiverProvider(controller),
 
@@ -277,9 +275,9 @@ func (t *Test) GetPayloadSerializer() serialization.Serializer {
 	return t.PayloadSerializer
 }
 
-// GetMetricsClient for testing
-func (t *Test) GetMetricsClient() metrics.Client {
-	return t.MetricsClient
+// GetMetricsHandler for testing
+func (t *Test) GetMetricsHandler() metrics.Handler {
+	return t.MetricsHandler
 }
 
 // GetArchivalMetadata for testing

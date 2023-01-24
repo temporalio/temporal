@@ -28,8 +28,9 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/common/primitives"
 	"golang.org/x/exp/maps"
+
+	"go.temporal.io/server/common/primitives"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -67,7 +68,7 @@ func (s *RpoSuite) TestRingpopMonitor() {
 
 	// Force refresh now and drain the notification channel
 	resolver, _ := rpm.GetResolver(serviceName)
-	resolver.(*ringpopServiceResolver).refresh()
+	s.NoError(resolver.(*ringpopServiceResolver).refresh())
 	drainChannel(listenCh)
 
 	s.T().Log("Killing host 1")

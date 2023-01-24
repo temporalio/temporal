@@ -64,7 +64,7 @@ type (
 		rateLimiter                 quotas.RateLimiter
 		perShardQPS                 dynamicconfig.IntPropertyFn
 		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
-		metrics                     metrics.Client
+		metricsHandler              metrics.Handler
 		logger                      log.Logger
 
 		stopC  chan struct{}
@@ -93,7 +93,7 @@ func NewScavenger(
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Scavenger {
 	return &Scavenger{
@@ -106,7 +106,7 @@ func NewScavenger(
 		executor: executor.NewFixedSizePoolExecutor(
 			executionTaskWorker(),
 			executorMaxDeferredTasks,
-			metricsClient,
+			metricsHandler,
 			metrics.ExecutionsScavengerScope,
 		),
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
@@ -114,7 +114,7 @@ func NewScavenger(
 		),
 		perShardQPS:                 perShardQPS,
 		executionDataDurationBuffer: executionDataDurationBuffer,
-		metrics:                     metricsClient,
+		metricsHandler:              metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope)),
 		logger:                      logger,
 
 		stopC: make(chan struct{}),
@@ -134,7 +134,7 @@ func (s *Scavenger) Start() {
 	s.stopWG.Add(1)
 	s.executor.Start()
 	go s.run()
-	s.metrics.IncCounter(metrics.ExecutionsScavengerScope, metrics.StartedCount)
+	s.metricsHandler.Counter(metrics.StartedCount.GetMetricName()).Record(1)
 	s.logger.Info("Executions scavenger started")
 }
 
@@ -147,7 +147,7 @@ func (s *Scavenger) Stop() {
 	) {
 		return
 	}
-	s.metrics.IncCounter(metrics.ExecutionsScavengerScope, metrics.StoppedCount)
+	s.metricsHandler.Counter(metrics.StoppedCount.GetMetricName()).Record(1)
 	s.logger.Info("Executions scavenger stopping")
 	close(s.stopC)
 	s.executor.Stop()
@@ -175,7 +175,7 @@ func (s *Scavenger) run() {
 			s.registry,
 			s.historyClient,
 			s.adminClient,
-			s.metrics,
+			s.metricsHandler,
 			s.logger,
 			s,
 			quotas.NewMultiRateLimiter([]quotas.RateLimiter{
@@ -196,14 +196,14 @@ func (s *Scavenger) run() {
 
 func (s *Scavenger) awaitExecutor() {
 	// gauge value persists, so we want to reset it to 0
-	defer s.metrics.UpdateGauge(metrics.ExecutionsScavengerScope, metrics.ExecutionsOutstandingCount, float64(0))
+	defer s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.GetMetricName()).Record(float64(0))
 
 	outstanding := s.executor.TaskCount()
 	for outstanding > 0 {
 		select {
 		case <-time.After(executorPollInterval):
 			outstanding = s.executor.TaskCount()
-			s.metrics.UpdateGauge(metrics.ExecutionsScavengerScope, metrics.ExecutionsOutstandingCount, float64(outstanding))
+			s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.GetMetricName()).Record(float64(outstanding))
 		case <-s.stopC:
 			return
 		}

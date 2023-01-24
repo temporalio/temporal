@@ -54,7 +54,7 @@ type (
 		taskChannelKeyFn  TaskChannelKeyFn
 		namespaceRegistry namespace.Registry
 		timeSource        clock.TimeSource
-		metricsHandler    metrics.MetricsHandler
+		metricsHandler    metrics.Handler
 		options           schedulerMonitorOptions
 
 		status     int32
@@ -74,7 +74,7 @@ type (
 		totalLatency  time.Duration
 		numStarted    int
 
-		taggedMetricsHandler metrics.MetricsHandler
+		taggedMetricsHandler metrics.Handler
 		lastEmissionTime     time.Time
 	}
 
@@ -85,7 +85,7 @@ func newSchedulerMonitor(
 	taskChannelKeyFn TaskChannelKeyFn,
 	namespaceRegistry namespace.Registry,
 	timeSource clock.TimeSource,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	options schedulerMonitorOptions,
 ) *schedulerMonitor {
 	return &schedulerMonitor{
@@ -202,7 +202,7 @@ func (m *schedulerMonitor) emitMetric(
 		totalLatency = totalLatency / time.Duration(stats.numStarted) * time.Duration(m.options.aggregationCount)
 	}
 
-	stats.taggedMetricsHandler.Timer(QueueScheduleLatency).Record(totalLatency)
+	stats.taggedMetricsHandler.Timer(metrics.QueueScheduleLatency.GetMetricName()).Record(totalLatency)
 
 	m.resetStats(stats)
 }

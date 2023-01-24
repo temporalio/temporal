@@ -285,7 +285,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.True(s.env.IsWorkflowCompleted())
 			result := s.env.GetWorkflowError()
 			var canErr *workflow.ContinueAsNewError
-			s.Require().True(errors.As(result, &canErr))
+			s.Require().True(errors.As(result, &canErr), "result: %v", result)
 
 			s.env.AssertExpectations(s.T())
 
@@ -311,10 +311,8 @@ func (s *workflowSuite) TestStart() {
 
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("mynsid", req.NamespaceId)
 		s.Nil(req.LastCompletionResult)
 		s.Nil(req.ContinuedFailure)
-		s.Equal("myns", req.Request.Namespace)
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
 		s.Equal("mywf", req.Request.WorkflowType.Name)
 		s.Equal("mytq", req.Request.TaskQueue.Name)
@@ -952,9 +950,9 @@ func (s *workflowSuite) TestPauseOnFailure() {
 		Policies: &schedpb.SchedulePolicies{
 			PauseOnFailure: true,
 		},
-	}, 6)
+	}, 3)
 	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	// doesn't end properly since it sleeps forever after pausing
 }
 
 func (s *workflowSuite) TestCompileError() {
@@ -1297,54 +1295,64 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 }
 
 func (s *workflowSuite) TestLimitedActions() {
-	s.runAcrossContinue(
-		[]workflowRun{
-			{
-				id:     "myid-2022-06-01T00:03:00Z",
-				start:  time.Date(2022, 6, 1, 0, 3, 0, 0, time.UTC),
-				end:    time.Date(2022, 6, 1, 0, 4, 0, 0, time.UTC),
-				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			},
-			{
-				id:     "myid-2022-06-01T00:06:00Z",
-				start:  time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
-				end:    time.Date(2022, 6, 1, 0, 7, 0, 0, time.UTC),
-				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			},
-			// limited to 2
+	// written using low-level mocks so we can sleep forever
+
+	// limited to 2
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 3, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:03:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:03:00Z", req.Execution.WorkflowId)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:06:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	// does not watch again at :09, but does at :10
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:06:00Z", req.Execution.WorkflowId)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+	})
+
+	s.env.RegisterDelayedCallback(func() {
+		s.Equal(int64(2), s.describe().Schedule.State.RemainingActions)
+	}, 1*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		s.Equal(int64(1), s.describe().Schedule.State.RemainingActions)
+	}, 5*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		s.Equal(int64(0), s.describe().Schedule.State.RemainingActions)
+		s.Equal(1, len(s.runningWorkflows()))
+	}, 7*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		// hasn't updated yet since we slept past :09
+		s.Equal(1, len(s.runningWorkflows()))
+		s.env.SignalWorkflow(SignalNameRefresh, nil)
+	}, 10*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		s.Equal(0, len(s.runningWorkflows()))
+	}, 10*time.Minute+1*time.Second)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(3 * time.Minute),
+			}},
 		},
-		[]delayedCallback{
-			{
-				at: time.Date(2022, 6, 1, 0, 1, 0, 0, time.UTC),
-				f: func() {
-					s.Equal(int64(2), s.describe().Schedule.State.RemainingActions)
-				},
-			}, {
-				at: time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
-				f: func() {
-					s.Equal(int64(1), s.describe().Schedule.State.RemainingActions)
-				},
-			}, {
-				at: time.Date(2022, 6, 1, 0, 7, 0, 0, time.UTC),
-				f: func() {
-					s.Equal(int64(0), s.describe().Schedule.State.RemainingActions)
-				},
-			},
+		State: &schedpb.ScheduleState{
+			LimitedActions:   true,
+			RemainingActions: 2,
 		},
-		&schedpb.Schedule{
-			Spec: &schedpb.ScheduleSpec{
-				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(3 * time.Minute),
-				}},
-			},
-			State: &schedpb.ScheduleState{
-				LimitedActions:   true,
-				RemainingActions: 2,
-			},
-			Policies: &schedpb.SchedulePolicies{
-				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
-		6,
-	)
+	}, 4)
+	s.True(s.env.IsWorkflowCompleted())
+	// doesn't end properly since it sleeps forever after pausing
 }

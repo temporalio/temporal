@@ -181,7 +181,7 @@ func buildCLI() *cli.App {
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
 				}
-				s := temporal.NewServer(
+				s, err := temporal.NewServer(
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
 					temporal.WithDynamicConfigClient(dynamicConfigClient),
@@ -192,6 +192,9 @@ func buildCLI() *cli.App {
 						return claimMapper
 					}),
 				)
+				if err != nil {
+					return cli.Exit(fmt.Sprintf("Unable to create server. Error: %v.", err), 1)
+				}
 
 				err = s.Start()
 				if err != nil {

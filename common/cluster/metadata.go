@@ -29,6 +29,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,7 +49,7 @@ const (
 	defaultClusterMetadataPageSize = 100
 	refreshInterval                = time.Minute
 
-	FakeClusterForEmptyVersion = "fake-cluster-for-empty-version"
+	unknownClusterNamePrefix = "unknown-cluster-"
 )
 
 type (
@@ -103,6 +104,7 @@ type (
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
+		ShardCount int32  `yaml:"-"` // Ignore this field when loading config.
 		// private field to track cluster information updates
 		version int64
 	}
@@ -262,7 +264,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterLock.Unlock()
 				return nil
 			},
-			MetricsTimer: metrics.ClusterMetadataLockLatency,
+			MetricsName: metrics.ClusterMetadataLockLatency.GetMetricName(),
 		},
 		{
 			Name: "cluster metadata callback lock",
@@ -275,7 +277,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterCallbackLock.Unlock()
 				return nil
 			},
-			MetricsTimer: metrics.ClusterMetadataCallbackLockLatency,
+			MetricsName: metrics.ClusterMetadataCallbackLockLatency.GetMetricName(),
 		},
 	}
 }
@@ -348,7 +350,7 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 		// workflows with EmptyVersion could be replicated to other clusters. The receiving cluster needs to know that
 		// those workflows are not from their current cluster.
 		if isGlobalNamespace {
-			return FakeClusterForEmptyVersion
+			return unknownClusterNamePrefix + strconv.Itoa(int(failoverVersion))
 		}
 		return m.currentClusterName
 	}
@@ -370,12 +372,13 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 	defer m.clusterLock.RUnlock()
 	clusterName, ok := m.versionToClusterName[initialFailoverVersion]
 	if !ok {
-		panic(fmt.Sprintf(
+		m.logger.Warn(fmt.Sprintf(
 			"Unknown initial failover version %v with given cluster initial failover version map: %v and failover version increment %v.",
 			initialFailoverVersion,
 			m.clusterInfo,
 			m.failoverVersionIncrement,
 		))
+		return unknownClusterNamePrefix + strconv.Itoa(int(initialFailoverVersion))
 	}
 	return clusterName
 }
@@ -398,6 +401,7 @@ func (m *metadataImpl) RegisterMetadataChangeCallback(callbackId any, cb Callbac
 			Enabled:                clusterInfo.Enabled,
 			InitialFailoverVersion: clusterInfo.InitialFailoverVersion,
 			RPCAddress:             clusterInfo.RPCAddress,
+			ShardCount:             clusterInfo.ShardCount,
 			version:                clusterInfo.version,
 		}
 	}
@@ -451,6 +455,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				Enabled:                newClusterInfo.Enabled,
 				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
 				RPCAddress:             newClusterInfo.RPCAddress,
+				ShardCount:             newClusterInfo.ShardCount,
 				version:                newClusterInfo.version,
 			}
 		} else if newClusterInfo.version > oldClusterInfo.version {
@@ -465,12 +470,14 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				Enabled:                oldClusterInfo.Enabled,
 				InitialFailoverVersion: oldClusterInfo.InitialFailoverVersion,
 				RPCAddress:             oldClusterInfo.RPCAddress,
+				ShardCount:             oldClusterInfo.ShardCount,
 				version:                oldClusterInfo.version,
 			}
 			newEntries[clusterName] = &ClusterInformation{
 				Enabled:                newClusterInfo.Enabled,
 				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
 				RPCAddress:             newClusterInfo.RPCAddress,
+				ShardCount:             newClusterInfo.ShardCount,
 				version:                newClusterInfo.version,
 			}
 		}
@@ -574,6 +581,7 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 			Enabled:                getClusterResp.GetIsConnectionEnabled(),
 			InitialFailoverVersion: getClusterResp.GetInitialFailoverVersion(),
 			RPCAddress:             getClusterResp.GetClusterAddress(),
+			ShardCount:             getClusterResp.GetHistoryShardCount(),
 			version:                getClusterResp.Version,
 		}
 	}

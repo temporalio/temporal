@@ -112,9 +112,9 @@ func newPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	requestPriorityFn quotas.RequestPriorityFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
+		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
 	}
 
 	return quotas.NewPriorityRateLimiter(
@@ -130,10 +130,10 @@ func NewNoopPriorityRateLimiter(
 
 	return quotas.NewPriorityRateLimiter(
 		func(_ quotas.Request) int { return priority },
-		map[int]quotas.RateLimiter{
-			priority: quotas.NewDefaultOutgoingRateLimiter(
+		map[int]quotas.RequestRateLimiter{
+			priority: quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(
 				func() float64 { return float64(maxQPS()) },
-			),
+			)),
 		},
 	)
 }

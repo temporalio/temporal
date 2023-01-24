@@ -241,13 +241,14 @@ func SetupNewWorkflowForRetryOrCron(
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              newMutableState.GetNamespaceEntry().ID().String(),
-		StartRequest:             createRequest,
-		ParentExecutionInfo:      parentInfo,
-		LastCompletionResult:     lastCompletionResult,
-		ContinuedFailure:         failure,
-		ContinueAsNewInitiator:   initiator,
-		FirstWorkflowTaskBackoff: timestamp.DurationPtr(backoffInterval),
+		NamespaceId:            newMutableState.GetNamespaceEntry().ID().String(),
+		StartRequest:           createRequest,
+		ParentExecutionInfo:    parentInfo,
+		LastCompletionResult:   lastCompletionResult,
+		ContinuedFailure:       failure,
+		ContinueAsNewInitiator: initiator,
+		// enforce minimal interval between runs to prevent tight loop continue as new spin.
+		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(&backoffInterval),
 		Attempt:                  attempt,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)

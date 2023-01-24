@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
@@ -56,8 +57,8 @@ type (
 		suite.Suite
 		controller *gomock.Controller
 
-		logger log.Logger
-		metric metrics.Client
+		logger        log.Logger
+		metricHandler metrics.Handler
 
 		numShards int32
 
@@ -89,7 +90,7 @@ func TestScavengerTestSuite(t *testing.T) {
 
 func (s *ScavengerTestSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
-	s.metric = metrics.NoopClient
+	s.metricHandler = metrics.NoopMetricsHandler
 	s.numShards = 512
 	s.createTestScavenger(100)
 }
@@ -120,14 +121,14 @@ func (s *ScavengerTestSuite) createTestScavenger(
 		dataAge,
 		executionDataAge,
 		enableRetentionVerification,
-		s.metric,
+		s.metricHandler,
 		s.logger,
 	)
 	s.scavenger.isInTest = true
 }
 
 func (s *ScavengerTestSuite) toBranchToken(treeID string, branchID string) []byte {
-	data, err := persistence.NewHistoryBranchToken(treeID, branchID)
+	data, err := persistence.NewHistoryBranchToken(treeID, branchID, []*persistencepb.HistoryBranchRange{})
 	s.NoError(err)
 	return data
 }
@@ -378,25 +379,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 
-	branchToken1, err := persistence.NewHistoryBranchToken(treeID1, branchID1)
+	branchToken1, err := persistence.NewHistoryBranchToken(treeID1, branchID1, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID1", "workflowID1", s.numShards),
 	}).Return(nil)
-	branchToken2, err := persistence.NewHistoryBranchToken(treeID2, branchID2)
+	branchToken2, err := persistence.NewHistoryBranchToken(treeID2, branchID2, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.numShards),
 	}).Return(nil)
-	branchToken3, err := persistence.NewHistoryBranchToken(treeID3, branchID3)
+	branchToken3, err := persistence.NewHistoryBranchToken(treeID3, branchID3, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
-	branchToken4, err := persistence.NewHistoryBranchToken(treeID4, branchID4)
+	branchToken4, err := persistence.NewHistoryBranchToken(treeID4, branchID4, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
@@ -496,14 +497,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		},
 	}).Return(ms, nil)
 
-	branchToken3, err := persistence.NewHistoryBranchToken(treeID3, branchID3)
+	branchToken3, err := persistence.NewHistoryBranchToken(treeID3, branchID3, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
 
-	branchToken4, err := persistence.NewHistoryBranchToken(treeID4, branchID4)
+	branchToken4, err := persistence.NewHistoryBranchToken(treeID4, branchID4, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
@@ -554,6 +555,11 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
 				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
+			{
+				BranchToken: s.toBranchToken("treeID5", "branchID5"),
+				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
+			},
 		},
 	}, nil)
 	mockedNamespace := namespace.NewNamespaceForTest(
@@ -575,10 +581,11 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
 				WorkflowId:     "workflowID2",
 				NamespaceId:    "namespaceID2",
-				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Truncate(time.Hour * 24)),
+				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Add(-time.Hour * 24)),
 			},
 			ExecutionState: &persistencepb.WorkflowExecutionState{
 				RunId: "runID2",
+				State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			},
 		},
 	}
@@ -587,10 +594,24 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
 				WorkflowId:     "workflowID4",
 				NamespaceId:    "namespaceID4",
-				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Truncate(time.Hour * 24)),
+				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Add(-time.Hour * 24)),
 			},
 			ExecutionState: &persistencepb.WorkflowExecutionState{
 				RunId: "runID4",
+				State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			},
+		},
+	}
+	runningWorkflow5 := &historyservice.DescribeMutableStateResponse{
+		DatabaseMutableState: &persistencepb.WorkflowMutableState{
+			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
+				WorkflowId:     "workflowID5",
+				NamespaceId:    "namespaceID5",
+				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Add(-time.Hour * 24)),
+			},
+			ExecutionState: &persistencepb.WorkflowExecutionState{
+				RunId: "runID5",
+				State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			},
 		},
 	}
@@ -623,6 +644,13 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			RunId:      "runID4",
 		},
 	}).Return(workflowPastRetention4, nil)
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: "namespaceID5",
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflowID5",
+			RunId:      "runID5",
+		},
+	}).Return(runningWorkflow5, nil)
 	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), &adminservice.DeleteWorkflowExecutionRequest{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID2",
@@ -639,7 +667,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 	hbd, err := s.scavenger.Run(context.Background())
 	s.Nil(err)
 	s.Equal(0, hbd.SkipCount)
-	s.Equal(4, hbd.SuccessCount)
+	s.Equal(5, hbd.SuccessCount)
 	s.Equal(0, hbd.ErrorCount)
 	s.Equal(2, hbd.CurrentPage)
 	s.Equal(0, len(hbd.NextPageToken))

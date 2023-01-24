@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -67,11 +68,11 @@ var (
 
 func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	archivalClient archiver.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	clusterName string,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -259,21 +260,23 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, err
 		}
 
-		if err := t.archiveVisibility(
-			ctx,
-			namespace.ID(transferTask.NamespaceID),
-			transferTask.WorkflowID,
-			transferTask.RunID,
-			workflowTypeName,
-			workflowStartTime,
-			workflowExecutionTime,
-			timestamp.TimeValue(wfCloseTime),
-			workflowStatus,
-			workflowHistoryLength,
-			visibilityMemo,
-			searchAttr,
-		); err != nil {
-			return nil, err
+		if !transferTask.CanSkipVisibilityArchival {
+			if err := t.archiveVisibility(
+				ctx,
+				namespace.ID(transferTask.NamespaceID),
+				transferTask.WorkflowID,
+				transferTask.RunID,
+				workflowTypeName,
+				workflowStartTime,
+				workflowExecutionTime,
+				timestamp.TimeValue(wfCloseTime),
+				workflowStatus,
+				workflowHistoryLength,
+				visibilityMemo,
+				searchAttr,
+			); err != nil {
+				return nil, err
+			}
 		}
 
 		// verify if parent got the completion event
@@ -514,7 +517,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, taskInfo, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, taskInfo, t.metricHandler, t.logger)
 	if err != nil || mutableState == nil {
 		return err
 	}
@@ -620,9 +623,10 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
+	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTransferTaskScope))
+	scope.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	startTime := time.Now().UTC()
+	defer func() { scope.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {

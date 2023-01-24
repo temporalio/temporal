@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/translator"
 	"go.temporal.io/server/common/resolver"
 )
@@ -143,8 +144,8 @@ func NewCassandraCluster(
 		cluster.Timeout = cfg.ConnectTimeout
 		cluster.ConnectTimeout = cfg.ConnectTimeout
 	} else {
-		cluster.Timeout = 10 * time.Second
-		cluster.ConnectTimeout = 10 * time.Second
+		cluster.Timeout = 10 * time.Second * debug.TimeoutMultiplier
+		cluster.ConnectTimeout = 10 * time.Second * debug.TimeoutMultiplier
 	}
 
 	cluster.ProtoVersion = 4

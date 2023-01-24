@@ -34,7 +34,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/tests/testhelper"
+	"go.temporal.io/server/tests/testutils"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -92,7 +92,9 @@ func (s *historyArchiverSuite) SetupSuite() {
 }
 
 func (s *historyArchiverSuite) TearDownSuite() {
-	os.RemoveAll(s.testGetDirectory)
+	if err := os.RemoveAll(s.testGetDirectory); err != nil {
+		s.Fail("Failed to remove test directory %v: %v", s.testGetDirectory, err)
+	}
 }
 
 func (s *historyArchiverSuite) SetupTest() {
@@ -353,7 +355,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	dir := testhelper.MkdirTemp(s.T(), "", "TestArchiveSingleRead")
+	dir := testutils.MkdirTemp(s.T(), "", "TestArchiveSingleRead")
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
@@ -536,7 +538,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	dir := testhelper.MkdirTemp(s.T(), "", "TestArchiveAndGet")
+	dir := testutils.MkdirTemp(s.T(), "", "TestArchiveAndGet")
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	archiveRequest := &archiver.ArchiveHistoryRequest{

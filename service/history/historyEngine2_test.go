@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -86,16 +87,18 @@ type (
 		mockTxProcessor         *queues.MockQueue
 		mockTimerProcessor      *queues.MockQueue
 		mockVisibilityProcessor *queues.MockQueue
+		mockArchivalProcessor   *queues.MockQueue
 		mockEventsCache         *events.MockCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
 
-		workflowCache    workflow.Cache
+		workflowCache    wcache.Cache
 		historyEngine    *historyEngineImpl
 		mockExecutionMgr *persistence.MockExecutionManager
 
-		config *configs.Config
-		logger log.Logger
+		config        *configs.Config
+		logger        *log.MockLogger
+		errorMessages []string
 	}
 )
 
@@ -119,12 +122,15 @@ func (s *engine2Suite) SetupTest() {
 	s.mockTxProcessor = queues.NewMockQueue(s.controller)
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
+	s.mockArchivalProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
-	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockArchivalProcessor.EXPECT().Category().Return(tasks.CategoryArchival).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
 	mockShard := shard.NewTestContext(
@@ -152,8 +158,15 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.workflowCache = workflow.NewCache(s.mockShard)
-	s.logger = s.mockShard.GetLogger()
+	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.logger = log.NewMockLogger(s.controller)
+	s.logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	s.logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+	s.logger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+	s.errorMessages = make([]string, 0)
+	s.logger.EXPECT().Error(gomock.Any(), gomock.Any()).AnyTimes().Do(func(msg string, tags ...tag.Tag) {
+		s.errorMessages = append(s.errorMessages, msg)
+	})
 
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
@@ -162,12 +175,13 @@ func (s *engine2Suite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
-		metricsClient:      metrics.NoopClient,
+		metricsHandler:     metrics.NoopMetricsHandler,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Queue{
+			s.mockArchivalProcessor.Category():   s.mockArchivalProcessor,
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
@@ -914,6 +928,90 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		},
 	})
 	s.Nil(err)
+}
+
+func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_ExceedsLimit() {
+	namespaceID := tests.NamespaceID
+	taskQueue := "testTaskQueue"
+	identity := "testIdentity"
+	workflowType := "testWorkflowType"
+
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+	ms := workflow.TestLocalMutableState(
+		s.historyEngine.shard,
+		s.mockEventsCache,
+		tests.LocalNamespaceEntry,
+		log.NewTestLogger(),
+		we.GetRunId(),
+	)
+
+	addWorkflowExecutionStartedEvent(
+		ms,
+		we,
+		workflowType,
+		taskQueue,
+		nil,
+		time.Minute,
+		time.Minute,
+		time.Minute,
+		identity,
+	)
+
+	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
+
+	var commands []*commandpb.Command
+	for i := 0; i < 6; i++ {
+		commands = append(
+			commands,
+			&commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+						Namespace:    tests.Namespace.String(),
+						WorkflowId:   tests.WorkflowID,
+						WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue},
+					}},
+			},
+		)
+	}
+
+	wt := addWorkflowTaskScheduledEvent(ms)
+	addWorkflowTaskStartedEvent(
+		ms,
+		wt.ScheduledEventID,
+		taskQueue,
+		identity,
+	)
+	taskToken := &tokenspb.Task{
+		Attempt:          1,
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       tests.WorkflowID,
+		RunId:            we.GetRunId(),
+		ScheduledEventId: 2,
+	}
+	taskTokenBytes, _ := taskToken.Marshal()
+	response := &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(response, nil).AnyTimes()
+
+	s.historyEngine.shard.GetConfig().NumPendingChildExecutionsLimit = func(namespace string) int {
+		return 5
+	}
+	_, err := s.historyEngine.RespondWorkflowTaskCompleted(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			TaskToken: taskTokenBytes,
+			Commands:  commands,
+			Identity:  identity,
+		},
+	})
+
+	s.Error(err)
+	s.Assert().Equal([]string{"the number of pending child workflow executions, 5, has reached the per-workflow" +
+		" limit of 5"}, s.errorMessages)
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {

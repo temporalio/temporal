@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -43,16 +44,19 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
 	visibilityQueueTaskExecutor struct {
 		shard          shard.Context
-		cache          workflow.Cache
+		cache          wcache.Cache
 		logger         log.Logger
-		metricProvider metrics.MetricsHandler
+		metricProvider metrics.Handler
 		visibilityMgr  manager.VisibilityManager
+
+		ensureCloseBeforeDelete    dynamicconfig.BoolPropertyFn
+		enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -60,10 +64,12 @@ var errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task
 
 func newVisibilityQueueTaskExecutor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
+	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
+	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *visibilityQueueTaskExecutor {
 	return &visibilityQueueTaskExecutor{
 		shard:          shard,
@@ -71,6 +77,9 @@ func newVisibilityQueueTaskExecutor(
 		logger:         logger,
 		metricProvider: metricProvider,
 		visibilityMgr:  visibilityMgr,
+
+		ensureCloseBeforeDelete:    ensureCloseBeforeDelete,
+		enableCloseWorkflowCleanup: enableCloseWorkflowCleanup,
 	}
 }
 
@@ -80,10 +89,25 @@ func (t *visibilityQueueTaskExecutor) Execute(
 ) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetVisibilityTaskTypeTagValue(task)
+	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
+		t.shard.GetNamespaceRegistry(),
+		task.GetNamespaceID(),
+	)
 	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
+	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
+		// TODO: exclude task types here if we believe it's safe & necessary to execute
+		// them during namespace handover.
+		// Visibility tasks should all be safe, but close execution task
+		// might do a setWorkflowExecution to clean up memo and search attributes, which
+		// will be blocked by shard context during ns handover
+		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
+		// be returned from task executor
+		return metricsTags, true, consts.ErrNamespaceHandover
 	}
 
 	var err error
@@ -310,11 +334,16 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
-	ctx context.Context,
+	parentCtx context.Context,
 	task *tasks.CloseExecutionVisibilityTask,
 ) (retError error) {
-	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(parentCtx, taskTimeout)
 	defer cancel()
+
+	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
 
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
@@ -362,7 +391,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	release(nil)
 	err = t.recordCloseExecution(
 		ctx,
-		namespace.ID(task.GetNamespaceID()),
+		namespaceEntry,
 		task.GetWorkflowID(),
 		task.GetRunID(),
 		workflowTypeName,
@@ -381,12 +410,21 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	return t.cleanupExecutionInfo(ctx, task)
+
+	// Elasticsearch bulk processor doesn't respect context timeout
+	// because under heavy load bulk flush might take longer than taskTimeout.
+	// Therefore, ctx timeout might be already expired
+	// and parentCtx (which doesn't have timeout) must be used everywhere bellow.
+
+	if t.enableCloseWorkflowCleanup(namespaceEntry.Name().String()) {
+		return t.cleanupExecutionInfo(parentCtx, task)
+	}
+	return nil
 }
 
 func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	ctx context.Context,
-	namespaceID namespace.ID,
+	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -402,14 +440,9 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	searchAttributes *commonpb.SearchAttributes,
 	historySizeBytes int64,
 ) error {
-	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID: namespaceID,
+			NamespaceID: namespaceEntry.ID(),
 			Namespace:   namespaceEntry.Name(),
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -447,7 +480,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		StartTime:   task.StartTime,
 		CloseTime:   task.CloseTime,
 	}
-	if t.shard.GetConfig().VisibilityProcessorEnsureCloseBeforeDelete() {
+	if t.ensureCloseBeforeDelete() {
 		// If visibility delete task is executed before visibility close task then visibility close task
 		// (which change workflow execution status by uploading new visibility record) will resurrect visibility record.
 		//
@@ -487,6 +520,9 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	ctx context.Context,
 	task *tasks.CloseExecutionVisibilityTask,
 ) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err

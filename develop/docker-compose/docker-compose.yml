@@ -23,6 +23,8 @@ services:
       - "9042:9042"
     environment:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
+      MAX_HEAP_SIZE: 1G
+      HEAP_NEWSIZE: 100M
     networks:
       - temporal-dev-network
   postgresql:
@@ -42,7 +44,7 @@ services:
       - "9200:9200"
     environment:
       # Make ES available both on _local_ and _site_,
-      # and use use _local_ for the publish_host.
+      # and use _local_ for the publish_host.
       #
       # See here for details on network configuration:
       # https://www.elastic.co/guide/en/elasticsearch/reference/current/modules-network.html
@@ -69,14 +71,14 @@ services:
       - "--web.console.templates=/usr/share/prometheus/consoles"
   grafana:
     # Use http://localhost:3000/ to access Grafana (admin/admin).
-    image: grafana/grafana:8.1.5
+    image: grafana/grafana:9.1.4
     container_name: temporal-dev-grafana
     depends_on:
       - prometheus
     volumes:
       - ./grafana/provisioning/:/etc/grafana/provisioning/
   temporal-ui:
-    image: temporalio/ui:2.7.1
+    image: temporalio/ui:2.8.3
     container_name: temporal-dev-ui
 
 networks:

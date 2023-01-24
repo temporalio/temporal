@@ -1,0 +1,16 @@
+enablearchival: false
+clusterno: 0
+historyconfig:
+  numhistoryshards: 1
+  numhistoryhosts: 1
+workerconfig:
+  enablearchiver: false
+  enablereplicator: false
+faultinjection:
+  targets:
+    dataStores:
+      ShardStore:
+        methods:
+          UpdateShard:
+            errors:
+              ShardOwnershipLostError: 1.0  # 100% of the time, return a ShardOwnershipLostError

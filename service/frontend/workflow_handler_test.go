@@ -158,7 +158,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
 
 	mockMonitor := s.mockResource.MembershipMonitor
-	mockMonitor.EXPECT().GetMemberCount(common.FrontendServiceName).Return(5, nil).AnyTimes()
+	mockMonitor.EXPECT().GetMemberCount(primitives.FrontendService).Return(5, nil).AnyTimes()
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
@@ -256,8 +256,8 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 	cfg := s.newConfig()
 	baseEvents := []*historypb.HistoryEvent{
-		&historypb.HistoryEvent{EventId: 1},
-		&historypb.HistoryEvent{EventId: 2},
+		{EventId: 1},
+		{EventId: 2},
 	}
 
 	// Needed to execute test but not relevant
@@ -294,21 +294,13 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 		transientCount int
 	}{
 		{
-			name: "Legacy",
-			taskInfo: historyspb.TransientWorkflowTaskInfo{
-				ScheduledEvent: &historypb.HistoryEvent{EventId: 3},
-				StartedEvent:   &historypb.HistoryEvent{EventId: 4},
-			},
-			transientCount: 2,
-		},
-		{
 			name: "HistorySuffix",
 			taskInfo: historyspb.TransientWorkflowTaskInfo{
 				HistorySuffix: []*historypb.HistoryEvent{
-					&historypb.HistoryEvent{EventId: 3},
-					&historypb.HistoryEvent{EventId: 4},
-					&historypb.HistoryEvent{EventId: 5},
-					&historypb.HistoryEvent{EventId: 6},
+					{EventId: 3},
+					{EventId: 4},
+					{EventId: 5},
+					{EventId: 6},
 				},
 			},
 			transientCount: 4,
@@ -597,7 +589,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolic
 		RetryPolicy:              &commonpb.RetryPolicy{},
 		RequestId:                uuid.New(),
 	}
-	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Error(err)
 	s.Equal(&commonpb.RetryPolicy{
 		BackoffCoefficient: 2.0,
 		InitialInterval:    timestamp.DurationPtr(time.Second),
@@ -623,7 +616,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNo
 		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
 		RequestId:                uuid.New(),
 	}
-	wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.Error(err)
 	s.Nil(startWorkflowExecutionRequest.RetryPolicy)
 }
 
@@ -1416,7 +1410,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 
 	history, token, err := wh.getHistory(
 		context.Background(),
-		metrics.NoopScope,
+		metrics.NoopMetricsHandler,
 		namespaceID,
 		namespace,
 		we,
@@ -1553,13 +1547,15 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTra
 		NextEventId:      5,
 		PersistenceToken: persistenceToken,
 		TransientWorkflowTask: &historyspb.TransientWorkflowTaskInfo{
-			ScheduledEvent: &historypb.HistoryEvent{
-				EventId:   5,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-			},
-			StartedEvent: &historypb.HistoryEvent{
-				EventId:   6,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			HistorySuffix: []*historypb.HistoryEvent{
+				{
+					EventId:   5,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+				},
+				{
+					EventId:   6,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+				},
 			},
 		},
 		BranchToken: branchToken,
@@ -1952,6 +1948,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
 		Namespace: testNamespace.String(),
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeTerminate,
+		Query:     inputString,
 	}
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
@@ -1984,6 +1981,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
 				Identity: inputString,
 			},
 		},
+		VisibilityQuery: inputString,
 	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
@@ -2001,6 +1999,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 		Namespace: testNamespace.String(),
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeCancel,
+		Query:     inputString,
 	}
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
@@ -2033,6 +2032,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 				Identity: inputString,
 			},
 		},
+		VisibilityQuery: inputString,
 	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
@@ -2049,6 +2049,8 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Signal() {
 	signalPayloads := payloads.EncodeString(signalName)
 	params := &batcher.BatchParams{
 		Namespace: testNamespace.String(),
+		Query:     inputString,
+		Reason:    inputString,
 		BatchType: batcher.BatchTypeSignal,
 		SignalParams: batcher.SignalParams{
 			SignalName: signalName,
@@ -2070,7 +2072,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Signal() {
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.Equal(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.Equal(payload.EncodeString(""), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.Equal(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 			s.Equal(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
@@ -2087,10 +2089,58 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Signal() {
 				Identity: inputString,
 			},
 		},
+		Reason:          inputString,
+		VisibilityQuery: inputString,
 	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
+}
+
+func (s *workflowHandlerSuite) TestStartBatchOperation_InvalidRequest() {
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace: "",
+		JobId:     uuid.New(),
+		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+			SignalOperation: &batchpb.BatchOperationSignal{
+				Signal:   "signalName",
+				Identity: "identity",
+			},
+		},
+		Reason:          uuid.New(),
+		VisibilityQuery: uuid.New(),
+	}
+
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	_, err := wh.StartBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
+
+	request.Namespace = uuid.New()
+	request.JobId = ""
+	_, err = wh.StartBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
+
+	request.JobId = uuid.New()
+	request.Operation = nil
+	_, err = wh.StartBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
+
+	request.Operation = &workflowservice.StartBatchOperationRequest_SignalOperation{
+		SignalOperation: &batchpb.BatchOperationSignal{
+			Signal:   "signalName",
+			Identity: "identity",
+		},
+	}
+	request.Reason = ""
+	_, err = wh.StartBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
+
+	request.Reason = uuid.New()
+	request.VisibilityQuery = ""
+	_, err = wh.StartBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
 }
 
 func (s *workflowHandlerSuite) TestStopBatchOperation() {
@@ -2116,10 +2166,35 @@ func (s *workflowHandlerSuite) TestStopBatchOperation() {
 	request := &workflowservice.StopBatchOperationRequest{
 		Namespace: testNamespace.String(),
 		JobId:     jobID,
+		Reason:    "reason",
 	}
 
 	_, err := wh.StopBatchOperation(context.Background(), request)
 	s.NoError(err)
+}
+
+func (s *workflowHandlerSuite) TestStopBatchOperation_InvalidRequest() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	request := &workflowservice.StopBatchOperationRequest{
+		Namespace: "",
+		JobId:     uuid.New(),
+		Reason:    "reason",
+	}
+
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	_, err := wh.StopBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
+
+	request.Namespace = uuid.New()
+	request.JobId = ""
+	_, err = wh.StopBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
+
+	request.JobId = uuid.New()
+	request.Reason = ""
+	_, err = wh.StopBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
 }
 
 func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
@@ -2325,6 +2400,23 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.GetState())
 }
 
+func (s *workflowHandlerSuite) TestDescribeBatchOperation_InvalidRequest() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	request := &workflowservice.DescribeBatchOperationRequest{
+		Namespace: "",
+		JobId:     uuid.New(),
+	}
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	_, err := wh.DescribeBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
+
+	request.Namespace = uuid.New()
+	request.JobId = ""
+	_, err = wh.DescribeBatchOperation(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
+}
+
 func (s *workflowHandlerSuite) TestListBatchOperations() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.New())
@@ -2369,6 +2461,18 @@ func (s *workflowHandlerSuite) TestListBatchOperations() {
 	s.Equal(now, resp.OperationInfo[0].GetStartTime())
 	s.Equal(now, resp.OperationInfo[0].GetCloseTime())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.OperationInfo[0].GetState())
+}
+
+func (s *workflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	request := &workflowservice.ListBatchOperationsRequest{
+		Namespace: "",
+	}
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	_, err := wh.ListBatchOperations(context.Background(), request)
+	s.ErrorAs(err, &invalidArgumentErr)
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
@@ -2472,7 +2576,8 @@ func listArchivedWorkflowExecutionsTestRequest() *workflowservice.ListArchivedWo
 func TestContextNearDeadline(t *testing.T) {
 	assert.False(t, contextNearDeadline(context.Background(), longPollTailRoom))
 
-	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*500)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+	defer cancel()
 	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
 }

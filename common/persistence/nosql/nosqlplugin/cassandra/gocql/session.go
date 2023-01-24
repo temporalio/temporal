@@ -90,13 +90,13 @@ func (s *session) refresh() {
 	defer s.Unlock()
 
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
-		s.logger.Warn("too soon to refresh cql session")
+		s.logger.Warn("gocql wrapper: too soon to refresh gocql session")
 		return
 	}
 
 	newSession, err := initSession(s.config, s.resolver)
 	if err != nil {
-		s.logger.Error("unable to refresh cql session", tag.Error(err))
+		s.logger.Error("gocql wrapper: unable to refresh gocql session", tag.Error(err))
 		return
 	}
 
@@ -104,7 +104,7 @@ func (s *session) refresh() {
 	oldSession := s.Value.Load().(*gocql.Session)
 	s.Value.Store(newSession)
 	go oldSession.Close()
-	s.logger.Warn("successfully refreshed cql session")
+	s.logger.Warn("gocql wrapper: successfully refreshed gocql session")
 }
 
 func initSession(

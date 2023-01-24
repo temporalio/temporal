@@ -136,7 +136,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 		config.DCRedirectionPolicy{},
 		s.mockResource.Logger,
 		s.mockResource.GetClientBean(),
-		s.mockResource.GetMetricsClient(),
+		s.mockResource.GetMetricsHandler(),
 		s.mockResource.GetTimeSource(),
 		s.mockResource.GetNamespaceRegistry(),
 		s.mockResource.GetClusterMetadata(),

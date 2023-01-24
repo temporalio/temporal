@@ -52,7 +52,7 @@ import (
 
 // encoding & decoding util
 
-func encode(message proto.Message) ([]byte, error) {
+func Encode(message proto.Message) ([]byte, error) {
 	encoder := codec.NewJSONPBEncoder()
 	return encoder.Encode(message)
 }
@@ -67,7 +67,7 @@ func decodeVisibilityRecord(data []byte) (*archiverspb.VisibilityRecord, error) 
 	return record, nil
 }
 
-func serializeToken(token interface{}) ([]byte, error) {
+func SerializeToken(token interface{}) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -89,7 +89,7 @@ func serializeQueryVisibilityToken(token string) []byte {
 }
 
 // Only validates the scheme and buckets are passed
-func softValidateURI(URI archiver.URI) error {
+func SoftValidateURI(URI archiver.URI) error {
 	if URI.Scheme() != URIScheme {
 		return archiver.ErrURISchemeMismatch
 	}
@@ -99,7 +99,7 @@ func softValidateURI(URI archiver.URI) error {
 	return nil
 }
 
-func bucketExists(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI) error {
+func BucketExists(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI) error {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
 	_, err := s3cli.HeadBucketWithContext(ctx, &s3.HeadBucketInput{
@@ -108,13 +108,13 @@ func bucketExists(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI) er
 	if err == nil {
 		return nil
 	}
-	if isNotFoundError(err) {
+	if IsNotFoundError(err) {
 		return errBucketNotExists
 	}
 	return err
 }
 
-func keyExists(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key string) (bool, error) {
+func KeyExists(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key string) (bool, error) {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
 	_, err := s3cli.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
@@ -122,7 +122,7 @@ func keyExists(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key s
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		if isNotFoundError(err) {
+		if IsNotFoundError(err) {
 			return false, nil
 		}
 		return false, err
@@ -130,7 +130,7 @@ func keyExists(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key s
 	return true, nil
 }
 
-func isNotFoundError(err error) bool {
+func IsNotFoundError(err error) bool {
 	aerr, ok := err.(awserr.Error)
 	return ok && (aerr.Code() == "NotFound")
 }
@@ -183,7 +183,7 @@ func ensureContextTimeout(ctx context.Context) (context.Context, context.CancelF
 	}
 	return context.WithTimeout(ctx, defaultBlobstoreTimeout)
 }
-func upload(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key string, data []byte) error {
+func Upload(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key string, data []byte) error {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
 
@@ -203,7 +203,7 @@ func upload(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key stri
 	return nil
 }
 
-func download(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key string) ([]byte, error) {
+func Download(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key string) ([]byte, error) {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
 	result, err := s3cli.GetObjectWithContext(ctx, &s3.GetObjectInput{

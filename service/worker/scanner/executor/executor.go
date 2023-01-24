@@ -57,15 +57,14 @@ type (
 	// goroutine pool. This executor also supports deferred execution of tasks
 	// for fairness
 	fixedPoolExecutor struct {
-		size        int
-		maxDeferred int
-		runQ        *runQueue
-		outstanding int64
-		status      int32
-		metrics     metrics.Client
-		metricScope int
-		stopC       chan struct{}
-		stopWG      sync.WaitGroup
+		size           int
+		maxDeferred    int
+		runQ           *runQueue
+		outstanding    int64
+		status         int32
+		metricsHandler metrics.Handler
+		stopC          chan struct{}
+		stopWG         sync.WaitGroup
 	}
 
 	// TaskStatus is the return code from a Task
@@ -86,15 +85,14 @@ const (
 // to be deferred for fairness. To defer processing of a task, simply return TaskStatsDefer
 // from your task.Run method. When a task is deferred, it will be added to the tail of a
 // deferredTaskQ which in turn will be processed after the current runQ is drained
-func NewFixedSizePoolExecutor(size int, maxDeferred int, metrics metrics.Client, scope int) Executor {
+func NewFixedSizePoolExecutor(size int, maxDeferred int, metricsHandler metrics.Handler, operation string) Executor {
 	stopC := make(chan struct{})
 	return &fixedPoolExecutor{
-		size:        size,
-		maxDeferred: maxDeferred,
-		runQ:        newRunQueue(size, stopC),
-		metrics:     metrics,
-		metricScope: scope,
-		stopC:       stopC,
+		size:           size,
+		maxDeferred:    maxDeferred,
+		runQ:           newRunQueue(size, stopC),
+		metricsHandler: metricsHandler.WithTags(metrics.OperationTag(operation)),
+		stopC:          stopC,
 	}
 }
 
@@ -147,18 +145,18 @@ func (e *fixedPoolExecutor) worker() {
 		switch status {
 		case TaskStatusDone:
 			atomic.AddInt64(&e.outstanding, -1)
-			e.metrics.IncCounter(e.metricScope, metrics.ExecutorTasksDoneCount)
+			e.metricsHandler.Counter(metrics.ExecutorTasksDoneCount.GetMetricName()).Record(1)
 		case TaskStatusDefer:
 			if e.runQ.deferredCount() < e.maxDeferred {
 				e.runQ.addAndDefer(task)
-				e.metrics.IncCounter(e.metricScope, metrics.ExecutorTasksDeferredCount)
+				e.metricsHandler.Counter(metrics.ExecutorTasksDeferredCount.GetMetricName()).Record(1)
 			} else {
 				atomic.AddInt64(&e.outstanding, -1)
-				e.metrics.IncCounter(e.metricScope, metrics.ExecutorTasksDroppedCount)
+				e.metricsHandler.Counter(metrics.ExecutorTasksDroppedCount.GetMetricName()).Record(1)
 			}
 		case TaskStatusErr:
 			atomic.AddInt64(&e.outstanding, -1)
-			e.metrics.IncCounter(e.metricScope, metrics.ExecutorTasksErrCount)
+			e.metricsHandler.Counter(metrics.ExecutorTasksErrCount.GetMetricName()).Record(1)
 		default:
 			panic(fmt.Sprintf("unknown task status: %v", status))
 		}

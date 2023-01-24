@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -40,11 +41,14 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (
 	QueueFactoryFxGroup = "queueFactory"
+
+	HostSchedulerMaxDispatchThrottleDuration  = 3 * time.Second
+	ShardSchedulerMaxDispatchThrottleDuration = 5 * time.Second
 )
 
 type (
@@ -58,26 +62,24 @@ type (
 		// as that will lead to a cycle dependency issue between shard and workflow package.
 		// 2. Move this interface to queues package after 1 is done so that there's no cycle dependency
 		// between workflow and queues package.
-		CreateQueue(shard shard.Context, cache workflow.Cache) queues.Queue
+		CreateQueue(shard shard.Context, cache wcache.Cache) queues.Queue
 	}
 
 	QueueFactoryBaseParams struct {
 		fx.In
 
-		NamespaceRegistry namespace.Registry
-		ClusterMetadata   cluster.Metadata
-		Config            *configs.Config
-		TimeSource        clock.TimeSource
-		MetricsHandler    metrics.MetricsHandler
-		Logger            log.SnTaggedLogger
+		NamespaceRegistry    namespace.Registry
+		ClusterMetadata      cluster.Metadata
+		Config               *configs.Config
+		TimeSource           clock.TimeSource
+		MetricsHandler       metrics.Handler
+		Logger               log.SnTaggedLogger
+		SchedulerRateLimiter queues.SchedulerRateLimiter
 	}
 
 	QueueFactoryBase struct {
-		HostScheduler        queues.Scheduler
-		HostPriorityAssigner queues.PriorityAssigner
-		HostRateLimiter      quotas.RateLimiter
-
-		// used by multi-cursor queue reader
+		HostScheduler         queues.Scheduler
+		HostPriorityAssigner  queues.PriorityAssigner
 		HostReaderRateLimiter quotas.RequestRateLimiter
 	}
 
@@ -90,6 +92,7 @@ type (
 )
 
 var QueueModule = fx.Options(
+	fx.Provide(QueueSchedulerRateLimiterProvider),
 	fx.Provide(
 		fx.Annotated{
 			Group:  QueueFactoryFxGroup,
@@ -103,9 +106,24 @@ var QueueModule = fx.Options(
 			Group:  QueueFactoryFxGroup,
 			Target: NewVisibilityQueueFactory,
 		},
+		fx.Annotated{
+			Group:  QueueFactoryFxGroup,
+			Target: NewArchivalQueueFactory,
+		},
 	),
 	fx.Invoke(QueueFactoryLifetimeHooks),
 )
+
+func QueueSchedulerRateLimiterProvider(
+	config *configs.Config,
+) queues.SchedulerRateLimiter {
+	return queues.NewSchedulerRateLimiter(
+		config.TaskSchedulerNamespaceMaxQPS,
+		config.TaskSchedulerMaxQPS,
+		config.PersistenceNamespaceMaxQPS,
+		config.PersistenceMaxQPS,
+	)
+}
 
 func QueueFactoryLifetimeHooks(
 	params QueueFactoriesLifetimeHookParams,

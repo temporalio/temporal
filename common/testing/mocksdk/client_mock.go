@@ -417,6 +417,20 @@ func (mr *MockClientMockRecorder) ScanWorkflow(arg0, arg1 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScanWorkflow", reflect.TypeOf((*MockClient)(nil).ScanWorkflow), arg0, arg1)
 }
 
+// ScheduleClient mocks base method.
+func (m *MockClient) ScheduleClient() client.ScheduleClient {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ScheduleClient")
+	ret0, _ := ret[0].(client.ScheduleClient)
+	return ret0
+}
+
+// ScheduleClient indicates an expected call of ScheduleClient.
+func (mr *MockClientMockRecorder) ScheduleClient() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleClient", reflect.TypeOf((*MockClient)(nil).ScheduleClient))
+}
+
 // SignalWithStartWorkflow mocks base method.
 func (m *MockClient) SignalWithStartWorkflow(arg0 context.Context, arg1, arg2 string, arg3 interface{}, arg4 client.StartWorkflowOptions, arg5 interface{}, arg6 ...interface{}) (client.WorkflowRun, error) {
 	m.ctrl.T.Helper()

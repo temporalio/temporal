@@ -78,6 +78,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -119,6 +120,7 @@ type (
 		saValidator                     *searchattribute.Validator
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
+		overrides                       *Overrides
 	}
 )
 
@@ -182,6 +184,7 @@ func NewWorkflowHandler(
 			config.SearchAttributesTotalSizeLimit),
 		archivalMetadata: archivalMetadata,
 		healthServer:     healthServer,
+		overrides:        NewOverrides(),
 	}
 
 	return handler
@@ -943,6 +946,8 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
 
+	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
+
 	histResp, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId:     namespaceId.String(),
 		CompleteRequest: request},
@@ -1025,7 +1030,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		namespaceId.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondWorkflowTaskFailed"),
 	); err != nil {
@@ -1040,7 +1045,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 			tag.WorkflowID(taskToken.GetWorkflowId()),
 			tag.WorkflowRunID(taskToken.GetRunId()),
 		)
-		wh.metricsScope(ctx).IncCounter(metrics.ServiceErrNonDeterministicCounter)
+		wh.metricsScope(ctx).Counter(metrics.ServiceErrNonDeterministicCounter.GetMetricName()).Record(1)
 	}
 
 	_, err = wh.historyClient.RespondWorkflowTaskFailed(ctx, &historyservice.RespondWorkflowTaskFailedRequest{
@@ -1180,7 +1185,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		namespaceId.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeat"),
 	); err != nil {
@@ -1271,7 +1276,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeatById"),
 	); err != nil {
@@ -1350,7 +1355,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		namespaceId.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskCompleted"),
 	); err != nil {
@@ -1443,7 +1448,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		runID,
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskCompletedById"),
 	); err != nil {
@@ -1530,7 +1535,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 			namespaceID.String(),
 			taskToken.GetWorkflowId(),
 			taskToken.GetRunId(),
-			wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
 			tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 		); err != nil {
@@ -1549,7 +1554,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 	); err != nil {
@@ -1635,7 +1640,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 			namespaceID.String(),
 			taskToken.GetWorkflowId(),
 			runID,
-			wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
 			tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 		); err != nil {
@@ -1654,7 +1659,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		runID,
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 	); err != nil {
@@ -1721,7 +1726,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskCanceled"),
 	); err != nil {
@@ -1813,7 +1818,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		runID,
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskCanceledById"),
 	); err != nil {
@@ -1927,7 +1932,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		namespaceID.String(),
 		request.GetWorkflowExecution().GetWorkflowId(),
 		request.GetWorkflowExecution().GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("SignalWorkflowExecution"),
 	); err != nil {
@@ -2420,7 +2425,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, err
 	}
 
-	visibilityArchiver, err := wh.archiverProvider.GetVisibilityArchiver(URI.Scheme(), common.FrontendServiceName)
+	visibilityArchiver, err := wh.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.FrontendService))
 	if err != nil {
 		return nil, err
 	}
@@ -2597,7 +2602,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		namespaceId.String(),
 		"",
 		"",
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondQueryTaskCompleted"),
 	); err != nil {
@@ -2705,7 +2710,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		namespaceID.String(),
 		request.GetExecution().GetWorkflowId(),
 		request.GetExecution().GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("QueryWorkflow")); err != nil {
 		return nil, err
@@ -3115,7 +3120,10 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	// then query to get current state from the workflow itself
 	// TODO: turn the refresh path into a synchronous update so we don't have to retry in a loop
 	sentRefresh := make(map[commonpb.WorkflowExecution]struct{})
-	var describeScheduleResponse *workflowservice.DescribeScheduleResponse
+	// limit how many signals we send, separate from the retry policy (which is used to retry
+	// the query if the signal was not received or processed yet)
+	signalsLeft := 1
+	var queryResponse schedspb.DescribeResponse
 
 	op := func(ctx context.Context) error {
 		req := &historyservice.QueryWorkflowRequest{
@@ -3131,14 +3139,14 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 			return err
 		}
 
-		var response schedspb.DescribeResponse
-		err = payloads.Decode(res.GetResponse().GetQueryResult(), &response)
+		queryResponse.Reset()
+		err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
 		if err != nil {
 			return err
 		}
 
 		// map action search attributes
-		if sa := response.Schedule.Action.GetStartWorkflow().SearchAttributes; sa != nil {
+		if sa := queryResponse.Schedule.Action.GetStartWorkflow().SearchAttributes; sa != nil {
 			saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
 			if err != nil {
 				return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
@@ -3149,14 +3157,14 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 				return err
 			}
 			if aliasedSas != nil {
-				response.Schedule.Action.GetStartWorkflow().SearchAttributes = aliasedSas
+				queryResponse.Schedule.Action.GetStartWorkflow().SearchAttributes = aliasedSas
 			}
 		}
 
 		// for all running workflows started by the schedule, we should check that they're
 		// still running, and if not, poke the schedule to refresh
 		needRefresh := false
-		for _, ex := range response.GetInfo().GetRunningWorkflows() {
+		for _, ex := range queryResponse.GetInfo().GetRunningWorkflows() {
 			if _, ok := sentRefresh[*ex]; ok {
 				// we asked the schedule to refresh this one because it wasn't running, but
 				// it's still reporting it as running
@@ -3187,25 +3195,10 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 			}
 		}
 
-		if !needRefresh {
-			token := make([]byte, 8)
-			binary.BigEndian.PutUint64(token, uint64(response.ConflictToken))
-
-			searchAttributes := describeResponse.GetWorkflowExecutionInfo().GetSearchAttributes()
-			searchAttributes = wh.cleanScheduleSearchAttributes(searchAttributes)
-
-			memo := describeResponse.GetWorkflowExecutionInfo().GetMemo()
-			memo = wh.cleanScheduleMemo(memo)
-
-			describeScheduleResponse = &workflowservice.DescribeScheduleResponse{
-				Schedule:         response.Schedule,
-				Info:             response.Info,
-				Memo:             memo,
-				SearchAttributes: searchAttributes,
-				ConflictToken:    token,
-			}
+		if !needRefresh || signalsLeft == 0 {
 			return nil
 		}
+		signalsLeft--
 
 		// poke to refresh
 		_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
@@ -3225,15 +3218,40 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return errWaitForRefresh
 	}
 
-	// TODO: confirm retry is necessary here.
-	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
+	// wait up to 4 seconds or rpc deadline minus 1 second, but at least 1 second
+	expiration := 4 * time.Second
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline) - 1*time.Second
+		expiration = util.Min(expiration, remaining)
+	}
+	expiration = util.Max(expiration, 1*time.Second)
+	policy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond).
+		WithExpirationInterval(expiration)
 	isWaitErr := func(e error) bool { return e == errWaitForRefresh }
+
 	err = backoff.ThrottleRetryContext(ctx, op, policy, isWaitErr)
-	if err != nil {
+	// if we still got errWaitForRefresh that means we used up our retries, just return
+	// whatever we have
+	if err != nil && err != errWaitForRefresh {
 		return nil, err
 	}
 
-	return describeScheduleResponse, nil
+	token := make([]byte, 8)
+	binary.BigEndian.PutUint64(token, uint64(queryResponse.ConflictToken))
+
+	searchAttributes := describeResponse.GetWorkflowExecutionInfo().GetSearchAttributes()
+	searchAttributes = wh.cleanScheduleSearchAttributes(searchAttributes)
+
+	memo := describeResponse.GetWorkflowExecutionInfo().GetMemo()
+	memo = wh.cleanScheduleMemo(memo)
+
+	return &workflowservice.DescribeScheduleResponse{
+		Schedule:         queryResponse.Schedule,
+		Info:             queryResponse.Info,
+		Memo:             memo,
+		SearchAttributes: searchAttributes,
+		ConflictToken:    token,
+	}, nil
 }
 
 // Changes the configuration or state of an existing schedule.
@@ -3301,7 +3319,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		namespaceID.String(),
 		workflowID,
 		"", // don't have runid yet
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("UpdateSchedule"),
 	); err != nil {
@@ -3372,7 +3390,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		namespaceID.String(),
 		workflowID,
 		"", // don't have runid yet
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("PatchSchedule"),
 	); err != nil {
@@ -3434,7 +3452,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		namespaceID.String(),
 		workflowID,
 		"",
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("ListScheduleMatchingTimes")); err != nil {
 		return nil, err
@@ -3691,6 +3709,18 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if len(request.GetJobId()) == 0 {
 		return nil, errBatchJobIDNotSet
 	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+	if len(request.VisibilityQuery) == 0 {
+		return nil, errQueryNotSet
+	}
+	if len(request.Reason) == 0 {
+		return nil, errReasonNotSet
+	}
+	if request.Operation == nil {
+		return nil, errBatchOperationNotSet
+	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {
 		return nil, errBatchAPINotAllowed
@@ -3800,6 +3830,16 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errRequestNotSet
 	}
 
+	if len(request.GetJobId()) == 0 {
+		return nil, errBatchJobIDNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+	if len(request.Reason) == 0 {
+		return nil, errReasonNotSet
+	}
+
 	if !wh.config.EnableBatcher(request.Namespace) {
 		return nil, errBatchAPINotAllowed
 	}
@@ -3835,6 +3875,13 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if len(request.GetJobId()) == 0 {
+		return nil, errBatchJobIDNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
 	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {
@@ -3948,6 +3995,10 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		return nil, errRequestNotSet
 	}
 
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
 	if !wh.config.EnableBatcher(request.Namespace) {
 		return nil, errBatchAPINotAllowed
 	}
@@ -3984,7 +4035,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 func (wh *WorkflowHandler) getRawHistory(
 	ctx context.Context,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	firstEventID int64,
@@ -4018,7 +4069,7 @@ func (wh *WorkflowHandler) getRawHistory(
 
 	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
+			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
 			wh.logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -4027,9 +4078,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			return nil, nil, err
 		}
 
-		suffix := extractHistorySuffix(transientWorkflowTaskInfo)
-
-		for _, event := range suffix {
+		for _, event := range transientWorkflowTaskInfo.HistorySuffix {
 			blob, err := wh.payloadSerializer.SerializeEvent(event, enumspb.ENCODING_TYPE_PROTO3)
 			if err != nil {
 				return nil, nil, err
@@ -4046,7 +4095,7 @@ func (wh *WorkflowHandler) getRawHistory(
 
 func (wh *WorkflowHandler) getHistory(
 	ctx context.Context,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	namespaceID namespace.ID,
 	namespace namespace.Name,
 	execution commonpb.WorkflowExecution,
@@ -4082,7 +4131,7 @@ func (wh *WorkflowHandler) getHistory(
 		return nil, nil, err
 	}
 
-	scope.RecordDistribution(metrics.HistorySize, size)
+	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
 
 	isLastPage := len(nextPageToken) == 0
 	if err := wh.verifyHistoryIsComplete(
@@ -4092,7 +4141,7 @@ func (wh *WorkflowHandler) getHistory(
 		isFirstPage,
 		isLastPage,
 		int(pageSize)); err != nil {
-		scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
+		metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
 		wh.logger.Error("getHistory: incomplete history",
 			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.WorkflowID(execution.GetWorkflowId()),
@@ -4102,7 +4151,7 @@ func (wh *WorkflowHandler) getHistory(
 
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
+			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
 			wh.logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -4110,7 +4159,7 @@ func (wh *WorkflowHandler) getHistory(
 				tag.Error(err))
 		}
 		// Append the transient workflow task events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, extractHistorySuffix(transientWorkflowTaskInfo)...)
+		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
 	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
@@ -4125,7 +4174,7 @@ func (wh *WorkflowHandler) getHistory(
 
 func (wh *WorkflowHandler) getHistoryReverse(
 	ctx context.Context,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	namespaceID namespace.ID,
 	namespace namespace.Name,
 	execution commonpb.WorkflowExecution,
@@ -4160,7 +4209,7 @@ func (wh *WorkflowHandler) getHistoryReverse(
 		return nil, nil, 0, err
 	}
 
-	scope.RecordDistribution(metrics.HistorySize, size)
+	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
 
 	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
 		return nil, nil, 0, err
@@ -4226,8 +4275,7 @@ func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	eventIDOffset int64,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 ) error {
-	suffix := extractHistorySuffix(transientWorkflowTaskInfo)
-	for i, event := range suffix {
+	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
 		expectedEventID := eventIDOffset + int64(i)
 		if event.GetEventId() != expectedEventID {
 			return serviceerror.NewInternal(
@@ -4240,24 +4288,6 @@ func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	}
 
 	return nil
-}
-
-func extractHistorySuffix(transientWorkflowTask *historyspb.TransientWorkflowTaskInfo) []*historypb.HistoryEvent {
-	// TODO (mmcshane): remove this function after v1.18 is release as we will
-	// be able to just use transientWorkflowTask.HistorySuffix directly and the other
-	// fields will be removed.
-
-	suffix := transientWorkflowTask.HistorySuffix
-	if len(suffix) == 0 {
-		// HistorySuffix is a new field - we may still need to handle
-		// instances that carry the separate ScheduledEvent and StartedEvent
-		// fields
-
-		// One might be tempted to check for nil here but the old code did not
-		// make that check and we aim to preserve compatiblity
-		suffix = append(suffix, transientWorkflowTask.ScheduledEvent, transientWorkflowTask.StartedEvent)
-	}
-	return suffix
 }
 
 func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
@@ -4501,7 +4531,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, err
 	}
 
-	historyArchiver, err := wh.archiverProvider.GetHistoryArchiver(URI.Scheme(), common.FrontendServiceName)
+	historyArchiver, err := wh.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
 	if err != nil {
 		return nil, err
 	}
@@ -4611,8 +4641,8 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	return nil
 }
 
-func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Scope {
-	return interceptor.MetricsScope(ctx, wh.logger)
+func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Handler {
+	return interceptor.GetMetricsHandlerFromContext(ctx, wh.logger)
 }
 
 func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(

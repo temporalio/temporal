@@ -29,6 +29,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -36,11 +37,13 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -192,25 +195,19 @@ func Invoke(
 		}
 	}
 
-	if executionInfo.CloseVisibilityTaskCompleted {
-		// If close visibility task has completed, then search attributes and memo
-		// were removed from mutable state, and we need to fetch from visibility.
-		visResponse, err := persistenceVisibilityMgr.GetWorkflowExecution(
-			ctx,
-			&manager.GetWorkflowExecutionRequest{
-				NamespaceID: namespaceID,
-				Namespace:   namespace.Name(req.Request.GetNamespace()),
-				RunID:       executionState.RunId,
-				WorkflowID:  executionInfo.WorkflowId,
-				CloseTime:   executionInfo.CloseTime,
-			},
+	relocatableAttributes, err := workflow.RelocatableAttributesFetcherProvider(persistenceVisibilityMgr).Fetch(ctx, mutableState)
+	if err != nil {
+		shard.GetLogger().Error(
+			"Failed to fetch relocatable attributes",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(executionInfo.WorkflowId),
+			tag.WorkflowRunID(executionState.RunId),
+			tag.Error(err),
 		)
-		if err != nil {
-			return nil, err
-		}
-		result.WorkflowExecutionInfo.SearchAttributes = visResponse.Execution.SearchAttributes
-		result.WorkflowExecutionInfo.Memo = visResponse.Execution.Memo
+		return nil, serviceerror.NewInternal("Failed to fetch memo and search attributes")
 	}
+	result.WorkflowExecutionInfo.Memo = relocatableAttributes.Memo
+	result.WorkflowExecutionInfo.SearchAttributes = relocatableAttributes.SearchAttributes
 
 	return result, nil
 }

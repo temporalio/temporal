@@ -46,10 +46,11 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -117,8 +118,8 @@ func (s *dlqHandlerSuite) SetupTest() {
 
 	s.replicationMessageHandler = newDLQHandler(
 		s.mockShard,
-		workflow.NewMockDeleteManager(s.controller),
-		workflow.NewMockCache(s.controller),
+		deletemanager.NewMockDeleteManager(s.controller),
+		wcache.NewMockCache(s.controller),
 		s.mockClientBean,
 		s.taskExecutors,
 		func(params TaskExecutorParams) TaskExecutor {
@@ -126,7 +127,6 @@ func (s *dlqHandlerSuite) SetupTest() {
 				params.RemoteCluster,
 				params.Shard,
 				params.HistoryResender,
-				params.HistoryEngine,
 				params.DeleteManager,
 				params.WorkflowCache,
 			)
@@ -291,7 +291,7 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
-	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(0, nil)
+	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(nil)
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.RangeDeleteReplicationTaskFromDLQRequest{
 		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),

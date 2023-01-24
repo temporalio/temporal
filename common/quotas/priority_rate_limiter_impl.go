@@ -35,12 +35,12 @@ type (
 	// PriorityRateLimiterImpl is a wrapper around the golang rate limiter
 	PriorityRateLimiterImpl struct {
 		requestPriorityFn      RequestPriorityFn
-		priorityToRateLimiters map[int]RateLimiter
+		priorityToRateLimiters map[int]RequestRateLimiter
 
 		// priority value 0 means highest priority
 		// sorted rate limiter from low priority value to high priority value
 		priorityToIndex map[int]int
-		rateLimiters    []RateLimiter
+		rateLimiters    []RequestRateLimiter
 	}
 )
 
@@ -50,7 +50,7 @@ var _ RequestRateLimiter = (*PriorityRateLimiterImpl)(nil)
 // configuration updates
 func NewPriorityRateLimiter(
 	requestPriorityFn RequestPriorityFn,
-	priorityToRateLimiters map[int]RateLimiter,
+	priorityToRateLimiters map[int]RequestRateLimiter,
 ) *PriorityRateLimiterImpl {
 	priorities := make([]int, 0, len(priorityToRateLimiters))
 	for priority := range priorityToRateLimiters {
@@ -60,7 +60,7 @@ func NewPriorityRateLimiter(
 		return priorities[i] < priorities[j]
 	})
 	priorityToIndex := make(map[int]int, len(priorityToRateLimiters))
-	rateLimiters := make([]RateLimiter, 0, len(priorityToRateLimiters))
+	rateLimiters := make([]RequestRateLimiter, 0, len(priorityToRateLimiters))
 	for index, priority := range priorities {
 		priorityToIndex[priority] = index
 		rateLimiters = append(rateLimiters, priorityToRateLimiters[priority])
@@ -81,13 +81,13 @@ func (p *PriorityRateLimiterImpl) Allow(
 ) bool {
 	decidingRateLimiter, consumeRateLimiters := p.getRateLimiters(request)
 
-	allow := decidingRateLimiter.AllowN(now, request.Token)
+	allow := decidingRateLimiter.Allow(now, request)
 	if !allow {
 		return false
 	}
 
 	for _, limiter := range consumeRateLimiters {
-		_ = limiter.ReserveN(now, request.Token)
+		_ = limiter.Reserve(now, request)
 	}
 	return allow
 }
@@ -98,14 +98,14 @@ func (p *PriorityRateLimiterImpl) Reserve(
 ) Reservation {
 	decidingRateLimiter, consumeRateLimiters := p.getRateLimiters(request)
 
-	decidingReservation := decidingRateLimiter.ReserveN(now, request.Token)
+	decidingReservation := decidingRateLimiter.Reserve(now, request)
 	if !decidingReservation.OK() {
 		return decidingReservation
 	}
 
 	otherReservations := make([]Reservation, len(consumeRateLimiters))
 	for index, limiter := range consumeRateLimiters {
-		otherReservations[index] = limiter.ReserveN(now, request.Token)
+		otherReservations[index] = limiter.Reserve(now, request)
 	}
 	return NewPriorityReservation(decidingReservation, otherReservations)
 }
@@ -153,7 +153,7 @@ func (p *PriorityRateLimiterImpl) Wait(
 
 func (p *PriorityRateLimiterImpl) getRateLimiters(
 	request Request,
-) (RateLimiter, []RateLimiter) {
+) (RequestRateLimiter, []RequestRateLimiter) {
 	priority := p.requestPriorityFn(request)
 	if _, ok := p.priorityToRateLimiters[priority]; !ok {
 		panic("Request to priority & priority to rate limiter does not match")

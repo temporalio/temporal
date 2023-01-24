@@ -45,7 +45,7 @@ import (
 
 type (
 	Handler struct {
-		metrics.MetricsHandler
+		metrics.Handler
 		exporter *prometheus.Exporter
 	}
 
@@ -93,8 +93,8 @@ func NewHandler(logger log.Logger) (*Handler, error) {
 	otelHandler := metrics.NewOtelMetricsHandler(logger, provider, clientConfig)
 
 	metricsHandler := &Handler{
-		MetricsHandler: otelHandler,
-		exporter:       exporter,
+		Handler:  otelHandler,
+		exporter: exporter,
 	}
 
 	return metricsHandler, nil
@@ -102,10 +102,10 @@ func NewHandler(logger log.Logger) (*Handler, error) {
 
 func (*Handler) Stop(log.Logger) {}
 
-func (mh *Handler) Snapshot() (Snapshot, error) {
+func (h *Handler) Snapshot() (Snapshot, error) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/metrics", nil)
-	mh.exporter.ServeHTTP(rec, req)
+	h.exporter.ServeHTTP(rec, req)
 
 	var tp expfmt.TextParser
 	families, err := tp.TextToMetricFamilies(rec.Body)
@@ -142,8 +142,8 @@ func (mh *Handler) Snapshot() (Snapshot, error) {
 	return Snapshot{samples: samples}, nil
 }
 
-func (mh *Handler) MustSnapshot() Snapshot {
-	s, err := mh.Snapshot()
+func (h *Handler) MustSnapshot() Snapshot {
+	s, err := h.Snapshot()
 	if err != nil {
 		panic(err)
 	}

@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -53,11 +54,13 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/cache"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 )
 
@@ -65,6 +68,8 @@ var Module = fx.Options(
 	resource.Module,
 	workflow.Module,
 	shard.Module,
+	cache.Module,
+	archival.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(RetryableInterceptorProvider),
@@ -92,7 +97,7 @@ func ServiceProvider(
 	logger log.SnTaggedLogger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
 ) *Service {
@@ -111,7 +116,7 @@ func ServiceProvider(
 }
 
 func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
-	return membershipMonitor.GetResolver(common.HistoryServiceName)
+	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
 func HandlerProvider(args NewHandlerArgs) *Handler {
@@ -125,7 +130,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		persistenceShardManager:       args.PersistenceShardManager,
 		persistenceVisibilityManager:  args.PersistenceVisibilityManager,
 		historyServiceResolver:        args.HistoryServiceResolver,
-		metricsClient:                 args.MetricsClient,
+		metricsHandler:                args.MetricsHandler,
 		payloadSerializer:             args.PayloadSerializer,
 		timeSource:                    args.TimeSource,
 		namespaceRegistry:             args.NamespaceRegistry,
@@ -178,12 +183,11 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
-		metricsClient,
-		metrics.HistoryAPIMetricsScopes(),
+		metricsHandler,
 		logger,
 	)
 }
@@ -223,7 +227,7 @@ func PersistenceRateLimitingParamsProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	persistenceConfig *config.Persistence,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceConfig *configs.Config,
@@ -251,19 +255,19 @@ func VisibilityManagerProvider(
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
 		serviceConfig.VisibilityDisableOrderByClause,
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 }
 
 func EventNotifierProvider(
 	timeSource clock.TimeSource,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 ) events.Notifier {
 	return events.NewNotifier(
 		timeSource,
-		metricsClient,
+		metricsHandler,
 		config.GetShardID,
 	)
 }
@@ -272,11 +276,11 @@ func ArchivalClientProvider(
 	archiverProvider provider.ArchiverProvider,
 	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 ) warchiver.Client {
 	return warchiver.NewClient(
-		metricsClient,
+		metricsHandler,
 		logger,
 		sdkClientFactory,
 		config.NumArchiveSystemWorkflows,

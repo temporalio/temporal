@@ -83,7 +83,7 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 
 	ctx := scannerContext{
 		logger:           mockResource.GetLogger(),
-		metricsClient:    mockResource.GetMetricsClient(),
+		metricsHandler:   mockResource.GetMetricsHandler(),
 		executionManager: mockResource.GetExecutionManager(),
 		taskManager:      mockResource.GetTaskManager(),
 		historyClient:    mockResource.GetHistoryClient(),

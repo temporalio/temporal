@@ -67,9 +67,9 @@ func (s *nDCEventReapplicationSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	logger := log.NewTestLogger()
-	metricsClient := metrics.NoopClient
+	metricsHandler := metrics.NoopMetricsHandler
 	s.nDCReapplication = NewEventsReapplier(
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 }

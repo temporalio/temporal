@@ -229,15 +229,15 @@ func (mr *MockEngineMockRecorder) NotifyNewHistoryEvent(event interface{}) *gomo
 }
 
 // NotifyNewTasks mocks base method.
-func (m *MockEngine) NotifyNewTasks(clusterName string, tasks map[tasks.Category][]tasks.Task) {
+func (m *MockEngine) NotifyNewTasks(tasks map[tasks.Category][]tasks.Task) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTasks", clusterName, tasks)
+	m.ctrl.Call(m, "NotifyNewTasks", tasks)
 }
 
 // NotifyNewTasks indicates an expected call of NotifyNewTasks.
-func (mr *MockEngineMockRecorder) NotifyNewTasks(clusterName, tasks interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) NotifyNewTasks(tasks interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTasks), clusterName, tasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTasks), tasks)
 }
 
 // PollMutableState mocks base method.

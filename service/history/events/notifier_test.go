@@ -68,7 +68,7 @@ func (s *notifierSuite) SetupTest() {
 
 	s.notifier = NewNotifier(
 		clock.NewRealTimeSource(),
-		metrics.NoopClient,
+		metrics.NoopMetricsHandler,
 		func(namespaceID namespace.ID, workflowID string) int32 {
 			key := namespaceID.String() + "_" + workflowID
 			return int32(len(key))

@@ -32,9 +32,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
-	"google.golang.org/grpc"
 )
 
 type (
@@ -71,6 +72,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 	// testNamespaceID := namespace.NewID()
 	testNamespaceName := namespace.Name("test-namespace")
 	// s.mockRegistry.EXPECT().GetNamespaceName(testNamespaceID).Return(testNamespaceName, nil).AnyTimes()
+	s.mockRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, nil).AnyTimes()
 
 	testCases := []struct {
 		setupIncomingCtx   func() context.Context
@@ -123,7 +125,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 		ctx := testCase.setupIncomingCtx()
 
 		var resultingCtx context.Context
-		s.interceptor.Intercept(
+		_, err := s.interceptor.Intercept(
 			ctx,
 			testCase.request,
 			&grpc.UnaryServerInfo{},
@@ -132,6 +134,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 				return nil, nil
 			},
 		)
+		s.NoError(err)
 
 		actualCallerName := headers.GetCallerInfo(resultingCtx).CallerName
 		s.Equal(testCase.expectedCallerName, actualCallerName)
@@ -139,6 +142,8 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 }
 
 func (s *callerInfoSuite) TestIntercept_CallerType() {
+	s.mockRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, nil).AnyTimes()
+
 	testCases := []struct {
 		setupIncomingCtx   func() context.Context
 		request            interface{}
@@ -182,7 +187,7 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 		ctx := testCase.setupIncomingCtx()
 
 		var resultingCtx context.Context
-		s.interceptor.Intercept(
+		_, err := s.interceptor.Intercept(
 			ctx,
 			testCase.request,
 			&grpc.UnaryServerInfo{},
@@ -191,6 +196,7 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 				return nil, nil
 			},
 		)
+		s.NoError(err)
 
 		actualCallerType := headers.GetCallerInfo(resultingCtx).CallerType
 		s.Equal(testCase.expectedCallerType, actualCallerType)
@@ -202,6 +208,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/" + method,
 	}
+	s.mockRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, nil).AnyTimes()
 
 	testCases := []struct {
 		setupIncomingCtx   func() context.Context
@@ -254,7 +261,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 		ctx := testCase.setupIncomingCtx()
 
 		var resultingCtx context.Context
-		s.interceptor.Intercept(
+		_, err := s.interceptor.Intercept(
 			ctx,
 			testCase.request,
 			serverInfo,
@@ -263,6 +270,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 				return nil, nil
 			},
 		)
+		s.NoError(err)
 
 		actualCallOrigin := headers.GetCallerInfo(resultingCtx).CallOrigin
 		s.Equal(testCase.expectedCallOrigin, actualCallOrigin)

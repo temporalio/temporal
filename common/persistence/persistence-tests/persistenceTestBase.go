@@ -200,9 +200,9 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		&cfg,
 		s.AbstractDataStoreFactory,
 		s.Logger,
-		metrics.NoopClient,
+		metrics.NoopMetricsHandler,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopClient, s.Logger)
+	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopMetricsHandler, s.Logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)

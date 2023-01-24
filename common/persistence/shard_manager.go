@@ -84,7 +84,7 @@ func (m *shardManagerImpl) GetOrCreateShard(
 	if err != nil {
 		return nil, err
 	}
-	shardInfo, err := m.serializer.ShardInfoFromBlob(internalResp.ShardInfo, m.shardStore.GetClusterName())
+	shardInfo, err := m.serializer.ShardInfoFromBlob(internalResp.ShardInfo)
 	if err != nil {
 		return nil, err
 	}

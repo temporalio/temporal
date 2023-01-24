@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
@@ -72,7 +73,7 @@ type (
 		esConfig               *esclient.Config
 		esClient               esclient.Client
 		sdkClientFactory       sdk.ClientFactory
-		metricsClient          metrics.Client
+		metricsHandler         metrics.Handler
 		saProvider             searchattribute.Provider
 		saManager              searchattribute.Manager
 		healthServer           *health.Server
@@ -89,7 +90,7 @@ type (
 		EsClient               esclient.Client
 		Logger                 log.Logger
 		sdkClientFactory       sdk.ClientFactory
-		MetricsClient          metrics.Client
+		MetricsHandler         metrics.Handler
 		SaProvider             searchattribute.Provider
 		SaManager              searchattribute.Manager
 		healthServer           *health.Server
@@ -113,7 +114,7 @@ func NewOperatorHandlerImpl(
 		esConfig:               args.EsConfig,
 		esClient:               args.EsClient,
 		sdkClientFactory:       args.sdkClientFactory,
-		metricsClient:          args.MetricsClient,
+		metricsHandler:         args.MetricsHandler,
 		saProvider:             args.SaProvider,
 		saManager:              args.SaManager,
 		healthServer:           args.healthServer,
@@ -152,8 +153,8 @@ func (h *OperatorHandlerImpl) Stop() {
 func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *operatorservice.AddSearchAttributesRequest) (_ *operatorservice.AddSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	scope, sw := h.startRequestProfile(metrics.OperatorAddSearchAttributesScope)
-	defer sw.Stop()
+	scope, startTime := h.startRequestProfile(metrics.OperatorAddSearchAttributesScope)
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	// validate request
 	if request == nil {
@@ -207,11 +208,11 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 	// Wait for workflow to complete.
 	err = run.Get(ctx, nil)
 	if err != nil {
-		scope.IncCounter(metrics.AddSearchAttributesWorkflowFailuresCount)
+		scope.Counter(metrics.AddSearchAttributesWorkflowFailuresCount.GetMetricName()).Record(1)
 		execution := &commonpb.WorkflowExecution{WorkflowId: addsearchattributes.WorkflowName, RunId: run.GetRunID()}
 		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
-	scope.IncCounter(metrics.AddSearchAttributesWorkflowSuccessCount)
+	scope.Counter(metrics.AddSearchAttributesWorkflowSuccessCount.GetMetricName()).Record(1)
 
 	return &operatorservice.AddSearchAttributesResponse{}, nil
 }
@@ -292,8 +293,8 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(ctx context.Context, request 
 func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *operatorservice.DeleteNamespaceRequest) (_ *operatorservice.DeleteNamespaceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	scope, sw := h.startRequestProfile(metrics.OperatorDeleteNamespaceScope)
-	defer sw.Stop()
+	scope, startTime := h.startRequestProfile(metrics.OperatorDeleteNamespaceScope)
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	// validate request
 	if request == nil {
@@ -334,11 +335,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		scope.IncCounter(metrics.DeleteNamespaceWorkflowFailuresCount)
+		scope.Counter(metrics.DeleteNamespaceWorkflowFailuresCount.GetMetricName()).Record(1)
 		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
 		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
-	scope.IncCounter(metrics.DeleteNamespaceWorkflowSuccessCount)
+	scope.Counter(metrics.DeleteNamespaceWorkflowSuccessCount.GetMetricName()).Record(1)
 
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),
@@ -351,8 +352,8 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	request *operatorservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	scope, sw := h.startRequestProfile(metrics.OperatorAddOrUpdateRemoteClusterScope)
-	defer sw.Stop()
+	scope, startTime := h.startRequestProfile(metrics.OperatorAddOrUpdateRemoteClusterScope)
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -363,7 +364,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
 	if err != nil {
-		scope.IncCounter(metrics.ServiceFailures)
+		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
 			errUnableConnectRemoteClusterMessage,
 			request.GetFrontendAddress(),
@@ -373,7 +374,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 
 	err = h.validateRemoteClusterMetadata(resp)
 	if err != nil {
-		scope.IncCounter(metrics.ServiceFailures)
+		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidRemoteClusterInfo, err))
 	}
 
@@ -388,7 +389,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
-		scope.IncCounter(metrics.ServiceFailures)
+		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 
@@ -406,11 +407,11 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 		Version: updateRequestVersion,
 	})
 	if err != nil {
-		scope.IncCounter(metrics.ServiceFailures)
+		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 	if !applied {
-		scope.IncCounter(metrics.ServiceFailures)
+		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 	return &operatorservice.AddOrUpdateRemoteClusterResponse{}, nil
@@ -421,14 +422,25 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	request *operatorservice.RemoveRemoteClusterRequest,
 ) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	scope, sw := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
-	defer sw.Stop()
+	scope, startTime := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
+
+	var isClusterNameExist bool
+	for clusterName := range h.clusterMetadata.GetAllClusterInfo() {
+		if clusterName == request.GetClusterName() {
+			isClusterNameExist = true
+			break
+		}
+	}
+	if !isClusterNameExist {
+		return nil, serviceerror.NewNotFound("The cluster to be deleted cannot be found in clusters cache.")
+	}
 
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	); err != nil {
-		scope.IncCounter(metrics.ServiceFailures)
+		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToDeleteClusterInfo, err))
 	}
 	return &operatorservice.RemoveRemoteClusterResponse{}, nil
@@ -439,8 +451,8 @@ func (h *OperatorHandlerImpl) ListClusters(
 	request *operatorservice.ListClustersRequest,
 ) (_ *operatorservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	scope, sw := h.startRequestProfile(metrics.OperatorListClustersScope)
-	defer sw.Stop()
+	scope, startTime := h.startRequestProfile(metrics.OperatorListClustersScope)
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -454,7 +466,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 		NextPageToken: request.GetNextPageToken(),
 	})
 	if err != nil {
-		scope.IncCounter(metrics.ServiceFailures)
+		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, err
 	}
 
@@ -487,9 +499,15 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
 	}
 	if metadata.GetHistoryShardCount() != h.config.NumHistoryShards {
-		// cluster shard number not equal
-		// TODO: remove this check once we support different shard numbers
-		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to history shard number mismatch")
+		remoteShardCount := metadata.GetHistoryShardCount()
+		large := remoteShardCount
+		small := h.config.NumHistoryShards
+		if large < small {
+			small, large = large, small
+		}
+		if large%small != 0 {
+			return serviceerror.NewInvalidArgument("Remote cluster shard number and local cluster shard number are not multiples.")
+		}
 	}
 	if !metadata.IsGlobalNamespaceEnabled {
 		// remote cluster doesn't support global namespace
@@ -506,9 +524,8 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 }
 
 // startRequestProfile initiates recording of request metrics
-func (h *OperatorHandlerImpl) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
-	metricsScope := h.metricsClient.Scope(scope)
-	sw := metricsScope.StartTimer(metrics.ServiceLatency)
-	metricsScope.IncCounter(metrics.ServiceRequests)
-	return metricsScope, sw
+func (h *OperatorHandlerImpl) startRequestProfile(operation string) (metrics.Handler, time.Time) {
+	metricsScope := h.metricsHandler.WithTags(metrics.OperationTag(operation))
+	metricsScope.Counter(metrics.ServiceRequests.GetMetricName()).Record(1)
+	return metricsScope, time.Now().UTC()
 }

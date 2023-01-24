@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	primitives "go.temporal.io/server/common/primitives"
 )
 
 // MockMonitor is a mock of Monitor interface.
@@ -58,7 +59,7 @@ func (m *MockMonitor) EXPECT() *MockMonitorMockRecorder {
 }
 
 // AddListener mocks base method.
-func (m *MockMonitor) AddListener(service, name string, notifyChannel chan<- *ChangedEvent) error {
+func (m *MockMonitor) AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *ChangedEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddListener", service, name, notifyChannel)
 	ret0, _ := ret[0].(error)
@@ -86,18 +87,18 @@ func (mr *MockMonitorMockRecorder) EvictSelf() *gomock.Call {
 }
 
 // GetMemberCount mocks base method.
-func (m *MockMonitor) GetMemberCount(role string) (int, error) {
+func (m *MockMonitor) GetMemberCount(service primitives.ServiceName) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMemberCount", role)
+	ret := m.ctrl.Call(m, "GetMemberCount", service)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMemberCount indicates an expected call of GetMemberCount.
-func (mr *MockMonitorMockRecorder) GetMemberCount(role interface{}) *gomock.Call {
+func (mr *MockMonitorMockRecorder) GetMemberCount(service interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMemberCount", reflect.TypeOf((*MockMonitor)(nil).GetMemberCount), role)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMemberCount", reflect.TypeOf((*MockMonitor)(nil).GetMemberCount), service)
 }
 
 // GetReachableMembers mocks base method.
@@ -116,7 +117,7 @@ func (mr *MockMonitorMockRecorder) GetReachableMembers() *gomock.Call {
 }
 
 // GetResolver mocks base method.
-func (m *MockMonitor) GetResolver(service string) (ServiceResolver, error) {
+func (m *MockMonitor) GetResolver(service primitives.ServiceName) (ServiceResolver, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetResolver", service)
 	ret0, _ := ret[0].(ServiceResolver)
@@ -131,7 +132,7 @@ func (mr *MockMonitorMockRecorder) GetResolver(service interface{}) *gomock.Call
 }
 
 // Lookup mocks base method.
-func (m *MockMonitor) Lookup(service, key string) (*HostInfo, error) {
+func (m *MockMonitor) Lookup(service primitives.ServiceName, key string) (*HostInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Lookup", service, key)
 	ret0, _ := ret[0].(*HostInfo)
@@ -146,7 +147,7 @@ func (mr *MockMonitorMockRecorder) Lookup(service, key interface{}) *gomock.Call
 }
 
 // RemoveListener mocks base method.
-func (m *MockMonitor) RemoveListener(service, name string) error {
+func (m *MockMonitor) RemoveListener(service primitives.ServiceName, name string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveListener", service, name)
 	ret0, _ := ret[0].(error)

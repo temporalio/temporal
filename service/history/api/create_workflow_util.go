@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -117,7 +118,7 @@ func NewWorkflowWithSignal(
 		),
 		shard.GetLogger(),
 	)
-	return NewWorkflowContext(newWorkflowContext, workflow.NoopReleaseFn, newMutableState), nil
+	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
 }
 
 func CreateMutableState(
@@ -170,10 +171,11 @@ func NewWorkflowVersionCheck(
 	if prevLastWriteVersion > newMutableState.GetCurrentVersion() {
 		clusterMetadata := shard.GetClusterMetadata()
 		namespaceEntry := newMutableState.GetNamespaceEntry()
+		clusterName := clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion)
 		return serviceerror.NewNamespaceNotActive(
 			namespaceEntry.Name().String(),
 			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
+			clusterName,
 		)
 	}
 	return nil
@@ -200,15 +202,15 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(operation)),
+		interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.CommandTypeTag(operation)),
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
 		return err
 	}
 
-	scope := interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(operation))
-	scope.RecordDistribution(metrics.MemoSize, workflowMemoSize)
+	handler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.CommandTypeTag(operation))
+	handler.Histogram(metrics.MemoSize.GetMetricName(), metrics.MemoSize.GetMetricUnit()).Record(int64(workflowMemoSize))
 	if err := common.CheckEventBlobSizeLimit(
 		workflowMemoSize,
 		config.MemoSizeLimitWarn(namespaceName),
@@ -216,7 +218,7 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		scope,
+		handler,
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
@@ -288,9 +290,9 @@ func ValidateStartWorkflowExecutionRequest(
 
 func OverrideStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
-	metricsScope int,
+	operation string,
 	shard shard.Context,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 ) {
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
@@ -303,10 +305,11 @@ func OverrideStartWorkflowExecutionRequest(
 	)
 	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
 		request.WorkflowRunTimeout = timestamp.DurationPtr(workflowRunTimeout)
-		metricsClient.Scope(
-			metricsScope,
+		metricsHandler.Counter(metrics.WorkflowRunTimeoutOverrideCount.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowRunTimeoutOverrideCount)
+		)
 	}
 
 	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
@@ -317,9 +320,10 @@ func OverrideStartWorkflowExecutionRequest(
 	)
 	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
 		request.WorkflowTaskTimeout = timestamp.DurationPtr(workflowTaskStartToCloseTimeout)
-		metricsClient.Scope(
-			metricsScope,
+		metricsHandler.Counter(metrics.WorkflowTaskTimeoutOverrideCount.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowTaskTimeoutOverrideCount)
+		)
 	}
 }

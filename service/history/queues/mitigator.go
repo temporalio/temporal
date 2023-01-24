@@ -46,7 +46,7 @@ type (
 
 		monitor        Monitor
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		maxReaderCount dynamicconfig.IntPropertyFn
 	}
 )
@@ -54,7 +54,7 @@ type (
 func newMitigator(
 	monitor Monitor,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	maxReaderCount dynamicconfig.IntPropertyFn,
 ) *mitigatorImpl {
 	return &mitigatorImpl{
@@ -108,6 +108,6 @@ func (m *mitigatorImpl) newActionCompletionFn(
 			tag.QueueAlertType(alertType.String()),
 			tag.QueueAlertAttributes(alertAttributes),
 		)
-		m.metricsHandler.Counter(QueueActionCounter).Record(1, metrics.QueueAlertTypeTag(alertType.String()))
+		m.metricsHandler.Counter(metrics.QueueActionCounter.GetMetricName()).Record(1, metrics.QueueAlertTypeTag(alertType.String()))
 	}
 }

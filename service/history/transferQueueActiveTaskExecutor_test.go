@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -71,6 +72,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -78,6 +80,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
@@ -103,7 +106,7 @@ type (
 		mockArchiverProvider        *provider.MockArchiverProvider
 		mockParentClosePolicyClient *parentclosepolicy.MockClient
 
-		workflowCache                   workflow.Cache
+		workflowCache                   wcache.Cache
 		logger                          log.Logger
 		namespaceID                     namespace.ID
 		namespace                       namespace.Name
@@ -153,8 +156,8 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
-	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	config := tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContextWithTimeSource(
@@ -176,7 +179,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetExecutionManager(),
 		false,
 		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsClient(),
+		s.mockShard.GetMetricsHandler(),
 	))
 
 	s.mockParentClosePolicyClient = parentclosepolicy.NewMockClient(s.controller)
@@ -205,7 +208,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
-	s.workflowCache = workflow.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -215,8 +218,8 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
+		metricsHandler:     s.mockShard.GetMetricsHandler(),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():    s.mockTxProcessor,
 			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
@@ -720,6 +723,96 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_CanSkipVisibilityArchival() {
+	for _, skipVisibilityArchival := range []bool{
+		false,
+		true,
+	} {
+		s.Run(fmt.Sprintf("CanSkipVisibilityArchival=%v", skipVisibilityArchival), func() {
+			execution := commonpb.WorkflowExecution{
+				WorkflowId: "some random workflow ID",
+				RunId:      uuid.New(),
+			}
+			workflowType := "some random workflow type"
+			taskQueueName := "some random task queue"
+
+			mutableState := workflow.TestGlobalMutableState(
+				s.mockShard,
+				s.mockShard.GetEventsCache(),
+				s.logger,
+				s.version,
+				execution.GetRunId(),
+			)
+			_, err := mutableState.AddWorkflowExecutionStartedEvent(
+				execution,
+				&historyservice.StartWorkflowExecutionRequest{
+					Attempt:     1,
+					NamespaceId: s.namespaceID.String(),
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+						TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+						WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+						WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+					},
+				},
+			)
+			s.Nil(err)
+
+			wt := addWorkflowTaskScheduledEvent(mutableState)
+			event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+			wt.StartedEventID = event.GetEventId()
+			event = addWorkflowTaskCompletedEvent(
+				mutableState,
+				wt.ScheduledEventID,
+				wt.StartedEventID,
+				"some random identity",
+			)
+
+			taskID := int64(59)
+			event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+			transferTask := &tasks.CloseExecutionTask{
+				WorkflowKey: definition.NewWorkflowKey(
+					s.namespaceID.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+				),
+				Version:                   s.version,
+				TaskID:                    taskID,
+				VisibilityTimestamp:       time.Now().UTC(),
+				CanSkipVisibilityArchival: skipVisibilityArchival,
+			}
+
+			persistenceMutableState := s.createPersistenceMutableState(
+				mutableState,
+				event.GetEventId(),
+				event.GetVersion(),
+			)
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+			if !skipVisibilityArchival {
+				s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().
+					Return(archiver.NewArchivalConfig(
+						"enabled",
+						dc.GetStringPropertyFn("enabled"),
+						dc.GetBoolPropertyFn(true),
+						"disabled",
+						"random URI",
+					))
+				s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
+				s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
+			}
+
+			_, _, err = s.transferQueueActiveTaskExecutor.Execute(
+				context.Background(),
+				s.newTaskExecutable(transferTask),
+			)
+			s.Nil(err)
+
+		})
+	}
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent() {
@@ -1290,8 +1383,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Times(2)
-	mockDeleteMgr := workflow.NewMockDeleteManager(s.controller)
-	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockDeleteMgr := deletemanager.NewMockDeleteManager(s.controller)
+	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.transferQueueActiveTaskExecutor.workflowDeleteManager = mockDeleteMgr
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(err)
@@ -2466,10 +2559,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 
-			mockWorkflowCache := workflow.NewMockCache(ctrl)
+			mockWorkflowCache := wcache.NewMockCache(ctrl)
 			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
 				gomock.Any(),
-			).Return(mockWorkflowContext, workflow.ReleaseCacheFunc(func(err error) {
+			).Return(mockWorkflowContext, wcache.ReleaseCacheFunc(func(err error) {
 			}), nil)
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
@@ -2486,7 +2579,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockShard.EXPECT().GetClusterMetadata().Return(mockClusterMetadata).AnyTimes()
 			mockMutableState.EXPECT().GetLastWriteVersion().Return(tests.Version, nil).AnyTimes()
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
-			mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespaceEntry.Name(), nil)
+			mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil)
 			mockShard.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
 			if c.MultiCursorQueue {
 				var highWatermarkTaskId int64
@@ -2514,17 +2607,17 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 					clusterName).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
 			}
 
-			mockWorkflowDeleteManager := workflow.NewMockDeleteManager(ctrl)
+			mockWorkflowDeleteManager := deletemanager.NewMockDeleteManager(ctrl)
 			if c.ShouldDelete {
 				mockWorkflowDeleteManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
-					gomock.Any(), gomock.Any(), gomock.Any())
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			}
 
 			executor := &transferQueueActiveTaskExecutor{
 				transferQueueTaskExecutorBase: &transferQueueTaskExecutorBase{
 					cache:                 mockWorkflowCache,
 					config:                mockShard.GetConfig(),
-					metricsClient:         metrics.NoopClient,
+					metricHandler:         metrics.NoopMetricsHandler,
 					shard:                 mockShard,
 					workflowDeleteManager: mockWorkflowDeleteManager,
 				},
@@ -2704,16 +2797,14 @@ func (s *transferQueueActiveTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.transferQueueActiveTaskExecutor,
 		nil,
 		nil,
 		queues.NewNoopPriorityAssigner(),
 		s.mockShard.GetTimeSource(),
-		nil,
+		s.mockNamespaceCache,
+		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
-		nil,
 	)
 }

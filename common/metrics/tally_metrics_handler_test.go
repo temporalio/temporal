@@ -90,19 +90,19 @@ func TestTallyScope(t *testing.T) {
 	assert.EqualValues(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
 }
 
-func recordTallyMetrics(mp MetricsHandler) {
-	c := mp.Counter("hits")
-	g := mp.Gauge("temp")
-	d := mp.Timer("latency")
-	h := mp.Histogram("transmission", Bytes)
-	t := mp.Counter("hits-tagged")
-	e := mp.Counter("hits-tagged-excluded")
+func recordTallyMetrics(h Handler) {
+	hitsCounter := h.Counter("hits")
+	gauge := h.Gauge("temp")
+	timer := h.Timer("latency")
+	histogram := h.Histogram("transmission", Bytes)
+	hitsTaggedCounter := h.Counter("hits-tagged")
+	hitsTaggedExcludedCounter := h.Counter("hits-tagged-excluded")
 
-	c.Record(8)
-	g.Record(-100, StringTag("location", "Mare Imbrium"))
-	d.Record(1248 * time.Millisecond)
-	d.Record(5255 * time.Millisecond)
-	h.Record(1234567)
-	t.Record(11, TaskQueueTag("__sticky__"))
-	e.Record(14, TaskQueueTag("filtered"))
+	hitsCounter.Record(8)
+	gauge.Record(-100, StringTag("location", "Mare Imbrium"))
+	timer.Record(1248 * time.Millisecond)
+	timer.Record(5255 * time.Millisecond)
+	histogram.Record(1234567)
+	hitsTaggedCounter.Record(11, TaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, TaskQueueTag("filtered"))
 }

@@ -145,9 +145,10 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	metricsClient := metrics.NoopClient
+	metricsClient := metrics.NoopMetricsHandler
 
 	s.replicationTaskProcessor = NewTaskProcessor(
+		s.shardID,
 		s.mockShard,
 		s.mockEngine,
 		s.config,
@@ -204,7 +205,7 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(0, nil)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
 	s.NoError(err)
 }
@@ -243,9 +244,21 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(0, nil)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
 	err = s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
 	s.NoError(err)
+}
+
+func (s *taskProcessorSuite) TestHandleReplicationTask_Panic() {
+	task := &replicationspb.ReplicationTask{}
+
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).DoAndReturn(
+		func(_ context.Context, _ *replicationspb.ReplicationTask, _ bool) error {
+			panic("test replication task panic")
+		},
+	)
+	err := s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
+	s.Error(err)
 }
 
 func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {

@@ -40,9 +40,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -73,8 +74,8 @@ type (
 		taskExecutorsLock    sync.Mutex
 		taskExecutors        map[string]TaskExecutor
 		shard                shard.Context
-		deleteManager        workflow.DeleteManager
-		workflowCache        workflow.Cache
+		deleteManager        deletemanager.DeleteManager
+		workflowCache        wcache.Cache
 		resender             xdc.NDCHistoryResender
 		taskExecutorProvider TaskExecutorProvider
 		logger               log.Logger
@@ -83,8 +84,8 @@ type (
 
 func NewLazyDLQHandler(
 	shard shard.Context,
-	deleteManager workflow.DeleteManager,
-	workflowCache workflow.Cache,
+	deleteManager deletemanager.DeleteManager,
+	workflowCache wcache.Cache,
 	clientBean client.Bean,
 	taskExecutorProvider TaskExecutorProvider,
 ) DLQHandler {
@@ -100,8 +101,8 @@ func NewLazyDLQHandler(
 
 func newDLQHandler(
 	shard shard.Context,
-	deleteManager workflow.DeleteManager,
-	workflowCache workflow.Cache,
+	deleteManager deletemanager.DeleteManager,
+	workflowCache wcache.Cache,
 	clientBean client.Bean,
 	taskExecutors map[string]TaskExecutor,
 	taskExecutorProvider TaskExecutorProvider,
@@ -208,7 +209,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 	}
 
 	for _, task := range replicationTasks {
-		if _, err := taskExecutor.Execute(
+		if err := taskExecutor.Execute(
 			ctx,
 			task,
 			true,
@@ -339,15 +340,10 @@ func (r *dlqHandlerImpl) getOrCreateTaskExecutor(ctx context.Context, clusterNam
 	if executor, ok := r.taskExecutors[clusterName]; ok {
 		return executor, nil
 	}
-	engine, err := r.shard.GetEngine(ctx)
-	if err != nil {
-		return nil, err
-	}
 	taskExecutor := r.taskExecutorProvider(TaskExecutorParams{
 		RemoteCluster:   clusterName,
 		Shard:           r.shard,
 		HistoryResender: r.resender,
-		HistoryEngine:   engine,
 		DeleteManager:   r.deleteManager,
 		WorkflowCache:   r.workflowCache,
 	})
