@@ -143,6 +143,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
+	currentMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	currentEventsSize := int64(2333)
 	currentNewEventsSize := int64(3444)
 	currentMutation := &persistence.WorkflowMutation{
@@ -176,6 +177,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
 	resetWorkflow.EXPECT().GetReleaseFn().Return(tarGetReleaseFn).AnyTimes()
 
+	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	resetEventsSize := int64(1444)
 	resetNewEventsSize := int64(4321)
 	resetSnapshot := &persistence.WorkflowSnapshot{
@@ -207,7 +209,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
-		0,
+		int64(0),
 		currentMutation,
 		currentEventsSeq,
 		convert.Int64Ptr(0),
