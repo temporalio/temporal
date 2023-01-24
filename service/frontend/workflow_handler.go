@@ -2982,6 +2982,8 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	if err != nil {
 		return nil, err
 	}
+	// Add initial memo for list schedules
+	wh.addInitialScheduleMemo(request, input)
 	// Add namespace division
 	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 	// Create StartWorkflowExecutionRequest
@@ -4835,6 +4837,22 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 		return nil
 	}
 	return memo
+}
+
+// This mutates request (but idempotent so safe for retries)
+func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedspb.StartScheduleArgs) {
+	info := scheduler.GetListInfoFromStartArgs(args)
+	p, err := sdk.PreferProtoDataConverter.ToPayload(info)
+	if err != nil {
+		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))
+	}
+	if request.Memo == nil {
+		request.Memo = &commonpb.Memo{}
+	}
+	if request.Memo.Fields == nil {
+		request.Memo.Fields = make(map[string]*commonpb.Payload)
+	}
+	request.Memo.Fields[scheduler.MemoFieldInfo] = p
 }
 
 func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enumspb.BatchOperationState {
