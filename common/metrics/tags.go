@@ -41,15 +41,16 @@ const (
 	buildPlatformTag = "build_platform"
 	goVersionTag     = "go_version"
 
-	instance      = "instance"
-	namespace     = "namespace"
-	targetCluster = "target_cluster"
-	taskQueue     = "taskqueue"
-	workflowType  = "workflowType"
-	activityType  = "activityType"
-	commandType   = "commandType"
-	serviceName   = "service_name"
-	actionType    = "action_type"
+	instance       = "instance"
+	namespace      = "namespace"
+	namespaceState = "namespace_state"
+	targetCluster  = "target_cluster"
+	taskQueue      = "taskqueue"
+	workflowType   = "workflowType"
+	activityType   = "activityType"
+	commandType    = "commandType"
+	serviceName    = "service_name"
+	actionType     = "action_type"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -101,6 +102,17 @@ var namespaceUnknownTag = &tagImpl{key: namespace, value: unknownValue}
 // NamespaceUnknownTag returns a new namespace:unknown tag-value
 func NamespaceUnknownTag() Tag {
 	return namespaceUnknownTag
+}
+
+// NamespaceStateTag returns a new namespace state tag.
+func NamespaceStateTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{
+		key:   namespaceState,
+		value: value,
+	}
 }
 
 var taskQueueUnknownTag = &tagImpl{key: taskQueue, value: unknownValue}
