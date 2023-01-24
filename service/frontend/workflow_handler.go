@@ -3718,8 +3718,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if len(request.VisibilityQuery) != 0 && len(request.Executions) != 0 {
 		return nil, errBatchOpsWorkflowFiltersNotAllowed
 	}
-	if len(request.Executions) > wh.config.MaxExecutionSizeBatchOperation(request.Namespace) {
-		return nil, errBatchOpsMaxWorkflowExecution
+	if len(request.Executions) > wh.config.MaxExecutionCountBatchOperation(request.Namespace) {
+		return nil, errBatchOpsMaxWorkflowExecutionCount
 	}
 	if len(request.Reason) == 0 {
 		return nil, errReasonNotSet
