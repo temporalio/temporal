@@ -178,3 +178,17 @@ func (mr *MockArchivalConfigMockRecorder) ReadEnabled() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadEnabled", reflect.TypeOf((*MockArchivalConfig)(nil).ReadEnabled))
 }
+
+// StaticClusterState mocks base method.
+func (m *MockArchivalConfig) StaticClusterState() ArchivalState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StaticClusterState")
+	ret0, _ := ret[0].(ArchivalState)
+	return ret0
+}
+
+// StaticClusterState indicates an expected call of StaticClusterState.
+func (mr *MockArchivalConfigMockRecorder) StaticClusterState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StaticClusterState", reflect.TypeOf((*MockArchivalConfig)(nil).StaticClusterState))
+}
