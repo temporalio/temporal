@@ -106,7 +106,7 @@ type (
 		mockMetadataMgr        *persistence.MockMetadataManager
 		mockExecutionManager   *persistence.MockExecutionManager
 		mockVisibilityMgr      *manager.MockVisibilityManager
-		mockArchivalMetadata   *archiver.MockArchivalMetadata
+		mockArchivalMetadata   archiver.MetadataMock
 		mockArchiverProvider   *provider.MockArchiverProvider
 		mockHistoryArchiver    *archiver.MockHistoryArchiver
 		mockVisibilityArchiver *archiver.MockVisibilityArchiver

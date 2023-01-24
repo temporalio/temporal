@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -108,6 +109,7 @@ type (
 		namespaceRegistry namespace.Registry
 		mutableState      MutableState
 		config            *configs.Config
+		archivalMetadata  archiver.ArchivalMetadata
 	}
 )
 
@@ -119,11 +121,13 @@ func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
 	mutableState MutableState,
 	config *configs.Config,
+	archivalMetadata archiver.ArchivalMetadata,
 ) *TaskGeneratorImpl {
 	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
 		mutableState:      mutableState,
 		config:            config,
+		archivalMetadata:  archivalMetadata,
 	}
 }
 
@@ -188,7 +192,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				Version:     currentVersion,
 			},
 		)
-		if r.config.DurableArchivalEnabled() {
+		if r.archivalQueueEnabled() {
 			retention, err := r.getRetention()
 			if err != nil {
 				return err
@@ -635,4 +639,18 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 	}
 
 	return namespace.ID(r.mutableState.GetExecutionInfo().NamespaceId), nil
+}
+
+// archivalQueueEnabled returns true if archival is enabled for either history or visibility, and the archival queue
+// itself is also enabled.
+// For both history and visibility, we check that archival is enabled for both the cluster and the namespace.
+func (r *TaskGeneratorImpl) archivalQueueEnabled() bool {
+	if !r.config.DurableArchivalEnabled() {
+		return false
+	}
+	namespaceEntry := r.mutableState.GetNamespaceEntry()
+	return r.archivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival() &&
+		namespaceEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED ||
+		r.archivalMetadata.GetVisibilityConfig().ClusterConfiguredForArchival() &&
+			namespaceEntry.VisibilityArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
 }
