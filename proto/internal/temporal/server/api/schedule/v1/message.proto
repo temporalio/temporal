@@ -104,6 +104,7 @@ message StartWorkflowRequest {
     reserved 3;
     temporal.api.common.v1.Payloads last_completion_result = 4;
     temporal.api.failure.v1.Failure continued_failure = 5;
+    bool completed_rate_limit_sleep = 6;
 }
 
 message StartWorkflowResponse {

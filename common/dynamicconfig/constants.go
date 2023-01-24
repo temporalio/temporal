@@ -720,4 +720,6 @@ const (
 	// WorkerStickyCacheSize controls the sticky cache size for SDK workers on worker nodes
 	// (shared between all workers in the process, cannot be changed after startup)
 	WorkerStickyCacheSize = "worker.stickyCacheSize"
+	// SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules
+	SchedulerNamespaceStartWorkflowRPS = "worker.schedulerNamespaceStartWorkflowRPS"
 )

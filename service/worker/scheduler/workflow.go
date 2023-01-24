@@ -676,6 +676,7 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 }
 
 // processBuffer should return true if there might be more work to do right now.
+//
 //nolint:revive
 func (s *scheduler) processBuffer() bool {
 	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.State.NeedRefresh)
@@ -810,20 +811,32 @@ func (s *scheduler) startWorkflow(
 		LastCompletionResult: s.State.LastCompletionResult,
 		ContinuedFailure:     s.State.ContinuedFailure,
 	}
-	var res schedspb.StartWorkflowResponse
-	err := workflow.ExecuteLocalActivity(ctx, s.a.StartWorkflow, req).Get(s.ctx, &res)
-	if err != nil {
-		return nil, err
-	}
+	for {
+		var res schedspb.StartWorkflowResponse
+		err := workflow.ExecuteLocalActivity(ctx, s.a.StartWorkflow, req).Get(s.ctx, &res)
 
-	return &schedpb.ScheduleActionResult{
-		ScheduleTime: start.ActualTime,
-		ActualTime:   res.RealStartTime,
-		StartWorkflowResult: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      res.RunId,
-		},
-	}, nil
+		var appErr *temporal.ApplicationError
+		var details rateLimitedDetails
+		if errors.As(err, &appErr) &&
+			appErr.Type() == rateLimitedErrorType &&
+			appErr.Details(&details) == nil {
+			workflow.Sleep(s.ctx, details.Delay)
+			req.CompletedRateLimitSleep = true // only use rate limiter once
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		return &schedpb.ScheduleActionResult{
+			ScheduleTime: start.ActualTime,
+			ActualTime:   res.RealStartTime,
+			StartWorkflowResult: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      res.RunId,
+			},
+		}, nil
+	}
 }
 
 func (s *scheduler) identity() string {

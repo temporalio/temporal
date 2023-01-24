@@ -44,6 +44,11 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
+)
+
+const (
+	rateLimitedErrorType = "RateLimited"
 )
 
 type (
@@ -51,9 +56,16 @@ type (
 		activityDeps
 		namespace   namespace.Name
 		namespaceID namespace.ID
+		// Rate limiter for start workflow requests. Note that the scope is all schedules in
+		// this namespace on this worker.
+		startWorkflowRateLimiter quotas.RateLimiter
 	}
 
 	errFollow string
+
+	rateLimitedDetails struct {
+		Delay time.Duration
+	}
 )
 
 var (
@@ -61,11 +73,27 @@ var (
 	errWrongChain = errors.New("found running workflow with wrong FirstExecutionRunId")
 	errNoEvents   = errors.New("GetEvents didn't return any events")
 	errNoAttrs    = errors.New("last event did not have correct attrs")
+	errBlocked    = errors.New("rate limiter doesn't allow any progress")
 )
 
 func (e errFollow) Error() string { return string(e) }
 
 func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+	if !req.CompletedRateLimitSleep {
+		reservation := a.startWorkflowRateLimiter.Reserve()
+		if !reservation.OK() {
+			return nil, translateError(errBlocked, "StartWorkflowExecution")
+		}
+		delay := reservation.Delay()
+		if delay > 1*time.Second {
+			// for a long sleep, ask the workflow to do it in workflow logic
+			return nil, temporal.NewNonRetryableApplicationError(
+				rateLimitedErrorType, rateLimitedErrorType, nil, rateLimitedDetails{delay})
+		}
+		// short sleep can be done in-line
+		time.Sleep(delay)
+	}
+
 	req.Request.Namespace = a.namespace.String()
 
 	request := common.CreateHistoryStartWorkflowRequest(

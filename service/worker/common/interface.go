@@ -54,7 +54,7 @@ type (
 	PerNSWorkerComponent interface {
 		// Register registers Workflow and Activity types provided by this worker component.
 		// The namespace that this worker is running in is also provided.
-		Register(sdkworker.Worker, *namespace.Namespace)
+		Register(sdkworker.Worker, *namespace.Namespace, RegistrationDetails)
 		// DedicatedWorkerOptions returns a PerNSDedicatedWorkerOptions for this worker component.
 		DedicatedWorkerOptions(*namespace.Namespace) *PerNSDedicatedWorkerOptions
 	}
@@ -62,5 +62,13 @@ type (
 	PerNSDedicatedWorkerOptions struct {
 		// Set this to false to disable this worker for this namespace
 		Enabled bool
+	}
+
+	RegistrationDetails struct {
+		// WorkerFactor is the proportion of workers for this namespace that this worker
+		// represents. E.g. if it's the only worker for this namespace, it'll be 1; if it's
+		// one of two, it'll be 1/2; if three workers were requested and two landed on this
+		// node, it'll be 2/3.
+		WorkerFactor float64
 	}
 )
