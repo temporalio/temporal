@@ -194,13 +194,17 @@ func (wm *perNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace, 
 	go wm.getWorkerByNamespace(ns).refreshWithNewNamespace(ns, deleted)
 }
 
+func (wm *perNamespaceWorkerManager) refreshAll() {
+	wm.lock.Lock()
+	defer wm.lock.Unlock()
+	for _, worker := range wm.workers {
+		go worker.refreshWithExistingNamespace()
+	}
+}
+
 func (wm *perNamespaceWorkerManager) membershipChangedListener() {
 	for range wm.membershipChangedCh {
-		wm.lock.Lock()
-		for _, worker := range wm.workers {
-			go worker.refreshWithExistingNamespace()
-		}
-		wm.lock.Unlock()
+		wm.refreshAll()
 	}
 }
 

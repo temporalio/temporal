@@ -564,3 +564,8 @@ func (s *Service) ensureSystemNamespaceExists(
 		)
 	}
 }
+
+// This is intended for use by integration tests only.
+func (s *Service) RefreshPerNSWorkerManager() {
+	s.perNamespaceWorkerManager.refreshAll()
+}
