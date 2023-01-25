@@ -119,6 +119,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
 		DefaultWorkflowRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
 		EnableCrossNamespaceCommands:      dynamicconfig.GetBoolPropertyFn(true),
+		DefaultWorkflowTaskTimeout:        dynamicconfig.GetDurationPropertyFnFilteredByNamespace(common.DefaultWorkflowTaskTimeout),
 	}
 	s.validator = newCommandAttrValidator(
 		s.mockNamespaceCache,
@@ -211,6 +212,41 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+}
+
+func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes() {
+	executionTimeout := time.Hour
+	workflowTypeName := "workflowType"
+	taskQueue := "taskQueue"
+
+	attributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+		// workflow type name and task queue name should be retrieved from existing workflow info
+
+		// WorkflowRunTimeout should be shorten to execution timeout
+		WorkflowRunTimeout: timestamp.DurationPtr(executionTimeout * 2),
+		// WorkflowTaskTimeout should be shorten to max workflow task timeout
+		WorkflowTaskTimeout: timestamp.DurationPtr(common.MaxWorkflowTaskStartToCloseTimeout * 2),
+	}
+
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		WorkflowTypeName:         workflowTypeName,
+		TaskQueue:                taskQueue,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(executionTimeout),
+	}
+
+	fc, err := s.validator.validateContinueAsNewWorkflowExecutionAttributes(
+		tests.Namespace,
+		attributes,
+		executionInfo,
+		"index-name",
+	)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+
+	s.Equal(workflowTypeName, attributes.GetWorkflowType().GetName())
+	s.Equal(taskQueue, attributes.GetTaskQueue().GetName())
+	s.Equal(executionTimeout, *attributes.GetWorkflowRunTimeout())
+	s.Equal(common.MaxWorkflowTaskStartToCloseTimeout, *attributes.GetWorkflowTaskTimeout())
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
