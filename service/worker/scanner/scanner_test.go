@@ -232,7 +232,6 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	mockSdkClient := mocksdk.NewMockClient(ctrl)
 	mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
 	mockAdminClient := adminservicemock.NewMockAdminServiceClient(ctrl)
-	mockWorkerFactory := sdk.NewMockWorkerFactory(ctrl)
 	worker := mocksdk.NewMockWorker(ctrl)
 	scanner := New(
 		logger,
@@ -258,13 +257,12 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		historyservicemock.NewMockHistoryServiceClient(ctrl),
 		mockAdminClient,
 		mockNamespaceRegistry,
-		mockWorkerFactory,
 	)
 	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().Start()
-	mockWorkerFactory.EXPECT().New(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
+	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(
