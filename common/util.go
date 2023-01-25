@@ -39,6 +39,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -417,6 +418,21 @@ func PrettyPrintCommands(commands []*commandpb.Command, header ...string) {
 	fmt.Print(sb.String())
 }
 
+// PrettyPrintMessages prints commands in human-readable format
+func PrettyPrintMessages(messages []*protocolpb.Message, header ...string) {
+	var sb strings.Builder
+	sb.WriteString("==========================================================================\n")
+	for _, h := range header {
+		sb.WriteString(h)
+		sb.WriteString("\n")
+	}
+	sb.WriteString("--------------------------------------------------------------------------\n")
+	for _, message := range messages {
+		_ = proto.MarshalText(&sb, message)
+	}
+	fmt.Print(sb.String())
+}
+
 // IsValidContext checks that the thrift context is not expired on cancelled.
 // Returns nil if the context is still valid. Otherwise, returns the result of
 // ctx.Err()
@@ -465,6 +481,7 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		ScheduledTime:              historyResponse.ScheduledTime,
 		StartedTime:                historyResponse.StartedTime,
 		Queries:                    historyResponse.Queries,
+		Messages:                   historyResponse.Messages,
 	}
 
 	return matchingResp

@@ -34,6 +34,7 @@ import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
+import "temporal/api/protocol/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
@@ -164,6 +165,7 @@ message RecordWorkflowTaskStartedResponse {
     google.protobuf.Timestamp started_time = 13 [(gogoproto.stdtime) = true];
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 14;
     temporal.server.api.clock.v1.VectorClock clock = 15;
+    repeated temporal.api.protocol.v1.Message messages = 16;
 }
 
 message RecordActivityTaskStartedRequest {
