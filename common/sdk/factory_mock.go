@@ -87,39 +87,16 @@ func (mr *MockClientFactoryMockRecorder) NewClient(options interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClient", reflect.TypeOf((*MockClientFactory)(nil).NewClient), options)
 }
 
-// MockWorkerFactory is a mock of WorkerFactory interface.
-type MockWorkerFactory struct {
-	ctrl     *gomock.Controller
-	recorder *MockWorkerFactoryMockRecorder
-}
-
-// MockWorkerFactoryMockRecorder is the mock recorder for MockWorkerFactory.
-type MockWorkerFactoryMockRecorder struct {
-	mock *MockWorkerFactory
-}
-
-// NewMockWorkerFactory creates a new mock instance.
-func NewMockWorkerFactory(ctrl *gomock.Controller) *MockWorkerFactory {
-	mock := &MockWorkerFactory{ctrl: ctrl}
-	mock.recorder = &MockWorkerFactoryMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockWorkerFactory) EXPECT() *MockWorkerFactoryMockRecorder {
-	return m.recorder
-}
-
-// New mocks base method.
-func (m *MockWorkerFactory) New(client client.Client, taskQueue string, options worker.Options) worker.Worker {
+// NewWorker mocks base method.
+func (m *MockClientFactory) NewWorker(client client.Client, taskQueue string, options worker.Options) worker.Worker {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "New", client, taskQueue, options)
+	ret := m.ctrl.Call(m, "NewWorker", client, taskQueue, options)
 	ret0, _ := ret[0].(worker.Worker)
 	return ret0
 }
 
-// New indicates an expected call of New.
-func (mr *MockWorkerFactoryMockRecorder) New(client, taskQueue, options interface{}) *gomock.Call {
+// NewWorker indicates an expected call of NewWorker.
+func (mr *MockClientFactoryMockRecorder) NewWorker(client, taskQueue, options interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "New", reflect.TypeOf((*MockWorkerFactory)(nil).New), client, taskQueue, options)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewWorker", reflect.TypeOf((*MockClientFactory)(nil).NewWorker), client, taskQueue, options)
 }
