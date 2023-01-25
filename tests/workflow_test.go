@@ -582,7 +582,7 @@ func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 			})
 			s.NoError(err)
 			history := historyResponse.History
-			common.PrettyPrintHistory(history)
+			common.PrettyPrint(history.Events)
 		}
 		s.True(err == nil || err == matching.ErrNoTasks, "%v", err)
 		if !dropWorkflowTask {

@@ -35,11 +35,8 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
-	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -389,46 +386,16 @@ func WorkflowIDToHistoryShard(
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
-// PrettyPrintHistory prints history in human-readable format
-func PrettyPrintHistory(history *historypb.History, header ...string) {
+func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	var sb strings.Builder
-	sb.WriteString("==========================================================================\n")
+	_, _ = sb.WriteString("==========================================================================\n")
 	for _, h := range header {
-		sb.WriteString(h)
-		sb.WriteString("\n")
+		_, _ = sb.WriteString(h)
+		_, _ = sb.WriteString("\n")
 	}
-	sb.WriteString("--------------------------------------------------------------------------\n")
-	_ = proto.MarshalText(&sb, history)
-	sb.WriteString("\n")
-	fmt.Print(sb.String())
-}
-
-// PrettyPrintCommands prints commands in human-readable format
-func PrettyPrintCommands(commands []*commandpb.Command, header ...string) {
-	var sb strings.Builder
-	sb.WriteString("==========================================================================\n")
-	for _, h := range header {
-		sb.WriteString(h)
-		sb.WriteString("\n")
-	}
-	sb.WriteString("--------------------------------------------------------------------------\n")
-	for _, command := range commands {
-		_ = proto.MarshalText(&sb, command)
-	}
-	fmt.Print(sb.String())
-}
-
-// PrettyPrintMessages prints commands in human-readable format
-func PrettyPrintMessages(messages []*protocolpb.Message, header ...string) {
-	var sb strings.Builder
-	sb.WriteString("==========================================================================\n")
-	for _, h := range header {
-		sb.WriteString(h)
-		sb.WriteString("\n")
-	}
-	sb.WriteString("--------------------------------------------------------------------------\n")
-	for _, message := range messages {
-		_ = proto.MarshalText(&sb, message)
+	_, _ = sb.WriteString("--------------------------------------------------------------------------\n")
+	for _, m := range msgs {
+		_ = proto.MarshalText(&sb, m)
 	}
 	fmt.Print(sb.String())
 }

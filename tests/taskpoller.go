@@ -223,7 +223,7 @@ Loop:
 		}
 
 		if dumpHistory {
-			common.PrettyPrintHistory(response.History)
+			common.PrettyPrint(response.History.Events)
 		}
 
 		// handle query task response
@@ -281,10 +281,10 @@ Loop:
 			return false, nil, err
 		}
 		if len(commands) > 0 {
-			common.PrettyPrintCommands(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
+			common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
 		}
 		if len(workerToServerMessages) > 0 {
-			common.PrettyPrintMessages(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+			common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
 		}
 
 		if !respondStickyTaskQueue {
@@ -369,10 +369,10 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		return nil, err
 	}
 	if len(commands) > 0 {
-		common.PrettyPrintCommands(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
+		common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
 	}
 	if len(workerToServerMessages) > 0 {
-		common.PrettyPrintMessages(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+		common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
 	}
 
 	// sticky taskqueue
