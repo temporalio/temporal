@@ -46,24 +46,32 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+type StartArgs struct {
+	ShardCtx                   shard.Context
+	WorkflowConsistencyChecker api.WorkflowConsistencyChecker
+	TokenSerializer            serverCommon.TaskTokenSerializer
+	Request                    *historyservice.StartWorkflowExecutionRequest
+}
+
 func Invoke(
 	ctx context.Context,
-	startRequest *historyservice.StartWorkflowExecutionRequest,
-	shard shard.Context,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	tokenSerializer serverCommon.TaskTokenSerializer,
+	args *StartArgs,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(startRequest.GetNamespaceId()))
+	shardCtx := args.ShardCtx
+	workflowConsistencyChecker := args.WorkflowConsistencyChecker
+	startRequest := args.Request
+
+	namespaceEntry, err := api.GetActiveNamespace(shardCtx, namespace.ID(startRequest.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
 	namespaceID := namespaceEntry.ID().String()
 
 	request := startRequest.StartRequest
-	metricsHandler := shard.GetMetricsHandler()
+	metricsHandler := shardCtx.GetMetricsHandler()
 
-	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, shard, metricsHandler)
-	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shard, namespaceEntry, "StartWorkflowExecution")
+	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, shardCtx, metricsHandler)
+	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shardCtx, namespaceEntry, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +88,7 @@ func Invoke(
 	runID := uuid.NewString()
 	workflowContext, err := api.NewWorkflowWithSignal(
 		ctx,
-		shard,
+		shardCtx,
 		namespaceEntry,
 		workflowID,
 		runID,
@@ -91,7 +99,7 @@ func Invoke(
 		return nil, err
 	}
 
-	now := shard.GetTimeSource().Now()
+	now := shardCtx.GetTimeSource().Now()
 	mutableState := workflowContext.GetMutableState()
 	workflowTaskInfo, hasInflight := mutableState.GetInFlightWorkflowTask()
 	if !hasInflight {
@@ -123,7 +131,7 @@ func Invoke(
 		newWorkflowEventsSeq,
 	)
 	if err == nil {
-		return generateResponse(shard, tokenSerializer, request, namespaceID, runID, workflowTaskInfo, extractHistoryEvents(newWorkflowEventsSeq))
+		return generateResponse(args, namespaceID, runID, workflowTaskInfo, extractHistoryEvents(newWorkflowEventsSeq))
 	}
 
 	t, ok := err.(*persistence.CurrentWorkflowConditionFailedError)
@@ -135,14 +143,14 @@ func Invoke(
 	// workflow execution with a different run ID.
 	// The history we generated above should be deleted by a background process.
 	if t.RequestID == request.GetRequestId() {
-		return respondToRetriedRequest(ctx, request, namespaceEntry.ID(), t.RunID, shard, workflowConsistencyChecker, tokenSerializer)
+		return respondToRetriedRequest(ctx, args, namespaceEntry.ID(), t.RunID)
 	}
 
 	// create as ID reuse
 	prevRunID = t.RunID
 	prevLastWriteVersion = t.LastWriteVersion
 	if workflowContext.GetMutableState().GetCurrentVersion() < prevLastWriteVersion {
-		clusterMetadata := shard.GetClusterMetadata()
+		clusterMetadata := shardCtx.GetClusterMetadata()
 		clusterName := clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion)
 		return nil, serviceerror.NewNamespaceNotActive(
 			request.GetNamespace(),
@@ -179,7 +187,7 @@ func Invoke(
 			func() (workflow.Context, workflow.MutableState, error) {
 				workflowContext, err := api.NewWorkflowWithSignal(
 					ctx,
-					shard,
+					shardCtx,
 					namespaceEntry,
 					workflowID,
 					runID,
@@ -190,7 +198,7 @@ func Invoke(
 				}
 				return workflowContext.GetContext(), workflowContext.GetMutableState(), nil
 			},
-			shard,
+			shardCtx,
 			workflowConsistencyChecker,
 		)
 		switch err {
@@ -221,19 +229,20 @@ func Invoke(
 	); err != nil {
 		return nil, err
 	}
-	return generateResponse(shard, tokenSerializer, request, namespaceID, runID, workflowTaskInfo, extractHistoryEvents(newWorkflowEventsSeq))
+	return generateResponse(args, namespaceID, runID, workflowTaskInfo, extractHistoryEvents(newWorkflowEventsSeq))
 }
 
 // respondToRetriedRequest provides a response in case a start request is retried.
 func respondToRetriedRequest(
 	ctx context.Context,
-	request *workflowservice.StartWorkflowExecutionRequest,
+	args *StartArgs,
 	namespaceID namespace.ID,
 	runID string,
-	shard shard.Context,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	tokenSerializer serverCommon.TaskTokenSerializer,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
+	shardCtx := args.ShardCtx
+	workflowConsistencyChecker := args.WorkflowConsistencyChecker
+	request := args.Request.StartRequest
+
 	if !request.GetRequestEagerExecution() {
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId: runID,
@@ -266,8 +275,7 @@ func respondToRetriedRequest(
 	// The current workflow task is not inflight or not the first task or we exceeded the first attempt and fell back to
 	// matching based dispatch.
 	if !hasInflight || workflowTaskInfo.StartedEventID != 3 || workflowTaskInfo.Attempt > 1 {
-		// TODO: show error here or return just the RunID with an empty poll response?
-		// TODO: which error?
+		// TODO: Should we error here or return just the RunID with an empty poll response? If so which error type?
 		return nil, serviceerror.NewAlreadyExist("Workflow task cannot be delivered")
 	}
 
@@ -281,8 +289,8 @@ func respondToRetriedRequest(
 	// Future optimization: generate the task from mutable state to save the extra DB read.
 	// NOTE: While unlikely that there'll be more than one page, it's safer to make less assumptions
 	for {
-		response, err := shard.GetExecutionManager().ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-			ShardID:     shard.GetShardID(),
+		response, err := shardCtx.GetExecutionManager().ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+			ShardID:     shardCtx.GetShardID(),
 			BranchToken: branchToken,
 			MinEventID:  1,
 			MaxEventID:  workflowTaskInfo.StartedEventID,
@@ -297,7 +305,7 @@ func respondToRetriedRequest(
 		}
 	}
 
-	return generateResponse(shard, tokenSerializer, request, namespaceID.String(), runID, workflowTaskInfo, events)
+	return generateResponse(args, namespaceID.String(), runID, workflowTaskInfo, events)
 }
 
 // extractHistoryEvents extracts all history events from a batch of events sent to persistence.
@@ -314,21 +322,23 @@ func extractHistoryEvents(persistenceEvents []*persistence.WorkflowEvents) []*hi
 }
 
 func generateResponse(
-	shard shard.Context,
-	tokenSerializer serverCommon.TaskTokenSerializer,
-	request *workflowservice.StartWorkflowExecutionRequest,
+	args *StartArgs,
 	namespaceID string,
 	runID string,
 	workflowTaskInfo *workflow.WorkflowTaskInfo,
 	historyEvents []*history.HistoryEvent,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
+	shardCtx := args.ShardCtx
+	tokenSerializer := args.TokenSerializer
+	request := args.Request.StartRequest
 	workflowID := request.WorkflowId
+
 	if !request.GetRequestEagerExecution() {
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId: runID,
 		}, nil
 	}
-	clock, err := shard.NewVectorClock()
+	clock, err := shardCtx.NewVectorClock()
 	if err != nil {
 		return nil, err
 	}
