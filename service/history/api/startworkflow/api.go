@@ -85,7 +85,7 @@ func NewStarter(
 }
 
 // Invoke starts a new workflow execution
-// nolint:cyclomatic // Simplified this existing function but it is still too complex
+// nolint:gocyclo // Simplified this existing function but it is still too complex
 func (s *Starter) Invoke(
 	ctx context.Context,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
