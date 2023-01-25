@@ -86,7 +86,7 @@ func (s *connectionSuite) TestClosedConnectionError() {
 	store, err := s.factory.NewShardStore()
 	s.NoError(err)
 
-	store.Close()
+	store.Close() // Connection will be closed by this call
 	manager := p.NewShardManager(store, serialization.NewSerializer())
 
 	resp, err := manager.GetOrCreateShard(ctx, &p.GetOrCreateShardRequest{
