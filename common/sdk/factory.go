@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -48,10 +49,7 @@ type (
 		// MetricsHandler, or Logger (they will be overwritten)
 		NewClient(options sdkclient.Options) sdkclient.Client
 		GetSystemClient() sdkclient.Client
-	}
-
-	WorkerFactory interface {
-		New(client sdkclient.Client, taskQueue string, options sdkworker.Options) sdkworker.Worker
+		NewWorker(client sdkclient.Client, taskQueue string, options sdkworker.Options) sdkworker.Worker
 	}
 
 	clientFactory struct {
@@ -61,15 +59,13 @@ type (
 		logger          log.Logger
 		sdklogger       sdklog.Logger
 		systemSdkClient sdkclient.Client
+		stickyCacheSize dynamicconfig.IntPropertyFn
 		once            sync.Once
 	}
-
-	workerFactory struct{}
 )
 
 var (
 	_ ClientFactory = (*clientFactory)(nil)
-	_ WorkerFactory = (*workerFactory)(nil)
 )
 
 func NewClientFactory(
@@ -77,13 +73,15 @@ func NewClientFactory(
 	tlsConfig *tls.Config,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	stickyCacheSize dynamicconfig.IntPropertyFn,
 ) *clientFactory {
 	return &clientFactory{
-		hostPort:       hostPort,
-		tlsConfig:      tlsConfig,
-		metricsHandler: NewMetricsHandler(metricsHandler),
-		logger:         logger,
-		sdklogger:      log.NewSdkLogger(logger),
+		hostPort:        hostPort,
+		tlsConfig:       tlsConfig,
+		metricsHandler:  NewMetricsHandler(metricsHandler),
+		logger:          logger,
+		sdklogger:       log.NewSdkLogger(logger),
+		stickyCacheSize: stickyCacheSize,
 	}
 }
 
@@ -122,15 +120,16 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 		if err != nil {
 			f.logger.Fatal("error creating sdk client", tag.Error(err))
 		}
+
+		if size := f.stickyCacheSize(); size > 0 {
+			f.logger.Info("setting sticky workflow cache size", tag.NewInt("size", size))
+			sdkworker.SetStickyWorkflowCacheSize(size)
+		}
 	})
 	return f.systemSdkClient
 }
 
-func NewWorkerFactory() *workerFactory {
-	return &workerFactory{}
-}
-
-func (f *workerFactory) New(
+func (f *clientFactory) NewWorker(
 	client sdkclient.Client,
 	taskQueue string,
 	options sdkworker.Options,

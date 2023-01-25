@@ -484,6 +484,41 @@ func (mr *MockClientMockRecorder) TerminateWorkflow(arg0, arg1, arg2, arg3 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflow", reflect.TypeOf((*MockClient)(nil).TerminateWorkflow), varargs...)
 }
 
+// UpdateWorkflow mocks base method.
+func (m *MockClient) UpdateWorkflow(arg0 context.Context, arg1, arg2, arg3 string, arg4 ...interface{}) (client.WorkflowUpdateHandle, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1, arg2, arg3}
+	for _, a := range arg4 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkflow", varargs...)
+	ret0, _ := ret[0].(client.WorkflowUpdateHandle)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkflow indicates an expected call of UpdateWorkflow.
+func (mr *MockClientMockRecorder) UpdateWorkflow(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflow", reflect.TypeOf((*MockClient)(nil).UpdateWorkflow), varargs...)
+}
+
+// UpdateWorkflowWithOptions mocks base method.
+func (m *MockClient) UpdateWorkflowWithOptions(arg0 context.Context, arg1 *client.UpdateWorkflowWithOptionsRequest) (client.WorkflowUpdateHandle, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkflowWithOptions", arg0, arg1)
+	ret0, _ := ret[0].(client.WorkflowUpdateHandle)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkflowWithOptions indicates an expected call of UpdateWorkflowWithOptions.
+func (mr *MockClientMockRecorder) UpdateWorkflowWithOptions(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowWithOptions", reflect.TypeOf((*MockClient)(nil).UpdateWorkflowWithOptions), arg0, arg1)
+}
+
 // WorkflowService mocks base method.
 func (m *MockClient) WorkflowService() workflowservice.WorkflowServiceClient {
 	m.ctrl.T.Helper()

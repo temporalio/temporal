@@ -157,7 +157,6 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 	} {
 		s.Run(c.Name, func() {
 			ctrl := gomock.NewController(s.T())
-			mockWorkerFactory := sdk.NewMockWorkerFactory(ctrl)
 			mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
 			mockSdkClient := mocksdk.NewMockClient(ctrl)
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
@@ -189,7 +188,6 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				historyservicemock.NewMockHistoryServiceClient(ctrl),
 				mockAdminClient,
 				mockNamespaceRegistry,
-				mockWorkerFactory,
 			)
 			var wg sync.WaitGroup
 			for _, sc := range c.ExpectedScanners {
@@ -198,7 +196,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().Start()
-				mockWorkerFactory.EXPECT().New(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
+				mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
 				mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 				mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), sc.WFTypeName,
 					gomock.Any()).Do(func(
@@ -234,7 +232,6 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	mockSdkClient := mocksdk.NewMockClient(ctrl)
 	mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
 	mockAdminClient := adminservicemock.NewMockAdminServiceClient(ctrl)
-	mockWorkerFactory := sdk.NewMockWorkerFactory(ctrl)
 	worker := mocksdk.NewMockWorker(ctrl)
 	scanner := New(
 		logger,
@@ -260,13 +257,12 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		historyservicemock.NewMockHistoryServiceClient(ctrl),
 		mockAdminClient,
 		mockNamespaceRegistry,
-		mockWorkerFactory,
 	)
 	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().Start()
-	mockWorkerFactory.EXPECT().New(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
+	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(
