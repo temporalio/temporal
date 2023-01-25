@@ -384,9 +384,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
 	}
 
-	workflowTaskHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0
+	workflowTaskHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0 && len(request.Messages) == 0
 	var workflowTaskHeartbeatTimeout bool
 	var completedEvent *historypb.HistoryEvent
+	var responseMutations []workflowTaskResponseMutation
+
 	if workflowTaskHeartbeating {
 		namespace := namespaceEntry.Name()
 		timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace.String())
@@ -421,11 +423,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		wtFailedCause               *workflowTaskFailedCause
 		activityNotStartedCancelled bool
 		newMutableState             workflow.MutableState
-
-		hasUnhandledEvents bool
-		responseMutations  []workflowTaskResponseMutation
 	)
-	hasUnhandledEvents = ms.HasBufferedEvents()
+	hasBufferedEvents := ms.HasBufferedEvents()
 
 	if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
 		handler.metricsHandler.Counter(metrics.CompleteWorkflowTaskWithStickyDisabledCounter.GetMetricName()).Record(
@@ -479,12 +478,19 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.config,
 			handler.shard,
 			handler.searchAttributesMapper,
-			hasUnhandledEvents,
+			hasBufferedEvents,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
 			ctx,
 			request.Commands,
+		); err != nil {
+			return nil, err
+		}
+
+		if err = workflowTaskHandler.handleMessages(
+			ctx,
+			request.Messages,
 		); err != nil {
 			return nil, err
 		}
@@ -499,7 +505,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		newMutableState = workflowTaskHandler.newMutableState
 
-		hasUnhandledEvents = workflowTaskHandler.hasBufferedEvents
+		hasBufferedEvents = workflowTaskHandler.hasBufferedEvents
 	}
 
 	if wtFailedCause != nil {
@@ -520,7 +526,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		if err != nil {
 			return nil, err
 		}
-		hasUnhandledEvents = true
+		hasBufferedEvents = true
 		newMutableState = nil
 
 		if wtFailedCause.workflowFailure != nil {
@@ -530,24 +536,37 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			if _, err := ms.AddFailWorkflowEvent(nextEventBatchId, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
 				return nil, err
 			}
-			hasUnhandledEvents = false
+			hasBufferedEvents = false
 		}
 	}
 
-	createNewWorkflowTask := ms.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
+	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
+	if ms.IsWorkflowExecutionRunning() && (hasBufferedEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled) {
+		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+	}
+	createNewWorkflowTask := newWorkflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
+
 	var newWorkflowTaskScheduledEventID int64
 	if createNewWorkflowTask {
+		// TODO (alex-update): Need to support case when ReturnNewWorkflowTask=false and WT.Type=Speculative.
+		// In this case WT needs to be added directly to matching.
+		// Current implementation will create normal WT.
 		bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
+		if !bypassTaskGeneration {
+			// If task generation can't be bypassed workflow task must be of Normal type because Speculative workflow task always skip task generation.
+			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+		}
+
 		var newWorkflowTask *workflow.WorkflowTaskInfo
 		var err error
 		if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
 			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
 				bypassTaskGeneration,
 				currentWorkflowTask.OriginalScheduledTime,
-				enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+				enumsspb.WORKFLOW_TASK_TYPE_NORMAL, // Heartbeat workflow task is always of Normal type.
 			)
 		} else {
-			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, newWorkflowTaskType)
 		}
 		if err != nil {
 			return nil, err
@@ -659,7 +678,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	return resp, nil
-
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskScheduled(

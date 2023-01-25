@@ -642,7 +642,6 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(sdkClientFactoryProvider),
-		fx.Provide(func() sdk.WorkerFactory { return sdk.NewWorkerFactory() }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
@@ -743,12 +742,14 @@ func sdkClientFactoryProvider(
 	resolver membership.GRPCResolver,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	dc *dynamicconfig.Collection,
 ) sdk.ClientFactory {
 	return sdk.NewClientFactory(
 		resolver.MakeURL(primitives.FrontendService),
 		nil,
 		metricsHandler,
 		logger,
+		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
 	)
 }
 

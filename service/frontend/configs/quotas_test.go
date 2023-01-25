@@ -107,7 +107,7 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"TerminateWorkflowExecution":         {},
 		"GetWorkflowExecutionHistory":        {},
 		"GetWorkflowExecutionHistoryReverse": {},
-		"UpdateWorkflow":                     {},
+		"UpdateWorkflowExecution":            {},
 
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},
