@@ -791,16 +791,16 @@ func (c *metricClient) UpdateWorkerBuildIdOrdering(
 	return c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
 }
 
-func (c *metricClient) UpdateWorkflow(
+func (c *metricClient) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkflowRequest,
+	request *workflowservice.UpdateWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (_ *workflowservice.UpdateWorkflowResponse, retError error) {
+) (_ *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateWorkflowScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.UpdateWorkflow(ctx, request, opts...)
+	return c.client.UpdateWorkflowExecution(ctx, request, opts...)
 }

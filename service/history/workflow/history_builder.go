@@ -1267,11 +1267,15 @@ func (b *HistoryBuilder) bufferEvent(
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_REJECTED,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED,
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
 		// do not buffer event if event is directly generated from a corresponding command
+		return false
+
+	case // events generated directly from messages should not be buffered
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
+		// do not buffer event if event is directly generated from a message
 		return false
 
 	default:

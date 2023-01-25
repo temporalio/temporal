@@ -2200,24 +2200,30 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:             true,
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:         true,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:                    true,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_REJECTED:                             true,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED:                             true,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:                            true,
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:                         true,
 	}
 
-	// other events will not be assign event ID immediately
+	// events corresponding to message from client will be assign event ID immediately
+	messageEvents := map[enumspb.EventType]bool{
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED:  true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:  true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED: true,
+	}
+
+	// other events will not be assign event ID immediately (created automatically)
 	otherEvents := map[enumspb.EventType]bool{}
-OtherEventsLoop:
 	for _, eventType := range enumspb.EventType_value {
 		if _, ok := workflowEvents[enumspb.EventType(eventType)]; ok {
-			continue OtherEventsLoop
+			continue
 		}
 		if _, ok := workflowTaskEvents[enumspb.EventType(eventType)]; ok {
-			continue OtherEventsLoop
+			continue
 		}
 		if _, ok := commandEvents[enumspb.EventType(eventType)]; ok {
-			continue OtherEventsLoop
+			continue
+		}
+		if _, ok := messageEvents[enumspb.EventType(eventType)]; ok {
+			continue
 		}
 		otherEvents[enumspb.EventType(eventType)] = true
 	}
@@ -2232,17 +2238,28 @@ OtherEventsLoop:
 	for eventType := range commandEvents {
 		s.False(s.historyBuilder.bufferEvent(eventType))
 	}
+	for eventType := range messageEvents {
+		s.False(s.historyBuilder.bufferEvent(eventType))
+	}
 	// other events will return false
 	for eventType := range otherEvents {
 		s.True(s.historyBuilder.bufferEvent(eventType))
 	}
 
-	commandTypes := enumspb.CommandType_name
-	delete(commandTypes, 0) // Remove Unspecified.
+	commandsWithEventsCount := 0
+	for ct, _ := range enumspb.CommandType_name {
+		commandType := enumspb.CommandType(ct)
+		// Unspecified is not counted.
+		// ProtocolMessage command doesn't have corresponding event.
+		if commandType == enumspb.COMMAND_TYPE_UNSPECIFIED || commandType == enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE {
+			continue
+		}
+		commandsWithEventsCount++
+	}
 	s.Equal(
-		len(commandTypes),
+		commandsWithEventsCount,
 		len(commandEvents),
-		"This assertion will be broken a new command is added and no corresponding logic added to HistoryBuilder.bufferEvent",
+		"This assertion is broken when a new command is added and no corresponding logic for corresponding command event is added to HistoryBuilder.bufferEvent",
 	)
 }
 

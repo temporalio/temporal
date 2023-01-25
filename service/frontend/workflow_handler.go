@@ -3629,10 +3629,10 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 	return &workflowservice.UpdateWorkerBuildIdOrderingResponse{}, err
 }
 
-func (wh *WorkflowHandler) UpdateWorkflow(
+func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkflowRequest,
-) (_ *workflowservice.UpdateWorkflowResponse, retError error) {
+	request *workflowservice.UpdateWorkflowExecutionRequest,
+) (_ *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if wh.isStopped() {
@@ -3648,7 +3648,7 @@ func (wh *WorkflowHandler) UpdateWorkflow(
 		return nil, err
 	}
 
-	histResp, err := wh.historyClient.UpdateWorkflow(ctx, &historyservice.UpdateWorkflowRequest{
+	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{
 		NamespaceId: nsID.String(),
 		Request:     request,
 	})
