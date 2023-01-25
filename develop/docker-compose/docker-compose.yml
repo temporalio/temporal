@@ -78,11 +78,10 @@ services:
     volumes:
       - ./grafana/provisioning/:/etc/grafana/provisioning/
   temporal-ui:
-    image: temporalio/ui:2.8.3
+    image: temporalio/ui:2.10.0
     container_name: temporal-dev-ui
 
 networks:
   temporal-dev-network:
     driver: bridge
     name: temporal-dev-network
-
