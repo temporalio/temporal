@@ -183,43 +183,14 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 	}
 }
 
-func (s *contextSuite) TestTimerMaxReadLevelUpdate_MultiProcessor() {
-	now := time.Now()
-	s.timeSource.Update(now)
-	maxReadLevel, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
-	s.NoError(err)
-
-	s.timeSource.Update(now.Add(-time.Minute))
-	newMaxReadLevel, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
-	s.NoError(err)
-	s.Equal(maxReadLevel, newMaxReadLevel)
-
-	s.timeSource.Update(now.Add(time.Minute))
-	newMaxReadLevel, err = s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
-	s.NoError(err)
-	s.True(newMaxReadLevel.FireTime.After(maxReadLevel.FireTime))
-}
-
-func (s *contextSuite) TestTimerMaxReadLevelUpdate_SingleProcessor() {
-	now := time.Now()
+func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
+	now := time.Now().Add(time.Minute)
 	s.timeSource.Update(now)
 
-	// make sure the scheduledTaskMaxReadLevelMap has value for both current cluster and alternative cluster
-	_, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
-	s.NoError(err)
-	_, err = s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestAlternativeClusterName, false)
+	_, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark()
 	s.NoError(err)
 
-	now = time.Now().Add(time.Minute)
-	s.timeSource.Update(now)
-
-	// update in single processor mode
-	_, err = s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, true)
-	s.NoError(err)
-	scheduledTaskMaxReadLevelMap := s.mockShard.scheduledTaskMaxReadLevelMap
-	s.Len(scheduledTaskMaxReadLevelMap, 2)
-	s.True(scheduledTaskMaxReadLevelMap[cluster.TestCurrentClusterName].After(now))
-	s.True(scheduledTaskMaxReadLevelMap[cluster.TestAlternativeClusterName].After(now))
+	s.True(s.mockShard.scheduledTaskMaxReadLevel.After(now))
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_Success() {

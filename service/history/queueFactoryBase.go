@@ -31,6 +31,7 @@ import (
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -87,7 +88,7 @@ type (
 		fx.In
 
 		Lifecycle fx.Lifecycle
-		Factories []QueueFactory `group:"queueFactory"`
+		Factories []QueueFactory
 	}
 )
 
@@ -95,24 +96,51 @@ var QueueModule = fx.Options(
 	fx.Provide(QueueSchedulerRateLimiterProvider),
 	fx.Provide(
 		fx.Annotated{
-			Group:  QueueFactoryFxGroup,
+			Name:   "transferQueueFactory",
 			Target: NewTransferQueueFactory,
 		},
 		fx.Annotated{
-			Group:  QueueFactoryFxGroup,
+			Name:   "timerQueueFactory",
 			Target: NewTimerQueueFactory,
 		},
 		fx.Annotated{
-			Group:  QueueFactoryFxGroup,
+			Name:   "visibilityQueueFactory",
 			Target: NewVisibilityQueueFactory,
 		},
 		fx.Annotated{
-			Group:  QueueFactoryFxGroup,
+			Name:   "archivalQueueFactory",
 			Target: NewArchivalQueueFactory,
 		},
+		getQueueFactories,
 	),
 	fx.Invoke(QueueFactoryLifetimeHooks),
 )
+
+type queueFactorySet struct {
+	fx.In
+
+	TransferQueueFactory   QueueFactory `name:"transferQueueFactory"`
+	TimerQueueFactory      QueueFactory `name:"timerQueueFactory"`
+	VisibilityQueueFactory QueueFactory `name:"visibilityQueueFactory"`
+	ArchivalQueueFactory   QueueFactory `name:"archivalQueueFactory"`
+}
+
+// getQueueFactories returns factories for all the enabled queue types.
+// The archival queue factory is only returned when archival is enabled in the static config.
+func getQueueFactories(
+	queueFactorySet queueFactorySet,
+	archivalMetadata archiver.ArchivalMetadata,
+) []QueueFactory {
+	factories := []QueueFactory{
+		queueFactorySet.TransferQueueFactory,
+		queueFactorySet.TimerQueueFactory,
+		queueFactorySet.VisibilityQueueFactory,
+	}
+	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled || archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
+		factories = append(factories, queueFactorySet.ArchivalQueueFactory)
+	}
+	return factories
+}
 
 func QueueSchedulerRateLimiterProvider(
 	config *configs.Config,

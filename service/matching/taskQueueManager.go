@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -66,7 +67,7 @@ const (
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
 
-	ioTimeout = 5 * time.Second
+	ioTimeout = 5 * time.Second * debug.TimeoutMultiplier
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2

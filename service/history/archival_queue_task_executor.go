@@ -112,9 +112,11 @@ func (e *archivalQueueTaskExecutor) processArchiveExecutionTask(ctx context.Cont
 	if err != nil {
 		return err
 	}
-	_, err = e.archiver.Archive(ctx, request)
-	if err != nil {
-		return err
+	if len(request.Targets) > 0 {
+		_, err = e.archiver.Archive(ctx, request)
+		if err != nil {
+			return err
+		}
 	}
 	return e.addDeletionTask(ctx, logger, task, request.CloseTime)
 }
@@ -154,52 +156,47 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		return nil, err
 	}
 
+	var historyURI, visibilityURI carchiver.URI
 	var targets []archival.Target
 	if e.shardContext.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() &&
 		namespaceEntry.VisibilityArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED {
 		targets = append(targets, archival.TargetVisibility)
+		visibilityURIString := namespaceEntry.VisibilityArchivalState().URI
+		visibilityURI, err = carchiver.NewURI(visibilityURIString)
+		if err != nil {
+			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.GetMetricName()).Record(
+				1,
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.FailureTag(metrics.InvalidVisibilityURITagValue),
+			)
+			logger.Error(
+				"Failed to parse visibility URI.",
+				tag.ArchivalURI(visibilityURIString),
+				tag.Error(err),
+			)
+			return nil, fmt.Errorf("failed to parse visibility URI for archival task: %w", err)
+		}
 	}
 	if e.shardContext.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival() &&
 		namespaceEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED {
+		historyURIString := namespaceEntry.HistoryArchivalState().URI
+		historyURI, err = carchiver.NewURI(historyURIString)
+		if err != nil {
+			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.GetMetricName()).Record(
+				1,
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.FailureTag(metrics.InvalidHistoryURITagValue),
+			)
+			logger.Error(
+				"Failed to parse history URI.",
+				tag.ArchivalURI(historyURIString),
+				tag.Error(err),
+			)
+			return nil, fmt.Errorf("failed to parse history URI for archival task: %w", err)
+		}
 		targets = append(targets, archival.TargetHistory)
 	}
-	if len(targets) == 0 {
-		return nil, fmt.Errorf(
-			"no archival targets configured for archive execution task: %+v",
-			task.WorkflowKey,
-		)
-	}
 
-	historyURIString := namespaceEntry.HistoryArchivalState().URI
-	historyURI, err := carchiver.NewURI(historyURIString)
-	if err != nil {
-		e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.GetMetricName()).Record(
-			1,
-			metrics.NamespaceTag(namespaceName.String()),
-			metrics.FailureTag("invalid_history_uri"),
-		)
-		logger.Error(
-			"Failed to parse history URI.",
-			tag.ArchivalURI(historyURIString),
-			tag.Error(err),
-		)
-		return nil, fmt.Errorf("failed to parse history URI for archival task: %w", err)
-	}
-	visibilityURIString := namespaceEntry.VisibilityArchivalState().URI
-	visibilityURI, err := carchiver.NewURI(visibilityURIString)
-	if err != nil {
-		e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.GetMetricName()).Record(
-			1,
-			metrics.NamespaceTag(namespaceName.String()),
-			metrics.FailureTag("invalid_visibility_uri"),
-		)
-		logger.Error(
-			"Failed to parse visibility URI.",
-			tag.ArchivalURI(visibilityURIString),
-			tag.Error(err),
-		)
-		return nil, fmt.Errorf("failed to parse visibility URI for archival task: %w", err)
-	}
 	workflowAttributes, err := e.relocatableAttributesFetcher.Fetch(ctx, mutableState)
 	if err != nil {
 		return nil, err
@@ -249,6 +246,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		e.shardContext.GetNamespaceRegistry(),
 		mutableState,
 		e.shardContext.GetConfig(),
+		e.shardContext.GetArchivalMetadata(),
 	)
 	err = taskGenerator.GenerateDeleteHistoryEventTask(*closeTime, true)
 	if err != nil {
