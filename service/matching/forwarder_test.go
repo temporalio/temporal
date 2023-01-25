@@ -78,7 +78,7 @@ func (t *ForwarderTestSuite) TearDownTest() {
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
 	task := newInternalTask(&persistencespb.AllocatedTaskInfo{}, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
-	t.Equal(errNoParent, t.fwdr.ForwardTask(context.Background(), task))
+	t.Equal(tqname.ErrNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	t.fwdr.taskQueueKind = enumspb.TASK_QUEUE_KIND_STICKY
@@ -99,7 +99,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
-	t.Equal(t.taskQueue.Parent(20).FullName(), request.TaskQueue.GetName())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), request.TaskQueue.GetName())
 	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.TaskQueue.GetKind())
 	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
@@ -126,7 +126,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
-	t.Equal(t.taskQueue.Parent(20).FullName(), request.TaskQueue.GetName())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), request.TaskQueue.GetName())
 	t.Equal(t.fwdr.taskQueueKind, request.TaskQueue.GetKind())
 	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
@@ -153,7 +153,7 @@ func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
 func (t *ForwarderTestSuite) TestForwardQueryTaskError() {
 	task := newInternalQueryTask("id1", &matchingservice.QueryWorkflowRequest{})
 	_, err := t.fwdr.ForwardQueryTask(context.Background(), task)
-	t.Equal(errNoParent, err)
+	t.Equal(tqname.ErrNoParent, err)
 
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	t.fwdr.taskQueueKind = enumspb.TASK_QUEUE_KIND_STICKY
@@ -174,7 +174,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTask() {
 
 	gotResp, err := t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.NoError(err)
-	t.Equal(t.taskQueue.Parent(20).FullName(), request.TaskQueue.GetName())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), request.TaskQueue.GetName())
 	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.TaskQueue.GetKind())
 	t.Equal(task.query.request.QueryRequest, request.QueryRequest)
 	t.Equal(resp, gotResp)
@@ -196,7 +196,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTaskRateNotEnforced() {
 
 func (t *ForwarderTestSuite) TestForwardPollError() {
 	_, err := t.fwdr.ForwardPoll(context.Background())
-	t.Equal(errNoParent, err)
+	t.Equal(tqname.ErrNoParent, err)
 
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	t.fwdr.taskQueueKind = enumspb.TASK_QUEUE_KIND_STICKY
@@ -227,7 +227,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Equal(pollerID, request.GetPollerId())
 	t.Equal(t.taskQueue.namespaceID, namespace.ID(request.GetNamespaceId()))
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
-	t.Equal(t.taskQueue.Parent(20).FullName(), request.GetPollRequest().GetTaskQueue().GetName())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), request.GetPollRequest().GetTaskQueue().GetName())
 	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.GetPollRequest().GetTaskQueue().GetKind())
 	t.Equal(resp, task.pollWorkflowTaskQueueResponse())
 	t.Nil(task.pollActivityTaskQueueResponse())
@@ -255,7 +255,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.Equal(pollerID, request.GetPollerId())
 	t.Equal(t.taskQueue.namespaceID, namespace.ID(request.GetNamespaceId()))
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
-	t.Equal(t.taskQueue.Parent(20).FullName(), request.GetPollRequest().GetTaskQueue().GetName())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), request.GetPollRequest().GetTaskQueue().GetName())
 	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.GetPollRequest().GetTaskQueue().GetKind())
 	t.Equal(resp, task.pollActivityTaskQueueResponse())
 	t.Nil(task.pollWorkflowTaskQueueResponse())
@@ -343,7 +343,24 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
 }
 
 func (t *ForwarderTestSuite) usingTaskqueuePartition(taskType enumspb.TaskQueueType) {
-	n := tqname.MustFromBaseName("tl0").WithPartition(1)
+	n := mustFromBaseName("tl0").WithPartition(1)
 	t.taskQueue = newTestTaskQueueID("fwdr", n.FullName(), taskType)
 	t.fwdr.taskQueueID = t.taskQueue
+}
+
+// Wrappers for tqname functions to make tests read better:
+func mustFromBaseName(name string) tqname.Name {
+	n, err := tqname.FromBaseName(name)
+	if err != nil {
+		panic(err)
+	}
+	return n
+}
+
+func mustParent(tn tqname.Name, n int) tqname.Name {
+	parent, err := tn.Parent(n)
+	if err != nil {
+		panic(err)
+	}
+	return parent
 }

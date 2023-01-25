@@ -76,7 +76,6 @@ type (
 )
 
 var (
-	errNoParent             = errors.New("cannot find parent task queue for forwarding")
 	errTaskQueueKind        = errors.New("forwarding is not supported on sticky task queue")
 	errInvalidTaskQueueType = errors.New("unrecognized task queue type")
 	errForwarderSlowDown    = errors.New("limit exceeded")
@@ -88,7 +87,7 @@ var (
 // forwarder is tied to a single task queue. All of the exposed
 // methods can return the following errors:
 // Returns following errors:
-//   - errNoParent: If this task queue doesn't have a parent to forward to
+//   - tqname.ErrNoParent, tqname.ErrInvalidDegree: If this task queue doesn't have a parent to forward to
 //   - errTaskQueueKind: If the task queue is a sticky task queue. Sticky task queues are never partitioned
 //   - errForwarderSlowDown: When the rate limit is exceeded
 //   - errInvalidTaskType: If the task queue type is invalid
@@ -121,16 +120,14 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	}
 
 	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	if fwdr.taskQueueID.IsRoot() || degree == 0 {
-		return errNoParent
+	target, err := fwdr.taskQueueID.Parent(degree)
+	if err != nil {
+		return err
 	}
-	target := fwdr.taskQueueID.Parent(degree)
 
 	if !fwdr.limiter.Allow() {
 		return errForwarderSlowDown
 	}
-
-	var err error
 
 	var expirationDuration time.Duration
 	expirationTime := timestamp.TimeValue(task.event.Data.ExpiryTime)
@@ -190,10 +187,10 @@ func (fwdr *Forwarder) ForwardQueryTask(
 	}
 
 	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	if fwdr.taskQueueID.IsRoot() || degree == 0 {
-		return nil, errNoParent
+	target, err := fwdr.taskQueueID.Parent(degree)
+	if err != nil {
+		return nil, err
 	}
-	target := fwdr.taskQueueID.Parent(degree)
 
 	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
 		NamespaceId: task.query.request.GetNamespaceId(),
@@ -215,10 +212,10 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 	}
 
 	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	if fwdr.taskQueueID.IsRoot() || degree == 0 {
-		return nil, errNoParent
+	target, err := fwdr.taskQueueID.Parent(degree)
+	if err != nil {
+		return nil, err
 	}
-	target := fwdr.taskQueueID.Parent(degree)
 
 	pollerID, _ := ctx.Value(pollerIDKey).(string)
 	identity, _ := ctx.Value(identityKey).(string)

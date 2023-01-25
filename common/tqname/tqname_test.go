@@ -42,7 +42,8 @@ func TestParse(t *testing.T) {
 	a.Equal("", n.VersionSet())
 	a.Equal("my-basic-tq-name", n.FullName())
 	a.True(n.IsRoot())
-	a.Equal(0, n.Parent(5).Partition())
+	_, err = n.Parent(5)
+	a.Equal(ErrNoParent, err)
 
 	n, err = Parse("/_sys/my-basic-tq-name/23")
 	a.NoError(err)
@@ -51,8 +52,8 @@ func TestParse(t *testing.T) {
 	a.Equal("", n.VersionSet())
 	a.Equal("/_sys/my-basic-tq-name/23", n.FullName())
 	a.False(n.IsRoot())
-	a.Equal(4, n.Parent(5).Partition())
-	a.Equal(0, n.Parent(32).Partition())
+	a.Equal(4, mustParent(n, 5).Partition())
+	a.Equal(0, mustParent(n, 32).Partition())
 
 	n, err = Parse("/_sys/my-basic-tq-name/verxyz:23")
 	a.NoError(err)
@@ -142,19 +143,20 @@ func TestValidTaskQueueNames(t *testing.T) {
 }
 
 func TestTaskQueueParentName(t *testing.T) {
+	const invalid = "__invalid__"
 	testCases := []struct {
 		name   string
 		degree int
 		output string
 	}{
 		/* unexpected input */
-		{"list0", 0, "__INVALID__"},
+		{"list0", 0, invalid},
 		/* 1-ary tree */
-		{"list0", 1, "__INVALID__"},
+		{"list0", 1, invalid},
 		{"/_sys/list0/1", 1, "list0"},
 		{"/_sys/list0/2", 1, "/_sys/list0/1"},
 		/* 2-ary tree */
-		{"list0", 2, "__INVALID__"},
+		{"list0", 2, invalid},
 		{"/_sys/list0/1", 2, "list0"},
 		{"/_sys/list0/2", 2, "list0"},
 		{"/_sys/list0/3", 2, "/_sys/list0/1"},
@@ -176,7 +178,12 @@ func TestTaskQueueParentName(t *testing.T) {
 		t.Run(tc.name+"#"+strconv.Itoa(tc.degree), func(t *testing.T) {
 			tn, err := Parse(tc.name)
 			require.NoError(t, err)
-			require.Equal(t, tc.output, tn.Parent(tc.degree).FullName())
+			parent, err := tn.Parent(tc.degree)
+			if tc.output == invalid {
+				require.Equal(t, ErrNoParent, err)
+			} else {
+				require.Equal(t, tc.output, parent.FullName())
+			}
 		})
 	}
 }
@@ -199,4 +206,12 @@ func TestInvalidTaskqueueNames(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func mustParent(tn Name, n int) Name {
+	parent, err := tn.Parent(n)
+	if err != nil {
+		panic(err)
+	}
+	return parent
 }

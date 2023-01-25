@@ -25,6 +25,7 @@
 package tqname
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -75,8 +76,8 @@ type (
 )
 
 var (
-	// This value can be used when we have an error, but need to return just a Name.
-	InvalidName = Name{baseName: "__INVALID__"}
+	ErrNoParent      = errors.New("root task queue partition has no parent")
+	ErrInvalidDegree = errors.New("invalid task queue partition branching degree")
 )
 
 // Parse takes a mangled low-level task queue name and returns a Name. Returns an error if the
@@ -124,15 +125,6 @@ func FromBaseName(name string) (Name, error) {
 	return Name{baseName: name}, nil
 }
 
-// MustFromBaseName is a convenience function for tests, when name is guaranteed to be a base name.
-func MustFromBaseName(name string) Name {
-	n, err := FromBaseName(name)
-	if err != nil {
-		return InvalidName
-	}
-	return n
-}
-
 // IsRoot returns true if this task queue is a root partition.
 func (tn Name) IsRoot() bool {
 	return tn.partition == 0
@@ -175,12 +167,14 @@ func (tn Name) VersionSet() string {
 }
 
 // Parent returns a Name for the parent partition, using the given branching degree.
-func (tn Name) Parent(degree int) Name {
-	if tn.IsRoot() || degree == 0 {
-		return InvalidName
+func (tn Name) Parent(degree int) (Name, error) {
+	if tn.IsRoot() {
+		return Name{}, ErrNoParent
+	} else if degree < 1 {
+		return Name{}, ErrInvalidDegree
 	}
 	parent := (tn.partition+degree-1)/degree - 1
-	return tn.WithPartition(parent)
+	return tn.WithPartition(parent), nil
 }
 
 // FullName returns the mangled name of the task queue, to be used in RPCs and persistence.

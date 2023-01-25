@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/tqname"
 )
 
 var errMatchingHostThrottleTest = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "Matching host RPS exceeded.")
@@ -72,7 +71,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 
-	n := tqname.MustFromBaseName("tl0").WithPartition(1)
+	n := mustFromBaseName("tl0").WithPartition(1)
 	t.taskQueue = newTestTaskQueueID(namespace.ID(uuid.New()), n.FullName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	tlCfg := newTaskQueueConfig(t.taskQueue, cfg, "test-namespace")
 	tlCfg.forwarderConfig = forwarderConfig{
@@ -85,7 +84,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, t.client)
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
 
-	rootTaskQueue := newTestTaskQueueID(t.taskQueue.namespaceID, t.taskQueue.Parent(20).FullName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rootTaskQueue := newTestTaskQueueID(t.taskQueue.namespaceID, mustParent(t.taskQueue.Name, 20).FullName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	rootTaskqueueCfg := newTaskQueueConfig(rootTaskQueue, cfg, "test-namespace")
 	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, metrics.NoopMetricsHandler)
 }
@@ -191,7 +190,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.NoError(err)
 	t.True(remoteSyncMatch)
 	t.Equal(t.taskQueue.FullName(), req.GetForwardedSource())
-	t.Equal(t.taskQueue.Parent(20).FullName(), req.GetTaskQueue().GetName())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestSyncMatchFailure() {
@@ -297,7 +296,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	t.NoError(err)
 	t.Equal("answer", answer)
 	t.Equal(t.taskQueue.FullName(), req.GetForwardedSource())
-	t.Equal(t.taskQueue.Parent(20).FullName(), req.GetTaskQueue().GetName())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
@@ -429,7 +428,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	t.True(remoteSyncMatch)
 	t.True(taskCompleted)
 	t.Equal(t.taskQueue.FullName(), req.GetForwardedSource())
-	t.Equal(t.taskQueue.Parent(20).FullName(), req.GetTaskQueue().GetName())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestRemotePoll() {
