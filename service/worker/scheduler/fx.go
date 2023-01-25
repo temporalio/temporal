@@ -80,7 +80,7 @@ func NewResult(
 			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
 				dynamicconfig.WorkerEnableScheduler, true),
 			globalNSStartWorkflowRPS: dcCollection.GetFloatPropertyFilteredByNamespace(
-				dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 30),
+				dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 30.0),
 		},
 	}
 }
