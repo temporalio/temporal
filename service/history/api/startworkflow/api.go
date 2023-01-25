@@ -85,6 +85,7 @@ func NewStarter(
 }
 
 // Invoke starts a new workflow execution
+// nolint:cyclomatic // Simplified this existing function but it is still too complex
 func (s *Starter) Invoke(
 	ctx context.Context,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
@@ -177,7 +178,7 @@ func (s *Starter) Invoke(
 			clusterName,
 		)
 	}
-	if mutableStateInfo, err := s.applyWorkflowIDReusePolicy(ctx, t, workflowContext, runID); err != nil {
+	if mutableStateInfo, err := s.applyWorkflowIDReusePolicy(ctx, t, runID); err != nil {
 		switch err {
 		case nil:
 			if !s.request.StartRequest.GetRequestEagerExecution() {
@@ -222,7 +223,6 @@ func (s *Starter) Invoke(
 func (s *Starter) applyWorkflowIDReusePolicy(
 	ctx context.Context,
 	t *persistence.CurrentWorkflowConditionFailedError,
-	workflowContext api.WorkflowContext,
 	runID string,
 ) (*MutableStateInfo, error) {
 	workflowID := s.request.StartRequest.WorkflowId
