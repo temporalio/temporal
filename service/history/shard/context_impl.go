@@ -580,9 +580,15 @@ func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVe
 
 func (s *ContextImpl) UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool) {
 	nsName := ns.Name()
+	// NOTE: replication state field won't be replicated and currently we only update a namespace
+	// to handover state from active cluster, so the second condition will always be true. Adding
+	// it here to be more safe in case above assumption no longer holds in the future.
+	isHandoverNamespace := ns.IsGlobalNamespace() &&
+		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
+		ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER
 
 	s.wLock()
-	if deletedFromDb {
+	if deletedFromDb || !isHandoverNamespace {
 		delete(s.handoverNamespaces, ns.Name())
 		s.wUnlock()
 		return
@@ -595,23 +601,15 @@ func (s *ContextImpl) UpdateHandoverNamespaces(ns *namespace.Namespace, deletedF
 		maxReplicationTaskID = pendingMaxReplicationTaskID
 	}
 
-	// NOTE: replication state field won't be replicated and currently we only update a namespace
-	// to handover state from active cluster, so the second condition will always be true. Adding
-	// it here to be more safe in case above assumption no longer holds in the future.
-	if ns.IsGlobalNamespace() &&
-		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
-		ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
-
-		if handover, ok := s.handoverNamespaces[nsName]; ok {
-			if handover.NotificationVersion < ns.NotificationVersion() {
-				handover.NotificationVersion = ns.NotificationVersion()
-				handover.MaxReplicationTaskID = maxReplicationTaskID
-			}
-		} else {
-			s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
-				NotificationVersion:  ns.NotificationVersion(),
-				MaxReplicationTaskID: maxReplicationTaskID,
-			}
+	if handover, ok := s.handoverNamespaces[nsName]; ok {
+		if handover.NotificationVersion < ns.NotificationVersion() {
+			handover.NotificationVersion = ns.NotificationVersion()
+			handover.MaxReplicationTaskID = maxReplicationTaskID
+		}
+	} else {
+		s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
+			NotificationVersion:  ns.NotificationVersion(),
+			MaxReplicationTaskID: maxReplicationTaskID,
 		}
 	}
 
