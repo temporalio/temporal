@@ -328,12 +328,16 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-	return startworkflow.Invoke(ctx, &startworkflow.StartArgs{
-		ShardCtx:                   e.shard,
-		WorkflowConsistencyChecker: e.workflowConsistencyChecker,
-		TokenSerializer:            e.tokenSerializer,
-		Request:                    startRequest,
-	})
+	starter, err := startworkflow.NewStarter(
+		e.shard,
+		e.workflowConsistencyChecker,
+		e.tokenSerializer,
+		startRequest,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return starter.Invoke(ctx)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
