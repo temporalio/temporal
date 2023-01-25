@@ -1823,10 +1823,10 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	return &historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil
 }
 
-func (h *Handler) UpdateWorkflow(
+func (h *Handler) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *historyservice.UpdateWorkflowRequest,
-) (_ *historyservice.UpdateWorkflowResponse, retError error) {
+	request *historyservice.UpdateWorkflowExecutionRequest,
+) (_ *historyservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
@@ -1847,7 +1847,7 @@ func (h *Handler) UpdateWorkflow(
 		return nil, h.convertError(err)
 	}
 
-	return engine.UpdateWorkflow(ctx, request)
+	return engine.UpdateWorkflowExecution(ctx, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

@@ -908,19 +908,19 @@ func (mr *MockHandlerMockRecorder) UpdateWorkerBuildIdOrdering(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdOrdering", reflect.TypeOf((*MockHandler)(nil).UpdateWorkerBuildIdOrdering), arg0, arg1)
 }
 
-// UpdateWorkflow mocks base method.
-func (m *MockHandler) UpdateWorkflow(arg0 context.Context, arg1 *v10.UpdateWorkflowRequest) (*v10.UpdateWorkflowResponse, error) {
+// UpdateWorkflowExecution mocks base method.
+func (m *MockHandler) UpdateWorkflowExecution(arg0 context.Context, arg1 *v10.UpdateWorkflowExecutionRequest) (*v10.UpdateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflow", arg0, arg1)
-	ret0, _ := ret[0].(*v10.UpdateWorkflowResponse)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*v10.UpdateWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateWorkflow indicates an expected call of UpdateWorkflow.
-func (mr *MockHandlerMockRecorder) UpdateWorkflow(arg0, arg1 interface{}) *gomock.Call {
+// UpdateWorkflowExecution indicates an expected call of UpdateWorkflowExecution.
+func (mr *MockHandlerMockRecorder) UpdateWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflow", reflect.TypeOf((*MockHandler)(nil).UpdateWorkflow), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockHandler)(nil).UpdateWorkflowExecution), arg0, arg1)
 }
 
 // MockOperatorHandler is a mock of OperatorHandler interface.
