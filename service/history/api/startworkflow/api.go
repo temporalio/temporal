@@ -51,7 +51,7 @@ type Starter struct {
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	tokenSerializer            serverCommon.TaskTokenSerializer
 	request                    *historyservice.StartWorkflowExecutionRequest
-	namespaceID                namespace.ID
+	namespace                  *namespace.Namespace
 }
 
 func NewStarter(
@@ -69,7 +69,7 @@ func NewStarter(
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tokenSerializer:            tokenSerializer,
 		request:                    request,
-		namespaceID:                namespaceEntry.ID(),
+		namespace:                  namespaceEntry,
 	}, nil
 }
 
@@ -80,17 +80,11 @@ func (s *Starter) Invoke(
 	workflowConsistencyChecker := s.workflowConsistencyChecker
 	startRequest := s.request
 
-	namespaceEntry, err := api.GetActiveNamespace(shardCtx, namespace.ID(startRequest.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-	s.namespaceID = namespaceEntry.ID()
-
 	request := startRequest.StartRequest
 	metricsHandler := shardCtx.GetMetricsHandler()
 
 	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, shardCtx, metricsHandler)
-	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shardCtx, namespaceEntry, "StartWorkflowExecution")
+	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, shardCtx, s.namespace, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +92,7 @@ func (s *Starter) Invoke(
 	if request.GetRequestEagerExecution() {
 		metricsHandler.Counter(metrics.WorkflowEagerExecutionCounter.GetMetricName()).Record(
 			1,
-			metrics.NamespaceTag(namespaceEntry.Name().String()),
+			metrics.NamespaceTag(s.namespace.Name().String()),
 			metrics.TaskQueueTag(request.TaskQueue.Name),
 		)
 	}
@@ -108,7 +102,7 @@ func (s *Starter) Invoke(
 	workflowContext, err := api.NewWorkflowWithSignal(
 		ctx,
 		shardCtx,
-		namespaceEntry,
+		s.namespace,
 		workflowID,
 		runID,
 		startRequest,
@@ -170,7 +164,7 @@ func (s *Starter) Invoke(
 	prevLastWriteVersion = t.LastWriteVersion
 	if workflowContext.GetMutableState().GetCurrentVersion() < prevLastWriteVersion {
 		clusterMetadata := shardCtx.GetClusterMetadata()
-		clusterName := clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion)
+		clusterName := clusterMetadata.ClusterNameForFailoverVersion(s.namespace.IsGlobalNamespace(), prevLastWriteVersion)
 		return nil, serviceerror.NewNamespaceNotActive(
 			request.GetNamespace(),
 			clusterMetadata.GetCurrentClusterName(),
@@ -192,13 +186,14 @@ func (s *Starter) Invoke(
 	}
 
 	if prevExecutionUpdateAction != nil {
+		var mutableState workflow.MutableState
 		// update prev execution and create new execution in one transaction
 		err := api.GetAndUpdateWorkflowWithNew(
 			ctx,
 			nil,
 			api.BypassMutableStateConsistencyPredicate,
 			definition.NewWorkflowKey(
-				s.namespaceID.String(),
+				s.namespace.ID().String(),
 				workflowID,
 				prevRunID,
 			),
@@ -207,7 +202,7 @@ func (s *Starter) Invoke(
 				workflowContext, err := api.NewWorkflowWithSignal(
 					ctx,
 					shardCtx,
-					namespaceEntry,
+					s.namespace,
 					workflowID,
 					runID,
 					startRequest,
@@ -215,19 +210,25 @@ func (s *Starter) Invoke(
 				if err != nil {
 					return nil, nil, err
 				}
-				return workflowContext.GetContext(), workflowContext.GetMutableState(), nil
+				mutableState = workflowContext.GetMutableState()
+				return workflowContext.GetContext(), mutableState, nil
 			},
 			shardCtx,
 			workflowConsistencyChecker,
 		)
 		switch err {
 		case nil:
-			// We don't support TERMINATE_IF_RUNNING + eager workflow dispatch, it's okay not to return an inline task here.
-			// TODO(bergundy): support TERMINATE_IF_RUNNING and get newWorkflowEventsSeq
-			// return generateResponse(shard, tokenSerializer, request, namespaceID, runID, workflowTaskInfo, newWorkflowEventsSeq)
-			return &historyservice.StartWorkflowExecutionResponse{
-				RunId: runID,
-			}, nil
+			if !request.GetRequestEagerExecution() {
+				return &historyservice.StartWorkflowExecutionResponse{
+					RunId: runID,
+				}, nil
+			}
+			workflowTaskInfo, _ := mutableState.GetInFlightWorkflowTask()
+			events, err := s.getWorkflowHistory(ctx, mutableState)
+			if err != nil {
+				return nil, err
+			}
+			return s.generateResponse(runID, workflowTaskInfo, events)
 		case consts.ErrWorkflowCompleted:
 			// previous workflow already closed
 			// fallthough to the logic for only creating the new workflow below
@@ -256,7 +257,6 @@ func (s *Starter) respondToRetriedRequest(
 	ctx context.Context,
 	runID string,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	workflowConsistencyChecker := s.workflowConsistencyChecker
 	request := s.request.StartRequest
 
 	if !request.GetRequestEagerExecution() {
@@ -267,9 +267,9 @@ func (s *Starter) respondToRetriedRequest(
 
 	// For eager workflow execution, we need to get the task info and history events in order to construct a poll response.
 	// We techincally never want to create a new execution but in practice this should not happen.
-	workflowContext, releaseFn, err := workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
+	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
 		ctx,
-		s.namespaceID,
+		s.namespace.ID(),
 		common.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: runID},
 		workflow.CallerTypeAPI,
 	)
@@ -291,8 +291,11 @@ func (s *Starter) respondToRetriedRequest(
 	// The current workflow task is not inflight or not the first task or we exceeded the first attempt and fell back to
 	// matching based dispatch.
 	if !hasInflight || workflowTaskInfo.StartedEventID != 3 || workflowTaskInfo.Attempt > 1 {
-		// TODO: Should we error here or return just the RunID with an empty poll response? If so which error type?
-		return nil, serviceerror.NewAlreadyExist("Workflow task cannot be delivered")
+		return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+			"First workflow task is no longer inflight, retried request came in too late",
+			request.RequestId,
+			runID,
+		)
 	}
 
 	events, err := s.getWorkflowHistory(ctx, mutableState)
@@ -365,7 +368,7 @@ func (s *Starter) generateResponse(
 		return nil, err
 	}
 	taskToken := &tokenspb.Task{
-		NamespaceId:      s.namespaceID.String(),
+		NamespaceId:      s.namespace.ID().String(),
 		WorkflowId:       workflowID,
 		RunId:            runID,
 		ScheduledEventId: workflowTaskInfo.ScheduledEventID,

@@ -29,7 +29,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -284,11 +283,6 @@ func ValidateStartWorkflowExecutionRequest(
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
 		return err
 	}
-	// TODO(bergundy): Support this case
-	if request.GetRequestEagerExecution() && request.GetWorkflowIdReusePolicy() == enums.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
-		return serviceerror.NewInvalidArgument("Eager workflow execution not supported for WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING")
-	}
-
 	if err := ValidateStart(
 		ctx,
 		shard,
