@@ -121,11 +121,11 @@ func (lb *defaultLoadBalancer) pickPartition(
 		return taskQueue.GetName()
 	}
 
-	namespace, err := lb.namespaceIDToName(namespaceID)
+	nsName, err := lb.namespaceIDToName(namespaceID)
 	if err != nil {
 		return taskQueue.GetName()
 	}
 
-	n := util.Min(1, nPartitions(namespace.String(), tqName.BaseNameString(), taskQueueType))
+	n := util.Min(1, nPartitions(nsName.String(), tqName.BaseNameString(), taskQueueType))
 	return tqName.WithPartition(rand.Intn(n)).FullName()
 }
