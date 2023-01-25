@@ -62,6 +62,7 @@ type (
 
 	// processorImpl implements Processor, it's an agent of elastic.BulkProcessor
 	processorImpl struct {
+		sync.RWMutex
 		status                  int32
 		bulkProcessor           client.BulkProcessor
 		bulkProcessorParameters *client.BulkProcessorParameters
@@ -70,7 +71,6 @@ type (
 		logger                  log.Logger
 		metricsHandler          metrics.Handler
 		indexerConcurrency      uint32
-		inflightAdds            sync.WaitGroup
 	}
 
 	// ProcessorConfig contains all configs for processor
@@ -152,7 +152,8 @@ func (p *processorImpl) Stop() {
 		return
 	}
 
-	p.inflightAdds.Wait()
+	p.Lock()
+	defer p.Unlock()
 
 	err := p.bulkProcessor.Stop()
 	if err != nil {
@@ -177,13 +178,14 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 // Add request to the bulk and return a future object which will receive ack signal when request is processed.
 func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string) *future.FutureImpl[bool] {
 	if atomic.LoadInt32(&p.status) == common.DaemonStatusStopped {
-		p.logger.Warn("Skipping ES request for visibility task key because processor has been shut down.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
-		return nil
+		p.logger.Warn("Rejecting ES request for visibility task key because processor has been shut down.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
+		errFuture := future.NewFuture[bool]()
+		errFuture.Set(false, errors.New("visiblity processor was shut down"))
+		return errFuture
 	}
 
-	// count the number of requests to prevent shutting down in the middle of an Add
-	p.inflightAdds.Add(1)
-	defer p.inflightAdds.Done()
+	p.RLock()
+	defer p.RUnlock()
 
 	newFuture := newAckFuture()
 	_, isDup, _ := p.mapToAckFuture.PutOrDo(visibilityTaskKey, newFuture, func(key interface{}, value interface{}) error {
