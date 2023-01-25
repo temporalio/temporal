@@ -78,7 +78,7 @@ func Invoke(
 
 	workflowID := request.GetWorkflowId()
 	runID := uuid.NewString()
-	workflowContext, workflowTaskInfo, err := api.NewWorkflowWithSignal(
+	workflowContext, err := api.NewWorkflowWithSignal(
 		ctx,
 		shard,
 		namespaceEntry,
@@ -92,6 +92,11 @@ func Invoke(
 	}
 
 	now := shard.GetTimeSource().Now()
+	mutableState := workflowContext.GetMutableState()
+	workflowTaskInfo, hasInflight := mutableState.GetInFlightWorkflowTask()
+	if !hasInflight {
+		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have an inflight workflow task")
+	}
 	newWorkflow, newWorkflowEventsSeq, err := workflowContext.GetMutableState().CloseTransactionAsSnapshot(
 		now,
 		workflow.TransactionPolicyActive,
@@ -172,7 +177,7 @@ func Invoke(
 			),
 			prevExecutionUpdateAction,
 			func() (workflow.Context, workflow.MutableState, error) {
-				workflowContext, _, err := api.NewWorkflowWithSignal(
+				workflowContext, err := api.NewWorkflowWithSignal(
 					ctx,
 					shard,
 					namespaceEntry,

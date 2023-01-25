@@ -63,7 +63,7 @@ func NewWorkflowWithSignal(
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (WorkflowContext, *workflow.WorkflowTaskInfo, error) {
+) (WorkflowContext, error) {
 	newMutableState, err := CreateMutableState(
 		ctx,
 		shard,
@@ -73,7 +73,7 @@ func NewWorkflowWithSignal(
 		runID,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	startEvent, err := newMutableState.AddWorkflowExecutionStartedEvent(
@@ -84,7 +84,7 @@ func NewWorkflowWithSignal(
 		startRequest,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if signalWithStartRequest != nil {
@@ -97,7 +97,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
 		); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
@@ -109,13 +109,11 @@ func NewWorkflowWithSignal(
 		requestEagerExecution,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	var workflowTaskInfo *workflow.WorkflowTaskInfo
-
 	if requestEagerExecution {
-		_, workflowTaskInfo, err = newMutableState.AddWorkflowTaskStartedEvent(
+		_, _, err = newMutableState.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
 			startRequest.StartRequest.RequestId,
 			startRequest.StartRequest.TaskQueue,
@@ -123,7 +121,7 @@ func NewWorkflowWithSignal(
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -136,7 +134,7 @@ func NewWorkflowWithSignal(
 		),
 		shard.GetLogger(),
 	)
-	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), workflowTaskInfo, nil
+	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
 }
 
 func CreateMutableState(
