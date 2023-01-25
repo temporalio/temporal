@@ -524,8 +524,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 }
 
 func (e *historyEngineImpl) UpdateWorkflowExecution(
-	ctx context.Context,
-	req *historyservice.UpdateWorkflowExecutionRequest,
+	_ context.Context,
+	_ *historyservice.UpdateWorkflowExecutionRequest,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 
 	return nil, serviceerror.NewUnimplemented("UpdateWorkflowExecution is not supported on this server")
