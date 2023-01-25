@@ -260,17 +260,15 @@ func (pdb *db) GetClusterMembers(
 	err := pdb.conn.SelectContext(ctx, &rows,
 		compiledQryString,
 		operands...)
-
 	if err != nil {
 		return nil, err
 	}
-
-	convertedRows := make([]sqlplugin.ClusterMembershipRow, 0, len(rows))
-	for _, r := range rows {
-		r.SessionStart = r.SessionStart.UTC()
-		convertedRows = append(convertedRows, r)
+	for i := range rows {
+		rows[i].SessionStart = pdb.converter.FromPostgreSQLDateTime(rows[i].SessionStart)
+		rows[i].LastHeartbeat = pdb.converter.FromPostgreSQLDateTime(rows[i].LastHeartbeat)
+		rows[i].RecordExpiry = pdb.converter.FromPostgreSQLDateTime(rows[i].RecordExpiry)
 	}
-	return convertedRows, err
+	return rows, nil
 }
 
 func (pdb *db) PruneClusterMembership(
