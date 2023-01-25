@@ -44,7 +44,7 @@ var (
 		"RequestCancelWorkflowExecution":   0,
 		"TerminateWorkflowExecution":       0,
 		"GetWorkflowExecutionHistory":      0,
-		"UpdateWorkflow":                   0,
+		"UpdateWorkflowExecution":          0,
 	}
 
 	BackgroundTypeAPIPriorityOverride = map[string]int{

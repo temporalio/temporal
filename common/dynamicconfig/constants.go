@@ -319,8 +319,6 @@ const (
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
 	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
 	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
-	// MatchingUseOldRouting is whether to use old task queue routing (name only) instead of namespace+name+type.
-	MatchingUseOldRouting = "matching.useOldRouting"
 
 	// keys for history
 
@@ -715,6 +713,11 @@ const (
 	WorkerParentCloseMaxConcurrentWorkflowTaskPollers = "worker.ParentCloseMaxConcurrentWorkflowTaskPollers"
 	// WorkerPerNamespaceWorkerCount controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace
 	WorkerPerNamespaceWorkerCount = "worker.perNamespaceWorkerCount"
+	// WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace worker
+	WorkerPerNamespaceWorkerOptions = "worker.perNamespaceWorkerOptions"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
+	// WorkerStickyCacheSize controls the sticky cache size for SDK workers on worker nodes
+	// (shared between all workers in the process, cannot be changed after startup)
+	WorkerStickyCacheSize = "worker.stickyCacheSize"
 )

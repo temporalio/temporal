@@ -1766,35 +1766,35 @@ func (handler *DCRedirectionHandlerImpl) GetWorkerBuildIdOrdering(
 	return resp, err
 }
 
-// UpdateWorkflow API call
-func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
+// UpdateWorkflowExecution API call
+func (handler *DCRedirectionHandlerImpl) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkflowRequest,
-) (resp *workflowservice.UpdateWorkflowResponse, retError error) {
+	request *workflowservice.UpdateWorkflowExecutionRequest,
+) (resp *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	var (
 		err     error
 		cluster string
 	)
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkflowScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkflowExecutionScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, retError)
 	}()
 
 	defer log.CapturePanic(handler.logger, &retError)
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), "UpdateWorkflow", func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), "UpdateWorkflowExecution", func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.UpdateWorkflow(ctx, request)
+			resp, err = handler.frontendHandler.UpdateWorkflowExecution(ctx, request)
 			return err
 		default:
 			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			if err != nil {
 				return err
 			}
-			resp, err = remoteClient.UpdateWorkflow(ctx, request)
+			resp, err = remoteClient.UpdateWorkflowExecution(ctx, request)
 			return err
 		}
 	})

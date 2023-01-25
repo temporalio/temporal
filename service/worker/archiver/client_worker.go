@@ -120,7 +120,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext:              actCtx,
 	}
 	clientWorker := &clientWorker{
-		worker:            worker.New(sdkClient, workflowTaskQueue, wo),
+		worker:            container.SdkClientFactory.NewWorker(sdkClient, workflowTaskQueue, wo),
 		namespaceRegistry: container.NamespaceCache,
 	}
 

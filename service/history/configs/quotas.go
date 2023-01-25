@@ -75,7 +75,7 @@ var (
 		"GenerateLastHistoryReplicationTasks":    0,
 		"GetReplicationStatus":                   0,
 		"DeleteWorkflowVisibilityRecord":         0,
-		"UpdateWorkflow":                         0,
+		"UpdateWorkflowExecution":                0,
 	}
 
 	APIPrioritiesOrdered = []int{0}

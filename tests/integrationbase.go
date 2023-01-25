@@ -35,14 +35,14 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"gopkg.in/yaml.v3"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -225,7 +225,7 @@ func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *comm
 	common.PrettyPrintHistory(&historypb.History{Events: events})
 }
 
-//lint:ignore U1000 will use it later
+//lint:ignore U1000 used for debugging.
 func (s *IntegrationBase) printWorkflowHistoryCompact(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
 	fmt.Println(s.formatHistoryCompact(&historypb.History{Events: events}))
@@ -328,6 +328,7 @@ func (s *IntegrationBase) registerArchivalNamespace(archivalNamespace string) er
 }
 
 func (s *IntegrationBase) formatHistoryCompact(history *historypb.History) string {
+	s.T().Helper()
 	var sb strings.Builder
 	for _, event := range history.Events {
 		sb.WriteString(fmt.Sprintf("%3d %s\n", event.GetEventId(), event.GetEventType()))
@@ -339,11 +340,13 @@ func (s *IntegrationBase) formatHistoryCompact(history *historypb.History) strin
 }
 
 func (s *IntegrationBase) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
+	s.T().Helper()
 	expectedHistoryTrimmed := strings.Trim(expectedHistory, "\n")
 	actualHistoryStr := s.formatHistoryCompact(actualHistory)
 	s.Equal(expectedHistoryTrimmed, actualHistoryStr)
 }
 
 func (s *IntegrationBase) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
+	s.T().Helper()
 	s.EqualHistory(expectedHistory, &historypb.History{Events: actualHistoryEvents})
 }
