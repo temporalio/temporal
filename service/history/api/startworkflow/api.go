@@ -186,7 +186,7 @@ func (s *Starter) Invoke(
 	}
 
 	if prevExecutionUpdateAction != nil {
-		var mutableState workflow.MutableState
+		var mutableStateInfo *MutableStateInfo
 		// update prev execution and create new execution in one transaction
 		err := api.GetAndUpdateWorkflowWithNew(
 			ctx,
@@ -211,6 +211,10 @@ func (s *Starter) Invoke(
 					return nil, nil, err
 				}
 				mutableState = workflowContext.GetMutableState()
+				mutableStateInfo, err = extractMutableStateInfo(mutableState)
+				if err != nil {
+					return nil, nil, err
+				}
 				return workflowContext.GetContext(), mutableState, nil
 			},
 			shardCtx,
@@ -223,12 +227,11 @@ func (s *Starter) Invoke(
 					RunId: runID,
 				}, nil
 			}
-			workflowTaskInfo, _ := mutableState.GetInFlightWorkflowTask()
-			events, err := s.getWorkflowHistory(ctx, mutableState)
+			events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
 			if err != nil {
 				return nil, err
 			}
-			return s.generateResponse(runID, workflowTaskInfo, events)
+			return s.generateResponse(runID, mutableStateInfo.workflowTaskInfo, events)
 		case consts.ErrWorkflowCompleted:
 			// previous workflow already closed
 			// fallthough to the logic for only creating the new workflow below
@@ -266,31 +269,14 @@ func (s *Starter) respondToRetriedRequest(
 	}
 
 	// For eager workflow execution, we need to get the task info and history events in order to construct a poll response.
-	// We techincally never want to create a new execution but in practice this should not happen.
-	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
-		ctx,
-		s.namespace.ID(),
-		common.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: runID},
-		workflow.CallerTypeAPI,
-	)
+	mutableStateInfo, err := s.getMutableStateInfo(ctx, runID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		// TODO: figure out which err to pass here
-		releaseFn(err)
-	}()
-	mutableState, err := workflowContext.LoadMutableState(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Future work extend the task timeout (by failing / timing out the current task).
-	workflowTaskInfo, hasInflight := mutableState.GetInFlightWorkflowTask()
 
 	// The current workflow task is not inflight or not the first task or we exceeded the first attempt and fell back to
 	// matching based dispatch.
-	if !hasInflight || workflowTaskInfo.StartedEventID != 3 || workflowTaskInfo.Attempt > 1 {
+	if !mutableStateInfo.hasInflight || mutableStateInfo.workflowTaskInfo.StartedEventID != 3 || mutableStateInfo.workflowTaskInfo.Attempt > 1 {
 		return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
 			"First workflow task is no longer inflight, retried request came in too late",
 			request.RequestId,
@@ -298,29 +284,70 @@ func (s *Starter) respondToRetriedRequest(
 		)
 	}
 
-	events, err := s.getWorkflowHistory(ctx, mutableState)
+	events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.generateResponse(runID, workflowTaskInfo, events)
+	return s.generateResponse(runID, mutableStateInfo.workflowTaskInfo, events)
 }
 
-func (s *Starter) getWorkflowHistory(ctx context.Context, mutableState workflow.MutableState) ([]*history.HistoryEvent, error) {
+type MutableStateInfo struct {
+	branchToken      []byte
+	lastEventID      int64
+	workflowTaskInfo *workflow.WorkflowTaskInfo
+	hasInflight      bool
+}
+
+func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*MutableStateInfo, error) {
+	// We techincally never want to create a new execution but in practice this should not happen.
+	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
+		ctx,
+		s.namespace.ID(),
+		common.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
+		workflow.CallerTypeAPI,
+	)
+	var releaseErr error
+	defer func() {
+		releaseFn(releaseErr)
+	}()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var mutableState workflow.MutableState
+	mutableState, releaseErr = workflowContext.LoadMutableState(ctx)
+	return extractMutableStateInfo(mutableState)
+}
+
+func extractMutableStateInfo(mutableState workflow.MutableState) (*MutableStateInfo, error) {
 	branchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
 	}
 
+	// Future work for the request retry path: extend the task timeout (by failing / timing out the current task).
+	workflowTaskInfo, hasInflight := mutableState.GetInFlightWorkflowTask()
+
+	return &MutableStateInfo{
+		branchToken:      branchToken,
+		lastEventID:      mutableState.GetNextEventID() - 1,
+		workflowTaskInfo: workflowTaskInfo,
+		hasInflight:      hasInflight,
+	}, nil
+}
+
+func (s *Starter) getWorkflowHistory(ctx context.Context, mutableState *MutableStateInfo) ([]*history.HistoryEvent, error) {
 	var events []*history.HistoryEvent
 	// Future optimization: generate the task from mutable state to save the extra DB read.
 	// NOTE: While unlikely that there'll be more than one page, it's safer to make less assumptions
 	for {
 		response, err := s.shardCtx.GetExecutionManager().ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 			ShardID:     s.shardCtx.GetShardID(),
-			BranchToken: branchToken,
+			BranchToken: mutableState.branchToken,
 			MinEventID:  1,
-			MaxEventID:  mutableState.GetNextEventID() - 1,
+			MaxEventID:  mutableState.lastEventID,
 			PageSize:    1024,
 		})
 		if err != nil {
