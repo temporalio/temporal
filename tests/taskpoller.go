@@ -246,16 +246,19 @@ Loop:
 		}
 
 		// Handle messages.
-		workerToServerMessages, err := p.MessageHandler(response)
-		if err != nil {
-			p.Logger.Error("Failing workflow task. Workflow interaction handler failed with error", tag.Error(err))
-			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
-				TaskToken: response.TaskToken,
-				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
-				Failure:   newApplicationFailure(err, false, nil),
-				Identity:  p.Identity,
-			})
-			return false, nil, err
+		var workerToServerMessages []*protocolpb.Message
+		if p.MessageHandler != nil {
+			workerToServerMessages, err = p.MessageHandler(response)
+			if err != nil {
+				p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
+				_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+					TaskToken: response.TaskToken,
+					Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+					Failure:   newApplicationFailure(err, false, nil),
+					Identity:  p.Identity,
+				})
+				return false, nil, err
+			}
 		}
 
 		// handle normal workflow task / non query task response
@@ -344,16 +347,20 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 	}
 
 	// Handle messages.
-	workerToServerMessages, err := p.MessageHandler(response)
-	if err != nil {
-		p.Logger.Error("Failing workflow task. Workflow interaction handler failed with error", tag.Error(err))
-		_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
-			TaskToken: response.TaskToken,
-			Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
-			Failure:   newApplicationFailure(err, false, nil),
-			Identity:  p.Identity,
-		})
-		return nil, err
+	var workerToServerMessages []*protocolpb.Message
+	if p.MessageHandler != nil {
+		var err error
+		workerToServerMessages, err = p.MessageHandler(response)
+		if err != nil {
+			p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
+			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+				TaskToken: response.TaskToken,
+				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+				Failure:   newApplicationFailure(err, false, nil),
+				Identity:  p.Identity,
+			})
+			return nil, err
+		}
 	}
 
 	commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType,
