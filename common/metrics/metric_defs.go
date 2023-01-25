@@ -298,8 +298,8 @@ const (
 	DCRedirectionUpdateWorkerBuildIdOrderingScope = "DCRedirectionUpdateWorkerBuildIdOrdering"
 	// DCRedirectionGetWorkerBuildIdOrderingScope tracks RPC calls for dc redirection
 	DCRedirectionGetWorkerBuildIdOrderingScope = "DCRedirectionGetWorkerBuildIdOrdering"
-	// DCRedirectionUpdateWorkflowScope tracks RPC calls for dc redirection
-	DCRedirectionUpdateWorkflowScope = "DCRedirectionUpdateWorkflow"
+	// DCRedirectionUpdateWorkflowExecutionScope tracks RPC calls for dc redirection
+	DCRedirectionUpdateWorkflowExecutionScope = "DCRedirectionUpdateWorkflowExecution"
 	// DCRedirectionDescribeBatchOperationScope tracks RPC calls for dc redirection
 	DCRedirectionDescribeBatchOperationScope = "DCRedirectionDescribeBatchOperation"
 	// DCRedirectionListBatchOperationsScope tracks RPC calls for dc redirection
@@ -921,8 +921,8 @@ const (
 	FrontendUpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrdering"
 	// FrontendGetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrdering"
 	FrontendGetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrdering"
-	// FrontendUpdateWorkflowScope is the metric scope for frontend.UpdateWorkflow
-	FrontendUpdateWorkflowScope = "UpdateWorkflow"
+	// FrontendUpdateWorkflowExecutionScope is the metric scope for frontend.UpdateWorkflowExecution
+	FrontendUpdateWorkflowExecutionScope = "UpdateWorkflowExecution"
 	// FrontendDescribeBatchOperationScope is the metric scope for frontend.DescribeBatchOperation
 	FrontendDescribeBatchOperationScope = "DescribeBatchOperation"
 	// FrontendListBatchOperationsScope is the metric scope for frontend.ListBatchOperations
@@ -1021,8 +1021,8 @@ const (
 	HistoryDescribeHistoryHostScope = "DescribeHistoryHost"
 	// HistoryDeleteWorkflowVisibilityRecordScope is the scope used by delete workflow visibility record API
 	HistoryDeleteWorkflowVisibilityRecordScope = "DeleteWorkflowVisibilityRecord"
-	// HistoryUpdateWorkflowScope is the scope used by update workflow API
-	HistoryUpdateWorkflowScope = "UpdateWorkflow"
+	// HistoryUpdateWorkflowExecutionScope is the scope used by update workflow execution API
+	HistoryUpdateWorkflowExecutionScope = "UpdateWorkflowExecution"
 	// HistoryResetWorkflowExecutionScope tracks ResetWorkflowExecution API calls received by service
 	HistoryResetWorkflowExecutionScope = "ResetWorkflowExecution"
 	// HistoryQueryWorkflowScope tracks QueryWorkflow API calls received by service

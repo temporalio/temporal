@@ -231,6 +231,9 @@ func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, comma
 	case enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:
 		return nil, handler.handleCommandModifyWorkflowProperties(ctx, command.GetModifyWorkflowPropertiesCommandAttributes())
 
+	case enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE:
+		return nil, nil
+
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
 	}

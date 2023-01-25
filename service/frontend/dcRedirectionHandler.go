@@ -1766,7 +1766,7 @@ func (handler *DCRedirectionHandlerImpl) GetWorkerBuildIdOrdering(
 	return resp, err
 }
 
-// UpdateWorkflow API call
+// UpdateWorkflowExecution API call
 func (handler *DCRedirectionHandlerImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionRequest,
@@ -1776,14 +1776,14 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkflowExecution(
 		cluster string
 	)
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkflowScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkflowExecutionScope)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, retError)
 	}()
 
 	defer log.CapturePanic(handler.logger, &retError)
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), "UpdateWorkflow", func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), "UpdateWorkflowExecution", func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
