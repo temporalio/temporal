@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+// Starter starts a new workflow execution.
 type Starter struct {
 	shardCtx                   shard.Context
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
@@ -54,6 +55,16 @@ type Starter struct {
 	namespace                  *namespace.Namespace
 }
 
+// MutableStateInfo is a container for the relevant mutable state information to generate a start response with an eager
+// workflow task.
+type MutableStateInfo struct {
+	branchToken      []byte
+	lastEventID      int64
+	workflowTaskInfo *workflow.WorkflowTaskInfo
+	hasInflight      bool
+}
+
+// NewStarter creates a new starter, fails if getting the active namespace fails.
 func NewStarter(
 	shardCtx shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
@@ -73,11 +84,11 @@ func NewStarter(
 	}, nil
 }
 
+// Invoke starts a new workflow execution
 func (s *Starter) Invoke(
 	ctx context.Context,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
 	shardCtx := s.shardCtx
-	workflowConsistencyChecker := s.workflowConsistencyChecker
 	startRequest := s.request
 
 	request := startRequest.StartRequest
@@ -131,14 +142,12 @@ func (s *Starter) Invoke(
 
 	// create as brand new
 	createMode := persistence.CreateWorkflowModeBrandNew
-	prevRunID := ""
-	prevLastWriteVersion := int64(0)
 	err = workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
 		now,
 		createMode,
-		prevRunID,
-		prevLastWriteVersion,
+		"", // prevRunID
+		0,  // prevLastWriteVersion
 		workflowContext.GetMutableState(),
 		newWorkflow,
 		newWorkflowEventsSeq,
@@ -159,70 +168,19 @@ func (s *Starter) Invoke(
 		return s.respondToRetriedRequest(ctx, t.RunID)
 	}
 
-	// create as ID reuse
-	prevRunID = t.RunID
-	prevLastWriteVersion = t.LastWriteVersion
-	if workflowContext.GetMutableState().GetCurrentVersion() < prevLastWriteVersion {
-		clusterMetadata := shardCtx.GetClusterMetadata()
-		clusterName := clusterMetadata.ClusterNameForFailoverVersion(s.namespace.IsGlobalNamespace(), prevLastWriteVersion)
+	if workflowContext.GetMutableState().GetCurrentVersion() < t.LastWriteVersion {
+		clusterMetadata := s.shardCtx.GetClusterMetadata()
+		clusterName := clusterMetadata.ClusterNameForFailoverVersion(s.namespace.IsGlobalNamespace(), t.LastWriteVersion)
 		return nil, serviceerror.NewNamespaceNotActive(
-			request.GetNamespace(),
+			s.namespace.Name().String(),
 			clusterMetadata.GetCurrentClusterName(),
 			clusterName,
 		)
 	}
-
-	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
-		t.RequestID,
-		prevRunID,
-		t.State,
-		t.Status,
-		workflowID,
-		runID,
-		startRequest.StartRequest.GetWorkflowIdReusePolicy(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if prevExecutionUpdateAction != nil {
-		var mutableStateInfo *MutableStateInfo
-		// update prev execution and create new execution in one transaction
-		err := api.GetAndUpdateWorkflowWithNew(
-			ctx,
-			nil,
-			api.BypassMutableStateConsistencyPredicate,
-			definition.NewWorkflowKey(
-				s.namespace.ID().String(),
-				workflowID,
-				prevRunID,
-			),
-			prevExecutionUpdateAction,
-			func() (workflow.Context, workflow.MutableState, error) {
-				workflowContext, err := api.NewWorkflowWithSignal(
-					ctx,
-					shardCtx,
-					s.namespace,
-					workflowID,
-					runID,
-					startRequest,
-					nil)
-				if err != nil {
-					return nil, nil, err
-				}
-				mutableState = workflowContext.GetMutableState()
-				mutableStateInfo, err = extractMutableStateInfo(mutableState)
-				if err != nil {
-					return nil, nil, err
-				}
-				return workflowContext.GetContext(), mutableState, nil
-			},
-			shardCtx,
-			workflowConsistencyChecker,
-		)
+	if mutableStateInfo, err := s.applyWorkflowIDReusePolicy(ctx, t, workflowContext, runID); err != nil {
 		switch err {
 		case nil:
-			if !request.GetRequestEagerExecution() {
+			if !s.request.StartRequest.GetRequestEagerExecution() {
 				return &historyservice.StartWorkflowExecutionResponse{
 					RunId: runID,
 				}, nil
@@ -244,8 +202,8 @@ func (s *Starter) Invoke(
 		ctx,
 		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
-		prevRunID,
-		prevLastWriteVersion,
+		t.RunID,
+		t.LastWriteVersion,
 		workflowContext.GetMutableState(),
 		newWorkflow,
 		newWorkflowEventsSeq,
@@ -253,6 +211,72 @@ func (s *Starter) Invoke(
 		return nil, err
 	}
 	return s.generateResponse(runID, workflowTaskInfo, extractHistoryEvents(newWorkflowEventsSeq))
+}
+
+// applyWorkflowIDReusePolicy applies the workflow ID reuse policy in case a workflow start requests fails with a
+// duplicate execution.
+// At the time of this writing, the only possible action here is to terminate the current execution in case the start
+// request's ID reuse policy is TERMINATE_IF_RUNNING.
+// Returns non-nil MutableStateInfo if an action was required and completed successfully resulting in a newly created
+// execution.
+func (s *Starter) applyWorkflowIDReusePolicy(
+	ctx context.Context,
+	t *persistence.CurrentWorkflowConditionFailedError,
+	workflowContext api.WorkflowContext,
+	runID string,
+) (*MutableStateInfo, error) {
+	workflowID := s.request.StartRequest.WorkflowId
+	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
+		t.RequestID,
+		t.RunID,
+		t.State,
+		t.Status,
+		workflowID,
+		runID,
+		s.request.StartRequest.GetWorkflowIdReusePolicy(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if prevExecutionUpdateAction == nil {
+		return nil, nil
+	}
+	var mutableStateInfo *MutableStateInfo
+	// update prev execution and create new execution in one transaction
+	err = api.GetAndUpdateWorkflowWithNew(
+		ctx,
+		nil,
+		api.BypassMutableStateConsistencyPredicate,
+		definition.NewWorkflowKey(
+			s.namespace.ID().String(),
+			workflowID,
+			t.RunID,
+		),
+		prevExecutionUpdateAction,
+		func() (workflow.Context, workflow.MutableState, error) {
+			workflowContext, err := api.NewWorkflowWithSignal(
+				ctx,
+				s.shardCtx,
+				s.namespace,
+				workflowID,
+				runID,
+				s.request,
+				nil)
+			if err != nil {
+				return nil, nil, err
+			}
+			mutableState := workflowContext.GetMutableState()
+			mutableStateInfo, err = extractMutableStateInfo(mutableState)
+			if err != nil {
+				return nil, nil, err
+			}
+			return workflowContext.GetContext(), mutableState, nil
+		},
+		s.shardCtx,
+		s.workflowConsistencyChecker,
+	)
+	return mutableStateInfo, err
 }
 
 // respondToRetriedRequest provides a response in case a start request is retried.
@@ -292,13 +316,8 @@ func (s *Starter) respondToRetriedRequest(
 	return s.generateResponse(runID, mutableStateInfo.workflowTaskInfo, events)
 }
 
-type MutableStateInfo struct {
-	branchToken      []byte
-	lastEventID      int64
-	workflowTaskInfo *workflow.WorkflowTaskInfo
-	hasInflight      bool
-}
-
+// getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
+// workflow cache and managing the cache lease.
 func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*MutableStateInfo, error) {
 	// We techincally never want to create a new execution but in practice this should not happen.
 	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
@@ -321,6 +340,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*Mutab
 	return extractMutableStateInfo(mutableState)
 }
 
+// extractMutableStateInfo extracts the relevant information to generate a start response with an eager workflow task.
 func extractMutableStateInfo(mutableState workflow.MutableState) (*MutableStateInfo, error) {
 	branchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
@@ -338,6 +358,7 @@ func extractMutableStateInfo(mutableState workflow.MutableState) (*MutableStateI
 	}, nil
 }
 
+// getWorkflowHistory loads the workflow history based on given mutable state information from the DB.
 func (s *Starter) getWorkflowHistory(ctx context.Context, mutableState *MutableStateInfo) ([]*history.HistoryEvent, error) {
 	var events []*history.HistoryEvent
 	// Future optimization: generate the task from mutable state to save the extra DB read.
@@ -375,6 +396,8 @@ func extractHistoryEvents(persistenceEvents []*persistence.WorkflowEvents) []*hi
 	return events
 }
 
+// generateResponse is a helper for generating StartWorkflowExecutionResponse for eager and non eager workflow start
+// requests.
 func (s *Starter) generateResponse(
 	runID string,
 	workflowTaskInfo *workflow.WorkflowTaskInfo,

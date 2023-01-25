@@ -48,6 +48,10 @@ import (
 )
 
 type (
+	// ReleaseCacheFunc must be called to release the workflow context from the cache.
+	// Make sure not to access the mutable state or workflow context after releasing back to the cache.
+	// If there is any error when using the mutable state (e.g. mutable state is mutated and dirty), call release with
+	// the error so the in-memory copy will be thrown away.
 	ReleaseCacheFunc func(err error)
 
 	Cache interface {
