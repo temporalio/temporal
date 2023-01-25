@@ -52,6 +52,7 @@ type (
 		ReadEnabled() bool
 		GetNamespaceDefaultState() enumspb.ArchivalState
 		GetNamespaceDefaultURI() string
+		StaticClusterState() ArchivalState
 	}
 
 	archivalMetadata struct {
@@ -70,6 +71,10 @@ type (
 	// ArchivalState represents the archival state of the cluster
 	ArchivalState int
 )
+
+func (a *archivalConfig) StaticClusterState() ArchivalState {
+	return a.staticClusterState
+}
 
 const (
 	// ArchivalDisabled means this cluster is not configured to handle archival
@@ -146,7 +151,7 @@ func NewArchivalConfig(
 	}
 }
 
-// NewDisabledArchvialConfig returns a disabled ArchivalConfig
+// NewDisabledArchvialConfig returns an ArchivalConfig where archival is disabled for both the cluster and the namespace
 func NewDisabledArchvialConfig() ArchivalConfig {
 	return &archivalConfig{
 		staticClusterState:    ArchivalDisabled,
@@ -154,6 +159,17 @@ func NewDisabledArchvialConfig() ArchivalConfig {
 		enableRead:            nil,
 		namespaceDefaultState: enumspb.ARCHIVAL_STATE_DISABLED,
 		namespaceDefaultURI:   "",
+	}
+}
+
+// NewEnabledArchivalConfig returns an ArchivalConfig where archival is enabled for both the cluster and the namespace
+func NewEnabledArchivalConfig() ArchivalConfig {
+	return &archivalConfig{
+		staticClusterState:    ArchivalEnabled,
+		dynamicClusterState:   dynamicconfig.GetStringPropertyFn("enabled"),
+		enableRead:            dynamicconfig.GetBoolPropertyFn(true),
+		namespaceDefaultState: enumspb.ARCHIVAL_STATE_ENABLED,
+		namespaceDefaultURI:   "some-uri",
 	}
 }
 

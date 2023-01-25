@@ -613,6 +613,7 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 
 // TestUpsertWorkflowExecution test
 func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
+	temporalChangeVersionPayload, _ := payload.Encode([]string{"dummy"})
 	tests := []struct {
 		request  *manager.UpsertWorkflowExecutionRequest
 		expected error
@@ -630,7 +631,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 					Memo:             nil,
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							searchattribute.TemporalChangeVersion: payload.EncodeBytes([]byte("dummy")),
+							searchattribute.TemporalChangeVersion: temporalChangeVersionPayload,
 						},
 					},
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -662,6 +663,56 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 
 	for _, test := range tests {
 		s.Equal(test.expected, s.VisibilityMgr.UpsertWorkflowExecution(s.ctx, test.request))
+	}
+}
+
+// TestGetWorkflowExecution test
+func (s *VisibilityPersistenceSuite) TestGetWorkflowExecution() {
+	testNamespaceUUID := namespace.ID(uuid.New())
+	closeTime := time.Now().UTC()
+	startTime := closeTime.Add(-5 * time.Second)
+
+	var startRequests []*manager.RecordWorkflowExecutionStartedRequest
+	for i := 0; i < 5; i++ {
+		startRequests = append(
+			startRequests,
+			s.createOpenWorkflowRecord(
+				testNamespaceUUID,
+				"visibility-workflow-test",
+				"visibility-workflow",
+				startTime,
+				"test-queue",
+			),
+		)
+	}
+	for _, req := range startRequests {
+		resp, err := s.VisibilityMgr.GetWorkflowExecution(
+			s.ctx,
+			&manager.GetWorkflowExecutionRequest{
+				NamespaceID: testNamespaceUUID,
+				RunID:       req.Execution.RunId,
+				StartTime:   &startTime,
+			},
+		)
+		s.NoError(err)
+		s.assertOpenExecutionEquals(req, resp.Execution)
+	}
+
+	var closeRequests []*manager.RecordWorkflowExecutionClosedRequest
+	for _, startReq := range startRequests {
+		closeRequests = append(closeRequests, s.createClosedWorkflowRecord(startReq, closeTime))
+	}
+	for _, req := range closeRequests {
+		resp, err := s.VisibilityMgr.GetWorkflowExecution(
+			s.ctx,
+			&manager.GetWorkflowExecutionRequest{
+				NamespaceID: testNamespaceUUID,
+				RunID:       req.Execution.RunId,
+				CloseTime:   &closeTime,
+			},
+		)
+		s.NoError(err)
+		s.assertClosedExecutionEquals(req, resp.Execution)
 	}
 }
 

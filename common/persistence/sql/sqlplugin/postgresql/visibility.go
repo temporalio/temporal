@@ -290,26 +290,18 @@ func (pdb *db) SelectFromVisibility(
 		return nil, err
 	}
 	for i := range rows {
-		rows[i].StartTime = pdb.converter.FromPostgreSQLDateTime(rows[i].StartTime)
-		rows[i].ExecutionTime = pdb.converter.FromPostgreSQLDateTime(rows[i].ExecutionTime)
-		if rows[i].CloseTime != nil {
-			closeTime := pdb.converter.FromPostgreSQLDateTime(*rows[i].CloseTime)
-			rows[i].CloseTime = &closeTime
-		}
-		// need to trim the run ID, or otherwise the returned value will
-		//  come with lots of trailing spaces, probably due to the CHAR(64) type
-		rows[i].RunID = strings.TrimSpace(rows[i].RunID)
+		pdb.processRowFromDB(&rows[i])
 	}
 	return rows, nil
 }
 
 // GetFromVisibility reads one row from visibility table
-func (mdb *db) GetFromVisibility(
+func (pdb *db) GetFromVisibility(
 	ctx context.Context,
 	filter sqlplugin.VisibilityGetFilter,
 ) (*sqlplugin.VisibilityRow, error) {
 	var row sqlplugin.VisibilityRow
-	err := mdb.conn.GetContext(ctx,
+	err := pdb.conn.GetContext(ctx,
 		&row,
 		templateGetWorkflowExecution,
 		filter.NamespaceID,
@@ -318,5 +310,18 @@ func (mdb *db) GetFromVisibility(
 	if err != nil {
 		return nil, err
 	}
+	pdb.processRowFromDB(&row)
 	return &row, nil
+}
+
+func (pdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) {
+	row.StartTime = pdb.converter.FromPostgreSQLDateTime(row.StartTime)
+	row.ExecutionTime = pdb.converter.FromPostgreSQLDateTime(row.ExecutionTime)
+	if row.CloseTime != nil {
+		closeTime := pdb.converter.FromPostgreSQLDateTime(*row.CloseTime)
+		row.CloseTime = &closeTime
+	}
+	// need to trim the run ID, or otherwise the returned value will
+	//  come with lots of trailing spaces, probably due to the CHAR(64) type
+	row.RunID = strings.TrimSpace(row.RunID)
 }
