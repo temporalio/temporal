@@ -47,10 +47,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
-const (
-	rateLimitedErrorType = "RateLimited"
-)
-
 type (
 	activities struct {
 		activityDeps
@@ -88,7 +84,7 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkf
 		if delay > 1*time.Second {
 			// for a long sleep, ask the workflow to do it in workflow logic
 			return nil, temporal.NewNonRetryableApplicationError(
-				rateLimitedErrorType, rateLimitedErrorType, nil, rateLimitedDetails{delay})
+				rateLimitedErrorType, rateLimitedErrorType, nil, rateLimitedDetails{Delay: delay})
 		}
 		// short sleep can be done in-line
 		time.Sleep(delay)

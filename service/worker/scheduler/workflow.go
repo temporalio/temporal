@@ -73,6 +73,8 @@ const (
 	maxListMatchingTimesCount = 1000
 
 	invalidDuration time.Duration = -1
+
+	rateLimitedErrorType = "RateLimited"
 )
 
 type (
