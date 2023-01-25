@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -57,6 +58,8 @@ type (
 
 	queryHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error)
 
+	messageHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error)
+
 	// TaskPoller is used in integration tests to poll workflow or activity task queues.
 	TaskPoller struct {
 		Engine                       FrontendClient
@@ -68,6 +71,7 @@ type (
 		WorkflowTaskHandler          workflowTaskHandler
 		ActivityTaskHandler          activityTaskHandler
 		QueryHandler                 queryHandler
+		MessageHandler               messageHandler
 		Logger                       log.Logger
 		T                            *testing.T
 	}
@@ -219,7 +223,7 @@ Loop:
 		}
 
 		if dumpHistory {
-			common.PrettyPrintHistory(response.History)
+			common.PrettyPrint(response.History.Events)
 		}
 
 		// handle query task response
@@ -241,7 +245,21 @@ Loop:
 			return true, nil, err
 		}
 
-		var commands []*commandpb.Command
+		// Handle messages.
+		var workerToServerMessages []*protocolpb.Message
+		if p.MessageHandler != nil {
+			workerToServerMessages, err = p.MessageHandler(response)
+			if err != nil {
+				p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
+				_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+					TaskToken: response.TaskToken,
+					Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+					Failure:   newApplicationFailure(err, false, nil),
+					Identity:  p.Identity,
+				})
+				return false, nil, err
+			}
+		}
 
 		// handle normal workflow task / non query task response
 		var lastWorkflowTaskScheduleEvent *historypb.HistoryEvent
@@ -254,7 +272,7 @@ Loop:
 			require.Equal(p.T, workflowTaskAttempt, lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
 		}
 
-		wtCommands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
+		commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
 		if err != nil {
 			p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
@@ -265,15 +283,20 @@ Loop:
 			})
 			return false, nil, err
 		}
+		if len(commands) > 0 {
+			common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
+		}
+		if len(workerToServerMessages) > 0 {
+			common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+		}
 
-		commands = append(commands, wtCommands...)
-		common.PrettyPrintCommands(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
 		if !respondStickyTaskQueue {
 			// non sticky taskqueue
 			newTask, err := p.Engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken:                  response.TaskToken,
 				Identity:                   p.Identity,
 				Commands:                   commands,
+				Messages:                   workerToServerMessages,
 				ReturnNewWorkflowTask:      forceCreateNewWorkflowTask,
 				ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
 				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
@@ -304,8 +327,7 @@ Loop:
 }
 
 // HandlePartialWorkflowTask for workflow task
-func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWorkflowTaskQueueResponse) (
-	*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWorkflowTaskQueueResponse, forceCreateNewWorkflowTask bool) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	if response == nil || len(response.TaskToken) == 0 {
 		p.Logger.Info("Empty Workflow task: Polling again")
 		return nil, nil
@@ -324,9 +346,24 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		return nil, errors.New("history events are empty")
 	}
 
-	var commands []*commandpb.Command
+	// Handle messages.
+	var workerToServerMessages []*protocolpb.Message
+	if p.MessageHandler != nil {
+		var err error
+		workerToServerMessages, err = p.MessageHandler(response)
+		if err != nil {
+			p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
+			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+				TaskToken: response.TaskToken,
+				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+				Failure:   newApplicationFailure(err, false, nil),
+				Identity:  p.Identity,
+			})
+			return nil, err
+		}
+	}
 
-	wtCommands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType,
+	commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType,
 		response.PreviousStartedEventId, response.StartedEventId, response.History)
 	if err != nil {
 		p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
@@ -338,8 +375,12 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		})
 		return nil, err
 	}
-	commands = append(commands, wtCommands...)
-	common.PrettyPrintCommands(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
+	if len(commands) > 0 {
+		common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
+	}
+	if len(workerToServerMessages) > 0 {
+		common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+	}
 
 	// sticky taskqueue
 	newTask, err := p.Engine.RespondWorkflowTaskCompleted(
@@ -348,12 +389,13 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
 			Commands:  commands,
+			Messages:  workerToServerMessages,
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 				WorkerTaskQueue:        p.StickyTaskQueue,
 				ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
 			},
 			ReturnNewWorkflowTask:      true,
-			ForceCreateNewWorkflowTask: true,
+			ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
 		},
 	)
 

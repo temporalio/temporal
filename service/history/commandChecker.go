@@ -33,6 +33,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
@@ -897,4 +898,12 @@ func (v *commandAttrValidator) commandTypes(
 		result[index] = command.GetCommandType().String()
 	}
 	return result
+}
+
+// TODO (alex-update): move to messageValidator.
+func (v *commandAttrValidator) validateMessages(
+	_ []*protocolpb.Message,
+) error {
+
+	return nil
 }

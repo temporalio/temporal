@@ -378,7 +378,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	// second workflow task, completes another local activity and forces flush of buffered activity events
 	newWorkflowTask := task.GetWorkflowTask()
 	s.NotNil(newWorkflowTask)
-	task, err = poller.HandlePartialWorkflowTask(newWorkflowTask)
+	task, err = poller.HandlePartialWorkflowTask(newWorkflowTask, true)
 	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(task)
@@ -386,7 +386,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	// third workflow task, which will close workflow
 	newWorkflowTask = task.GetWorkflowTask()
 	s.NotNil(newWorkflowTask)
-	task, err = poller.HandlePartialWorkflowTask(newWorkflowTask)
+	task, err = poller.HandlePartialWorkflowTask(newWorkflowTask, true)
 	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.Nil(task.WorkflowTask)

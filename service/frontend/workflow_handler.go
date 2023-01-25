@@ -4433,6 +4433,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 		ScheduledTime:              matchingResp.ScheduledTime,
 		StartedTime:                matchingResp.StartedTime,
 		Queries:                    matchingResp.Queries,
+		Messages:                   matchingResp.Messages,
 	}
 
 	return resp, nil

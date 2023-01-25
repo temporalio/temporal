@@ -222,7 +222,7 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 
 func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
-	common.PrettyPrintHistory(&historypb.History{Events: events})
+	common.PrettyPrint(events)
 }
 
 //lint:ignore U1000 used for debugging.

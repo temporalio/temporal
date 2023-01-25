@@ -34,6 +34,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -237,6 +238,31 @@ func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, comma
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
 	}
+}
+
+func (handler *workflowTaskHandlerImpl) handleMessages(
+	ctx context.Context,
+	messages []*protocolpb.Message,
+) error {
+	if err := handler.attrValidator.validateMessages(
+		messages,
+	); err != nil {
+		return err
+	}
+
+	for _, message := range messages {
+		err := handler.handleMessage(ctx, message)
+		if err != nil || handler.stopProcessing {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (handler *workflowTaskHandlerImpl) handleMessage(_ context.Context, _ *protocolpb.Message) error {
+
+	return nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
