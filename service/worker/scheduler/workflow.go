@@ -73,6 +73,8 @@ const (
 	maxListMatchingTimesCount = 1000
 
 	invalidDuration time.Duration = -1
+
+	rateLimitedErrorType = "RateLimited"
 )
 
 type (
@@ -252,7 +254,9 @@ func (s *scheduler) ensureFields() {
 func (s *scheduler) compileSpec() {
 	cspec, err := NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
-		s.logger.Error("Invalid schedule", "error", err)
+		if s.logger != nil {
+			s.logger.Error("Invalid schedule", "error", err)
+		}
 		s.Info.InvalidScheduleError = err.Error()
 		s.cspec = nil
 	} else {
@@ -516,6 +520,8 @@ func (s *scheduler) processSignals() bool {
 }
 
 func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
+	// Note that `s` may be a fake scheduler used to compute list info at creation time.
+
 	if s.cspec == nil {
 		return nil
 	}
@@ -571,6 +577,9 @@ func (s *scheduler) incSeqNo() {
 }
 
 func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
+	// Note that `s` may be a fake scheduler used to compute list info at creation time, before
+	// the first workflow task. This function and anything it calls should not use s.ctx.
+
 	// make shallow copy
 	spec := *s.Schedule.Spec
 	// clear fields that are too large/not useful for the list view
@@ -676,6 +685,7 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 }
 
 // processBuffer should return true if there might be more work to do right now.
+//
 //nolint:revive
 func (s *scheduler) processBuffer() bool {
 	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.State.NeedRefresh)
@@ -810,20 +820,32 @@ func (s *scheduler) startWorkflow(
 		LastCompletionResult: s.State.LastCompletionResult,
 		ContinuedFailure:     s.State.ContinuedFailure,
 	}
-	var res schedspb.StartWorkflowResponse
-	err := workflow.ExecuteLocalActivity(ctx, s.a.StartWorkflow, req).Get(s.ctx, &res)
-	if err != nil {
-		return nil, err
-	}
+	for {
+		var res schedspb.StartWorkflowResponse
+		err := workflow.ExecuteLocalActivity(ctx, s.a.StartWorkflow, req).Get(s.ctx, &res)
 
-	return &schedpb.ScheduleActionResult{
-		ScheduleTime: start.ActualTime,
-		ActualTime:   res.RealStartTime,
-		StartWorkflowResult: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      res.RunId,
-		},
-	}, nil
+		var appErr *temporal.ApplicationError
+		var details rateLimitedDetails
+		if errors.As(err, &appErr) &&
+			appErr.Type() == rateLimitedErrorType &&
+			appErr.Details(&details) == nil {
+			workflow.Sleep(s.ctx, details.Delay)
+			req.CompletedRateLimitSleep = true // only use rate limiter once
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		return &schedpb.ScheduleActionResult{
+			ScheduleTime: start.ActualTime,
+			ActualTime:   res.RealStartTime,
+			StartWorkflowResult: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      res.RunId,
+			},
+		}, nil
+	}
 }
 
 func (s *scheduler) identity() string {
@@ -940,4 +962,15 @@ func panicIfErr(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs) *schedpb.ScheduleListInfo {
+	// note that this does not take into account InitialPatch
+	fakeScheduler := &scheduler{
+		StartScheduleArgs: *args,
+		tweakables:        currentTweakablePolicies,
+	}
+	fakeScheduler.ensureFields()
+	fakeScheduler.compileSpec()
+	return fakeScheduler.getListInfo()
 }

@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-tests update-tools shell-check check proto go-generate gomodtidy ensure-no-changes
+ci-build: bins build-tests ci-update-tools shell-check copyright-check proto go-generate gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -108,13 +108,13 @@ SQL_PASSWORD ?= temporal
 INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/...,$(MODULE_ROOT)/tools/..."
 FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/...,$(MODULE_ROOT)/tools/..."
 ##### Tools #####
-update-checkers:
-	@printf $(COLOR) "Install/update check tools..."
+update-goimports:
+	@printf $(COLOR) "Install/update goimports..."
 	@go install golang.org/x/tools/cmd/goimports@latest
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.32.3
-	@go install github.com/bufbuild/buf/cmd/buf@v1.6.0
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1
 
+update-linters:
+	@printf $(COLOR) "Install/update linters..."
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -125,6 +125,11 @@ update-proto-plugins:
 	@go install -modfile build/go.mod github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
+update-proto-linters:
+	@printf $(COLOR) "Install/update proto linters..."
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.32.3
+	@go install github.com/bufbuild/buf/cmd/buf@v1.6.0
+
 update-tctl:
 	@printf $(COLOR) "Install/update tctl..."
 	@go install github.com/temporalio/tctl/cmd/tctl@latest
@@ -133,7 +138,10 @@ update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
-update-tools: update-checkers update-mockgen update-proto-plugins
+update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters
+
+# update-linters is not included because in CI linters are run by github actions.
+ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters
 
 ##### Proto #####
 $(PROTO_OUT):
@@ -224,8 +232,8 @@ copyright:
 	@go run ./cmd/tools/copyright/licensegen.go
 
 lint:
-	@printf $(COLOR) "Run linter..."
-	@golangci-lint run
+	@printf $(COLOR) "Run linters..."
+	@golangci-lint run --verbose --timeout 10m --fix=false --new-from-rev=HEAD~ --config=.golangci.yml
 
 api-linter:
 	@printf $(COLOR) "Run api-linter..."
@@ -247,7 +255,7 @@ shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
 	@shellcheck $(ALL_SCRIPTS)
 
-check: copyright-check
+check: copyright-check lint shell-check
 
 ##### Tests #####
 clean-test-results:

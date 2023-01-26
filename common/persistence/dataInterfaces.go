@@ -170,6 +170,8 @@ type (
 	}
 
 	// FailoverLevel contains corresponding start / end level
+	// TODO: remove FailoverLevel definition, they are only used by
+	// old queue processing logic
 	FailoverLevel struct {
 		StartTime    time.Time
 		MinLevel     tasks.Key

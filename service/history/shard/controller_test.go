@@ -790,9 +790,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 			shardID := int32(rand.Intn(int(s.config.NumberOfShards))) + 1
 			switch rand.Intn(5) {
 			case 0:
-				if _, err := s.shardController.GetShardByID(shardID); err != nil {
-					return err
-				}
+				_, _ = s.shardController.GetShardByID(shardID)
 			case 1:
 				if shard, err := s.shardController.GetShardByID(shardID); err == nil {
 					_, _ = shard.GetEngine(ctx)

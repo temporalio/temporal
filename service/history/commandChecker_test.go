@@ -119,6 +119,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		DefaultActivityRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
 		DefaultWorkflowRetryPolicy:        dynamicconfig.GetMapPropertyFnWithNamespaceFilter(common.GetDefaultRetryPolicyConfigOptions()),
 		EnableCrossNamespaceCommands:      dynamicconfig.GetBoolPropertyFn(true),
+		DefaultWorkflowTaskTimeout:        dynamicconfig.GetDurationPropertyFnFilteredByNamespace(common.DefaultWorkflowTaskTimeout),
 	}
 	s.validator = newCommandAttrValidator(
 		s.mockNamespaceCache,
@@ -129,6 +130,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
+			"index-name",
 		))
 }
 
@@ -189,17 +191,17 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	namespace := namespace.Name("tests.Namespace")
 	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
-	fc, err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes = &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}
-	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "SearchAttributes is not set on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
-	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "IndexedFields is empty on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
@@ -208,9 +210,43 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"CustomKeywordField": saPayload,
 	}
-	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+}
+
+func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAttributes() {
+	executionTimeout := time.Hour
+	workflowTypeName := "workflowType"
+	taskQueue := "taskQueue"
+
+	attributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+		// workflow type name and task queue name should be retrieved from existing workflow info
+
+		// WorkflowRunTimeout should be shorten to execution timeout
+		WorkflowRunTimeout: timestamp.DurationPtr(executionTimeout * 2),
+		// WorkflowTaskTimeout should be shorten to max workflow task timeout
+		WorkflowTaskTimeout: timestamp.DurationPtr(common.MaxWorkflowTaskStartToCloseTimeout * 2),
+	}
+
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		WorkflowTypeName:         workflowTypeName,
+		TaskQueue:                taskQueue,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(executionTimeout),
+	}
+
+	fc, err := s.validator.validateContinueAsNewWorkflowExecutionAttributes(
+		tests.Namespace,
+		attributes,
+		executionInfo,
+	)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+
+	s.Equal(workflowTypeName, attributes.GetWorkflowType().GetName())
+	s.Equal(taskQueue, attributes.GetTaskQueue().GetName())
+	s.Equal(executionTimeout, *attributes.GetWorkflowRunTimeout())
+	s.Equal(common.MaxWorkflowTaskStartToCloseTimeout, *attributes.GetWorkflowTaskTimeout())
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {

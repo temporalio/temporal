@@ -229,6 +229,7 @@ func NewEngineWithShardContext(
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
+		config.DefaultVisibilityIndexName,
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
@@ -301,7 +302,7 @@ func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 
 	e.shard.GetNamespaceRegistry().RegisterStateChangeCallback(e, func(ns *namespace.Namespace, deletedFromDb bool) {
 		if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-			e.shard.UpdateHandoverNamespaces(ns, deletedFromDb)
+			e.shard.UpdateHandoverNamespace(ns, deletedFromDb)
 		}
 
 		if deletedFromDb {

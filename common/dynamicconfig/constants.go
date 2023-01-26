@@ -546,8 +546,8 @@ const (
 	ShardUpdateMinInterval = "history.shardUpdateMinInterval"
 	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
 	ShardSyncMinInterval = "history.shardSyncMinInterval"
-	// EmitShardDiffLog whether emit the shard diff log
-	EmitShardDiffLog = "history.emitShardDiffLog"
+	// EmitShardLagLog whether emit the shard lag log
+	EmitShardLagLog = "history.emitShardLagLog"
 	// DefaultEventEncoding is the encoding type for history events
 	DefaultEventEncoding = "history.defaultEventEncoding"
 	// NumArchiveSystemWorkflows is key for number of archive system workflows running in total
@@ -720,4 +720,6 @@ const (
 	// WorkerStickyCacheSize controls the sticky cache size for SDK workers on worker nodes
 	// (shared between all workers in the process, cannot be changed after startup)
 	WorkerStickyCacheSize = "worker.stickyCacheSize"
+	// SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules
+	SchedulerNamespaceStartWorkflowRPS = "worker.schedulerNamespaceStartWorkflowRPS"
 )

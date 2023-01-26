@@ -43,6 +43,7 @@ type (
 		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
+		indexName                         string
 	}
 )
 
@@ -53,6 +54,7 @@ func NewValidator(
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	indexName string,
 ) *Validator {
 	return &Validator{
 		searchAttributesProvider:          searchAttributesProvider,
@@ -60,12 +62,13 @@ func NewValidator(
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
+		indexName:                         indexName,
 	}
 }
 
 // Validate search attributes are valid for writing.
 // The search attributes must be unaliased before calling validation.
-func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string, indexName string) error {
+func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string) error {
 	if searchAttributes == nil {
 		return nil
 	}
@@ -81,7 +84,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		)
 	}
 
-	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(indexName, false)
+	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(v.indexName, false)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(
 			fmt.Sprintf("unable to get search attributes from cluster metadata: %v", err),

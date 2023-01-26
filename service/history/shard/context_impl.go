@@ -35,7 +35,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/multierr"
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -173,10 +172,10 @@ var (
 )
 
 const (
-	logWarnImmediateTaskLevelDiff = 3000000 // 3 million
-	logWarnScheduledTaskLevelDiff = time.Duration(30 * time.Minute)
-	historySizeLogThreshold       = 10 * 1024 * 1024
-	minContextTimeout             = 2 * time.Second
+	logWarnImmediateTaskLag = 3000000 // 3 million
+	logWarnScheduledTaskLag = time.Duration(30 * time.Minute)
+	historySizeLogThreshold = 10 * 1024 * 1024
+	minContextTimeout       = 2 * time.Second
 )
 
 func (s *ContextImpl) String() string {
@@ -578,11 +577,17 @@ func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVe
 	return nil
 }
 
-func (s *ContextImpl) UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool) {
+func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool) {
 	nsName := ns.Name()
+	// NOTE: replication state field won't be replicated and currently we only update a namespace
+	// to handover state from active cluster, so the second condition will always be true. Adding
+	// it here to be more safe in case above assumption no longer holds in the future.
+	isHandoverNamespace := ns.IsGlobalNamespace() &&
+		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
+		ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER
 
 	s.wLock()
-	if deletedFromDb {
+	if deletedFromDb || !isHandoverNamespace {
 		delete(s.handoverNamespaces, ns.Name())
 		s.wUnlock()
 		return
@@ -595,23 +600,15 @@ func (s *ContextImpl) UpdateHandoverNamespaces(ns *namespace.Namespace, deletedF
 		maxReplicationTaskID = pendingMaxReplicationTaskID
 	}
 
-	// NOTE: replication state field won't be replicated and currently we only update a namespace
-	// to handover state from active cluster, so the second condition will always be true. Adding
-	// it here to be more safe in case above assumption no longer holds in the future.
-	if ns.IsGlobalNamespace() &&
-		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
-		ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
-
-		if handover, ok := s.handoverNamespaces[nsName]; ok {
-			if handover.NotificationVersion < ns.NotificationVersion() {
-				handover.NotificationVersion = ns.NotificationVersion()
-				handover.MaxReplicationTaskID = maxReplicationTaskID
-			}
-		} else {
-			s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
-				NotificationVersion:  ns.NotificationVersion(),
-				MaxReplicationTaskID: maxReplicationTaskID,
-			}
+	if handover, ok := s.handoverNamespaces[nsName]; ok {
+		if handover.NotificationVersion < ns.NotificationVersion() {
+			handover.NotificationVersion = ns.NotificationVersion()
+			handover.MaxReplicationTaskID = maxReplicationTaskID
+		}
+	} else {
+		s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
+			NotificationVersion:  ns.NotificationVersion(),
+			MaxReplicationTaskID: maxReplicationTaskID,
 		}
 	}
 
@@ -1279,58 +1276,40 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	return nil
 }
 
-// TODO: Instead of having separate metric definition for each task category, we should
-// use one metrics (or two, one for immedidate task, one for scheduled task),
-// and add tags indicating the task category.
 func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
-	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
-	clusterInfo := s.GetClusterMetadata().GetAllClusterInfo()
+	handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	logWarnLagExceeded := false
 
-	minTransferLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTransfer, currentCluster) // s.shardInfo.ClusterTransferAckLevel[currentCluster]
-	maxTransferLevel := minTransferLevel
-	minTimerLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTimer, currentCluster)
-	maxTimerLevel := minTimerLevel
-	for clusterName, info := range clusterInfo {
-		if !info.Enabled {
+	for categoryID := range s.shardInfo.QueueAckLevels {
+		category, ok := tasks.GetCategoryByID(categoryID)
+		if !ok {
 			continue
 		}
 
-		clusterTransferLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTransfer, clusterName)
-		if clusterTransferLevel.CompareTo(minTransferLevel) < 0 {
-			minTransferLevel = clusterTransferLevel
-		}
-		if clusterTransferLevel.CompareTo(maxTransferLevel) > 0 {
-			maxTransferLevel = clusterTransferLevel
-		}
-
-		clusterTimerLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTimer, clusterName)
-		if clusterTimerLevel.CompareTo(minTimerLevel) < 0 {
-			minTimerLevel = clusterTimerLevel
-		}
-		if clusterTimerLevel.CompareTo(maxTimerLevel) > 0 {
-			maxTimerLevel = clusterTimerLevel
+		switch category.Type() {
+		case tasks.CategoryTypeImmediate:
+			lag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(category).TaskID - 1
+			if lag > logWarnImmediateTaskLag {
+				logWarnLagExceeded = true
+			}
+			handler.Histogram(
+				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricName(),
+				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricUnit(),
+			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+		case tasks.CategoryTypeScheduled:
+			lag := s.scheduledTaskMaxReadLevel.Sub(s.getQueueAckLevelLocked(category).FireTime)
+			if lag > logWarnScheduledTaskLag {
+				logWarnLagExceeded = true
+			}
+			handler.Timer(
+				metrics.ShardInfoScheduledQueueLagTimer.GetMetricName(),
+			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+		default:
+			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
 		}
 	}
 
-	diffTransferLevel := maxTransferLevel.TaskID - minTransferLevel.TaskID
-	diffTimerLevel := maxTimerLevel.FireTime.Sub(minTimerLevel.FireTime)
-
-	replicationLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryReplication).TaskID - 1
-	transferLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryTransfer).TaskID - 1
-	timerLag := s.timeSource.Now().Sub(s.getQueueAckLevelLocked(tasks.CategoryTimer).FireTime)
-	visibilityLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryVisibility).TaskID - 1
-
-	transferFailoverInProgress := len(s.shardInfo.FailoverLevels[tasks.CategoryTransfer])
-	timerFailoverInProgress := len(s.shardInfo.FailoverLevels[tasks.CategoryTimer])
-
-	if s.config.EmitShardDiffLog() &&
-		(logWarnImmediateTaskLevelDiff < diffTransferLevel ||
-			logWarnScheduledTaskLevelDiff < diffTimerLevel ||
-			logWarnImmediateTaskLevelDiff < transferLag ||
-			logWarnScheduledTaskLevelDiff < timerLag ||
-			logWarnImmediateTaskLevelDiff < visibilityLag ||
-			logWarnImmediateTaskLevelDiff < replicationLag) {
-
+	if logWarnLagExceeded && s.config.EmitShardLagLog() {
 		ackLevelTags := make([]tag.Tag, 0, len(s.shardInfo.QueueAckLevels))
 		for categoryID, ackLevel := range s.shardInfo.QueueAckLevels {
 			category, ok := tasks.GetCategoryByID(categoryID)
@@ -1339,22 +1318,20 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 			}
 			ackLevelTags = append(ackLevelTags, tag.ShardQueueAcks(category.Name(), ackLevel))
 		}
-		s.contextTaggedLogger.Warn("Shard ack levels diff exceeds warn threshold.", ackLevelTags...)
+		s.contextTaggedLogger.Warn("Shard ack levels lag exceeds warn threshold.", ackLevelTags...)
 	}
 
-	handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	handler.Histogram(metrics.ShardInfoTransferDiffHistogram.GetMetricName(), metrics.ShardInfoTransferDiffHistogram.GetMetricUnit()).Record(diffTransferLevel)
-	handler.Timer(metrics.ShardInfoTimerDiffTimer.GetMetricName()).Record(diffTimerLevel)
+	// Following metrics are double-emitted for backward compatibility so that old dashboard/alert won't break
+	// TODO: remove in 1.21 release
+	replicationLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryReplication).TaskID - 1
+	transferLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryTransfer).TaskID - 1
+	visibilityLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryVisibility).TaskID - 1
+	timerLag := s.timeSource.Now().Sub(s.getQueueAckLevelLocked(tasks.CategoryTimer).FireTime)
 
 	handler.Histogram(metrics.ShardInfoReplicationLagHistogram.GetMetricName(), metrics.ShardInfoReplicationLagHistogram.GetMetricUnit()).Record(replicationLag)
 	handler.Histogram(metrics.ShardInfoTransferLagHistogram.GetMetricName(), metrics.ShardInfoTransferLagHistogram.GetMetricUnit()).Record(transferLag)
 	handler.Histogram(metrics.ShardInfoVisibilityLagHistogram.GetMetricName(), metrics.ShardInfoVisibilityLagHistogram.GetMetricUnit()).Record(visibilityLag)
 	handler.Timer(metrics.ShardInfoTimerLagTimer.GetMetricName()).Record(timerLag)
-
-	handler.Histogram(metrics.ShardInfoTransferFailoverInProgressHistogram.GetMetricName(), metrics.ShardInfoTransferFailoverInProgressHistogram.GetMetricUnit()).
-		Record(int64(transferFailoverInProgress))
-	handler.Histogram(metrics.ShardInfoTimerFailoverInProgressHistogram.GetMetricName(), metrics.ShardInfoTimerFailoverInProgressHistogram.GetMetricUnit()).
-		Record(int64(timerFailoverInProgress))
 }
 
 func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
@@ -1446,7 +1423,8 @@ func (s *ContextImpl) handleReadError(err error) error {
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		return multierr.Combine(err, s.transition(contextRequestStop{}))
+		_ = s.transition(contextRequestStop{})
+		return err
 
 	default:
 		return err
@@ -1480,7 +1458,8 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		return multierr.Combine(err, s.transition(contextRequestStop{}))
+		_ = s.transition(contextRequestStop{})
+		return err
 
 	default:
 		// We have no idea if the write failed or will eventually make it to persistence. Try to re-acquire
@@ -1489,7 +1468,8 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 		// reliably check the outcome by performing a read. If we fail, we'll shut down the shard.
 		// Note that reacquiring the shard will cause the max read level to be updated
 		// to the new range (i.e. past newMaxReadLevel).
-		return multierr.Combine(err, s.transition(contextRequestLost{}))
+		_ = s.transition(contextRequestLost{})
+		return err
 	}
 }
 
@@ -1512,24 +1492,18 @@ func (s *ContextImpl) createEngine() Engine {
 
 // start should only be called by the controller.
 func (s *ContextImpl) start() {
-	if err := s.transition(contextRequestAcquire{}); err != nil {
-		s.contextTaggedLogger.Error("Failed to start shard", tag.Error(err))
-	}
+	_ = s.transition(contextRequestAcquire{})
 }
 
 func (s *ContextImpl) Unload() {
-	if err := s.transition(contextRequestStop{}); err != nil {
-		s.contextTaggedLogger.Error("Failed to unload shard", tag.Error(err))
-	}
+	_ = s.transition(contextRequestStop{})
 }
 
 // finishStop should only be called by the controller.
 func (s *ContextImpl) finishStop() {
 	// After this returns, engineFuture.Set may not be called anymore, so if we don't get see
 	// an Engine here, we won't ever have one.
-	if err := s.transition(contextRequestFinishStop{}); err != nil {
-		s.contextTaggedLogger.Error("Failed to stop shard", tag.Error(err))
-	}
+	_ = s.transition(contextRequestFinishStop{})
 
 	// use a context that we know is cancelled so that this doesn't block
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
@@ -2034,9 +2008,7 @@ func (s *ContextImpl) acquireShard() {
 
 		// On any error, initiate shutting down the shard. If we already changed state
 		// because we got a ShardOwnershipLostError, this won't do anything.
-		if err := s.transition(contextRequestStop{}); err != nil {
-			s.contextTaggedLogger.Error("Error stopping shard", tag.Error(err))
-		}
+		_ = s.transition(contextRequestStop{})
 	}
 }
 

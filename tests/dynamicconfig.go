@@ -81,6 +81,12 @@ func (d *dcClient) OverrideValue(name dynamicconfig.Key, value any) {
 	d.overrides[name] = value
 }
 
+func (d *dcClient) RemoveOverride(name dynamicconfig.Key) {
+	d.Lock()
+	defer d.Unlock()
+	delete(d.overrides, name)
+}
+
 // newTestDCClient - returns a dynamic config client for integration testing
 func newTestDCClient(fallback dynamicconfig.Client) *dcClient {
 	return &dcClient{
