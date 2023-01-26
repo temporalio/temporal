@@ -458,7 +458,8 @@ func (w *perNamespaceWorker) startWorker(
 	// this should not block because the client already has server capabilities
 	worker := w.wm.sdkClientFactory.NewWorker(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	details := workercommon.RegistrationDetails{
-		WorkerFactor: float64(multiplicity) / float64(totalWorkers),
+		TotalWorkers: totalWorkers,
+		Multiplicity: multiplicity,
 	}
 	for _, cmp := range components {
 		cmp.Register(worker, ns, details)

@@ -65,10 +65,12 @@ type (
 	}
 
 	RegistrationDetails struct {
-		// WorkerFactor is the proportion of workers for this namespace that this worker
-		// represents. E.g. if it's the only worker for this namespace, it'll be 1; if it's
-		// one of two, it'll be 1/2; if three workers were requested and two landed on this
-		// node, it'll be 2/3.
-		WorkerFactor float64
+		// TotalWorkers is the number of requested per-namespace workers for this namespace.
+		TotalWorkers int
+		// Multiplicity is the number of those workers that this particular sdkworker.Worker
+		// represents. It may be more than one if the requested number is more than the total
+		// number of worker nodes or if consistent hashing decided to place more than one on
+		// the same node.
+		Multiplicity int
 	}
 )

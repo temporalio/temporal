@@ -93,12 +93,12 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(worker sdkworker.Worker, ns *namespace.Namespace, details workercommon.RegistrationDetails) {
 	worker.RegisterWorkflowWithOptions(SchedulerWorkflow, workflow.RegisterOptions{Name: WorkflowType})
-	worker.RegisterActivity(s.activities(ns.Name(), ns.ID(), details.WorkerFactor))
+	worker.RegisterActivity(s.activities(ns.Name(), ns.ID(), details))
 }
 
-func (s *workerComponent) activities(name namespace.Name, id namespace.ID, workerFactor float64) *activities {
+func (s *workerComponent) activities(name namespace.Name, id namespace.ID, details workercommon.RegistrationDetails) *activities {
 	localRPS := func() float64 {
-		return s.globalNSStartWorkflowRPS(name.String()) * workerFactor
+		return float64(details.Multiplicity) * s.globalNSStartWorkflowRPS(name.String()) / float64(details.TotalWorkers)
 	}
 	return &activities{
 		activityDeps:             s.activityDeps,
