@@ -161,6 +161,9 @@ func RetryContext(
 			t.Stop()
 		}
 	}
+	if err != nil {
+		return err
+	}
 	return ctx.Err()
 }
 
@@ -214,7 +217,9 @@ func ThrottleRetryContext(
 			timer.Stop()
 		}
 	}
-
+	if err != nil {
+		return err
+	}
 	return ctx.Err()
 }
 
