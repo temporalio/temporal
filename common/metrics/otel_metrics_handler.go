@@ -79,13 +79,19 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 
 // Gauge obtains a gauge for the given name and MetricOptions.
 func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
-	c, err := omp.provider.GetMeter().SyncFloat64().UpDownCounter(gauge)
+	c, err := omp.provider.GetMeter().AsyncFloat64().Gauge(gauge)
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 	}
 
 	return GaugeFunc(func(i float64, t ...Tag) {
-		c.Add(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		err = omp.provider.GetMeter().RegisterCallback([]instrument.Asynchronous{c}, func(ctx context.Context) {
+			c.Observe(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		})
+		if err != nil {
+			omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+		}
+		//c.Observe(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 	})
 }
 

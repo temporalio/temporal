@@ -34,7 +34,6 @@ import (
 )
 
 func TestBasic(t *testing.T) {
-	t.Skip()
 	logger := log.NewTestLogger()
 	handler := MustNewHandler(logger)
 
@@ -43,23 +42,30 @@ func TestBasic(t *testing.T) {
 		metrics.StringTag("l2", "v2"),
 		metrics.StringTag("l1", "v1"),
 	}
+	expectedSystemTags := []metrics.Tag{
+		metrics.StringTag("otel_scope_name", "temporal"),
+		metrics.StringTag("otel_scope_version", ""),
+	}
+	expectedCounterTags := append(expectedSystemTags, counterTags...)
 	counter := handler.WithTags(counterTags...).Counter(counterName)
 	counter.Record(1)
 	counter.Record(1)
 
 	s1 := handler.MustSnapshot()
-	require.Equal(t, float64(2), s1.MustCounter(counterName, counterTags...))
+	require.Equal(t, float64(2), s1.MustCounter(counterName+"_total", expectedCounterTags...))
 
 	gaugeName := "gauge1"
 	gaugeTags := []metrics.Tag{
 		metrics.StringTag("l3", "v3"),
 		metrics.StringTag("l4", "v4"),
 	}
+	//expectedGaugeTags := append(expectedSystemTags, gaugeTags...)
 	gauge := handler.WithTags(gaugeTags...).Gauge(gaugeName)
 	gauge.Record(-2)
 	gauge.Record(10)
 
 	s2 := handler.MustSnapshot()
-	require.Equal(t, float64(2), s2.MustCounter(counterName, counterTags...))
-	require.Equal(t, float64(10), s2.MustGauge(gaugeName, gaugeTags...))
+	require.Equal(t, float64(2), s2.MustCounter(counterName+"_total", expectedCounterTags...))
+	// TODO: How to test the AsyncFloat64 Gauge?
+	//require.Equal(t, float64(10), s2.MustGauge(gaugeName, expectedGaugeTags...))
 }

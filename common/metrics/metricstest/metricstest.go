@@ -30,9 +30,11 @@ import (
 	"net/http/httptest"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
-	"go.opentelemetry.io/otel/exporters/prometheus"
+	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"golang.org/x/exp/maps"
@@ -44,7 +46,8 @@ import (
 type (
 	Handler struct {
 		metrics.Handler
-		exporter *prometheus.Exporter
+		exporter *exporters.Exporter
+		reg      *prometheus.Registry
 	}
 
 	sample struct {
@@ -67,7 +70,8 @@ func MustNewHandler(logger log.Logger) *Handler {
 }
 
 func NewHandler(logger log.Logger) (*Handler, error) {
-	exporter, err := prometheus.New()
+	registry := prometheus.NewRegistry()
+	exporter, err := exporters.New(exporters.WithRegisterer(registry))
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +83,7 @@ func NewHandler(logger log.Logger) (*Handler, error) {
 	metricsHandler := &Handler{
 		Handler:  otelHandler,
 		exporter: exporter,
+		reg:      registry,
 	}
 
 	return metricsHandler, nil
@@ -90,6 +95,7 @@ func (h *Handler) Snapshot() (Snapshot, error) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/metrics", nil)
 	handler := http.NewServeMux()
+	handler.HandleFunc("/metrics", promhttp.HandlerFor(h.reg, promhttp.HandlerOpts{Registry: h.reg}).ServeHTTP)
 	handler.ServeHTTP(rec, req)
 
 	var tp expfmt.TextParser
