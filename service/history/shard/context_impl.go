@@ -172,10 +172,10 @@ var (
 )
 
 const (
-	logWarnImmediateTaskLevelDiff = 3000000 // 3 million
-	logWarnScheduledTaskLevelDiff = time.Duration(30 * time.Minute)
-	historySizeLogThreshold       = 10 * 1024 * 1024
-	minContextTimeout             = 2 * time.Second
+	logWarnImmediateTaskLag = 3000000 // 3 million
+	logWarnScheduledTaskLag = time.Duration(30 * time.Minute)
+	historySizeLogThreshold = 10 * 1024 * 1024
+	minContextTimeout       = 2 * time.Second
 )
 
 func (s *ContextImpl) String() string {
@@ -1276,58 +1276,40 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	return nil
 }
 
-// TODO: Instead of having separate metric definition for each task category, we should
-// use one metrics (or two, one for immedidate task, one for scheduled task),
-// and add tags indicating the task category.
 func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
-	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
-	clusterInfo := s.GetClusterMetadata().GetAllClusterInfo()
+	handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	logWarnLagExceeded := false
 
-	minTransferLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTransfer, currentCluster) // s.shardInfo.ClusterTransferAckLevel[currentCluster]
-	maxTransferLevel := minTransferLevel
-	minTimerLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTimer, currentCluster)
-	maxTimerLevel := minTimerLevel
-	for clusterName, info := range clusterInfo {
-		if !info.Enabled {
+	for categoryID := range s.shardInfo.QueueAckLevels {
+		category, ok := tasks.GetCategoryByID(categoryID)
+		if !ok {
 			continue
 		}
 
-		clusterTransferLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTransfer, clusterName)
-		if clusterTransferLevel.CompareTo(minTransferLevel) < 0 {
-			minTransferLevel = clusterTransferLevel
-		}
-		if clusterTransferLevel.CompareTo(maxTransferLevel) > 0 {
-			maxTransferLevel = clusterTransferLevel
-		}
-
-		clusterTimerLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTimer, clusterName)
-		if clusterTimerLevel.CompareTo(minTimerLevel) < 0 {
-			minTimerLevel = clusterTimerLevel
-		}
-		if clusterTimerLevel.CompareTo(maxTimerLevel) > 0 {
-			maxTimerLevel = clusterTimerLevel
+		switch category.Type() {
+		case tasks.CategoryTypeImmediate:
+			lag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(category).TaskID - 1
+			if lag > logWarnImmediateTaskLag {
+				logWarnLagExceeded = true
+			}
+			handler.Histogram(
+				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricName(),
+				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricUnit(),
+			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+		case tasks.CategoryTypeScheduled:
+			lag := s.scheduledTaskMaxReadLevel.Sub(s.getQueueAckLevelLocked(category).FireTime)
+			if lag > logWarnScheduledTaskLag {
+				logWarnLagExceeded = true
+			}
+			handler.Timer(
+				metrics.ShardInfoScheduledQueueLagTimer.GetMetricName(),
+			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+		default:
+			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
 		}
 	}
 
-	diffTransferLevel := maxTransferLevel.TaskID - minTransferLevel.TaskID
-	diffTimerLevel := maxTimerLevel.FireTime.Sub(minTimerLevel.FireTime)
-
-	replicationLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryReplication).TaskID - 1
-	transferLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryTransfer).TaskID - 1
-	timerLag := s.timeSource.Now().Sub(s.getQueueAckLevelLocked(tasks.CategoryTimer).FireTime)
-	visibilityLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryVisibility).TaskID - 1
-
-	transferFailoverInProgress := len(s.shardInfo.FailoverLevels[tasks.CategoryTransfer])
-	timerFailoverInProgress := len(s.shardInfo.FailoverLevels[tasks.CategoryTimer])
-
-	if s.config.EmitShardDiffLog() &&
-		(logWarnImmediateTaskLevelDiff < diffTransferLevel ||
-			logWarnScheduledTaskLevelDiff < diffTimerLevel ||
-			logWarnImmediateTaskLevelDiff < transferLag ||
-			logWarnScheduledTaskLevelDiff < timerLag ||
-			logWarnImmediateTaskLevelDiff < visibilityLag ||
-			logWarnImmediateTaskLevelDiff < replicationLag) {
-
+	if logWarnLagExceeded && s.config.EmitShardLagLog() {
 		ackLevelTags := make([]tag.Tag, 0, len(s.shardInfo.QueueAckLevels))
 		for categoryID, ackLevel := range s.shardInfo.QueueAckLevels {
 			category, ok := tasks.GetCategoryByID(categoryID)
@@ -1336,22 +1318,20 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 			}
 			ackLevelTags = append(ackLevelTags, tag.ShardQueueAcks(category.Name(), ackLevel))
 		}
-		s.contextTaggedLogger.Warn("Shard ack levels diff exceeds warn threshold.", ackLevelTags...)
+		s.contextTaggedLogger.Warn("Shard ack levels lag exceeds warn threshold.", ackLevelTags...)
 	}
 
-	handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	handler.Histogram(metrics.ShardInfoTransferDiffHistogram.GetMetricName(), metrics.ShardInfoTransferDiffHistogram.GetMetricUnit()).Record(diffTransferLevel)
-	handler.Timer(metrics.ShardInfoTimerDiffTimer.GetMetricName()).Record(diffTimerLevel)
+	// Following metrics are double-emitted for backward compatibility so that old dashboard/alert won't break
+	// TODO: remove in 1.21 release
+	replicationLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryReplication).TaskID - 1
+	transferLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryTransfer).TaskID - 1
+	visibilityLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryVisibility).TaskID - 1
+	timerLag := s.timeSource.Now().Sub(s.getQueueAckLevelLocked(tasks.CategoryTimer).FireTime)
 
 	handler.Histogram(metrics.ShardInfoReplicationLagHistogram.GetMetricName(), metrics.ShardInfoReplicationLagHistogram.GetMetricUnit()).Record(replicationLag)
 	handler.Histogram(metrics.ShardInfoTransferLagHistogram.GetMetricName(), metrics.ShardInfoTransferLagHistogram.GetMetricUnit()).Record(transferLag)
 	handler.Histogram(metrics.ShardInfoVisibilityLagHistogram.GetMetricName(), metrics.ShardInfoVisibilityLagHistogram.GetMetricUnit()).Record(visibilityLag)
 	handler.Timer(metrics.ShardInfoTimerLagTimer.GetMetricName()).Record(timerLag)
-
-	handler.Histogram(metrics.ShardInfoTransferFailoverInProgressHistogram.GetMetricName(), metrics.ShardInfoTransferFailoverInProgressHistogram.GetMetricUnit()).
-		Record(int64(transferFailoverInProgress))
-	handler.Histogram(metrics.ShardInfoTimerFailoverInProgressHistogram.GetMetricName(), metrics.ShardInfoTimerFailoverInProgressHistogram.GetMetricUnit()).
-		Record(int64(timerFailoverInProgress))
 }
 
 func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
