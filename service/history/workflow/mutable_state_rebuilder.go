@@ -637,13 +637,16 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				return nil, err
 			}
 
-		case enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED,
-			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
+			// TODO (alex-update): Async workflow update will require update to be restored in registry from Accepted event.
+			// Completed event will remove it from registry and notify update result pollers.
 			return nil, serviceerror.NewUnimplemented("Workflow Update rebuild not implemented")
 
 		case enumspb.EVENT_TYPE_ACTIVITY_PROPERTIES_MODIFIED_EXTERNALLY,
 			enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY:
-			return nil, serviceerror.NewUnimplemented("Workflow/activity property motification not implemented")
+			return nil, serviceerror.NewUnimplemented("Workflow/activity property modification not implemented")
 
 		default:
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))

@@ -573,12 +573,12 @@ func (c *clientImpl) UpdateWorkerBuildIdOrdering(
 	return c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateWorkflow(
+func (c *clientImpl) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkflowRequest,
+	request *workflowservice.UpdateWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateWorkflowResponse, error) {
+) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UpdateWorkflow(ctx, request, opts...)
+	return c.client.UpdateWorkflowExecution(ctx, request, opts...)
 }

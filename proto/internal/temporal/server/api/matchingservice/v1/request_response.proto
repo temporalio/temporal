@@ -32,6 +32,7 @@ import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
+import "temporal/api/protocol/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
@@ -65,6 +66,7 @@ message PollWorkflowTaskQueueResponse {
     google.protobuf.Timestamp scheduled_time = 15 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp started_time = 16 [(gogoproto.stdtime) = true];
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 17;
+    repeated temporal.api.protocol.v1.Message messages = 18;
 }
 
 message PollActivityTaskQueueRequest {

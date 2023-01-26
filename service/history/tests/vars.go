@@ -184,5 +184,6 @@ func NewDynamicConfig() *configs.Config {
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	config.EnableActivityEagerExecution = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
+	config.DurableArchivalEnabled = dynamicconfig.GetBoolPropertyFn(true)
 	return config
 }
