@@ -112,10 +112,10 @@ func (s *engine3Suite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
+		&persistencespb.ShardInfo{
 			ShardId: 1,
 			RangeId: 1,
-		}},
+		},
 		s.config,
 	)
 	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()

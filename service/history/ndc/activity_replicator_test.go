@@ -104,11 +104,10 @@ func (s *activityReplicatorSuite) SetupTest() {
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 1,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 1,
+			RangeId: 1,
+		},
 		tests.NewDynamicConfig(),
 	)
 	s.workflowCache = wcache.NewCache(s.mockShard).(*wcache.CacheImpl)

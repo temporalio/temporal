@@ -1412,8 +1412,6 @@ var (
 	ShardInfoVisibilityLagHistogram                   = NewDimensionlessHistogramDef("shardinfo_visibility_lag")
 	ShardInfoImmediateQueueLagHistogram               = NewDimensionlessHistogramDef("shardinfo_immediate_queue_lag")
 	ShardInfoScheduledQueueLagTimer                   = NewTimerDef("shardinfo_scheduled_queue_lag")
-	ShardInfoTransferFailoverLatencyTimer             = NewTimerDef("shardinfo_transfer_failover_latency")
-	ShardInfoTimerFailoverLatencyTimer                = NewTimerDef("shardinfo_timer_failover_latency")
 	SyncShardFromRemoteCounter                        = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure                        = NewCounterDef("syncshard_remote_failed")
 	TaskRequests                                      = NewCounterDef("task_requests")

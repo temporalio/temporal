@@ -135,11 +135,10 @@ func (s *engine2Suite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 1,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 1,
+			RangeId: 1,
+		},
 		s.config,
 	)
 	s.mockShard = mockShard
