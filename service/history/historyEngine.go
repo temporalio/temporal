@@ -643,7 +643,11 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		}
 
 		if len(tasksByCategory) > 0 {
-			e.queueProcessors[category].NotifyNewTasks(tasksByCategory)
+			processor, ok := e.queueProcessors[category]
+			if !ok {
+				continue
+			}
+			processor.NotifyNewTasks(tasksByCategory)
 		}
 	}
 }

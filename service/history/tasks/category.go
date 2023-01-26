@@ -25,7 +25,6 @@
 package tasks
 
 import (
-	"fmt"
 	"strconv"
 	"sync"
 
@@ -115,7 +114,7 @@ var (
 
 // NewCategory creates a new Category and register the created Category
 // Registered Categories can be retrieved via GetCategories() or GetCategoryByID()
-// NewCategory panics when a Category with the same ID has already been registered
+// NewCategory does nothing if a Category with the same ID is already registered
 func NewCategory(
 	id int32,
 	categoryType CategoryType,
@@ -125,7 +124,7 @@ func NewCategory(
 	defer categories.Unlock()
 
 	if category, ok := categories.m[id]; ok {
-		panic(fmt.Sprintf("category id: %v has already been defined as type %v and name %v", id, category.cType, category.name))
+		return category
 	}
 
 	newCategory := Category{

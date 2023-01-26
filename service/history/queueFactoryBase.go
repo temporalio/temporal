@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -137,6 +138,8 @@ func getQueueFactories(
 		queueFactorySet.VisibilityQueueFactory,
 	}
 	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled || archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
+		c := tasks.CategoryArchival
+		tasks.NewCategory(c.ID(), c.Type(), c.Name())
 		factories = append(factories, queueFactorySet.ArchivalQueueFactory)
 	}
 	return factories
