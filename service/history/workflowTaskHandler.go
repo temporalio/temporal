@@ -784,7 +784,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 				namespaceName,
 				attr,
 				handler.mutableState.GetExecutionInfo(),
-				handler.config.DefaultVisibilityIndexName,
 			)
 		},
 	); err != nil || handler.stopProcessing {
@@ -899,7 +898,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 				attr,
 				handler.mutableState.GetExecutionInfo(),
 				handler.config.DefaultWorkflowTaskTimeout,
-				handler.config.DefaultVisibilityIndexName,
 			)
 		},
 	); err != nil || handler.stopProcessing {
@@ -1038,11 +1036,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	// valid search attributes for upsert
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateUpsertWorkflowSearchAttributes(
-				namespace,
-				attr,
-				handler.config.DefaultVisibilityIndexName,
-			)
+			return handler.attrValidator.validateUpsertWorkflowSearchAttributes(namespace, attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return err
