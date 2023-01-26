@@ -54,7 +54,7 @@ func Invoke(
 	namespaceID := namespaceEntry.ID()
 
 	request := startRequest.StartRequest
-	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, shard, shard.GetMetricsClient())
+	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, shard, shard.GetMetricsHandler())
 	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shard, namespaceEntry, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err
@@ -125,10 +125,11 @@ func Invoke(
 	prevLastWriteVersion = t.LastWriteVersion
 	if workflowContext.GetMutableState().GetCurrentVersion() < prevLastWriteVersion {
 		clusterMetadata := shard.GetClusterMetadata()
+		clusterName := clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion)
 		return nil, serviceerror.NewNamespaceNotActive(
 			request.GetNamespace(),
 			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
+			clusterName,
 		)
 	}
 

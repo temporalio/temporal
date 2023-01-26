@@ -25,8 +25,6 @@
 package serialization
 
 import (
-	"fmt"
-
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -137,7 +135,7 @@ func encode(
 	case enumspb.ENCODING_TYPE_PROTO3:
 		return proto3Encode(object)
 	default:
-		return commonpb.DataBlob{}, fmt.Errorf("unknown encoding type: %v", encoding)
+		return commonpb.DataBlob{}, NewUnknownEncodingTypeError(encoding.String(), enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3)
 	}
 }
 
@@ -156,7 +154,7 @@ func decode(
 	case enumspb.ENCODING_TYPE_PROTO3:
 		return proto3Decode(blob, encoding, result)
 	default:
-		return fmt.Errorf("unknown encoding type: %v", encoding)
+		return NewUnknownEncodingTypeError(encoding, enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3)
 	}
 }
 
@@ -164,7 +162,7 @@ func proto3Encode(m proto.Message) (commonpb.DataBlob, error) {
 	blob := commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
 	data, err := proto.Marshal(m)
 	if err != nil {
-		return blob, fmt.Errorf("error serializing struct to blob using %v encoding: %w", enumspb.ENCODING_TYPE_PROTO3, err)
+		return blob, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	blob.Data = data
 	return blob, nil
@@ -172,11 +170,11 @@ func proto3Encode(m proto.Message) (commonpb.DataBlob, error) {
 
 func proto3Decode(blob []byte, encoding string, result proto.Message) error {
 	if e, ok := enumspb.EncodingType_value[encoding]; !ok || enumspb.EncodingType(e) != enumspb.ENCODING_TYPE_PROTO3 {
-		return fmt.Errorf("encoding %s doesn't match expected encoding %v", encoding, enumspb.ENCODING_TYPE_PROTO3)
+		return NewUnknownEncodingTypeError(encoding, enumspb.ENCODING_TYPE_PROTO3)
 	}
 
 	if err := proto.Unmarshal(blob, result); err != nil {
-		return fmt.Errorf("error deserializing blob using %v encoding: %w", enumspb.ENCODING_TYPE_PROTO3, err)
+		return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return nil
 }

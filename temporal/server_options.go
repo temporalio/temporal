@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
@@ -45,7 +46,7 @@ import (
 
 type (
 	serverOptions struct {
-		serviceNames map[string]struct{}
+		serviceNames map[primitives.ServiceName]struct{}
 
 		config    *config.Config
 		configDir string
@@ -68,7 +69,7 @@ type (
 		clientFactoryProvider      client.FactoryProvider
 		searchAttributesMapper     searchattribute.Mapper
 		customInterceptors         []grpc.UnaryServerInterceptor
-		metricProvider             metrics.MetricsHandler
+		metricHandler              metrics.Handler
 	}
 )
 
@@ -86,7 +87,7 @@ func newServerOptions(opts []ServerOption) *serverOptions {
 
 func (so *serverOptions) loadAndValidate() error {
 	for serviceName := range so.serviceNames {
-		if !slices.Contains(Services, serviceName) {
+		if !slices.Contains(Services, string(serviceName)) {
 			return fmt.Errorf("invalid service %q in service list %v", serviceName, so.serviceNames)
 		}
 	}
@@ -122,7 +123,7 @@ func (so *serverOptions) validateConfig() error {
 	}
 
 	for name := range so.serviceNames {
-		if _, ok := so.config.Services[name]; !ok {
+		if _, ok := so.config.Services[string(name)]; !ok {
 			return fmt.Errorf("%q service is missing in config", name)
 		}
 	}

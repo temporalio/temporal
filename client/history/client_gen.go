@@ -619,6 +619,30 @@ func (c *clientImpl) ReplicateEventsV2(
 	return response, nil
 }
 
+func (c *clientImpl) ReplicateWorkflowState(
+	ctx context.Context,
+	request *historyservice.ReplicateWorkflowStateRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReplicateWorkflowStateResponse, error) {
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetWorkflowState().GetExecutionInfo().GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+	var response *historyservice.ReplicateWorkflowStateResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ReplicateWorkflowState(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.RequestCancelWorkflowExecutionRequest,
@@ -1004,21 +1028,21 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	return response, nil
 }
 
-func (c *clientImpl) UpdateWorkflow(
+func (c *clientImpl) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *historyservice.UpdateWorkflowRequest,
+	request *historyservice.UpdateWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*historyservice.UpdateWorkflowResponse, error) {
+) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetRequest().GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
-	var response *historyservice.UpdateWorkflowResponse
+	var response *historyservice.UpdateWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
-		response, err = client.UpdateWorkflow(ctx, request, opts...)
+		response, err = client.UpdateWorkflowExecution(ctx, request, opts...)
 		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)

@@ -32,6 +32,8 @@ import (
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc/resolver"
+
+	"go.temporal.io/server/common/primitives"
 )
 
 const GRPCResolverScheme = "membership"
@@ -59,8 +61,8 @@ func initializeBuilder(monitor Monitor) GRPCResolver {
 	return GRPCResolver{}
 }
 
-func (g *GRPCResolver) MakeURL(service string) string {
-	return fmt.Sprintf("%s://%s", GRPCResolverScheme, service)
+func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
+	return fmt.Sprintf("%s://%s", GRPCResolverScheme, string(service))
 }
 
 type grpcBuilder struct {
@@ -78,7 +80,7 @@ func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts
 	}
 	// See MakeURL: the service ends up as the "host" of the parsed URL
 	service := target.URL.Host
-	r, err := monitor.GetResolver(service)
+	r, err := monitor.GetResolver(primitives.ServiceName(service))
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +89,9 @@ func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts
 		r:        r,
 		notifyCh: make(chan *ChangedEvent, 1),
 	}
-	resolver.start()
+	if err := resolver.start(); err != nil {
+		return nil, err
+	}
 	return resolver, nil
 }
 
@@ -98,14 +102,17 @@ type grpcResolver struct {
 	wg       sync.WaitGroup
 }
 
-func (m *grpcResolver) start() {
-	m.r.AddListener(fmt.Sprintf("%p", m), m.notifyCh)
+func (m *grpcResolver) start() error {
+	if err := m.r.AddListener(fmt.Sprintf("%p", m), m.notifyCh); err != nil {
+		return err
+	}
 	m.wg.Add(1)
 	go m.listen()
 
 	// Try once to get address synchronously. If this fails, it's okay, we'll listen for
 	// changes and update the resolver later.
 	m.resolve()
+	return nil
 }
 
 func (m *grpcResolver) listen() {
@@ -129,7 +136,9 @@ func (m *grpcResolver) resolve() {
 			Addr: hostInfo.GetAddress(),
 		})
 	}
-	m.cc.UpdateState(resolver.State{Addresses: addresses})
+	if err := m.cc.UpdateState(resolver.State{Addresses: addresses}); err != nil {
+		fmt.Printf("error updating state in gRPC resolver: %v", err)
+	}
 }
 
 func (m *grpcResolver) ResolveNow(_ resolver.ResolveNowOptions) {
@@ -140,7 +149,9 @@ func (m *grpcResolver) ResolveNow(_ resolver.ResolveNowOptions) {
 }
 
 func (m *grpcResolver) Close() {
-	m.r.RemoveListener(fmt.Sprintf("%p", m))
+	if err := m.r.RemoveListener(fmt.Sprintf("%p", m)); err != nil {
+		fmt.Printf("error removing listener from gRPC resolver: %v", err)
+	}
 	close(m.notifyCh)
 	m.wg.Wait() // wait until listen() exits
 }

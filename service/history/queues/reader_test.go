@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -54,7 +55,7 @@ type (
 		mockRescheduler *MockRescheduler
 
 		logger                log.Logger
-		metricsHandler        metrics.MetricsHandler
+		metricsHandler        metrics.Handler
 		executableInitializer ExecutableInitializer
 		monitor               *monitorImpl
 	}
@@ -76,7 +77,7 @@ func (s *readerSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 
 	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
+		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, metrics.NoopMetricsHandler)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
@@ -436,7 +437,7 @@ func (s *readerSuite) TestSubmitTask() {
 
 	futureFireTime := reader.timeSource.Now().Add(time.Minute)
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(futureFireTime, rand.Int63())).Times(1)
-	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime.Add(scheduledTaskPrecision)).Times(1)
+	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime.Add(persistence.ScheduledTaskMinPrecision)).Times(1)
 	reader.submit(mockExecutable)
 }
 

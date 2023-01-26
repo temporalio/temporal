@@ -26,17 +26,19 @@ package shard
 
 import (
 	"context"
-	"time"
+	"fmt"
 
 	"github.com/golang/mock/gomock"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
@@ -44,7 +46,7 @@ import (
 type ContextTest struct {
 	*ContextImpl
 
-	Resource *resource.Test
+	Resource *resourcetest.Test
 
 	MockEventsCache      *events.MockCache
 	MockHostInfoProvider *membership.MockHostInfoProvider
@@ -69,7 +71,7 @@ func NewTestContext(
 	shardInfo *persistence.ShardInfoWithFailover,
 	config *configs.Config,
 ) *ContextTest {
-	resourceTest := resource.NewTest(ctrl, metrics.History)
+	resourceTest := resourcetest.NewTest(ctrl, metrics.History)
 	eventsCache := events.NewMockCache(ctrl)
 	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
@@ -81,8 +83,9 @@ func NewTestContext(
 	}
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
+		stringRepr:          fmt.Sprintf("Shard(%d)", shardInfo.GetShardId()),
 		executionManager:    resourceTest.ExecutionMgr,
-		metricsClient:       resourceTest.MetricsClient,
+		metricsHandler:      resourceTest.MetricsHandler,
 		eventsCache:         eventsCache,
 		config:              config,
 		contextTaggedLogger: resourceTest.GetLogger(),
@@ -96,9 +99,8 @@ func NewTestContext(
 		taskSequenceNumber:                 shardInfo.RangeId << int64(config.RangeSizeBits),
 		immediateTaskExclusiveMaxReadLevel: shardInfo.RangeId << int64(config.RangeSizeBits),
 		maxTaskSequenceNumber:              (shardInfo.RangeId + 1) << int64(config.RangeSizeBits),
-		scheduledTaskMaxReadLevelMap:       make(map[string]time.Time),
 		remoteClusterInfos:                 make(map[string]*remoteClusterInfo),
-		handoverNamespaces:                 make(map[string]*namespaceHandOverInfo),
+		handoverNamespaces:                 make(map[namespace.Name]*namespaceHandOverInfo),
 
 		clusterMetadata:         resourceTest.ClusterMetadata,
 		timeSource:              resourceTest.TimeSource,
@@ -128,6 +130,11 @@ func (s *ContextTest) SetEngineForTesting(engine Engine) {
 func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
 	// for testing only, will only be called immediately after initialization
 	s.eventsCache = c
+}
+
+// SetHistoryClientForTesting sets history client. Only used by tests.
+func (s *ContextTest) SetHistoryClientForTesting(client historyservice.HistoryServiceClient) {
+	s.historyClient = client
 }
 
 // StopForTest calls private method finishStop(). In general only the controller

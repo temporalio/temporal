@@ -47,7 +47,7 @@ const VersionCheckInterval = 24 * time.Hour
 type VersionChecker struct {
 	config                 *Config
 	shutdownChan           chan struct{}
-	metricsScope           metrics.Scope
+	metricsHandler         metrics.Handler
 	clusterMetadataManager persistence.ClusterMetadataManager
 	startOnce              sync.Once
 	stopOnce               sync.Once
@@ -56,14 +56,14 @@ type VersionChecker struct {
 
 func NewVersionChecker(
 	config *Config,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
 ) *VersionChecker {
 	return &VersionChecker{
 		config:                 config,
 		shutdownChan:           make(chan struct{}),
-		metricsScope:           metricsClient.Scope(metrics.VersionCheckScope),
+		metricsHandler:         metricsHandler.WithTags(metrics.OperationTag(metrics.VersionCheckScope)),
 		clusterMetadataManager: clusterMetadataManager,
 		sdkVersionRecorder:     sdkVersionRecorder,
 	}
@@ -110,11 +110,13 @@ func (vc *VersionChecker) versionCheckLoop(
 func (vc *VersionChecker) performVersionCheck(
 	ctx context.Context,
 ) {
-	sw := vc.metricsScope.StartTimer(metrics.VersionCheckLatency)
-	defer sw.Stop()
+	startTime := time.Now().UTC()
+	defer func() {
+		vc.metricsHandler.Timer(metrics.VersionCheckLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
-		vc.metricsScope.IncCounter(metrics.VersionCheckFailedCount)
+		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.GetMetricName()).Record(1)
 		return
 	}
 
@@ -124,21 +126,21 @@ func (vc *VersionChecker) performVersionCheck(
 
 	req, err := vc.createVersionCheckRequest(metadata)
 	if err != nil {
-		vc.metricsScope.IncCounter(metrics.VersionCheckFailedCount)
+		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.GetMetricName()).Record(1)
 		return
 	}
 	resp, err := vc.getVersionInfo(req)
 	if err != nil {
-		vc.metricsScope.IncCounter(metrics.VersionCheckRequestFailedCount)
-		vc.metricsScope.IncCounter(metrics.VersionCheckFailedCount)
+		vc.metricsHandler.Counter(metrics.VersionCheckRequestFailedCount.GetMetricName()).Record(1)
+		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.GetMetricName()).Record(1)
 		return
 	}
 	err = vc.saveVersionInfo(ctx, resp)
 	if err != nil {
-		vc.metricsScope.IncCounter(metrics.VersionCheckFailedCount)
+		vc.metricsHandler.Counter(metrics.VersionCheckFailedCount.GetMetricName()).Record(1)
 		return
 	}
-	vc.metricsScope.IncCounter(metrics.VersionCheckSuccessCount)
+	vc.metricsHandler.Counter(metrics.VersionCheckSuccessCount.GetMetricName()).Record(1)
 }
 
 func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {

@@ -57,29 +57,19 @@ type (
 )
 
 var (
-	errTryAgain          = errors.New("try again")
-	errWrongChain        = errors.New("found running workflow with wrong FirstExecutionRunId")
-	errNoEvents          = errors.New("GetEvents didn't return any events")
-	errNoAttrs           = errors.New("last event did not have correct attrs")
-	errNamespaceMismatch = errors.New("namespace mismatch")
+	errTryAgain   = errors.New("try again")
+	errWrongChain = errors.New("found running workflow with wrong FirstExecutionRunId")
+	errNoEvents   = errors.New("GetEvents didn't return any events")
+	errNoAttrs    = errors.New("last event did not have correct attrs")
 )
 
 func (e errFollow) Error() string { return string(e) }
 
-func (a *activities) checkNamespace(namespace, namespaceID string) error {
-	if namespace != a.namespace.String() || namespaceID != a.namespaceID.String() {
-		return errNamespaceMismatch
-	}
-	return nil
-}
-
 func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
-	if err := a.checkNamespace(req.Request.Namespace, req.NamespaceId); err != nil {
-		return nil, err
-	}
+	req.Request.Namespace = a.namespace.String()
 
 	request := common.CreateHistoryStartWorkflowRequest(
-		req.NamespaceId,
+		a.namespaceID.String(),
 		req.Request,
 		nil,
 		time.Now().UTC(),
@@ -118,7 +108,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 	// the desired chain or not). if we have to follow (unlikely), we'll end up
 	// back here with non-empty RunId.
 	pollReq := &historyservice.PollMutableStateRequest{
-		NamespaceId: req.NamespaceId,
+		NamespaceId: a.namespaceID.String(),
 		Execution:   req.Execution,
 	}
 	if req.LongPoll {
@@ -166,7 +156,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 
 	// get last event from history
 	histReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:              req.Namespace,
+		Namespace:              a.namespace.String(),
 		Execution:              req.Execution,
 		MaximumPageSize:        1,
 		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
@@ -224,10 +214,6 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 }
 
 func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
-	if err := a.checkNamespace(req.Namespace, req.NamespaceId); err != nil {
-		return nil, err
-	}
-
 	for ctx.Err() == nil {
 		activity.RecordHeartbeat(ctx)
 		res, err := a.tryWatchWorkflow(ctx, req)
@@ -246,14 +232,10 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkf
 }
 
 func (a *activities) CancelWorkflow(ctx context.Context, req *schedspb.CancelWorkflowRequest) error {
-	if err := a.checkNamespace(req.Namespace, req.NamespaceId); err != nil {
-		return err
-	}
-
 	rreq := &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: req.NamespaceId,
+		NamespaceId: a.namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-			Namespace: req.Namespace,
+			Namespace: a.namespace.String(),
 			// only set WorkflowId so we cancel the latest, but restricted by FirstExecutionRunId
 			WorkflowExecution:   &commonpb.WorkflowExecution{WorkflowId: req.Execution.WorkflowId},
 			Identity:            req.Identity,
@@ -268,14 +250,10 @@ func (a *activities) CancelWorkflow(ctx context.Context, req *schedspb.CancelWor
 }
 
 func (a *activities) TerminateWorkflow(ctx context.Context, req *schedspb.TerminateWorkflowRequest) error {
-	if err := a.checkNamespace(req.Namespace, req.NamespaceId); err != nil {
-		return err
-	}
-
 	rreq := &historyservice.TerminateWorkflowExecutionRequest{
-		NamespaceId: req.NamespaceId,
+		NamespaceId: a.namespaceID.String(),
 		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace: req.Namespace,
+			Namespace: a.namespace.String(),
 			// only set WorkflowId so we cancel the latest, but restricted by FirstExecutionRunId
 			WorkflowExecution:   &commonpb.WorkflowExecution{WorkflowId: req.Execution.WorkflowId},
 			Reason:              req.Reason,

@@ -43,10 +43,12 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -55,8 +57,8 @@ type (
 		*require.Assertions
 
 		controller        *gomock.Controller
-		mockDeleteManager *workflow.MockDeleteManager
-		mockCache         *workflow.MockCache
+		mockDeleteManager *deletemanager.MockDeleteManager
+		mockCache         *wcache.MockCache
 
 		testShardContext           *shard.ContextTest
 		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase
@@ -78,8 +80,8 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
-	s.mockCache = workflow.NewMockCache(s.controller)
+	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
+	s.mockCache = wcache.NewMockCache(s.controller)
 
 	config := tests.NewDynamicConfig()
 	s.testShardContext = shard.NewTestContext(
@@ -131,7 +133,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 			mockWeCtx := workflow.NewMockContext(s.controller)
 			mockMutableState := workflow.NewMockMutableState(s.controller)
 
-			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 			mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 			mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
@@ -142,6 +144,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 
 			archiveIfEnabled := !alreadyArchived
+			stage := tasks.DeleteWorkflowExecutionStageNone
 			s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 				gomock.Any(),
 				tests.NamespaceID,
@@ -149,6 +152,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 				mockWeCtx,
 				mockMutableState,
 				archiveIfEnabled,
+				&stage,
 			).Return(nil)
 
 			err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(
@@ -181,7 +185,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 			mockWeCtx := workflow.NewMockContext(s.controller)
 			mockMutableState := workflow.NewMockMutableState(s.controller)
 
-			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 			mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 			mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
@@ -192,6 +196,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 
 			archiveIfEnabled := !alreadyArchived
+			stage := tasks.DeleteWorkflowExecutionStageNone
 			s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 				gomock.Any(),
 				tests.NamespaceID,
@@ -199,6 +204,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 				mockWeCtx,
 				mockMutableState,
 				archiveIfEnabled,
+				&stage,
 			).Return(serviceerror.NewInternal("test error"))
 
 			err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(

@@ -50,13 +50,11 @@ type (
 		NumParentClosePolicySystemWorkflows    dynamicconfig.IntPropertyFn
 	}
 
-	// BootstrapParams contains the set of params needed to bootstrap
-	// the sub-system
+	// BootstrapParams contains the set of params needed to bootstrap the sub-system
 	BootstrapParams struct {
-		// SdkSystemClient is an instance of temporal service client
 		SdkClientFactory sdk.ClientFactory
-		// MetricsClient is an instance of metrics object for emitting stats
-		MetricsClient metrics.Client
+		// MetricsHandler is an instance of metrics object for emitting stats
+		MetricsHandler metrics.Handler
 		// Logger is the logger
 		Logger log.Logger
 		// Config contains the configuration for scanner
@@ -69,9 +67,9 @@ type (
 
 	// Processor is the background sub-system that execute workflow for ParentClosePolicy
 	Processor struct {
-		svcClientFactory sdk.ClientFactory
+		sdkClientFactory sdk.ClientFactory
 		clientBean       client.Bean
-		metricsClient    metrics.Client
+		metricsHandler   metrics.Handler
 		cfg              Config
 		logger           log.Logger
 		currentCluster   string
@@ -81,8 +79,8 @@ type (
 // New returns a new instance as daemon
 func New(params *BootstrapParams) *Processor {
 	return &Processor{
-		svcClientFactory: params.SdkClientFactory,
-		metricsClient:    params.MetricsClient,
+		sdkClientFactory: params.SdkClientFactory,
+		metricsHandler:   params.MetricsHandler.WithTags(metrics.OperationTag(metrics.ParentClosePolicyProcessorScope)),
 		cfg:              params.Config,
 		logger:           log.With(params.Logger, tag.ComponentBatcher),
 		clientBean:       params.ClientBean,
@@ -92,8 +90,8 @@ func New(params *BootstrapParams) *Processor {
 
 // Start starts the scanner
 func (s *Processor) Start() error {
-	svcClient := s.svcClientFactory.GetSystemClient()
-	processorWorker := worker.New(svcClient, processorTaskQueueName, getWorkerOptions(s))
+	svcClient := s.sdkClientFactory.GetSystemClient()
+	processorWorker := s.sdkClientFactory.NewWorker(svcClient, processorTaskQueueName, getWorkerOptions(s))
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
 	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
 

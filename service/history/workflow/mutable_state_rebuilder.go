@@ -36,6 +36,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -191,6 +192,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				attributes.GetAttempt(),
 				event.GetEventTime(),
 				event.GetEventTime(),
+				enumsspb.WORKFLOW_TASK_TYPE_NORMAL, // speculative workflow tasks are not replicated.
 			)
 			if err != nil {
 				return nil, err
@@ -635,14 +637,16 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				return nil, err
 			}
 
-		case enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED,
-			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_REQUESTED,
-			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
+			// TODO (alex-update): Async workflow update will require update to be restored in registry from Accepted event.
+			// Completed event will remove it from registry and notify update result pollers.
 			return nil, serviceerror.NewUnimplemented("Workflow Update rebuild not implemented")
 
 		case enumspb.EVENT_TYPE_ACTIVITY_PROPERTIES_MODIFIED_EXTERNALLY,
 			enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY:
-			return nil, serviceerror.NewUnimplemented("Workflow/activity property motification not implemented")
+			return nil, serviceerror.NewUnimplemented("Workflow/activity property modification not implemented")
 
 		default:
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))

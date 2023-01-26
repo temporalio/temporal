@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -105,7 +106,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = mockShard.GetLogger()
 
-	historyCache := workflow.NewCache(mockShard)
+	workflowCache := wcache.NewCache(mockShard)
 	h := &historyEngineImpl{
 		currentClusterName: mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              mockShard,
@@ -113,11 +114,11 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
-		metricsClient:      metrics.NoopClient,
+		metricsHandler:     metrics.NoopMetricsHandler,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		config:             config,
 		timeSource:         mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		searchAttributesValidator: searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
 			mockShard.Resource.SearchAttributesMapper,
@@ -125,7 +126,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 		),
-		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, historyCache),
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, workflowCache),
 	}
 
 	s.workflowTaskHandlerCallback = newWorkflowTaskHandlerCallback(h)
@@ -196,10 +197,10 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 
 	// zombie state should be treated as open
-	ms.UpdateWorkflowStateStatus(
+	s.NoError(ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-	)
+	))
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)

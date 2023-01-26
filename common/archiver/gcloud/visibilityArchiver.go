@@ -33,8 +33,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/searchattribute"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -94,16 +93,16 @@ func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, con
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
 func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.VisibilityRecord, opts ...archiver.ArchiveOption) (err error) {
-	scope := v.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
+	handler := v.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	startTime := time.Now().UTC()
 	defer func() {
-		sw.Stop()
+		handler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveTransientErrorCount)
+				handler.Counter(metrics.VisibilityArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
 			} else {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount)
+				handler.Counter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount.GetMetricName()).Record(1)
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
 				}
@@ -147,7 +146,7 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		return errRetryable
 	}
 
-	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
+	handler.Counter(metrics.VisibilityArchiveSuccessCount.GetMetricName()).Record(1)
 	return nil
 }
 

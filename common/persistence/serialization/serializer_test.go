@@ -25,16 +25,19 @@
 package serialization
 
 import (
+	"math/rand"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
@@ -48,6 +51,8 @@ type (
 		// not merely log an error
 		*require.Assertions
 		logger log.Logger
+
+		serializer Serializer
 	}
 )
 
@@ -60,6 +65,8 @@ func (s *temporalSerializerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+
+	s.serializer = NewSerializer()
 }
 
 func (s *temporalSerializerSuite) TestSerializer() {
@@ -70,8 +77,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 	startWG.Add(1)
 	doneWG.Add(concurrency)
-
-	serializer := NewSerializer()
 
 	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
 	event0 := &historypb.HistoryEvent{
@@ -99,51 +104,51 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			// serialize event
 
-			nilEvent, err := serializer.SerializeEvent(nil, enumspb.ENCODING_TYPE_PROTO3)
+			nilEvent, err := s.serializer.SerializeEvent(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.Nil(nilEvent)
 
-			_, err = serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_UNSPECIFIED)
+			_, err = s.serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
 			_, ok := err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			dProto, err := serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_PROTO3)
+			dProto, err := s.serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(dProto)
 
 			// serialize batch events
 
-			nilEvents, err := serializer.SerializeEvents(nil, enumspb.ENCODING_TYPE_PROTO3)
+			nilEvents, err := s.serializer.SerializeEvents(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(nilEvents)
 
-			_, err = serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_UNSPECIFIED)
+			_, err = s.serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
 			_, ok = err.(*UnknownEncodingTypeError)
 			s.True(ok)
 
-			dsProto, err := serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_PROTO3)
+			dsProto, err := s.serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(dsProto)
 
 			// deserialize event
 
-			dNilEvent, err := serializer.DeserializeEvent(nilEvent)
+			dNilEvent, err := s.serializer.DeserializeEvent(nilEvent)
 			s.Nil(err)
 			s.Nil(dNilEvent)
 
-			event2, err := serializer.DeserializeEvent(dProto)
+			event2, err := s.serializer.DeserializeEvent(dProto)
 			s.Nil(err)
 			s.True(reflect.DeepEqual(event0, event2))
 
 			// deserialize events
 
-			dNilEvents, err := serializer.DeserializeEvents(nilEvents)
+			dNilEvents, err := s.serializer.DeserializeEvents(nilEvents)
 			s.Nil(err)
 			s.Nil(dNilEvents)
 
-			events, err := serializer.DeserializeEvents(dsProto)
+			events, err := s.serializer.DeserializeEvents(dsProto)
 			history2 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history2))
@@ -153,4 +158,47 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	startWG.Done()
 	succ := common.AwaitWaitGroup(&doneWG, 10*time.Second)
 	s.True(succ, "test timed out")
+}
+
+func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
+	var shardInfo persistencespb.ShardInfo
+
+	shardInfo.ShardId = rand.Int31()
+	shardInfo.RangeId = rand.Int63()
+
+	categoryID := rand.Int31()
+	shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
+	shardInfo.QueueAckLevels[categoryID] = &persistencespb.QueueAckLevel{
+		ClusterAckLevel: make(map[string]int64),
+	}
+	shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
+	shardInfo.QueueStates[categoryID] = &persistencespb.QueueState{
+		ReaderStates: make(map[int32]*persistencespb.QueueReaderState),
+	}
+	shardInfo.QueueStates[categoryID].ReaderStates[rand.Int31()] = &persistencespb.QueueReaderState{
+		Scopes: make([]*persistencespb.QueueSliceScope, 0),
+	}
+	shardInfo.ReplicationDlqAckLevel = make(map[string]int64)
+
+	blob, err := s.serializer.ShardInfoToBlob(&shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	deserializedShardInfo, err := s.serializer.ShardInfoFromBlob(blob)
+	s.NoError(err)
+
+	s.Equal(&shardInfo, deserializedShardInfo)
+}
+
+func (s *temporalSerializerSuite) TestSerializeShardInfo_Random() {
+	var shardInfo persistencespb.ShardInfo
+	err := gofakeit.Struct(&shardInfo)
+	s.NoError(err)
+
+	blob, err := s.serializer.ShardInfoToBlob(&shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	deserializedShardInfo, err := s.serializer.ShardInfoFromBlob(blob)
+	s.NoError(err)
+
+	s.Equal(&shardInfo, deserializedShardInfo)
 }

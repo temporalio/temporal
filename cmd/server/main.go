@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/build"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -148,6 +149,7 @@ func buildCLI() *cli.App {
 					tag.NewStringTag("go-version", build.InfoData.GoVersion),
 					tag.NewBoolTag("cgo-enabled", build.InfoData.CgoEnabled),
 					tag.NewStringTag("server-version", headers.ServerVersion),
+					tag.NewBoolTag("debug-mode", debug.Enabled),
 				)
 
 				var dynamicConfigClient dynamicconfig.Client
@@ -179,7 +181,7 @@ func buildCLI() *cli.App {
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
 				}
-				s := temporal.NewServer(
+				s, err := temporal.NewServer(
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
 					temporal.WithDynamicConfigClient(dynamicConfigClient),
@@ -190,6 +192,9 @@ func buildCLI() *cli.App {
 						return claimMapper
 					}),
 				)
+				if err != nil {
+					return cli.Exit(fmt.Sprintf("Unable to create server. Error: %v.", err), 1)
+				}
 
 				err = s.Start()
 				if err != nil {

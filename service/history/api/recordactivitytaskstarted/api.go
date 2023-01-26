@@ -72,12 +72,12 @@ func Invoke(
 			requestID := request.GetRequestId()
 			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
 
-			metricsScope := shard.GetMetricsClient().Scope(metrics.HistoryRecordActivityTaskStartedScope)
+			taggedMetrics := shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedScope))
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
+				taggedMetrics.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(1)
 				return nil, consts.ErrStaleState
 			}
 
@@ -123,12 +123,14 @@ func Invoke(
 			taskQueueName := ai.GetTaskQueue()
 
 			metrics.GetPerTaskQueueScope(
-				metricsScope,
+				taggedMetrics,
 				namespaceName.String(),
 				taskQueueName,
 				enumspb.TASK_QUEUE_KIND_NORMAL,
-			).Tagged(metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY)).
-				RecordTimer(metrics.TaskScheduleToStartLatency, scheduleToStartLatency)
+			).Timer(metrics.TaskScheduleToStartLatency.GetMetricName()).Record(
+				scheduleToStartLatency,
+				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+			)
 
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt

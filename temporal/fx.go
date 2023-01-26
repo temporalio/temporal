@@ -30,8 +30,7 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/service/history/replication"
-
+	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -39,24 +38,18 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
-
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
-
-	"github.com/pborman/uuid"
-
-	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/telemetry"
+	"google.golang.org/grpc"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -68,11 +61,14 @@ import (
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
@@ -94,7 +90,7 @@ type (
 
 	ServicesMetadata struct {
 		App           *fx.App // Added for info. ServiceStopFn is enough.
-		ServiceName   string
+		ServiceName   primitives.ServiceName
 		ServiceStopFn ServiceStopFn
 	}
 
@@ -126,17 +122,16 @@ type (
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                  log.Logger
 		ClientFactoryProvider   client.FactoryProvider
-		MetricsClient           metrics.Client
 		DynamicConfigClient     dynamicconfig.Client
 		DynamicConfigCollection *dynamicconfig.Collection
 		TLSConfigProvider       encryption.TLSConfigProvider
 		EsConfig                *esclient.Config
 		EsClient                esclient.Client
-		MetricsHandler          metrics.MetricsHandler
+		MetricsHandler          metrics.Handler
 	}
 )
 
-func NewServerFx(opts ...ServerOption) *ServerFx {
+func NewServerFx(opts ...ServerOption) (*ServerFx, error) {
 	app := fx.New(
 		pprof.Module,
 		ServerFxImplModule,
@@ -148,6 +143,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		fx.Provide(HistoryServiceProvider),
 		fx.Provide(MatchingServiceProvider),
 		fx.Provide(FrontendServiceProvider),
+		fx.Provide(InternalFrontendServiceProvider),
 		fx.Provide(WorkerServiceProvider),
 
 		fx.Provide(ApplyClusterMetadataConfigProvider),
@@ -157,7 +153,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 	s := &ServerFx{
 		app,
 	}
-	return s
+	return s, app.Err()
 }
 
 func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
@@ -193,13 +189,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	// MetricsHandler
-	provider := so.metricProvider
-	if provider == nil {
-		provider = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
+	metricHandler := so.metricHandler
+	if metricHandler == nil {
+		metricHandler = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
 	}
-
-	// MetricsClient
-	var metricsClient metrics.Client = metrics.NewClient(provider, metrics.Server)
 
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
@@ -220,7 +213,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// TLSConfigProvider
 	tlsConfigProvider := so.tlsConfigProvider
 	if tlsConfigProvider == nil {
-		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricsClient, logger, nil)
+		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricHandler, logger, nil)
 		if err != nil {
 			return serverOptionsProvider{}, err
 		}
@@ -274,13 +267,12 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 
 		Logger:                  logger,
 		ClientFactoryProvider:   clientFactoryProvider,
-		MetricsClient:           metricsClient,
 		DynamicConfigClient:     dcClient,
 		DynamicConfigCollection: dynamicconfig.NewCollection(dcClient, logger),
 		TLSConfigProvider:       tlsConfigProvider,
 		EsConfig:                esConfig,
 		EsClient:                esClient,
-		MetricsHandler:          provider,
+		MetricsHandler:          metricHandler,
 	}, nil
 }
 
@@ -288,11 +280,11 @@ func (s ServerFx) Start() error {
 	return s.app.Start(context.Background())
 }
 
-func (s ServerFx) Stop() {
-	s.app.Stop(context.Background())
+func (s ServerFx) Stop() error {
+	return s.app.Stop(context.Background())
 }
 
-func StopService(logger log.Logger, app *fx.App, svcName string, stopChan chan struct{}) {
+func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName, stopChan chan struct{}) {
 	stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
 	err := app.Stop(stopCtx)
 	cancelFunc()
@@ -317,7 +309,7 @@ type (
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
-		MetricsHandler             metrics.MetricsHandler
+		MetricsHandler             metrics.Handler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
@@ -362,6 +354,7 @@ func HistoryServiceProvider(
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
+			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -373,9 +366,11 @@ func HistoryServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
+		fx.Provide(func() metrics.Handler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
@@ -422,6 +417,7 @@ func MatchingServiceProvider(
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
+			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -433,9 +429,11 @@ func MatchingServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
+		fx.Provide(func() metrics.Handler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Supply(params.SpanExporters),
@@ -458,8 +456,19 @@ func MatchingServiceProvider(
 func FrontendServiceProvider(
 	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
-	serviceName := primitives.FrontendService
+	return genericFrontendServiceProvider(params, primitives.FrontendService)
+}
 
+func InternalFrontendServiceProvider(
+	params ServiceProviderParamsCommon,
+) (ServicesGroupOut, error) {
+	return genericFrontendServiceProvider(params, primitives.InternalFrontendService)
+}
+
+func genericFrontendServiceProvider(
+	params ServiceProviderParamsCommon,
+	serviceName primitives.ServiceName,
+) (ServicesGroupOut, error) {
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
@@ -479,6 +488,7 @@ func FrontendServiceProvider(
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
+			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -487,12 +497,32 @@ func FrontendServiceProvider(
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
 		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() authorization.ClaimMapper {
+			switch serviceName {
+			case primitives.FrontendService:
+				return params.ClaimMapper
+			case primitives.InternalFrontendService:
+				return authorization.NewNoopClaimMapper()
+			default:
+				panic("Unexpected frontend service name")
+			}
+		}),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(func() log.SnTaggedLogger {
+			// Use "frontend" for logs even if serviceName is "internal-frontend", but add an
+			// extra tag to differentiate.
+			tags := []tag.Tag{tag.Service(primitives.FrontendService)}
+			if serviceName == primitives.InternalFrontendService {
+				tags = append(tags, tag.NewBoolTag("internal-frontend", true))
+			}
+			return log.With(params.Logger, tags...)
+		}),
+		fx.Provide(func() metrics.Handler {
+			// Use either "frontend" or "internal-frontend" for metrics
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
@@ -537,6 +567,7 @@ func WorkerServiceProvider(
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
+			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -548,9 +579,11 @@ func WorkerServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
+		fx.Provide(func() metrics.Handler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Supply(params.SpanExporters),
@@ -600,7 +633,7 @@ func ApplyClusterMetadataConfigProvider(
 		PersistenceNamespaceMaxQPS: nil,
 		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
-		MetricsClient:              nil,
+		MetricsHandler:             nil,
 		Logger:                     logger,
 	})
 	defer factory.Close()
@@ -734,17 +767,28 @@ func loadClusterInformationFromStore(ctx context.Context, config *config.Config,
 			return err
 		}
 		metadata := item.(*persistence.GetClusterMetadataResponse)
+		shardCount := metadata.HistoryShardCount
+		if shardCount == 0 {
+			// This is to add backward compatibility to the config based cluster connection.
+			shardCount = config.Persistence.NumHistoryShards
+		}
 		newMetadata := cluster.ClusterInformation{
 			Enabled:                metadata.IsConnectionEnabled,
 			InitialFailoverVersion: metadata.InitialFailoverVersion,
 			RPCAddress:             metadata.ClusterAddress,
+			ShardCount:             shardCount,
 		}
-		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok && metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
-			logger.Warn(
-				"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
-				tag.Key("clusterInformation"),
-				tag.IgnoredValue(staticClusterMetadata),
-				tag.Value(newMetadata))
+		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
+			if metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
+				logger.Warn(
+					"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
+					tag.Key("clusterInformation"),
+					tag.IgnoredValue(staticClusterMetadata),
+					tag.Value(newMetadata))
+			} else {
+				newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
+				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
+			}
 		}
 		config.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
 	}
@@ -761,8 +805,7 @@ func ServerLifetimeHooks(
 				return svr.Start()
 			},
 			OnStop: func(ctx context.Context) error {
-				svr.Stop()
-				return nil
+				return svr.Stop()
 			},
 		},
 	)
@@ -840,7 +883,11 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(
 		fx.Annotate(
-			func(rsn resource.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
+			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
+				// map "internal-frontend" to "frontend" for the purpose of tracing
+				if rsn == primitives.InternalFrontendService {
+					rsn = primitives.FrontendService
+				}
 				serviceName := string(rsn)
 				if !strings.HasPrefix(serviceName, "io.temporal.") {
 					serviceName = fmt.Sprintf("io.temporal.%s", serviceName)
@@ -876,8 +923,7 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
 		tp := otelsdktrace.NewTracerProvider(opts...)
 		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
-			tp.Shutdown(ctx)
-			return nil // do not pass this up to fx
+			return tp.Shutdown(ctx)
 		}})
 		return tp
 	}),

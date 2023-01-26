@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -44,13 +45,14 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -60,14 +62,13 @@ type (
 		controller *gomock.Controller
 
 		remoteCluster      string
-		mockResource       *resource.Test
+		mockResource       *resourcetest.Test
 		mockShard          *shard.ContextTest
-		mockEngine         *shard.MockEngine
 		config             *configs.Config
 		historyClient      *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *namespace.MockRegistry
 		clusterMetadata    *cluster.MockMetadata
-		workflowCache      *workflow.MockCache
+		workflowCache      *wcache.MockCache
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
 		replicationTaskExecutor *taskExecutorImpl
@@ -105,23 +106,21 @@ func (s *taskExecutorSuite) SetupTest() {
 			}},
 		s.config,
 	)
-	s.mockEngine = shard.NewMockEngine(s.controller)
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.workflowCache = workflow.NewMockCache(s.controller)
+	s.workflowCache = wcache.NewMockCache(s.controller)
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
-
+	s.mockShard.SetHistoryClientForTesting(s.historyClient)
 	s.replicationTaskExecutor = NewTaskExecutor(
 		s.remoteCluster,
 		s.mockShard,
 		s.nDCHistoryResender,
-		s.mockEngine,
-		workflow.NewMockDeleteManager(s.controller),
+		deletemanager.NewMockDeleteManager(s.controller),
 		s.workflowCache,
 	).(*taskExecutorImpl)
 }
@@ -181,6 +180,16 @@ func (s *taskExecutorSuite) TestFilterTask_EnforceApply() {
 	s.True(ok)
 }
 
+func (s *taskExecutorSuite) TestFilterTask_NamespaceNotFound() {
+	namespaceID := namespace.ID(uuid.New())
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(nil, &serviceerror.NamespaceNotFound{})
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	s.NoError(err)
+	s.False(ok)
+}
+
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 	namespaceID := namespace.ID(uuid.New())
 	workflowID := uuid.New()
@@ -219,8 +228,8 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 		LastWorkerIdentity: "",
 	}
 
-	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(&historyservice.SyncActivityResponse{}, nil)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -272,7 +281,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 		345,
 		456,
 	)
-	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(resendErr)
+	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(nil, resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.remoteCluster,
@@ -284,8 +293,9 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 		int64(345),
 		int64(456),
 	)
-	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+
+	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(&historyservice.SyncActivityResponse{}, nil)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -316,9 +326,8 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask() {
 		Events:              nil,
 		NewRunEvents:        nil,
 	}
-
-	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	s.historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(&historyservice.ReplicateEventsV2Response{}, nil)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -360,7 +369,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 		345,
 		456,
 	)
-	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(resendErr)
+	s.historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.remoteCluster,
@@ -372,8 +381,9 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 		int64(345),
 		int64(456),
 	)
-	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+
+	s.historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(&historyservice.ReplicateEventsV2Response{}, nil)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }
 
@@ -391,9 +401,8 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
 			},
 		},
 	}
+	s.historyClient.EXPECT().ReplicateWorkflowState(gomock.Any(), gomock.Any()).Return(&historyservice.ReplicateWorkflowStateResponse{}, nil)
 
-	s.mockEngine.EXPECT().ReplicateWorkflowState(gomock.Any(), gomock.Any()).Return(nil)
-
-	_, err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
 }

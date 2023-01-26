@@ -42,6 +42,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -60,7 +61,7 @@ type (
 		visibilityStore            *visibilityStore
 		mockESClient               *client.MockClient
 		mockProcessor              *MockProcessor
-		mockMetricsClient          *metrics.MockClient
+		mockMetricsHandler         *metrics.MockHandler
 		mockSearchAttributesMapper *searchattribute.MockMapper
 	}
 )
@@ -117,11 +118,12 @@ func (s *ESVisibilitySuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
-	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute)
+	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier)
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFn(false)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMetricsClient = metrics.NewMockClient(s.controller)
+	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapper = searchattribute.NewMockMapper(s.controller)
@@ -133,7 +135,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		s.mockProcessor,
 		esProcessorAckTimeout,
 		visibilityDisableOrderByClause,
-		s.mockMetricsClient,
+		s.mockMetricsHandler,
 	)
 }
 
@@ -906,7 +908,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 
 	// test for error case
 	docSource = []byte(`corrupted data`)
-	s.mockMetricsClient.EXPECT().IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.Error(err)
 	s.Nil(info)

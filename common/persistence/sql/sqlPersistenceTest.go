@@ -38,6 +38,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/tests/testutils"
 )
 
 // TestCluster allows executing cassandra operations in testing.
@@ -98,10 +99,7 @@ func (s *TestCluster) SetupTestDatabase() {
 
 	schemaDir := s.schemaDir + "/"
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
-		temporalPackageDir, err := getTemporalPackageDir()
-		if err != nil {
-			s.logger.Fatal("Unable to get package dir.", tag.Error(err))
-		}
+		temporalPackageDir := testutils.GetRepoRootDirectory()
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.sql"))
@@ -115,7 +113,7 @@ func (s *TestCluster) Config() config.Persistence {
 		DefaultStore:    "test",
 		VisibilityStore: "test",
 		DataStores: map[string]config.DataStore{
-			"test": {SQL: &cfg},
+			"test": {SQL: &cfg, FaultInjection: s.faultInjection},
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}
@@ -205,21 +203,4 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 			s.logger.Fatal("LoadSchema", tag.Error(err))
 		}
 	}
-}
-
-func getTemporalPackageDir() (string, error) {
-	var err error
-	temporalPackageDir := os.Getenv("TEMPORAL_ROOT")
-	if temporalPackageDir == "" {
-		temporalPackageDir, err = os.Getwd()
-		if err != nil {
-			panic(err)
-		}
-		temporalIndex := strings.LastIndex(temporalPackageDir, "/temporal/")
-		if temporalIndex == -1 {
-			panic("Unable to find repo path. Use env var TEMPORAL_ROOT or clone the repo into folder named 'temporal'")
-		}
-		temporalPackageDir = temporalPackageDir[:temporalIndex+len("/temporal/")]
-	}
-	return temporalPackageDir, err
 }

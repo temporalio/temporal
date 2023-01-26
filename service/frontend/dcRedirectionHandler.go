@@ -52,7 +52,7 @@ type (
 		frontendHandler    Handler
 		logger             log.Logger
 		clientBean         client.Bean
-		metricsClient      metrics.Client
+		metricsHandler     metrics.Handler
 		timeSource         clock.TimeSource
 	}
 )
@@ -63,7 +63,7 @@ func NewDCRedirectionHandler(
 	policy config.DCRedirectionPolicy,
 	logger log.Logger,
 	clientBean client.Bean,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
@@ -83,7 +83,7 @@ func NewDCRedirectionHandler(
 		frontendHandler:    wfHandler,
 		logger:             logger,
 		clientBean:         clientBean,
-		metricsClient:      metricsClient,
+		metricsHandler:     metricsHandler,
 		timeSource:         timeSource,
 	}
 }
@@ -115,8 +115,10 @@ func (handler *DCRedirectionHandlerImpl) DeprecateNamespace(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeprecateNamespaceScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	return handler.frontendHandler.DeprecateNamespace(ctx, request)
 }
@@ -131,8 +133,10 @@ func (handler *DCRedirectionHandlerImpl) DescribeNamespace(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeNamespaceScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	return handler.frontendHandler.DescribeNamespace(ctx, request)
 }
@@ -147,8 +151,10 @@ func (handler *DCRedirectionHandlerImpl) ListNamespaces(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListNamespacesScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	return handler.frontendHandler.ListNamespaces(ctx, request)
 }
@@ -163,8 +169,10 @@ func (handler *DCRedirectionHandlerImpl) RegisterNamespace(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRegisterNamespaceScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	return handler.frontendHandler.RegisterNamespace(ctx, request)
 }
@@ -179,8 +187,10 @@ func (handler *DCRedirectionHandlerImpl) UpdateNamespace(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateNamespaceScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	return handler.frontendHandler.UpdateNamespace(ctx, request)
 }
@@ -199,8 +209,10 @@ func (handler *DCRedirectionHandlerImpl) DescribeTaskQueue(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeTaskQueueScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -233,8 +245,10 @@ func (handler *DCRedirectionHandlerImpl) DescribeWorkflowExecution(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeWorkflowExecutionScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -267,8 +281,10 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionHistoryScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -301,8 +317,10 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistoryReverse(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionHistoryReverseScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -335,8 +353,10 @@ func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListArchivedWorkflowExecutionsScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -369,8 +389,10 @@ func (handler *DCRedirectionHandlerImpl) ListClosedWorkflowExecutions(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListClosedWorkflowExecutionsScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -403,8 +425,10 @@ func (handler *DCRedirectionHandlerImpl) ListOpenWorkflowExecutions(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListOpenWorkflowExecutionsScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -437,8 +461,10 @@ func (handler *DCRedirectionHandlerImpl) ListWorkflowExecutions(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListWorkflowExecutionsScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -471,8 +497,10 @@ func (handler *DCRedirectionHandlerImpl) ScanWorkflowExecutions(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionScanWorkflowExecutionsScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
@@ -504,8 +532,10 @@ func (handler *DCRedirectionHandlerImpl) CountWorkflowExecutions(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionCountWorkflowExecutionsScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -536,8 +566,10 @@ func (handler *DCRedirectionHandlerImpl) GetSearchAttributes(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetSearchAttributesScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	return handler.frontendHandler.GetSearchAttributes(ctx, request)
 }
@@ -554,8 +586,10 @@ func (handler *DCRedirectionHandlerImpl) PollActivityTaskQueue(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollActivityTaskQueueScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -588,8 +622,10 @@ func (handler *DCRedirectionHandlerImpl) PollWorkflowTaskQueue(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollWorkflowTaskQueueScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -621,8 +657,10 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionQueryWorkflowScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -655,8 +693,10 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRecordActivityTaskHeartbeatScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
@@ -694,8 +734,10 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatById(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRecordActivityTaskHeartbeatByIdScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -728,8 +770,10 @@ func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRequestCancelWorkflowExecutionScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -762,8 +806,10 @@ func (handler *DCRedirectionHandlerImpl) ResetStickyTaskQueue(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetStickyTaskQueueScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -796,8 +842,10 @@ func (handler *DCRedirectionHandlerImpl) ResetWorkflowExecution(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetWorkflowExecutionScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -830,8 +878,10 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCanceledScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
@@ -869,8 +919,10 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledById(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCanceledByIdScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -903,8 +955,10 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCompletedScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
@@ -942,8 +996,10 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedById(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCompletedByIdScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -976,8 +1032,10 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskFailedScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
@@ -1015,8 +1073,10 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedById(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskFailedByIdScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1049,8 +1109,10 @@ func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskCompleted(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondWorkflowTaskCompletedScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
@@ -1088,8 +1150,10 @@ func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskFailed(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondWorkflowTaskFailedScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
@@ -1127,8 +1191,10 @@ func (handler *DCRedirectionHandlerImpl) RespondQueryTaskCompleted(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondQueryTaskCompletedScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	token, err := handler.tokenSerializer.DeserializeQueryTaskToken(request.TaskToken)
 	if err != nil {
@@ -1166,8 +1232,10 @@ func (handler *DCRedirectionHandlerImpl) SignalWithStartWorkflowExecution(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionSignalWithStartWorkflowExecutionScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1200,8 +1268,10 @@ func (handler *DCRedirectionHandlerImpl) SignalWorkflowExecution(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionSignalWorkflowExecutionScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1233,8 +1303,10 @@ func (handler *DCRedirectionHandlerImpl) StartWorkflowExecution(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionStartWorkflowExecutionScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1267,8 +1339,10 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionTerminateWorkflowExecutionScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1301,8 +1375,10 @@ func (handler *DCRedirectionHandlerImpl) DeleteWorkflowExecution(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeleteWorkflowExecutionScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1335,8 +1411,10 @@ func (handler *DCRedirectionHandlerImpl) ListTaskQueuePartitions(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListTaskQueuePartitionsScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1384,8 +1462,10 @@ func (handler *DCRedirectionHandlerImpl) CreateSchedule(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionCreateScheduleScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1417,8 +1497,10 @@ func (handler *DCRedirectionHandlerImpl) DescribeSchedule(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeScheduleScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1450,8 +1532,10 @@ func (handler *DCRedirectionHandlerImpl) UpdateSchedule(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateScheduleScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1483,8 +1567,10 @@ func (handler *DCRedirectionHandlerImpl) PatchSchedule(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionPatchScheduleScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1516,8 +1602,10 @@ func (handler *DCRedirectionHandlerImpl) ListScheduleMatchingTimes(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListScheduleMatchingTimesScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1549,8 +1637,10 @@ func (handler *DCRedirectionHandlerImpl) DeleteSchedule(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeleteScheduleScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1582,8 +1672,10 @@ func (handler *DCRedirectionHandlerImpl) ListSchedules(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListSchedulesScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1615,8 +1707,10 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkerBuildIdOrdering(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkerBuildIdOrderingScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1648,8 +1742,10 @@ func (handler *DCRedirectionHandlerImpl) GetWorkerBuildIdOrdering(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkerBuildIdOrderingScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1670,33 +1766,35 @@ func (handler *DCRedirectionHandlerImpl) GetWorkerBuildIdOrdering(
 	return resp, err
 }
 
-// UpdateWorkflow API call
-func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
+// UpdateWorkflowExecution API call
+func (handler *DCRedirectionHandlerImpl) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkflowRequest,
-) (resp *workflowservice.UpdateWorkflowResponse, retError error) {
+	request *workflowservice.UpdateWorkflowExecutionRequest,
+) (resp *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	var (
 		err     error
 		cluster string
 	)
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkflowScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkflowExecutionScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), "UpdateWorkflow", func(targetDC string) error {
+	defer log.CapturePanic(handler.logger, &retError)
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), "UpdateWorkflowExecution", func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
-			resp, err = handler.frontendHandler.UpdateWorkflow(ctx, request)
+			resp, err = handler.frontendHandler.UpdateWorkflowExecution(ctx, request)
 			return err
 		default:
 			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			if err != nil {
 				return err
 			}
-			resp, err = remoteClient.UpdateWorkflow(ctx, request)
+			resp, err = remoteClient.UpdateWorkflowExecution(ctx, request)
 			return err
 		}
 	})
@@ -1714,8 +1812,10 @@ func (handler *DCRedirectionHandlerImpl) StartBatchOperation(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionStartBatchOperationScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1746,8 +1846,10 @@ func (handler *DCRedirectionHandlerImpl) StopBatchOperation(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionStopBatchOperationScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1778,8 +1880,10 @@ func (handler *DCRedirectionHandlerImpl) DescribeBatchOperation(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeBatchOperationScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1810,8 +1914,10 @@ func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListBatchOperationsScope)
 	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
+		handler.afterCall(scope, startTime, cluster, retError)
 	}()
+
+	defer log.CapturePanic(handler.logger, &retError)
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
@@ -1833,25 +1939,22 @@ func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
 }
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(
-	scope int,
-) (metrics.Scope, time.Time) {
+	operation string,
+) (metrics.Handler, time.Time) {
 
-	return handler.metricsClient.Scope(scope), handler.timeSource.Now()
+	return handler.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.ServiceRoleTag(metrics.DCRedirectionRoleTagValue)), handler.timeSource.Now()
 }
 
 func (handler *DCRedirectionHandlerImpl) afterCall(
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	startTime time.Time,
 	cluster string,
-	retError *error,
+	retError error,
 ) {
-
-	log.CapturePanic(handler.logger, retError)
-
-	scope = scope.Tagged(metrics.TargetClusterTag(cluster))
-	scope.IncCounter(metrics.ClientRedirectionRequests)
-	scope.RecordTimer(metrics.ClientRedirectionLatency, handler.timeSource.Now().Sub(startTime))
-	if *retError != nil {
-		scope.IncCounter(metrics.ClientRedirectionFailures)
+	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(cluster))
+	metricsHandler.Counter(metrics.ClientRedirectionRequests.GetMetricName()).Record(1)
+	metricsHandler.Timer(metrics.ClientRedirectionLatency.GetMetricName()).Record(handler.timeSource.Now().Sub(startTime))
+	if retError != nil {
+		metricsHandler.Counter(metrics.ClientRedirectionFailures.GetMetricName()).Record(1)
 	}
 }

@@ -43,11 +43,13 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -61,12 +63,12 @@ type (
 
 func newTimerQueueStandbyTaskExecutor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
-	workflowDeleteManager workflow.DeleteManager,
+	workflowCache wcache.Cache,
+	workflowDeleteManager deletemanager.DeleteManager,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	clusterName string,
 	config *configs.Config,
 ) queues.Executor {
@@ -457,7 +459,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -507,9 +509,10 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
+	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskScope))
+	scope.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	startTime := time.Now()
+	defer func() { scope.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {

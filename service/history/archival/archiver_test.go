@@ -1,0 +1,365 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package archival
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
+	"go.uber.org/multierr"
+
+	carchiver "go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/service/history/configs"
+)
+
+func TestArchiver(t *testing.T) {
+	for _, c := range []struct {
+		Name                 string
+		ArchiveHistoryErr    error
+		ArchiveVisibilityErr error
+		RateLimiterWaitErr   error
+		Targets              []Target
+
+		ExpectArchiveHistory    bool
+		ExpectArchiveVisibility bool
+		ExpectedMetrics         []expectedMetric
+		ExpectedReturnErrors    []string
+	}{
+		{
+			Name:    "No targets",
+			Targets: []Target{},
+
+			ExpectedMetrics: []expectedMetric{
+				{
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
+					Tags:   []metrics.Tag{metrics.StringTag("status", "ok")},
+				},
+			},
+		},
+		{
+			Name:    "Invalid target",
+			Targets: []Target{Target("oops")},
+
+			ExpectedMetrics: []expectedMetric{
+				{
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
+					Tags:   []metrics.Tag{metrics.StringTag("status", "err")},
+				},
+			},
+			ExpectedReturnErrors: []string{
+				"unknown archival target: oops",
+			},
+		},
+		{
+			Name:              "History archival succeeds",
+			Targets:           []Target{TargetHistory},
+			ArchiveHistoryErr: nil,
+
+			ExpectedMetrics: []expectedMetric{
+				{
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
+					Tags:   []metrics.Tag{metrics.StringTag("status", "ok")},
+				},
+				{
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
+					Tags: []metrics.Tag{
+						metrics.StringTag("target", "history"),
+						metrics.StringTag("status", "ok"),
+					},
+				},
+			},
+			ExpectArchiveHistory: true,
+		},
+		{
+			Name:              "History archival fails",
+			Targets:           []Target{TargetHistory},
+			ArchiveHistoryErr: errors.New("example archive history error"),
+
+			ExpectArchiveHistory: true,
+			ExpectedMetrics: []expectedMetric{
+				{
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
+					Tags:   []metrics.Tag{metrics.StringTag("status", "err")},
+				},
+				{
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
+					Tags: []metrics.Tag{
+						metrics.StringTag("target", "history"),
+						metrics.StringTag("status", "err"),
+					},
+				},
+			},
+			ExpectedReturnErrors: []string{"example archive history err"},
+		},
+		{
+			Name:    "Visibility archival succeeds",
+			Targets: []Target{TargetVisibility},
+
+			ExpectedMetrics: []expectedMetric{
+				{
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
+					Tags:   []metrics.Tag{metrics.StringTag("status", "ok")},
+				},
+				{
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
+					Tags: []metrics.Tag{
+						metrics.StringTag("target", "visibility"),
+						metrics.StringTag("status", "ok"),
+					},
+				},
+			},
+			ExpectArchiveVisibility: true,
+		},
+		{
+			Name:                 "History succeeds but visibility fails",
+			Targets:              []Target{TargetHistory, TargetVisibility},
+			ArchiveVisibilityErr: errors.New("example archive visibility error"),
+
+			ExpectArchiveHistory:    true,
+			ExpectArchiveVisibility: true,
+			ExpectedReturnErrors:    []string{"example archive visibility error"},
+			ExpectedMetrics: []expectedMetric{
+				{
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
+					Tags:   []metrics.Tag{metrics.StringTag("status", "err")},
+				},
+				{
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
+					Tags: []metrics.Tag{
+						metrics.StringTag("target", "history"),
+						metrics.StringTag("status", "ok"),
+					},
+				},
+				{
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
+					Tags: []metrics.Tag{
+						metrics.StringTag("target", "visibility"),
+						metrics.StringTag("status", "err"),
+					},
+				},
+			},
+		},
+		{
+			Name:              "Visibility succeeds but history fails",
+			Targets:           []Target{TargetHistory, TargetVisibility},
+			ArchiveHistoryErr: errors.New("example archive history error"),
+
+			ExpectArchiveHistory:    true,
+			ExpectArchiveVisibility: true,
+			ExpectedReturnErrors:    []string{"example archive history error"},
+			ExpectedMetrics: []expectedMetric{
+				{
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
+					Tags:   []metrics.Tag{metrics.StringTag("status", "err")},
+				},
+				{
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
+					Tags: []metrics.Tag{
+						metrics.StringTag("target", "history"),
+						metrics.StringTag("status", "err"),
+					},
+				},
+				{
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
+					Tags: []metrics.Tag{
+						metrics.StringTag("target", "visibility"),
+						metrics.StringTag("status", "ok"),
+					},
+				},
+			},
+		},
+		{
+			Name:    "Both targets succeed",
+			Targets: []Target{TargetHistory, TargetVisibility},
+
+			ExpectArchiveHistory:    true,
+			ExpectArchiveVisibility: true,
+			ExpectedMetrics: []expectedMetric{
+				{
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
+					Tags:   []metrics.Tag{metrics.StringTag("status", "ok")},
+				},
+				{
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
+					Tags: []metrics.Tag{
+						metrics.StringTag("target", "history"),
+						metrics.StringTag("status", "ok"),
+					},
+				},
+				{
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
+					Tags: []metrics.Tag{
+						metrics.StringTag("target", "visibility"),
+						metrics.StringTag("status", "ok"),
+					},
+				},
+			},
+		},
+		{
+			Name:               "Rate limit hit",
+			Targets:            []Target{TargetHistory, TargetVisibility},
+			RateLimiterWaitErr: errors.New("didn't acquire rate limiter tokens in time"),
+
+			ExpectedReturnErrors: []string{
+				"archival rate limited: didn't acquire rate limiter tokens in time",
+			},
+			ExpectedMetrics: []expectedMetric{
+				{
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
+					Tags:   []metrics.Tag{metrics.StringTag("status", "rate_limit_exceeded")},
+				},
+			},
+		},
+	} {
+		c := c // capture range variable
+		t.Run(c.Name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			controller := gomock.NewController(t)
+			archiverProvider := provider.NewMockArchiverProvider(controller)
+			historyArchiver := carchiver.NewMockHistoryArchiver(controller)
+			visibilityArchiver := carchiver.NewMockVisibilityArchiver(controller)
+			metricsHandler := metrics.NewMockHandler(controller)
+			metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverClientScope)).Return(metricsHandler)
+			sdkClient := mocksdk.NewMockClient(controller)
+			sdkClientFactory := sdk.NewMockClientFactory(controller)
+			sdkClientFactory.EXPECT().GetSystemClient().Return(sdkClient).AnyTimes()
+			logRecorder := &errorLogRecorder{
+				T:      t,
+				Logger: log.NewNoopLogger(),
+			}
+			for _, m := range c.ExpectedMetrics {
+				metricsHandler.EXPECT().Timer(m.Metric).Return(metrics.NoopTimerMetricFunc)
+			}
+			historyURI, err := carchiver.NewURI("test:///history/archival")
+			require.NoError(t, err)
+			if c.ExpectArchiveHistory {
+				archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(historyArchiver, nil)
+				historyArchiver.EXPECT().Archive(gomock.Any(), historyURI, gomock.Any()).Return(c.ArchiveHistoryErr)
+			}
+			visibilityURI, err := carchiver.NewURI("test:///visibility/archival")
+			require.NoError(t, err)
+			if c.ExpectArchiveVisibility {
+				archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).
+					Return(visibilityArchiver, nil)
+				visibilityArchiver.EXPECT().Archive(gomock.Any(), visibilityURI, gomock.Any()).
+					Return(c.ArchiveVisibilityErr)
+			}
+			rateLimiter := quotas.NewMockRateLimiter(controller)
+			rateLimiter.EXPECT().WaitN(gomock.Any(), len(c.Targets)).Return(c.RateLimiterWaitErr)
+
+			// we need this channel to get the Archiver which is created asynchronously
+			archivers := make(chan Archiver, 1)
+			// we make an app here so that we can test that the Module is working as intended
+			app := fx.New(
+				fx.Supply(fx.Annotate(archiverProvider, fx.As(new(provider.ArchiverProvider)))),
+				fx.Supply(fx.Annotate(logRecorder, fx.As(new(log.Logger)))),
+				fx.Supply(fx.Annotate(metricsHandler, fx.As(new(metrics.Handler)))),
+				fx.Supply(&configs.Config{
+					ArchivalBackendMaxRPS: func() float64 {
+						return 42.0
+					},
+				}),
+				Module,
+				fx.Decorate(func(rl quotas.RateLimiter) quotas.RateLimiter {
+					// we need to decorate the rate limiter so that we can use the mock
+					// we also verify that the rate being used is equal to the one in the config
+					assert.Equal(t, 42.0, rl.Rate())
+					return rateLimiter
+				}),
+				fx.Invoke(func(a Archiver) {
+					// after all parameters are provided, we get the Archiver and put it in the channel
+					// so that we can use it in the test
+					archivers <- a
+				}),
+			)
+			require.NoError(t, app.Err())
+			// we need to start the app for fx.Invoke to be called, so that we can get the Archiver
+			require.NoError(t, app.Start(ctx))
+			defer func() {
+				require.NoError(t, app.Stop(ctx))
+			}()
+			archiver := <-archivers
+			_, err = archiver.Archive(ctx, &Request{
+				HistoryURI:    historyURI,
+				VisibilityURI: visibilityURI,
+				Targets:       c.Targets,
+			})
+
+			if len(c.ExpectedReturnErrors) > 0 {
+				require.Error(t, err)
+				assert.Len(t, multierr.Errors(err), len(c.ExpectedReturnErrors))
+				for _, e := range c.ExpectedReturnErrors {
+					assert.Contains(t, err.Error(), e)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
+			var expectedLogErrs []string
+			if c.ArchiveHistoryErr != nil {
+				expectedLogErrs = append(expectedLogErrs, c.ArchiveHistoryErr.Error())
+			}
+			if c.ArchiveVisibilityErr != nil {
+				expectedLogErrs = append(expectedLogErrs, c.ArchiveVisibilityErr.Error())
+			}
+			assert.ElementsMatch(t, expectedLogErrs, logRecorder.ErrorMessages)
+		})
+	}
+}
+
+type expectedMetric struct {
+	Metric string
+	Tags   []metrics.Tag
+}
+
+type errorLogRecorder struct {
+	log.Logger
+	T             testing.TB
+	ErrorMessages []string
+}
+
+func (r *errorLogRecorder) Error(msg string, tags ...tag.Tag) {
+	for _, t := range tags {
+		if t.Key() == "error" {
+			value := t.Value()
+			message, ok := value.(string)
+			require.True(r.T, ok)
+			r.ErrorMessages = append(r.ErrorMessages, message)
+		}
+	}
+}

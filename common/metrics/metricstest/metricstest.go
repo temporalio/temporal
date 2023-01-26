@@ -43,9 +43,8 @@ import (
 
 type (
 	Handler struct {
-		metrics.MetricsHandler
+		metrics.Handler
 		exporter *prometheus.Exporter
-		provider *sdkmetrics.MeterProvider
 	}
 
 	sample struct {
@@ -78,9 +77,8 @@ func NewHandler(logger log.Logger) (*Handler, error) {
 	clientConfig := metrics.ClientConfig{}
 	otelHandler := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig)
 	metricsHandler := &Handler{
-		MetricsHandler: otelHandler,
-		provider:       provider,
-		exporter:       exporter,
+		Handler:  otelHandler,
+		exporter: exporter,
 	}
 
 	return metricsHandler, nil
@@ -88,7 +86,7 @@ func NewHandler(logger log.Logger) (*Handler, error) {
 
 func (*Handler) Stop(log.Logger) {}
 
-func (mh *Handler) Snapshot() (Snapshot, error) {
+func (h *Handler) Snapshot() (Snapshot, error) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/metrics", nil)
 	handler := http.NewServeMux()
@@ -129,8 +127,8 @@ func (mh *Handler) Snapshot() (Snapshot, error) {
 	return Snapshot{samples: samples}, nil
 }
 
-func (mh *Handler) MustSnapshot() Snapshot {
-	s, err := mh.Snapshot()
+func (h *Handler) MustSnapshot() Snapshot {
+	s, err := h.Snapshot()
 	if err != nil {
 		panic(err)
 	}

@@ -225,7 +225,7 @@ func (s *mutableStateSuite) TestChecksum() {
 	}
 
 	loadErrorsFunc := func() int64 {
-		counter := s.testScope.Snapshot().Counters()["test.mutable_state_checksum_mismatch+namespace=all,operation=WorkflowContext,service_name=history"]
+		counter := s.testScope.Snapshot().Counters()["test.mutable_state_checksum_mismatch+operation=WorkflowContext,service_name=history"]
 		if counter != nil {
 			return counter.Value()
 		}
@@ -320,6 +320,55 @@ func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 	s.False(s.mutableState.shouldInvalidateCheckum())
 }
 
+func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
+	// set ContinueAsNew min interval to 5s
+	s.mockConfig.ContinueAsNewMinInterval = func(namespace string) time.Duration {
+		return 5 * time.Second
+	}
+
+	// with no backoff, verify min backoff is in [3s, 5s]
+	minBackoff := s.mutableState.ContinueAsNewMinBackoff(nil)
+	s.NotNil(minBackoff)
+	s.True(*minBackoff >= 3*time.Second)
+	s.True(*minBackoff <= 5*time.Second)
+
+	// with 2s backoff, verify min backoff is in [3s, 5s]
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(timestamp.DurationPtr(time.Second * 2))
+	s.NotNil(minBackoff)
+	s.True(*minBackoff >= 3*time.Second)
+	s.True(*minBackoff <= 5*time.Second)
+
+	// with 6s backoff, verify min backoff unchanged
+	backoff := timestamp.DurationPtr(time.Second * 6)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(backoff)
+	s.NotNil(minBackoff)
+	s.True(minBackoff == backoff)
+
+	// set start time to be 3s ago
+	s.mutableState.executionInfo.StartTime = timestamp.TimePtr(time.Now().Add(-time.Second * 3))
+	// with no backoff, verify min backoff is in [0, 2s]
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil)
+	s.NotNil(minBackoff)
+	s.True(*minBackoff >= 0)
+	s.True(*minBackoff <= 2*time.Second, "%v\n", *minBackoff)
+
+	// with 2s backoff, verify min backoff not changed
+	backoff = timestamp.DurationPtr(time.Second * 2)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(backoff)
+	s.True(minBackoff == backoff)
+
+	// set start time to be 5s ago
+	s.mutableState.executionInfo.StartTime = timestamp.TimePtr(time.Now().Add(-time.Second * 5))
+	// with no backoff, verify backoff unchanged (no backoff needed)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil)
+	s.Nil(minBackoff)
+
+	// with 2s backoff, verify backoff unchanged
+	backoff = timestamp.DurationPtr(time.Second * 2)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(backoff)
+	s.True(minBackoff == backoff)
+}
+
 func (s *mutableStateSuite) TestEventReapplied() {
 	runID := uuid.New()
 	eventID := int64(1)
@@ -357,7 +406,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChan
 	})
 	s.NoError(err)
 
-	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc(), enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
 	s.NotNil(wt)
 
@@ -388,7 +437,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	})
 	s.NoError(err)
 
-	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc(), enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
 	s.NotNil(wt)
 
@@ -534,6 +583,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		nil,
 		nil,
+		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -585,6 +635,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		nil,
 		nil,
+		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
 	s.Nil(err)
 	s.NotNil(wt)

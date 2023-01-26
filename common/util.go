@@ -37,7 +37,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -147,6 +146,11 @@ var (
 	ErrContextTimeoutTooShort = serviceerror.NewInvalidArgument("Context timeout is too short.")
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = serviceerror.NewInvalidArgument("Context timeout is not set.")
+)
+
+var (
+	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
+	ErrNamespaceHandover = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -335,6 +339,10 @@ func IsServiceClientTransientError(err error) bool {
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
+	if err.Error() == ErrNamespaceHandover.Error() {
+		return false
+	}
+
 	switch err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.Unavailable:
@@ -361,6 +369,12 @@ func IsResourceExhausted(err error) bool {
 	return false
 }
 
+// IsInternalError checks if the error is an internal error.
+func IsInternalError(err error) bool {
+	var internalErr *serviceerror.Internal
+	return errors.As(err, &internalErr)
+}
+
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
 func WorkflowIDToHistoryShard(
 	namespaceID string,
@@ -372,11 +386,18 @@ func WorkflowIDToHistoryShard(
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
-// PrettyPrintHistory prints history in human readable format
-func PrettyPrintHistory(history *historypb.History, logger log.Logger) {
-	fmt.Println("************** History *******************")
-	fmt.Println(proto.MarshalTextString(history))
-	fmt.Println("******************************************")
+func PrettyPrint[T proto.Message](msgs []T, header ...string) {
+	var sb strings.Builder
+	_, _ = sb.WriteString("==========================================================================\n")
+	for _, h := range header {
+		_, _ = sb.WriteString(h)
+		_, _ = sb.WriteString("\n")
+	}
+	_, _ = sb.WriteString("--------------------------------------------------------------------------\n")
+	for _, m := range msgs {
+		_ = proto.MarshalText(&sb, m)
+	}
+	fmt.Print(sb.String())
 }
 
 // IsValidContext checks that the thrift context is not expired on cancelled.
@@ -427,6 +448,7 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		ScheduledTime:              historyResponse.ScheduledTime,
 		StartedTime:                historyResponse.StartedTime,
 		Queries:                    historyResponse.Queries,
+		Messages:                   historyResponse.Messages,
 	}
 
 	return matchingResp
@@ -575,13 +597,12 @@ func CheckEventBlobSizeLimit(
 	namespace string,
 	workflowID string,
 	runID string,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	blobSizeViolationOperationTag tag.ZapTag,
 ) error {
 
-	scope.RecordDistribution(metrics.EventBlobSize, actualSize)
-
+	metricsHandler.Histogram(metrics.EventBlobSize.GetMetricName(), metrics.EventBlobSize.GetMetricUnit()).Record(int64(actualSize))
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",

@@ -48,28 +48,28 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
 	timerQueueActiveTaskExecutor struct {
 		*timerQueueTaskExecutorBase
-
-		queueProcessor *timerQueueActiveProcessorImpl
 	}
 )
 
 func newTimerQueueActiveTaskExecutor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
-	workflowDeleteManager workflow.DeleteManager,
-	queueProcessor *timerQueueActiveProcessorImpl,
+	workflowCache wcache.Cache,
+	workflowDeleteManager deletemanager.DeleteManager,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -83,7 +83,6 @@ func newTimerQueueActiveTaskExecutor(
 			metricProvider,
 			config,
 		),
-		queueProcessor: queueProcessor,
 	}
 }
 
@@ -93,10 +92,22 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 ) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
+	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
+		t.shard.GetNamespaceRegistry(),
+		task.GetNamespaceID(),
+	)
 	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
+	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
+		// TODO: exclude task types here if we believe it's safe & necessary to execute
+		// them during namespace handover.
+		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
+		// be returned from task executor
+		return metricsTags, true, consts.ErrNamespaceHandover
 	}
 
 	var err error
@@ -135,7 +146,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -188,7 +199,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -291,7 +302,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -362,7 +373,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -371,9 +382,15 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY {
-		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowRetryBackoffTimerCount)
+		t.metricHandler.Counter(metrics.WorkflowRetryBackoffTimerCount.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
+		)
 	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_CRON {
-		t.metricsClient.IncCounter(metrics.TimerActiveTaskWorkflowBackoffTimerScope, metrics.WorkflowCronBackoffTimerCount)
+		t.metricHandler.Counter(metrics.WorkflowCronBackoffTimerCount.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
+		)
 	}
 
 	if mutableState.HasProcessedOrPendingWorkflowTask() {
@@ -398,7 +415,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -464,7 +481,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -598,36 +615,30 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	}
 
 	now := t.shard.GetTimeSource().Now()
-	err = context.UpdateWorkflowExecutionAsActive(ctx, now)
-	if err != nil {
-		if shard.IsShardOwnershipLostError(err) && t.queueProcessor != nil {
-			// Shard is stolen.  Stop timer processing to reduce duplicates
-			t.queueProcessor.Stop()
-		}
-		return err
-	}
-
-	return nil
+	return context.UpdateWorkflowExecutionAsActive(ctx, now)
 }
 
 func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	namespaceID namespace.ID,
-	scope int,
+	operation string,
 	timerType enumspb.TimeoutType,
 ) {
 	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return
 	}
-	metricsScope := t.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespaceEntry.Name().String()))
+	metricsScope := t.metricHandler.WithTags(
+		metrics.OperationTag(operation),
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+	)
 	switch timerType {
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-		metricsScope.IncCounter(metrics.ScheduleToStartTimeoutCounter)
+		metricsScope.Counter(metrics.ScheduleToStartTimeoutCounter.GetMetricName()).Record(1)
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-		metricsScope.IncCounter(metrics.ScheduleToCloseTimeoutCounter)
+		metricsScope.Counter(metrics.ScheduleToCloseTimeoutCounter.GetMetricName()).Record(1)
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-		metricsScope.IncCounter(metrics.StartToCloseTimeoutCounter)
+		metricsScope.Counter(metrics.StartToCloseTimeoutCounter.GetMetricName()).Record(1)
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-		metricsScope.IncCounter(metrics.HeartbeatTimeoutCounter)
+		metricsScope.Counter(metrics.HeartbeatTimeoutCounter.GetMetricName()).Record(1)
 	}
 }

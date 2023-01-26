@@ -41,6 +41,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -86,8 +87,7 @@ func NewExecutionMutableStateSuite(
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),
-		Logger:  logger,
-		ShardID: 1,
+		Logger: logger,
 	}
 }
 
@@ -101,9 +101,9 @@ func (s *ExecutionMutableStateSuite) TearDownSuite() {
 
 func (s *ExecutionMutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
+	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
-	s.ShardID = 1 + s.ShardID
+	s.ShardID++
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID: s.ShardID,
 		InitialShardInfo: &persistencespb.ShardInfo{
@@ -113,7 +113,7 @@ func (s *ExecutionMutableStateSuite) SetupTest() {
 	})
 	s.NoError(err)
 	previousRangeID := resp.ShardInfo.RangeId
-	resp.ShardInfo.RangeId += 1
+	resp.ShardInfo.RangeId++
 	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
 		ShardInfo:       resp.ShardInfo,
 		PreviousRangeID: previousRangeID,

@@ -29,13 +29,13 @@ import (
 	"math/rand"
 	"time"
 
-	"go.temporal.io/server/tests/testhelper"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -79,12 +79,12 @@ func (tb *DBTestBase) TearDownSuiteBase() {
 
 // RunParseFileTest runs a test against the ParseFile method
 func (tb *DBTestBase) RunParseFileTest(content string) {
-	rootDir := testhelper.MkdirTemp(tb.T(), "", "dbClientTestDir")
-	cqlFile := testhelper.CreateTemp(tb.T(), rootDir, "parseCQLTest")
+	rootDir := testutils.MkdirTemp(tb.T(), "", "dbClientTestDir")
+	cqlFile := testutils.CreateTemp(tb.T(), rootDir, "parseCQLTest")
 
 	_, err := cqlFile.WriteString(content)
 	tb.NoError(err)
-	stmts, err := schema.ParseFile(cqlFile.Name())
+	stmts, err := persistence.LoadAndSplitQuery([]string{cqlFile.Name()})
 	tb.Nil(err)
 	tb.Equal(2, len(stmts), "wrong number of sql statements")
 }

@@ -58,7 +58,7 @@ services:
       - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
 
-  unit-test:
+  db-integration-test:
     build:
       context: ../..
       dockerfile: ./develop/buildkite/Dockerfile
@@ -81,7 +81,7 @@ services:
     networks:
       services-network:
         aliases:
-          - unit-test
+          - db-integration-test
 
   integration-test-cassandra:
     build:

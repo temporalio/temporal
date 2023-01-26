@@ -26,6 +26,7 @@ package config
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"time"
 
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/telemetry"
 )
 
@@ -111,9 +113,12 @@ type (
 
 	// RootTLS contains all TLS settings for the Temporal server
 	RootTLS struct {
-		// Internode controls backend service communication TLS settings.
+		// Internode controls backend service (history, matching, internal-frontend)
+		// communication TLS settings.
 		Internode GroupTLS `yaml:"internode"`
-		// Frontend controls SDK Client to Frontend communication TLS settings.
+		// Frontend controls frontend server TLS settings. To control system worker -> frontend
+		// TLS, use the SystemWorker field. (Frontend.Client is accepted for backwards
+		// compatibility.)
 		Frontend GroupTLS `yaml:"frontend"`
 		// SystemWorker controls TLS setting for System Workers connecting to Frontend.
 		SystemWorker WorkerTLS `yaml:"systemWorker"`
@@ -251,7 +256,70 @@ type (
 	}
 
 	FaultInjection struct {
+		// Rate is the probability that we will return an error from any call to any datastore.
+		// The value should be between 0.0 and 1.0.
+		// The fault injector will inject different errors depending on the data store and method. See the
+		// implementation for details.
+		// This field is ignored if Targets is non-empty.
 		Rate float64 `yaml:"rate"`
+
+		// Targets is a mapping of data store name to a targeted fault injection config for that data store.
+		// If Targets is non-empty, then Rate is ignored.
+		// Here is an example config for targeted fault injection. This config will inject errors into the
+		// UpdateShard method of the ShardStore at a rate of 100%. No other methods will be affected.
+		/*
+			targets:
+			  dataStores:
+				ShardStore:
+				  methods:
+					UpdateShard:
+					  seed: 42
+					  errors:
+						ShardOwnershipLostError: 1.0 # all UpdateShard calls will fail with ShardOwnershipLostError
+		*/
+		// This will cause the UpdateShard method of the ShardStore to always return ShardOwnershipLostError.
+		Targets FaultInjectionTargets `yaml:"targets"`
+	}
+
+	// FaultInjectionTargets is the set of targets for fault injection. A target is a method of a data store.
+	FaultInjectionTargets struct {
+		// DataStores is a map of datastore name to fault injection config.
+		// Use this to configure fault injection for specific datastores. The key is the name of the datastore,
+		// e.g. "ShardStore". See DataStoreName for the list of valid datastore names.
+		DataStores map[DataStoreName]FaultInjectionDataStoreConfig `yaml:"dataStores"`
+	}
+
+	// DataStoreName is the name of a datastore, e.g. "ShardStore". The full list is defined later in this file.
+	DataStoreName string
+
+	// FaultInjectionDataStoreConfig is the fault injection config for a single datastore, e.g., the ShardStore.
+	FaultInjectionDataStoreConfig struct {
+		// Methods is a map of data store method name to a fault injection config for that method.
+		// We create an error generator that infers the method name from the call stack using reflection.
+		// For example, if a test with targeted fault injection enabled calls ShardStore.UpdateShard, then
+		// we fetch the error generator from this map using the key "UpdateShard".
+		// The key is the name of the method to inject faults for.
+		// The value is the config for that method.
+		Methods map[string]FaultInjectionMethodConfig `yaml:"methods"`
+	}
+
+	// FaultInjectionMethodConfig is the fault injection config for a single method of a data store.
+	FaultInjectionMethodConfig struct {
+		// Errors is a map of error type to probability of returning that error.
+		// For example: `ShardOwnershipLostError: 0.1` will cause the method to return a ShardOwnershipLostError 10% of
+		// the time.
+		// The other 90% of the time, the method will call the underlying datastore.
+		// If there are multiple errors for a method, the probability of each error is independent of the others.
+		// For example, if there are two errors with probabilities 0.1 and 0.2, then the first error will be returned
+		// 10% of the time, the second error will be returned 20% of the time,
+		// and the underlying method will be called 70% of the time.
+		Errors map[string]float64 `yaml:"errors"`
+
+		// Seed is the seed for the random number generator used to sample faults from the Errors map. You can use this
+		// to make the fault injection deterministic.
+		// If the test config does not set this to a non-zero number, the fault injector will set it to the current time
+		// in nanoseconds.
+		Seed int64 `yaml:"seed"`
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster
@@ -418,16 +486,30 @@ type (
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
 	}
 
-	// PublicClient is config for internal nodes (history/matching/worker) connecting to
-	// temporal frontend. There are two methods of connecting:
-	// Explicit endpoint: Supply a host:port to connect to. This can resolve to multiple IPs,
-	// or a single IP that is a load-balancer.
-	// Membership resolver (new in 1.18): Leave this empty, and other nodes will use the
-	// membership service resolver to find the frontend.
-	// TODO: remove this and always use membership resolver
+	// PublicClient is the config for internal nodes (history/matching/worker) connecting to
+	// frontend. There are three methods of connecting:
+	// 1. Use membership to locate "internal-frontend" and connect to them using the Internode
+	//    TLS config (which can be "no TLS"). This is recommended for deployments that use an
+	//    Authorizer and ClaimMapper. To use this, leave this section out of your config, and
+	//    make sure there is an "internal-frontend" section in Services.
+	// 2. Use membership to locate "frontend" and connect to them using the Frontend TLS config
+	//    (which can be "no TLS"). This is recommended for deployments that don't use an
+	//    Authorizer or ClaimMapper, or have implemented a custom ClaimMapper that correctly
+	//    identifies the system worker using mTLS and assigns it an Admin-level claim.
+	//    To use this, leave this section out of your config and make sure there is _no_
+	//    "internal-frontend" section in Services.
+	// 3. Connect to an explicit endpoint using the SystemWorker (falling back to Frontend) TLS
+	//    config (which can be "no TLS"). You can use this if you want to force frontend
+	//    connections to go through an external load balancer. If you use this with a
+	//    ClaimMapper+Authorizer, you need to ensure that your ClaimMapper assigns Admin
+	//    claims to worker nodes, and your Authorizer correctly handles those claims.
 	PublicClient struct {
-		// HostPort is the host port to connect on. Host can be DNS name
+		// HostPort is the host port to connect on. Host can be DNS name. See the above
+		// comment: in many situations you can leave this empty.
 		HostPort string `yaml:"hostPort"`
+		// Force selection of either the "internode" or "frontend" TLS configs for these
+		// connections (only those two strings are valid).
+		ForceTLSConfig string `yaml:"forceTLSConfig"`
 	}
 
 	// NamespaceDefaults is the default config for each namespace
@@ -479,6 +561,21 @@ type (
 	// @@@SNIPEND
 )
 
+const (
+	ShardStoreName     DataStoreName = "ShardStore"
+	TaskStoreName      DataStoreName = "TaskStore"
+	MetadataStoreName  DataStoreName = "MetadataStore"
+	ExecutionStoreName DataStoreName = "ExecutionStore"
+	QueueName          DataStoreName = "Queue"
+	ClusterMDStoreName DataStoreName = "ClusterMDStore"
+)
+
+const (
+	ForceTLSConfigAuto      = ""
+	ForceTLSConfigInternode = "internode"
+	ForceTLSConfigFrontend  = "frontend"
+)
+
 // Validate validates this config
 func (c *Config) Validate() error {
 	if err := c.Persistence.Validate(); err != nil {
@@ -487,6 +584,17 @@ func (c *Config) Validate() error {
 
 	if err := c.Archival.Validate(&c.NamespaceDefaults.Archival); err != nil {
 		return err
+	}
+
+	_, hasIFE := c.Services[string(primitives.InternalFrontendService)]
+	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "") {
+		return fmt.Errorf("when using internal-frontend, publicClient must be empty")
+	}
+
+	switch c.PublicClient.ForceTLSConfig {
+	case ForceTLSConfigAuto, ForceTLSConfigInternode, ForceTLSConfigFrontend:
+	default:
+		return fmt.Errorf("invalid value for publicClient.forceTLSConfig: %q", c.PublicClient.ForceTLSConfig)
 	}
 
 	return nil

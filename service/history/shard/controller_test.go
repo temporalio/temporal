@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -64,7 +64,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockResource        *resource.Test
+		mockResource        *resourcetest.Test
 		mockHistoryEngine   *MockEngine
 		mockClusterMetadata *cluster.MockMetadata
 		mockServiceResolver *membership.MockServiceResolver
@@ -83,7 +83,7 @@ type (
 func NewTestController(
 	engineFactory *MockEngineFactory,
 	config *configs.Config,
-	resource *resource.Test,
+	resource *resourcetest.Test,
 	hostInfoProvider *membership.MockHostInfoProvider,
 ) *ControllerImpl {
 	return &ControllerImpl{
@@ -96,7 +96,7 @@ func NewTestController(
 		clientBean:                  resource.GetClientBean(),
 		historyClient:               resource.GetHistoryClient(),
 		historyServiceResolver:      resource.GetHistoryServiceResolver(),
-		metricsClient:               resource.GetMetricsClient(),
+		metricsHandler:              resource.GetMetricsHandler(),
 		payloadSerializer:           resource.GetPayloadSerializer(),
 		timeSource:                  resource.GetTimeSource(),
 		namespaceRegistry:           resource.GetNamespaceRegistry(),
@@ -106,12 +106,12 @@ func NewTestController(
 		archivalMetadata:            resource.GetArchivalMetadata(),
 		hostInfoProvider:            hostInfoProvider,
 
-		status:             common.DaemonStatusInitialized,
-		membershipUpdateCh: make(chan *membership.ChangedEvent, 10),
-		engineFactory:      engineFactory,
-		shutdownCh:         make(chan struct{}),
-		metricsScope:       resource.GetMetricsClient().Scope(metrics.HistoryShardControllerScope),
-		historyShards:      make(map[int32]*ContextImpl),
+		status:               common.DaemonStatusInitialized,
+		membershipUpdateCh:   make(chan *membership.ChangedEvent, 10),
+		engineFactory:        engineFactory,
+		shutdownCh:           make(chan struct{}),
+		taggedMetricsHandler: resource.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryShardControllerScope)),
+		historyShards:        make(map[int32]*ContextImpl),
 	}
 }
 
@@ -124,7 +124,7 @@ func (s *controllerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.mockResource = resourcetest.NewTest(s.controller, metrics.History)
 	s.mockHistoryEngine = NewMockEngine(s.controller)
 	s.mockEngineFactory = NewMockEngineFactory(s.controller)
 
@@ -163,7 +163,8 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
 			s.mockHistoryEngine.EXPECT().Start().Return()
-			s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+			// notification step is done after engine is created, so may not be called when test finishes
+			s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
 			s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
@@ -232,7 +233,8 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
 			s.mockHistoryEngine.EXPECT().Start().Return()
-			s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any())
+			// notification step is done after engine is created, so may not be called when test finishes
+			s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
 			s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
@@ -310,7 +312,8 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockHistoryEngine.EXPECT().Start().Return()
-		s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any())
+		// notification step is done after engine is created, so may not be called when test finishes
+		s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
 		s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
@@ -373,7 +376,8 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockHistoryEngine.EXPECT().Start().Return()
-		s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any())
+		// notification step is done after engine is created, so may not be called when test finishes
+		s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
 		s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
@@ -590,9 +594,9 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	mockEngine := NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
-	s.setupMocksForAcquireShard(0, mockEngine, 5, 6, false)
+	s.setupMocksForAcquireShard(1, mockEngine, 5, 6, false)
 
-	shard, err := s.shardController.getOrCreateShardContext(0)
+	shard, err := s.shardController.getOrCreateShardContext(1)
 	s.NoError(err)
 	s.Equal(1, len(s.shardController.ShardIDs()))
 
@@ -614,7 +618,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 	mockEngine := NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
-	shardID := int32(0)
+	shardID := int32(1)
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil)
 
 	ready := make(chan struct{})
@@ -634,7 +638,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 		})
 
 	// get shard, will start initializing in background
-	shard, err := s.shardController.getOrCreateShardContext(0)
+	shard, err := s.shardController.getOrCreateShardContext(1)
 	s.NoError(err)
 
 	<-ready
@@ -655,7 +659,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 	mockEngine := NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
-	shardID := int32(0)
+	shardID := int32(1)
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil)
 	// return success from GetOrCreateShard
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
@@ -687,7 +691,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 		})
 
 	// get shard, will start initializing in background
-	shard, err := s.shardController.getOrCreateShardContext(0)
+	shard, err := s.shardController.getOrCreateShardContext(1)
 	s.NoError(err)
 
 	<-ready
@@ -725,7 +729,8 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).DoAndReturn(func(shard Context) Engine {
 			mockEngine := NewMockEngine(disconnectedMockController)
 			status := new(int32)
-			mockEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+			// notification step is done after engine is created, so may not be called when test finishes
+			mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
 			mockEngine.EXPECT().Start().Do(func() {
 				if !atomic.CompareAndSwapInt32(status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 					return
@@ -785,7 +790,9 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 			shardID := int32(rand.Intn(int(s.config.NumberOfShards))) + 1
 			switch rand.Intn(5) {
 			case 0:
-				s.shardController.GetShardByID(shardID)
+				if _, err := s.shardController.GetShardByID(shardID); err != nil {
+					return err
+				}
 			case 1:
 				if shard, err := s.shardController.GetShardByID(shardID); err == nil {
 					_, _ = shard.GetEngine(ctx)
@@ -827,6 +834,17 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	}, 1*time.Second, 50*time.Millisecond, "engine start/stop")
 }
 
+func (s *controllerSuite) Test_GetOrCreateShard_InvalidShardID() {
+	numShards := int32(2)
+	s.config.NumberOfShards = numShards
+
+	_, err := s.shardController.getOrCreateShardContext(0)
+	s.ErrorIs(err, invalidShardIdLowerBound)
+
+	_, err = s.shardController.getOrCreateShardContext(3)
+	s.ErrorIs(err, invalidShardIdUpperBound)
+}
+
 func (s *controllerSuite) setupMocksForAcquireShard(
 	shardID int32,
 	mockEngine *MockEngine,
@@ -844,7 +862,8 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 
 	// s.mockResource.ExecutionMgr.On("Close").Return()
 	mockEngine.EXPECT().Start().MinTimes(minTimes)
-	mockEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	// notification step is done after engine is created, so may not be called when test finishes
+	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2).MinTimes(minTimes)
 	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine).MinTimes(minTimes)
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(

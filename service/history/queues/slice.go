@@ -366,7 +366,9 @@ func (s *SliceImpl) SelectTasks(readerID int32, batchSize int) ([]Executable, er
 		return []Executable{}, nil
 	}
 
-	defer s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
+	defer func() {
+		s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
+	}()
 
 	executables := make([]Executable, 0, batchSize)
 	for len(executables) < batchSize && len(s.iterators) != 0 {

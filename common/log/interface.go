@@ -44,6 +44,8 @@ type (
 		Info(msg string, tags ...tag.Tag)
 		Warn(msg string, tags ...tag.Tag)
 		Error(msg string, tags ...tag.Tag)
+		DPanic(msg string, tags ...tag.Tag)
+		Panic(msg string, tags ...tag.Tag)
 		Fatal(msg string, tags ...tag.Tag)
 	}
 
@@ -66,4 +68,8 @@ type (
 	SkipLogger interface {
 		Skip(extraSkip int) Logger
 	}
+
+	// Special logger types for use with fx
+	SnTaggedLogger  Logger
+	ThrottledLogger Logger
 )

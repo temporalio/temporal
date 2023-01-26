@@ -29,6 +29,7 @@ import (
 	"os"
 
 	"github.com/urfave/cli/v2"
+	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -44,7 +45,7 @@ const (
 )
 
 // AdminGetDLQMessages gets DLQ metadata
-func AdminGetDLQMessages(c *cli.Context) error {
+func AdminGetDLQMessages(c *cli.Context) (err error) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
@@ -56,7 +57,10 @@ func AdminGetDLQMessages(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	defer outputFile.Close()
+	defer func() {
+		// see https://pkg.go.dev/go.uber.org/multierr#hdr-Deferred_Functions
+		err = multierr.Combine(err, outputFile.Close())
+	}()
 
 	remainingMessageCount := common.EndMessageID
 	if c.IsSet(FlagMaxMessageCount) {

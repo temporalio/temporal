@@ -61,10 +61,10 @@ type ringpopMonitor struct {
 	lifecycleCtx    context.Context
 	lifecycleCancel context.CancelFunc
 
-	serviceName               string
-	services                  map[string]int
+	serviceName               primitives.ServiceName
+	services                  map[primitives.ServiceName]int
 	rp                        *RingPop
-	rings                     map[string]*ringpopServiceResolver
+	rings                     map[primitives.ServiceName]*ringpopServiceResolver
 	logger                    log.Logger
 	metadataManager           persistence.ClusterMetadataManager
 	broadcastHostPortResolver func() (string, error)
@@ -75,8 +75,8 @@ var _ Monitor = (*ringpopMonitor)(nil)
 
 // NewRingpopMonitor returns a ringpop-based membership monitor
 func NewRingpopMonitor(
-	serviceName string,
-	services map[string]int,
+	serviceName primitives.ServiceName,
+	services map[primitives.ServiceName]int,
 	rp *RingPop,
 	logger log.Logger,
 	metadataManager persistence.ClusterMetadataManager,
@@ -98,7 +98,7 @@ func NewRingpopMonitor(
 		serviceName:               serviceName,
 		services:                  services,
 		rp:                        rp,
-		rings:                     make(map[string]*ringpopServiceResolver),
+		rings:                     make(map[primitives.ServiceName]*ringpopServiceResolver),
 		logger:                    logger,
 		metadataManager:           metadataManager,
 		broadcastHostPortResolver: broadcastHostPortResolver,
@@ -145,7 +145,7 @@ func (rpo *ringpopMonitor) Start() {
 		rpo.logger.Fatal("unable to set ring pop ServicePort label", tag.Error(err))
 	}
 
-	if err = labels.Set(RoleKey, rpo.serviceName); err != nil {
+	if err = labels.Set(RoleKey, string(rpo.serviceName)); err != nil {
 		rpo.logger.Fatal("unable to set ring pop ServiceRole label", tag.Error(err))
 	}
 
@@ -154,12 +154,14 @@ func (rpo *ringpopMonitor) Start() {
 	}
 }
 
-func ServiceNameToServiceTypeEnum(name string) (persistence.ServiceType, error) {
+func ServiceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.ServiceType, error) {
 	switch name {
 	case primitives.AllServices:
 		return persistence.All, nil
 	case primitives.FrontendService:
 		return persistence.Frontend, nil
+	case primitives.InternalFrontendService:
+		return persistence.InternalFrontend, nil
 	case primitives.HistoryService:
 		return persistence.History, nil
 	case primitives.MatchingService:
@@ -355,7 +357,7 @@ func (rpo *ringpopMonitor) EvictSelf() error {
 	return rpo.rp.SelfEvict()
 }
 
-func (rpo *ringpopMonitor) GetResolver(service string) (ServiceResolver, error) {
+func (rpo *ringpopMonitor) GetResolver(service primitives.ServiceName) (ServiceResolver, error) {
 	ring, found := rpo.rings[service]
 	if !found {
 		return nil, ErrUnknownService
@@ -363,7 +365,7 @@ func (rpo *ringpopMonitor) GetResolver(service string) (ServiceResolver, error) 
 	return ring, nil
 }
 
-func (rpo *ringpopMonitor) Lookup(service string, key string) (*HostInfo, error) {
+func (rpo *ringpopMonitor) Lookup(service primitives.ServiceName, key string) (*HostInfo, error) {
 	ring, err := rpo.GetResolver(service)
 	if err != nil {
 		return nil, err
@@ -371,7 +373,7 @@ func (rpo *ringpopMonitor) Lookup(service string, key string) (*HostInfo, error)
 	return ring.Lookup(key)
 }
 
-func (rpo *ringpopMonitor) AddListener(service string, name string, notifyChannel chan<- *ChangedEvent) error {
+func (rpo *ringpopMonitor) AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *ChangedEvent) error {
 	ring, err := rpo.GetResolver(service)
 	if err != nil {
 		return err
@@ -379,7 +381,7 @@ func (rpo *ringpopMonitor) AddListener(service string, name string, notifyChanne
 	return ring.AddListener(name, notifyChannel)
 }
 
-func (rpo *ringpopMonitor) RemoveListener(service string, name string) error {
+func (rpo *ringpopMonitor) RemoveListener(service primitives.ServiceName, name string) error {
 	ring, err := rpo.GetResolver(service)
 	if err != nil {
 		return err
@@ -391,7 +393,7 @@ func (rpo *ringpopMonitor) GetReachableMembers() ([]string, error) {
 	return rpo.rp.GetReachableMembers()
 }
 
-func (rpo *ringpopMonitor) GetMemberCount(service string) (int, error) {
+func (rpo *ringpopMonitor) GetMemberCount(service primitives.ServiceName) (int, error) {
 	ring, err := rpo.GetResolver(service)
 	if err != nil {
 		return 0, err

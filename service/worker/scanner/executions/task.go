@@ -62,7 +62,7 @@ type (
 		registry         namespace.Registry
 		historyClient    historyservice.HistoryServiceClient
 		adminClient      adminservice.AdminServiceClient
-		metrics          metrics.Client
+		metricsHandler   metrics.Handler
 		logger           log.Logger
 		scavenger        *Scavenger
 
@@ -81,7 +81,7 @@ func newTask(
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
-	metrics metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
@@ -94,9 +94,9 @@ func newTask(
 		historyClient:    historyClient,
 		adminClient:      adminClient,
 
-		metrics:   metrics,
-		logger:    logger,
-		scavenger: scavenger,
+		metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope)),
+		logger:         logger,
+		scavenger:      scavenger,
 
 		ctx:                         ctx,
 		rateLimiter:                 rateLimiter,
@@ -106,18 +106,21 @@ func newTask(
 
 // Run runs the task
 func (t *task) Run() executor.TaskStatus {
-	time.Sleep(backoff.JitDuration(
+	time.Sleep(backoff.Jitter(
 		taskStartupDelayRatio*time.Duration(t.scavenger.numHistoryShards),
 		taskStartupDelayRandomizationRatio,
 	))
 
 	iter := collection.NewPagingIteratorWithToken(t.getPaginationFn(), t.paginationToken)
+	var retryTask bool
 	for iter.HasNext() {
 		_ = t.rateLimiter.Wait(t.ctx)
 		record, err := iter.Next()
 		if err != nil {
+			t.metricsHandler.Counter(metrics.ScavengerValidationSkipsCount.GetMetricName()).Record(1)
+			// continue validation process and retry after all workflow records has been iterated.
 			t.logger.Error("unable to paginate concrete execution", tag.ShardID(t.shardID), tag.Error(err))
-			return executor.TaskStatusDefer
+			retryTask = true
 		}
 
 		mutableState := &MutableState{WorkflowMutableState: record}
@@ -125,14 +128,25 @@ func (t *task) Run() executor.TaskStatus {
 		printValidationResult(
 			mutableState,
 			results,
-			t.metrics,
+			t.metricsHandler,
 			t.logger,
 		)
 		err = t.handleFailures(mutableState, results)
 		if err != nil {
-			t.logger.Error("unable to process failure result", tag.ShardID(t.shardID), tag.Error(err))
-			return executor.TaskStatusDefer
+			// continue validation process and retry after all workflow records has been iterated.
+			executionInfo := mutableState.GetExecutionInfo()
+			t.metricsHandler.Counter(metrics.ScavengerValidationSkipsCount.GetMetricName()).Record(1)
+			t.logger.Error("unable to process failure result",
+				tag.ShardID(t.shardID),
+				tag.Error(err),
+				tag.WorkflowNamespaceID(executionInfo.GetNamespaceId()),
+				tag.WorkflowID(executionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()))
+			retryTask = true
 		}
+	}
+	if retryTask {
+		return executor.TaskStatusDefer
 	}
 	return executor.TaskStatusDone
 }
@@ -165,6 +179,11 @@ func (t *task) validate(
 		)
 	} else {
 		results = append(results, validationResults...)
+	}
+
+	// Fail fast if the mutable is corrupted, no need to validate history.
+	if len(results) > 0 {
+		return results
 	}
 
 	if validationResults, err := NewHistoryEventIDValidator(
@@ -251,25 +270,18 @@ func (t *task) handleFailures(
 func printValidationResult(
 	mutableState *MutableState,
 	results []MutableStateValidationResult,
-	metricClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
-
-	metricsScope := metricClient.Scope(metrics.ExecutionsScavengerScope).Tagged(
-		metrics.FailureTag(""),
-	)
-	metricsScope.IncCounter(metrics.ScavengerValidationRequestsCount)
+	metricsHandler.Counter(metrics.ScavengerValidationRequestsCount.GetMetricName()).Record(1)
 	if len(results) == 0 {
 		return
 	}
 
-	metricsScope.IncCounter(metrics.ScavengerValidationFailuresCount)
+	metricsHandler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1)
 	for _, result := range results {
-		metricsScope.Tagged(
-			metrics.FailureTag(result.failureType),
-		).IncCounter(metrics.ScavengerValidationFailuresCount)
-
-		logger.Error(
+		metricsHandler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1, metrics.FailureTag(result.failureType))
+		logger.Info(
 			"validation failed for execution.",
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
 			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),

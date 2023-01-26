@@ -75,6 +75,9 @@ var (
 	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
 	errUnableDeleteSystemNamespace                        = serviceerror.NewInvalidArgument("Unable to delete system namespace.")
 	errBatchJobIDNotSet                                   = serviceerror.NewInvalidArgument("JobId is not set on request.")
+	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
+	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
+	errBatchOperationNotSet                               = serviceerror.NewInvalidArgument("Batch operation is not set on request.")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 
@@ -95,5 +98,8 @@ var (
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
 
-	errBatchAPINotAllowed = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
+	errBatchAPINotAllowed                = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
+	errBatchOpsWorkflowFilterNotSet      = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are not set on request.")
+	errBatchOpsWorkflowFiltersNotAllowed = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are both set on request. Only one of them is allowed.")
+	errBatchOpsMaxWorkflowExecutionCount = serviceerror.NewInvalidArgument("Workflow executions count exceeded.")
 )

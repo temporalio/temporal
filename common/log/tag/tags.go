@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -372,8 +373,8 @@ func shardupdate(shardupdate string) ZapTag {
 // general
 
 // Service returns tag for Service
-func Service(sv string) ZapTag {
-	return NewStringTag("service", sv)
+func Service(sv primitives.ServiceName) ZapTag {
+	return NewStringTag("service", string(sv))
 }
 
 // Addresses returns tag for Addresses
@@ -608,6 +609,10 @@ func TimerTaskStatus(timerTaskStatus int32) ZapTag {
 // Attempt returns tag for Attempt
 func Attempt(attempt int32) ZapTag {
 	return NewInt32("attempt", attempt)
+}
+
+func WorkflowTaskType(wtType string) ZapTag {
+	return NewStringTag("wt-type", wtType)
 }
 
 // AttemptCount returns tag for AttemptCount

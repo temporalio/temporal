@@ -130,7 +130,6 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 			},
 		},
 		[]*persistence.WorkflowEvents{},
-		"active-cluster-name",
 	)
 	s.Equal(timeoutErr, err)
 }
@@ -158,7 +157,6 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 		[]*persistence.WorkflowEvents{},
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
-		"active-cluster-name",
 	)
 	s.Equal(timeoutErr, err)
 }
@@ -189,11 +187,10 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 		[]*persistence.WorkflowEvents{},
 		&persistence.WorkflowMutation{},
 		[]*persistence.WorkflowEvents{},
-		"active-cluster-name",
 	)
 	s.Equal(timeoutErr, err)
 }
 
 func (s *transactionSuite) setupMockForTaskNotification() {
-	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).Times(1)
+	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).Times(1)
 }

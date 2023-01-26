@@ -26,6 +26,8 @@ package shard
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -35,9 +37,11 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -51,7 +55,7 @@ type (
 		*require.Assertions
 
 		controller           *gomock.Controller
-		mockShard            Context
+		mockShard            *ContextTest
 		mockClusterMetadata  *cluster.MockMetadata
 		mockShardManager     *persistence.MockShardManager
 		mockExecutionManager *persistence.MockExecutionManager
@@ -101,10 +105,6 @@ func (s *contextSuite) SetupTest() {
 	shardContext.engineFuture.Set(s.mockHistoryEngine, nil)
 }
 
-func (s *contextSuite) TearDownTest() {
-	s.controller.Finish()
-}
-
 func (s *contextSuite) TestAddTasks_Success() {
 	tasks := map[tasks.Category][]tasks.Task{
 		tasks.CategoryTransfer:    {&tasks.ActivityTask{}},           // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
@@ -123,7 +123,7 @@ func (s *contextSuite) TestAddTasks_Success() {
 	}
 
 	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), addTasksRequest).Return(nil)
-	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), tasks)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(tasks)
 
 	err := s.mockShard.AddTasks(context.Background(), addTasksRequest)
 	s.NoError(err)
@@ -159,7 +159,7 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 	)
 
 	// clear shardInfo and load from persistence
-	shardContextImpl := s.mockShard.(*ContextTest)
+	shardContextImpl := s.mockShard
 	shardContextImpl.shardInfo = nil
 	err := shardContextImpl.loadShardMetadata(convert.BoolPtr(false))
 	s.NoError(err)
@@ -183,35 +183,214 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 	}
 }
 
-func (s *contextSuite) TestTimerMaxReadLevelUpdate_MultiProcessor() {
-	now := time.Now()
+func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
+	now := time.Now().Add(time.Minute)
 	s.timeSource.Update(now)
-	maxReadLevel := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, false)
 
-	s.timeSource.Update(now.Add(-time.Minute))
-	newMaxReadLevel := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, false)
-	s.Equal(maxReadLevel, newMaxReadLevel)
+	_, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark()
+	s.NoError(err)
 
-	s.timeSource.Update(now.Add(time.Minute))
-	newMaxReadLevel = s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, false)
-	s.True(newMaxReadLevel.FireTime.After(maxReadLevel.FireTime))
+	s.True(s.mockShard.scheduledTaskMaxReadLevel.After(now))
 }
 
-func (s *contextSuite) TestTimerMaxReadLevelUpdate_SingleProcessor() {
-	now := time.Now()
-	s.timeSource.Update(now)
+func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  tests.WorkflowID,
+		RunID:       tests.RunID,
+	}
+	branchToken := []byte("branchToken")
+	stage := tasks.DeleteWorkflowExecutionStageNone
 
-	// make sure the scheduledTaskMaxReadLevelMap has value for both current cluster and alternative cluster
-	s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, false)
-	s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestAlternativeClusterName, false)
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any())
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
 
-	now = time.Now().Add(time.Minute)
-	s.timeSource.Update(now)
+	err := s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
 
-	// update in single processor mode
-	s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, true)
-	scheduledTaskMaxReadLevelMap := s.mockShard.(*ContextTest).scheduledTaskMaxReadLevelMap
-	s.Len(scheduledTaskMaxReadLevelMap, 2)
-	s.True(scheduledTaskMaxReadLevelMap[cluster.TestCurrentClusterName].After(now))
-	s.True(scheduledTaskMaxReadLevelMap[cluster.TestAlternativeClusterName].After(now))
+	s.NoError(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+}
+
+func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  tests.WorkflowID,
+		RunID:       tests.RunID,
+	}
+	branchToken := []byte("branchToken")
+
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
+	stage := tasks.DeleteWorkflowExecutionStageVisibility
+	err := s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
+	s.NoError(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
+	stage = tasks.DeleteWorkflowExecutionStageVisibility | tasks.DeleteWorkflowExecutionStageCurrent
+	err = s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
+	s.NoError(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
+	stage = tasks.DeleteWorkflowExecutionStageVisibility | tasks.DeleteWorkflowExecutionStageCurrent | tasks.DeleteWorkflowExecutionStageMutableState
+	err = s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
+	s.NoError(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+}
+
+func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  tests.WorkflowID,
+		RunID:       tests.RunID,
+	}
+	branchToken := []byte("branchToken")
+
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any())
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(errors.New("some error"))
+	stage := tasks.DeleteWorkflowExecutionStageNone
+	err := s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
+	s.Error(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility, stage)
+
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(errors.New("some error"))
+	err = s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
+	s.Error(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageCurrent, stage)
+
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(errors.New("some error"))
+	err = s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
+	s.Error(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
+	err = s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
+	s.NoError(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageHistory, stage)
+}
+
+func (s *contextSuite) TestAcquireShardOwnershipLostErrorIsNotRetried() {
+	s.mockShard.state = contextStateAcquiring
+	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).
+		WithMaximumAttempts(5)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	s.mockShard.acquireShard()
+
+	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+}
+
+func (s *contextSuite) TestAcquireShardNonOwnershipLostErrorIsRetried() {
+	s.mockShard.state = contextStateAcquiring
+	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).
+		WithMaximumAttempts(5)
+	// TODO: make this 5 times instead of 6 when retry policy is fixed
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(fmt.Errorf("temp error")).Times(6)
+
+	s.mockShard.acquireShard()
+
+	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+}
+
+func (s *contextSuite) TestAcquireShardEventuallySucceeds() {
+	s.mockShard.state = contextStateAcquiring
+	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).
+		WithMaximumAttempts(5)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(fmt.Errorf("temp error")).Times(3)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MinTimes(1)
+
+	s.mockShard.acquireShard()
+
+	s.Assert().Equal(contextStateAcquired, s.mockShard.state)
+}
+
+func (s *contextSuite) TestAcquireShardNoError() {
+	s.mockShard.state = contextStateAcquiring
+	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).
+		WithMaximumAttempts(5)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MinTimes(1)
+
+	s.mockShard.acquireShard()
+
+	s.Assert().Equal(contextStateAcquired, s.mockShard.state)
 }

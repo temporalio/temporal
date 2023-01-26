@@ -47,12 +47,20 @@ func NewPriorityAssigner() PriorityAssigner {
 }
 
 func (a *priorityAssignerImpl) Assign(executable Executable) tasks.Priority {
-	switch executable.GetType() {
+	taskType := executable.GetType()
+	switch taskType {
 	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
-		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
+		enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION,
+		enumsspb.TASK_TYPE_UNSPECIFIED:
 		// add more task types here if we believe it's ok to delay those tasks
 		// and assign them the same priority as throttled tasks
+		return tasks.PriorityLow
+	}
+
+	if _, ok := enumsspb.TaskType_name[int32(taskType)]; !ok {
+		// low priority for unknown task types
 		return tasks.PriorityLow
 	}
 

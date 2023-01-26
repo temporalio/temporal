@@ -40,6 +40,10 @@ type (
 		TaskID              int64
 		Version             int64
 		DeleteAfterClose    bool
+		// CanSkipVisibilityArchival means the archival of visibility records will be handled by the archival queue, so
+		// we can skip archiving visibility records here while processing this task on the transfer queue.
+		CanSkipVisibilityArchival bool
+		DeleteProcessStage        DeleteWorkflowExecutionStage
 	}
 )
 

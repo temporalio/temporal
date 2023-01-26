@@ -1,0 +1,79 @@
+# https://golangci-lint.run/usage/configuration/#config-file
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - goimports
+    - revive # revive supersedes golint, which is now archived
+    - staticcheck
+    - vet
+run:
+  skip-dirs:
+    - ^api
+    - ^proto
+    - ^.git
+linters-settings:
+  govet:
+    fieldalignment: 0
+  revive:
+    severity: error
+    confidence: 0.8
+    enable-all-rules: true
+    rules:
+      # Disabled rules
+      - name: add-constant
+        disabled: true
+      - name: bare-return
+        disabled: true
+      - name: banned-characters
+        disabled: true
+      - name: bool-literal-in-expr
+        disabled: true
+      - name: empty-lines
+        disabled: true
+      - name: error-naming
+        disabled: true
+      - name: errorf
+        disabled: true
+      - name: exported
+        disabled: true
+      - name: file-header
+        disabled: true
+      - name: function-length
+        disabled: true
+      - name: imports-blacklist
+        disabled: true
+      - name: increment-decrement
+        disabled: true
+      - name: line-length-limit
+        disabled: true
+      - name: max-public-structs
+        disabled: true
+      - name: nested-structs
+        disabled: true
+      - name: package-comments
+        disabled: true
+      - name: string-format
+        disabled: true
+      - name: unexported-naming
+        disabled: true
+      - name: unused-receiver
+        disabled: true
+      - name: use-any
+        disabled: true
+      - name: var-naming
+        disabled: true
+
+      # Rule tuning
+      - name: argument-limit
+        arguments:
+          - 10
+      - name: cognitive-complexity
+        arguments:
+          - 25
+      - name: cyclomatic
+        arguments:
+          - 15
+      - name: function-result-limit
+        arguments:
+          - 3

@@ -107,19 +107,19 @@ func (v *visibilityArchiver) Archive(
 	request *archiverspb.VisibilityRecord,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.NamespaceTag(request.Namespace))
+	handler := v.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.VisibilityArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	startTime := time.Now().UTC()
 	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
 	archiveFailReason := ""
 	defer func() {
-		sw.Stop()
+		handler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveTransientErrorCount)
+				handler.Counter(metrics.VisibilityArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 			} else {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount)
+				handler.Counter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount.GetMetricName()).Record(1)
 				logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
@@ -128,7 +128,7 @@ func (v *visibilityArchiver) Archive(
 		}
 	}()
 
-	if err := softValidateURI(URI); err != nil {
+	if err := SoftValidateURI(URI); err != nil {
 		archiveFailReason = archiver.ErrReasonInvalidURI
 		return err
 	}
@@ -138,7 +138,7 @@ func (v *visibilityArchiver) Archive(
 		return err
 	}
 
-	encodedVisibilityRecord, err := encode(request)
+	encodedVisibilityRecord, err := Encode(request)
 	if err != nil {
 		archiveFailReason = errEncodeVisibilityRecord
 		return err
@@ -147,12 +147,12 @@ func (v *visibilityArchiver) Archive(
 	// Upload archive to all indexes
 	for _, element := range indexes {
 		key := constructTimestampIndex(URI.Path(), request.GetNamespaceId(), element.primaryIndex, element.primaryIndexValue, element.secondaryIndex, element.secondaryIndexTimestamp, request.GetRunId())
-		if err := upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
+		if err := Upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
 			archiveFailReason = errWriteKey
 			return err
 		}
 	}
-	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
+	handler.Counter(metrics.VisibilityArchiveSuccessCount.GetMetricName()).Record(1)
 	return nil
 }
 func createIndexesToArchive(request *archiverspb.VisibilityRecord) []indexToArchive {
@@ -171,7 +171,7 @@ func (v *visibilityArchiver) Query(
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
 
-	if err := softValidateURI(URI); err != nil {
+	if err := SoftValidateURI(URI); err != nil {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
 	}
 
@@ -244,7 +244,7 @@ func (v *visibilityArchiver) query(
 		response.NextPageToken = serializeQueryVisibilityToken(*results.NextContinuationToken)
 	}
 	for _, item := range results.Contents {
-		encodedRecord, err := download(ctx, v.s3cli, URI, *item.Key)
+		encodedRecord, err := Download(ctx, v.s3cli, URI, *item.Key)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(err.Error())
 		}
@@ -263,9 +263,9 @@ func (v *visibilityArchiver) query(
 }
 
 func (v *visibilityArchiver) ValidateURI(URI archiver.URI) error {
-	err := softValidateURI(URI)
+	err := SoftValidateURI(URI)
 	if err != nil {
 		return err
 	}
-	return bucketExists(context.TODO(), v.s3cli, URI)
+	return BucketExists(context.TODO(), v.s3cli, URI)
 }

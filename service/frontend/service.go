@@ -79,7 +79,9 @@ type Config struct {
 	MaxNamespaceVisibilityRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
 	GlobalNamespaceRPS                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	InternalFEGlobalNamespaceRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	GlobalNamespaceVisibilityRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	InternalFEGlobalNamespaceVisibilityRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                       dynamicconfig.IntPropertyFn
 	WorkerBuildIdSizeLimit                 dynamicconfig.IntPropertyFn
 	DisallowQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -162,7 +164,8 @@ type Config struct {
 	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
-	MaxConcurrentBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -193,7 +196,9 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		MaxNamespaceVisibilityRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
 		MaxNamespaceVisibilityBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
+		InternalFEGlobalNamespaceRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceRPS, 0),
 		GlobalNamespaceVisibilityRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceVisibilityRPS, 0),
+		InternalFEGlobalNamespaceVisibilityRPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceVisibilityRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		WorkerBuildIdSizeLimit:                 dc.GetIntProperty(dynamicconfig.WorkerBuildIdSizeLimit, 1000),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
@@ -212,7 +217,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		DefaultWorkflowRetryPolicy:             dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
 		DefaultWorkflowTaskTimeout:             dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		EnableServerVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
-		EnableTokenNamespaceEnforcement:        dc.GetBoolProperty(dynamicconfig.EnableTokenNamespaceEnforcement, false),
+		EnableTokenNamespaceEnforcement:        dc.GetBoolProperty(dynamicconfig.EnableTokenNamespaceEnforcement, true),
 		KeepAliveMinTime:                       dc.GetDurationProperty(dynamicconfig.KeepAliveMinTime, 10*time.Second),
 		KeepAlivePermitWithoutStream:           dc.GetBoolProperty(dynamicconfig.KeepAlivePermitWithoutStream, true),
 		KeepAliveMaxConnectionIdle:             dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionIdle, 2*time.Minute),
@@ -229,8 +234,9 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 
 		EnableSchedules: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableSchedules, true),
 
-		EnableBatcher:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableBatcher, true),
-		MaxConcurrentBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
+		EnableBatcher:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableBatcher, true),
+		MaxConcurrentBatchOperation:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
+		MaxExecutionCountBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace, 1000),
 	}
 }
 
@@ -249,7 +255,7 @@ type Service struct {
 
 	logger                         log.Logger
 	grpcListener                   net.Listener
-	metricsHandler                 metrics.MetricsHandler
+	metricsHandler                 metrics.Handler
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 }
 
@@ -264,7 +270,7 @@ func NewService(
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	grpcListener net.Listener,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{

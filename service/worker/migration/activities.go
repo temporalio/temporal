@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
@@ -139,9 +138,9 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
 				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
 				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
-				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
+				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
 				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
-				tag.NewTimeTag("ShardLocalTime", *shard.ShardLocalTime),
+				tag.NewTimeTag("MaxReplicationTaskVisibilityTime", *shard.MaxReplicationTaskVisibilityTime),
 				tag.NewTimeTag("AckedTaskVisibilityTime", *clusterInfo.AckedTaskVisibilityTime),
 				tag.NewInt64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
 				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
@@ -150,10 +149,10 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 	}
 
 	// emit metrics about how many shards are ready
-	a.metricsClient.Scope(
-		metrics.MigrationWorkflowScope,
-		metrics.TargetClusterTag(waitRequest.RemoteCluster),
-	).UpdateGauge(metrics.CatchUpReadyShardCountGauge, float64(readyShardCount))
+	a.metricsHandler.Gauge(metrics.CatchUpReadyShardCountGauge.GetMetricName()).Record(
+		float64(readyShardCount),
+		metrics.OperationTag(metrics.MigrationWorkflowScope),
+		metrics.TargetClusterTag(waitRequest.RemoteCluster))
 
 	return readyShardCount == len(resp.Shards), nil
 }
@@ -193,7 +192,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
 		handoverInfo, hasHandoverInfo := shard.HandoverNamespaces[waitRequest.Namespace]
 		if hasClusterInfo && hasHandoverInfo {
-			if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId || clusterInfo.AckedTaskId >= handoverInfo.HandoverReplicationTaskId {
+			if clusterInfo.AckedTaskId >= handoverInfo.HandoverReplicationTaskId {
 				readyShardCount++
 				continue
 			}
@@ -224,11 +223,11 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	}
 
 	// emit metrics about how many shards are ready
-	a.metricsClient.Scope(
-		metrics.MigrationWorkflowScope,
+	a.metricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.GetMetricName()).Record(
+		float64(readyShardCount),
+		metrics.OperationTag(metrics.MigrationWorkflowScope),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster),
-		metrics.NamespaceTag(waitRequest.Namespace),
-	).UpdateGauge(metrics.HandoverReadyShardCountGauge, float64(readyShardCount))
+		metrics.NamespaceTag(waitRequest.Namespace))
 	a.logger.Info("Wait handover ready shard count.",
 		tag.NewInt("ReadyShards", readyShardCount),
 		tag.NewStringTag("Namespace", waitRequest.Namespace),
@@ -339,6 +338,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 		we := request.Executions[i]
 		err := a.generateWorkflowReplicationTask(ctx, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
 		if err != nil {
+			a.logger.Info("Force replicate failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
 			return err
 		}
 		activity.RecordHeartbeat(ctx, i)

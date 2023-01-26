@@ -32,15 +32,16 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/debug"
 )
 
 var _ adminservice.AdminServiceClient = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = 10 * time.Second
+	DefaultTimeout = 10 * time.Second * debug.TimeoutMultiplier
 	// DefaultLargeTimeout is the default timeout used to make calls
-	DefaultLargeTimeout = time.Minute
+	DefaultLargeTimeout = time.Minute * debug.TimeoutMultiplier
 )
 
 type clientImpl struct {

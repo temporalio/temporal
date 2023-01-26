@@ -45,7 +45,7 @@ var (
 		"RequestCancelWorkflowExecution":   0,
 		"TerminateWorkflowExecution":       0,
 		"GetWorkflowExecutionHistory":      0,
-		"UpdateWorkflow":                   0,
+		"UpdateWorkflowExecution":          0,
 
 		// priority 1
 		"RecordActivityTaskHeartbeat":      1,
@@ -176,9 +176,9 @@ func NewRequestToRateLimiter(
 func NewExecutionPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range ExecutionAPIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
+		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
 		if priority, ok := ExecutionAPIToPriority[req.API]; ok {
@@ -191,9 +191,9 @@ func NewExecutionPriorityRateLimiter(
 func NewVisibilityPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range VisibilityAPIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
+		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
 		if priority, ok := VisibilityAPIToPriority[req.API]; ok {
@@ -206,9 +206,9 @@ func NewVisibilityPriorityRateLimiter(
 func NewOtherAPIPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range OtherAPIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
+		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
 		if priority, ok := OtherAPIToPriority[req.API]; ok {

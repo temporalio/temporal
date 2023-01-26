@@ -198,9 +198,9 @@ func (b *HistoryBuilder) AddWorkflowTaskScheduledEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	startToCloseTimeout *time.Duration,
 	attempt int32,
-	now time.Time,
+	scheduleTime time.Time,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, now)
+	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, scheduleTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 			TaskQueue:           taskQueue,
@@ -216,9 +216,9 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	scheduledEventID int64,
 	requestID string,
 	identity string,
-	now time.Time,
+	startTime time.Time,
 ) *historypb.HistoryEvent {
-	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, now)
+	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 			ScheduledEventId: scheduledEventID,
@@ -1267,10 +1267,15 @@ func (b *HistoryBuilder) bufferEvent(
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED,
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
 		// do not buffer event if event is directly generated from a corresponding command
+		return false
+
+	case // events generated directly from messages should not be buffered
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
+		// do not buffer event if event is directly generated from a message
 		return false
 
 	default:

@@ -53,8 +53,8 @@ type (
 
 		controller            *gomock.Controller
 		mockNamespaceRegistry *namespace.MockRegistry
-		mockMetricsHandler    *metrics.MockMetricsHandler
-		mockTimerMetric       *metrics.MockTimerMetric
+		mockMetricsHandler    *metrics.MockHandler
+		mockTimerMetric       *metrics.MockTimerIface
 		mockTimeSource        *clock.EventTimeSource
 
 		schedulerMonitor *schedulerMonitor
@@ -71,13 +71,13 @@ func (s *schedulerMonitorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
-	s.mockMetricsHandler = metrics.NewMockMetricsHandler(s.controller)
-	s.mockTimerMetric = metrics.NewMockTimerMetric(s.controller)
+	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
+	s.mockTimerMetric = metrics.NewMockTimerIface(s.controller)
 	s.mockTimeSource = clock.NewEventTimeSource()
 
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
 	s.mockMetricsHandler.EXPECT().WithTags(gomock.Any()).Return(s.mockMetricsHandler).AnyTimes()
-	s.mockMetricsHandler.EXPECT().Timer(QueueScheduleLatency).Return(s.mockTimerMetric).AnyTimes()
+	s.mockMetricsHandler.EXPECT().Timer(metrics.QueueScheduleLatency.GetMetricName()).Return(s.mockTimerMetric).AnyTimes()
 
 	s.schedulerMonitor = newSchedulerMonitor(
 		func(e Executable) TaskChannelKey {

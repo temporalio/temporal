@@ -31,17 +31,18 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/tests/testhelper"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
+
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/tests/testutils"
 )
 
 type (
@@ -53,7 +54,7 @@ type (
 
 		logger           log.Logger
 		internodeCertDir string
-		internodeChain   testhelper.CertChain
+		internodeChain   testutils.CertChain
 
 		membershipConfig         config.Membership
 		internodeConfigMutualTLS config.GroupTLS
@@ -98,7 +99,7 @@ func (s *RingpopSuite) SetupTest() {
 	var err error
 	s.internodeCertDir, err = os.MkdirTemp("", "RingpopSuiteInternode")
 	s.NoError(err)
-	s.internodeChain, err = testhelper.GenerateTestChain(s.internodeCertDir, localhostIPv4)
+	s.internodeChain, err = testutils.GenerateTestChain(s.internodeCertDir, localhostIPv4)
 	s.NoError(err)
 
 	s.internodeConfigMutualTLS = config.GroupTLS{
@@ -115,11 +116,11 @@ func (s *RingpopSuite) SetupTest() {
 
 	s.internodeConfigServerTLS = config.GroupTLS{
 		Server: config.ServerTLS{
-			CertData: testhelper.ConvertFileToBase64(s.internodeChain.CertPubFile),
-			KeyData:  testhelper.ConvertFileToBase64(s.internodeChain.CertKeyFile),
+			CertData: testutils.ConvertFileToBase64(s.internodeChain.CertPubFile),
+			KeyData:  testutils.ConvertFileToBase64(s.internodeChain.CertKeyFile),
 		},
 		Client: config.ClientTLS{
-			RootCAData: []string{testhelper.ConvertFileToBase64(s.internodeChain.CaPubFile)},
+			RootCAData: []string{testutils.ConvertFileToBase64(s.internodeChain.CaPubFile)},
 		},
 	}
 
@@ -158,7 +159,7 @@ maxJoinDuration: 30s`
 }
 
 func newTestRingpopFactory(
-	serviceName string,
+	serviceName primitives.ServiceName,
 	logger log.Logger,
 	rpcConfig *config.RPC,
 	tlsProvider encryption.TLSConfigProvider,
@@ -220,7 +221,7 @@ func runRingpopTLSTest(s suite.Suite, logger log.Logger, serverA *ringpopFactory
 }
 
 func (s *RingpopSuite) setupInternodeRingpop() {
-	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	s.insecureFactory = newTestRingpopFactory("tester", s.logger, rpcTestCfgDefault, provider, dynamicconfig.NewNoopCollection())
 	s.NotNil(s.insecureFactory)
@@ -246,14 +247,14 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 		dynamicconfig.EnableRingpopTLS: true,
 	}), s.logger)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	s.ringpopMutualTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
 	s.NotNil(s.ringpopMutualTLSFactoryA)
 	s.ringpopMutualTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
 	s.NotNil(s.ringpopMutualTLSFactoryB)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopServerTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopServerTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	s.ringpopServerTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
 	s.NotNil(s.ringpopServerTLSFactoryA)

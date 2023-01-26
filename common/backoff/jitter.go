@@ -26,32 +26,26 @@ package backoff
 
 import (
 	"math/rand"
-	"time"
 )
 
-// JitDuration return random duration from (1-coefficient)*duration to (1+coefficient)*duration, inclusive, exclusive
-func JitDuration(duration time.Duration, coefficient float64) time.Duration {
-	validateCoefficient(coefficient)
+const fullCoefficient float64 = 1
 
-	return time.Duration(JitInt64(duration.Nanoseconds(), coefficient))
+// FullJitter return random number from 0 to input, inclusive, exclusive
+func FullJitter[T ~int64 | ~int | ~int32 | ~float64 | ~float32](input T) T {
+	return Jitter(input, fullCoefficient) / 2
 }
 
-// JitInt64 return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
-func JitInt64(input int64, coefficient float64) int64 {
+// Jitter return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
+func Jitter[T ~int64 | ~int | ~int32 | ~float64 | ~float32](input T, coefficient float64) T {
 	validateCoefficient(coefficient)
 
-	base := int64(float64(input) * (1 - coefficient))
-	addon := rand.Int63n(2 * (input - base))
-	return base + addon
-}
+	if coefficient == 0 {
+		return input
+	}
 
-// JitFloat64 return random number from (1-coefficient)*input to (1+coefficient)*input, inclusive, exclusive
-func JitFloat64(input float64, coefficient float64) float64 {
-	validateCoefficient(coefficient)
-
-	base := input * (1 - coefficient)
-	addon := rand.Float64() * 2 * (input - base)
-	return base + addon
+	base := float64(input) * (1 - coefficient)
+	addon := rand.Float64() * 2 * (float64(input) - base)
+	return T(base + addon)
 }
 
 func validateCoefficient(coefficient float64) {

@@ -1,0 +1,17 @@
+enablearchival: false
+clusterno: 0
+historyconfig:
+  numhistoryshards: 1
+  numhistoryhosts: 1
+workerconfig:
+  enablearchiver: false
+  enablereplicator: false
+faultinjection:
+  targets:
+    dataStores:
+      ShardStore:
+        methods:
+          UpdateShard:
+            seed: 43  # deterministically generate a deadline exceeded error followed by a success
+            errors:
+              DeadlineExceededError: 0.5 # 50% of the time, return a deadline exceeded error

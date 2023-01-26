@@ -69,10 +69,10 @@ func (a *activities) checkNamespace(namespace string) error {
 func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
-	metricsClient := a.MetricsClient.Scope(metrics.BatcherScope, metrics.NamespaceTag(batchParams.Namespace))
+	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceTag(batchParams.Namespace))
 
 	if err := a.checkNamespace(batchParams.Namespace); err != nil {
-		metricsClient.IncCounter(metrics.BatcherOperationFailures)
+		metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
@@ -91,44 +91,56 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	}
 
 	if startOver {
-		resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-			Query: batchParams.Query,
-		})
-		if err != nil {
-			metricsClient.IncCounter(metrics.BatcherOperationFailures)
-			logger.Error("Failed to get estimate workflow count", tag.Error(err))
-			return HeartBeatDetails{}, err
+		estimateCount := int64(len(batchParams.Executions))
+		if len(batchParams.Query) > 0 {
+			resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+				Query: batchParams.Query,
+			})
+			if err != nil {
+				metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
+				logger.Error("Failed to get estimate workflow count", tag.Error(err))
+				return HeartBeatDetails{}, err
+			}
+			estimateCount = resp.GetCount()
 		}
-		hbd.TotalEstimate = resp.GetCount()
+		hbd.TotalEstimate = estimateCount
 	}
 	rps := a.getOperationRPS(batchParams.RPS)
 	rateLimiter := rate.NewLimiter(rate.Limit(rps), rps)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
 	for i := 0; i < a.getOperationConcurrency(batchParams.Concurrency); i++ {
-		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsClient, logger)
+		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
 	for {
-		resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			PageSize:      int32(pageSize),
-			NextPageToken: hbd.PageToken,
-			Query:         batchParams.Query,
-		})
-		if err != nil {
-			metricsClient.IncCounter(metrics.BatcherOperationFailures)
-			logger.Error("Failed to list workflow executions", tag.Error(err))
-			return HeartBeatDetails{}, err
+		executions := batchParams.Executions
+		pageToken := hbd.PageToken
+		if len(batchParams.Query) > 0 {
+			resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				PageSize:      int32(pageSize),
+				NextPageToken: pageToken,
+				Query:         batchParams.Query,
+			})
+			if err != nil {
+				metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
+				logger.Error("Failed to list workflow executions", tag.Error(err))
+				return HeartBeatDetails{}, err
+			}
+			pageToken = resp.NextPageToken
+			for _, wf := range resp.Executions {
+				executions = append(executions, wf.Execution)
+			}
 		}
-		batchCount := len(resp.Executions)
+
+		batchCount := len(executions)
 		if batchCount <= 0 {
 			break
 		}
-
 		// send all tasks
-		for _, wf := range resp.Executions {
+		for _, wf := range executions {
 			taskCh <- taskDetail{
-				execution: *wf.Execution,
+				execution: *wf,
 				attempts:  1,
 				hbd:       hbd,
 			}
@@ -150,14 +162,14 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 					break Loop
 				}
 			case <-ctx.Done():
-				metricsClient.IncCounter(metrics.BatcherOperationFailures)
+				metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
 				logger.Error("Failed to complete batch operation", tag.Error(ctx.Err()))
 				return HeartBeatDetails{}, ctx.Err()
 			}
 		}
 
 		hbd.CurrentPage++
-		hbd.PageToken = resp.NextPageToken
+		hbd.PageToken = pageToken
 		hbd.SuccessCount += succCount
 		hbd.ErrorCount += errCount
 		activity.RecordHeartbeat(ctx, hbd)
@@ -202,7 +214,7 @@ func startTaskProcessor(
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
-	metricsClient metrics.Scope,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
 	for {
@@ -245,7 +257,7 @@ func startTaskProcessor(
 					})
 			}
 			if err != nil {
-				metricsClient.IncCounter(metrics.BatcherProcessorFailures)
+				metricsHandler.Counter(metrics.BatcherProcessorFailures.GetMetricName()).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
@@ -257,7 +269,7 @@ func startTaskProcessor(
 					taskCh <- task
 				}
 			} else {
-				metricsClient.IncCounter(metrics.BatcherProcessorSuccess)
+				metricsHandler.Counter(metrics.BatcherProcessorSuccess.GetMetricName()).Record(1)
 				respCh <- nil
 			}
 		}

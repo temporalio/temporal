@@ -95,7 +95,7 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 		s.mockExecutionManager,
 		false,
 		s.logger,
-		metrics.NoopClient,
+		metrics.NoopMetricsHandler,
 	)
 }
 

@@ -39,21 +39,23 @@ const (
 type (
 	Server interface {
 		Start() error
-		Stop()
+		Stop() error
 	}
 )
 
-// Services is the list of all valid temporal services
+// Services is the list of all valid temporal services as strings (needs to be strings to keep
+// ServerOptions interface stable)
 var (
 	Services = []string{
-		primitives.FrontendService,
-		primitives.HistoryService,
-		primitives.MatchingService,
-		primitives.WorkerService,
+		string(primitives.FrontendService),
+		string(primitives.InternalFrontendService),
+		string(primitives.HistoryService),
+		string(primitives.MatchingService),
+		string(primitives.WorkerService),
 	}
 )
 
 // NewServer returns a new instance of server that serves one or many services.
-func NewServer(opts ...ServerOption) Server {
+func NewServer(opts ...ServerOption) (Server, error) {
 	return NewServerFx(opts...)
 }

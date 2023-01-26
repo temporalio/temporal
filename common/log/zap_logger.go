@@ -40,7 +40,9 @@ import (
 const (
 	skipForZapLogger = 3
 	// we put a default message when it is empty so that the log can be searchable/filterable
-	defaultMsgForEmpty = "none"
+	defaultMsgForEmpty  = "none"
+	testLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
+	testLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
 )
 
 type (
@@ -53,11 +55,16 @@ type (
 
 var _ Logger = (*zapLogger)(nil)
 
-// NewTestLogger returns a logger at debug level and log into STDERR
+// NewTestLogger returns a logger for tests
 func NewTestLogger() *zapLogger {
+	format := os.Getenv(testLogFormatEnvVar)
+	if format == "" {
+		format = "console"
+	}
 	return NewZapLogger(BuildZapLogger(Config{
-		// Uncomment next line if you need debug level logging in tests.
-		// Level: "debug",
+		Level:       os.Getenv(testLogLevelEnvVar),
+		Format:      format,
+		Development: true,
 	}))
 }
 
@@ -144,6 +151,22 @@ func (l *zapLogger) Error(msg string, tags ...tag.Tag) {
 	}
 }
 
+func (l *zapLogger) DPanic(msg string, tags ...tag.Tag) {
+	if l.zl.Core().Enabled(zap.DPanicLevel) {
+		msg = setDefaultMsg(msg)
+		fields := l.buildFieldsWithCallAt(tags)
+		l.zl.DPanic(msg, fields...)
+	}
+}
+
+func (l *zapLogger) Panic(msg string, tags ...tag.Tag) {
+	if l.zl.Core().Enabled(zap.PanicLevel) {
+		msg = setDefaultMsg(msg)
+		fields := l.buildFieldsWithCallAt(tags)
+		l.zl.Panic(msg, fields...)
+	}
+}
+
 func (l *zapLogger) Fatal(msg string, tags ...tag.Tag) {
 	if l.zl.Core().Enabled(zap.FatalLevel) {
 		msg = setDefaultMsg(msg)
@@ -196,12 +219,15 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 	if cfg.Stdout {
 		outputPath = "stdout"
 	}
-
+	encoding := "json"
+	if cfg.Format == "console" {
+		encoding = "console"
+	}
 	config := zap.Config{
 		Level:            zap.NewAtomicLevelAt(parseZapLevel(cfg.Level)),
-		Development:      false,
+		Development:      cfg.Development,
 		Sampling:         nil,
-		Encoding:         "json",
+		Encoding:         encoding,
 		EncoderConfig:    encodeConfig,
 		OutputPaths:      []string{outputPath},
 		ErrorOutputPaths: []string{outputPath},
@@ -252,6 +278,10 @@ func parseZapLevel(level string) zapcore.Level {
 		return zap.WarnLevel
 	case "error":
 		return zap.ErrorLevel
+	case "dpanic":
+		return zap.DPanicLevel
+	case "panic":
+		return zap.PanicLevel
 	case "fatal":
 		return zap.FatalLevel
 	default:

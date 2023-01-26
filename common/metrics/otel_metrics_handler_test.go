@@ -206,20 +206,20 @@ func valuesEqual(v1, v2 attribute.Value) bool {
 	return v1.AsInterface() == v2.AsInterface()
 }
 
-func recordMetrics(mp MetricsHandler) {
-	c := mp.Counter("hits")
-	g := mp.Gauge("temp")
+func recordMetrics(mp Handler) {
+	hitsCounter := mp.Counter("hits")
+	gauge := mp.Gauge("temp")
 
-	d := mp.Timer("latency")
-	h := mp.Histogram("transmission", Bytes)
-	t := mp.Counter("hits-tagged")
-	e := mp.Counter("hits-tagged-excluded")
+	timer := mp.Timer("latency")
+	histogram := mp.Histogram("transmission", Bytes)
+	hitsTaggedCounter := mp.Counter("hits-tagged")
+	hitsTaggedExcludedCounter := mp.Counter("hits-tagged-excluded")
 
-	c.Record(8)
-	g.Record(100, StringTag("location", "Mare Imbrium"))
-	d.Record(time.Duration(minLatency) * time.Millisecond)
-	d.Record(time.Duration(maxLatency) * time.Millisecond)
-	h.Record(int64(testBytes))
-	t.Record(11, TaskQueueTag("__sticky__"))
-	e.Record(14, TaskQueueTag("filtered"))
+	hitsCounter.Record(8)
+	gauge.Record(100, StringTag("location", "Mare Imbrium"))
+	timer.Record(time.Duration(minLatency) * time.Millisecond)
+	timer.Record(time.Duration(maxLatency) * time.Millisecond)
+	histogram.Record(int64(testBytes))
+	hitsTaggedCounter.Record(11, TaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, TaskQueueTag("filtered"))
 }

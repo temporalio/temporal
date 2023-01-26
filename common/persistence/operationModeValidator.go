@@ -113,8 +113,7 @@ func ValidateUpdateWorkflowModeState(
 		// case 2
 		if currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
 			currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
-			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
-			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 			return newInvalidUpdateWorkflowWithNewMode(mode, currentWorkflowState, *newWorkflowState)
 		}
 		return nil
@@ -125,7 +124,7 @@ func ValidateUpdateWorkflowModeState(
 		//  current workflow cannot be created / running
 		// 2. current workflow & new workflow ->
 		//  current workflow cannot be created / running,
-		//  new workflow cannot be created / running / completed
+		//  new workflow cannot be created / running
 
 		// case 1
 		if newWorkflowState == nil {
@@ -140,8 +139,7 @@ func ValidateUpdateWorkflowModeState(
 		if currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
 			currentWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
 			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
-			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
-			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING {
 			return newInvalidUpdateWorkflowWithNewMode(
 				mode,
 				currentWorkflowState,
@@ -189,14 +187,14 @@ func ValidateConflictResolveWorkflowModeState(
 		//  reset workflow cannot be zombie
 		// 2. reset workflow & new workflow ->
 		//  reset workflow cannot be created / running / zombie,
-		//  new workflow cannot be zombie / completed
+		//  new workflow cannot be zombie
 		// 3. current workflow & reset workflow ->
 		//  current workflow cannot be created / running,
 		//  reset workflow cannot be zombie
 		// 4. current workflow & reset workflow & new workflow ->
 		//  current workflow cannot be created / running,
 		//  reset workflow cannot be created / running / zombie,
-		//  new workflow cannot be zombie / completed
+		//  new workflow cannot be zombie
 
 		// TODO remove case 1 & 2 support once 2DC is deprecated
 		// it is ok that currentWorkflowMutation is null, only for 2 DC case
@@ -220,8 +218,7 @@ func ValidateConflictResolveWorkflowModeState(
 			if resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
 				resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
 				resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
-				*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
-				*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+				*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 				return newInvalidConflictResolveWorkflowWithNewMode(
 					mode,
 					resetWorkflowState,
@@ -252,8 +249,7 @@ func ValidateConflictResolveWorkflowModeState(
 			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
 			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
 			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
-			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
-			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 			return newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 				mode,
 				resetWorkflowState,

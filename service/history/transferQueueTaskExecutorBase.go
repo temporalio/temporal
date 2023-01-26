@@ -33,55 +33,59 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
-
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 const (
-	taskTimeout             = time.Second * 3
-	taskGetExecutionTimeout = time.Second
+	taskTimeout             = time.Second * 3 * debug.TimeoutMultiplier
+	taskGetExecutionTimeout = time.Second * debug.TimeoutMultiplier
 	taskHistoryOpTimeout    = 20 * time.Second
 )
+
+var errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
 
 type (
 	transferQueueTaskExecutorBase struct {
 		currentClusterName       string
 		shard                    shard.Context
 		registry                 namespace.Registry
-		cache                    workflow.Cache
+		cache                    wcache.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
-		metricProvider           metrics.MetricsHandler
-		metricsClient            metrics.Client
+		metricHandler            metrics.Handler
 		historyClient            historyservice.HistoryServiceClient
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
-		workflowDeleteManager    workflow.DeleteManager
+		workflowDeleteManager    deletemanager.DeleteManager
 	}
 )
 
 func newTransferQueueTaskExecutorBase(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.Handler,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
@@ -91,13 +95,12 @@ func newTransferQueueTaskExecutorBase(
 		cache:                    workflowCache,
 		archivalClient:           archivalClient,
 		logger:                   logger,
-		metricProvider:           metricProvider,
-		metricsClient:            shard.GetMetricsClient(),
+		metricHandler:            metricHandler,
 		historyClient:            shard.GetHistoryClient(),
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
-		workflowDeleteManager: workflow.NewDeleteManager(
+		workflowDeleteManager: deletemanager.NewDeleteManager(
 			shard,
 			workflowCache,
 			shard.GetConfig(),
@@ -219,7 +222,7 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 			HistoryURI:       namespaceEntry.HistoryArchivalState().URI,
 			Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
 		},
-		CallerService:        common.HistoryServiceName,
+		CallerService:        string(primitives.HistoryService),
 		AttemptArchiveInline: true, // archive visibility inline by default
 	})
 
@@ -231,11 +234,16 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	task *tasks.DeleteExecutionTask,
 	ensureNoPendingCloseTask bool,
 ) error {
-	return t.deleteExecution(ctx, task, false, ensureNoPendingCloseTask)
+	return t.deleteExecution(ctx, task, false, ensureNoPendingCloseTask, &task.ProcessStage)
 }
 
-func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, task tasks.Task,
-	forceDeleteFromOpenVisibility bool, ensureNoPendingCloseTask bool) (retError error) {
+func (t *transferQueueTaskExecutorBase) deleteExecution(
+	ctx context.Context,
+	task tasks.Task,
+	forceDeleteFromOpenVisibility bool,
+	ensureNoPendingCloseTask bool,
+	stage *tasks.DeleteWorkflowExecutionStage,
+) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -255,7 +263,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -297,6 +305,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		weCtx,
 		mutableState,
 		forceDeleteFromOpenVisibility,
+		stage,
 	)
 }
 
