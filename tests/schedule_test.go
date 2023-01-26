@@ -574,6 +574,7 @@ func (s *scheduleIntegrationSuite) TestListBeforeRun() {
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	time.Sleep(2 * time.Second)
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -631,4 +632,5 @@ func (s *scheduleIntegrationSuite) TestListBeforeRun() {
 
 	dc.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	time.Sleep(2 * time.Second)
 }
