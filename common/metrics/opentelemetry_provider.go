@@ -69,43 +69,23 @@ func NewOpenTelemetryProvider(
 		return nil, err
 	}
 
+	var views []sdkmetrics.View
+	for _, u := range []string{Dimensionless, Bytes, Milliseconds} {
+		views = append(views, sdkmetrics.NewView(
+			sdkmetrics.Instrument{
+				Kind: sdkmetrics.InstrumentKindSyncHistogram,
+				Unit: unit.Unit(u),
+			},
+			sdkmetrics.Stream{
+				Aggregation: aggregation.ExplicitBucketHistogram{
+					Boundaries: clientConfig.PerUnitHistogramBoundaries[u],
+				},
+			},
+		))
+	}
 	provider := sdkmetrics.NewMeterProvider(
 		sdkmetrics.WithReader(exporter),
-		sdkmetrics.WithView(
-			sdkmetrics.NewView(
-				sdkmetrics.Instrument{
-					Kind: sdkmetrics.InstrumentKindSyncHistogram,
-					Unit: unit.Bytes,
-				},
-				sdkmetrics.Stream{
-					Aggregation: aggregation.ExplicitBucketHistogram{
-						Boundaries: clientConfig.PerUnitHistogramBoundaries[string(unit.Bytes)],
-					},
-				},
-			),
-			sdkmetrics.NewView(
-				sdkmetrics.Instrument{
-					Kind: sdkmetrics.InstrumentKindSyncHistogram,
-					Unit: unit.Dimensionless,
-				},
-				sdkmetrics.Stream{
-					Aggregation: aggregation.ExplicitBucketHistogram{
-						Boundaries: clientConfig.PerUnitHistogramBoundaries[string(unit.Dimensionless)],
-					},
-				},
-			),
-			sdkmetrics.NewView(
-				sdkmetrics.Instrument{
-					Kind: sdkmetrics.InstrumentKindSyncHistogram,
-					Unit: unit.Milliseconds,
-				},
-				sdkmetrics.Stream{
-					Aggregation: aggregation.ExplicitBucketHistogram{
-						Boundaries: clientConfig.PerUnitHistogramBoundaries[string(unit.Milliseconds)],
-					},
-				},
-			),
-		),
+		sdkmetrics.WithView(views...),
 	)
 	metricServer := initPrometheusListener(prometheusConfig, reg, logger)
 	meter := provider.Meter("temporal")
