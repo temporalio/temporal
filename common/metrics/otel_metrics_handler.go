@@ -89,9 +89,8 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 			c.Observe(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 		})
 		if err != nil {
-			omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+			omp.l.Fatal("error receive callback metric update", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 		}
-		//c.Observe(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 	})
 }
 
