@@ -161,7 +161,7 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 	now := s.shardCtx.GetTimeSource().Now()
 	mutableState := workflowContext.GetMutableState()
 	workflowTaskInfo, hasInflight := mutableState.GetInFlightWorkflowTask()
-	if !hasInflight {
+	if s.request.StartRequest.GetRequestEagerExecution() && !hasInflight {
 		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have an inflight workflow task")
 	}
 	workflowSnapshot, workflowEvents, err := mutableState.CloseTransactionAsSnapshot(
