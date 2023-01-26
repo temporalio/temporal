@@ -254,7 +254,9 @@ func (s *scheduler) ensureFields() {
 func (s *scheduler) compileSpec() {
 	cspec, err := NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
-		s.logger.Error("Invalid schedule", "error", err)
+		if s.logger != nil {
+			s.logger.Error("Invalid schedule", "error", err)
+		}
 		s.Info.InvalidScheduleError = err.Error()
 		s.cspec = nil
 	} else {
@@ -518,6 +520,8 @@ func (s *scheduler) processSignals() bool {
 }
 
 func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
+	// Note that `s` may be a fake scheduler used to compute list info at creation time.
+
 	if s.cspec == nil {
 		return nil
 	}
@@ -573,6 +577,9 @@ func (s *scheduler) incSeqNo() {
 }
 
 func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
+	// Note that `s` may be a fake scheduler used to compute list info at creation time, before
+	// the first workflow task. This function and anything it calls should not use s.ctx.
+
 	// make shallow copy
 	spec := *s.Schedule.Spec
 	// clear fields that are too large/not useful for the list view
@@ -955,4 +962,15 @@ func panicIfErr(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs) *schedpb.ScheduleListInfo {
+	// note that this does not take into account InitialPatch
+	fakeScheduler := &scheduler{
+		StartScheduleArgs: *args,
+		tweakables:        currentTweakablePolicies,
+	}
+	fakeScheduler.ensureFields()
+	fakeScheduler.compileSpec()
+	return fakeScheduler.getListInfo()
 }
