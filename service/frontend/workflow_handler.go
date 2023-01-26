@@ -181,7 +181,9 @@ func NewWorkflowHandler(
 			saMapper,
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
-			config.SearchAttributesTotalSizeLimit),
+			config.SearchAttributesTotalSizeLimit,
+			config.ESIndexName,
+		),
 		archivalMetadata: archivalMetadata,
 		healthServer:     healthServer,
 		overrides:        NewOverrides(),
@@ -4271,7 +4273,7 @@ func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.H
 }
 
 func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {
-	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String(), wh.config.ESIndexName); err != nil {
+	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String()); err != nil {
 		return err
 	}
 	if err := wh.saValidator.ValidateSize(searchAttributes, namespaceName.String()); err != nil {
