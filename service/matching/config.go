@@ -156,7 +156,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 }
 
 func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) *taskQueueConfig {
-	taskQueueName := id.name
+	taskQueueName := id.FullName()
 	taskType := id.taskType
 
 	return &taskQueueConfig{
