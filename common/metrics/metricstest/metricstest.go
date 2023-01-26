@@ -46,8 +46,7 @@ import (
 type (
 	Handler struct {
 		metrics.Handler
-		exporter *exporters.Exporter
-		reg      *prometheus.Registry
+		reg *prometheus.Registry
 	}
 
 	sample struct {
@@ -81,9 +80,8 @@ func NewHandler(logger log.Logger) (*Handler, error) {
 	clientConfig := metrics.ClientConfig{}
 	otelHandler := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig)
 	metricsHandler := &Handler{
-		Handler:  otelHandler,
-		exporter: exporter,
-		reg:      registry,
+		Handler: otelHandler,
+		reg:     registry,
 	}
 
 	return metricsHandler, nil

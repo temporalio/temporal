@@ -59,13 +59,12 @@ func TestBasic(t *testing.T) {
 		metrics.StringTag("l3", "v3"),
 		metrics.StringTag("l4", "v4"),
 	}
-	//expectedGaugeTags := append(expectedSystemTags, gaugeTags...)
+	expectedGaugeTags := append(expectedSystemTags, gaugeTags...)
 	gauge := handler.WithTags(gaugeTags...).Gauge(gaugeName)
 	gauge.Record(-2)
 	gauge.Record(10)
 
 	s2 := handler.MustSnapshot()
 	require.Equal(t, float64(2), s2.MustCounter(counterName+"_total", expectedCounterTags...))
-	// TODO: How to test the AsyncFloat64 Gauge?
-	//require.Equal(t, float64(10), s2.MustGauge(gaugeName, expectedGaugeTags...))
+	require.Equal(t, float64(10), s2.MustGauge(gaugeName, expectedGaugeTags...))
 }
