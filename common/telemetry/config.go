@@ -276,7 +276,7 @@ func (ec *exportConfig) buildOtlpGrpcMetricExporter(
 	}
 
 	if cfg.ConnectionName == "" {
-		return otlpmetricgrpc.New(context.TODO(), opts...)
+		return otlpmetricgrpc.New(context.Background(), opts...)
 	}
 
 	conncfg, ok := ec.findNamedGrpcConnCfg(cfg.ConnectionName)
