@@ -578,7 +578,7 @@ func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVe
 	return nil
 }
 
-func (s *ContextImpl) UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool) {
+func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool) {
 	nsName := ns.Name()
 	// NOTE: replication state field won't be replicated and currently we only update a namespace
 	// to handover state from active cluster, so the second condition will always be true. Adding
