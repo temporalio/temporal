@@ -207,13 +207,17 @@ func (wm *perNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace, 
 	go wm.getWorkerByNamespace(ns).refreshWithNewNamespace(ns, deleted)
 }
 
+func (wm *perNamespaceWorkerManager) refreshAll() {
+	wm.lock.Lock()
+	defer wm.lock.Unlock()
+	for _, worker := range wm.workers {
+		go worker.refreshWithExistingNamespace()
+	}
+}
+
 func (wm *perNamespaceWorkerManager) membershipChangedListener() {
 	for range wm.membershipChangedCh {
-		wm.lock.Lock()
-		for _, worker := range wm.workers {
-			go worker.refreshWithExistingNamespace()
-		}
-		wm.lock.Unlock()
+		wm.refreshAll()
 	}
 }
 
@@ -242,24 +246,24 @@ func (wm *perNamespaceWorkerManager) removeWorker(ns *namespace.Namespace) {
 	delete(wm.workers, ns.ID())
 }
 
-func (wm *perNamespaceWorkerManager) getWorkerMultiplicity(ns *namespace.Namespace) (int, error) {
-	workerCount := wm.config.PerNamespaceWorkerCount(ns.Name().String())
-	// This can result in fewer than the intended number of workers if numWorkers > 1, because
+func (wm *perNamespaceWorkerManager) getWorkerMultiplicity(ns *namespace.Namespace) (int, int, error) {
+	totalWorkers := wm.config.PerNamespaceWorkerCount(ns.Name().String())
+	// This can result in fewer than the intended number of workers if totalWorkers > 1, because
 	// multiple lookups might land on the same node. To compensate, we increase the number of
 	// pollers in that case, but it would be better to try to spread them across our nodes.
 	// TODO: implement this properly using LookupN in serviceResolver
 	multiplicity := 0
-	for i := 0; i < workerCount; i++ {
+	for i := 0; i < totalWorkers; i++ {
 		key := fmt.Sprintf("%s/%d", ns.ID().String(), i)
 		target, err := wm.serviceResolver.Lookup(key)
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 		if target.Identity() == wm.self.Identity() {
 			multiplicity++
 		}
 	}
-	return multiplicity, nil
+	return multiplicity, totalWorkers, nil
 }
 
 func (wm *perNamespaceWorkerManager) getWorkerOptions(ns *namespace.Namespace) sdkWorkerOptions {
@@ -375,7 +379,7 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 	}
 
 	// check if we are responsible for this namespace at all
-	multiplicity, err := w.wm.getWorkerMultiplicity(ns)
+	multiplicity, totalWorkers, err := w.wm.getWorkerMultiplicity(ns)
 	if err != nil {
 		w.logger.Error("Failed to look up hosts", tag.Error(err))
 		// TODO: add metric also
@@ -406,7 +410,7 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 	// create new one. note that even before startWorker returns, the worker may have started
 	// and already called the fatal error handler. we need to set w.client+worker+componentSet
 	// before releasing the lock to keep our state consistent.
-	client, worker, err := w.startWorker(ns, enabledComponents, multiplicity, dcOptions)
+	client, worker, err := w.startWorker(ns, enabledComponents, multiplicity, totalWorkers, dcOptions)
 	if err != nil {
 		// TODO: add metric also
 		return err
@@ -422,6 +426,7 @@ func (w *perNamespaceWorker) startWorker(
 	ns *namespace.Namespace,
 	components []workercommon.PerNSWorkerComponent,
 	multiplicity int,
+	totalWorkers int,
 	dcOptions sdkWorkerOptions,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
@@ -452,8 +457,12 @@ func (w *perNamespaceWorker) startWorker(
 
 	// this should not block because the client already has server capabilities
 	worker := w.wm.sdkClientFactory.NewWorker(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
+	details := workercommon.RegistrationDetails{
+		TotalWorkers: totalWorkers,
+		Multiplicity: multiplicity,
+	}
 	for _, cmp := range components {
-		cmp.Register(worker, ns)
+		cmp.Register(worker, ns, details)
 	}
 
 	// this blocks by calling DescribeNamespace a few times (with a 10s timeout)

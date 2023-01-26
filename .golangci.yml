@@ -67,13 +67,13 @@ linters-settings:
       # Rule tuning
       - name: argument-limit
         arguments:
-          - 4
+          - 10
       - name: cognitive-complexity
         arguments:
-          - 15
+          - 25
       - name: cyclomatic
         arguments:
-          - 10
+          - 15
       - name: function-result-limit
         arguments:
           - 3

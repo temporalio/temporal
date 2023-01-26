@@ -103,7 +103,7 @@ type (
 		// TODO: deprecate UpdateNamespaceNotificationVersion in v1.21 and remove
 		// NamespaceNotificationVersion from shardInfo proto blob
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
-		UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool)
+		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
 
