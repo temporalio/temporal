@@ -26,7 +26,6 @@ package metrics
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -80,13 +79,13 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterMetric {
 
 // Gauge obtains a gauge for the given name and MetricOptions.
 func (omp *otelMetricsHandler) Gauge(gauge string) GaugeMetric {
-	c, err := omp.provider.GetMeter().AsyncFloat64().Gauge(gauge)
+	c, err := omp.provider.GetMeter().SyncFloat64().UpDownCounter(gauge)
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 	}
 
 	return GaugeMetricFunc(func(i float64, t ...Tag) {
-		c.Observe(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Add(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 	})
 }
 
@@ -104,8 +103,7 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerMetric {
 
 // Histogram obtains a histogram for the given name and MetricOptions.
 func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramMetric {
-	histogramName := strings.Join([]string{histogram, string(unit)}, "_")
-	c, err := omp.provider.GetMeter().SyncInt64().Histogram(histogramName, instrument.WithUnit(otelunit.Unit(unit)))
+	c, err := omp.provider.GetMeter().SyncInt64().Histogram(histogram, instrument.WithUnit(otelunit.Unit(unit)))
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
 	}

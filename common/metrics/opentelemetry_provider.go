@@ -62,7 +62,8 @@ func NewOpenTelemetryProvider(
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
 ) (*openTelemetryProviderImpl, error) {
-	exporter, err := exporters.New(exporters.WithRegisterer(prometheus.NewRegistry()))
+	reg := prometheus.NewRegistry()
+	exporter, err := exporters.New(exporters.WithRegisterer(reg))
 	if err != nil {
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
 		return nil, err
@@ -106,7 +107,7 @@ func NewOpenTelemetryProvider(
 			),
 		),
 	)
-	metricServer := initPrometheusListener(prometheusConfig, logger)
+	metricServer := initPrometheusListener(prometheusConfig, reg, logger)
 	meter := provider.Meter("temporal")
 	reporter := &openTelemetryProviderImpl{
 		exporter: exporter,
@@ -118,14 +119,14 @@ func NewOpenTelemetryProvider(
 	return reporter, nil
 }
 
-func initPrometheusListener(config *PrometheusConfig, logger log.Logger) *http.Server {
+func initPrometheusListener(config *PrometheusConfig, reg *prometheus.Registry, logger log.Logger) *http.Server {
 	handlerPath := config.HandlerPath
 	if handlerPath == "" {
 		handlerPath = "/metrics"
 	}
 
 	handler := http.NewServeMux()
-	handler.HandleFunc(handlerPath, promhttp.Handler().ServeHTTP)
+	handler.HandleFunc(handlerPath, promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}).ServeHTTP)
 
 	if config.ListenAddress == "" {
 		logger.Fatal("Listen address must be specified.", tag.Address(config.ListenAddress))

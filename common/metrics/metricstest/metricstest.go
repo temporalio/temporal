@@ -26,6 +26,7 @@ package metricstest
 
 import (
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 
@@ -44,6 +45,7 @@ type (
 	Handler struct {
 		metrics.MetricsHandler
 		exporter *prometheus.Exporter
+		provider *sdkmetrics.MeterProvider
 	}
 
 	sample struct {
@@ -74,10 +76,10 @@ func NewHandler(logger log.Logger) (*Handler, error) {
 	provider := sdkmetrics.NewMeterProvider(sdkmetrics.WithReader(exporter))
 	meter := provider.Meter("temporal")
 	clientConfig := metrics.ClientConfig{}
-	otelHandler := metrics.NewOtelMetricsHandler(logger, provider, clientConfig)
-
+	otelHandler := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig)
 	metricsHandler := &Handler{
 		MetricsHandler: otelHandler,
+		provider:       provider,
 		exporter:       exporter,
 	}
 
@@ -89,7 +91,8 @@ func (*Handler) Stop(log.Logger) {}
 func (mh *Handler) Snapshot() (Snapshot, error) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/metrics", nil)
-	mh.exporter..ServeHTTP(rec, req)
+	handler := http.NewServeMux()
+	handler.ServeHTTP(rec, req)
 
 	var tp expfmt.TextParser
 	families, err := tp.TextToMetricFamilies(rec.Body)
