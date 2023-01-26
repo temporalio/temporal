@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
@@ -46,8 +47,9 @@ const (
 
 type (
 	workerComponent struct {
-		activityDeps activityDeps
-		enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		activityDeps             activityDeps
+		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		globalNSStartWorkflowRPS dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -77,6 +79,8 @@ func NewResult(
 			activityDeps: params,
 			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
 				dynamicconfig.WorkerEnableScheduler, true),
+			globalNSStartWorkflowRPS: dcCollection.GetFloatPropertyFilteredByNamespace(
+				dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 30.0),
 		},
 	}
 }
@@ -87,15 +91,19 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 	}
 }
 
-func (s *workerComponent) Register(worker sdkworker.Worker, ns *namespace.Namespace) {
+func (s *workerComponent) Register(worker sdkworker.Worker, ns *namespace.Namespace, details workercommon.RegistrationDetails) {
 	worker.RegisterWorkflowWithOptions(SchedulerWorkflow, workflow.RegisterOptions{Name: WorkflowType})
-	worker.RegisterActivity(s.activities(ns.Name(), ns.ID()))
+	worker.RegisterActivity(s.activities(ns.Name(), ns.ID(), details))
 }
 
-func (s *workerComponent) activities(name namespace.Name, id namespace.ID) *activities {
+func (s *workerComponent) activities(name namespace.Name, id namespace.ID, details workercommon.RegistrationDetails) *activities {
+	localRPS := func() float64 {
+		return float64(details.Multiplicity) * s.globalNSStartWorkflowRPS(name.String()) / float64(details.TotalWorkers)
+	}
 	return &activities{
-		activityDeps: s.activityDeps,
-		namespace:    name,
-		namespaceID:  id,
+		activityDeps:             s.activityDeps,
+		namespace:                name,
+		namespaceID:              id,
+		startWorkflowRateLimiter: quotas.NewDefaultOutgoingRateLimiter(localRPS),
 	}
 }

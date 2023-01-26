@@ -550,7 +550,6 @@ func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes
 func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 	namespace namespace.Name,
 	attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
-	visibilityIndexName string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES
@@ -563,7 +562,7 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 	if len(attributes.GetSearchAttributes().GetIndexedFields()) == 0 {
 		return failedCause, serviceerror.NewInvalidArgument("IndexedFields is empty on command.")
 	}
-	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String(), visibilityIndexName); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
 		return failedCause, err
 	}
 
@@ -600,7 +599,6 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	namespace namespace.Name,
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
-	visibilityIndexName string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES
@@ -644,9 +642,30 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.DefaultWorkflowTaskTimeout))
 	}
 
-	if err = v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String(), visibilityIndexName); err != nil {
+	attributes.WorkflowRunTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowRunTimeout(
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			timestamp.DurationValue(executionInfo.GetWorkflowExecutionTimeout()),
+		),
+	)
+
+	attributes.WorkflowTaskTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowTaskTimeout(
+			namespace.String(),
+			timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()),
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			v.config.DefaultWorkflowTaskTimeout,
+		),
+	)
+
+	if err := v.validateWorkflowRetryPolicy(namespace, attributes.RetryPolicy); err != nil {
+		return failedCause, err
+	}
+
+	if err = v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
 		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err
 	}
+
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 
@@ -657,7 +676,6 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	parentInfo *persistencespb.WorkflowExecutionInfo,
 	defaultWorkflowTaskTimeoutFn dynamicconfig.DurationPropertyFnWithNamespaceFilter,
-	visibilityIndexName string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES
@@ -704,7 +722,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
 	}
 
-	if err := v.validateWorkflowRetryPolicy(attributes); err != nil {
+	if err := v.validateWorkflowRetryPolicy(namespace.Name(attributes.GetNamespace()), attributes.RetryPolicy); err != nil {
 		return failedCause, err
 	}
 
@@ -712,7 +730,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, err
 	}
 
-	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String(), visibilityIndexName); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String()); err != nil {
 		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err
 	}
 
@@ -790,17 +808,18 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(
 }
 
 func (v *commandAttrValidator) validateWorkflowRetryPolicy(
-	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
+	namespaceName namespace.Name,
+	retryPolicy *commonpb.RetryPolicy,
 ) error {
-	if attributes.RetryPolicy == nil {
+	if retryPolicy == nil {
 		// By default, if the user does not explicitly set a retry policy for a Child Workflow, do not perform any retries.
 		return nil
 	}
 
 	// Otherwise, for any unset fields on the retry policy, set with defaults
-	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(attributes.GetNamespace()))
-	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultWorkflowRetrySettings)
-	return common.ValidateRetryPolicy(attributes.RetryPolicy)
+	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	return common.ValidateRetryPolicy(retryPolicy)
 }
 
 func (v *commandAttrValidator) validateCrossNamespaceCall(
