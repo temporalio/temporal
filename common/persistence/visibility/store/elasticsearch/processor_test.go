@@ -135,7 +135,8 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 	request := &client.BulkableRequest{}
 	visibilityTaskKey := "test-key"
 	future1 := p.Add(request, visibilityTaskKey)
-	s.Nil(future1)
+	_, err := future1.Get(context.Background())
+	s.ErrorContains(err, "shut down")
 }
 
 func (s *processorSuite) TestAdd() {
