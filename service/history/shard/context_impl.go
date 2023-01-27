@@ -127,7 +127,7 @@ type (
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                             sync.RWMutex
 		lastUpdated                        time.Time
-		shardInfo                          *persistence.ShardInfoWithFailover
+		shardInfo                          *persistencespb.ShardInfo
 		taskSequenceNumber                 int64
 		maxTaskSequenceNumber              int64
 		immediateTaskExclusiveMaxReadLevel int64
@@ -405,12 +405,6 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 	s.wLock()
 	defer s.wUnlock()
 
-	if levels, ok := s.shardInfo.FailoverLevels[category]; ok && len(levels) != 0 {
-		// do not move ack level when there's failover queue
-		// so that after shard reload we can re-create the failover queue
-		return nil
-	}
-
 	if _, ok := s.shardInfo.QueueAckLevels[category.ID()]; !ok {
 		s.shardInfo.QueueAckLevels[category.ID()] = &persistencespb.QueueAckLevel{
 			ClusterAckLevel: make(map[string]int64),
@@ -519,49 +513,6 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 			metrics.TargetClusterTag(sourceCluster),
 			metrics.InstanceTag(convert.Int32ToString(s.shardID)))
 	return nil
-}
-
-func (s *ContextImpl) UpdateFailoverLevel(category tasks.Category, failoverID string, level persistence.FailoverLevel) error {
-	s.wLock()
-	defer s.wUnlock()
-
-	if _, ok := s.shardInfo.FailoverLevels[category]; !ok {
-		s.shardInfo.FailoverLevels[category] = make(map[string]persistence.FailoverLevel)
-	}
-	s.shardInfo.FailoverLevels[category][failoverID] = level
-
-	return s.updateShardInfoLocked()
-}
-
-func (s *ContextImpl) DeleteFailoverLevel(category tasks.Category, failoverID string) error {
-	s.wLock()
-	defer s.wUnlock()
-
-	if levels, ok := s.shardInfo.FailoverLevels[category]; ok {
-		if level, ok := levels[failoverID]; ok {
-			handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-			switch category {
-			case tasks.CategoryTransfer:
-				handler.Timer(metrics.ShardInfoTransferFailoverLatencyTimer.GetMetricName()).Record(time.Since(level.StartTime))
-			case tasks.CategoryTimer:
-				handler.Timer(metrics.ShardInfoTimerFailoverLatencyTimer.GetMetricName()).Record(time.Since(level.StartTime))
-			}
-			delete(levels, failoverID)
-		}
-	}
-	return s.updateShardInfoLocked()
-}
-
-func (s *ContextImpl) GetAllFailoverLevels(category tasks.Category) map[string]persistence.FailoverLevel {
-	s.rLock()
-	defer s.rUnlock()
-
-	ret := map[string]persistence.FailoverLevel{}
-	if levels, ok := s.shardInfo.FailoverLevels[category]; ok {
-		maps.Copy(ret, levels)
-	}
-
-	return ret
 }
 
 func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error {
@@ -1212,7 +1163,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	ctx, cancel := s.newIOContext()
 	defer cancel()
 	err := s.persistenceShardManager.UpdateShard(ctx, &persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo.ShardInfo,
+		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
 	if err != nil {
@@ -1265,7 +1216,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	ctx, cancel := s.newIOContext()
 	defer cancel()
 	err = s.persistenceShardManager.UpdateShard(ctx, &persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo.ShardInfo,
+		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
 	if err != nil {
@@ -1784,7 +1735,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		s.contextTaggedLogger.Error("Failed to load shard", tag.Error(err))
 		return err
 	}
-	shardInfo := &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}
+	shardInfo := resp.ShardInfo
 
 	// shardInfo is a fresh value, so we don't really need to copy, but
 	// copyShardInfo also ensures that all maps are non-nil
@@ -2079,12 +2030,7 @@ func newContext(
 }
 
 // TODO: why do we need a deep copy here?
-func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.ShardInfoWithFailover {
-	failoverLevels := make(map[tasks.Category]map[string]persistence.FailoverLevel)
-	for category, levels := range shardInfo.FailoverLevels {
-		failoverLevels[category] = maps.Clone(levels)
-	}
-
+func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInfo {
 	queueAckLevels := make(map[int32]*persistencespb.QueueAckLevel)
 	for category, ackLevels := range shardInfo.QueueAckLevels {
 		queueAckLevels[category] = &persistencespb.QueueAckLevel{
@@ -2093,22 +2039,17 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 		}
 	}
 
-	shardInfoCopy := &persistence.ShardInfoWithFailover{
-		ShardInfo: &persistencespb.ShardInfo{
-			ShardId:                      shardInfo.ShardId,
-			Owner:                        shardInfo.Owner,
-			RangeId:                      shardInfo.RangeId,
-			StolenSinceRenew:             shardInfo.StolenSinceRenew,
-			NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
-			ReplicationDlqAckLevel:       maps.Clone(shardInfo.ReplicationDlqAckLevel),
-			UpdateTime:                   shardInfo.UpdateTime,
-			QueueAckLevels:               queueAckLevels,
-			QueueStates:                  shardInfo.QueueStates,
-		},
-		FailoverLevels: failoverLevels,
+	return &persistencespb.ShardInfo{
+		ShardId:                      shardInfo.ShardId,
+		Owner:                        shardInfo.Owner,
+		RangeId:                      shardInfo.RangeId,
+		StolenSinceRenew:             shardInfo.StolenSinceRenew,
+		NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
+		ReplicationDlqAckLevel:       maps.Clone(shardInfo.ReplicationDlqAckLevel),
+		UpdateTime:                   shardInfo.UpdateTime,
+		QueueAckLevels:               queueAckLevels,
+		QueueStates:                  shardInfo.QueueStates,
 	}
-
-	return shardInfoCopy
 }
 
 func (s *ContextImpl) GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error) {

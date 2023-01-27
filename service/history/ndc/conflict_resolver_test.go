@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -82,11 +81,10 @@ func (s *conflictResolverSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 10,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 10,
+			RangeId: 1,
+		},
 		tests.NewDynamicConfig(),
 	)
 

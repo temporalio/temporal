@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -95,11 +94,10 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockConfig = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
 		s.mockConfig,
 	)
 	// set the checksum probabilities to 100% for exercising during test
