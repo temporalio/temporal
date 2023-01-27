@@ -22,14 +22,94 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package tqname
 
 import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestParse(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := Parse("my-basic-tq-name")
+	a.NoError(err)
+	a.Equal("my-basic-tq-name", n.BaseNameString())
+	a.Equal(0, n.Partition())
+	a.Equal("", n.VersionSet())
+	a.Equal("my-basic-tq-name", n.FullName())
+	a.True(n.IsRoot())
+	_, err = n.Parent(5)
+	a.Equal(ErrNoParent, err)
+
+	n, err = Parse("/_sys/my-basic-tq-name/23")
+	a.NoError(err)
+	a.Equal("my-basic-tq-name", n.BaseNameString())
+	a.Equal(23, n.Partition())
+	a.Equal("", n.VersionSet())
+	a.Equal("/_sys/my-basic-tq-name/23", n.FullName())
+	a.False(n.IsRoot())
+	a.Equal(4, mustParent(n, 5).Partition())
+	a.Equal(0, mustParent(n, 32).Partition())
+
+	n, err = Parse("/_sys/my-basic-tq-name/verxyz:23")
+	a.NoError(err)
+	a.Equal("my-basic-tq-name", n.BaseNameString())
+	a.Equal(23, n.Partition())
+	a.Equal("verxyz", n.VersionSet())
+	a.Equal("/_sys/my-basic-tq-name/verxyz:23", n.FullName())
+}
+
+func TestFromBaseName(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := FromBaseName("my-basic-tq-name")
+	a.NoError(err)
+	a.Equal("my-basic-tq-name", n.BaseNameString())
+	a.Equal(0, n.Partition())
+	a.Equal("", n.VersionSet())
+
+	_, err = FromBaseName("/_sys/my-basic-tq-name/23")
+	a.Error(err)
+}
+
+func TestWithPartition(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := FromBaseName("tq")
+	a.NoError(err)
+	n = n.WithPartition(23)
+	a.Equal("tq", n.BaseNameString())
+	a.Equal(23, n.Partition())
+	a.Equal("/_sys/tq/23", n.FullName())
+	a.False(n.IsRoot())
+}
+
+func TestWithVersionSet(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := FromBaseName("tq")
+	a.NoError(err)
+	n = n.WithVersionSet("abc3")
+	a.Equal("tq", n.BaseNameString())
+	a.Equal(0, n.Partition())
+	a.Equal("/_sys/tq/abc3:0", n.FullName())
+}
+
+func TestWithPartitionAndVersionSet(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := FromBaseName("tq")
+	a.NoError(err)
+	n = n.WithPartition(11).WithVersionSet("abc3")
+	a.Equal("tq", n.BaseNameString())
+	a.Equal(11, n.Partition())
+	a.Equal("abc3", n.VersionSet())
+	a.Equal("/_sys/tq/abc3:11", n.FullName())
+}
 
 func TestValidTaskQueueNames(t *testing.T) {
 	testCases := []struct {
@@ -51,31 +131,32 @@ func TestValidTaskQueueNames(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-			tn, err := newTaskQueueName(tc.input)
+			tn, err := Parse(tc.input)
 			require.NoError(t, err)
 			require.Equal(t, tc.partition, tn.partition)
 			require.Equal(t, tc.partition == 0, tn.IsRoot())
 			require.Equal(t, tc.baseName, tn.baseName)
-			require.Equal(t, tc.baseName, tn.GetRoot())
-			require.Equal(t, tc.input, tn.name)
+			require.Equal(t, tc.baseName, tn.BaseNameString())
+			require.Equal(t, tc.input, tn.FullName())
 		})
 	}
 }
 
 func TestTaskQueueParentName(t *testing.T) {
+	const invalid = "__invalid__"
 	testCases := []struct {
 		name   string
 		degree int
 		output string
 	}{
 		/* unexpected input */
-		{"list0", 0, ""},
+		{"list0", 0, invalid},
 		/* 1-ary tree */
-		{"list0", 1, ""},
+		{"list0", 1, invalid},
 		{"/_sys/list0/1", 1, "list0"},
 		{"/_sys/list0/2", 1, "/_sys/list0/1"},
 		/* 2-ary tree */
-		{"list0", 2, ""},
+		{"list0", 2, invalid},
 		{"/_sys/list0/1", 2, "list0"},
 		{"/_sys/list0/2", 2, "list0"},
 		{"/_sys/list0/3", 2, "/_sys/list0/1"},
@@ -95,9 +176,14 @@ func TestTaskQueueParentName(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name+"#"+strconv.Itoa(tc.degree), func(t *testing.T) {
-			tn, err := newTaskQueueName(tc.name)
+			tn, err := Parse(tc.name)
 			require.NoError(t, err)
-			require.Equal(t, tc.output, tn.Parent(tc.degree))
+			parent, err := tn.Parent(tc.degree)
+			if tc.output == invalid {
+				require.Equal(t, ErrNoParent, err)
+			} else {
+				require.Equal(t, tc.output, parent.FullName())
+			}
 		})
 	}
 }
@@ -111,31 +197,21 @@ func TestInvalidTaskqueueNames(t *testing.T) {
 		"/_sys/list0",
 		"/_sys/list0/0",
 		"/_sys/list0/-1",
+		"/_sys/list0/abc",
+		"/_sys/list0:verxyz:23",
 	}
 	for _, name := range inputs {
 		t.Run(name, func(t *testing.T) {
-			_, err := newTaskQueueName(name)
+			_, err := Parse(name)
 			require.Error(t, err)
 		})
 	}
 }
 
-func TestTaskQueueCreateNameWIthPartition(t *testing.T) {
-	testCases := []struct {
-		name   string
-		part   int
-		output string
-	}{
-		{"foo", 0, "foo"},
-		{"foo", 1, "/_sys/foo/1"},
-		{"foo", 2, "/_sys/foo/2"},
+func mustParent(tn Name, n int) Name {
+	parent, err := tn.Parent(n)
+	if err != nil {
+		panic(err)
 	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name+"#"+strconv.Itoa(tc.part), func(t *testing.T) {
-			tn, err := NewTaskQueueNameWithPartition(tc.name, tc.part)
-			require.NoError(t, err)
-			require.Equal(t, tc.output, tn.name)
-		})
-	}
+	return parent
 }

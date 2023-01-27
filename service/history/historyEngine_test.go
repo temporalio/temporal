@@ -142,11 +142,10 @@ func (s *engineSuite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 1,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 1,
+			RangeId: 1,
+		},
 		s.config,
 	)
 	s.workflowCache = wcache.NewCache(s.mockShard)

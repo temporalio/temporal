@@ -130,6 +130,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
+			"index-name",
 		))
 }
 
@@ -190,17 +191,17 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	namespace := namespace.Name("tests.Namespace")
 	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
-	fc, err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes = &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}
-	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "SearchAttributes is not set on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
-	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.EqualError(err, "IndexedFields is empty on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
@@ -209,7 +210,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"CustomKeywordField": saPayload,
 	}
-	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 }
@@ -238,7 +239,6 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 		tests.Namespace,
 		attributes,
 		executionInfo,
-		"index-name",
 	)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)

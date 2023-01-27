@@ -61,7 +61,7 @@ func (s *attrValidatorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 
-	s.validator = newAttrValidator(s.mockClusterMetadata)
+	s.validator = NewAttrValidator(s.mockClusterMetadata)
 }
 
 func (s *attrValidatorSuite) TearDownTest() {
@@ -91,7 +91,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 		cluster.TestAllClusterInfo,
 	).AnyTimes()
 
-	err := s.validator.validateNamespaceReplicationConfigForLocalNamespace(
+	err := s.validator.ValidateNamespaceReplicationConfigForLocalNamespace(
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
@@ -101,7 +101,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
+	err = s.validator.ValidateNamespaceReplicationConfigForLocalNamespace(
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
@@ -112,7 +112,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
+	err = s.validator.ValidateNamespaceReplicationConfigForLocalNamespace(
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -123,7 +123,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForLocalNames
 	)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
-	err = s.validator.validateNamespaceReplicationConfigForLocalNamespace(
+	err = s.validator.ValidateNamespaceReplicationConfigForLocalNamespace(
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -142,7 +142,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 		cluster.TestAllClusterInfo,
 	).AnyTimes()
 
-	err := s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
+	err := s.validator.ValidateNamespaceReplicationConfigForGlobalNamespace(
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
@@ -152,7 +152,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 	)
 	s.NoError(err)
 
-	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
+	err = s.validator.ValidateNamespaceReplicationConfigForGlobalNamespace(
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
@@ -162,7 +162,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 	)
 	s.NoError(err)
 
-	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
+	err = s.validator.ValidateNamespaceReplicationConfigForGlobalNamespace(
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
 			Clusters: []string{
@@ -173,7 +173,7 @@ func (s *attrValidatorSuite) TestValidateNamespaceReplicationConfigForGlobalName
 	)
 	s.NoError(err)
 
-	err = s.validator.validateNamespaceReplicationConfigForGlobalNamespace(
+	err = s.validator.ValidateNamespaceReplicationConfigForGlobalNamespace(
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{

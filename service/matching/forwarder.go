@@ -76,7 +76,6 @@ type (
 )
 
 var (
-	errNoParent             = errors.New("cannot find parent task queue for forwarding")
 	errTaskQueueKind        = errors.New("forwarding is not supported on sticky task queue")
 	errInvalidTaskQueueType = errors.New("unrecognized task queue type")
 	errForwarderSlowDown    = errors.New("limit exceeded")
@@ -88,7 +87,7 @@ var (
 // forwarder is tied to a single task queue. All of the exposed
 // methods can return the following errors:
 // Returns following errors:
-//   - errNoParent: If this task queue doesn't have a parent to forward to
+//   - tqname.ErrNoParent, tqname.ErrInvalidDegree: If this task queue doesn't have a parent to forward to
 //   - errTaskQueueKind: If the task queue is a sticky task queue. Sticky task queues are never partitioned
 //   - errForwarderSlowDown: When the rate limit is exceeded
 //   - errInvalidTaskType: If the task queue type is invalid
@@ -120,16 +119,15 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		return errTaskQueueKind
 	}
 
-	name := fwdr.taskQueueID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
-	if name == "" {
-		return errNoParent
+	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
+	target, err := fwdr.taskQueueID.Parent(degree)
+	if err != nil {
+		return err
 	}
 
 	if !fwdr.limiter.Allow() {
 		return errForwarderSlowDown
 	}
-
-	var err error
 
 	var expirationDuration time.Duration
 	expirationTime := timestamp.TimeValue(task.event.Data.ExpiryTime)
@@ -148,28 +146,28 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			NamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:   task.workflowExecution(),
 			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: name,
+				Name: target.FullName(),
 				Kind: fwdr.taskQueueKind,
 			},
 			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 			Clock:                  task.event.Data.GetClock(),
 			Source:                 task.source,
 			ScheduleToStartTimeout: &expirationDuration,
-			ForwardedSource:        fwdr.taskQueueID.name,
+			ForwardedSource:        fwdr.taskQueueID.FullName(),
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 			NamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:   task.workflowExecution(),
 			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: name,
+				Name: target.FullName(),
 				Kind: fwdr.taskQueueKind,
 			},
 			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 			Clock:                  task.event.Data.GetClock(),
 			Source:                 task.source,
 			ScheduleToStartTimeout: &expirationDuration,
-			ForwardedSource:        fwdr.taskQueueID.name,
+			ForwardedSource:        fwdr.taskQueueID.FullName(),
 		})
 	default:
 		return errInvalidTaskQueueType
@@ -188,19 +186,20 @@ func (fwdr *Forwarder) ForwardQueryTask(
 		return nil, errTaskQueueKind
 	}
 
-	name := fwdr.taskQueueID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
-	if name == "" {
-		return nil, errNoParent
+	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
+	target, err := fwdr.taskQueueID.Parent(degree)
+	if err != nil {
+		return nil, err
 	}
 
 	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
 		NamespaceId: task.query.request.GetNamespaceId(),
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: name,
+			Name: target.FullName(),
 			Kind: fwdr.taskQueueKind,
 		},
 		QueryRequest:    task.query.request.QueryRequest,
-		ForwardedSource: fwdr.taskQueueID.name,
+		ForwardedSource: fwdr.taskQueueID.FullName(),
 	})
 
 	return resp, fwdr.handleErr(err)
@@ -212,9 +211,10 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 		return nil, errTaskQueueKind
 	}
 
-	name := fwdr.taskQueueID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
-	if name == "" {
-		return nil, errNoParent
+	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
+	target, err := fwdr.taskQueueID.Parent(degree)
+	if err != nil {
+		return nil, err
 	}
 
 	pollerID, _ := ctx.Value(pollerIDKey).(string)
@@ -227,12 +227,12 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: name,
+					Name: target.FullName(),
 					Kind: fwdr.taskQueueKind,
 				},
 				Identity: identity,
 			},
-			ForwardedSource: fwdr.taskQueueID.name,
+			ForwardedSource: fwdr.taskQueueID.FullName(),
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
@@ -244,12 +244,12 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: name,
+					Name: target.FullName(),
 					Kind: fwdr.taskQueueKind,
 				},
 				Identity: identity,
 			},
-			ForwardedSource: fwdr.taskQueueID.name,
+			ForwardedSource: fwdr.taskQueueID.FullName(),
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)

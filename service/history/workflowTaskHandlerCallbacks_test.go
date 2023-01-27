@@ -85,11 +85,10 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	config := tests.NewDynamicConfig()
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 1,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 1,
+			RangeId: 1,
+		},
 		config,
 	)
 	mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
@@ -125,6 +124,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
+			config.DefaultVisibilityIndexName,
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, workflowCache),
 	}

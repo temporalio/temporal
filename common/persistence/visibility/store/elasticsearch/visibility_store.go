@@ -130,6 +130,10 @@ func (s *visibilityStore) GetName() string {
 	return PersistenceName
 }
 
+func (s *visibilityStore) GetIndexName() string {
+	return s.index
+}
+
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,

@@ -113,11 +113,9 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	config := tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 1,
-				RangeId: 1,
-			},
+		&persistencespb.ShardInfo{
+			ShardId: 1,
+			RangeId: 1,
 		},
 		config,
 	)

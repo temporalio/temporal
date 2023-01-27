@@ -835,18 +835,10 @@ func (e *matchingEngineImpl) getAllPartitions(
 	if err != nil {
 		return partitionKeys, err
 	}
-	rootPartition := taskQueueID.GetRoot()
 
-	partitionKeys = append(partitionKeys, rootPartition)
-
-	nWritePartitions := e.config.NumTaskqueueWritePartitions
-	n := nWritePartitions(namespace.String(), rootPartition, taskQueueType)
-	if n <= 0 {
-		return partitionKeys, nil
-	}
-
-	for i := 1; i < n; i++ {
-		partitionKeys = append(partitionKeys, fmt.Sprintf("%v%v/%v", taskQueuePartitionPrefix, rootPartition, i))
+	n := e.config.NumTaskqueueWritePartitions(namespace.String(), taskQueueID.BaseNameString(), taskQueueType)
+	for i := 0; i < n; i++ {
+		partitionKeys = append(partitionKeys, taskQueueID.WithPartition(i).FullName())
 	}
 
 	return partitionKeys, nil

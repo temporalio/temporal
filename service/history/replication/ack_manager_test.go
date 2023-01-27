@@ -98,11 +98,10 @@ func (s *ackManagerSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
 		tests.NewDynamicConfig(),
 	)
 

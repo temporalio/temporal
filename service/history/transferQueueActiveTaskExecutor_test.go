@@ -161,11 +161,9 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	config := tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 1,
-				RangeId: 1,
-			},
+		&persistencespb.ShardInfo{
+			ShardId: 1,
+			RangeId: 1,
 		},
 		config,
 		s.timeSource,

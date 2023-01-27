@@ -163,21 +163,6 @@ type (
 		Msg string
 	}
 
-	// ShardInfoWithFailover describes a shard
-	ShardInfoWithFailover struct {
-		*persistencespb.ShardInfo
-		FailoverLevels map[tasks.Category]map[string]FailoverLevel // uuid -> FailoverLevel
-	}
-
-	// FailoverLevel contains corresponding start / end level
-	FailoverLevel struct {
-		StartTime    time.Time
-		MinLevel     tasks.Key
-		CurrentLevel tasks.Key
-		MaxLevel     tasks.Key
-		NamespaceIDs map[string]struct{}
-	}
-
 	// TaskQueueKey is the struct used to identity TaskQueues
 	TaskQueueKey struct {
 		NamespaceID   string

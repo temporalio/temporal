@@ -2434,7 +2434,7 @@ func (m *testTaskManager) String() string {
 		} else {
 			result += "Workflow"
 		}
-		result += " task queue " + id.name
+		result += " task queue " + id.FullName()
 		result += "\n"
 		result += fmt.Sprintf("AckLevel=%v\n", tl.ackLevel)
 		result += fmt.Sprintf("CreateTaskCount=%v\n", tl.createTaskCount)

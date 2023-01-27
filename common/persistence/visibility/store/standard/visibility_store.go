@@ -73,6 +73,10 @@ func (s *standardStore) GetName() string {
 	return s.store.GetName()
 }
 
+func (s *standardStore) GetIndexName() string {
+	return s.store.GetIndexName()
+}
+
 func (s *standardStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,

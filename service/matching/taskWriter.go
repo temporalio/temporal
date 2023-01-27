@@ -210,7 +210,7 @@ func (w *taskWriter) appendTasks(
 		w.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCreateTask,
 			tag.Error(err),
-			tag.WorkflowTaskQueueName(w.taskQueueID.name),
+			tag.WorkflowTaskQueueName(w.taskQueueID.FullName()),
 			tag.WorkflowTaskQueueType(w.taskQueueID.taskType))
 		return nil, err
 	}

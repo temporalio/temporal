@@ -97,10 +97,8 @@ type (
 
 		logger                      log.Logger
 		numberOfHistoryShards       int32
-		ESConfig                    *esclient.Config
 		ESClient                    esclient.Client
 		config                      *Config
-		namespaceHandler            namespace.Handler
 		namespaceDLQHandler         namespace.DLQMessageHandler
 		eventSerializer             serialization.Serializer
 		visibilityMgr               manager.VisibilityManager
@@ -127,7 +125,6 @@ type (
 		Config                              *Config
 		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
-		EsConfig                            *esclient.Config
 		EsClient                            esclient.Client
 		VisibilityMrg                       manager.VisibilityManager
 		Logger                              log.Logger
@@ -174,17 +171,6 @@ func NewAdminHandler(
 		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: args.PersistenceConfig.NumHistoryShards,
 		config:                args.Config,
-		namespaceHandler: namespace.NewHandler(
-			args.Config.MaxBadBinaries,
-			args.Logger,
-			args.PersistenceMetadataManager,
-			args.ClusterMetadata,
-			namespace.NewNamespaceReplicator(args.ReplicatorNamespaceReplicationQueue, args.Logger),
-			args.ArchivalMetadata,
-			args.ArchiverProvider,
-			args.Config.EnableSchedules,
-			args.TimeSource,
-		),
 		namespaceDLQHandler: namespace.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,
 			args.NamespaceReplicationQueue,
@@ -192,7 +178,6 @@ func NewAdminHandler(
 		),
 		eventSerializer:             args.EventSerializer,
 		visibilityMgr:               args.VisibilityMrg,
-		ESConfig:                    args.EsConfig,
 		ESClient:                    args.EsClient,
 		persistenceExecutionManager: args.PersistenceExecutionManager,
 		namespaceReplicationQueue:   args.NamespaceReplicationQueue,
@@ -257,7 +242,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 
 	indexName := request.GetIndexName()
 	if indexName == "" {
-		indexName = adh.ESConfig.GetVisibilityIndex()
+		indexName = adh.visibilityMgr.GetIndexName()
 	}
 
 	currentSearchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
@@ -322,7 +307,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *ad
 
 	indexName := request.GetIndexName()
 	if indexName == "" {
-		indexName = adh.ESConfig.GetVisibilityIndex()
+		indexName = adh.visibilityMgr.GetIndexName()
 	}
 
 	currentSearchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
@@ -359,7 +344,7 @@ func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *admin
 
 	indexName := request.GetIndexName()
 	if indexName == "" {
-		indexName = adh.ESConfig.GetVisibilityIndex()
+		indexName = adh.visibilityMgr.GetIndexName()
 	}
 
 	resp, err := adh.getSearchAttributes(ctx, indexName, "")
