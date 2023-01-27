@@ -161,6 +161,11 @@ func RetryContext(
 			t.Stop()
 		}
 	}
+	// always return the last error we got from operation, even if it is not useful
+	// this retry utility does not have enough information to do any filtering/mapping
+	if err != nil {
+		return err
+	}
 	return ctx.Err()
 }
 
@@ -214,7 +219,11 @@ func ThrottleRetryContext(
 			timer.Stop()
 		}
 	}
-
+	// always return the last error we got from operation, even if it is not useful
+	// this retry utility does not have enough information to do any filtering/mapping
+	if err != nil {
+		return err
+	}
 	return ctx.Err()
 }
 

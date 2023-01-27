@@ -205,7 +205,7 @@ func (s *RetrySuite) TestRetryContextTimeout() {
 	err := RetryContext(ctx, func(ctx context.Context) error { return &someError{} },
 		NewExponentialRetryPolicy(1*time.Second), retryEverything)
 	elapsed := time.Since(start)
-	s.ErrorIs(err, context.DeadlineExceeded)
+	s.ErrorIs(err, &someError{})
 	s.GreaterOrEqual(elapsed, timeout,
 		"Call to retry should take at least as long as the context timeout")
 }
@@ -260,7 +260,7 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 	start = SystemClock.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	err = ThrottleRetryContext(ctx, func(_ context.Context) error { return &serviceerror.ResourceExhausted{} }, policy, retryEverything)
-	s.Equal(ctx.Err(), err)
+	s.Equal(&serviceerror.ResourceExhausted{}, err)
 	s.LessOrEqual(
 		time.Since(start),
 		throttleInitialInterval,
