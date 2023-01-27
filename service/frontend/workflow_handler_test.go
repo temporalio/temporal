@@ -81,6 +81,7 @@ import (
 
 const (
 	numHistoryShards = 10
+	esIndexName      = ""
 
 	testWorkflowID            = "test-workflow-id"
 	testRunID                 = "test-run-id"
@@ -146,7 +147,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockSearchAttributesMapper = s.mockResource.SearchAttributesMapper
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
 	s.mockExecutionManager = s.mockResource.ExecutionMgr
-	s.mockVisibilityMgr = manager.NewMockVisibilityManager(s.controller)
+	s.mockVisibilityMgr = s.mockResource.VisibilityManager
 	s.mockArchivalMetadata = s.mockResource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockResource.ArchiverProvider
 	s.mockMatchingClient = s.mockResource.MatchingClient
@@ -166,11 +167,12 @@ func (s *workflowHandlerSuite) TearDownTest() {
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	return NewWorkflowHandler(
 		config,
 		s.mockProducer,
-		s.mockVisibilityMgr,
-		s.mockResource.Logger,
+		s.mockResource.GetVisibilityManager(),
+		s.mockResource.GetLogger(),
 		s.mockResource.GetThrottledLogger(),
 		s.mockResource.GetExecutionManager(),
 		s.mockResource.GetClusterMetadataManager(),
@@ -262,7 +264,7 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 
 	// Needed to execute test but not relevant
 	s.mockSearchAttributesProvider.EXPECT().
-		GetSearchAttributes(cfg.ESIndexName, false).
+		GetSearchAttributes(esIndexName, false).
 		Return(searchattribute.NameTypeMap{}, nil).
 		AnyTimes()
 
@@ -2541,7 +2543,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, "", false)
+	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, false)
 }
 
 func updateRequest(

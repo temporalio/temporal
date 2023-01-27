@@ -163,10 +163,23 @@ func ConfigProvider(
 	persistenceConfig config.Persistence,
 	esConfig *esclient.Config,
 ) *configs.Config {
+	indexName := ""
+	if persistenceConfig.StandardVisibilityConfigExist() {
+		storeConfig := persistenceConfig.DataStores[persistenceConfig.VisibilityStore]
+		switch {
+		case storeConfig.Cassandra != nil:
+			indexName = storeConfig.Cassandra.Keyspace
+		case storeConfig.SQL != nil:
+			indexName = storeConfig.SQL.DatabaseName
+		}
+	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
+		indexName = esConfig.GetVisibilityIndex()
+	}
 	return configs.NewConfig(dc,
 		persistenceConfig.NumHistoryShards,
 		persistenceConfig.AdvancedVisibilityConfigExist(),
-		esConfig.GetVisibilityIndex())
+		indexName,
+	)
 }
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.ThrottledLoggerRpsFn {
