@@ -44,6 +44,7 @@ type (
 	VisibilityManager interface {
 		persistence.Closeable
 		GetName() string
+		GetIndexName() string
 
 		// Write APIs.
 		RecordWorkflowExecutionStarted(ctx context.Context, request *RecordWorkflowExecutionStartedRequest) error

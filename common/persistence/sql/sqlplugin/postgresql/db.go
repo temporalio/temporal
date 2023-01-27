@@ -110,6 +110,11 @@ func (pdb *db) PluginName() string {
 	return PluginName
 }
 
+// DbName returns the name of the database
+func (pdb *db) DbName() string {
+	return pdb.dbName
+}
+
 // ExpectedVersion returns expected version.
 func (pdb *db) ExpectedVersion() string {
 	switch pdb.dbKind {

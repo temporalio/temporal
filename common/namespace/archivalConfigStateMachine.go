@@ -34,21 +34,21 @@ import (
 // Logically this class can be thought of as part of namespaceHandler.
 
 type (
-	// ArchivalState represents the state of archival config
+	// ArchivalConfigState represents the state of archival config
 	// the only invalid state is {URI="", state=enabled}
 	// once URI is set it is immutable
-	ArchivalState struct {
+	ArchivalConfigState struct {
 		State enumspb.ArchivalState
 		URI   string
 	}
 
-	// ArchivalEvent represents a change request to archival config state
+	// ArchivalConfigEvent represents a change request to archival config state
 	// the only restriction placed on events is that defaultURI is not empty
 	// state can be nil, enabled, or disabled (nil indicates no update by user is being attempted)
-	ArchivalEvent struct {
-		defaultURI string
+	ArchivalConfigEvent struct {
+		DefaultURI string
 		URI        string
-		state      enumspb.ArchivalState
+		State      enumspb.ArchivalState
 	}
 )
 
@@ -60,31 +60,31 @@ var (
 	errURIUpdate               = serviceerror.NewInvalidArgument("Cannot update existing archival URI")
 )
 
-func neverEnabledState() *ArchivalState {
-	return &ArchivalState{
+func NeverEnabledState() *ArchivalConfigState {
+	return &ArchivalConfigState{
 		URI:   "",
 		State: enumspb.ARCHIVAL_STATE_DISABLED,
 	}
 }
 
-func (e *ArchivalEvent) validate() error {
-	if len(e.defaultURI) == 0 {
+func (e *ArchivalConfigEvent) Validate() error {
+	if len(e.DefaultURI) == 0 {
 		return errInvalidEvent
 	}
 	return nil
 }
 
-func (s *ArchivalState) validate() error {
+func (s *ArchivalConfigState) validate() error {
 	if s.State == enumspb.ARCHIVAL_STATE_ENABLED && len(s.URI) == 0 {
 		return errInvalidState
 	}
 	return nil
 }
 
-func (s *ArchivalState) getNextState(
-	e *ArchivalEvent,
+func (s *ArchivalConfigState) GetNextState(
+	e *ArchivalConfigEvent,
 	URIValidationFunc func(URI string) error,
-) (nextState *ArchivalState, changed bool, err error) {
+) (nextState *ArchivalConfigState, changed bool, err error) {
 	defer func() {
 		// ensure that any existing URI name was not mutated
 		if nextState != nil && len(s.URI) != 0 && s.URI != nextState.URI {
@@ -120,7 +120,7 @@ func (s *ArchivalState) getNextState(
 	if err := s.validate(); err != nil {
 		return nil, false, err
 	}
-	if err := e.validate(); err != nil {
+	if err := e.Validate(); err != nil {
 		return nil, false, err
 	}
 
@@ -151,90 +151,90 @@ func (s *ArchivalState) getNextState(
 
 	// state 1
 	if s.State == enumspb.ARCHIVAL_STATE_ENABLED && stateURISet {
-		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_ENABLED && eventURISet {
 			return s, false, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && !eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_ENABLED && !eventURISet {
 			return s, false, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && eventURISet {
-			return &ArchivalState{
+		if e.State == enumspb.ARCHIVAL_STATE_DISABLED && eventURISet {
+			return &ArchivalConfigState{
 				State: enumspb.ARCHIVAL_STATE_DISABLED,
 				URI:   s.URI,
 			}, true, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && !eventURISet {
-			return &ArchivalState{
+		if e.State == enumspb.ARCHIVAL_STATE_DISABLED && !eventURISet {
+			return &ArchivalConfigState{
 				State: enumspb.ARCHIVAL_STATE_DISABLED,
 				URI:   s.URI,
 			}, true, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_UNSPECIFIED && eventURISet {
 			return s, false, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && !eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_UNSPECIFIED && !eventURISet {
 			return s, false, nil
 		}
 	}
 
 	// state 2
 	if s.State == enumspb.ARCHIVAL_STATE_DISABLED && stateURISet {
-		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && eventURISet {
-			return &ArchivalState{
+		if e.State == enumspb.ARCHIVAL_STATE_ENABLED && eventURISet {
+			return &ArchivalConfigState{
 				URI:   s.URI,
 				State: enumspb.ARCHIVAL_STATE_ENABLED,
 			}, true, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && !eventURISet {
-			return &ArchivalState{
+		if e.State == enumspb.ARCHIVAL_STATE_ENABLED && !eventURISet {
+			return &ArchivalConfigState{
 				State: enumspb.ARCHIVAL_STATE_ENABLED,
 				URI:   s.URI,
 			}, true, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_DISABLED && eventURISet {
 			return s, false, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && !eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_DISABLED && !eventURISet {
 			return s, false, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_UNSPECIFIED && eventURISet {
 			return s, false, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && !eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_UNSPECIFIED && !eventURISet {
 			return s, false, nil
 		}
 	}
 
 	// state 3
 	if s.State == enumspb.ARCHIVAL_STATE_DISABLED && !stateURISet {
-		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && eventURISet {
-			return &ArchivalState{
+		if e.State == enumspb.ARCHIVAL_STATE_ENABLED && eventURISet {
+			return &ArchivalConfigState{
 				State: enumspb.ARCHIVAL_STATE_ENABLED,
 				URI:   e.URI,
 			}, true, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_ENABLED && !eventURISet {
-			return &ArchivalState{
+		if e.State == enumspb.ARCHIVAL_STATE_ENABLED && !eventURISet {
+			return &ArchivalConfigState{
 				State: enumspb.ARCHIVAL_STATE_ENABLED,
-				URI:   e.defaultURI,
+				URI:   e.DefaultURI,
 			}, true, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && eventURISet {
-			return &ArchivalState{
+		if e.State == enumspb.ARCHIVAL_STATE_DISABLED && eventURISet {
+			return &ArchivalConfigState{
 				State: enumspb.ARCHIVAL_STATE_DISABLED,
 				URI:   e.URI,
 			}, true, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_DISABLED && !eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_DISABLED && !eventURISet {
 			return s, false, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && eventURISet {
-			return &ArchivalState{
+		if e.State == enumspb.ARCHIVAL_STATE_UNSPECIFIED && eventURISet {
+			return &ArchivalConfigState{
 				State: enumspb.ARCHIVAL_STATE_DISABLED,
 				URI:   e.URI,
 			}, true, nil
 		}
-		if e.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED && !eventURISet {
+		if e.State == enumspb.ARCHIVAL_STATE_UNSPECIFIED && !eventURISet {
 			return s, false, nil
 		}
 	}

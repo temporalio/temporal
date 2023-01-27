@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -86,11 +85,9 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	config := tests.NewDynamicConfig()
 	s.testShardContext = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
 		},
 		config,
 	)

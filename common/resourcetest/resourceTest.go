@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
@@ -96,6 +97,7 @@ type (
 		ClientBean           *client.MockBean
 		ClientFactory        *client.MockFactory
 		ESClient             *esclient.MockClient
+		VisibilityManager    *manager.MockVisibilityManager
 
 		// persistence clients
 
@@ -206,6 +208,7 @@ func NewTest(
 		ClientBean:           clientBean,
 		ClientFactory:        clientFactory,
 		ESClient:             esclient.NewMockClient(controller),
+		VisibilityManager:    manager.NewMockVisibilityManager(controller),
 
 		// persistence clients
 
@@ -371,6 +374,11 @@ func (t *Test) GetClientBean() client.Bean {
 // GetClientFactory for testing
 func (t *Test) GetClientFactory() client.Factory {
 	return t.ClientFactory
+}
+
+// GetVisibilityManager for testing
+func (t *Test) GetVisibilityManager() manager.VisibilityManager {
+	return t.VisibilityManager
 }
 
 // persistence clients

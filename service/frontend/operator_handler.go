@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
@@ -70,10 +71,10 @@ type (
 
 		logger                 log.Logger
 		config                 *Config
-		esConfig               *esclient.Config
 		esClient               esclient.Client
 		sdkClientFactory       sdk.ClientFactory
 		metricsHandler         metrics.Handler
+		visibilityMgr          manager.VisibilityManager
 		saProvider             searchattribute.Provider
 		saManager              searchattribute.Manager
 		healthServer           *health.Server
@@ -86,11 +87,11 @@ type (
 
 	NewOperatorHandlerImplArgs struct {
 		config                 *Config
-		EsConfig               *esclient.Config
 		EsClient               esclient.Client
 		Logger                 log.Logger
 		sdkClientFactory       sdk.ClientFactory
 		MetricsHandler         metrics.Handler
+		VisibilityMgr          manager.VisibilityManager
 		SaProvider             searchattribute.Provider
 		SaManager              searchattribute.Manager
 		healthServer           *health.Server
@@ -111,10 +112,10 @@ func NewOperatorHandlerImpl(
 		logger:                 args.Logger,
 		status:                 common.DaemonStatusInitialized,
 		config:                 args.config,
-		esConfig:               args.EsConfig,
 		esClient:               args.EsClient,
 		sdkClientFactory:       args.sdkClientFactory,
 		metricsHandler:         args.MetricsHandler,
+		visibilityMgr:          args.VisibilityMgr,
 		saProvider:             args.SaProvider,
 		saManager:              args.SaManager,
 		healthServer:           args.healthServer,
@@ -165,7 +166,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 		return nil, errSearchAttributesNotSet
 	}
 
-	indexName := h.esConfig.GetVisibilityIndex()
+	indexName := h.visibilityMgr.GetIndexName()
 
 	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
@@ -229,7 +230,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(ctx context.Context, reques
 		return nil, errSearchAttributesNotSet
 	}
 
-	indexName := h.esConfig.GetVisibilityIndex()
+	indexName := h.visibilityMgr.GetIndexName()
 
 	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
@@ -263,7 +264,7 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(ctx context.Context, request 
 		return nil, errRequestNotSet
 	}
 
-	indexName := h.esConfig.GetVisibilityIndex()
+	indexName := h.visibilityMgr.GetIndexName()
 
 	var lastErr error
 	var esMapping map[string]string = nil

@@ -120,14 +120,12 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: rangeID,
-				QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-					tasks.CategoryIDTransfer: {
-						AckLevel: ackLevel,
-					},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: rangeID,
+			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+				tasks.CategoryIDTransfer: {
+					AckLevel: ackLevel,
 				},
 			},
 		},
@@ -207,13 +205,11 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 10,
-				QueueStates: map[int32]*persistencespb.QueueState{
-					tasks.CategoryIDTransfer: persistenceState,
-				},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				tasks.CategoryIDTransfer: persistenceState,
 			},
 		},
 		s.config,
@@ -248,14 +244,12 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 func (s *queueBaseSuite) TestStartStop() {
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 10,
-				QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-					tasks.CategoryIDTransfer: {
-						AckLevel: 1024,
-					},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+				tasks.CategoryIDTransfer: {
+					AckLevel: 1024,
 				},
 			},
 		},
@@ -318,13 +312,11 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 10,
-				QueueStates: map[int32]*persistencespb.QueueState{
-					tasks.CategoryIDTimer: persistenceState,
-				},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				tasks.CategoryIDTimer: persistenceState,
 			},
 		},
 		s.config,
@@ -375,13 +367,11 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 10,
-				QueueStates: map[int32]*persistencespb.QueueState{
-					tasks.CategoryIDTimer: persistenceState,
-				},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				tasks.CategoryIDTimer: persistenceState,
 			},
 		},
 		s.config,
@@ -449,13 +439,11 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 10,
-				QueueStates: map[int32]*persistencespb.QueueState{
-					tasks.CategoryIDTimer: persistenceState,
-				},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				tasks.CategoryIDTimer: persistenceState,
 			},
 		},
 		s.config,
@@ -538,13 +526,11 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 10,
-				QueueStates: map[int32]*persistencespb.QueueState{
-					tasks.CategoryIDTimer: initialPersistenceState,
-				},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				tasks.CategoryIDTimer: initialPersistenceState,
 			},
 		},
 		s.config,

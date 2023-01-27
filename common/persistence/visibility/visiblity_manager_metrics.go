@@ -69,6 +69,10 @@ func (m *visibilityManagerMetrics) GetName() string {
 	return m.delegate.GetName()
 }
 
+func (m *visibilityManagerMetrics) GetIndexName() string {
+	return m.delegate.GetIndexName()
+}
+
 func (m *visibilityManagerMetrics) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionStartedRequest,

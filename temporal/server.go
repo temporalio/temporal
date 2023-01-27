@@ -43,12 +43,21 @@ type (
 	}
 )
 
-// Services is the list of all valid temporal services as strings (needs to be strings to keep
-// ServerOptions interface stable)
 var (
+	// Services is the set of all valid temporal services as strings (needs to be strings to
+	// keep ServerOptions interface stable)
 	Services = []string{
 		string(primitives.FrontendService),
 		string(primitives.InternalFrontendService),
+		string(primitives.HistoryService),
+		string(primitives.MatchingService),
+		string(primitives.WorkerService),
+	}
+
+	// DefaultServices is the set of services to start by default if services are not given on
+	// the command line.
+	DefaultServices = []string{
+		string(primitives.FrontendService),
 		string(primitives.HistoryService),
 		string(primitives.MatchingService),
 		string(primitives.WorkerService),

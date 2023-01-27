@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package frontend
 
 import (
 	"context"
@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -66,12 +67,12 @@ type (
 		mockMetadataMgr         *persistence.MockMetadataManager
 		mockClusterMetadata     *cluster.MockMetadata
 		mockProducer            *persistence.MockNamespaceReplicationQueue
-		mockNamespaceReplicator Replicator
+		mockNamespaceReplicator namespace.Replicator
 		archivalMetadata        archiver.ArchivalMetadata
 		mockArchiverProvider    *provider.MockArchiverProvider
 		fakeClock               *clock.EventTimeSource
 
-		handler *HandlerImpl
+		handler *namespaceHandlerImpl
 	}
 )
 
@@ -96,7 +97,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.mockMetadataMgr = persistence.NewMockMetadataManager(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
-	s.mockNamespaceReplicator = NewNamespaceReplicator(s.mockProducer, logger)
+	s.mockNamespaceReplicator = namespace.NewNamespaceReplicator(s.mockProducer, logger)
 	s.archivalMetadata = archiver.NewArchivalMetadata(
 		dcCollection,
 		"",
@@ -107,7 +108,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	)
 	s.mockArchiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.fakeClock = clock.NewEventTimeSource()
-	s.handler = NewHandler(
+	s.handler = newNamespaceHandler(
 		dc.GetIntPropertyFilteredByNamespace(s.maxBadBinaryCount),
 		logger,
 		s.mockMetadataMgr,
@@ -362,23 +363,23 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		namespace1.GetInfo().GetName(): namespace1,
 		namespace2.GetInfo().GetName(): namespace2,
 	}
-	for name, namespace := range namespaces {
-		s.Equal(expectedResult[name].GetInfo().GetName(), namespace.GetNamespaceInfo().GetName())
-		s.Equal(expectedResult[name].GetInfo().GetState(), namespace.GetNamespaceInfo().GetState())
-		s.Equal(expectedResult[name].GetInfo().GetDescription(), namespace.GetNamespaceInfo().GetDescription())
-		s.Equal(expectedResult[name].GetInfo().GetOwner(), namespace.GetNamespaceInfo().GetOwnerEmail())
-		s.Equal(expectedResult[name].GetInfo().GetData(), namespace.GetNamespaceInfo().GetData())
-		s.Equal(expectedResult[name].GetInfo().GetId(), namespace.GetNamespaceInfo().GetId())
-		s.Equal(expectedResult[name].GetConfig().GetRetention(), namespace.GetConfig().GetWorkflowExecutionRetentionTtl())
-		s.Equal(expectedResult[name].GetConfig().GetHistoryArchivalState(), namespace.GetConfig().GetHistoryArchivalState())
-		s.Equal(expectedResult[name].GetConfig().GetHistoryArchivalUri(), namespace.GetConfig().GetHistoryArchivalUri())
-		s.Equal(expectedResult[name].GetConfig().GetVisibilityArchivalState(), namespace.GetConfig().GetVisibilityArchivalState())
-		s.Equal(expectedResult[name].GetConfig().GetVisibilityArchivalUri(), namespace.GetConfig().GetVisibilityArchivalUri())
-		s.Equal(expectedResult[name].GetConfig().GetBadBinaries(), namespace.GetConfig().GetBadBinaries())
-		s.Equal(expectedResult[name].GetReplicationConfig().GetActiveClusterName(), namespace.GetReplicationConfig().GetActiveClusterName())
-		s.Equal(expectedResult[name].GetReplicationConfig().GetClusters(), convertClusterReplicationConfigFromProto(namespace.GetReplicationConfig().GetClusters()))
-		s.Equal(expectedResult[name].GetReplicationConfig().GetState(), namespace.GetReplicationConfig().GetState())
-		s.Equal(expectedResult[name].GetFailoverVersion(), namespace.GetFailoverVersion())
+	for name, ns := range namespaces {
+		s.Equal(expectedResult[name].GetInfo().GetName(), ns.GetNamespaceInfo().GetName())
+		s.Equal(expectedResult[name].GetInfo().GetState(), ns.GetNamespaceInfo().GetState())
+		s.Equal(expectedResult[name].GetInfo().GetDescription(), ns.GetNamespaceInfo().GetDescription())
+		s.Equal(expectedResult[name].GetInfo().GetOwner(), ns.GetNamespaceInfo().GetOwnerEmail())
+		s.Equal(expectedResult[name].GetInfo().GetData(), ns.GetNamespaceInfo().GetData())
+		s.Equal(expectedResult[name].GetInfo().GetId(), ns.GetNamespaceInfo().GetId())
+		s.Equal(expectedResult[name].GetConfig().GetRetention(), ns.GetConfig().GetWorkflowExecutionRetentionTtl())
+		s.Equal(expectedResult[name].GetConfig().GetHistoryArchivalState(), ns.GetConfig().GetHistoryArchivalState())
+		s.Equal(expectedResult[name].GetConfig().GetHistoryArchivalUri(), ns.GetConfig().GetHistoryArchivalUri())
+		s.Equal(expectedResult[name].GetConfig().GetVisibilityArchivalState(), ns.GetConfig().GetVisibilityArchivalState())
+		s.Equal(expectedResult[name].GetConfig().GetVisibilityArchivalUri(), ns.GetConfig().GetVisibilityArchivalUri())
+		s.Equal(expectedResult[name].GetConfig().GetBadBinaries(), ns.GetConfig().GetBadBinaries())
+		s.Equal(expectedResult[name].GetReplicationConfig().GetActiveClusterName(), ns.GetReplicationConfig().GetActiveClusterName())
+		s.Equal(expectedResult[name].GetReplicationConfig().GetClusters(), namespace.ConvertClusterReplicationConfigFromProto(ns.GetReplicationConfig().GetClusters()))
+		s.Equal(expectedResult[name].GetReplicationConfig().GetState(), ns.GetReplicationConfig().GetState())
+		s.Equal(expectedResult[name].GetFailoverVersion(), ns.GetFailoverVersion())
 	}
 }
 
