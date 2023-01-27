@@ -99,7 +99,6 @@ type (
 		numberOfHistoryShards       int32
 		ESClient                    esclient.Client
 		config                      *Config
-		namespaceHandler            namespace.Handler
 		namespaceDLQHandler         namespace.DLQMessageHandler
 		eventSerializer             serialization.Serializer
 		visibilityMgr               manager.VisibilityManager
@@ -172,17 +171,6 @@ func NewAdminHandler(
 		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: args.PersistenceConfig.NumHistoryShards,
 		config:                args.Config,
-		namespaceHandler: namespace.NewHandler(
-			args.Config.MaxBadBinaries,
-			args.Logger,
-			args.PersistenceMetadataManager,
-			args.ClusterMetadata,
-			namespace.NewNamespaceReplicator(args.ReplicatorNamespaceReplicationQueue, args.Logger),
-			args.ArchivalMetadata,
-			args.ArchiverProvider,
-			args.Config.EnableSchedules,
-			args.TimeSource,
-		),
 		namespaceDLQHandler: namespace.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,
 			args.NamespaceReplicationQueue,

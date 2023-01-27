@@ -41,8 +41,8 @@ type (
 	}
 )
 
-// newAttrValidator create a new namespace attr validator
-func newAttrValidator(
+// NewAttrValidator create a new namespace attr validator
+func NewAttrValidator(
 	clusterMetadata cluster.Metadata,
 ) *AttrValidatorImpl {
 
@@ -51,7 +51,7 @@ func newAttrValidator(
 	}
 }
 
-func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistencespb.NamespaceConfig) error {
+func (d *AttrValidatorImpl) ValidateNamespaceConfig(config *persistencespb.NamespaceConfig) error {
 	if config.HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED && len(config.HistoryArchivalUri) == 0 {
 		return errInvalidArchivalConfig
 	}
@@ -61,7 +61,7 @@ func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistencespb.Names
 	return nil
 }
 
-func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForLocalNamespace(
+func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForLocalNamespace(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
 
@@ -88,7 +88,7 @@ func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForLocalNamespace(
 	return nil
 }
 
-func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForGlobalNamespace(
+func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForGlobalNamespace(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
 
