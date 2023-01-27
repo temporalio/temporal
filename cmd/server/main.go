@@ -111,7 +111,7 @@ func buildCLI() *cli.App {
 				&cli.StringSliceFlag{
 					Name:    "service",
 					Aliases: []string{"svc"},
-					Value:   cli.NewStringSlice(temporal.DefaultServices...),
+					Value:   cli.NewStringSlice(temporal.Services...),
 					Usage:   "service(s) to start",
 				},
 			},
