@@ -71,12 +71,6 @@ services:
       membershipPort: 6933
       bindOnLocalHost: true
 
-  internal-frontend:
-    rpc:
-      grpcPort: 7236
-      membershipPort: 6936
-      bindOnLocalHost: true
-
   matching:
     rpc:
       grpcPort: 7235
