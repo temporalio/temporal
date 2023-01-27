@@ -87,7 +87,7 @@ func NewManager(
 }
 
 // GetSearchAttributes returns all search attributes (including system and build-in) for specified index.
-// indexName can be an empty string when Elasticsearch is not configured.
+// indexName can be an empty string for backward compatibility.
 func (m *managerImpl) GetSearchAttributes(
 	indexName string,
 	forceRefreshCache bool,
@@ -111,11 +111,19 @@ func (m *managerImpl) GetSearchAttributes(
 	}
 
 	indexSearchAttributes, ok := saCache.searchAttributes[indexName]
-	if !ok {
-		return NameTypeMap{}, nil
+	if ok {
+		return indexSearchAttributes, nil
 	}
 
-	return indexSearchAttributes, nil
+	if indexName != "" {
+		// Try to look for the empty string indexName for backward compatibility: up to v1.19,
+		// empty string was used when Elasticsearch was not configured.
+		indexSearchAttributes, ok = saCache.searchAttributes[""]
+		if ok {
+			return indexSearchAttributes, nil
+		}
+	}
+	return NameTypeMap{}, nil
 }
 
 func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, now time.Time) bool {

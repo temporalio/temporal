@@ -213,12 +213,10 @@ func GrpcServerOptionsProvider(
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
-	esConfig *esclient.Config,
 ) *Config {
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		esConfig.GetVisibilityIndex(),
 		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
@@ -418,7 +416,6 @@ func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
 	config *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
-	esConfig *esclient.Config,
 	esClient esclient.Client,
 	visibilityMrg manager.VisibilityManager,
 	logger log.SnTaggedLogger,
@@ -448,7 +445,6 @@ func AdminHandlerProvider(
 		config,
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
-		esConfig,
 		esClient,
 		visibilityMrg,
 		logger,
@@ -477,11 +473,11 @@ func AdminHandlerProvider(
 
 func OperatorHandlerProvider(
 	config *Config,
-	esConfig *esclient.Config,
 	esClient esclient.Client,
 	logger log.SnTaggedLogger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
+	visibilityMgr manager.VisibilityManager,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
@@ -493,11 +489,11 @@ func OperatorHandlerProvider(
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		config,
-		esConfig,
 		esClient,
 		logger,
 		sdkClientFactory,
 		metricsHandler,
+		visibilityMgr,
 		saProvider,
 		saManager,
 		healthServer,

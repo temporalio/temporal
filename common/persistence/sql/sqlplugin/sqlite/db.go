@@ -122,6 +122,11 @@ func (mdb *db) PluginName() string {
 	return PluginName
 }
 
+// DbName returns the name of the database
+func (mdb *db) DbName() string {
+	return mdb.dbName
+}
+
 // ExpectedVersion returns expected version.
 func (mdb *db) ExpectedVersion() string {
 	switch mdb.dbKind {

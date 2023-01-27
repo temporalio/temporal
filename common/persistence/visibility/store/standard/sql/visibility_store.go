@@ -80,6 +80,10 @@ func (s *visibilityStore) GetName() string {
 	return s.sqlStore.GetName()
 }
 
+func (s *visibilityStore) GetIndexName() string {
+	return s.sqlStore.GetDbName()
+}
+
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,

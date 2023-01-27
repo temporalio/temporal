@@ -67,6 +67,10 @@ func (m *visibilityManagerRateLimited) GetName() string {
 	return m.delegate.GetName()
 }
 
+func (m *visibilityManagerRateLimited) GetIndexName() string {
+	return m.delegate.GetIndexName()
+}
+
 // Below are write APIs.
 
 func (m *visibilityManagerRateLimited) RecordWorkflowExecutionStarted(
