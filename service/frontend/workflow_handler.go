@@ -103,7 +103,7 @@ type (
 		tokenSerializer                 common.TaskTokenSerializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
-		namespaceHandler                namespace.Handler
+		namespaceHandler                NamespaceHandler
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 		visibilityMrg                   manager.VisibilityManager
 		logger                          log.Logger
@@ -152,7 +152,7 @@ func NewWorkflowHandler(
 		config:          config,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
-		namespaceHandler: namespace.NewHandler(
+		namespaceHandler: newNamespaceHandler(
 			config.MaxBadBinaries,
 			logger,
 			persistenceMetadataManager,
