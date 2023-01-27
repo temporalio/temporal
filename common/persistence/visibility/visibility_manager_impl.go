@@ -76,6 +76,10 @@ func (p *visibilityManagerImpl) GetName() string {
 	return p.store.GetName()
 }
 
+func (p *visibilityManagerImpl) GetIndexName() string {
+	return p.store.GetIndexName()
+}
+
 func (p *visibilityManagerImpl) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionStartedRequest,

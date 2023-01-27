@@ -143,7 +143,7 @@ var (
 	// ErrMemoSizeExceedsLimit is error for memo size exceeds limit
 	ErrMemoSizeExceedsLimit = serviceerror.NewInvalidArgument("Memo size exceeds limit.")
 	// ErrContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
-	ErrContextTimeoutTooShort = serviceerror.NewInvalidArgument("Context timeout is too short.")
+	ErrContextTimeoutTooShort = serviceerror.NewFailedPrecondition("Context timeout is too short.")
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = serviceerror.NewInvalidArgument("Context timeout is not set.")
 )

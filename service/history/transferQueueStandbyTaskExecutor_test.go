@@ -140,10 +140,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockArchivalClient = warchiver.NewMockClient(s.controller)
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				RangeId: 1,
-			},
+		&persistencespb.ShardInfo{
+			RangeId: 1,
 		},
 		config,
 		s.timeSource,

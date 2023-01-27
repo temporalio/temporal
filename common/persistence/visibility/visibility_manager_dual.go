@@ -64,6 +64,10 @@ func (v *visibilityManagerDual) GetName() string {
 	return strings.Join([]string{v.visibilityManager.GetName(), v.secondaryVisibilityManager.GetName()}, ",")
 }
 
+func (v *visibilityManagerDual) GetIndexName() string {
+	return v.visibilityManager.GetIndexName()
+}
+
 func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionStartedRequest,

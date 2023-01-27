@@ -140,6 +140,7 @@ type (
 	visibilityStore struct {
 		session      gocql.Session
 		lowConslevel gocql.Consistency
+		keyspace     string
 	}
 )
 
@@ -158,11 +159,16 @@ func NewVisibilityStore(
 	return &visibilityStore{
 		session:      session,
 		lowConslevel: gocql.One,
+		keyspace:     cfg.Keyspace,
 	}, nil
 }
 
 func (v *visibilityStore) GetName() string {
 	return CassandraPersistenceName
+}
+
+func (v *visibilityStore) GetIndexName() string {
+	return v.keyspace
 }
 
 // Close releases the resources held by this object

@@ -22,9 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination handler_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination namespace_handler_mock.go
 
-package namespace
+package frontend
 
 import (
 	"context"
@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -55,7 +56,7 @@ import (
 
 type (
 	// Handler is the namespace operation handler
-	Handler interface {
+	NamespaceHandler interface {
 		// Deprecated.
 		DeprecateNamespace(
 			ctx context.Context,
@@ -79,14 +80,14 @@ type (
 		) (*workflowservice.UpdateNamespaceResponse, error)
 	}
 
-	// HandlerImpl is the namespace operation handler implementation
-	HandlerImpl struct {
+	// namespaceHandlerImpl is the namespace operation handler implementation
+	namespaceHandlerImpl struct {
 		maxBadBinaryCount      dynamicconfig.IntPropertyFnWithNamespaceFilter
 		logger                 log.Logger
 		metadataMgr            persistence.MetadataManager
 		clusterMetadata        cluster.Metadata
-		namespaceReplicator    Replicator
-		namespaceAttrValidator *AttrValidatorImpl
+		namespaceReplicator    namespace.Replicator
+		namespaceAttrValidator *namespace.AttrValidatorImpl
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
 		supportsSchedules      dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -98,28 +99,35 @@ const (
 	maxReplicationHistorySize = 10
 )
 
-var ErrInvalidNamespaceStateUpdate = serviceerror.NewInvalidArgument("invalid namespace state update")
-var _ Handler = (*HandlerImpl)(nil)
+var _ NamespaceHandler = (*namespaceHandlerImpl)(nil)
 
-// NewHandler create a new namespace handler
-func NewHandler(
+var (
+	// err indicating that this cluster is not the master, so cannot do namespace registration or update
+	errNotMasterCluster                   = serviceerror.NewInvalidArgument("Cluster is not master cluster, cannot do namespace registration or namespace update.")
+	errCannotDoNamespaceFailoverAndUpdate = serviceerror.NewInvalidArgument("Cannot set active cluster to current cluster when other parameters are set.")
+	errInvalidRetentionPeriod             = serviceerror.NewInvalidArgument("A valid retention period is not set on request.")
+	errInvalidNamespaceStateUpdate        = serviceerror.NewInvalidArgument("Invalid namespace state update.")
+)
+
+// newNamespaceHandler create a new namespace handler
+func newNamespaceHandler(
 	maxBadBinaryCount dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
-	namespaceReplicator Replicator,
+	namespaceReplicator namespace.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
 	supportsSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	timeSource clock.TimeSource,
-) *HandlerImpl {
-	return &HandlerImpl{
+) *namespaceHandlerImpl {
+	return &namespaceHandlerImpl{
 		maxBadBinaryCount:      maxBadBinaryCount,
 		logger:                 logger,
 		metadataMgr:            metadataMgr,
 		clusterMetadata:        clusterMetadata,
 		namespaceReplicator:    namespaceReplicator,
-		namespaceAttrValidator: newAttrValidator(clusterMetadata),
+		namespaceAttrValidator: namespace.NewAttrValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
 		supportsSchedules:      supportsSchedules,
@@ -128,7 +136,7 @@ func NewHandler(
 }
 
 // RegisterNamespace register a new namespace
-func (d *HandlerImpl) RegisterNamespace(
+func (d *namespaceHandlerImpl) RegisterNamespace(
 	ctx context.Context,
 	registerRequest *workflowservice.RegisterNamespaceRequest,
 ) (*workflowservice.RegisterNamespaceResponse, error) {
@@ -180,7 +188,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 	clusters = persistence.GetOrUseDefaultClusters(activeClusterName, clusters)
 
-	currentHistoryArchivalState := neverEnabledState()
+	currentHistoryArchivalState := namespace.NeverEnabledState()
 	nextHistoryArchivalState := currentHistoryArchivalState
 	clusterHistoryArchivalConfig := d.archivalMetadata.GetHistoryConfig()
 	if clusterHistoryArchivalConfig.ClusterConfiguredForArchival() {
@@ -194,13 +202,13 @@ func (d *HandlerImpl) RegisterNamespace(
 			return nil, err
 		}
 
-		nextHistoryArchivalState, _, err = currentHistoryArchivalState.getNextState(archivalEvent, d.validateHistoryArchivalURI)
+		nextHistoryArchivalState, _, err = currentHistoryArchivalState.GetNextState(archivalEvent, d.validateHistoryArchivalURI)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	currentVisibilityArchivalState := neverEnabledState()
+	currentVisibilityArchivalState := namespace.NeverEnabledState()
 	nextVisibilityArchivalState := currentVisibilityArchivalState
 	clusterVisibilityArchivalConfig := d.archivalMetadata.GetVisibilityConfig()
 	if clusterVisibilityArchivalConfig.ClusterConfiguredForArchival() {
@@ -214,7 +222,7 @@ func (d *HandlerImpl) RegisterNamespace(
 			return nil, err
 		}
 
-		nextVisibilityArchivalState, _, err = currentVisibilityArchivalState.getNextState(archivalEvent, d.validateVisibilityArchivalURI)
+		nextVisibilityArchivalState, _, err = currentVisibilityArchivalState.GetNextState(archivalEvent, d.validateVisibilityArchivalURI)
 		if err != nil {
 			return nil, err
 		}
@@ -243,17 +251,17 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 	isGlobalNamespace := registerRequest.GetIsGlobalNamespace()
 
-	if err := d.namespaceAttrValidator.validateNamespaceConfig(config); err != nil {
+	if err := d.namespaceAttrValidator.ValidateNamespaceConfig(config); err != nil {
 		return nil, err
 	}
 	if isGlobalNamespace {
-		if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigForGlobalNamespace(
+		if err := d.namespaceAttrValidator.ValidateNamespaceReplicationConfigForGlobalNamespace(
 			replicationConfig,
 		); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigForLocalNamespace(
+		if err := d.namespaceAttrValidator.ValidateNamespaceReplicationConfigForLocalNamespace(
 			replicationConfig,
 		); err != nil {
 			return nil, err
@@ -306,7 +314,7 @@ func (d *HandlerImpl) RegisterNamespace(
 }
 
 // ListNamespaces list all namespaces
-func (d *HandlerImpl) ListNamespaces(
+func (d *namespaceHandlerImpl) ListNamespaces(
 	ctx context.Context,
 	listRequest *workflowservice.ListNamespacesRequest,
 ) (*workflowservice.ListNamespacesResponse, error) {
@@ -349,7 +357,7 @@ func (d *HandlerImpl) ListNamespaces(
 }
 
 // DescribeNamespace describe the namespace
-func (d *HandlerImpl) DescribeNamespace(
+func (d *namespaceHandlerImpl) DescribeNamespace(
 	ctx context.Context,
 	describeRequest *workflowservice.DescribeNamespaceRequest,
 ) (*workflowservice.DescribeNamespaceResponse, error) {
@@ -374,7 +382,7 @@ func (d *HandlerImpl) DescribeNamespace(
 }
 
 // UpdateNamespace update the namespace
-func (d *HandlerImpl) UpdateNamespace(
+func (d *namespaceHandlerImpl) UpdateNamespace(
 	ctx context.Context,
 	updateRequest *workflowservice.UpdateNamespaceRequest,
 ) (*workflowservice.UpdateNamespaceResponse, error) {
@@ -403,7 +411,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	isGlobalNamespace := getResponse.IsGlobalNamespace || updateRequest.PromoteNamespace
 	needsNamespacePromotion := !getResponse.IsGlobalNamespace && updateRequest.PromoteNamespace
 
-	currentHistoryArchivalState := &ArchivalState{
+	currentHistoryArchivalState := &namespace.ArchivalConfigState{
 		State: config.HistoryArchivalState,
 		URI:   config.HistoryArchivalUri,
 	}
@@ -416,13 +424,13 @@ func (d *HandlerImpl) UpdateNamespace(
 		if err != nil {
 			return nil, err
 		}
-		nextHistoryArchivalState, historyArchivalConfigChanged, err = currentHistoryArchivalState.getNextState(archivalEvent, d.validateHistoryArchivalURI)
+		nextHistoryArchivalState, historyArchivalConfigChanged, err = currentHistoryArchivalState.GetNextState(archivalEvent, d.validateHistoryArchivalURI)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	currentVisibilityArchivalState := &ArchivalState{
+	currentVisibilityArchivalState := &namespace.ArchivalConfigState{
 		State: config.VisibilityArchivalState,
 		URI:   config.VisibilityArchivalUri,
 	}
@@ -435,7 +443,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		if err != nil {
 			return nil, err
 		}
-		nextVisibilityArchivalState, visibilityArchivalConfigChanged, err = currentVisibilityArchivalState.getNextState(archivalEvent, d.validateVisibilityArchivalURI)
+		nextVisibilityArchivalState, visibilityArchivalConfigChanged, err = currentVisibilityArchivalState.GetNextState(archivalEvent, d.validateVisibilityArchivalURI)
 		if err != nil {
 			return nil, err
 		}
@@ -541,11 +549,11 @@ func (d *HandlerImpl) UpdateNamespace(
 		}
 	}
 
-	if err := d.namespaceAttrValidator.validateNamespaceConfig(config); err != nil {
+	if err := d.namespaceAttrValidator.ValidateNamespaceConfig(config); err != nil {
 		return nil, err
 	}
 	if isGlobalNamespace {
-		if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigForGlobalNamespace(
+		if err := d.namespaceAttrValidator.ValidateNamespaceReplicationConfigForGlobalNamespace(
 			replicationConfig,
 		); err != nil {
 			return nil, err
@@ -555,7 +563,7 @@ func (d *HandlerImpl) UpdateNamespace(
 				"cluster, cannot update global namespace or promote local namespace: %v", updateRequest.Namespace))
 		}
 	} else {
-		if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigForLocalNamespace(
+		if err := d.namespaceAttrValidator.ValidateNamespaceReplicationConfigForLocalNamespace(
 			replicationConfig,
 		); err != nil {
 			return nil, err
@@ -638,7 +646,7 @@ func (d *HandlerImpl) UpdateNamespace(
 
 // DeprecateNamespace deprecates a namespace
 // Deprecated.
-func (d *HandlerImpl) DeprecateNamespace(
+func (d *namespaceHandlerImpl) DeprecateNamespace(
 	ctx context.Context,
 	deprecateRequest *workflowservice.DeprecateNamespaceRequest,
 ) (*workflowservice.DeprecateNamespaceResponse, error) {
@@ -684,7 +692,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 	return nil, nil
 }
 
-func (d *HandlerImpl) createResponse(
+func (d *namespaceHandlerImpl) createResponse(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
@@ -732,7 +740,7 @@ func (d *HandlerImpl) createResponse(
 	return infoResult, configResult, replicationConfigResult, failoverHistory
 }
 
-func (d *HandlerImpl) mergeBadBinaries(
+func (d *namespaceHandlerImpl) mergeBadBinaries(
 	old map[string]*namespacepb.BadBinaryInfo,
 	new map[string]*namespacepb.BadBinaryInfo,
 	createTime time.Time,
@@ -750,7 +758,7 @@ func (d *HandlerImpl) mergeBadBinaries(
 	}
 }
 
-func (d *HandlerImpl) mergeNamespaceData(
+func (d *namespaceHandlerImpl) mergeNamespaceData(
 	old map[string]string,
 	new map[string]string,
 ) map[string]string {
@@ -764,45 +772,45 @@ func (d *HandlerImpl) mergeNamespaceData(
 	return old
 }
 
-func (d *HandlerImpl) toArchivalRegisterEvent(
+func (d *namespaceHandlerImpl) toArchivalRegisterEvent(
 	state enumspb.ArchivalState,
 	URI string,
 	defaultState enumspb.ArchivalState,
 	defaultURI string,
-) (*ArchivalEvent, error) {
+) (*namespace.ArchivalConfigEvent, error) {
 
-	event := &ArchivalEvent{
-		state:      state,
+	event := &namespace.ArchivalConfigEvent{
+		State:      state,
 		URI:        URI,
-		defaultURI: defaultURI,
+		DefaultURI: defaultURI,
 	}
-	if event.state == enumspb.ARCHIVAL_STATE_UNSPECIFIED {
-		event.state = defaultState
+	if event.State == enumspb.ARCHIVAL_STATE_UNSPECIFIED {
+		event.State = defaultState
 	}
-	if err := event.validate(); err != nil {
+	if err := event.Validate(); err != nil {
 		return nil, err
 	}
 	return event, nil
 }
 
-func (d *HandlerImpl) toArchivalUpdateEvent(
+func (d *namespaceHandlerImpl) toArchivalUpdateEvent(
 	state enumspb.ArchivalState,
 	URI string,
 	defaultURI string,
-) (*ArchivalEvent, error) {
+) (*namespace.ArchivalConfigEvent, error) {
 
-	event := &ArchivalEvent{
-		state:      state,
+	event := &namespace.ArchivalConfigEvent{
+		State:      state,
 		URI:        URI,
-		defaultURI: defaultURI,
+		DefaultURI: defaultURI,
 	}
-	if err := event.validate(); err != nil {
+	if err := event.Validate(); err != nil {
 		return nil, err
 	}
 	return event, nil
 }
 
-func (d *HandlerImpl) validateHistoryArchivalURI(URIString string) error {
+func (d *namespaceHandlerImpl) validateHistoryArchivalURI(URIString string) error {
 	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
@@ -816,7 +824,7 @@ func (d *HandlerImpl) validateHistoryArchivalURI(URIString string) error {
 	return archiver.ValidateURI(URI)
 }
 
-func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
+func (d *namespaceHandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
@@ -831,7 +839,7 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 }
 
 // maybeUpdateFailoverHistory adds an entry if the Namespace is becoming active in a new cluster.
-func (d *HandlerImpl) maybeUpdateFailoverHistory(
+func (d *namespaceHandlerImpl) maybeUpdateFailoverHistory(
 	failoverHistory []*persistencespb.FailoverStatus,
 	updateReplicationConfig *replicationpb.NamespaceReplicationConfig,
 	namespaceDetail *persistencespb.NamespaceDetail,
@@ -869,9 +877,9 @@ func (d *HandlerImpl) maybeUpdateFailoverHistory(
 
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
 func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) error {
-	min := MinRetentionLocal
+	min := namespace.MinRetentionLocal
 	if isGlobalNamespace {
-		min = MinRetentionGlobal
+		min = namespace.MinRetentionGlobal
 	}
 	if retention < min {
 		return errInvalidRetentionPeriod
@@ -938,7 +946,7 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 		case enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_DEPRECATED:
 			return nil
 		default:
-			return ErrInvalidNamespaceStateUpdate
+			return errInvalidNamespaceStateUpdate
 		}
 
 	case enumspb.NAMESPACE_STATE_DEPRECATED:
@@ -946,12 +954,12 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 		case enumspb.NAMESPACE_STATE_DELETED:
 			return nil
 		default:
-			return ErrInvalidNamespaceStateUpdate
+			return errInvalidNamespaceStateUpdate
 		}
 
 	case enumspb.NAMESPACE_STATE_DELETED:
-		return ErrInvalidNamespaceStateUpdate
+		return errInvalidNamespaceStateUpdate
 	default:
-		return ErrInvalidNamespaceStateUpdate
+		return errInvalidNamespaceStateUpdate
 	}
 }

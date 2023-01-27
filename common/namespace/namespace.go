@@ -114,8 +114,8 @@ func (ns *Namespace) Clone(ms ...Mutation) *Namespace {
 
 // VisibilityArchivalState observes the visibility archive configuration (state
 // and URI) for this namespace.
-func (ns *Namespace) VisibilityArchivalState() ArchivalState {
-	return ArchivalState{
+func (ns *Namespace) VisibilityArchivalState() ArchivalConfigState {
+	return ArchivalConfigState{
 		State: ns.config.VisibilityArchivalState,
 		URI:   ns.config.VisibilityArchivalUri,
 	}
@@ -123,8 +123,8 @@ func (ns *Namespace) VisibilityArchivalState() ArchivalState {
 
 // HistoryArchivalState observes the history archive configuration (state and
 // URI) for this namespace.
-func (ns *Namespace) HistoryArchivalState() ArchivalState {
-	return ArchivalState{
+func (ns *Namespace) HistoryArchivalState() ArchivalConfigState {
+	return ArchivalConfigState{
 		State: ns.config.HistoryArchivalState,
 		URI:   ns.config.HistoryArchivalUri,
 	}

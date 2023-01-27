@@ -96,14 +96,13 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-				ReplicationDlqAckLevel: map[string]int64{
-					cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
-				},
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+			ReplicationDlqAckLevel: map[string]int64{
+				cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
+			},
+		},
 		s.config,
 	)
 	s.mockResource = s.mockShard.Resource

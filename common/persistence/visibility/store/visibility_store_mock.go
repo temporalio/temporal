@@ -100,6 +100,20 @@ func (mr *MockVisibilityStoreMockRecorder) DeleteWorkflowExecution(ctx, request 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockVisibilityStore)(nil).DeleteWorkflowExecution), ctx, request)
 }
 
+// GetIndexName mocks base method.
+func (m *MockVisibilityStore) GetIndexName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIndexName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetIndexName indicates an expected call of GetIndexName.
+func (mr *MockVisibilityStoreMockRecorder) GetIndexName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIndexName", reflect.TypeOf((*MockVisibilityStore)(nil).GetIndexName))
+}
+
 // GetName mocks base method.
 func (m *MockVisibilityStore) GetName() string {
 	m.ctrl.T.Helper()

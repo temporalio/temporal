@@ -53,12 +53,14 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		nil,
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		"",
+	)
 
 	namespace := "namespace"
 	var attr *commonpb.SearchAttributes
 
-	err := saValidator.Validate(attr, namespace, "")
+	err := saValidator.Validate(attr, namespace)
 	s.NoError(err)
 
 	intPayload, err := payload.Encode(1)
@@ -69,7 +71,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	attr = &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
-	err = saValidator.Validate(attr, namespace, "")
+	err = saValidator.Validate(attr, namespace)
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
@@ -78,7 +80,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		"CustomBoolField":    payload.EncodeString("true"),
 	}
 	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace, "")
+	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("number of search attributes 3 exceeds limit 2", err.Error())
 
@@ -86,7 +88,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		"InvalidKey": payload.EncodeString("1"),
 	}
 	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace, "")
+	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("search attribute InvalidKey is not defined", err.Error())
 
@@ -95,7 +97,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		"CustomBoolField": payload.EncodeString("123"),
 	}
 	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace, "")
+	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("invalid value for search attribute CustomBoolField of type Bool: 123", err.Error())
 
@@ -105,14 +107,14 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		"CustomIntField": intArrayPayload,
 	}
 	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace, "")
+	err = saValidator.Validate(attr, namespace)
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"StartTime": intPayload,
 	}
 	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace, "")
+	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
 }
@@ -127,12 +129,14 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		&TestMapper{},
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		"",
+	)
 
 	namespace := "test-namespace"
 	var attr *commonpb.SearchAttributes
 
-	err := saValidator.Validate(attr, namespace, "")
+	err := saValidator.Validate(attr, namespace)
 	s.Nil(err)
 
 	intPayload, err := payload.Encode(1)
@@ -143,7 +147,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	attr = &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
-	err = saValidator.Validate(attr, namespace, "")
+	err = saValidator.Validate(attr, namespace)
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
@@ -152,18 +156,18 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	attr = &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
-	err = saValidator.Validate(attr, "test-namespace", "")
+	err = saValidator.Validate(attr, "test-namespace")
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"InvalidKey": payload.EncodeString("1"),
 	}
 	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace, "")
+	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("search attribute alias_of_InvalidKey is not defined", err.Error())
 
-	err = saValidator.Validate(attr, "error-namespace", "")
+	err = saValidator.Validate(attr, "error-namespace")
 	s.Error(err)
 	s.EqualError(err, "mapper error")
 
@@ -172,7 +176,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		"CustomBoolField": payload.EncodeString("123"),
 	}
 	attr.IndexedFields = fields
-	err = saValidator.Validate(attr, namespace, "")
+	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("invalid value for search attribute alias_of_CustomBoolField of type Bool: 123", err.Error())
 }
@@ -187,7 +191,9 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 		nil,
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		"",
+	)
 
 	namespace := "namespace"
 
@@ -223,7 +229,9 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 		&TestMapper{},
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		"",
+	)
 
 	namespace := "test-namespace"
 
