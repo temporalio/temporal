@@ -307,6 +307,11 @@ integration-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration tests with coverage..."
 	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(INTEGRATION_COVER_PROFILE)
 
+# TODO(snowden): add coverage for these tests
+smoke-tests:
+	@printf $(COLOR) "Run smoke tests..."
+	@go test ./tests/smoke -timeout=$(TEST_TIMEOUT) $(TEST_TAG)
+
 functional-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_COVER_PROFILE)

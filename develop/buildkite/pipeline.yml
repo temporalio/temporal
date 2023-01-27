@@ -35,6 +35,18 @@ steps:
           run: db-integration-test
           config: ./develop/buildkite/docker-compose.yml
 
+  - label: ":golang: smoke tests"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make smoke-tests"
+    artifact_paths:
+      - ".coverage/*.out"
+    plugins:
+      - docker-compose#v3.8.0:
+          run: db-integration-test
+          config: ./develop/buildkite/docker-compose.yml
+
   - label: ":golang: functional test with cassandra"
     agents:
       queue: "default"

@@ -22,30 +22,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporal
+// package smoke contains tests that verify very basic functionality of the server.
+// They're similar to integration tests, but we only run them for one DB type.
+// This needs to be in a separate package because the other tests in the parent directory modify the same global
+// variables as this test.
+package smoke
 
 import (
 	"path"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"go.temporal.io/server/common/config"
-	// need to import this package to register the sqlite plugin
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
+
+	// this is needed to register the sqlite plugin
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 )
 
-// TestNewServer verifies that NewServer doesn't cause any fx errors
-func TestNewServer(t *testing.T) {
+// TestServerImpl_Start verifies that the server can be started and run for a minute without crashing
+func TestServerImpl_Start(t *testing.T) {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
 	cfg, err := config.LoadConfig("development-sqlite", configDir, "")
 	require.NoError(t, err)
 	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-sql.yaml")
-	_, err = NewServer(
-		ForServices(DefaultServices),
-		WithConfig(cfg),
+	server, err := temporal.NewServer(
+		temporal.ForServices(temporal.DefaultServices),
+		temporal.WithConfig(cfg),
 	)
 	assert.NoError(t, err)
+	err = server.Start()
+	if assert.NoError(t, err) {
+		time.Sleep(time.Minute)
+	}
+	defer func() {
+		err = server.Stop()
+		assert.NoError(t, err)
+	}()
 }
