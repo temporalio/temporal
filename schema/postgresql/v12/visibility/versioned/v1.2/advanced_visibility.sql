@@ -7,68 +7,60 @@ BEGIN
 END
 $$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
 
-CREATE TABLE executions_visibility (
-  namespace_id        CHAR(64)      NOT NULL,
-  run_id              CHAR(64)      NOT NULL,
-  start_time          TIMESTAMP     NOT NULL,
-  execution_time      TIMESTAMP     NOT NULL,
-  workflow_id         VARCHAR(255)  NOT NULL,
-  workflow_type_name  VARCHAR(255)  NOT NULL,
-  status              INTEGER       NOT NULL,  -- enum WorkflowExecutionStatus {RUNNING, COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
-  close_time          TIMESTAMP     NULL,
-  history_length      BIGINT        NULL,
-  memo                BYTEA         NULL,
-  encoding            VARCHAR(64)   NOT NULL,
-  task_queue          VARCHAR(255)  NOT NULL DEFAULT '',
-  search_attributes   JSONB         NULL,
+-- Add search attributes related columns
+ALTER TABLE executions_visibility ADD COLUMN search_attributes JSONB NULL;
 
-  -- Each search attribute has its own generated column.
-  -- Since PostgreSQL doesn't support virtual columns, all columns are stored.
-  -- PostgreSQL doesn't auto cast to the corresponding column type, so we need to explicitly do it.
-  -- Check the `custom_search_attributes` table for complete set of examples.
+-- Pre-defined search attributes
+ALTER TABLE executions_visibility
+  ADD COLUMN TemporalChangeVersion      JSONB         GENERATED ALWAYS AS (search_attributes->'TemporalChangeVersion')                    STORED,
+  ADD COLUMN BinaryChecksums            JSONB         GENERATED ALWAYS AS (search_attributes->'BinaryChecksums')                          STORED,
+  ADD COLUMN BatcherUser                VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'BatcherUser')                             STORED,
+  ADD COLUMN TemporalScheduledStartTime TIMESTAMP     GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalScheduledStartTime'))  STORED,
+  ADD COLUMN TemporalScheduledById      VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'TemporalScheduledById')                   STORED,
+  ADD COLUMN TemporalSchedulePaused     BOOLEAN       GENERATED ALWAYS AS ((search_attributes->'TemporalSchedulePaused')::boolean)        STORED,
+  ADD COLUMN TemporalNamespaceDivision  VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'TemporalNamespaceDivision')               STORED;
 
-  -- Pre-defined search attributes
-  TemporalChangeVersion         JSONB         GENERATED ALWAYS AS (search_attributes->'TemporalChangeVersion')                    STORED,
-  BinaryChecksums               JSONB         GENERATED ALWAYS AS (search_attributes->'BinaryChecksums')                          STORED,
-  BatcherUser                   VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'BatcherUser')                             STORED,
-  TemporalScheduledStartTime    TIMESTAMP     GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalScheduledStartTime'))  STORED,
-  TemporalScheduledById         VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'TemporalScheduledById')                   STORED,
-  TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS ((search_attributes->'TemporalSchedulePaused')::boolean)        STORED,
-  TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'TemporalNamespaceDivision')               STORED,
+-- Pre-allocated custom search attributes
+ALTER TABLE executions_visibility
+  ADD COLUMN Bool01         BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool01')::boolean)        STORED,
+  ADD COLUMN Bool02         BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool02')::boolean)        STORED,
+  ADD COLUMN Bool03         BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool03')::boolean)        STORED,
+  ADD COLUMN Datetime01     TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'Datetime01'))  STORED,
+  ADD COLUMN Datetime02     TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'Datetime02'))  STORED,
+  ADD COLUMN Datetime03     TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'Datetime03'))  STORED,
+  ADD COLUMN Double01       DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'Double01')::decimal)      STORED,
+  ADD COLUMN Double02       DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'Double02')::decimal)      STORED,
+  ADD COLUMN Double03       DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'Double03')::decimal)      STORED,
+  ADD COLUMN Int01          BIGINT          GENERATED ALWAYS AS ((search_attributes->'Int01')::bigint)          STORED,
+  ADD COLUMN Int02          BIGINT          GENERATED ALWAYS AS ((search_attributes->'Int02')::bigint)          STORED,
+  ADD COLUMN Int03          BIGINT          GENERATED ALWAYS AS ((search_attributes->'Int03')::bigint)          STORED,
+  ADD COLUMN Keyword01      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword01')               STORED,
+  ADD COLUMN Keyword02      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword02')               STORED,
+  ADD COLUMN Keyword03      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword03')               STORED,
+  ADD COLUMN Keyword04      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword04')               STORED,
+  ADD COLUMN Keyword05      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword05')               STORED,
+  ADD COLUMN Keyword06      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword06')               STORED,
+  ADD COLUMN Keyword07      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword07')               STORED,
+  ADD COLUMN Keyword08      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword08')               STORED,
+  ADD COLUMN Keyword09      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword09')               STORED,
+  ADD COLUMN Keyword10      VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword10')               STORED,
+  ADD COLUMN Text01         TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'Text01')::tsvector)      STORED,
+  ADD COLUMN Text02         TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'Text02')::tsvector)      STORED,
+  ADD COLUMN Text03         TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'Text03')::tsvector)      STORED,
+  ADD COLUMN KeywordList01  JSONB           GENERATED ALWAYS AS (search_attributes->'KeywordList01')            STORED,
+  ADD COLUMN KeywordList02  JSONB           GENERATED ALWAYS AS (search_attributes->'KeywordList02')            STORED,
+  ADD COLUMN KeywordList03  JSONB           GENERATED ALWAYS AS (search_attributes->'KeywordList03')            STORED;
 
-  -- Pre-allocated custom search attributes
-  Bool01          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool01')::boolean)        STORED,
-  Bool02          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool02')::boolean)        STORED,
-  Bool03          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool03')::boolean)        STORED,
-  Datetime01      TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'Datetime01'))  STORED,
-  Datetime02      TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'Datetime02'))  STORED,
-  Datetime03      TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'Datetime03'))  STORED,
-  Double01        DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'Double01')::decimal)      STORED,
-  Double02        DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'Double02')::decimal)      STORED,
-  Double03        DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'Double03')::decimal)      STORED,
-  Int01           BIGINT          GENERATED ALWAYS AS ((search_attributes->'Int01')::bigint)          STORED,
-  Int02           BIGINT          GENERATED ALWAYS AS ((search_attributes->'Int02')::bigint)          STORED,
-  Int03           BIGINT          GENERATED ALWAYS AS ((search_attributes->'Int03')::bigint)          STORED,
-  Keyword01       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword01')               STORED,
-  Keyword02       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword02')               STORED,
-  Keyword03       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword03')               STORED,
-  Keyword04       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword04')               STORED,
-  Keyword05       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword05')               STORED,
-  Keyword06       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword06')               STORED,
-  Keyword07       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword07')               STORED,
-  Keyword08       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword08')               STORED,
-  Keyword09       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword09')               STORED,
-  Keyword10       VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'Keyword10')               STORED,
-  Text01          TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'Text01')::tsvector)      STORED,
-  Text02          TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'Text02')::tsvector)      STORED,
-  Text03          TSVECTOR        GENERATED ALWAYS AS ((search_attributes->>'Text03')::tsvector)      STORED,
-  KeywordList01   JSONB           GENERATED ALWAYS AS (search_attributes->'KeywordList01')            STORED,
-  KeywordList02   JSONB           GENERATED ALWAYS AS (search_attributes->'KeywordList02')            STORED,
-  KeywordList03   JSONB           GENERATED ALWAYS AS (search_attributes->'KeywordList03')            STORED,
+-- Drop existing indexes
+DROP INDEX by_type_start_time;
+DROP INDEX by_workflow_id_start_time;
+DROP INDEX by_status_by_start_time;
+DROP INDEX by_type_close_time;
+DROP INDEX by_workflow_id_close_time;
+DROP INDEX by_status_by_close_time;
+DROP INDEX by_close_time_by_status;
 
-  PRIMARY KEY  (namespace_id, run_id)
-);
-
+-- Create new indexes
 CREATE INDEX default_idx        ON executions_visibility (namespace_id, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_execution_time  ON executions_visibility (namespace_id, execution_time,     (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_workflow_id     ON executions_visibility (namespace_id, workflow_id,        (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
