@@ -1339,10 +1339,6 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 	return ms.hBuilder.HasBufferEvents()
 }
 
-func (ms *MutableStateImpl) BufferedEventsSize() int {
-	return ms.hBuilder.BufferEventSize()
-}
-
 // DeleteWorkflowTask deletes a workflow task.
 func (ms *MutableStateImpl) DeleteWorkflowTask() {
 	ms.workflowTaskManager.DeleteWorkflowTask()

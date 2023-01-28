@@ -76,14 +76,7 @@ func Invoke(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
-	afterEventID := ms.GetNextEventID() - 1
-	if ms.HasInFlightWorkflowTask() {
-		// If workflow task has started, then the current last event Id can't be used.
-		// Set it to 0 here, and it will be updated after all commands and messages are processed.
-		afterEventID = 0
-	}
-
-	upd, removeFn := ms.UpdateRegistry().Add(req.GetRequest().GetRequest(), afterEventID, ms.BufferedEventsSize())
+	upd, removeFn := ms.UpdateRegistry().Add(req.GetRequest().GetRequest())
 	defer removeFn()
 
 	if !ms.HasPendingWorkflowTask() {

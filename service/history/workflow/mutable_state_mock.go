@@ -818,20 +818,6 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskTimedOutEvent(arg0, arg1 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskTimedOutEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskTimedOutEvent), arg0, arg1)
 }
 
-// BufferedEventsSize mocks base method.
-func (m *MockMutableState) BufferedEventsSize() int {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BufferedEventsSize")
-	ret0, _ := ret[0].(int)
-	return ret0
-}
-
-// BufferedEventsSize indicates an expected call of BufferedEventsSize.
-func (mr *MockMutableStateMockRecorder) BufferedEventsSize() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BufferedEventsSize", reflect.TypeOf((*MockMutableState)(nil).BufferedEventsSize))
-}
-
 // CheckResettable mocks base method.
 func (m *MockMutableState) CheckResettable() error {
 	m.ctrl.T.Helper()

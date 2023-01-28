@@ -38,7 +38,6 @@ type (
 	Update struct {
 		state                 state
 		request               *updatepb.Request
-		afterEventID          int64
 		afterBufferedEventNum int
 		messageID             string
 		protocolInstanceID    string
@@ -55,25 +54,18 @@ const (
 	stateCompleted
 )
 
-func newUpdate(request *updatepb.Request, afterEventID int64, afterBufferedEventNum int, protocolInstanceID string) *Update {
+func newUpdate(request *updatepb.Request, protocolInstanceID string) *Update {
 	return &Update{
-		state:                 statePending,
-		request:               request,
-		afterEventID:          afterEventID,
-		afterBufferedEventNum: afterBufferedEventNum,
-		messageID:             uuid.New(),
-		protocolInstanceID:    protocolInstanceID,
-		out:                   future.NewFuture[*updatepb.Outcome](),
+		state:              statePending,
+		request:            request,
+		messageID:          uuid.New(),
+		protocolInstanceID: protocolInstanceID,
+		out:                future.NewFuture[*updatepb.Outcome](),
 	}
 }
 
 func (u *Update) WaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
 	return u.out.Get(ctx)
-}
-
-func (u *Update) sequenceEventID() int64 {
-	// TODO (alex-update): fix the formula to take possible reordering into account. See HistoryBuilder.reorderBuffer method.
-	return u.afterEventID + int64(u.afterBufferedEventNum)
 }
 
 func (u *Update) accept() {

@@ -512,10 +512,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		hasBufferedEvents = workflowTaskHandler.hasBufferedEvents
 	}
 
-	// After all commands and messages are processed, store EventID before flushing buffered events.
-	// This EventID will be used to compute SequenceEventID updates received after this WT was started.
-	lastCommandEventID := ms.GetNextEventID() - 1
-
 	if wtFailedCause != nil {
 		handler.metricsHandler.Counter(metrics.FailedWorkflowTasksCounter.GetMetricName()).Record(
 			1,
@@ -665,7 +661,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	ms.UpdateRegistry().UpdateAfterEventID(lastCommandEventID)
 
 	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), createNewWorkflowTask, namespaceEntry, workflowTaskHeartbeating)
 
@@ -792,7 +787,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		}
 	}
 
-	response.Messages, err = ms.UpdateRegistry().CreateOutgoingMessages()
+	response.Messages, err = ms.UpdateRegistry().CreateOutgoingMessages(workflowTask.StartedEventID)
 	if err != nil {
 		return nil, err
 	}

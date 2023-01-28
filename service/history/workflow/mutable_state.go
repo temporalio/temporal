@@ -193,7 +193,6 @@ type (
 		UpdateRegistry() update.Registry
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
-		BufferedEventsSize() int
 		HasInFlightWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool

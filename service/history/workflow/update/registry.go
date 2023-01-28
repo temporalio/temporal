@@ -35,13 +35,12 @@ import (
 
 type (
 	Registry interface {
-		Add(request *updatepb.Request, afterEventID int64, afterBufferedEventNum int) (*Update, RemoveFunc)
+		Add(request *updatepb.Request) (*Update, RemoveFunc)
 
-		CreateOutgoingMessages() ([]*protocolpb.Message, error)
+		CreateOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
 
 		HasPending(filterMessages []*protocolpb.Message) bool
 		ProcessIncomingMessages(messages []*protocolpb.Message) error
-		UpdateAfterEventID(afterEventID int64)
 
 		Clear()
 	}
@@ -62,11 +61,11 @@ func NewRegistry() *RegistryImpl {
 	}
 }
 
-func (r *RegistryImpl) Add(request *updatepb.Request, afterEventID int64, afterBufferedEventNum int) (*Update, RemoveFunc) {
+func (r *RegistryImpl) Add(request *updatepb.Request) (*Update, RemoveFunc) {
 	r.Lock()
 	defer r.Unlock()
 	protocolInstanceID := request.GetMeta().GetUpdateId()
-	upd := newUpdate(request, afterEventID, afterBufferedEventNum, protocolInstanceID)
+	upd := newUpdate(request, protocolInstanceID)
 	r.updates[upd.protocolInstanceID] = upd
 	return upd, func() { r.remove(protocolInstanceID) }
 }
@@ -95,7 +94,7 @@ func (r *RegistryImpl) HasPending(filterMessages []*protocolpb.Message) bool {
 	return false
 }
 
-func (r *RegistryImpl) CreateOutgoingMessages() ([]*protocolpb.Message, error) {
+func (r *RegistryImpl) CreateOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error) {
 	r.RLock()
 	defer r.RUnlock()
 	numPendingUpd := 0
@@ -107,6 +106,12 @@ func (r *RegistryImpl) CreateOutgoingMessages() ([]*protocolpb.Message, error) {
 	if numPendingUpd == 0 {
 		return nil, nil
 	}
+
+	// TODO (alex-update): currently sequencing_id is simply pointing to the event before WorkflowTaskStartedEvent.
+	// SDKs are supposed to respect this and process messages (specifically, updates) after event with that ID.
+	// In future, sequencing_id could point to some specific event (specifically, signal) after which the update should be processed.
+	// Currently it is not possible due to buffered events reordering on server and events reordering in some SDKs.
+	sequencingEventID := startedEventID - 1
 
 	updMessages := make([]*protocolpb.Message, numPendingUpd)
 	i := 0
@@ -120,7 +125,7 @@ func (r *RegistryImpl) CreateOutgoingMessages() ([]*protocolpb.Message, error) {
 				Id:                 upd.messageID,
 				ProtocolInstanceId: upd.protocolInstanceID,
 				SequencingId: &protocolpb.Message_EventId{
-					EventId: upd.sequenceEventID(),
+					EventId: sequencingEventID,
 				},
 				Body: messageBody,
 			}
@@ -159,18 +164,6 @@ func (r *RegistryImpl) ProcessIncomingMessages(messages []*protocolpb.Message) e
 		}
 	}
 	return nil
-}
-
-func (r *RegistryImpl) UpdateAfterEventID(afterEventID int64) {
-	r.Lock()
-	defer r.Unlock()
-	for _, upd := range r.updates {
-		// If update doesn't have afterEventID set, it means that it was created after workflow task started,
-		// last event Id of last generated event from command was unknown at that moment.
-		if upd.state == statePending && upd.afterEventID == 0 {
-			upd.afterEventID = afterEventID
-		}
-	}
 }
 
 func (r *RegistryImpl) Clear() {

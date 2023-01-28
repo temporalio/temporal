@@ -122,7 +122,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_AcceptComplete()
 			if msgHandlerCalls == 1 {
 				s.EqualValues(2, updRequestMsg.GetEventId())
 			} else if msgHandlerCalls == 2 {
-				s.EqualValues(6, updRequestMsg.GetEventId())
+				s.EqualValues(7, updRequestMsg.GetEventId())
 			}
 
 			return []*protocolpb.Message{
@@ -336,7 +336,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewWorkflowTask_AcceptComplete() {
 
 			s.Equal(payloads.EncodeString("update args"), updRequest.GetInput().GetArgs())
 			s.Equal("update_handler", updRequest.GetInput().GetName())
-			s.EqualValues(5, updRequestMsg.GetEventId())
+			s.EqualValues(6, updRequestMsg.GetEventId())
 
 			return []*protocolpb.Message{
 				{
@@ -675,7 +675,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewWorkflowTask_Reject() {
 
 			s.Equal(payloads.EncodeString("update args"), updRequest.GetInput().GetArgs())
 			s.Equal("update_handler", updRequest.GetInput().GetName())
-			s.EqualValues(5, updRequestMsg.GetEventId())
+			s.EqualValues(6, updRequestMsg.GetEventId())
 
 			return []*protocolpb.Message{
 				{
@@ -883,7 +883,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_1stAccept_2ndAcc
 		case 3:
 			s.Len(task.Messages, 1)
 			updRequestMsg := task.Messages[0]
-			s.EqualValues(8, updRequestMsg.GetEventId())
+			s.EqualValues(9, updRequestMsg.GetEventId())
 			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
 			upd2Meta = updRequest.GetMeta()
 			// Accept 2nd update.
@@ -1175,7 +1175,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_1stAccept_2ndRej
 		case 3:
 			s.Len(task.Messages, 1)
 			updRequestMsg := task.Messages[0]
-			s.EqualValues(9, updRequestMsg.GetEventId())
+			s.EqualValues(10, updRequestMsg.GetEventId())
 			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
 			// Reject 2nd update.
 			return []*protocolpb.Message{
