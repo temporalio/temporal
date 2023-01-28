@@ -1472,6 +1472,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		CronSchedule:             command.CronSchedule,
 		Memo:                     command.Memo,
 		SearchAttributes:         command.SearchAttributes,
+		// No need to request eager execution here (for now)
+		RequestEagerExecution: false,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)

@@ -5067,7 +5067,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	s.NoError(err)
 }
 
-func (s *engineSuite) TestEagerWorkflowDispatch_DoesNotCreateTransferTask() {
+func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	var recordedTasks []tasks.Task
 
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
@@ -5098,6 +5098,41 @@ func (s *engineSuite) TestEagerWorkflowDispatch_DoesNotCreateTransferTask() {
 	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[0].EventType, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[1].EventType, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
 	s.Equal(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask.History.Events[2].EventType, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
+	s.Equal(len(recordedTasks), 0)
+}
+
+func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
+	var recordedTasks []tasks.Task
+
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+		recordedTasks = request.NewWorkflowSnapshot.Tasks[tasks.CategoryTransfer]
+		persistenceResponse := persistence.CreateWorkflowExecutionResponse{NewMutableStateStats: tests.CreateWorkflowExecutionResponse.NewMutableStateStats}
+		return &persistenceResponse, nil
+	})
+
+	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(), s.mockShard.GetMetricsHandler(), s.mockShard.Resource.Logger)
+	response, err := i.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+		firstWorkflowTaskBackoff := time.Second
+		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
+			NamespaceId:              tests.NamespaceID.String(),
+			Attempt:                  1,
+			ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
+			FirstWorkflowTaskBackoff: &firstWorkflowTaskBackoff,
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId:            "test",
+				Namespace:             tests.Namespace.String(),
+				WorkflowType:          &commonpb.WorkflowType{Name: "test"},
+				TaskQueue:             &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "test"},
+				Identity:              "test",
+				RequestId:             "test",
+				CronSchedule:          "* * * * *",
+				RequestEagerExecution: true,
+			},
+		})
+		return response, err
+	})
+	s.NoError(err)
+	s.Nil(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask)
 	s.Equal(len(recordedTasks), 0)
 }
 
