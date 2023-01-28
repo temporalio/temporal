@@ -49,7 +49,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 		assert.Equal(t, metrics.OperationTagName, tags[0].Key())
 		assert.Equal(t, "ArchivalQueueProcessor", tags[0].Value())
 		return metricsHandler
-	})
+	}).Times(2)
 	shardContext := shard.NewMockContext(ctrl)
 	shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger())
 	shardContext.EXPECT().GetQueueState(tasks.CategoryArchival).Return(&persistence.QueueState{

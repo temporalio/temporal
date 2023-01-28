@@ -385,6 +385,11 @@ const (
 
 	// TaskSchedulerEnableRateLimiter indicates if rate limiter should be enabled in task scheduler
 	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
+	// TaskSchedulerEnableRateLimiterShadowMode indicates if task scheduler rate limiter should run in shadow mode
+	// i.e. through rate limiter and emit metrics but do not actually block/throttle task scheduling
+	TaskSchedulerEnableRateLimiterShadowMode = "history.taskSchedulerEnableRateLimiterShadowMode"
+	// TaskSchedulerThrottleDuration is the throttle duration when task scheduled exceeds max qps
+	TaskSchedulerThrottleDuration = "history.taskSchedulerThrottleDuration"
 	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"

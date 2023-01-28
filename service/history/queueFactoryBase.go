@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"time"
 
 	"go.uber.org/fx"
 
@@ -43,13 +42,6 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-)
-
-const (
-	QueueFactoryFxGroup = "queueFactory"
-
-	HostSchedulerMaxDispatchThrottleDuration  = 3 * time.Second
-	ShardSchedulerMaxDispatchThrottleDuration = 5 * time.Second
 )
 
 type (

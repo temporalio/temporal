@@ -32,16 +32,14 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/util"
 )
 
 const (
-	iwrrMinDispatchThrottleDuration = 1 * time.Second
 	checkRateLimiterEnabledInterval = 1 * time.Minute
 )
 
@@ -59,12 +57,17 @@ type (
 		ChannelWeightUpdateCh chan struct{}
 		// Required for converting task channel to rate limit request
 		ChannelQuotaRequestFn ChannelQuotaRequestFn[K]
-		// Required for determining if rate limiter should be enabled.
+		// Required for getting metrics tags for task channels
+		TaskChannelMetricTagsFn TaskChannelMetricTagsFn[K]
+		// Required for determining if rate limiter should be enabled
 		EnableRateLimiter dynamicconfig.BoolPropertyFn
-		// Optional, if specified and greater than 1s the throttle duration will be a random
-		// value between 1s to the value specified.
-		// If not specified or not valid, the throttle duration will always be 1s.
-		MaxDispatchThrottleDuration time.Duration
+		// Required for determining if task should still go through rate limiter and
+		// emit metrics, but not actually block task dispatching.
+		// only takes effect when rate limiter is not enabled
+		EnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
+		// Required for determining how long scheduler should be throttled
+		// when exceeding allowed dispatch rate
+		DispatchThrottleDuration dynamicconfig.DurationPropertyFn
 	}
 
 	// TaskChannelKeyFn is the function for mapping a task to its task channel (key)
@@ -76,15 +79,19 @@ type (
 	// ChannelQuotaRequestFn is the function for mapping a task channel (key) to its rate limit request
 	ChannelQuotaRequestFn[K comparable] func(K) quotas.Request
 
+	// TaskChannelMetricTagsFn is the function for mapping a task channel (key) to its metrics tags
+	TaskChannelMetricTagsFn[K comparable] func(K) []metrics.Tag
+
 	// InterleavedWeightedRoundRobinScheduler is a round robin scheduler implementation
 	// ref: https://en.wikipedia.org/wiki/Weighted_round_robin#Interleaved_WRR
 	InterleavedWeightedRoundRobinScheduler[T Task, K comparable] struct {
 		status int32
 
-		fifoScheduler Scheduler[T]
-		rateLimiter   quotas.RequestRateLimiter
-		timeSource    clock.TimeSource
-		logger        log.Logger
+		fifoScheduler  Scheduler[T]
+		rateLimiter    quotas.RequestRateLimiter
+		timeSource     clock.TimeSource
+		logger         log.Logger
+		metricsHandler metrics.Handler
 
 		notifyChan   chan struct{}
 		shutdownChan chan struct{}
@@ -96,10 +103,10 @@ type (
 		sync.RWMutex
 		weightedChannels map[K]*WeightedChannel[T]
 
-		dispatchTimerLock  sync.Mutex
-		dispatchTimer      *time.Timer
-		rateLimiterEnabled atomic.Value
-		iwrrChannels       atomic.Value
+		dispatchTimerLock sync.Mutex
+		dispatchTimer     *time.Timer
+		rateLimiterConfig atomic.Value // rateLimitConfig
+		iwrrChannels      atomic.Value
 	}
 
 	channelWithStatus[T Task, K comparable] struct {
@@ -107,12 +114,17 @@ type (
 
 		key              K
 		rateLimitRequest quotas.Request
+		metricsTags      []metrics.Tag
 
 		throttled bool
-		moreTasks bool // this is only a hint since there's no way to peek the channel
 	}
 
 	channelsWithStatus[T Task, K comparable] []*channelWithStatus[T, K]
+
+	rateLimiterConfig struct {
+		enableThrottle   bool
+		enableShadowMode bool
+	}
 
 	iwrrChannels[T Task, K comparable] struct {
 		channels channelsWithStatus[T, K]
@@ -135,31 +147,37 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 	rateLimiter quotas.RequestRateLimiter,
 	timeSource clock.TimeSource,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *InterleavedWeightedRoundRobinScheduler[T, K] {
 	channels := atomic.Value{}
 	channels.Store(iwrrChannels[T, K]{})
 
-	enableRateLimiter := atomic.Value{}
-	enableRateLimiter.Store(options.EnableRateLimiter())
+	rlConfig := atomic.Value{}
+	rlConfig.Store(
+		rateLimiterConfig{
+			enableThrottle:   options.EnableRateLimiter(),
+			enableShadowMode: options.EnableRateLimiterShadowMode(),
+		},
+	)
 
-	options.MaxDispatchThrottleDuration = util.Max(iwrrMinDispatchThrottleDuration, options.MaxDispatchThrottleDuration)
 	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
 
-		fifoScheduler: fifoScheduler,
-		rateLimiter:   rateLimiter,
-		timeSource:    timeSource,
-		logger:        logger,
+		fifoScheduler:  fifoScheduler,
+		rateLimiter:    rateLimiter,
+		timeSource:     timeSource,
+		logger:         logger,
+		metricsHandler: metricsHandler,
 
 		options: options,
 
 		notifyChan:   make(chan struct{}, 1),
 		shutdownChan: make(chan struct{}),
 
-		numInflightTask:    0,
-		weightedChannels:   make(map[K]*WeightedChannel[T]),
-		rateLimiterEnabled: enableRateLimiter,
-		iwrrChannels:       channels,
+		numInflightTask:   0,
+		weightedChannels:  make(map[K]*WeightedChannel[T]),
+		rateLimiterConfig: rlConfig,
+		iwrrChannels:      channels,
 	}
 }
 
@@ -244,7 +262,10 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) eventLoop() {
 		case <-s.notifyChan:
 			s.dispatchTasksWithWeight()
 		case <-checkRateLimiterEnabledTimer.C:
-			s.rateLimiterEnabled.Store(s.options.EnableRateLimiter())
+			s.rateLimiterConfig.Store(rateLimiterConfig{
+				enableThrottle:   s.options.EnableRateLimiter(),
+				enableShadowMode: s.options.EnableRateLimiterShadowMode(),
+			})
 		case <-s.shutdownChan:
 			return
 		}
@@ -285,8 +306,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLo
 			WeightedChannel:  weightedChan,
 			key:              channelKey,
 			rateLimitRequest: s.options.ChannelQuotaRequestFn(channelKey),
+			metricsTags:      s.options.TaskChannelMetricTagsFn(channelKey),
 			throttled:        false,
-			moreTasks:        false,
 		})
 	}
 	sort.Slice(weightedChannels, func(i, j int) bool {
@@ -311,17 +332,14 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() iwrrChannels[T
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) setupDispatchTimer() {
-	throttleDuration := iwrrMinDispatchThrottleDuration +
-		backoff.FullJitter(s.options.MaxDispatchThrottleDuration-iwrrMinDispatchThrottleDuration)
-
 	s.dispatchTimerLock.Lock()
 	defer s.dispatchTimerLock.Unlock()
 
 	if s.dispatchTimer != nil {
-		s.dispatchTimer.Stop()
+		return
 	}
 
-	s.dispatchTimer = time.AfterFunc(throttleDuration, func() {
+	s.dispatchTimer = time.AfterFunc(s.options.DispatchThrottleDuration(), func() {
 		s.dispatchTimerLock.Lock()
 		defer s.dispatchTimerLock.Unlock()
 
@@ -379,16 +397,18 @@ LoopDispatch:
 		}
 
 		iwrrChannels := s.channels()
-		enableRateLimiter := s.isRateLimiterEnabled()
-		s.doDispatchTasksWithWeight(iwrrChannels, enableRateLimiter)
+		rateLimiterConfig := s.getRateLimiterConfig()
+		s.doDispatchTasksWithWeight(iwrrChannels, rateLimiterConfig)
 
-		if !enableRateLimiter {
+		if !rateLimiterConfig.enableThrottle {
 			continue LoopDispatch
 		}
 
-		// rate limiter enabled
+		// rate limiter throttled enabled
+		// we only want to perform next round of dispatch if there are tasks in non-throttled channel.
+		//
 		// all channels = throttled channels + not throttled but has more task + not throttled and no more task
-		// - If there's channel that's not throttled but has more task, need to trigger next round
+		// - If there's channel that's not throttled and has more task, need to trigger next round
 		//   of dispatch immediately.
 		// - Otherwise all channels = throttled channels + not throttled and no more task
 		//   then as long as there's throttled channel, need to set a timer to try dispatch later
@@ -399,7 +419,7 @@ LoopDispatch:
 				numThrottled++
 				continue
 			}
-			if channel.moreTasks {
+			if len(channel.Chan()) > 0 {
 				// there's channel that is not throttled and may have more tasks
 				// start a new round of dispatch immediately
 				continue LoopDispatch
@@ -416,20 +436,20 @@ LoopDispatch:
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight(
 	iwrrChannels iwrrChannels[T, K],
-	enableRateLimiter bool,
+	rateLimiterConfig rateLimiterConfig,
 ) {
+	for _, channel := range iwrrChannels.channels {
+		channel.throttled = false
+	}
+
 	rateLimiter := quotas.NoopRequestRateLimiter
-	if enableRateLimiter {
+	if rateLimiterConfig.enableThrottle || rateLimiterConfig.enableShadowMode {
 		rateLimiter = s.rateLimiter
-		for _, channel := range iwrrChannels.channels {
-			channel.throttled = false
-			channel.moreTasks = false
-		}
 	}
 
 	numFlattenedChannels := len(iwrrChannels.flattenedChannels)
 	startIdx := rand.Intn(numFlattenedChannels)
-	numTasks := int64(0)
+	taskDispatched := int64(0)
 	numThrottled := 0
 LoopDispatch:
 	for i := 0; i != numFlattenedChannels; i++ {
@@ -439,44 +459,57 @@ LoopDispatch:
 			continue LoopDispatch
 		}
 
-		now := s.timeSource.Now()
-		reservation := rateLimiter.Reserve(
-			now,
-			channel.rateLimitRequest,
-		)
-		if reservation.DelayFrom(now) != 0 {
-			reservation.CancelAt(now)
-			channel.throttled = true
-			numThrottled++
-			if numThrottled == len(iwrrChannels.channels) {
-				// all channels throttled
-				break LoopDispatch
-			}
+		if len(channel.Chan()) == 0 {
 			continue LoopDispatch
 		}
+
+		if !rateLimiter.Allow(s.timeSource.Now(), channel.rateLimitRequest) {
+			s.metricsHandler.Counter(metrics.TaskSchedulerThrottled.GetMetricName()).Record(1, channel.metricsTags...)
+
+			if rateLimiterConfig.enableThrottle {
+				channel.throttled = true
+				numThrottled++
+				if numThrottled == len(iwrrChannels.channels) {
+					// all channels throttled
+					break LoopDispatch
+				}
+				continue LoopDispatch
+			}
+
+			// throttled, but in shadow mode, do not actually throttle task dispatching
+		}
+
 		select {
 		case task := <-channel.Chan():
 			s.fifoScheduler.Submit(task)
-			numTasks++
-			channel.moreTasks = true
+			taskDispatched++
 		default:
-			reservation.CancelAt(now)
-			channel.moreTasks = false
 			continue LoopDispatch
 		}
 	}
-	atomic.AddInt64(&s.numInflightTask, -numTasks)
+	atomic.AddInt64(&s.numInflightTask, -taskDispatched)
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) tryDispatchTaskDirectly(
 	channelKey K,
 	task T,
 ) bool {
-	if s.isRateLimiterEnabled() && !s.rateLimiter.Allow(
-		s.timeSource.Now(),
-		s.options.ChannelQuotaRequestFn(channelKey),
-	) {
-		return false
+	rateLimiterConfig := s.getRateLimiterConfig()
+	if rateLimiterConfig.enableThrottle || rateLimiterConfig.enableShadowMode {
+		if !s.rateLimiter.Allow(
+			s.timeSource.Now(),
+			s.options.ChannelQuotaRequestFn(channelKey),
+		) {
+			s.metricsHandler.Counter(metrics.TaskSchedulerThrottled.GetMetricName()).Record(1, s.options.TaskChannelMetricTagsFn(channelKey)...)
+
+			if rateLimiterConfig.enableThrottle {
+				return false
+			}
+
+			// throttled, but in shadow mode, continue to dispatch
+		}
+
+		// not throttled, continue to dispatch
 	}
 
 	dispatched := s.fifoScheduler.TrySubmit(task)
@@ -511,8 +544,8 @@ DrainLoop:
 	atomic.AddInt64(&s.numInflightTask, -numTasks)
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) isRateLimiterEnabled() bool {
-	return s.rateLimiterEnabled.Load().(bool)
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getRateLimiterConfig() rateLimiterConfig {
+	return s.rateLimiterConfig.Load().(rateLimiterConfig)
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) isStopped() bool {
