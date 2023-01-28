@@ -44,7 +44,7 @@ func TestNewServer(t *testing.T) {
 	require.NoError(t, err)
 	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-sql.yaml")
 	_, err = NewServer(
-		ForServices(Services),
+		ForServices(DefaultServices),
 		WithConfig(cfg),
 	)
 	assert.NoError(t, err)
