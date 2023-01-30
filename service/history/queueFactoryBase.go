@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -136,8 +137,13 @@ func getQueueFactories(
 		queueFactorySet.TimerQueueFactory,
 		queueFactorySet.VisibilityQueueFactory,
 	}
+	c := tasks.CategoryArchival
+	// this will only affect tests because this method is only called once in production,
+	// but it may be called many times across test runs, which would leave the archival queue as a dangling category
+	tasks.RemoveCategory(c.ID())
 	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled || archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
 		factories = append(factories, queueFactorySet.ArchivalQueueFactory)
+		tasks.NewCategory(c.ID(), c.Type(), c.Name())
 	}
 	return factories
 }
