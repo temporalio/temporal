@@ -59,6 +59,7 @@ message NamespaceConfig {
     string history_archival_uri = 5;
     temporal.api.enums.v1.ArchivalState visibility_archival_state = 6;
     string visibility_archival_uri = 7;
+    map<string, string> custom_search_attribute_aliases = 8;
 }
 
 message NamespaceReplicationConfig {
