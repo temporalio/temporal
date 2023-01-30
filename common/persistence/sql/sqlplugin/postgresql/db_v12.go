@@ -29,49 +29,35 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
 
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	postgresqlschemaV96 "go.temporal.io/server/schema/postgresql/v96"
+	postgresqlschemaV12 "go.temporal.io/server/schema/postgresql/v12"
 )
 
-// ErrDupEntryCode indicates a duplicate primary key i.e. the row already exists,
-// check http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
-const ErrDupEntryCode = pq.ErrorCode("23505")
-
-func (pdb *db) IsDupEntryError(err error) bool {
-	sqlErr, ok := err.(*pq.Error)
-	return ok && sqlErr.Code == ErrDupEntryCode
+// dbV12 represents a logical connection to mysql database
+type dbV12 struct {
+	db
 }
 
-// db represents a logical connection to mysql database
-type db struct {
-	dbKind sqlplugin.DbKind
-	dbName string
-
-	db        *sqlx.DB
-	tx        *sqlx.Tx
-	conn      sqlplugin.Conn
-	converter DataConverter
-}
-
-var _ sqlplugin.DB = (*db)(nil)
-var _ sqlplugin.Tx = (*db)(nil)
+var _ sqlplugin.DB = (*dbV12)(nil)
+var _ sqlplugin.Tx = (*dbV12)(nil)
 
 // newDB returns an instance of DB, which is a logical
 // connection to the underlying postgresql database
-func newDB(
+func newDBV12(
 	dbKind sqlplugin.DbKind,
 	dbName string,
 	xdb *sqlx.DB,
 	tx *sqlx.Tx,
-) *db {
-	mdb := &db{
-		dbKind: dbKind,
-		dbName: dbName,
-		db:     xdb,
-		tx:     tx,
+) *dbV12 {
+	mdb := &dbV12{
+		db: db{
+			dbKind: dbKind,
+			dbName: dbName,
+			db:     xdb,
+			tx:     tx,
+		},
 	}
 	mdb.conn = xdb
 	if tx != nil {
@@ -82,53 +68,33 @@ func newDB(
 }
 
 // BeginTx starts a new transaction and returns a reference to the Tx object
-func (pdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
-	xtx, err := pdb.db.BeginTxx(ctx, nil)
+func (pdb *dbV12) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
+	xtx, err := pdb.db.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	return newDB(pdb.dbKind, pdb.dbName, pdb.db, xtx), nil
-}
-
-// Commit commits a previously started transaction
-func (pdb *db) Commit() error {
-	return pdb.tx.Commit()
-}
-
-// Rollback triggers rollback of a previously started transaction
-func (pdb *db) Rollback() error {
-	return pdb.tx.Rollback()
-}
-
-// Close closes the connection to the mysql db
-func (pdb *db) Close() error {
-	return pdb.db.Close()
+	return newDB(pdb.dbKind, pdb.dbName, pdb.db.db, xtx), nil
 }
 
 // PluginName returns the name of the mysql plugin
-func (pdb *db) PluginName() string {
-	return PluginName
-}
-
-// DbName returns the name of the database
-func (pdb *db) DbName() string {
-	return pdb.dbName
+func (pdb *dbV12) PluginName() string {
+	return PluginNameV12
 }
 
 // ExpectedVersion returns expected version.
-func (pdb *db) ExpectedVersion() string {
+func (pdb *dbV12) ExpectedVersion() string {
 	switch pdb.dbKind {
 	case sqlplugin.DbKindMain:
-		return postgresqlschemaV96.Version
+		return postgresqlschemaV12.Version
 	case sqlplugin.DbKindVisibility:
-		return postgresqlschemaV96.VisibilityVersion
+		return postgresqlschemaV12.VisibilityVersion
 	default:
 		panic(fmt.Sprintf("unknown db kind %v", pdb.dbKind))
 	}
 }
 
 // VerifyVersion verify schema version is up to date
-func (pdb *db) VerifyVersion() error {
+func (pdb *dbV12) VerifyVersion() error {
 	expectedVersion := pdb.ExpectedVersion()
 	return schema.VerifyCompatibleVersion(pdb, pdb.dbName, expectedVersion)
 }

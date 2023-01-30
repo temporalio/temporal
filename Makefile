@@ -372,6 +372,17 @@ install-schema-postgresql: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v96/visibility/versioned
 
+install-schema-postgresql12: temporal-sql-tool
+	@printf $(COLOR) "Install Postgres schema..."
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) setup -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) update-schema -d ./schema/postgresql/v12/temporal/versioned
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v12/visibility/versioned
+
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
 	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
@@ -435,6 +446,9 @@ start-mysql-es: temporal-server
 
 start-postgres: temporal-server
 	./temporal-server --env development-postgres --allow-no-auth start
+
+start-postgres12: temporal-server
+	./temporal-server --env development-postgres12 --allow-no-auth start
 
 start-sqlite: temporal-server
 	./temporal-server --env development-sqlite --allow-no-auth start

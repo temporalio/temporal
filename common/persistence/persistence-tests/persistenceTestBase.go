@@ -138,7 +138,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		switch options.SQLDBPluginName {
 		case mysql.PluginName:
 			options.DBPort = environment.GetMySQLPort()
-		case postgresql.PluginName:
+		case postgresql.PluginName, postgresql.PluginNameV12:
 			options.DBPort = environment.GetPostgreSQLPort()
 		case sqlite.PluginName:
 			options.DBPort = 0
