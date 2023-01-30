@@ -39,11 +39,11 @@ const (
 )
 
 var (
-	SystemBackgroundCallerInfo CallerInfo = CallerInfo{
+	SystemBackgroundCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
 		CallerType: CallerTypeBackground,
 	}
-	SystemPreemptableCallerInfo CallerInfo = CallerInfo{
+	SystemPreemptableCallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
 		CallerType: CallerTypePreemptable,
 	}
