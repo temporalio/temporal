@@ -33,8 +33,9 @@ import (
 
 var (
 	CallerTypeDefaultPriority = map[string]int{
-		headers.CallerTypeAPI:        1,
-		headers.CallerTypeBackground: 3,
+		headers.CallerTypeAPI:         1,
+		headers.CallerTypeBackground:  3,
+		headers.CallerTypePreemptable: 4,
 	}
 
 	APITypeCallOriginPriorityOverride = map[string]int{
@@ -69,7 +70,7 @@ var (
 		p.ConstructHistoryTaskAPI("GetHistoryTasks", tasks.CategoryVisibility): 2,
 	}
 
-	RequestPrioritiesOrdered = []int{0, 1, 2, 3}
+	RequestPrioritiesOrdered = []int{0, 1, 2, 3, 4}
 )
 
 func NewPriorityRateLimiter(

@@ -31,8 +31,9 @@ import (
 )
 
 const (
-	CallerTypeAPI        = "api"
-	CallerTypeBackground = "background"
+	CallerTypeAPI         = "api"
+	CallerTypeBackground  = "background"
+	CallerTypePreemptable = "preemptable"
 
 	CallerNameSystem = "system"
 )
@@ -41,6 +42,10 @@ var (
 	SystemBackgroundCallerInfo CallerInfo = CallerInfo{
 		CallerName: CallerNameSystem,
 		CallerType: CallerTypeBackground,
+	}
+	SystemPreemptableCallerInfo CallerInfo = CallerInfo{
+		CallerName: CallerNameSystem,
+		CallerType: CallerTypePreemptable,
 	}
 )
 
