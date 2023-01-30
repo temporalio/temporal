@@ -190,6 +190,7 @@ type (
 		GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus)
 		GetQueryRegistry() QueryRegistry
 		IsTransientWorkflowTask() bool
+		// TODO (alex-update): move this out from mutable state.
 		UpdateRegistry() update.Registry
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
