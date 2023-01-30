@@ -1846,7 +1846,7 @@ func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
 	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
 		Points: currResetPoints,
 	}
-	checksumsPayload, err := searchattribute.EncodeValue(recentBinaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	checksumsPayload, err := searchattribute.EncodeValue(recentBinaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
 	}
