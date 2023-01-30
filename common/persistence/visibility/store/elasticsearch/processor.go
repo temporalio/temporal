@@ -99,6 +99,10 @@ const (
 	visibilityProcessorName = "visibility-processor"
 )
 
+var (
+	visibilityShutdownError = errors.New("visiblity processor was shut down")
+)
+
 // NewProcessor create new processorImpl
 func NewProcessor(
 	cfg *ProcessorConfig,
@@ -177,17 +181,18 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 
 // Add request to the bulk and return a future object which will receive ack signal when request is processed.
 func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string) *future.FutureImpl[bool] {
+	newFuture := newAckFuture() // Create future first to measure impact of following RWLock on latency
+
 	p.shutdownLock.RLock()
 	defer p.shutdownLock.RUnlock()
 
 	if atomic.LoadInt32(&p.status) == common.DaemonStatusStopped {
 		p.logger.Warn("Rejecting ES request for visibility task key because processor has been shut down.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
 		errFuture := future.NewFuture[bool]()
-		errFuture.Set(false, errors.New("visiblity processor was shut down"))
+		errFuture.Set(false, visibilityShutdownError)
 		return errFuture
 	}
 
-	newFuture := newAckFuture()
 	_, isDup, _ := p.mapToAckFuture.PutOrDo(visibilityTaskKey, newFuture, func(key interface{}, value interface{}) error {
 		existingFuture, ok := value.(*ackFuture)
 		if !ok {
