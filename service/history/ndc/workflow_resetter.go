@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -364,8 +365,10 @@ func (r *workflowResetterImpl) persistToDB(
 		if currentWorkflowSizeDiff, resetWorkflowSizeDiff, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
+			currentWorkflow.GetMutableState().GetCurrentVersion(),
 			currentWorkflowMutation,
 			currentWorkflowEventsSeq,
+			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
 		); err != nil {
