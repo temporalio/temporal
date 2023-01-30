@@ -68,6 +68,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -103,6 +104,9 @@ type (
 		mockHistoryEngine *historyEngineImpl
 		mockExecutionMgr  *persistence.MockExecutionManager
 		mockShardManager  *persistence.MockShardManager
+
+		mockSearchAttributesProvider *searchattribute.MockProvider
+		mockSearchAttributesMapper   *searchattribute.MockMapper
 
 		eventsCache events.Cache
 		config      *configs.Config
@@ -176,6 +180,27 @@ func (s *engineSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
+
+	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
+	s.mockSearchAttributesMapper = s.mockShard.Resource.SearchAttributesMapper
+	s.mockSearchAttributesProvider.EXPECT().AliasFields(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			mapper searchattribute.Mapper,
+			searchAttributes *commonpb.SearchAttributes,
+			namespace string,
+		) (*commonpb.SearchAttributes, error) {
+			return searchattribute.AliasFields(s.mockSearchAttributesMapper, searchAttributes, namespace)
+		},
+	).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().UnaliasFields(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			mapper searchattribute.Mapper,
+			searchAttributes *commonpb.SearchAttributes,
+			namespace string,
+		) (*commonpb.SearchAttributes, error) {
+			return searchattribute.UnaliasFields(s.mockSearchAttributesMapper, searchAttributes, namespace)
+		},
+	).AnyTimes()
 
 	eventNotifier := events.NewNotifier(
 		clock.NewRealTimeSource(),

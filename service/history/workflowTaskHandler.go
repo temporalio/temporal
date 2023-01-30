@@ -74,9 +74,10 @@ type (
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 
 		// validation
-		attrValidator          *commandAttrValidator
-		sizeLimitChecker       *workflowSizeChecker
-		searchAttributesMapper searchattribute.Mapper
+		attrValidator            *commandAttrValidator
+		sizeLimitChecker         *workflowSizeChecker
+		searchAttributesProvider searchattribute.Provider
+		searchAttributesMapper   searchattribute.Mapper
 
 		logger            log.Logger
 		namespaceRegistry namespace.Registry
@@ -117,6 +118,7 @@ func newWorkflowTaskHandler(
 	metricsHandler metrics.Handler,
 	config *configs.Config,
 	shard shard.Context,
+	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapper searchattribute.Mapper,
 	hasBufferedEvents bool,
 ) *workflowTaskHandlerImpl {
@@ -135,9 +137,10 @@ func newWorkflowTaskHandler(
 		initiatedChildExecutionsInBatch: make(map[string]struct{}),
 
 		// validation
-		attrValidator:          attrValidator,
-		sizeLimitChecker:       sizeLimitChecker,
-		searchAttributesMapper: searchAttributesMapper,
+		attrValidator:            attrValidator,
+		sizeLimitChecker:         sizeLimitChecker,
+		searchAttributesProvider: searchAttributesProvider,
+		searchAttributesMapper:   searchAttributesMapper,
 
 		logger:            logger,
 		namespaceRegistry: namespaceRegistry,
@@ -770,7 +773,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 
 	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
 
-	unaliasedSas, err := searchattribute.UnaliasFields(
+	unaliasedSas, err := handler.searchAttributesProvider.UnaliasFields(
 		handler.searchAttributesMapper,
 		attr.GetSearchAttributes(),
 		namespaceName.String(),
@@ -881,7 +884,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		attr.Namespace = parentNamespace.String()
 	}
 
-	unaliasedSas, err := searchattribute.UnaliasFields(
+	unaliasedSas, err := handler.searchAttributesProvider.UnaliasFields(
 		handler.searchAttributesMapper,
 		attr.GetSearchAttributes(),
 		targetNamespace.String(),
@@ -1025,7 +1028,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	}
 	namespace := namespaceEntry.Name()
 
-	unaliasedSas, err := searchattribute.UnaliasFields(
+	unaliasedSas, err := handler.searchAttributesProvider.UnaliasFields(
 		handler.searchAttributesMapper,
 		attr.GetSearchAttributes(),
 		namespace.String(),

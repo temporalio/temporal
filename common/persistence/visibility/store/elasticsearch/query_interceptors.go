@@ -30,6 +30,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -51,15 +52,23 @@ type (
 func newNameInterceptor(
 	namespace namespace.Name,
 	index string,
-	saTypeMap searchattribute.NameTypeMap,
+	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapper searchattribute.Mapper,
-) *nameInterceptor {
+) (*nameInterceptor, error) {
+	saTypeMap, err := searchAttributesProvider.GetSearchAttributes(index, false)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
+	}
+	searchAttributesMapper, err = searchAttributesProvider.GetMapper(searchAttributesMapper, namespace.String())
+	if err != nil {
+		return nil, err
+	}
 	return &nameInterceptor{
 		namespace:               namespace,
 		index:                   index,
 		searchAttributesTypeMap: saTypeMap,
 		searchAttributesMapper:  searchAttributesMapper,
-	}
+	}, nil
 }
 
 func NewValuesInterceptor() *valuesInterceptor {

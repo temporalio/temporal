@@ -160,6 +160,25 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	mockMonitor := s.mockResource.MembershipMonitor
 	mockMonitor.EXPECT().GetMemberCount(primitives.FrontendService).Return(5, nil).AnyTimes()
+
+	s.mockSearchAttributesProvider.EXPECT().AliasFields(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			mapper searchattribute.Mapper,
+			searchAttributes *commonpb.SearchAttributes,
+			namespace string,
+		) (*commonpb.SearchAttributes, error) {
+			return searchattribute.AliasFields(s.mockSearchAttributesMapper, searchAttributes, namespace)
+		},
+	).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().UnaliasFields(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			mapper searchattribute.Mapper,
+			searchAttributes *commonpb.SearchAttributes,
+			namespace string,
+		) (*commonpb.SearchAttributes, error) {
+			return searchattribute.AliasFields(s.mockSearchAttributesMapper, searchAttributes, namespace)
+		},
+	).AnyTimes()
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {

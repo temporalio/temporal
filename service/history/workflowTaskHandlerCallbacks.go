@@ -84,6 +84,7 @@ type (
 		logger                     log.Logger
 		throttledLogger            log.Logger
 		commandAttrValidator       *commandAttrValidator
+		searchAttributesProvider   searchattribute.Provider
 		searchAttributesMapper     searchattribute.Mapper
 		searchAttributesValidator  *searchattribute.Validator
 	}
@@ -106,6 +107,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 			historyEngine.config,
 			historyEngine.searchAttributesValidator,
 		),
+		searchAttributesProvider:  historyEngine.shard.GetSearchAttributesProvider(),
 		searchAttributesMapper:    historyEngine.shard.GetSearchAttributesMapper(),
 		searchAttributesValidator: historyEngine.searchAttributesValidator,
 	}
@@ -479,6 +481,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.metricsHandler,
 			handler.config,
 			handler.shard,
+			handler.searchAttributesProvider,
 			handler.searchAttributesMapper,
 			hasBufferedEvents,
 		)

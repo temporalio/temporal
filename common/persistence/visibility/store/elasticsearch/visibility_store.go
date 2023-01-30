@@ -726,11 +726,10 @@ func (s *visibilityStore) convertQuery(
 	namespaceID namespace.ID,
 	requestQueryStr string,
 ) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	nameInterceptor, err := newNameInterceptor(namespace, s.index, s.searchAttributesProvider, s.searchAttributesMapper)
 	if err != nil {
-		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
+		return nil, nil, err
 	}
-	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapper)
 	queryConverter := newQueryConverter(nameInterceptor, NewValuesInterceptor())
 	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
@@ -991,7 +990,7 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 			s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", docID, err))
 		}
-		aliasedSas, err := searchattribute.AliasFields(s.searchAttributesMapper, record.SearchAttributes, namespace.String())
+		aliasedSas, err := s.searchAttributesProvider.AliasFields(s.searchAttributesMapper, record.SearchAttributes, namespace.String())
 		if err != nil {
 			return nil, err
 		}

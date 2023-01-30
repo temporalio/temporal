@@ -96,6 +96,9 @@ type (
 		historyEngine    *historyEngineImpl
 		mockExecutionMgr *persistence.MockExecutionManager
 
+		mockSearchAttributesProvider *searchattribute.MockProvider
+		mockSearchAttributesMapper   *searchattribute.MockMapper
+
 		config        *configs.Config
 		logger        *log.MockLogger
 		errorMessages []string
@@ -159,6 +162,29 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
+	s.mockSearchAttributesMapper = s.mockShard.Resource.SearchAttributesMapper
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().AliasFields(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			mapper searchattribute.Mapper,
+			searchAttributes *commonpb.SearchAttributes,
+			namespace string,
+		) (*commonpb.SearchAttributes, error) {
+			return searchattribute.AliasFields(s.mockSearchAttributesMapper, searchAttributes, namespace)
+		},
+	).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().UnaliasFields(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			mapper searchattribute.Mapper,
+			searchAttributes *commonpb.SearchAttributes,
+			namespace string,
+		) (*commonpb.SearchAttributes, error) {
+			return searchattribute.UnaliasFields(s.mockSearchAttributesMapper, searchAttributes, namespace)
+		},
+	).AnyTimes()
+
 	s.workflowCache = wcache.NewCache(s.mockShard)
 	s.logger = log.NewMockLogger(s.controller)
 	s.logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
@@ -188,8 +214,8 @@ func (s *engine2Suite) SetupTest() {
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
 		},
 		searchAttributesValidator: searchattribute.NewValidator(
-			searchattribute.NewTestProvider(),
-			s.mockShard.Resource.SearchAttributesMapper,
+			s.mockSearchAttributesProvider,
+			s.mockSearchAttributesMapper,
 			s.config.SearchAttributesNumberOfKeysLimit,
 			s.config.SearchAttributesSizeOfValueLimit,
 			s.config.SearchAttributesTotalSizeLimit,
@@ -917,7 +943,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		return tests.UpdateWorkflowExecutionResponse, nil
 	})
 
-	s.mockShard.Resource.SearchAttributesMapper.EXPECT().
+	s.mockSearchAttributesMapper.EXPECT().
 		GetFieldName("AliasForCustomTextField", tests.Namespace.String()).Return("CustomTextField", nil).
 		Times(1) // one for mapper
 
