@@ -24,10 +24,52 @@
 
 package mysql
 
-// NOTE: whenever there is a new database schema update, plz update the following versions
+import (
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/resolver"
+)
 
-// Version is the MySQL database release version
-const Version = "1.9"
+const (
+	// PluginName is the name of the plugin
+	PluginNameV8 = "mysql8"
+)
 
-// VisibilityVersion is the MySQL visibility database release version
-const VisibilityVersion = "1.1"
+type pluginV8 struct {
+	plugin
+}
+
+var _ sqlplugin.Plugin = (*pluginV8)(nil)
+
+func init() {
+	sql.RegisterPlugin(PluginNameV8, &pluginV8{})
+}
+
+// CreateDB initialize the db object
+func (p *pluginV8) CreateDB(
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (sqlplugin.DB, error) {
+	conn, err := p.createDBConnection(cfg, r)
+	if err != nil {
+		return nil, err
+	}
+	db := newDBV8(dbKind, cfg.DatabaseName, conn, nil)
+	return db, nil
+}
+
+// CreateAdminDB initialize the db object
+func (p *pluginV8) CreateAdminDB(
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (sqlplugin.AdminDB, error) {
+	conn, err := p.createDBConnection(cfg, r)
+	if err != nil {
+		return nil, err
+	}
+	db := newDBV8(dbKind, cfg.DatabaseName, conn, nil)
+	return db, nil
+}

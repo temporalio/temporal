@@ -38,7 +38,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/environment"
@@ -56,8 +56,8 @@ const (
 
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testMySQLExecutionSchema  = "../../../schema/mysql/v57/temporal/schema.sql"
-	testMySQLVisibilitySchema = "../../../schema/mysql/v57/visibility/schema.sql"
+	testMySQLExecutionSchema  = "../../../schema/mysql/v8/temporal/schema.sql"
+	testMySQLVisibilitySchema = "../../../schema/mysql/v8/visibility/schema.sql"
 )
 
 type (
@@ -100,7 +100,7 @@ func NewMySQLConfig() *config.SQL {
 			strconv.Itoa(environment.GetMySQLPort()),
 		),
 		ConnectProtocol: testMySQLConnectionProtocol,
-		PluginName:      "mysql",
+		PluginName:      mysql.PluginNameV8,
 		DatabaseName:    testMySQLDatabaseNamePrefix + shuffle.String(testMySQLDatabaseNameSuffix),
 	}
 }

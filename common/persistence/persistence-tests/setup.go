@@ -33,9 +33,10 @@ import (
 )
 
 const (
-	testMySQLUser      = "temporal"
-	testMySQLPassword  = "temporal"
-	testMySQLSchemaDir = "schema/mysql/v57"
+	testMySQLUser       = "temporal"
+	testMySQLPassword   = "temporal"
+	testMySQLSchemaDir  = "schema/mysql/v57"
+	testMySQL8SchemaDir = "schema/mysql/v8"
 
 	testPostgreSQLUser      = "temporal"
 	testPostgreSQLPassword  = "temporal"
@@ -57,6 +58,19 @@ func GetMySQLTestClusterOption() *TestBaseOptions {
 		DBHost:          environment.GetMySQLAddress(),
 		DBPort:          environment.GetMySQLPort(),
 		SchemaDir:       testMySQLSchemaDir,
+		StoreType:       config.StoreTypeSQL,
+	}
+}
+
+// GetMySQL8TestClusterOption return test options
+func GetMySQL8TestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName: mysql.PluginNameV8,
+		DBUsername:      testMySQLUser,
+		DBPassword:      testMySQLPassword,
+		DBHost:          environment.GetMySQLAddress(),
+		DBPort:          environment.GetMySQLPort(),
+		SchemaDir:       testMySQL8SchemaDir,
 		StoreType:       config.StoreTypeSQL,
 	}
 }
