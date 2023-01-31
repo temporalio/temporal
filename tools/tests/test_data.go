@@ -74,7 +74,13 @@ CREATE TABLE current_executions(
 	testPostgreSQLVisibilitySchemaFile       = "../../schema/postgresql/v96/visibility/schema.sql"
 	testPostgreSQLExecutionSchemaVersionDir  = "../../schema/postgresql/v96/temporal/versioned"
 	testPostgreSQLVisibilitySchemaVersionDir = "../../schema/postgresql/v96/visibility/versioned"
-	testPostgreSQLQuery                      = `
+
+	testPostgreSQL12ExecutionSchemaFile        = "../../schema/postgresql/v12/temporal/schema.sql"
+	testPostgreSQL12VisibilitySchemaFile       = "../../schema/postgresql/v12/visibility/schema.sql"
+	testPostgreSQL12ExecutionSchemaVersionDir  = "../../schema/postgresql/v12/temporal/versioned"
+	testPostgreSQL12VisibilitySchemaVersionDir = "../../schema/postgresql/v12/visibility/versioned"
+
+	testPostgreSQLQuery = `
 -- test sql file content
 
 CREATE TABLE executions(
