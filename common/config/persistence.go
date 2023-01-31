@@ -81,6 +81,10 @@ func (c *Persistence) AdvancedVisibilityConfigExist() bool {
 	return c.AdvancedVisibilityStore != ""
 }
 
+func (c *Persistence) IsSQLVisibilityStore() bool {
+	return c.StandardVisibilityConfigExist() && c.DataStores[c.VisibilityStore].SQL != nil
+}
+
 func (c *Persistence) validateAdvancedVisibility() error {
 	if !c.StandardVisibilityConfigExist() && !c.AdvancedVisibilityConfigExist() {
 		return errors.New("persistence config: one of visibilityStore or advancedVisibilityStore must be specified")
