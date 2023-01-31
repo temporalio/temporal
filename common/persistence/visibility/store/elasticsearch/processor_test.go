@@ -136,7 +136,7 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 	visibilityTaskKey := "test-key"
 	future1 := p.Add(request, visibilityTaskKey)
 	_, err := future1.Get(context.Background())
-	s.ErrorIs(err, visibilityShutdownError)
+	s.ErrorIs(err, errVisibilityShutdown)
 }
 
 func (s *processorSuite) TestAdd() {
@@ -259,7 +259,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Shutdown() {
 	s.False(futures[0].Ready())          // first requests should be in bulk
 	s.True(futures[docsCount-1].Ready()) // final requests should be only errors
 	_, err := futures[docsCount-1].Get(context.Background())
-	s.ErrorIs(err, visibilityShutdownError)
+	s.ErrorIs(err, errVisibilityShutdown)
 }
 
 func (s *processorSuite) TestBulkAfterAction_Ack() {

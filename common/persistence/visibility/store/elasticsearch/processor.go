@@ -100,7 +100,7 @@ const (
 )
 
 var (
-	visibilityShutdownError = errors.New("visiblity processor was shut down")
+	errVisibilityShutdown = errors.New("visiblity processor was shut down")
 )
 
 // NewProcessor create new processorImpl
@@ -187,7 +187,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 	if atomic.LoadInt32(&p.status) == common.DaemonStatusStopped {
 		p.logger.Warn("Rejecting ES request for visibility task key because processor has been shut down.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
 		errFuture := future.NewFuture[bool]()
-		errFuture.Set(false, visibilityShutdownError)
+		errFuture.Set(false, errVisibilityShutdown)
 		return errFuture
 	}
 
