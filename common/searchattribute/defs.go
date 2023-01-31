@@ -85,8 +85,8 @@ var (
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
 	predefined = map[string]enumspb.IndexedValueType{
-		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
