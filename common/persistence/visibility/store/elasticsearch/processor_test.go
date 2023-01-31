@@ -128,8 +128,8 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 	s.NotNil(p.bulkProcessor)
 
 	p.Stop()
-	s.Nil(p.mapToAckFuture)
-	s.Nil(p.bulkProcessor)
+	s.NotNil(p.mapToAckFuture)
+	s.NotNil(p.bulkProcessor)
 
 	// Confirm processor does not panic on new requests after stopping
 	request := &client.BulkableRequest{}
@@ -255,7 +255,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Shutdown() {
 
 	wg.Wait()
 
-	s.Nil(s.esProcessor.mapToAckFuture)
+	s.NotNil(s.esProcessor.mapToAckFuture)
 	s.False(futures[0].Ready())          // first requests should be in bulk
 	s.True(futures[docsCount-1].Ready()) // final requests should be only errors
 	_, err := futures[docsCount-1].Get(context.Background())
