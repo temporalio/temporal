@@ -98,3 +98,15 @@ func CloneMapNonNil[M ~map[K]V, K comparable, V any](m M) M {
 	}
 	return m
 }
+
+// InverseMap creates the inverse map, ie., for a key-value map, it builds the value-key map.
+func InverseMap[M ~map[K]V, K, V comparable](m M) map[V]K {
+	if m == nil {
+		return nil
+	}
+	invm := make(map[V]K, len(m))
+	for k, v := range m {
+		invm[v] = k
+	}
+	return invm
+}
