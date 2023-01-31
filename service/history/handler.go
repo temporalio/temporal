@@ -91,7 +91,6 @@ type (
 		timeSource                    clock.TimeSource
 		namespaceRegistry             namespace.Registry
 		saProvider                    searchattribute.Provider
-		saMapper                      searchattribute.Mapper
 		clusterMetadata               cluster.Metadata
 		archivalMetadata              archiver.ArchivalMetadata
 		hostInfoProvider              membership.HostInfoProvider
@@ -114,7 +113,6 @@ type (
 		TimeSource                    clock.TimeSource
 		NamespaceRegistry             namespace.Registry
 		SaProvider                    searchattribute.Provider
-		SaMapper                      searchattribute.Mapper
 		ClusterMetadata               cluster.Metadata
 		ArchivalMetadata              archiver.ArchivalMetadata
 		HostInfoProvider              membership.HostInfoProvider

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 )
 
@@ -39,7 +40,7 @@ type (
 	// Validator is used to validate search attributes
 	Validator struct {
 		searchAttributesProvider          Provider
-		searchAttributesMapper            Mapper
+		searchAttributesMapperProvider    MapperProvider
 		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -50,7 +51,7 @@ type (
 // NewValidator create Validator
 func NewValidator(
 	searchAttributesProvider Provider,
-	searchAttributesMapper Mapper,
+	searchAttributesMapperProvider MapperProvider,
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -58,7 +59,7 @@ func NewValidator(
 ) *Validator {
 	return &Validator{
 		searchAttributesProvider:          searchAttributesProvider,
-		searchAttributesMapper:            searchAttributesMapper,
+		searchAttributesMapperProvider:    searchAttributesMapperProvider,
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
@@ -181,9 +182,15 @@ func (v *Validator) validationError(msg string, saFieldName string, namespace st
 	return serviceerror.NewInvalidArgument(fmt.Sprintf(msg, saAlias))
 }
 
-func (v *Validator) getAlias(saFieldName string, namespace string) (string, error) {
-	if IsMappable(saFieldName) && v.searchAttributesMapper != nil {
-		return v.searchAttributesMapper.GetAlias(saFieldName, namespace)
+func (v *Validator) getAlias(saFieldName string, namespaceName string) (string, error) {
+	if IsMappable(saFieldName) {
+		mapper, err := v.searchAttributesMapperProvider.GetMapper(namespace.Name(namespaceName))
+		if err != nil {
+			return "", err
+		}
+		if mapper != nil {
+			return mapper.GetAlias(saFieldName, namespaceName)
+		}
 	}
 	return saFieldName, nil
 }
