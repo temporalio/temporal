@@ -1,0 +1,10 @@
+{
+  "CurrVersion": "1.5",
+  "MinCompatibleVersion": "1.0",
+  "Description": "schema update for cluster_membership, executions and history_node tables",
+  "SchemaUpdateCqlFiles": [
+    "event.sql",
+    "executions.sql",
+    "cluster_membership.sql"
+  ]
+}

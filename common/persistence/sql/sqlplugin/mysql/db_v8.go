@@ -28,51 +28,37 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	mysqlschemaV57 "go.temporal.io/server/schema/mysql/v57"
+	mysqlschemaV8 "go.temporal.io/server/schema/mysql/v8"
 )
 
 // db represents a logical connection to mysql database
-type db struct {
-	dbKind sqlplugin.DbKind
-	dbName string
-
-	db        *sqlx.DB
-	tx        *sqlx.Tx
-	conn      sqlplugin.Conn
-	converter DataConverter
+type dbV8 struct {
+	db
 }
 
-var _ sqlplugin.AdminDB = (*db)(nil)
-var _ sqlplugin.DB = (*db)(nil)
-var _ sqlplugin.Tx = (*db)(nil)
-
-// ErrDupEntryCode MySQL Error 1062 indicates a duplicate primary key i.e. the row already exists,
-// so we don't do the insert and return a ConditionalUpdate error.
-const ErrDupEntryCode = 1062
-
-func (mdb *db) IsDupEntryError(err error) bool {
-	sqlErr, ok := err.(*mysql.MySQLError)
-	return ok && sqlErr.Number == ErrDupEntryCode
-}
+var _ sqlplugin.AdminDB = (*dbV8)(nil)
+var _ sqlplugin.DB = (*dbV8)(nil)
+var _ sqlplugin.Tx = (*dbV8)(nil)
 
 // newDB returns an instance of DB, which is a logical
 // connection to the underlying mysql database
-func newDB(
+func newDBV8(
 	dbKind sqlplugin.DbKind,
 	dbName string,
 	xdb *sqlx.DB,
 	tx *sqlx.Tx,
-) *db {
-	mdb := &db{
-		dbKind: dbKind,
-		dbName: dbName,
-		db:     xdb,
-		tx:     tx,
+) *dbV8 {
+	mdb := &dbV8{
+		db: db{
+			dbKind: dbKind,
+			dbName: dbName,
+			db:     xdb,
+			tx:     tx,
+		},
 	}
 	mdb.conn = xdb
 	if tx != nil {
@@ -83,53 +69,33 @@ func newDB(
 }
 
 // BeginTx starts a new transaction and returns a reference to the Tx object
-func (mdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
-	xtx, err := mdb.db.BeginTxx(ctx, nil)
+func (mdb *dbV8) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
+	xtx, err := mdb.db.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	return newDB(mdb.dbKind, mdb.dbName, mdb.db, xtx), nil
-}
-
-// Commit commits a previously started transaction
-func (mdb *db) Commit() error {
-	return mdb.tx.Commit()
-}
-
-// Rollback triggers rollback of a previously started transaction
-func (mdb *db) Rollback() error {
-	return mdb.tx.Rollback()
-}
-
-// Close closes the connection to the mysql db
-func (mdb *db) Close() error {
-	return mdb.db.Close()
+	return newDBV8(mdb.dbKind, mdb.dbName, mdb.db.db, xtx), nil
 }
 
 // PluginName returns the name of the mysql plugin
-func (mdb *db) PluginName() string {
-	return PluginName
-}
-
-// DbName returns the name of the database
-func (mdb *db) DbName() string {
-	return mdb.dbName
+func (mdb *dbV8) PluginName() string {
+	return PluginNameV8
 }
 
 // ExpectedVersion returns expected version.
-func (mdb *db) ExpectedVersion() string {
+func (mdb *dbV8) ExpectedVersion() string {
 	switch mdb.dbKind {
 	case sqlplugin.DbKindMain:
-		return mysqlschemaV57.Version
+		return mysqlschemaV8.Version
 	case sqlplugin.DbKindVisibility:
-		return mysqlschemaV57.VisibilityVersion
+		return mysqlschemaV8.VisibilityVersion
 	default:
 		panic(fmt.Sprintf("unknown db kind %v", mdb.dbKind))
 	}
 }
 
 // VerifyVersion verify schema version is up to date
-func (mdb *db) VerifyVersion() error {
+func (mdb *dbV8) VerifyVersion() error {
 	expectedVersion := mdb.ExpectedVersion()
 	return schema.VerifyCompatibleVersion(mdb, mdb.dbName, expectedVersion)
 }
