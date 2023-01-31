@@ -130,13 +130,6 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 	p.Stop()
 	s.NotNil(p.mapToAckFuture)
 	s.NotNil(p.bulkProcessor)
-
-	// Confirm processor does not panic on new requests after stopping
-	request := &client.BulkableRequest{}
-	visibilityTaskKey := "test-key"
-	future1 := p.Add(request, visibilityTaskKey)
-	_, err := future1.Get(context.Background())
-	s.ErrorIs(err, errVisibilityShutdown)
 }
 
 func (s *processorSuite) TestAdd() {
@@ -234,11 +227,14 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Shutdown() {
 	parallelFactor := 10
 	futures := make([]future.Future[bool], docsCount)
 
+	s.mockBulkProcessor.EXPECT().Add(request).MaxTimes(docsCount + 2) // +2 for explicit adds before and after shutdown
+	s.mockBulkProcessor.EXPECT().Stop().Return(nil).Times(1)
+	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorWaitAddLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc).MaxTimes(docsCount + 2)
+
+	addBefore := s.esProcessor.Add(request, "test-key-before")
+
 	wg := sync.WaitGroup{}
 	wg.Add(parallelFactor + 1) // +1 for separate shutdown goroutine
-	s.mockBulkProcessor.EXPECT().Add(request).MaxTimes(docsCount)
-	s.mockBulkProcessor.EXPECT().Stop().Return(nil).Times(1)
-	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorWaitAddLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc).MaxTimes(docsCount)
 	for i := 0; i < parallelFactor; i++ {
 		go func(i int) {
 			for j := 0; j < docsCount/parallelFactor; j++ {
@@ -254,11 +250,11 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Shutdown() {
 	}()
 
 	wg.Wait()
+	addAfter := s.esProcessor.Add(request, "test-key-after")
 
-	s.NotNil(s.esProcessor.mapToAckFuture)
-	s.False(futures[0].Ready())          // first requests should be in bulk
-	s.True(futures[docsCount-1].Ready()) // final requests should be only errors
-	_, err := futures[docsCount-1].Get(context.Background())
+	s.False(addBefore.Ready()) // first request should be in bulk
+	s.True(addAfter.Ready())   // final request should be only error
+	_, err := addAfter.Get(context.Background())
 	s.ErrorIs(err, errVisibilityShutdown)
 }
 
