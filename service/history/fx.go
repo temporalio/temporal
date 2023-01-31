@@ -135,7 +135,6 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		timeSource:                    args.TimeSource,
 		namespaceRegistry:             args.NamespaceRegistry,
 		saProvider:                    args.SaProvider,
-		saMapper:                      args.SaMapper,
 		clusterMetadata:               args.ClusterMetadata,
 		archivalMetadata:              args.ArchivalMetadata,
 		hostInfoProvider:              args.HostInfoProvider,
@@ -247,7 +246,7 @@ func VisibilityManagerProvider(
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
@@ -258,7 +257,7 @@ func VisibilityManagerProvider(
 		esClient,
 		esProcessorConfig,
 		saProvider,
-		searchAttributesMapper,
+		searchAttributesMapperProvider,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,

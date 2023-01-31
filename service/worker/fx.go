@@ -100,7 +100,7 @@ func VisibilityManagerProvider(
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
@@ -111,7 +111,7 @@ func VisibilityManagerProvider(
 		esClient,
 		nil, // worker visibility never write
 		saProvider,
-		searchAttributesMapper,
+		searchAttributesMapperProvider,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,

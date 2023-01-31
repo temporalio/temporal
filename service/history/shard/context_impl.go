@@ -111,7 +111,7 @@ type (
 		timeSource              cclock.TimeSource
 		namespaceRegistry       namespace.Registry
 		saProvider              searchattribute.Provider
-		saMapper                searchattribute.Mapper
+		saMapperProvider        searchattribute.MapperProvider
 		clusterMetadata         cluster.Metadata
 		archivalMetadata        archiver.ArchivalMetadata
 		hostInfoProvider        membership.HostInfoProvider
@@ -1979,7 +1979,7 @@ func newContext(
 	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
-	saMapper searchattribute.Mapper,
+	saMapperProvider searchattribute.MapperProvider,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider membership.HostInfoProvider,
@@ -2006,7 +2006,7 @@ func newContext(
 		timeSource:              timeSource,
 		namespaceRegistry:       namespaceRegistry,
 		saProvider:              saProvider,
-		saMapper:                saMapper,
+		saMapperProvider:        saMapperProvider,
 		clusterMetadata:         clusterMetadata,
 		archivalMetadata:        archivalMetadata,
 		hostInfoProvider:        hostInfoProvider,
@@ -2080,8 +2080,8 @@ func (s *ContextImpl) GetSearchAttributesProvider() searchattribute.Provider {
 	return s.saProvider
 }
 
-func (s *ContextImpl) GetSearchAttributesMapper() searchattribute.Mapper {
-	return s.saMapper
+func (s *ContextImpl) GetSearchAttributesMapperProvider() searchattribute.MapperProvider {
+	return s.saMapperProvider
 }
 
 func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {

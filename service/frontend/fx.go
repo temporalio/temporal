@@ -368,7 +368,7 @@ func VisibilityManagerProvider(
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
@@ -379,7 +379,7 @@ func VisibilityManagerProvider(
 		esClient,
 		nil, // frontend visibility never write
 		saProvider,
-		searchAttributesMapper,
+		searchAttributesMapperProvider,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
@@ -525,7 +525,7 @@ func HandlerProvider(
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
-	saMapper searchattribute.Mapper,
+	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
@@ -545,7 +545,7 @@ func HandlerProvider(
 		archiverProvider,
 		payloadSerializer,
 		namespaceRegistry,
-		saMapper,
+		saMapperProvider,
 		saProvider,
 		clusterMetadata,
 		archivalMetadata,
