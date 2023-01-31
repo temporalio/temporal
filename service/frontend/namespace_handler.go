@@ -511,6 +511,10 @@ func (d *namespaceHandlerImpl) UpdateNamespace(
 				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength))
 			}
 		}
+		if updatedConfig.CustomSearchAttributeAliases != nil {
+			configurationChanged = true
+			config.CustomSearchAttributeAliases = updatedConfig.CustomSearchAttributeAliases
+		}
 	}
 
 	if updateRequest.GetDeleteBadBinary() != "" {
