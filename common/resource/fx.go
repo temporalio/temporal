@@ -97,9 +97,9 @@ var Module = fx.Options(
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
+	fx.Provide(NamespaceRegistryProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
-	fx.Provide(NamespaceRegistryProvider),
 	namespace.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
 		func(p namespace.Registry) common.Pingable { return p },
@@ -165,23 +165,33 @@ func TimeSourceProvider() clock.TimeSource {
 func SearchAttributeProviderProvider(
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
+	namespaceRegistry namespace.Registry,
 	dynamicCollection *dynamicconfig.Collection,
+	persistenceConfig *config.Persistence,
 ) searchattribute.Provider {
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
-		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
+		namespaceRegistry,
+		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false),
+		persistenceConfig.StandardVisibilityConfigExist(),
+	)
 }
 
 func SearchAttributeManagerProvider(
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
+	namespaceRegistry namespace.Registry,
 	dynamicCollection *dynamicconfig.Collection,
+	persistenceConfig *config.Persistence,
 ) searchattribute.Manager {
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
-		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
+		namespaceRegistry,
+		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false),
+		persistenceConfig.StandardVisibilityConfigExist(),
+	)
 }
 
 func NamespaceRegistryProvider(

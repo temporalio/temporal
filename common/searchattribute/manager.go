@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -37,6 +38,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -49,7 +51,11 @@ type (
 	managerImpl struct {
 		timeSource             clock.TimeSource
 		clusterMetadataManager persistence.ClusterMetadataManager
+		namespaceRegistry      namespace.Registry
 		forceRefresh           dynamicconfig.BoolPropertyFn
+
+		// If enableNamespaceMapper is false, then return identity mapper.
+		enableNamespaceMapper bool
 
 		cacheUpdateMutex sync.Mutex
 		cache            atomic.Value // of type cache
@@ -68,7 +74,9 @@ var _ Manager = (*managerImpl)(nil)
 func NewManager(
 	timeSource clock.TimeSource,
 	clusterMetadataManager persistence.ClusterMetadataManager,
+	namespaceRegistry namespace.Registry,
 	forceRefresh dynamicconfig.BoolPropertyFn,
+	enableNamespaceMapper bool,
 ) *managerImpl {
 
 	var saCache atomic.Value
@@ -82,7 +90,9 @@ func NewManager(
 		timeSource:             timeSource,
 		cache:                  saCache,
 		clusterMetadataManager: clusterMetadataManager,
+		namespaceRegistry:      namespaceRegistry,
 		forceRefresh:           forceRefresh,
+		enableNamespaceMapper:  enableNamespaceMapper,
 	}
 }
 
@@ -196,4 +206,53 @@ func (m *managerImpl) SaveSearchAttributes(
 	m.cache.Store(cache{})
 
 	return err
+}
+
+func (m *managerImpl) AliasFields(
+	mapper Mapper,
+	searchAttributes *commonpb.SearchAttributes,
+	namespaceName string,
+) (*commonpb.SearchAttributes, error) {
+	mapper, err := m.GetMapper(mapper, namespaceName)
+	if err != nil {
+		return nil, err
+	}
+	return AliasFields(mapper, searchAttributes, namespaceName)
+}
+
+func (m *managerImpl) UnaliasFields(
+	mapper Mapper,
+	searchAttributes *commonpb.SearchAttributes,
+	namespaceName string,
+) (*commonpb.SearchAttributes, error) {
+	mapper, err := m.GetMapper(mapper, namespaceName)
+	if err != nil {
+		return nil, err
+	}
+	return UnaliasFields(mapper, searchAttributes, namespaceName)
+}
+
+func (m *managerImpl) GetMapper(mapper Mapper, namespaceName string) (Mapper, error) {
+	if mapper != nil {
+		return mapper, nil
+	}
+	if !m.enableNamespaceMapper {
+		return NewIdentityMapper(), nil
+	}
+	ns, err := m.namespaceRegistry.GetNamespace(namespace.Name(namespaceName))
+	if err != nil {
+		return nil, err
+	}
+	saMapper := ns.CustomSearchAttributesMapper()
+	emptyStringNameTypeMap, err := m.GetSearchAttributes("", false)
+	if err != nil {
+		return &backCompMapper_v1_20{
+			mapper:                 &saMapper,
+			emptyStringNameTypeMap: nil,
+		}, nil
+	}
+	return &backCompMapper_v1_20{
+		mapper:                 &saMapper,
+		emptyStringNameTypeMap: &emptyStringNameTypeMap,
+	}, nil
 }

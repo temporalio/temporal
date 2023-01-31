@@ -182,8 +182,12 @@ func (v *Validator) validationError(msg string, saFieldName string, namespace st
 }
 
 func (v *Validator) getAlias(saFieldName string, namespace string) (string, error) {
-	if IsMappable(saFieldName) && v.searchAttributesMapper != nil {
-		return v.searchAttributesMapper.GetAlias(saFieldName, namespace)
+	if IsMappable(saFieldName) {
+		mapper, err := v.searchAttributesProvider.GetMapper(v.searchAttributesMapper, namespace)
+		if err != nil {
+			return "", err
+		}
+		return mapper.GetAlias(saFieldName, namespace)
 	}
 	return saFieldName, nil
 }

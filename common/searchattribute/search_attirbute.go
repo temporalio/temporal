@@ -42,6 +42,20 @@ const (
 type (
 	Provider interface {
 		GetSearchAttributes(indexName string, forceRefreshCache bool) (NameTypeMap, error)
+
+		AliasFields(
+			mapper Mapper,
+			searchAttributes *commonpb.SearchAttributes,
+			namespace string,
+		) (*commonpb.SearchAttributes, error)
+
+		UnaliasFields(
+			mapper Mapper,
+			searchAttributes *commonpb.SearchAttributes,
+			namespace string,
+		) (*commonpb.SearchAttributes, error)
+
+		GetMapper(mapper Mapper, namespace string) (Mapper, error)
 	}
 
 	Manager interface {

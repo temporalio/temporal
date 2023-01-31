@@ -33,7 +33,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1 "go.temporal.io/api/enums/v1"
+	v1 "go.temporal.io/api/common/v1"
+	v10 "go.temporal.io/api/enums/v1"
 )
 
 // MockProvider is a mock of Provider interface.
@@ -59,6 +60,36 @@ func (m *MockProvider) EXPECT() *MockProviderMockRecorder {
 	return m.recorder
 }
 
+// AliasFields mocks base method.
+func (m *MockProvider) AliasFields(mapper Mapper, searchAttributes *v1.SearchAttributes, namespace string) (*v1.SearchAttributes, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AliasFields", mapper, searchAttributes, namespace)
+	ret0, _ := ret[0].(*v1.SearchAttributes)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AliasFields indicates an expected call of AliasFields.
+func (mr *MockProviderMockRecorder) AliasFields(mapper, searchAttributes, namespace interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AliasFields", reflect.TypeOf((*MockProvider)(nil).AliasFields), mapper, searchAttributes, namespace)
+}
+
+// GetMapper mocks base method.
+func (m *MockProvider) GetMapper(mapper Mapper, namespace string) (Mapper, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMapper", mapper, namespace)
+	ret0, _ := ret[0].(Mapper)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMapper indicates an expected call of GetMapper.
+func (mr *MockProviderMockRecorder) GetMapper(mapper, namespace interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMapper", reflect.TypeOf((*MockProvider)(nil).GetMapper), mapper, namespace)
+}
+
 // GetSearchAttributes mocks base method.
 func (m *MockProvider) GetSearchAttributes(indexName string, forceRefreshCache bool) (NameTypeMap, error) {
 	m.ctrl.T.Helper()
@@ -72,6 +103,21 @@ func (m *MockProvider) GetSearchAttributes(indexName string, forceRefreshCache b
 func (mr *MockProviderMockRecorder) GetSearchAttributes(indexName, forceRefreshCache interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockProvider)(nil).GetSearchAttributes), indexName, forceRefreshCache)
+}
+
+// UnaliasFields mocks base method.
+func (m *MockProvider) UnaliasFields(mapper Mapper, searchAttributes *v1.SearchAttributes, namespace string) (*v1.SearchAttributes, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnaliasFields", mapper, searchAttributes, namespace)
+	ret0, _ := ret[0].(*v1.SearchAttributes)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnaliasFields indicates an expected call of UnaliasFields.
+func (mr *MockProviderMockRecorder) UnaliasFields(mapper, searchAttributes, namespace interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnaliasFields", reflect.TypeOf((*MockProvider)(nil).UnaliasFields), mapper, searchAttributes, namespace)
 }
 
 // MockManager is a mock of Manager interface.
@@ -97,6 +143,36 @@ func (m *MockManager) EXPECT() *MockManagerMockRecorder {
 	return m.recorder
 }
 
+// AliasFields mocks base method.
+func (m *MockManager) AliasFields(mapper Mapper, searchAttributes *v1.SearchAttributes, namespace string) (*v1.SearchAttributes, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AliasFields", mapper, searchAttributes, namespace)
+	ret0, _ := ret[0].(*v1.SearchAttributes)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AliasFields indicates an expected call of AliasFields.
+func (mr *MockManagerMockRecorder) AliasFields(mapper, searchAttributes, namespace interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AliasFields", reflect.TypeOf((*MockManager)(nil).AliasFields), mapper, searchAttributes, namespace)
+}
+
+// GetMapper mocks base method.
+func (m *MockManager) GetMapper(mapper Mapper, namespace string) (Mapper, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMapper", mapper, namespace)
+	ret0, _ := ret[0].(Mapper)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMapper indicates an expected call of GetMapper.
+func (mr *MockManagerMockRecorder) GetMapper(mapper, namespace interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMapper", reflect.TypeOf((*MockManager)(nil).GetMapper), mapper, namespace)
+}
+
 // GetSearchAttributes mocks base method.
 func (m *MockManager) GetSearchAttributes(indexName string, forceRefreshCache bool) (NameTypeMap, error) {
 	m.ctrl.T.Helper()
@@ -113,7 +189,7 @@ func (mr *MockManagerMockRecorder) GetSearchAttributes(indexName, forceRefreshCa
 }
 
 // SaveSearchAttributes mocks base method.
-func (m *MockManager) SaveSearchAttributes(ctx context.Context, indexName string, newCustomSearchAttributes map[string]v1.IndexedValueType) error {
+func (m *MockManager) SaveSearchAttributes(ctx context.Context, indexName string, newCustomSearchAttributes map[string]v10.IndexedValueType) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SaveSearchAttributes", ctx, indexName, newCustomSearchAttributes)
 	ret0, _ := ret[0].(error)
@@ -124,4 +200,19 @@ func (m *MockManager) SaveSearchAttributes(ctx context.Context, indexName string
 func (mr *MockManagerMockRecorder) SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveSearchAttributes", reflect.TypeOf((*MockManager)(nil).SaveSearchAttributes), ctx, indexName, newCustomSearchAttributes)
+}
+
+// UnaliasFields mocks base method.
+func (m *MockManager) UnaliasFields(mapper Mapper, searchAttributes *v1.SearchAttributes, namespace string) (*v1.SearchAttributes, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnaliasFields", mapper, searchAttributes, namespace)
+	ret0, _ := ret[0].(*v1.SearchAttributes)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnaliasFields indicates an expected call of UnaliasFields.
+func (mr *MockManagerMockRecorder) UnaliasFields(mapper, searchAttributes, namespace interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnaliasFields", reflect.TypeOf((*MockManager)(nil).UnaliasFields), mapper, searchAttributes, namespace)
 }

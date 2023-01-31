@@ -25,6 +25,7 @@
 package searchattribute
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -32,15 +33,25 @@ type (
 	TestProvider struct{}
 )
 
+var _ Provider = (*TestProvider)(nil)
+
 var (
 	TestNameTypeMap = NameTypeMap{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
+			// elasticsearch visibility
 			"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
 			"CustomTextField":     enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+			// sql visibility
+			"Int01":      enumspb.INDEXED_VALUE_TYPE_INT,
+			"Text01":     enumspb.INDEXED_VALUE_TYPE_TEXT,
+			"Keyword01":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"Datetime01": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			"Double01":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			"Bool01":     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		},
 	}
 )
@@ -51,4 +62,33 @@ func NewTestProvider() *TestProvider {
 
 func (s *TestProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
 	return TestNameTypeMap, nil
+}
+
+func (s *TestProvider) AliasFields(
+	mapper Mapper,
+	searchAttributes *commonpb.SearchAttributes,
+	namespace string,
+) (*commonpb.SearchAttributes, error) {
+	if mapper != nil {
+		return AliasFields(mapper, searchAttributes, namespace)
+	}
+	return searchAttributes, nil
+}
+
+func (s *TestProvider) UnaliasFields(
+	mapper Mapper,
+	searchAttributes *commonpb.SearchAttributes,
+	namespace string,
+) (*commonpb.SearchAttributes, error) {
+	if mapper != nil {
+		return UnaliasFields(mapper, searchAttributes, namespace)
+	}
+	return searchAttributes, nil
+}
+
+func (s *TestProvider) GetMapper(mapper Mapper, _namespace string) (Mapper, error) {
+	if mapper != nil {
+		return mapper, nil
+	}
+	return NewIdentityMapper(), nil
 }

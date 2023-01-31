@@ -40,6 +40,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -53,6 +54,7 @@ type (
 		logger                     log.Logger
 		timeSource                 *clock.EventTimeSource
 		mockClusterMetadataManager *persistence.MockClusterMetadataManager
+		mockNamespaceRegistry      *namespace.MockRegistry
 		manager                    *managerImpl
 		forceCacheRefresh          bool
 	}
@@ -75,12 +77,15 @@ func (s *searchAttributesManagerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.timeSource = clock.NewEventTimeSource()
 	s.mockClusterMetadataManager = persistence.NewMockClusterMetadataManager(s.controller)
+	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.manager = NewManager(
 		s.timeSource,
 		s.mockClusterMetadataManager,
+		s.mockNamespaceRegistry,
 		func() bool {
 			return s.forceCacheRefresh
 		},
+		false,
 	)
 }
 

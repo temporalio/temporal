@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/client"
@@ -89,6 +90,7 @@ type (
 		AbstractDataStoreFactory  client.AbstractDataStoreFactory
 		FaultInjection            *client.FaultInjectionDataStoreFactory
 		Factory                   client.Factory
+		NamespaceRegistry         namespace.Registry
 		ExecutionManager          persistence.ExecutionManager
 		TaskMgr                   persistence.TaskManager
 		ClusterMetadataManager    persistence.ClusterMetadataManager
@@ -158,7 +160,18 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.ConnectAttributes, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := sql.NewTestCluster(
+		options.SQLDBPluginName,
+		options.DBName,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBHost,
+		options.DBPort,
+		options.ConnectAttributes,
+		options.SchemaDir,
+		options.FaultInjection,
+		logger,
+	)
 	return NewTestBaseForCluster(testCluster, logger)
 }
 
@@ -202,16 +215,21 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopMetricsHandler, s.Logger)
+	factory := client.NewFactory(
+		dataStoreFactory,
+		&cfg,
+		nil,
+		serialization.NewSerializer(),
+		clusterName,
+		metrics.NoopMetricsHandler,
+		s.Logger,
+	)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
 
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
-
-	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, s.ClusterMetadataManager, dynamicconfig.NewNoopCollection(), s.Logger)
-	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager, dynamicconfig.GetBoolPropertyFn(true))
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
@@ -221,6 +239,27 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 
 	s.ExecutionManager, err = factory.NewExecutionManager()
 	s.fatalOnError("NewExecutionManager", err)
+
+	s.ClusterMetadata = cluster.NewMetadataFromConfig(
+		clusterMetadataConfig,
+		s.ClusterMetadataManager,
+		dynamicconfig.NewNoopCollection(),
+		s.Logger,
+	)
+	s.NamespaceRegistry = namespace.NewRegistry(
+		s.MetadataManager,
+		true,
+		dynamicconfig.GetDurationPropertyFn(time.Second),
+		metrics.NoopMetricsHandler,
+		log.NewTestLogger(),
+	)
+	s.SearchAttributesManager = searchattribute.NewManager(
+		clock.NewRealTimeSource(),
+		s.ClusterMetadataManager,
+		s.NamespaceRegistry,
+		dynamicconfig.GetBoolPropertyFn(true),
+		false,
+	)
 
 	s.Factory = factory
 	s.FaultInjection = faultInjection

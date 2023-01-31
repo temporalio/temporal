@@ -29,6 +29,7 @@ package searchattribute
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (
@@ -39,7 +40,64 @@ type (
 		GetAlias(fieldName string, namespace string) (string, error)
 		GetFieldName(alias string, namespace string) (string, error)
 	}
+
+	// identityMapper is used when the visibility store is Elasticsearch.
+	identityMapper struct{}
+
+	// This mapper is to be backwards compatible with versions before v1.20.
+	// Users using SQL DB might have custom search attributes registered.
+	// Those search attributes won't be searchable, as they weren't before
+	// v1.20 (using SQL DB means standard visibility). Thus, this mapper will
+	// allow those search attributes to be used without going through aliasing.
+	backCompMapper_v1_20 struct {
+		mapper                 Mapper
+		emptyStringNameTypeMap *NameTypeMap
+	}
 )
+
+var _ Mapper = (*namespace.CustomSearchAttributesMapper)(nil)
+var _ Mapper = (*identityMapper)(nil)
+var _ Mapper = (*backCompMapper_v1_20)(nil)
+
+func NewIdentityMapper() Mapper {
+	return &identityMapper{}
+}
+
+func (m *identityMapper) GetAlias(fieldName string, namespaceName string) (string, error) {
+	return fieldName, nil
+}
+
+func (m *identityMapper) GetFieldName(alias string, namespaceName string) (string, error) {
+	return alias, nil
+}
+
+func (m *backCompMapper_v1_20) GetAlias(fieldName string, namespaceName string) (string, error) {
+	alias, err1 := m.mapper.GetAlias(fieldName, namespaceName)
+	if err1 != nil {
+		if m.emptyStringNameTypeMap != nil {
+			_, err2 := m.emptyStringNameTypeMap.getType(fieldName, customCategory)
+			if err2 == nil {
+				return fieldName, nil
+			}
+		}
+		return "", err1
+	}
+	return alias, nil
+}
+
+func (m *backCompMapper_v1_20) GetFieldName(alias string, namespaceName string) (string, error) {
+	fieldName, err1 := m.mapper.GetFieldName(alias, namespaceName)
+	if err1 != nil {
+		if m.emptyStringNameTypeMap != nil {
+			_, err2 := m.emptyStringNameTypeMap.getType(alias, customCategory)
+			if err2 == nil {
+				return alias, nil
+			}
+		}
+		return "", err1
+	}
+	return fieldName, nil
+}
 
 // AliasFields returns SearchAttributes struct where each search attribute name is replaced with alias.
 // If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
