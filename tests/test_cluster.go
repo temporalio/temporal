@@ -125,6 +125,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		switch TestFlags.PersistenceDriver {
 		case mysql.PluginName:
 			ops = persistencetests.GetMySQLTestClusterOption()
+		case mysql.PluginNameV8:
+			ops = persistencetests.GetMySQL8TestClusterOption()
 		case postgresql.PluginName:
 			ops = persistencetests.GetPostgreSQLTestClusterOption()
 		case sqlite.PluginName:
