@@ -165,8 +165,6 @@ func (p *processorImpl) Stop() {
 		p.logger.Error("Unable to stop Elasticsearch processor.", tag.LifeCycleStopFailed, tag.Error(err))
 		return
 	}
-	p.mapToAckFuture = nil
-	p.bulkProcessor = nil
 }
 
 func (p *processorImpl) hashFn(key interface{}) uint32 {
