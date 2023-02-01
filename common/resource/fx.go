@@ -165,9 +165,15 @@ func TimeSourceProvider() clock.TimeSource {
 
 func SearchAttributeMapperProviderProvider(
 	saMapper searchattribute.Mapper,
+	namespaceRegistry namespace.Registry,
+	searchAttributeProvider searchattribute.Provider,
+	persistenceConfig *config.Persistence,
 ) searchattribute.MapperProvider {
 	return searchattribute.NewMapperProvider(
 		saMapper,
+		namespaceRegistry,
+		searchAttributeProvider,
+		persistenceConfig.IsSQLVisibilityStore(),
 	)
 }
 

@@ -20,10 +20,20 @@ buildkite-agent artifact download ".coverage/functional_mysql_coverprofile.out" 
 buildkite-agent artifact download ".coverage/functional_xdc_mysql_coverprofile.out" . --step ":golang: functional xdc test with mysql" --build "${BUILDKITE_BUILD_ID}"
 buildkite-agent artifact download ".coverage/functional_ndc_mysql_coverprofile.out" . --step ":golang: functional ndc test with mysql" --build "${BUILDKITE_BUILD_ID}"
 
+# MySQL 8.
+buildkite-agent artifact download ".coverage/functional_mysql8_coverprofile.out" . --step ":golang: functional test with mysql 8" --build "${BUILDKITE_BUILD_ID}"
+buildkite-agent artifact download ".coverage/functional_xdc_mysql8_coverprofile.out" . --step ":golang: functional xdc test with mysql 8" --build "${BUILDKITE_BUILD_ID}"
+buildkite-agent artifact download ".coverage/functional_ndc_mysql8_coverprofile.out" . --step ":golang: functional ndc test with mysql 8" --build "${BUILDKITE_BUILD_ID}"
+
 # PostgreSQL.
 buildkite-agent artifact download ".coverage/functional_postgres_coverprofile.out" . --step ":golang: functional test with postgresql" --build "${BUILDKITE_BUILD_ID}"
 buildkite-agent artifact download ".coverage/functional_xdc_postgres_coverprofile.out" . --step ":golang: functional xdc test with postgresql" --build "${BUILDKITE_BUILD_ID}"
 buildkite-agent artifact download ".coverage/functional_ndc_postgres_coverprofile.out" . --step ":golang: functional ndc test with postgresql" --build "${BUILDKITE_BUILD_ID}"
+
+# PostgreSQL 12.
+buildkite-agent artifact download ".coverage/functional_postgres12_coverprofile.out" . --step ":golang: functional test with postgresql 12" --build "${BUILDKITE_BUILD_ID}"
+buildkite-agent artifact download ".coverage/functional_xdc_postgres12_coverprofile.out" . --step ":golang: functional xdc test with postgresql 12" --build "${BUILDKITE_BUILD_ID}"
+buildkite-agent artifact download ".coverage/functional_ndc_postgres12_coverprofile.out" . --step ":golang: functional ndc test with postgresql 12" --build "${BUILDKITE_BUILD_ID}"
 
 # SQLite.
 buildkite-agent artifact download ".coverage/functional_sqlite_coverprofile.out" . --step ":golang: functional test with sqlite" --build "${BUILDKITE_BUILD_ID}"
