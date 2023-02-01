@@ -112,7 +112,7 @@ func NewWorkflowWithSignal(
 	}
 
 	// If first workflow task should back off (e.g. cron or workflow retry) a workflow task will not be scheduled.
-	if requestEagerExecution && scheduledEventID != 0 {
+	if requestEagerExecution && newMutableState.HasPendingWorkflowTask() {
 		_, _, err = newMutableState.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
 			startRequest.StartRequest.RequestId,

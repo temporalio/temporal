@@ -51,6 +51,8 @@ const (
 	commandType    = "commandType"
 	serviceName    = "service_name"
 	actionType     = "action_type"
+	// Generic reason tag can be used anywhere a reason is needed.
+	reason = "reason"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -277,4 +279,10 @@ func StringTag(key string, value string) Tag {
 
 func CacheTypeTag(value string) Tag {
 	return &tagImpl{key: CacheTypeTagName, value: value}
+}
+
+// ReasonTag is a generic tag can be used anywhere a reason is needed.
+// Make sure that the value is of limited cardinality.
+func ReasonTag(value string) Tag {
+	return &tagImpl{key: reason, value: value}
 }

@@ -46,6 +46,14 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+type eagerStartDeniedReason string
+
+const (
+	eagerStartDeniedReasonDynamicConfigDisabled    eagerStartDeniedReason = "dynamic_config_disabled"
+	eagerStartDeniedReasonFirstWorkflowTaskBackoff eagerStartDeniedReason = "first_workflow_task_backoff"
+	eagerStartDeniedReasonTaskAlreadyDispatched    eagerStartDeniedReason = "task_already_dispatched"
+)
+
 // Starter starts a new workflow execution.
 type Starter struct {
 	shardCtx                   shard.Context
@@ -58,12 +66,12 @@ type Starter struct {
 // creationContext is a container for all information obtained from creating the uncommitted execution.
 // The information is later used to create a new execution and handle conflicts.
 type creationContext struct {
-	workflowID       string
-	runID            string
-	workflowContext  api.WorkflowContext
-	workflowTaskInfo *workflow.WorkflowTaskInfo
-	workflowSnapshot *persistence.WorkflowSnapshot
-	workflowEvents   []*persistence.WorkflowEvents
+	workflowID           string
+	runID                string
+	workflowContext      api.WorkflowContext
+	workflowTaskInfo     *workflow.WorkflowTaskInfo
+	workflowSnapshot     *persistence.WorkflowSnapshot
+	workflowEventBatches []*persistence.WorkflowEvents
 }
 
 // mutableStateInfo is a container for the relevant mutable state information to generate a start response with an eager
@@ -106,22 +114,40 @@ func (s *Starter) prepare(ctx context.Context) error {
 		return err
 	}
 
-	// Override to false to avoid having to look up the dynamic config throughout the diffrent code paths.
-	if !s.shardCtx.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
-		request.RequestEagerExecution = false
-	}
-	if s.requestEagerStart() {
+	if request.RequestEagerExecution {
 		metricsHandler.Counter(metrics.WorkflowEagerExecutionCounter.GetMetricName()).Record(
 			1,
 			metrics.NamespaceTag(s.namespace.Name().String()),
 			metrics.TaskQueueTag(request.TaskQueue.Name),
+			metrics.WorkflowTypeTag(request.WorkflowType.Name),
 		)
+	}
+
+	// Override to false to avoid having to look up the dynamic config throughout the diffrent code paths.
+	if !s.shardCtx.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
+		s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
+		request.RequestEagerExecution = false
+	}
+	if *s.request.FirstWorkflowTaskBackoff > 0 {
+		s.recordEagerDenied(eagerStartDeniedReasonFirstWorkflowTaskBackoff)
+		request.RequestEagerExecution = false
 	}
 	return nil
 }
 
+func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
+	metricsHandler := s.shardCtx.GetMetricsHandler()
+	metricsHandler.Counter(metrics.WorkflowEagerExecutionDeniedCounter.GetMetricName()).Record(
+		1,
+		metrics.NamespaceTag(s.namespace.Name().String()),
+		metrics.TaskQueueTag(s.request.StartRequest.TaskQueue.Name),
+		metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
+		metrics.ReasonTag(""),
+	)
+}
+
 func (s *Starter) requestEagerStart() bool {
-	return s.request.StartRequest.GetRequestEagerExecution() && *s.request.FirstWorkflowTaskBackoff == 0
+	return s.request.StartRequest.GetRequestEagerExecution()
 }
 
 // Invoke starts a new workflow execution
@@ -141,12 +167,13 @@ func (s *Starter) Invoke(
 	}
 	err = s.createBrandNew(ctx, creationCtx)
 	if err == nil {
-		return s.generateResponse(creationCtx.runID, creationCtx.workflowTaskInfo, extractHistoryEvents(creationCtx.workflowEvents))
+		return s.generateResponse(creationCtx.runID, creationCtx.workflowTaskInfo, extractHistoryEvents(creationCtx.workflowEventBatches))
 	}
 	t, ok := err.(*persistence.CurrentWorkflowConditionFailedError)
 	if !ok {
 		return nil, err
 	}
+	// The history and mutable state we generated above should be deleted by a background process.
 	return s.handleConflict(ctx, creationCtx, t)
 }
 
@@ -172,24 +199,24 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 	if s.requestEagerStart() && !hasInflight {
 		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have an inflight workflow task")
 	}
-	workflowSnapshot, workflowEvents, err := mutableState.CloseTransactionAsSnapshot(
+	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
 		now,
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {
 		return nil, err
 	}
-	if len(workflowEvents) != 1 {
+	if len(eventBatches) != 1 {
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
 	return &creationContext{
-		workflowID:       workflowID,
-		runID:            runID,
-		workflowContext:  workflowContext,
-		workflowTaskInfo: workflowTaskInfo,
-		workflowSnapshot: workflowSnapshot,
-		workflowEvents:   workflowEvents,
+		workflowID:           workflowID,
+		runID:                runID,
+		workflowContext:      workflowContext,
+		workflowTaskInfo:     workflowTaskInfo,
+		workflowSnapshot:     workflowSnapshot,
+		workflowEventBatches: eventBatches,
 	}, nil
 }
 
@@ -204,13 +231,13 @@ func (s *Starter) createBrandNew(ctx context.Context, creationCtx *creationConte
 		0,  // prevLastWriteVersion
 		creationCtx.workflowContext.GetMutableState(),
 		creationCtx.workflowSnapshot,
-		creationCtx.workflowEvents,
+		creationCtx.workflowEventBatches,
 	)
 }
 
-// handleConflict handles CurrentWorkflowConditionFailedError where a previous request with the same request ID already
-// created a workflow execution with a different run ID.
-// The history we generated above should be deleted by a background process.
+// handleConflict handles CurrentWorkflowConditionFailedError where there's a workflow with the same workflowID.
+// This may happen either when the currently handled request is a retry of a previous attempt (identified by the
+// RequestID) or simply because a different run exists for the same workflow.
 func (s *Starter) handleConflict(
 	ctx context.Context,
 	creationCtx *creationContext,
@@ -232,7 +259,7 @@ func (s *Starter) handleConflict(
 	if err := s.createAsCurrent(ctx, creationCtx, currentWorkflowConditionFailed); err != nil {
 		return nil, err
 	}
-	return s.generateResponse(creationCtx.runID, creationCtx.workflowTaskInfo, extractHistoryEvents(creationCtx.workflowEvents))
+	return s.generateResponse(creationCtx.runID, creationCtx.workflowTaskInfo, extractHistoryEvents(creationCtx.workflowEventBatches))
 }
 
 // createAsCurrent creates a new workflow execution and sets it to "current".
@@ -250,7 +277,7 @@ func (s *Starter) createAsCurrent(
 		currentWorkflowConditionFailed.LastWriteVersion,
 		creationCtx.workflowContext.GetMutableState(),
 		creationCtx.workflowSnapshot,
-		creationCtx.workflowEvents,
+		creationCtx.workflowEventBatches,
 	)
 }
 
@@ -354,8 +381,6 @@ func (s *Starter) respondToRetriedRequest(
 	ctx context.Context,
 	runID string,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	request := s.request.StartRequest
-
 	if !s.requestEagerStart() {
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId: runID,
@@ -371,11 +396,10 @@ func (s *Starter) respondToRetriedRequest(
 	// The current workflow task is not inflight or not the first task or we exceeded the first attempt and fell back to
 	// matching based dispatch.
 	if !mutableStateInfo.hasInflight || mutableStateInfo.workflowTaskInfo.StartedEventID != 3 || mutableStateInfo.workflowTaskInfo.Attempt > 1 {
-		return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
-			"First workflow task is no longer inflight, retried request came in too late",
-			request.RequestId,
-			runID,
-		)
+		s.recordEagerDenied(eagerStartDeniedReasonTaskAlreadyDispatched)
+		return &historyservice.StartWorkflowExecutionResponse{
+			RunId: runID,
+		}, nil
 	}
 
 	events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
@@ -499,7 +523,7 @@ func (s *Starter) generateResponse(
 		WorkflowId:       workflowID,
 		RunId:            runID,
 		ScheduledEventId: workflowTaskInfo.ScheduledEventID,
-		Attempt:          1,
+		Attempt:          workflowTaskInfo.Attempt,
 		Clock:            clock,
 	}
 	serializedToken, err := tokenSerializer.Serialize(taskToken)
@@ -510,12 +534,14 @@ func (s *Starter) generateResponse(
 		RunId: runID,
 		Clock: clock,
 		EagerWorkflowTask: &workflowservice.PollWorkflowTaskQueueResponse{
-			TaskToken:                  serializedToken,
-			WorkflowExecution:          &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
-			WorkflowType:               request.GetWorkflowType(),
+			TaskToken:         serializedToken,
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			WorkflowType:      request.GetWorkflowType(),
+			// TODO: consider getting the ID from mutable state, this was not done to avoid adding more complexity to
+			// the code to plumb that value through.
 			PreviousStartedEventId:     0,
 			StartedEventId:             workflowTaskInfo.StartedEventID,
-			Attempt:                    1,
+			Attempt:                    workflowTaskInfo.Attempt,
 			History:                    &historypb.History{Events: historyEvents},
 			NextPageToken:              nil,
 			WorkflowExecutionTaskQueue: workflowTaskInfo.TaskQueue,
