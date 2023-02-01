@@ -29,6 +29,7 @@ package searchattribute
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (
@@ -39,11 +40,54 @@ type (
 		GetAlias(fieldName string, namespace string) (string, error)
 		GetFieldName(alias string, namespace string) (string, error)
 	}
+
+	noopMapper struct{}
+
+	MapperProvider interface {
+		GetMapper(nsName namespace.Name) (Mapper, error)
+	}
+
+	mapperProviderImpl struct {
+		customMapper Mapper
+	}
 )
+
+var _ Mapper = (*noopMapper)(nil)
+var _ Mapper = (*namespace.CustomSearchAttributesMapper)(nil)
+var _ MapperProvider = (*mapperProviderImpl)(nil)
+
+func (m *noopMapper) GetAlias(fieldName string, _ string) (string, error) {
+	return fieldName, nil
+}
+
+func (m *noopMapper) GetFieldName(alias string, _ string) (string, error) {
+	return alias, nil
+}
+
+func NewMapperProvider(
+	customMapper Mapper,
+) MapperProvider {
+	return &mapperProviderImpl{
+		customMapper: customMapper,
+	}
+}
+
+func (m *mapperProviderImpl) GetMapper(_ namespace.Name) (Mapper, error) {
+	return m.customMapper, nil
+}
 
 // AliasFields returns SearchAttributes struct where each search attribute name is replaced with alias.
 // If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
-func AliasFields(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
+func AliasFields(
+	mapperProvider MapperProvider,
+	searchAttributes *commonpb.SearchAttributes,
+	namespaceName string,
+) (*commonpb.SearchAttributes, error) {
+	mapper, err := mapperProvider.GetMapper(namespace.Name(namespaceName))
+	if err != nil {
+		return nil, err
+	}
+
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil, nil
 	}
@@ -56,7 +100,7 @@ func AliasFields(mapper Mapper, searchAttributes *commonpb.SearchAttributes, nam
 			continue
 		}
 
-		aliasName, err := mapper.GetAlias(saName, namespace)
+		aliasName, err := mapper.GetAlias(saName, namespaceName)
 		if err != nil {
 			if _, isInvalidArgument := err.(*serviceerror.InvalidArgument); isInvalidArgument {
 				// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field (alias was deleted, for example).
@@ -81,7 +125,16 @@ func AliasFields(mapper Mapper, searchAttributes *commonpb.SearchAttributes, nam
 
 // UnaliasFields returns SearchAttributes struct where each search attribute alias is replaced with field name.
 // If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
-func UnaliasFields(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
+func UnaliasFields(
+	mapperProvider MapperProvider,
+	searchAttributes *commonpb.SearchAttributes,
+	namespaceName string,
+) (*commonpb.SearchAttributes, error) {
+	mapper, err := mapperProvider.GetMapper(namespace.Name(namespaceName))
+	if err != nil {
+		return nil, err
+	}
+
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil, nil
 	}
@@ -94,7 +147,7 @@ func UnaliasFields(mapper Mapper, searchAttributes *commonpb.SearchAttributes, n
 			continue
 		}
 
-		fieldName, err := mapper.GetFieldName(saName, namespace)
+		fieldName, err := mapper.GetFieldName(saName, namespaceName)
 		if err != nil {
 			return nil, err
 		}

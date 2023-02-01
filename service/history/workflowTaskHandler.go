@@ -74,9 +74,9 @@ type (
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 
 		// validation
-		attrValidator          *commandAttrValidator
-		sizeLimitChecker       *workflowSizeChecker
-		searchAttributesMapper searchattribute.Mapper
+		attrValidator                  *commandAttrValidator
+		sizeLimitChecker               *workflowSizeChecker
+		searchAttributesMapperProvider searchattribute.MapperProvider
 
 		logger            log.Logger
 		namespaceRegistry namespace.Registry
@@ -117,7 +117,7 @@ func newWorkflowTaskHandler(
 	metricsHandler metrics.Handler,
 	config *configs.Config,
 	shard shard.Context,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEvents bool,
 ) *workflowTaskHandlerImpl {
 
@@ -135,9 +135,9 @@ func newWorkflowTaskHandler(
 		initiatedChildExecutionsInBatch: make(map[string]struct{}),
 
 		// validation
-		attrValidator:          attrValidator,
-		sizeLimitChecker:       sizeLimitChecker,
-		searchAttributesMapper: searchAttributesMapper,
+		attrValidator:                  attrValidator,
+		sizeLimitChecker:               sizeLimitChecker,
+		searchAttributesMapperProvider: searchAttributesMapperProvider,
 
 		logger:            logger,
 		namespaceRegistry: namespaceRegistry,
@@ -333,6 +333,13 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (workflowTaskResponseMutation, error) {
+	if !handler.mutableState.IsWorkflowExecutionRunning() {
+		// workflow closed in the same workflow task
+		// this function is executed as a callback after all workflow commands
+		// are handled, so need to check for workflow completion case.
+		return nil, nil
+	}
+
 	ai, ok := handler.mutableState.GetActivityByActivityID(attr.ActivityId)
 	if !ok {
 		// activity cancelled in the same worflow task
@@ -764,7 +771,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
 
 	unaliasedSas, err := searchattribute.UnaliasFields(
-		handler.searchAttributesMapper,
+		handler.searchAttributesMapperProvider,
 		attr.GetSearchAttributes(),
 		namespaceName.String(),
 	)
@@ -875,7 +882,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	}
 
 	unaliasedSas, err := searchattribute.UnaliasFields(
-		handler.searchAttributesMapper,
+		handler.searchAttributesMapperProvider,
 		attr.GetSearchAttributes(),
 		targetNamespace.String(),
 	)
@@ -1019,7 +1026,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	namespace := namespaceEntry.Name()
 
 	unaliasedSas, err := searchattribute.UnaliasFields(
-		handler.searchAttributesMapper,
+		handler.searchAttributesMapperProvider,
 		attr.GetSearchAttributes(),
 		namespace.String(),
 	)

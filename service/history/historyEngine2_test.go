@@ -153,6 +153,8 @@ func (s *engine2Suite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.ParentNamespaceID).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ChildNamespace).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(tests.Version, tests.Version).Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -187,7 +189,7 @@ func (s *engine2Suite) SetupTest() {
 		},
 		searchAttributesValidator: searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
-			s.mockShard.Resource.SearchAttributesMapper,
+			s.mockShard.Resource.SearchAttributesMapperProvider,
 			s.config.SearchAttributesNumberOfKeysLimit,
 			s.config.SearchAttributesSizeOfValueLimit,
 			s.config.SearchAttributesTotalSizeLimit,
@@ -915,9 +917,9 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		return tests.UpdateWorkflowExecutionResponse, nil
 	})
 
-	s.mockShard.Resource.SearchAttributesMapper.EXPECT().
-		GetFieldName("AliasForCustomTextField", tests.Namespace.String()).Return("CustomTextField", nil).
-		Times(1) // one for mapper
+	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().
+		GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil)
 
 	_, err := s.historyEngine.RespondWorkflowTaskCompleted(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -996,6 +998,10 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 	taskTokenBytes, _ := taskToken.Marshal()
 	response := &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(response, nil).AnyTimes()
+	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().
+		GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).
+		AnyTimes()
 
 	s.historyEngine.shard.GetConfig().NumPendingChildExecutionsLimit = func(namespace string) int {
 		return 5

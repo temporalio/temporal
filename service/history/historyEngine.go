@@ -225,7 +225,7 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
 		shard.GetSearchAttributesProvider(),
-		shard.GetSearchAttributesMapper(),
+		shard.GetSearchAttributesMapperProvider(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,

@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -93,7 +95,7 @@ type moduleTestCase struct {
 
 // Run runs the test case.
 func (c *moduleTestCase) Run(t *testing.T) {
-	t.Parallel()
+
 	controller := gomock.NewController(t)
 	dependencies := getModuleDependencies(controller, c)
 	var factories []QueueFactory
@@ -135,8 +137,10 @@ func (c *moduleTestCase) Run(t *testing.T) {
 	require.NotNil(t, viq)
 	if c.ExpectArchivalQueue {
 		require.NotNil(t, aq)
+		assert.Contains(t, tasks.GetCategories(), tasks.CategoryIDArchival)
 	} else {
 		require.Nil(t, aq)
+		assert.NotContains(t, tasks.GetCategories(), tasks.CategoryIDArchival)
 	}
 }
 

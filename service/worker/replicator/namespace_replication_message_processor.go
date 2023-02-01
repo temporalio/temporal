@@ -147,7 +147,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 	}
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(fetchTaskRequestTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 	request := &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            p.currentCluster,
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
@@ -164,7 +164,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 	p.logger.Debug("Successfully fetched namespace replication tasks", tag.Counter(len(response.Messages.ReplicationTasks)))
 
 	// TODO: specify a timeout for processing namespace replication tasks
-	taskCtx := headers.SetCallerInfo(context.TODO(), headers.SystemBackgroundCallerInfo)
+	taskCtx := headers.SetCallerInfo(context.TODO(), headers.SystemPreemptableCallerInfo)
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
 		err := backoff.ThrottleRetry(func() error {
