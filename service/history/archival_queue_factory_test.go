@@ -51,7 +51,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 		return metricsHandler
 	}).Times(2)
 	shardContext := shard.NewMockContext(ctrl)
-	shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger())
+	shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).Times(2)
 	shardContext.EXPECT().GetQueueState(tasks.CategoryArchival).Return(&persistence.QueueState{
 		ReaderStates: nil,
 		ExclusiveReaderHighWatermark: &persistence.TaskKey{
