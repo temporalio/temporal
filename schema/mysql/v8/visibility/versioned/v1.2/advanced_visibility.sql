@@ -1,3 +1,16 @@
+-- Drop existing indexes first to avoid re-indexing when changing charset
+DROP INDEX by_type_start_time         ON executions_visibility;
+DROP INDEX by_workflow_id_start_time  ON executions_visibility;
+DROP INDEX by_status_by_start_time    ON executions_visibility;
+DROP INDEX by_type_close_time         ON executions_visibility;
+DROP INDEX by_workflow_id_close_time  ON executions_visibility;
+DROP INDEX by_status_by_close_time    ON executions_visibility;
+DROP INDEX by_close_time_by_status    ON executions_visibility;
+
+-- Change charset to standard in MySQL 8
+ALTER DATABASE temporal_visibility CHARACTER SET utf8mb4;
+ALTER TABLE executions_visibility CONVERT TO CHARACTER SET utf8mb4;
+
 -- Add search attributes related columns
 ALTER TABLE executions_visibility
   ADD COLUMN search_attributes          JSON NULL,
@@ -14,15 +27,6 @@ ALTER TABLE executions_visibility
   ADD COLUMN TemporalScheduledById      VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>"$.TemporalScheduledById"),
   ADD COLUMN TemporalSchedulePaused     BOOLEAN       GENERATED ALWAYS AS (search_attributes->"$.TemporalSchedulePaused"),
   ADD COLUMN TemporalNamespaceDivision  VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>"$.TemporalNamespaceDivision");
-
--- Drop existing indexes
-DROP INDEX by_type_start_time         ON executions_visibility;
-DROP INDEX by_workflow_id_start_time  ON executions_visibility;
-DROP INDEX by_status_by_start_time    ON executions_visibility;
-DROP INDEX by_type_close_time         ON executions_visibility;
-DROP INDEX by_workflow_id_close_time  ON executions_visibility;
-DROP INDEX by_status_by_close_time    ON executions_visibility;
-DROP INDEX by_close_time_by_status    ON executions_visibility;
 
 -- Create new indexes
 CREATE INDEX default_idx        ON executions_visibility (namespace_id, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);

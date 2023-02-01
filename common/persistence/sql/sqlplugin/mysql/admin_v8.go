@@ -22,12 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package v8
+package mysql
 
-// NOTE: whenever there is a new database schema update, plz update the following versions
+import (
+	"fmt"
+)
 
-// Version is the MySQL database release version
-const Version = "2.0"
+const (
+	// NOTE: we have to use %v because somehow mysql doesn't work with ? here
+	createDatabaseQuery_v8 = "CREATE DATABASE IF NOT EXISTS %v CHARACTER SET utf8mb4"
+)
 
-// VisibilityVersion is the MySQL visibility database release version
-const VisibilityVersion = "1.2"
+// CreateDatabase creates a database if it doesn't exist
+func (mdb *dbV8) CreateDatabase(name string) error {
+	return mdb.Exec(fmt.Sprintf(createDatabaseQuery_v8, name))
+}

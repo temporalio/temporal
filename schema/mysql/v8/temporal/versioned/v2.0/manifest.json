@@ -1,0 +1,8 @@
+{
+    "CurrVersion": "2.0",
+    "MinCompatibleVersion": "1.0",
+    "Description": "change charset",
+    "SchemaUpdateCqlFiles": [
+        "update_charset.sql"
+    ]
+}
