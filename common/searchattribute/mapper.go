@@ -43,16 +43,29 @@ type (
 
 	noopMapper struct{}
 
+	// This mapper is to be backwards compatible with versions before v1.20.
+	// Users using standard visibility might have registered custom search attributes.
+	// Those search attributes won't be searchable, as they weren't before version v1.20.
+	// Thus, this mapper will allow those search attributes to be used without being alised.
+	backCompMapper_v1_20 struct {
+		mapper                 Mapper
+		emptyStringNameTypeMap NameTypeMap
+	}
+
 	MapperProvider interface {
 		GetMapper(nsName namespace.Name) (Mapper, error)
 	}
 
 	mapperProviderImpl struct {
-		customMapper Mapper
+		customMapper              Mapper
+		namespaceRegistry         namespace.Registry
+		searchAttributesProvider  Provider
+		enableMapperFromNamespace bool
 	}
 )
 
 var _ Mapper = (*noopMapper)(nil)
+var _ Mapper = (*backCompMapper_v1_20)(nil)
 var _ Mapper = (*namespace.CustomSearchAttributesMapper)(nil)
 var _ MapperProvider = (*mapperProviderImpl)(nil)
 
@@ -64,16 +77,64 @@ func (m *noopMapper) GetFieldName(alias string, _ string) (string, error) {
 	return alias, nil
 }
 
+func (m *backCompMapper_v1_20) GetAlias(fieldName string, namespaceName string) (string, error) {
+	alias, firstErr := m.mapper.GetAlias(fieldName, namespaceName)
+	if firstErr != nil {
+		_, err := m.emptyStringNameTypeMap.getType(fieldName, customCategory)
+		if err != nil {
+			return "", firstErr
+		}
+		// this is custom search attribute registered in pre-v1.20
+		return fieldName, nil
+	}
+	return alias, nil
+}
+
+func (m *backCompMapper_v1_20) GetFieldName(alias string, namespaceName string) (string, error) {
+	fieldName, firstErr := m.mapper.GetFieldName(alias, namespaceName)
+	if firstErr != nil {
+		_, err := m.emptyStringNameTypeMap.getType(alias, customCategory)
+		if err != nil {
+			return "", firstErr
+		}
+		// this is custom search attribute registered in pre-v1.20
+		return alias, nil
+	}
+	return fieldName, nil
+}
+
 func NewMapperProvider(
 	customMapper Mapper,
+	namespaceRegistry namespace.Registry,
+	searchAttributesProvider Provider,
+	enableMapperFromNamespace bool,
 ) MapperProvider {
 	return &mapperProviderImpl{
-		customMapper: customMapper,
+		customMapper:              customMapper,
+		namespaceRegistry:         namespaceRegistry,
+		searchAttributesProvider:  searchAttributesProvider,
+		enableMapperFromNamespace: enableMapperFromNamespace,
 	}
 }
 
-func (m *mapperProviderImpl) GetMapper(_ namespace.Name) (Mapper, error) {
-	return m.customMapper, nil
+func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
+	if m.customMapper != nil {
+		return m.customMapper, nil
+	}
+	if !m.enableMapperFromNamespace {
+		return &noopMapper{}, nil
+	}
+	ns, err := m.namespaceRegistry.GetNamespace(nsName)
+	if err != nil {
+		return nil, err
+	}
+	saMapper := ns.CustomSearchAttributesMapper()
+	// if there's an error, it returns an empty object, which is expected here
+	emptyStringNameTypeMap, _ := m.searchAttributesProvider.GetSearchAttributes("", false)
+	return &backCompMapper_v1_20{
+		mapper:                 &saMapper,
+		emptyStringNameTypeMap: emptyStringNameTypeMap,
+	}, nil
 }
 
 // AliasFields returns SearchAttributes struct where each search attribute name is replaced with alias.
