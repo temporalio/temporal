@@ -36,6 +36,7 @@ import (
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
@@ -89,6 +90,7 @@ func (s *processorSuite) SetupTest() {
 	// esProcessor.Start mock
 	s.esProcessor.mapToAckFuture = collection.NewShardedConcurrentTxMap(1024, s.esProcessor.hashFn)
 	s.esProcessor.bulkProcessor = s.mockBulkProcessor
+	s.esProcessor.status = common.DaemonStatusStarted
 }
 
 func (s *processorSuite) TearDownTest() {
@@ -126,8 +128,8 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 	s.NotNil(p.bulkProcessor)
 
 	p.Stop()
-	s.Nil(p.mapToAckFuture)
-	s.Nil(p.bulkProcessor)
+	s.NotNil(p.mapToAckFuture)
+	s.NotNil(p.bulkProcessor)
 }
 
 func (s *processorSuite) TestAdd() {
@@ -217,6 +219,43 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
 
 	s.Equal(100, pendingRequestsCount, "only one request should not be acked")
 	s.Equal(1, s.esProcessor.mapToAckFuture.Len(), "only one request should be in the bulk")
+}
+
+func (s *processorSuite) TestAdd_ConcurrentAdd_Shutdown() {
+	request := &client.BulkableRequest{}
+	docsCount := 1000
+	parallelFactor := 10
+	futures := make([]future.Future[bool], docsCount)
+
+	s.mockBulkProcessor.EXPECT().Add(request).MaxTimes(docsCount + 2) // +2 for explicit adds before and after shutdown
+	s.mockBulkProcessor.EXPECT().Stop().Return(nil).Times(1)
+	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorWaitAddLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc).MaxTimes(docsCount + 2)
+
+	addBefore := s.esProcessor.Add(request, "test-key-before")
+
+	wg := sync.WaitGroup{}
+	wg.Add(parallelFactor + 1) // +1 for separate shutdown goroutine
+	for i := 0; i < parallelFactor; i++ {
+		go func(i int) {
+			for j := 0; j < docsCount/parallelFactor; j++ {
+				futures[i*docsCount/parallelFactor+j] = s.esProcessor.Add(request, fmt.Sprintf("test-key-%d-%d", i, j))
+			}
+			wg.Done()
+		}(i)
+	}
+	go func() {
+		time.Sleep(1 * time.Millisecond) // slight delay so at least a few docs get added
+		s.esProcessor.Stop()
+		wg.Done()
+	}()
+
+	wg.Wait()
+	addAfter := s.esProcessor.Add(request, "test-key-after")
+
+	s.False(addBefore.Ready()) // first request should be in bulk
+	s.True(addAfter.Ready())   // final request should be only error
+	_, err := addAfter.Get(context.Background())
+	s.ErrorIs(err, errVisibilityShutdown)
 }
 
 func (s *processorSuite) TestBulkAfterAction_Ack() {

@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -69,6 +70,7 @@ type (
 		logger                  log.Logger
 		metricsHandler          metrics.Handler
 		indexerConcurrency      uint32
+		shutdownLock            sync.RWMutex
 	}
 
 	// ProcessorConfig contains all configs for processor
@@ -95,6 +97,10 @@ var _ Processor = (*processorImpl)(nil)
 
 const (
 	visibilityProcessorName = "visibility-processor"
+)
+
+var (
+	errVisibilityShutdown = errors.New("visiblity processor was shut down")
 )
 
 // NewProcessor create new processorImpl
@@ -150,14 +156,15 @@ func (p *processorImpl) Stop() {
 		return
 	}
 
+	p.shutdownLock.Lock()
+	defer p.shutdownLock.Unlock()
+
 	err := p.bulkProcessor.Stop()
 	if err != nil {
 		// This could happen if ES is down when we're trying to shut down the server.
 		p.logger.Error("Unable to stop Elasticsearch processor.", tag.LifeCycleStopFailed, tag.Error(err))
 		return
 	}
-	p.mapToAckFuture = nil
-	p.bulkProcessor = nil
 }
 
 func (p *processorImpl) hashFn(key interface{}) uint32 {
@@ -172,7 +179,17 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 
 // Add request to the bulk and return a future object which will receive ack signal when request is processed.
 func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string) *future.FutureImpl[bool] {
-	newFuture := newAckFuture()
+	newFuture := newAckFuture() // Create future first to measure impact of following RWLock on latency
+
+	p.shutdownLock.RLock()
+	defer p.shutdownLock.RUnlock()
+
+	if atomic.LoadInt32(&p.status) == common.DaemonStatusStopped {
+		p.logger.Warn("Rejecting ES request for visibility task key because processor has been shut down.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
+		newFuture.future.Set(false, errVisibilityShutdown)
+		return newFuture.future
+	}
+
 	_, isDup, _ := p.mapToAckFuture.PutOrDo(visibilityTaskKey, newFuture, func(key interface{}, value interface{}) error {
 		existingFuture, ok := value.(*ackFuture)
 		if !ok {
