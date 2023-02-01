@@ -51,6 +51,13 @@ var (
 			"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+
+			"Int01":      enumspb.INDEXED_VALUE_TYPE_INT,
+			"Text01":     enumspb.INDEXED_VALUE_TYPE_TEXT,
+			"Keyword01":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"Datetime01": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			"Double01":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			"Bool01":     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		},
 	}
 )
@@ -102,5 +109,5 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 }
 
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
-	return NewMapperProvider(customMapper)
+	return NewMapperProvider(customMapper, nil, NewTestProvider(), false)
 }
