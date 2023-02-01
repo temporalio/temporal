@@ -128,7 +128,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 		s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
 		request.RequestEagerExecution = false
 	}
-	if *s.request.FirstWorkflowTaskBackoff > 0 {
+	if s.request.FirstWorkflowTaskBackoff != nil && *s.request.FirstWorkflowTaskBackoff > 0 {
 		s.recordEagerDenied(eagerStartDeniedReasonFirstWorkflowTaskBackoff)
 		request.RequestEagerExecution = false
 	}
