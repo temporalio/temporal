@@ -66,7 +66,6 @@ func (p pollerManagerImpl) getSourceClusterShardIDs(sourceClusterName string) ([
 		return nil, errors.New(fmt.Sprintf("cannot get source cluster %s info from cluster metadata cache", sourceClusterName))
 	}
 
-	// remoteShardCount > localShardCount, replication poller will poll from multiple remote shard.
 	// The remote shard count and local shard count must be multiples.
 	large, small := remoteClusterInfo.ShardCount, currentClusterInfo.ShardCount
 	if small > large {
@@ -86,7 +85,7 @@ func generateShardIDs(localShardId int32, localShardCount int32, remoteShardCoun
 		}
 		return pollingShards
 	}
-
+	// remoteShardCount > localShardCount, replication poller will poll from multiple remote shard.
 	for i := localShardId; i <= remoteShardCount; i += localShardCount {
 		pollingShards = append(pollingShards, i)
 	}
