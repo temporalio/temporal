@@ -38,7 +38,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/environment"
@@ -56,8 +56,8 @@ const (
 
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testPostgreSQLExecutionSchema  = "../../../schema/postgresql/v96/temporal/schema.sql"
-	testPostgreSQLVisibilitySchema = "../../../schema/postgresql/v96/visibility/schema.sql"
+	testPostgreSQLExecutionSchema  = "../../../schema/postgresql/v12/temporal/schema.sql"
+	testPostgreSQLVisibilitySchema = "../../../schema/postgresql/v12/visibility/schema.sql"
 )
 
 type (
@@ -100,7 +100,7 @@ func NewPostgreSQLConfig() *config.SQL {
 			strconv.Itoa(environment.GetPostgreSQLPort()),
 		),
 		ConnectProtocol: testPostgreSQLConnectionProtocol,
-		PluginName:      "postgres",
+		PluginName:      postgresql.PluginNameV12,
 		DatabaseName:    testPostgreSQLDatabaseNamePrefix + shuffle.String(testPostgreSQLDatabaseNameSuffix),
 	}
 }

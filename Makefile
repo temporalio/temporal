@@ -361,6 +361,17 @@ install-schema-mysql: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) update-schema -d ./schema/mysql/v57/visibility/versioned
 
+install-schema-mysql8: temporal-sql-tool
+	@printf $(COLOR) "Install MySQL schema..."
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) update-schema -d ./schema/mysql/v8/temporal/versioned
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) drop  -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) update-schema -d ./schema/mysql/v8/visibility/versioned
+
 install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) drop -f
@@ -371,6 +382,17 @@ install-schema-postgresql: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) create
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v96/visibility/versioned
+
+install-schema-postgresql12: temporal-sql-tool
+	@printf $(COLOR) "Install Postgres schema..."
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) setup -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) update-schema -d ./schema/postgresql/v12/temporal/versioned
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v12/visibility/versioned
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
@@ -430,11 +452,17 @@ start-es: temporal-server
 start-mysql: temporal-server
 	./temporal-server --env development-mysql --allow-no-auth start
 
+start-mysql8: temporal-server
+	./temporal-server --env development-mysql8 --allow-no-auth start
+
 start-mysql-es: temporal-server
 	./temporal-server --env development-mysql-es --allow-no-auth start
 
 start-postgres: temporal-server
 	./temporal-server --env development-postgres --allow-no-auth start
+
+start-postgres12: temporal-server
+	./temporal-server --env development-postgres12 --allow-no-auth start
 
 start-sqlite: temporal-server
 	./temporal-server --env development-sqlite --allow-no-auth start

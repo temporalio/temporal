@@ -376,7 +376,7 @@ func buildMappingBody(mapping map[string]enumspb.IndexedValueType) map[string]in
 		switch fieldType {
 		case enumspb.INDEXED_VALUE_TYPE_TEXT:
 			typeMap = map[string]interface{}{"type": "text"}
-		case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+		case enumspb.INDEXED_VALUE_TYPE_KEYWORD, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 			typeMap = map[string]interface{}{"type": "keyword"}
 		case enumspb.INDEXED_VALUE_TYPE_INT:
 			typeMap = map[string]interface{}{"type": "long"}

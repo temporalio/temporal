@@ -120,7 +120,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		searchAttributesValidator: searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
-			mockShard.Resource.SearchAttributesMapper,
+			mockShard.Resource.SearchAttributesMapperProvider,
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,

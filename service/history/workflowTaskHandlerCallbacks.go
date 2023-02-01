@@ -73,19 +73,19 @@ type (
 	}
 
 	workflowTaskHandlerCallbacksImpl struct {
-		currentClusterName         string
-		config                     *configs.Config
-		shard                      shard.Context
-		workflowConsistencyChecker api.WorkflowConsistencyChecker
-		timeSource                 clock.TimeSource
-		namespaceRegistry          namespace.Registry
-		tokenSerializer            common.TaskTokenSerializer
-		metricsHandler             metrics.Handler
-		logger                     log.Logger
-		throttledLogger            log.Logger
-		commandAttrValidator       *commandAttrValidator
-		searchAttributesMapper     searchattribute.Mapper
-		searchAttributesValidator  *searchattribute.Validator
+		currentClusterName             string
+		config                         *configs.Config
+		shard                          shard.Context
+		workflowConsistencyChecker     api.WorkflowConsistencyChecker
+		timeSource                     clock.TimeSource
+		namespaceRegistry              namespace.Registry
+		tokenSerializer                common.TaskTokenSerializer
+		metricsHandler                 metrics.Handler
+		logger                         log.Logger
+		throttledLogger                log.Logger
+		commandAttrValidator           *commandAttrValidator
+		searchAttributesMapperProvider searchattribute.MapperProvider
+		searchAttributesValidator      *searchattribute.Validator
 	}
 )
 
@@ -106,8 +106,8 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 			historyEngine.config,
 			historyEngine.searchAttributesValidator,
 		),
-		searchAttributesMapper:    historyEngine.shard.GetSearchAttributesMapper(),
-		searchAttributesValidator: historyEngine.searchAttributesValidator,
+		searchAttributesMapperProvider: historyEngine.shard.GetSearchAttributesMapperProvider(),
+		searchAttributesValidator:      historyEngine.searchAttributesValidator,
 	}
 }
 
@@ -479,7 +479,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.metricsHandler,
 			handler.config,
 			handler.shard,
-			handler.searchAttributesMapper,
+			handler.searchAttributesMapperProvider,
 			hasBufferedEvents,
 		)
 
