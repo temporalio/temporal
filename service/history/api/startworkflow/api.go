@@ -142,7 +142,7 @@ func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
 		metrics.NamespaceTag(s.namespace.Name().String()),
 		metrics.TaskQueueTag(s.request.StartRequest.TaskQueue.Name),
 		metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
-		metrics.ReasonTag(""),
+		metrics.ReasonTag(string(reason)),
 	)
 }
 
