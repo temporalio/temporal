@@ -186,9 +186,8 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 
 	if atomic.LoadInt32(&p.status) == common.DaemonStatusStopped {
 		p.logger.Warn("Rejecting ES request for visibility task key because processor has been shut down.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
-		errFuture := future.NewFuture[bool]()
-		errFuture.Set(false, errVisibilityShutdown)
-		return errFuture
+		newFuture.future.Set(false, errVisibilityShutdown)
+		return newFuture.future
 	}
 
 	_, isDup, _ := p.mapToAckFuture.PutOrDo(visibilityTaskKey, newFuture, func(key interface{}, value interface{}) error {
