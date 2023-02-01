@@ -92,10 +92,6 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		)
 	}
 
-	// TODO (rodrigozhou): this is to be backwards compatible with custom search attributes
-	// registered before v1.20. Ignoring error as this key might not exist.
-	emptyStringSaTypeMap, _ := v.searchAttributesProvider.GetSearchAttributes("", false)
-
 	for saFieldName, saPayload := range searchAttributes.GetIndexedFields() {
 		// user search attribute cannot be a system search attribute
 		if _, err = saTypeMap.getType(saFieldName, systemCategory); err == nil {
@@ -105,9 +101,6 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		}
 
 		saType, err := saTypeMap.getType(saFieldName, customCategory|predefinedCategory)
-		if err != nil {
-			saType, err = emptyStringSaTypeMap.getType(saFieldName, customCategory)
-		}
 		if err != nil {
 			if errors.Is(err, ErrInvalidName) {
 				return v.validationError(
