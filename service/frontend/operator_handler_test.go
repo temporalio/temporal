@@ -46,7 +46,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
@@ -79,11 +79,11 @@ func (s *operatorHandlerSuite) SetupTest() {
 
 	args := NewOperatorHandlerImplArgs{
 		&Config{NumHistoryShards: 4},
-		nil,
 		s.mockResource.ESClient,
 		s.mockResource.Logger,
 		s.mockResource.GetSDKClientFactory(),
 		s.mockResource.GetMetricsHandler(),
+		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesManager(),
 		health.NewServer(),
@@ -102,7 +102,7 @@ func (s *operatorHandlerSuite) TearDownTest() {
 	s.handler.Stop()
 }
 
-func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
+func (s *operatorHandlerSuite) Test_AddSearchAttributes_EmptyIndexName() {
 	handler := s.handler
 	ctx := context.Background()
 
@@ -124,6 +124,8 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
 		},
 	}
+
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 	for _, testCase := range testCases1 {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.AddSearchAttributes(ctx, testCase.Request)
@@ -134,7 +136,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 
 	// Elasticsearch is not configured
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
-	testCases3 := []test{
+	testCases2 := []test{
 		{
 			Name: "reserved key (empty index)",
 			Request: &operatorservice.AddSearchAttributesRequest{
@@ -154,23 +156,25 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 			Expected: &serviceerror.AlreadyExists{Message: "Search attribute CustomTextField already exists."},
 		},
 	}
-	for _, testCase := range testCases3 {
+	for _, testCase := range testCases2 {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.AddSearchAttributes(ctx, testCase.Request)
 			s.Equal(testCase.Expected, err)
 			s.Nil(resp)
 		})
 	}
+}
 
-	// Configure Elasticsearch: add advanced visibility store config with index name.
-	handler.esConfig = &client.Config{
-		Indices: map[string]string{
-			"visibility": "random-index-name",
-		},
+func (s *operatorHandlerSuite) Test_AddSearchAttributes_NonEmptyIndexName() {
+	handler := s.handler
+	ctx := context.Background()
+
+	type test struct {
+		Name     string
+		Request  *operatorservice.AddSearchAttributesRequest
+		Expected error
 	}
-
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
-	testCases2 := []test{
+	testCases := []test{
 		{
 			Name: "reserved key (ES configured)",
 			Request: &operatorservice.AddSearchAttributesRequest{
@@ -190,7 +194,12 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 			Expected: &serviceerror.AlreadyExists{Message: "Search attribute CustomTextField already exists."},
 		},
 	}
-	for _, testCase := range testCases2 {
+
+	// Configure Elasticsearch: add advanced visibility store config with index name.
+	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	for _, testCase := range testCases {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.AddSearchAttributes(ctx, testCase.Request)
 			s.Equal(testCase.Expected, err)
@@ -241,10 +250,12 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 	s.NotNil(resp)
 }
 
-func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
+func (s *operatorHandlerSuite) Test_ListSearchAttributes_EmptyIndexName() {
 	handler := s.handler
 	ctx := context.Background()
 
+	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 	resp, err := handler.ListSearchAttributes(ctx, nil)
 	s.Error(err)
 	s.Equal(&serviceerror.InvalidArgument{Message: "Request is nil."}, err)
@@ -257,28 +268,28 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+func (s *operatorHandlerSuite) Test_ListSearchAttributes_NonEmptyIndexName() {
+	handler := s.handler
+	ctx := context.Background()
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	handler.esConfig = &client.Config{
-		Indices: map[string]string{
-			"visibility": "random-index-name",
-		},
-	}
-
+	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil)
-	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
+	resp, err := handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
 
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.NameTypeMap{}, errors.New("random error"))
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.Error(err)
 	s.Nil(resp)
 }
 
-func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
+func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_EmptyIndexName() {
 	handler := s.handler
 	ctx := context.Background()
 
@@ -300,6 +311,9 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
 		},
 	}
+
+	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 	for _, testCase := range testCases1 {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
@@ -310,7 +324,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 
 	// Elasticsearch is not configured
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
-	testCases3 := []test{
+	testCases2 := []test{
 		{
 			Name: "reserved search attribute (empty index)",
 			Request: &operatorservice.RemoveSearchAttributesRequest{
@@ -330,23 +344,25 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 			Expected: &serviceerror.NotFound{Message: "Search attribute ProductId doesn't exist."},
 		},
 	}
-	for _, testCase := range testCases3 {
+	for _, testCase := range testCases2 {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
 			s.Equal(testCase.Expected, err)
 			s.Nil(resp)
 		})
 	}
+}
 
-	// Configure Elasticsearch: add advanced visibility store config with index name.
-	handler.esConfig = &client.Config{
-		Indices: map[string]string{
-			"visibility": "random-index-name",
-		},
+func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_NonEmptyIndexName() {
+	handler := s.handler
+	ctx := context.Background()
+
+	type test struct {
+		Name     string
+		Request  *operatorservice.RemoveSearchAttributesRequest
+		Expected error
 	}
-
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
-	testCases2 := []test{
+	testCases := []test{
 		{
 			Name: "reserved search attribute (ES configured)",
 			Request: &operatorservice.RemoveSearchAttributesRequest{
@@ -366,7 +382,12 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 			Expected: &serviceerror.NotFound{Message: "Search attribute ProductId doesn't exist."},
 		},
 	}
-	for _, testCase := range testCases2 {
+
+	// Configure Elasticsearch: add advanced visibility store config with index name.
+	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	for _, testCase := range testCases {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
 			s.Equal(testCase.Expected, err)

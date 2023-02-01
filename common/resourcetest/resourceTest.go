@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
@@ -62,11 +63,11 @@ import (
 type (
 	// Test is the test implementation used for testing
 	Test struct {
-		MetricsScope             tally.Scope
-		ClusterMetadata          *cluster.MockMetadata
-		SearchAttributesProvider *searchattribute.MockProvider
-		SearchAttributesManager  *searchattribute.MockManager
-		SearchAttributesMapper   *searchattribute.MockMapper
+		MetricsScope                   tally.Scope
+		ClusterMetadata                *cluster.MockMetadata
+		SearchAttributesProvider       *searchattribute.MockProvider
+		SearchAttributesManager        *searchattribute.MockManager
+		SearchAttributesMapperProvider *searchattribute.MockMapperProvider
 
 		// other common resources
 
@@ -96,6 +97,7 @@ type (
 		ClientBean           *client.MockBean
 		ClientFactory        *client.MockFactory
 		ESClient             *esclient.MockClient
+		VisibilityManager    *manager.MockVisibilityManager
 
 		// persistence clients
 
@@ -172,11 +174,11 @@ func NewTest(
 	)
 
 	return &Test{
-		MetricsScope:             scope,
-		ClusterMetadata:          cluster.NewMockMetadata(controller),
-		SearchAttributesProvider: searchattribute.NewMockProvider(controller),
-		SearchAttributesManager:  searchattribute.NewMockManager(controller),
-		SearchAttributesMapper:   searchattribute.NewMockMapper(controller),
+		MetricsScope:                   scope,
+		ClusterMetadata:                cluster.NewMockMetadata(controller),
+		SearchAttributesProvider:       searchattribute.NewMockProvider(controller),
+		SearchAttributesManager:        searchattribute.NewMockManager(controller),
+		SearchAttributesMapperProvider: searchattribute.NewMockMapperProvider(controller),
 
 		// other common resources
 
@@ -206,6 +208,7 @@ func NewTest(
 		ClientBean:           clientBean,
 		ClientFactory:        clientFactory,
 		ESClient:             esclient.NewMockClient(controller),
+		VisibilityManager:    manager.NewMockVisibilityManager(controller),
 
 		// persistence clients
 
@@ -373,6 +376,11 @@ func (t *Test) GetClientFactory() client.Factory {
 	return t.ClientFactory
 }
 
+// GetVisibilityManager for testing
+func (t *Test) GetVisibilityManager() manager.VisibilityManager {
+	return t.VisibilityManager
+}
+
 // persistence clients
 
 // GetMetadataManager for testing
@@ -431,8 +439,8 @@ func (t *Test) GetSearchAttributesManager() searchattribute.Manager {
 	return t.SearchAttributesManager
 }
 
-func (t *Test) GetSearchAttributesMapper() searchattribute.Mapper {
-	return t.SearchAttributesMapper
+func (t *Test) GetSearchAttributesMapperProvider() searchattribute.MapperProvider {
+	return t.SearchAttributesMapperProvider
 }
 
 func (t *Test) RefreshNamespaceCache() {

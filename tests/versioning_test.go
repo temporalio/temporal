@@ -31,8 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/service/matching"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -45,6 +43,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/tqname"
 )
 
 type versioningIntegSuite struct {
@@ -243,11 +242,12 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	}
 
 	for i := 1; i < partCount; i++ {
-		subPartName, err := matching.NewTaskQueueNameWithPartition(tq, i)
+		subPartName, err := tqname.FromBaseName(tq)
 		s.NoError(err)
+		subPartName = subPartName.WithPartition(i)
 		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
 			Namespace: s.namespace,
-			TaskQueue: subPartName.String(),
+			TaskQueue: subPartName.FullName(),
 		})
 		s.NoError(err)
 		s.NotNil(res)
@@ -265,11 +265,12 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	s.NotNil(res)
 
 	for i := 1; i < partCount; i++ {
-		subPartName, err := matching.NewTaskQueueNameWithPartition(tq, i)
+		subPartName, err := tqname.FromBaseName(tq)
 		s.NoError(err)
+		subPartName = subPartName.WithPartition(i)
 		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
 			Namespace: s.namespace,
-			TaskQueue: subPartName.String(),
+			TaskQueue: subPartName.FullName(),
 		})
 		s.NoError(err)
 		s.NotNil(res)

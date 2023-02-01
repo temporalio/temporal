@@ -135,7 +135,6 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		timeSource:                    args.TimeSource,
 		namespaceRegistry:             args.NamespaceRegistry,
 		saProvider:                    args.SaProvider,
-		saMapper:                      args.SaMapper,
 		clusterMetadata:               args.ClusterMetadata,
 		archivalMetadata:              args.ArchivalMetadata,
 		hostInfoProvider:              args.HostInfoProvider,
@@ -163,10 +162,23 @@ func ConfigProvider(
 	persistenceConfig config.Persistence,
 	esConfig *esclient.Config,
 ) *configs.Config {
+	indexName := ""
+	if persistenceConfig.StandardVisibilityConfigExist() {
+		storeConfig := persistenceConfig.DataStores[persistenceConfig.VisibilityStore]
+		switch {
+		case storeConfig.Cassandra != nil:
+			indexName = storeConfig.Cassandra.Keyspace
+		case storeConfig.SQL != nil:
+			indexName = storeConfig.SQL.DatabaseName
+		}
+	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
+		indexName = esConfig.GetVisibilityIndex()
+	}
 	return configs.NewConfig(dc,
 		persistenceConfig.NumHistoryShards,
 		persistenceConfig.AdvancedVisibilityConfigExist(),
-		esConfig.GetVisibilityIndex())
+		indexName,
+	)
 }
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.ThrottledLoggerRpsFn {
@@ -234,7 +246,7 @@ func VisibilityManagerProvider(
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
@@ -245,7 +257,7 @@ func VisibilityManagerProvider(
 		esClient,
 		esProcessorConfig,
 		saProvider,
-		searchAttributesMapper,
+		searchAttributesMapperProvider,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,

@@ -79,11 +79,10 @@ func (s *contextSuite) SetupTest() {
 	s.timeSource = clock.NewEventTimeSource()
 	shardContext := NewTestContextWithTimeSource(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
 		tests.NewDynamicConfig(),
 		s.timeSource,
 	)

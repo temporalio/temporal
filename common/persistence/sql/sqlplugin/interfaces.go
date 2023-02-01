@@ -110,6 +110,7 @@ type (
 
 		BeginTx(ctx context.Context) (Tx, error)
 		PluginName() string
+		DbName() string
 		IsDupEntryError(err error) bool
 		Close() error
 	}

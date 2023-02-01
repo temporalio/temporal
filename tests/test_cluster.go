@@ -125,8 +125,12 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		switch TestFlags.PersistenceDriver {
 		case mysql.PluginName:
 			ops = persistencetests.GetMySQLTestClusterOption()
+		case mysql.PluginNameV8:
+			ops = persistencetests.GetMySQL8TestClusterOption()
 		case postgresql.PluginName:
 			ops = persistencetests.GetPostgreSQLTestClusterOption()
+		case postgresql.PluginNameV12:
+			ops = persistencetests.GetPostgreSQL12TestClusterOption()
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
@@ -159,13 +163,25 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
 
 	var (
-		esClient esclient.Client
+		indexName string
+		esClient  esclient.Client
 	)
 	if options.ESConfig != nil {
+		// Disable standard to elasticsearch dual visibility
+		pConfig.VisibilityStore = ""
+		indexName = options.ESConfig.GetVisibilityIndex()
 		var err error
 		esClient, err = esclient.NewClient(options.ESConfig, nil, logger)
 		if err != nil {
 			return nil, err
+		}
+	} else {
+		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
+		switch {
+		case storeConfig.Cassandra != nil:
+			indexName = storeConfig.Cassandra.Keyspace
+		case storeConfig.SQL != nil:
+			indexName = storeConfig.SQL.DatabaseName
 		}
 	}
 
@@ -194,7 +210,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	// Actual Elasticsearch fields are created from index template (testdata/es_v7_index_template.json).
 	err := testBase.SearchAttributesManager.SaveSearchAttributes(
 		context.Background(),
-		options.ESConfig.GetVisibilityIndex(),
+		indexName,
 		searchattribute.TestNameTypeMap.Custom(),
 	)
 	if err != nil {

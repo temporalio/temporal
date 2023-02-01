@@ -97,6 +97,7 @@ var Module = fx.Options(
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
+	fx.Provide(SearchAttributeMapperProviderProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
@@ -160,6 +161,20 @@ func HostNameProvider() (HostName, error) {
 
 func TimeSourceProvider() clock.TimeSource {
 	return clock.NewRealTimeSource()
+}
+
+func SearchAttributeMapperProviderProvider(
+	saMapper searchattribute.Mapper,
+	namespaceRegistry namespace.Registry,
+	searchAttributeProvider searchattribute.Provider,
+	persistenceConfig *config.Persistence,
+) searchattribute.MapperProvider {
+	return searchattribute.NewMapperProvider(
+		saMapper,
+		namespaceRegistry,
+		searchAttributeProvider,
+		persistenceConfig.IsSQLVisibilityStore(),
+	)
 }
 
 func SearchAttributeProviderProvider(

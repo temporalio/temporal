@@ -73,11 +73,9 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
 		},
 		tests.NewDynamicConfig(),
 	)

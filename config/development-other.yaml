@@ -44,12 +44,6 @@ services:
       membershipPort: 9933
       bindOnLocalHost: true
 
-  internal-frontend:
-    rpc:
-      grpcPort: 9236
-      membershipPort: 9936
-      bindOnLocalHost: true
-
   matching:
     rpc:
       grpcPort: 9235

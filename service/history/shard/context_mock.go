@@ -164,20 +164,6 @@ func (mr *MockContextMockRecorder) CurrentVectorClock() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentVectorClock", reflect.TypeOf((*MockContext)(nil).CurrentVectorClock))
 }
 
-// DeleteFailoverLevel mocks base method.
-func (m *MockContext) DeleteFailoverLevel(category tasks.Category, failoverID string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteFailoverLevel", category, failoverID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteFailoverLevel indicates an expected call of DeleteFailoverLevel.
-func (mr *MockContextMockRecorder) DeleteFailoverLevel(category, failoverID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteFailoverLevel", reflect.TypeOf((*MockContext)(nil).DeleteFailoverLevel), category, failoverID)
-}
-
 // DeleteWorkflowExecution mocks base method.
 func (m *MockContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime, closeTime *time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error {
 	m.ctrl.T.Helper()
@@ -220,20 +206,6 @@ func (m *MockContext) GenerateTaskIDs(number int) ([]int64, error) {
 func (mr *MockContextMockRecorder) GenerateTaskIDs(number interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateTaskIDs", reflect.TypeOf((*MockContext)(nil).GenerateTaskIDs), number)
-}
-
-// GetAllFailoverLevels mocks base method.
-func (m *MockContext) GetAllFailoverLevels(category tasks.Category) map[string]persistence.FailoverLevel {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllFailoverLevels", category)
-	ret0, _ := ret[0].(map[string]persistence.FailoverLevel)
-	return ret0
-}
-
-// GetAllFailoverLevels indicates an expected call of GetAllFailoverLevels.
-func (mr *MockContextMockRecorder) GetAllFailoverLevels(category interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllFailoverLevels", reflect.TypeOf((*MockContext)(nil).GetAllFailoverLevels), category)
 }
 
 // GetArchivalMetadata mocks base method.
@@ -550,18 +522,18 @@ func (mr *MockContextMockRecorder) GetReplicatorDLQAckLevel(sourceCluster interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicatorDLQAckLevel", reflect.TypeOf((*MockContext)(nil).GetReplicatorDLQAckLevel), sourceCluster)
 }
 
-// GetSearchAttributesMapper mocks base method.
-func (m *MockContext) GetSearchAttributesMapper() searchattribute.Mapper {
+// GetSearchAttributesMapperProvider mocks base method.
+func (m *MockContext) GetSearchAttributesMapperProvider() searchattribute.MapperProvider {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSearchAttributesMapper")
-	ret0, _ := ret[0].(searchattribute.Mapper)
+	ret := m.ctrl.Call(m, "GetSearchAttributesMapperProvider")
+	ret0, _ := ret[0].(searchattribute.MapperProvider)
 	return ret0
 }
 
-// GetSearchAttributesMapper indicates an expected call of GetSearchAttributesMapper.
-func (mr *MockContextMockRecorder) GetSearchAttributesMapper() *gomock.Call {
+// GetSearchAttributesMapperProvider indicates an expected call of GetSearchAttributesMapperProvider.
+func (mr *MockContextMockRecorder) GetSearchAttributesMapperProvider() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributesMapper", reflect.TypeOf((*MockContext)(nil).GetSearchAttributesMapper))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributesMapperProvider", reflect.TypeOf((*MockContext)(nil).GetSearchAttributesMapperProvider))
 }
 
 // GetSearchAttributesProvider mocks base method.
@@ -687,20 +659,6 @@ func (m *MockContext) Unload() {
 func (mr *MockContextMockRecorder) Unload() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unload", reflect.TypeOf((*MockContext)(nil).Unload))
-}
-
-// UpdateFailoverLevel mocks base method.
-func (m *MockContext) UpdateFailoverLevel(category tasks.Category, failoverID string, level persistence.FailoverLevel) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateFailoverLevel", category, failoverID, level)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateFailoverLevel indicates an expected call of UpdateFailoverLevel.
-func (mr *MockContextMockRecorder) UpdateFailoverLevel(category, failoverID, level interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFailoverLevel", reflect.TypeOf((*MockContext)(nil).UpdateFailoverLevel), category, failoverID, level)
 }
 
 // UpdateHandoverNamespace mocks base method.

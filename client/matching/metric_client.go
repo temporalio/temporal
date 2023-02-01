@@ -26,20 +26,19 @@ package matching
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/common/headers"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
-
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqname"
 )
 
 var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
@@ -179,12 +178,12 @@ func (c *metricClient) emitForwardedSourceStats(
 		return
 	}
 
-	isChildPartition := strings.HasPrefix(taskQueue.GetName(), taskQueuePartitionPrefix)
 	switch {
 	case forwardedFrom != "":
 		metricsHandler.Counter(metrics.MatchingClientForwardedCounter.GetMetricName()).Record(1)
 	default:
-		if isChildPartition {
+		_, err := tqname.FromBaseName(taskQueue.GetName())
+		if err != nil {
 			metricsHandler.Counter(metrics.MatchingClientInvalidTaskQueueName.GetMetricName()).Record(1)
 		}
 	}

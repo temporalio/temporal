@@ -111,15 +111,13 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.shardID = rand.Int31()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: s.shardID,
-				RangeId: 1,
-				QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-					tasks.CategoryReplication.ID(): {
-						ClusterAckLevel: map[string]int64{
-							cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
-						},
+		&persistencespb.ShardInfo{
+			ShardId: s.shardID,
+			RangeId: 1,
+			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+				tasks.CategoryReplication.ID(): {
+					ClusterAckLevel: map[string]int64{
+						cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
 					},
 				},
 			},

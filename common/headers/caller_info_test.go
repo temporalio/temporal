@@ -83,6 +83,10 @@ func (s *callerInfoSuite) TestSetCallerType() {
 	ctx = SetCallerType(ctx, CallerTypeAPI)
 	info = GetCallerInfo(ctx)
 	s.Equal(CallerTypeAPI, info.CallerType)
+
+	ctx = SetCallerType(ctx, CallerTypePreemptable)
+	info = GetCallerInfo(ctx)
+	s.Equal(CallerTypePreemptable, info.CallerType)
 }
 
 func (s *callerInfoSuite) TestSetCallOrigin() {

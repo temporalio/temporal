@@ -86,10 +86,6 @@ type (
 		GetReplicatorDLQAckLevel(sourceCluster string) int64
 		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
 
-		UpdateFailoverLevel(category tasks.Category, failoverID string, level persistence.FailoverLevel) error
-		DeleteFailoverLevel(category tasks.Category, failoverID string) error
-		GetAllFailoverLevels(category tasks.Category) map[string]persistence.FailoverLevel
-
 		UpdateRemoteClusterInfo(cluster string, ackTaskID int64, ackTimestamp time.Time)
 
 		GetMaxTaskIDForCurrentRangeID() int64
@@ -123,7 +119,7 @@ type (
 		GetPayloadSerializer() serialization.Serializer
 
 		GetSearchAttributesProvider() searchattribute.Provider
-		GetSearchAttributesMapper() searchattribute.Mapper
+		GetSearchAttributesMapperProvider() searchattribute.MapperProvider
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
 		Unload()

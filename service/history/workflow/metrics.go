@@ -83,12 +83,14 @@ func emitMutableStateStatus(
 func emitWorkflowCompletionStats(
 	metricsHandler metrics.Handler,
 	namespace namespace.Name,
+	namespaceState string,
 	taskQueue string,
 	status enumspb.WorkflowExecutionStatus,
 ) {
 	handler := metricsHandler.WithTags(
 		metrics.OperationTag(metrics.WorkflowCompletionStatsScope),
 		metrics.NamespaceTag(namespace.String()),
+		metrics.NamespaceStateTag(namespaceState),
 		metrics.TaskQueueTag(taskQueue),
 	)
 

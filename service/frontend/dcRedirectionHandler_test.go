@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resourcetest"
 )
 
@@ -56,6 +57,7 @@ type (
 		mockFrontendHandler      *workflowservicemock.MockWorkflowServiceServer
 		mockRemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		mockClusterMetadata      *cluster.MockMetadata
+		mockVisibilityMgr        *manager.MockVisibilityManager
 
 		mockDCRedirectionPolicy *MockDCRedirectionPolicy
 
@@ -102,17 +104,19 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.mockResource = resourcetest.NewTest(s.controller, metrics.Frontend)
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockRemoteFrontendClient = s.mockResource.RemoteFrontendClient
+	s.mockVisibilityMgr = s.mockResource.VisibilityManager
 
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.currentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
-	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopClient(), s.mockResource.GetLogger()), 0, "", false)
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
+	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopClient(), s.mockResource.GetLogger()), 0, false)
 
 	frontendHandlerGRPC := NewWorkflowHandler(
 		s.config,
 		nil,
-		nil,
-		s.mockResource.Logger,
+		s.mockResource.GetVisibilityManager(),
+		s.mockResource.GetLogger(),
 		s.mockResource.GetThrottledLogger(),
 		s.mockResource.GetExecutionManager(),
 		s.mockResource.GetClusterMetadataManager(),
@@ -122,7 +126,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetPayloadSerializer(),
 		s.mockResource.GetNamespaceRegistry(),
-		s.mockResource.GetSearchAttributesMapper(),
+		s.mockResource.GetSearchAttributesMapperProvider(),
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),

@@ -33,7 +33,7 @@ import (
 
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	postgresqlschema "go.temporal.io/server/schema/postgresql"
+	postgresqlschemaV96 "go.temporal.io/server/schema/postgresql/v96"
 )
 
 // ErrDupEntryCode indicates a duplicate primary key i.e. the row already exists,
@@ -110,13 +110,18 @@ func (pdb *db) PluginName() string {
 	return PluginName
 }
 
+// DbName returns the name of the database
+func (pdb *db) DbName() string {
+	return pdb.dbName
+}
+
 // ExpectedVersion returns expected version.
 func (pdb *db) ExpectedVersion() string {
 	switch pdb.dbKind {
 	case sqlplugin.DbKindMain:
-		return postgresqlschema.Version
+		return postgresqlschemaV96.Version
 	case sqlplugin.DbKindVisibility:
-		return postgresqlschema.VisibilityVersion
+		return postgresqlschemaV96.VisibilityVersion
 	default:
 		panic(fmt.Sprintf("unknown db kind %v", pdb.dbKind))
 	}

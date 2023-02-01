@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 const (
@@ -85,8 +86,8 @@ var (
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
 	predefined = map[string]enumspb.IndexedValueType{
-		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
@@ -101,6 +102,37 @@ var (
 		MemoEncoding:      {},
 		Memo:              {},
 		VisibilityTaskKey: {},
+	}
+
+	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{
+		"Bool01":        enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"Bool02":        enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"Bool03":        enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"Datetime01":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"Datetime02":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"Datetime03":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"Double01":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"Double02":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"Double03":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"Int01":         enumspb.INDEXED_VALUE_TYPE_INT,
+		"Int02":         enumspb.INDEXED_VALUE_TYPE_INT,
+		"Int03":         enumspb.INDEXED_VALUE_TYPE_INT,
+		"Keyword01":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword02":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword03":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword04":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword05":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword06":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword07":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword08":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword09":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword10":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Text01":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"Text02":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"Text03":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"KeywordList01": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		"KeywordList02": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		"KeywordList03": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 )
 
@@ -127,4 +159,10 @@ func IsMappable(name string) bool {
 		return false
 	}
 	return true
+}
+
+func GetSqlDbIndexSearchAttributes() *persistencespb.IndexSearchAttributes {
+	return &persistencespb.IndexSearchAttributes{
+		CustomSearchAttributes: sqlDbCustomSearchAttributes,
+	}
 }
