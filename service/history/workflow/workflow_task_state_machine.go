@@ -283,7 +283,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		createWorkflowTaskScheduledEvent = true
 		m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch())
 	}
-	if !createWorkflowTaskScheduledEvent {
+	if m.ms.IsTransientWorkflowTask() {
 		lastWriteVersion, err := m.ms.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
@@ -573,8 +573,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 	}
 
 	var event *historypb.HistoryEvent
-	// Only emit WorkflowTaskFailedEvent if workflow task is not transient.
-	if !m.ms.IsTransientWorkflowTask() {
+	// Only emit WorkflowTaskFailedEvent if workflow task is not transient and not speculative.
+	if !m.ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		event = m.ms.hBuilder.AddWorkflowTaskFailedEvent(
 			attr.ScheduledEventId,
 			attr.StartedEventId,

@@ -310,6 +310,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			if err != nil {
 				return nil, err
 			}
+
+			// TODO (alex-update): if it was speculative WT that failed, and there is nothing but pending updates,
+			//  new WT also should be create as speculative (or not?). Currently, it will be recreated as normal WT.
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: true,
@@ -442,6 +445,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		activityNotStartedCancelled bool
 		newMutableState             workflow.MutableState
 	)
+	// hasPendingUpdates indicates if there are more pending updates (excluding those which are accepted/rejected by this workflow task).
 	hasPendingUpdates := ms.UpdateRegistry().HasPending(request.GetMessages())
 	hasBufferedEvents := ms.HasBufferedEvents()
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {

@@ -35,7 +35,7 @@ import (
 
 type (
 	Registry interface {
-		Add(request *updatepb.Request) (*Update, RemoveFunc)
+		Add(request *updatepb.Request) (*Update, Duplicate, RemoveFunc)
 
 		CreateOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
 
@@ -44,6 +44,8 @@ type (
 
 		Clear()
 	}
+
+	Duplicate bool
 
 	RemoveFunc func()
 
@@ -61,13 +63,17 @@ func NewRegistry() *RegistryImpl {
 	}
 }
 
-func (r *RegistryImpl) Add(request *updatepb.Request) (*Update, RemoveFunc) {
+func (r *RegistryImpl) Add(request *updatepb.Request) (*Update, Duplicate, RemoveFunc) {
 	r.Lock()
 	defer r.Unlock()
 	protocolInstanceID := request.GetMeta().GetUpdateId()
-	upd := newUpdate(request, protocolInstanceID)
+	upd, ok := r.updates[protocolInstanceID]
+	if ok {
+		return upd, true, nil
+	}
+	upd = newUpdate(request, protocolInstanceID)
 	r.updates[upd.protocolInstanceID] = upd
-	return upd, func() { r.remove(protocolInstanceID) }
+	return upd, false, func() { r.remove(protocolInstanceID) }
 }
 
 func (r *RegistryImpl) HasPending(filterMessages []*protocolpb.Message) bool {
@@ -108,28 +114,26 @@ func (r *RegistryImpl) CreateOutgoingMessages(startedEventID int64) ([]*protocol
 	}
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the event before WorkflowTaskStartedEvent.
-	// SDKs are supposed to respect this and process messages (specifically, updates) after event with that ID.
-	// In future, sequencing_id could point to some specific event (specifically, signal) after which the update should be processed.
-	// Currently it is not possible due to buffered events reordering on server and events reordering in some SDKs.
+	//  SDKs are supposed to respect this and process messages (specifically, updates) after event with that ID.
+	//  In the future, sequencing_id could point to some specific event (specifically, signal) after which the update should be processed.
+	//  Currently, it is not possible due to buffered events reordering on server and events reordering in some SDKs.
 	sequencingEventID := startedEventID - 1
 
-	updMessages := make([]*protocolpb.Message, numPendingUpd)
-	i := 0
+	updMessages := make([]*protocolpb.Message, 0, numPendingUpd)
 	for _, upd := range r.updates {
 		if upd.state == statePending {
 			messageBody, err := types.MarshalAny(upd.request)
 			if err != nil {
 				return nil, err
 			}
-			updMessages[i] = &protocolpb.Message{
+			updMessages = append(updMessages, &protocolpb.Message{
 				Id:                 upd.messageID,
 				ProtocolInstanceId: upd.protocolInstanceID,
 				SequencingId: &protocolpb.Message_EventId{
 					EventId: sequencingEventID,
 				},
 				Body: messageBody,
-			}
-			i++
+			})
 		}
 	}
 	return updMessages, nil

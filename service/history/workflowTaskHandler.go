@@ -249,6 +249,15 @@ func (handler *workflowTaskHandlerImpl) handleMessages(
 	ctx context.Context,
 	messages []*protocolpb.Message,
 ) error {
+	if !handler.mutableState.IsWorkflowExecutionRunning() {
+		// Workflow might get completed within the same WT after processing corresponding command.
+		// Currently, messages are used to transport updates only and updates should not be processed after workflow is completed.
+		// Therefore, just ignore all messages.
+		// If later, there are messages which can be processed after workflow is completed,
+		// then this check should be moved down to specific message handler.
+		return nil
+	}
+
 	if err := handler.attrValidator.validateMessages(
 		messages,
 	); err != nil {

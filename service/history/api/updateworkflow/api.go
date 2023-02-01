@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -76,36 +75,36 @@ func Invoke(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
-	upd, removeFn := ms.UpdateRegistry().Add(req.GetRequest().GetRequest())
-	defer removeFn()
+	upd, duplicate, removeFn := ms.UpdateRegistry().Add(req.GetRequest().GetRequest())
+	if removeFn != nil {
+		defer removeFn()
+	}
 
-	if !ms.HasPendingWorkflowTask() {
+	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
+	// If WT has already started, new speculative WT will be created when started WT completes.
+	// If update is duplicate, then WT for this update was already created.
+	createNewWorkflowTask := !ms.HasPendingWorkflowTask() && duplicate == false
+
+	if createNewWorkflowTask {
 		// This will try not to add an event but will create speculative WT in mutable state.
 		// Task generation will be skipped if WT is created as speculative.
 		wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 		if err != nil {
 			return nil, err
 		}
-		// If WT was created as speculative, then workflow task needs to be explicitly added to matching.
-		if wt.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			// It is important to release workflow lock before calling matching.
-			weCtx.GetReleaseFn()(nil)
-			err = addWorkflowTaskToMatching(ctx, shardCtx, ms, matchingClient, wt, namespace.ID(req.GetNamespaceId()))
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// If there were buffered events, WT was created as normal and transfer task was generated to
-			// add WT to matching. Mutable state and task need to be persisted.
-			err = weCtx.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardCtx.GetTimeSource().Now())
-			if err != nil {
-				return nil, err
-			}
-			weCtx.GetReleaseFn()(nil)
+		if wt.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			// This should never happen because WT is created as normal (despite speculative is requested)
+			// only if there were buffered events and because there were no pending WT, there can't be buffered events.
+			return nil, consts.ErrWorkflowTaskStateInconsistent
+		}
+
+		// It is important to release workflow lock before calling matching.
+		weCtx.GetReleaseFn()(nil)
+		err = addWorkflowTaskToMatching(ctx, shardCtx, ms, matchingClient, wt, namespace.ID(req.GetNamespaceId()))
+		if err != nil {
+			return nil, err
 		}
 	} else {
-		// If WT is scheduled, but not started, updates will be attached to it.
-		// If WT has already started, new speculative WT will be created when started WT completes.
 		weCtx.GetReleaseFn()(nil)
 	}
 
@@ -147,7 +146,12 @@ func addWorkflowTaskToMatching(
 	}
 
 	wfKey := ms.GetWorkflowKey()
-	_, err := matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+	clock, err := shardCtx.NewVectorClock()
+	if err != nil {
+		return err
+	}
+
+	_, err = matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: nsID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wfKey.WorkflowID,
@@ -156,8 +160,11 @@ func addWorkflowTaskToMatching(
 		TaskQueue:              task.TaskQueue,
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: taskScheduleToStartTimeout,
-		Clock:                  vclock.NewVectorClock(shardCtx.GetClusterMetadata().GetClusterID(), shardCtx.GetShardID(), task.ScheduledEventID),
+		Clock:                  clock,
 	})
+	if err != nil {
+		return err
+	}
 
-	return err
+	return nil
 }
