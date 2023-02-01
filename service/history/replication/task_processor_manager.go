@@ -174,7 +174,11 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 		if clusterName == currentClusterName {
 			continue
 		}
-		sourceShardIds := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
+		sourceShardIds, err := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
+		if err != nil {
+			r.logger.Error("Failed to get source shard id list", tag.Error(err), tag.ClusterName(clusterName))
+			continue
+		}
 		for _, sourceShardId := range sourceShardIds {
 			perShardTaskProcessorKey := fmt.Sprintf(clusterCallbackKey, clusterName, sourceShardId)
 			// The metadata triggers an update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address

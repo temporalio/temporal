@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"errors"
 	"fmt"
 
 	"go.temporal.io/server/common/cluster"
@@ -32,7 +33,7 @@ import (
 
 type (
 	pollerManager interface {
-		getSourceClusterShardIDs(sourceClusterName string) []int32
+		getSourceClusterShardIDs(sourceClusterName string) ([]int32, error)
 	}
 
 	pollerManagerImpl struct {
@@ -53,18 +54,28 @@ func newPollerManager(
 	}
 }
 
-func (p pollerManagerImpl) getSourceClusterShardIDs(sourceClusterName string) []int32 {
+func (p pollerManagerImpl) getSourceClusterShardIDs(sourceClusterName string) ([]int32, error) {
 	currentCluster := p.clusterMetadata.GetCurrentClusterName()
 	allClusters := p.clusterMetadata.GetAllClusterInfo()
 	currentClusterInfo, ok := allClusters[currentCluster]
 	if !ok {
-		panic("Cannot get current cluster info from cluster metadata cache")
+		return nil, errors.New("cannot get current cluster info from cluster metadata cache")
 	}
 	remoteClusterInfo, ok := allClusters[sourceClusterName]
 	if !ok {
-		panic(fmt.Sprintf("Cannot get source cluster %s info from cluster metadata cache", sourceClusterName))
+		return nil, errors.New(fmt.Sprintf("cannot get source cluster %s info from cluster metadata cache", sourceClusterName))
 	}
-	return generateShardIDs(p.currentShardId, currentClusterInfo.ShardCount, remoteClusterInfo.ShardCount)
+
+	// remoteShardCount > localShardCount, replication poller will poll from multiple remote shard.
+	// The remote shard count and local shard count must be multiples.
+	large, small := remoteClusterInfo.ShardCount, currentClusterInfo.ShardCount
+	if small > large {
+		large, small = small, large
+	}
+	if large%small != 0 {
+		return nil, errors.New(fmt.Sprintf("remote shard count %d and local shard count %d are not multiples.", remoteClusterInfo.ShardCount, currentClusterInfo.ShardCount))
+	}
+	return generateShardIDs(p.currentShardId, currentClusterInfo.ShardCount, remoteClusterInfo.ShardCount), nil
 }
 
 func generateShardIDs(localShardId int32, localShardCount int32, remoteShardCount int32) []int32 {
@@ -76,11 +87,6 @@ func generateShardIDs(localShardId int32, localShardCount int32, remoteShardCoun
 		return pollingShards
 	}
 
-	// remoteShardCount > localShardCount, replication poller will poll from multiple remote shard.
-	// The remote shard count and local shard count must be multiples.
-	if remoteShardCount%localShardCount != 0 {
-		panic(fmt.Sprintf("Remote shard count %d and local shard count %d are not multiples.", remoteShardCount, localShardCount))
-	}
 	for i := localShardId; i <= remoteShardCount; i += localShardCount {
 		pollingShards = append(pollingShards, i)
 	}
