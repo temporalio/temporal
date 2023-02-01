@@ -182,8 +182,8 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 		}
 		for _, processor := range r.taskProcessors[clusterName] {
 			processor.Stop()
-			delete(r.taskProcessors, clusterName)
 		}
+		delete(r.taskProcessors, clusterName)
 	}
 
 	// Case 2 and Case 3
