@@ -843,8 +843,8 @@ go.opentelemetry.io/proto/otlp v0.19.0/go.mod h1:H7XAot3MsfNsj7EXtrA2q5xSNQ10UqI
 go.temporal.io/api v1.15.1-0.20230125004443-42737e40d339/go.mod h1:dbi2T2T/PVw0jOHF0pdc8XFDFGQoMQeNq7F0ClTKwlU=
 go.temporal.io/api v1.15.1-0.20230130221739-35f91d43296f h1:wNX+g/F7lQWpzftw/Su3T9a1guXB04zqaX0lnHmPQLI=
 go.temporal.io/api v1.15.1-0.20230130221739-35f91d43296f/go.mod h1:u3qLbaVTffmcZQbf9ueB+16LKmhkftH79SJOV517MDk=
-go.temporal.io/sdk v1.20.1-0.20230125015921-1fe6824cedfe h1:mlyDvuKMuxCTcEgmeZs+Qd/x69jyT/Jwq1ULhJGfPbU=
-go.temporal.io/sdk v1.20.1-0.20230125015921-1fe6824cedfe/go.mod h1:KtPAB/8+lVNm0aP0W5wLCyxXfHoQJbYNfM4+SfVnsJc=
+go.temporal.io/sdk v1.20.1-0.20230131233224-093eabe1f8d1 h1:gj+p52mx2cq1UCOfHvxK2GtEZO6/qAhltKGLKbJe+qY=
+go.temporal.io/sdk v1.20.1-0.20230131233224-093eabe1f8d1/go.mod h1:KtPAB/8+lVNm0aP0W5wLCyxXfHoQJbYNfM4+SfVnsJc=
 go.temporal.io/version v0.3.0 h1:dMrei9l9NyHt8nG6EB8vAwDLLTwx2SvRyucCSumAiig=
 go.temporal.io/version v0.3.0/go.mod h1:UA9S8/1LaKYae6TyD9NaPMJTZb911JcbqghI2CBSP78=
 go.uber.org/atomic v1.4.0/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=
