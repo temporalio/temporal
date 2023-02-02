@@ -27,8 +27,10 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"golang.org/x/exp/slices"
@@ -165,8 +167,6 @@ func SchedulerWorkflow(ctx workflow.Context, args *schedspb.StartScheduleArgs) e
 }
 
 func (s *scheduler) run() error {
-	s.logger.Debug("Schedule starting", "schedule", s.Schedule)
-
 	s.updateTweakables()
 	s.ensureFields()
 	s.compileSpec()
@@ -179,7 +179,13 @@ func (s *scheduler) run() error {
 	}
 
 	if s.State.LastProcessedTime == nil {
-		s.logger.Debug("Initializing internal state")
+		// log these as json since it's more readable than the Go representation
+		var m jsonpb.Marshaler
+		var specJson, policiesJson strings.Builder
+		_ = m.Marshal(&specJson, s.Schedule.Spec)
+		_ = m.Marshal(&policiesJson, s.Schedule.Policies)
+		s.logger.Info("Starting schedule", "spec", specJson.String(), "policies", policiesJson.String())
+
 		s.State.LastProcessedTime = timestamp.TimePtr(s.now())
 		s.State.ConflictToken = InitialConflictToken
 		s.Info.CreateTime = s.State.LastProcessedTime
@@ -328,7 +334,7 @@ func (s *scheduler) processTimeRange(
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
 ) time.Duration {
-	s.logger.Debug("processTimeRange", "t1", t1, "t2", t2, "overlapPolicy", overlapPolicy, "manual", manual)
+	s.logger.Debug("processTimeRange", "t1", t1, "t2", t2, "overlap-policy", overlapPolicy, "manual", manual)
 
 	if s.cspec == nil {
 		return invalidDuration
@@ -419,7 +425,7 @@ func (s *scheduler) sleep(nextSleep time.Duration) {
 		sel.AddFuture(s.watchingFuture, s.wfWatcherReturned)
 	}
 
-	s.logger.Debug("sleeping", "nextSleep", nextSleep, "watching", s.watchingFuture != nil)
+	s.logger.Debug("sleeping", "next-sleep", nextSleep, "watching", s.watchingFuture != nil)
 	sel.Select(s.ctx)
 	for sel.HasPending() {
 		sel.Select(s.ctx)
@@ -681,9 +687,9 @@ func (s *scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPo
 }
 
 func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
-	s.logger.Debug("addStart", "nominal", nominalTime, "actual", actualTime, "overlapPolicy", overlapPolicy, "manual", manual)
+	s.logger.Debug("addStart", "start-time", nominalTime, "actual-start-time", actualTime, "overlap-policy", overlapPolicy, "manual", manual)
 	if s.tweakables.MaxBufferSize > 0 && len(s.State.BufferedStarts) >= s.tweakables.MaxBufferSize {
-		s.logger.Error("Buffer too large")
+		s.logger.Warn("Buffer too large", "start-time", nominalTime, "overlap-policy", overlapPolicy, "manual", manual)
 		s.metrics.Counter(metrics.ScheduleBufferOverruns.GetMetricName()).Inc(1)
 		return
 	}
@@ -702,7 +708,7 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 //
 //nolint:revive
 func (s *scheduler) processBuffer() bool {
-	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.State.NeedRefresh)
+	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "need-refresh", s.State.NeedRefresh)
 
 	// TODO: consider doing this always and removing needRefresh? we only end up here without
 	// needRefresh in the case of update, or patch without an immediate run, so it's not much
