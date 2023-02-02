@@ -208,6 +208,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_AcceptComplete()
 						Input: &updatepb.Input{Name: "update_handler", Args: payloads.EncodeString("update args")},
 					},
 				})
+				s.NoError(err1)
 				updateResultCh <- UpdateResult{Response: updateResponse, Err: err1}
 			}
 			go updateWorkflowFn()
@@ -402,6 +403,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewWorkflowTask_AcceptComplete() {
 				},
 			},
 		})
+		s.NoError(err1)
 		updateResultCh <- UpdateResult{Response: updateResponse, Err: err1}
 	}
 	go updateWorkflowFn()
@@ -560,6 +562,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_Reject() {
 				},
 			},
 		})
+		s.NoError(err1)
 		updateResultCh <- UpdateResult{Response: updateResponse, Err: err1}
 	}
 	go updateWorkflowFn()
@@ -732,6 +735,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewWorkflowTask_Reject() {
 				},
 			},
 		})
+		s.NoError(err1)
 		updateResultCh <- UpdateResult{Response: updateResponse, Err: err1}
 	}
 	go updateWorkflowFn()
@@ -969,6 +973,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_1stAccept_2ndAcc
 				},
 			},
 		})
+		s.NoError(err1)
 		ch <- UpdateResult{Response: updateResponse, Err: err1}
 	}
 
@@ -1246,6 +1251,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_1stAccept_2ndRej
 				},
 			},
 		})
+		s.NoError(err1)
 		ch <- UpdateResult{Response: updateResponse, Err: err1}
 	}
 
