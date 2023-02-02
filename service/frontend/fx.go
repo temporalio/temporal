@@ -252,7 +252,6 @@ func RedirectionInterceptorProvider(
 	clientBean client.Bean,
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
-	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 ) *RedirectionInterceptor {
 	return NewRedirectionInterceptor(
@@ -263,7 +262,6 @@ func RedirectionInterceptorProvider(
 		clientBean,
 		metricsHandler,
 		timeSource,
-		namespaceRegistry,
 		clusterMetadata,
 	)
 }

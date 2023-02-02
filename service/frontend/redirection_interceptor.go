@@ -45,7 +45,7 @@ import (
 var (
 	dcRedirectionMetricsPrefix = "DCRedirection"
 
-	localAPIMetrics = map[string]respAllocFn{
+	localAPIResults = map[string]respAllocFn{
 		// Namespace APIs, namespace APIs does not require redirection
 		"DeprecateNamespace": func() interface{} { return new(workflowservice.DeprecateNamespaceResponse) },
 		"DescribeNamespace":  func() interface{} { return new(workflowservice.DescribeNamespaceResponse) },
@@ -59,7 +59,7 @@ var (
 		"GetSystemInfo":       func() interface{} { return new(workflowservice.GetSystemInfoResponse) },
 	}
 
-	globalAPIMetrics = map[string]respAllocFn{
+	globalAPIResults = map[string]respAllocFn{
 		"DescribeTaskQueue":                  func() interface{} { return new(workflowservice.DescribeTaskQueueResponse) },
 		"DescribeWorkflowExecution":          func() interface{} { return new(workflowservice.DescribeWorkflowExecutionResponse) },
 		"GetWorkflowExecutionHistory":        func() interface{} { return new(workflowservice.GetWorkflowExecutionHistoryResponse) },
@@ -137,13 +137,12 @@ func NewRedirectionInterceptor(
 	clientBean client.Bean,
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
-	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 ) *RedirectionInterceptor {
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
 		clusterMetadata,
 		configuration,
-		namespaceRegistry,
+		namespaceCache,
 		policy,
 	)
 
@@ -170,10 +169,10 @@ func (i *RedirectionInterceptor) Intercept(
 	defer log.CapturePanic(i.logger, &retError)
 
 	_, methodName := interceptor.SplitMethodName(info.FullMethod)
-	if _, ok := localAPIMetrics[methodName]; ok {
+	if _, ok := localAPIResults[methodName]; ok {
 		return i.handleLocalAPIInvocation(ctx, req, handler, methodName)
 	}
-	if respAllocFn, ok := globalAPIMetrics[methodName]; ok {
+	if respAllocFn, ok := globalAPIResults[methodName]; ok {
 		namespaceName := interceptor.GetNamespace(i.namespaceCache, req)
 		return i.handleRedirectAPIInvocation(ctx, req, info, handler, methodName, respAllocFn, namespaceName)
 	}

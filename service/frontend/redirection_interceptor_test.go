@@ -25,13 +25,27 @@
 package frontend
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -39,7 +53,12 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller *gomock.Controller
+		controller      *gomock.Controller
+		namespaceCache  *namespace.MockRegistry
+		clientBean      *client.MockBean
+		clusterMetadata *cluster.MockMetadata
+
+		redirector *RedirectionInterceptor
 	}
 )
 
@@ -56,12 +75,112 @@ func (s *redirectionInterceptorSuite) TearDownSuite() {
 
 func (s *redirectionInterceptorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.controller = gomock.NewController(s.T())
+	s.namespaceCache = namespace.NewMockRegistry(s.controller)
+	s.clientBean = client.NewMockBean(s.controller)
+	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
+
+	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	s.redirector = NewRedirectionInterceptor(
+		NewConfig(
+			dynamicconfig.NewNoopCollection(),
+			1,
+			false,
+		),
+		s.namespaceCache,
+		config.DCRedirectionPolicy{
+			Policy: DCRedirectionPolicyAllAPIsForwarding,
+		},
+		log.NewNoopLogger(),
+		s.clientBean,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
+		s.clusterMetadata,
+	)
 }
 
 func (s *redirectionInterceptorSuite) TearDownTest() {
+	s.controller.Finish()
 }
 
-func (s *redirectionInterceptorSuite) TestAPIMapping() {
+func (s *redirectionInterceptorSuite) TestLocalAPI() {
+	apis := make(map[string]struct{})
+	for api := range localAPIResults {
+		apis[api] = struct{}{}
+	}
+	s.Equal(map[string]struct{}{
+		"DeprecateNamespace": {},
+		"DescribeNamespace":  {},
+		"ListNamespaces":     {},
+		"RegisterNamespace":  {},
+		"UpdateNamespace":    {},
+
+		"GetSearchAttributes": {},
+		"GetClusterInfo":      {},
+		"GetSystemInfo":       {},
+	}, apis)
+}
+
+func (s *redirectionInterceptorSuite) TestGlobalAPI() {
+	apis := make(map[string]struct{})
+	for api := range globalAPIResults {
+		apis[api] = struct{}{}
+	}
+	s.Equal(map[string]struct{}{
+		"DescribeTaskQueue":                  {},
+		"DescribeWorkflowExecution":          {},
+		"GetWorkflowExecutionHistory":        {},
+		"GetWorkflowExecutionHistoryReverse": {},
+		"ListArchivedWorkflowExecutions":     {},
+		"ListClosedWorkflowExecutions":       {},
+		"ListOpenWorkflowExecutions":         {},
+		"ListWorkflowExecutions":             {},
+		"ScanWorkflowExecutions":             {},
+		"CountWorkflowExecutions":            {},
+		"PollActivityTaskQueue":              {},
+		"PollWorkflowTaskQueue":              {},
+		"QueryWorkflow":                      {},
+		"RecordActivityTaskHeartbeat":        {},
+		"RecordActivityTaskHeartbeatById":    {},
+		"RequestCancelWorkflowExecution":     {},
+		"ResetStickyTaskQueue":               {},
+		"ResetWorkflowExecution":             {},
+		"RespondActivityTaskCanceled":        {},
+		"RespondActivityTaskCanceledById":    {},
+		"RespondActivityTaskCompleted":       {},
+		"RespondActivityTaskCompletedById":   {},
+		"RespondActivityTaskFailed":          {},
+		"RespondActivityTaskFailedById":      {},
+		"RespondWorkflowTaskCompleted":       {},
+		"RespondWorkflowTaskFailed":          {},
+		"RespondQueryTaskCompleted":          {},
+		"SignalWithStartWorkflowExecution":   {},
+		"SignalWorkflowExecution":            {},
+		"StartWorkflowExecution":             {},
+		"UpdateWorkflowExecution":            {},
+		"TerminateWorkflowExecution":         {},
+		"DeleteWorkflowExecution":            {},
+		"ListTaskQueuePartitions":            {},
+
+		"CreateSchedule":              {},
+		"DescribeSchedule":            {},
+		"UpdateSchedule":              {},
+		"PatchSchedule":               {},
+		"DeleteSchedule":              {},
+		"ListSchedules":               {},
+		"ListScheduleMatchingTimes":   {},
+		"UpdateWorkerBuildIdOrdering": {},
+		"GetWorkerBuildIdOrdering":    {},
+
+		"StartBatchOperation":    {},
+		"StopBatchOperation":     {},
+		"DescribeBatchOperation": {},
+		"ListBatchOperations":    {},
+	}, apis)
+}
+
+func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	var service workflowservice.WorkflowServiceServer
 	t := reflect.TypeOf(&service).Elem()
 	expectedAPIs := make(map[string]interface{}, t.NumMethod())
@@ -70,11 +189,144 @@ func (s *redirectionInterceptorSuite) TestAPIMapping() {
 	}
 
 	actualAPIs := make(map[string]interface{})
-	for api, respAllocFn := range localAPIMetrics {
+	for api, respAllocFn := range localAPIResults {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
-	for api, respAllocFn := range globalAPIMetrics {
+	for api, respAllocFn := range globalAPIResults {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
 	s.Equal(expectedAPIs, actualAPIs)
+}
+
+func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation() {
+	ctx := context.Background()
+	req := &workflowservice.RegisterNamespaceRequest{}
+	functionInvoked := false
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		functionInvoked = true
+		return &workflowservice.RegisterNamespaceResponse{}, nil
+	}
+	methodName := "RegisterNamespace"
+
+	resp, err := s.redirector.handleLocalAPIInvocation(
+		ctx,
+		req,
+		handler,
+		methodName,
+	)
+	s.NoError(err)
+	s.IsType(&workflowservice.RegisterNamespaceResponse{}, resp)
+	s.True(functionInvoked)
+}
+
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Local() {
+	ctx := context.Background()
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
+	info := &grpc.UnaryServerInfo{}
+	functionInvoked := false
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		functionInvoked = true
+		return &workflowservice.SignalWithStartWorkflowExecutionResponse{}, nil
+	}
+	namespaceName := namespace.Name("(╯°Д°)╯ ┻━┻")
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
+	methodName := "SignalWithStartWorkflowExecution"
+
+	resp, err := s.redirector.handleRedirectAPIInvocation(
+		ctx,
+		req,
+		info,
+		handler,
+		methodName,
+		globalAPIResults[methodName],
+		namespaceName,
+	)
+	s.NoError(err)
+	s.IsType(&workflowservice.SignalWithStartWorkflowExecutionResponse{}, resp)
+	s.True(functionInvoked)
+}
+
+func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation_Redirect() {
+	ctx := context.Background()
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
+	info := &grpc.UnaryServerInfo{
+		FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution",
+	}
+	namespaceName := namespace.Name("(╯°Д°)╯ ┻━┻")
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
+	methodName := "SignalWithStartWorkflowExecution"
+
+	grpcConn := &mockClientConnInterface{
+		Suite:          &s.Suite,
+		targetMethod:   info.FullMethod,
+		targetResponse: &workflowservice.SignalWithStartWorkflowExecutionResponse{},
+	}
+	s.clientBean.EXPECT().GetRemoteFrontendClient(cluster.TestAlternativeClusterName).Return(grpcConn, nil, nil).Times(1)
+
+	resp, err := s.redirector.handleRedirectAPIInvocation(
+		ctx,
+		req,
+		info,
+		nil,
+		methodName,
+		globalAPIResults[methodName],
+		namespaceName,
+	)
+	s.NoError(err)
+	s.IsType(&workflowservice.SignalWithStartWorkflowExecutionResponse{}, resp)
+}
+
+type (
+	mockClientConnInterface struct {
+		*suite.Suite
+		targetMethod   string
+		targetResponse interface{}
+	}
+)
+
+var _ grpc.ClientConnInterface = (*mockClientConnInterface)(nil)
+
+func (s *mockClientConnInterface) Invoke(
+	_ context.Context,
+	method string,
+	_ interface{},
+	reply interface{},
+	_ ...grpc.CallOption,
+) error {
+	s.Equal(s.targetMethod, method)
+	s.Equal(s.targetResponse, reply)
+	return nil
+}
+
+func (s *mockClientConnInterface) NewStream(
+	_ context.Context,
+	_ *grpc.StreamDesc,
+	_ string,
+	_ ...grpc.CallOption,
+) (grpc.ClientStream, error) {
+	panic("implement me")
 }
