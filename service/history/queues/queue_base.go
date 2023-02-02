@@ -130,6 +130,7 @@ func newQueueBase(
 	executor Executor,
 	options *Options,
 	hostReaderRateLimiter quotas.RequestRateLimiter,
+	completionFn ReaderCompletionFn,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *queueBase {
@@ -196,6 +197,7 @@ func newQueueBase(
 			timeSource,
 			readerRateLimiter,
 			monitor,
+			completionFn,
 			logger,
 			metricsHandler,
 		)
@@ -281,7 +283,7 @@ func (p *queueBase) FailoverNamespace(
 	p.rescheduler.Reschedule(namespaceID)
 }
 
-func (p *queueBase) processNewRange() error {
+func (p *queueBase) processNewRange() {
 	var newMaxKey tasks.Key
 	switch categoryType := p.category.Type(); categoryType {
 	case tasks.CategoryTypeImmediate:
@@ -289,14 +291,15 @@ func (p *queueBase) processNewRange() error {
 	case tasks.CategoryTypeScheduled:
 		var err error
 		if newMaxKey, err = p.shard.UpdateScheduledQueueExclusiveHighReadWatermark(); err != nil {
-			return err
+			p.logger.Error("Unable to process new range", tag.Error(err))
+			return
 		}
 	default:
 		panic(fmt.Sprintf("Unknown task category type: %v", categoryType.String()))
 	}
 
 	if !p.nonReadableScope.CanSplitByRange(newMaxKey) {
-		return nil
+		return
 	}
 
 	var newReadScope Scope
@@ -311,7 +314,7 @@ func (p *queueBase) processNewRange() error {
 	reader, ok := p.readerGroup.ReaderByID(DefaultReaderId)
 	if !ok {
 		p.readerGroup.NewReader(DefaultReaderId, newSlice)
-		return nil
+		return
 	}
 
 	if now := p.timeSource.Now(); now.After(p.nextForceNewSliceTime) {
@@ -320,7 +323,6 @@ func (p *queueBase) processNewRange() error {
 	} else {
 		reader.MergeSlices(newSlice)
 	}
-	return nil
 }
 
 func (p *queueBase) checkpoint() {

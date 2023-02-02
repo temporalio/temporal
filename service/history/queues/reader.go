@@ -76,6 +76,8 @@ type (
 
 	SlicePredicate func(s Slice) bool
 
+	ReaderCompletionFn func(readerID int32)
+
 	ReaderImpl struct {
 		sync.Mutex
 
@@ -86,6 +88,7 @@ type (
 		timeSource     clock.TimeSource
 		ratelimiter    quotas.RequestRateLimiter
 		monitor        Monitor
+		completionFn   ReaderCompletionFn
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
@@ -106,6 +109,10 @@ type (
 	}
 )
 
+var (
+	NoopReaderCompletionFn = func(_ int32) {}
+)
+
 func NewReader(
 	readerID int32,
 	slices []Slice,
@@ -115,6 +122,7 @@ func NewReader(
 	timeSource clock.TimeSource,
 	ratelimiter quotas.RequestRateLimiter,
 	monitor Monitor,
+	completionFn ReaderCompletionFn,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *ReaderImpl {
@@ -134,6 +142,7 @@ func NewReader(
 		timeSource:     timeSource,
 		ratelimiter:    ratelimiter,
 		monitor:        monitor,
+		completionFn:   completionFn,
 		logger:         log.With(logger, tag.QueueReaderID(readerID)),
 		metricsHandler: metricsHandler,
 
@@ -458,6 +467,9 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	if r.nextReadSlice = r.nextReadSlice.Next(); r.nextReadSlice != nil {
 		r.notify()
 	}
+
+	// no more task to load, trigger completion callback
+	r.completionFn(r.readerID)
 }
 
 func (r *ReaderImpl) resetNextReadSliceLocked() {
