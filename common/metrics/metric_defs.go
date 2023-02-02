@@ -1464,7 +1464,14 @@ var (
 	MessageTypeCompleteWorkflowExecutionUpdateCounter = NewCounterDef("complete_workflow_update_message")
 	MessageTypeRejectWorkflowExecutionUpdateCounter   = NewCounterDef("reject_workflow_update_message")
 
-	ActivityEagerExecutionCounter                  = NewCounterDef("activity_eager_execution")
+	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
+	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
+	WorkflowEagerExecutionCounter = NewCounterDef("workflow_eager_execution")
+	// WorkflowEagerExecutionDeniedCounter is emitted any time eager workflow start is requested and the serer fell back
+	// to standard dispatch.
+	// Timeouts and failures are not counted in this metric.
+	// This metric has a "reason" tag attached to it to understand why eager start was denied.
+	WorkflowEagerExecutionDeniedCounter            = NewCounterDef("workflow_eager_execution_denied")
 	EmptyCompletionCommandsCounter                 = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter              = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                     = NewCounterDef("failed_workflow_tasks")

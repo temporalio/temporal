@@ -407,7 +407,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	if err != nil {
 		return nil, err
 	}
-	return &workflowservice.StartWorkflowExecutionResponse{RunId: resp.GetRunId()}, nil
+	return &workflowservice.StartWorkflowExecutionResponse{RunId: resp.GetRunId(), EagerWorkflowTask: resp.GetEagerWorkflowTask()}, nil
 }
 
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if specified workflow
@@ -2866,6 +2866,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			SupportsSchedules:               true,
 			EncodedFailureAttributes:        true,
 			UpsertMemo:                      true,
+			EagerWorkflowStart:              true,
 		},
 	}, nil
 }

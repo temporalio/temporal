@@ -87,8 +87,11 @@ const (
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery = "system.enableStickyQuery"
-	// EnableActivityEagerExecution indicates if acitivty eager execution is enabled per namespace
+	// EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace
 	EnableActivityEagerExecution = "system.enableActivityEagerExecution"
+	// EnableEagerWorkflowStart toggles "eager workflow start" - returning the first workflow task inline in the
+	// response to a StartWorkflowExecution request and skipping the trip through matching.
+	EnableEagerWorkflowStart = "system.enableEagerWorkflowStart"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 

@@ -352,17 +352,18 @@ func (mr *MockMutableStateMockRecorder) AddFailWorkflowEvent(arg0, arg1, arg2, a
 }
 
 // AddFirstWorkflowTaskScheduled mocks base method.
-func (m *MockMutableState) AddFirstWorkflowTaskScheduled(arg0 *v13.HistoryEvent) error {
+func (m *MockMutableState) AddFirstWorkflowTaskScheduled(event *v13.HistoryEvent, bypassTaskGeneration bool) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddFirstWorkflowTaskScheduled", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "AddFirstWorkflowTaskScheduled", event, bypassTaskGeneration)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // AddFirstWorkflowTaskScheduled indicates an expected call of AddFirstWorkflowTaskScheduled.
-func (mr *MockMutableStateMockRecorder) AddFirstWorkflowTaskScheduled(arg0 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddFirstWorkflowTaskScheduled(event, bypassTaskGeneration interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFirstWorkflowTaskScheduled", reflect.TypeOf((*MockMutableState)(nil).AddFirstWorkflowTaskScheduled), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFirstWorkflowTaskScheduled", reflect.TypeOf((*MockMutableState)(nil).AddFirstWorkflowTaskScheduled), event, bypassTaskGeneration)
 }
 
 // AddRecordMarkerEvent mocks base method.
