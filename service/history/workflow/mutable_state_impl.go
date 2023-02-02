@@ -1726,7 +1726,7 @@ func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
 ) (int64, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := ms.checkMutability(opTag); err != nil {
-		return 0, err
+		return common.EmptyEventID, err
 	}
 	return ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
 }

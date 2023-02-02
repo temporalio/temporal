@@ -530,9 +530,9 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	}
 	if response.Clock == nil {
 		response.Clock, err = shardContext.NewVectorClock()
-	}
-	if err != nil {
-		return nil, h.convertError(err)
+		if err != nil {
+			return nil, h.convertError(err)
+		}
 	}
 	return response, nil
 }

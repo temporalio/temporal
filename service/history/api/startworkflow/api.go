@@ -26,6 +26,7 @@ package startworkflow
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -46,7 +47,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
-type eagerStartDeniedReason string
+type eagerStartDeniedReason metrics.ReasonString
 
 const (
 	eagerStartDeniedReasonDynamicConfigDisabled    eagerStartDeniedReason = "dynamic_config_disabled"
@@ -63,9 +64,9 @@ type Starter struct {
 	namespace                  *namespace.Namespace
 }
 
-// creationContext is a container for all information obtained from creating the uncommitted execution.
+// creationParams is a container for all information obtained from creating the uncommitted execution.
 // The information is later used to create a new execution and handle conflicts.
-type creationContext struct {
+type creationParams struct {
 	workflowID           string
 	runID                string
 	workflowContext      api.WorkflowContext
@@ -142,7 +143,7 @@ func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
 		metrics.NamespaceTag(s.namespace.Name().String()),
 		metrics.TaskQueueTag(s.request.StartRequest.TaskQueue.Name),
 		metrics.WorkflowTypeTag(s.request.StartRequest.WorkflowType.Name),
-		metrics.ReasonTag(string(reason)),
+		metrics.ReasonTag(metrics.ReasonString(reason)),
 	)
 }
 
@@ -161,25 +162,25 @@ func (s *Starter) Invoke(
 
 	runID := uuid.NewString()
 
-	creationCtx, err := s.createNewMutableState(ctx, request.GetWorkflowId(), runID)
+	creationParams, err := s.createNewMutableState(ctx, request.GetWorkflowId(), runID)
 	if err != nil {
 		return nil, err
 	}
-	err = s.createBrandNew(ctx, creationCtx)
+	err = s.createBrandNew(ctx, creationParams)
 	if err == nil {
-		return s.generateResponse(creationCtx.runID, creationCtx.workflowTaskInfo, extractHistoryEvents(creationCtx.workflowEventBatches))
+		return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
 	}
-	t, ok := err.(*persistence.CurrentWorkflowConditionFailedError)
-	if !ok {
+	var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
+	if !errors.As(err, &currentWorkflowConditionFailedError) {
 		return nil, err
 	}
 	// The history and mutable state we generated above should be deleted by a background process.
-	return s.handleConflict(ctx, creationCtx, t)
+	return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
 }
 
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
-func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, runID string) (*creationContext, error) {
+func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, runID string) (*creationParams, error) {
 	workflowContext, err := api.NewWorkflowWithSignal(
 		ctx,
 		s.shardCtx,
@@ -210,7 +211,7 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	return &creationContext{
+	return &creationParams{
 		workflowID:           workflowID,
 		runID:                runID,
 		workflowContext:      workflowContext,
@@ -221,17 +222,17 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 }
 
 // createBrandNew creates a new "brand new" execution in the executions table.
-func (s *Starter) createBrandNew(ctx context.Context, creationCtx *creationContext) error {
+func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationParams) error {
 	now := s.shardCtx.GetTimeSource().Now()
-	return creationCtx.workflowContext.GetContext().CreateWorkflowExecution(
+	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
 		now,
 		persistence.CreateWorkflowModeBrandNew,
 		"", // prevRunID
 		0,  // prevLastWriteVersion
-		creationCtx.workflowContext.GetMutableState(),
-		creationCtx.workflowSnapshot,
-		creationCtx.workflowEventBatches,
+		creationParams.workflowContext.GetMutableState(),
+		creationParams.workflowSnapshot,
+		creationParams.workflowEventBatches,
 	)
 }
 
@@ -240,49 +241,49 @@ func (s *Starter) createBrandNew(ctx context.Context, creationCtx *creationConte
 // RequestID) or simply because a different run exists for the same workflow.
 func (s *Starter) handleConflict(
 	ctx context.Context,
-	creationCtx *creationContext,
+	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	request := s.request.StartRequest
 	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
 		return s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
 	}
-	if err := s.verifyNamespaceActive(creationCtx, currentWorkflowConditionFailed); err != nil {
+	if err := s.verifyNamespaceActive(creationParams, currentWorkflowConditionFailed); err != nil {
 		return nil, err
 	}
-	response, err := s.applyWorkflowIDReusePolicy(ctx, currentWorkflowConditionFailed, creationCtx)
+	response, err := s.applyWorkflowIDReusePolicy(ctx, currentWorkflowConditionFailed, creationParams)
 	if err != nil {
 		return nil, err
 	} else if response != nil {
 		return response, nil
 	}
-	if err := s.createAsCurrent(ctx, creationCtx, currentWorkflowConditionFailed); err != nil {
+	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
 		return nil, err
 	}
-	return s.generateResponse(creationCtx.runID, creationCtx.workflowTaskInfo, extractHistoryEvents(creationCtx.workflowEventBatches))
+	return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
 }
 
 // createAsCurrent creates a new workflow execution and sets it to "current".
 func (s *Starter) createAsCurrent(
 	ctx context.Context,
-	creationCtx *creationContext,
+	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) error {
 	now := s.shardCtx.GetTimeSource().Now()
-	return creationCtx.workflowContext.GetContext().CreateWorkflowExecution(
+	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
 		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.LastWriteVersion,
-		creationCtx.workflowContext.GetMutableState(),
-		creationCtx.workflowSnapshot,
-		creationCtx.workflowEventBatches,
+		creationParams.workflowContext.GetMutableState(),
+		creationParams.workflowSnapshot,
+		creationParams.workflowEventBatches,
 	)
 }
 
-func (s *Starter) verifyNamespaceActive(creationCtx *creationContext, currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError) error {
-	if creationCtx.workflowContext.GetMutableState().GetCurrentVersion() < currentWorkflowConditionFailed.LastWriteVersion {
+func (s *Starter) verifyNamespaceActive(creationParams *creationParams, currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError) error {
+	if creationParams.workflowContext.GetMutableState().GetCurrentVersion() < currentWorkflowConditionFailed.LastWriteVersion {
 		clusterMetadata := s.shardCtx.GetClusterMetadata()
 		clusterName := clusterMetadata.ClusterNameForFailoverVersion(s.namespace.IsGlobalNamespace(), currentWorkflowConditionFailed.LastWriteVersion)
 		return serviceerror.NewNamespaceNotActive(
@@ -302,7 +303,7 @@ func (s *Starter) verifyNamespaceActive(creationCtx *creationContext, currentWor
 func (s *Starter) applyWorkflowIDReusePolicy(
 	ctx context.Context,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
-	creationCtx *creationContext,
+	creationParams *creationParams,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	workflowID := s.request.StartRequest.WorkflowId
 	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
@@ -311,7 +312,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
 		workflowID,
-		creationCtx.runID,
+		creationParams.runID,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 	)
 	if err != nil {
@@ -339,7 +340,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 				s.shardCtx,
 				s.namespace,
 				workflowID,
-				creationCtx.runID,
+				creationParams.runID,
 				s.request,
 				nil)
 			if err != nil {
@@ -359,14 +360,14 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 	case nil:
 		if !s.requestEagerStart() {
 			return &historyservice.StartWorkflowExecutionResponse{
-				RunId: creationCtx.runID,
+				RunId: creationParams.runID,
 			}, nil
 		}
 		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
 		if err != nil {
 			return nil, err
 		}
-		return s.generateResponse(creationCtx.runID, mutableStateInfo.workflowTaskInfo, events)
+		return s.generateResponse(creationParams.runID, mutableStateInfo.workflowTaskInfo, events)
 	case consts.ErrWorkflowCompleted:
 		// previous workflow already closed
 		// fallthough to the logic for only creating the new workflow below

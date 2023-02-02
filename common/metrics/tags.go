@@ -281,8 +281,12 @@ func CacheTypeTag(value string) Tag {
 	return &tagImpl{key: CacheTypeTagName, value: value}
 }
 
+// ReasonString is just a string but the special type is defined here to remind callers of ReasonTag to limit the
+// cardinality of possible reasons.
+type ReasonString string
+
 // ReasonTag is a generic tag can be used anywhere a reason is needed.
 // Make sure that the value is of limited cardinality.
-func ReasonTag(value string) Tag {
-	return &tagImpl{key: reason, value: value}
+func ReasonTag(value ReasonString) Tag {
+	return &tagImpl{key: reason, value: string(value)}
 }
