@@ -77,3 +77,6 @@ linters-settings:
       - name: function-result-limit
         arguments:
           - 3
+      - name: unhandled-error
+        arguments:
+          - "fmt.Printf"
