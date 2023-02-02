@@ -1479,6 +1479,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		CronSchedule:             command.CronSchedule,
 		Memo:                     command.Memo,
 		SearchAttributes:         command.SearchAttributes,
+		// No need to request eager execution here (for now)
+		RequestEagerExecution: false,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -1513,7 +1515,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	if err != nil {
 		return nil, err
 	}
-	if err = ms.AddFirstWorkflowTaskScheduled(event); err != nil {
+	if _, err = ms.AddFirstWorkflowTaskScheduled(event, false); err != nil {
 		return nil, err
 	}
 
@@ -1715,14 +1717,18 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	return nil
 }
 
+// AddFirstWorkflowTaskScheduled adds the first workflow task scehduled event unless it should be delayed as indicated
+// by the startEvent's FirstWorkflowTaskBackoff.
+// Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
 func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
 	startEvent *historypb.HistoryEvent,
-) error {
+	bypassTaskGeneration bool,
+) (int64, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := ms.checkMutability(opTag); err != nil {
-		return err
+		return common.EmptyEventID, err
 	}
-	return ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent)
+	return ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEvent(
