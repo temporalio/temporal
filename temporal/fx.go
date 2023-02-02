@@ -662,11 +662,20 @@ func ApplyClusterMetadataConfigProvider(
 				tag.Key("clusterInformation"),
 				tag.ClusterName(clusterName),
 				tag.IgnoredValue(clusterInfo))
+
+			// Only configure current cluster metadata from static config file
 			continue
 		}
 
-		// Only configure current cluster metadata from static config file
 		clusterId := uuid.New()
+		if clusterInfo.ClusterID != "" {
+			if uuid.Parse(clusterInfo.ClusterID) == nil {
+				return config.ClusterMetadata, config.Persistence, fmt.Errorf("invalid cluster id: %v", clusterInfo.ClusterID)
+			}
+
+			clusterId = clusterInfo.ClusterID
+		}
+
 		applied, err := clusterMetadataManager.SaveClusterMetadata(
 			ctx,
 			&persistence.SaveClusterMetadataRequest{
