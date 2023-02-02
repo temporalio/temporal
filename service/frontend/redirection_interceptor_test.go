@@ -22,60 +22,59 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package interceptor
+package frontend
 
 import (
-	"context"
+	"reflect"
+	"testing"
 
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/namespace"
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/workflowservice/v1"
 )
 
 type (
-	CallerInfoInterceptor struct {
-		namespaceRegistry namespace.Registry
+	redirectionInterceptorSuite struct {
+		suite.Suite
+		*require.Assertions
+
+		controller *gomock.Controller
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*CallerInfoInterceptor)(nil).Intercept
-
-func NewCallerInfoInterceptor(
-	namespaceRegistry namespace.Registry,
-) *CallerInfoInterceptor {
-	return &CallerInfoInterceptor{
-		namespaceRegistry: namespaceRegistry,
-	}
+func TestRedirectionInterceptorSuite(t *testing.T) {
+	s := new(redirectionInterceptorSuite)
+	suite.Run(t, s)
 }
 
-func (i *CallerInfoInterceptor) Intercept(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	callerInfo := headers.GetCallerInfo(ctx)
+func (s *redirectionInterceptorSuite) SetupSuite() {
+}
 
-	updateInfo := false
-	if callerInfo.CallerName == "" {
-		callerInfo.CallerName = string(GetNamespace(i.namespaceRegistry, req))
-		updateInfo = callerInfo.CallerName != ""
-	}
-	if callerInfo.CallerType == "" {
-		callerInfo.CallerType = headers.CallerTypeAPI
-		updateInfo = true
-	}
-	if callerInfo.CallerType == headers.CallerTypeAPI &&
-		callerInfo.CallOrigin == "" {
-		_, method := SplitMethodName(info.FullMethod)
-		callerInfo.CallOrigin = method
-		updateInfo = true
+func (s *redirectionInterceptorSuite) TearDownSuite() {
+}
+
+func (s *redirectionInterceptorSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+
+func (s *redirectionInterceptorSuite) TearDownTest() {
+}
+
+func (s *redirectionInterceptorSuite) TestAPIMapping() {
+	var service workflowservice.WorkflowServiceServer
+	t := reflect.TypeOf(&service).Elem()
+	expectedAPIs := make(map[string]interface{}, t.NumMethod())
+	for i := 0; i < t.NumMethod(); i++ {
+		expectedAPIs[t.Method(i).Name] = t.Method(i).Type.Out(0)
 	}
 
-	if updateInfo {
-		ctx = headers.SetCallerInfo(ctx, callerInfo)
+	actualAPIs := make(map[string]interface{})
+	for api, respAllocFn := range localAPIMetrics {
+		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
-
-	return handler(ctx, req)
+	for api, respAllocFn := range globalAPIMetrics {
+		actualAPIs[api] = reflect.TypeOf(respAllocFn())
+	}
+	s.Equal(expectedAPIs, actualAPIs)
 }

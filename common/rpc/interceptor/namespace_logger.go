@@ -62,7 +62,7 @@ func (nli *NamespaceLogInterceptor) Intercept(
 ) (interface{}, error) {
 
 	if nli.logger != nil {
-		_, methodName := splitMethodName(info.FullMethod)
+		_, methodName := SplitMethodName(info.FullMethod)
 		namespace := GetNamespace(nli.namespaceRegistry, req)
 		tlsInfo := authorization.TLSInfoFormContext(ctx)
 		var serverName string
