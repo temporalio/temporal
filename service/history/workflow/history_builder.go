@@ -33,6 +33,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -463,6 +464,30 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 		},
 	}
 
+	return b.appendEvents(event)
+}
+
+func (b *HistoryBuilder) AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, updAcceptance *updatepb.Acceptance) *historypb.HistoryEvent {
+	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
+		WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+			ProtocolInstanceId:               protocolInstanceID,
+			AcceptedRequestMessageId:         updAcceptance.AcceptedRequestMessageId,
+			AcceptedRequestSequencingEventId: updAcceptance.AcceptedRequestSequencingEventId,
+			AcceptedRequest:                  updAcceptance.AcceptedRequest,
+		},
+	}
+	return b.appendEvents(event)
+}
+
+func (b *HistoryBuilder) AddWorkflowExecutionUpdateCompletedEvent(updResp *updatepb.Response) *historypb.HistoryEvent {
+	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateCompletedEventAttributes{
+		WorkflowExecutionUpdateCompletedEventAttributes: &historypb.WorkflowExecutionUpdateCompletedEventAttributes{
+			Meta:    updResp.GetMeta(),
+			Outcome: updResp.GetOutcome(),
+		},
+	}
 	return b.appendEvents(event)
 }
 

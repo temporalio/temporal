@@ -36,60 +36,53 @@ func TestGetPollingShardIds(t *testing.T) {
 		shardID          int32
 		remoteShardCount int32
 		localShardCount  int32
-		expectedPanic    bool
 		expectedShardIDs []int32
 	}{
 		{
 			1,
 			4,
 			4,
-			false,
 			[]int32{1},
 		},
 		{
 			1,
 			2,
 			4,
-			false,
 			[]int32{1},
 		},
 		{
 			3,
 			2,
 			4,
-			false,
-			[]int32{},
+			nil,
 		},
 		{
 			1,
 			16,
 			4,
-			false,
 			[]int32{1, 5, 9, 13},
 		},
 		{
 			4,
 			16,
 			4,
-			false,
 			[]int32{4, 8, 12, 16},
 		},
 		{
 			4,
 			17,
 			4,
-			true,
-			[]int32{},
+			[]int32{4, 8, 12, 16},
+		},
+		{
+			1,
+			17,
+			4,
+			[]int32{1, 5, 9, 13, 17},
 		},
 	}
 	for idx, tt := range testCases {
 		t.Run(fmt.Sprintf("Testcase %d", idx), func(t *testing.T) {
-			t.Parallel()
-			defer func() {
-				if r := recover(); tt.expectedPanic && r == nil {
-					t.Errorf("The code did not panic")
-				}
-			}()
 			shardIDs := generateShardIDs(tt.shardID, tt.localShardCount, tt.remoteShardCount)
 			assert.Equal(t, tt.expectedShardIDs, shardIDs)
 		})
