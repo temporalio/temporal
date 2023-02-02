@@ -32,6 +32,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/maps"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
@@ -110,20 +111,24 @@ func (m *managerImpl) GetSearchAttributes(
 		m.cacheUpdateMutex.Unlock()
 	}
 
+	result := NameTypeMap{}
 	indexSearchAttributes, ok := saCache.searchAttributes[indexName]
 	if ok {
-		return indexSearchAttributes, nil
+		result.customSearchAttributes = maps.Clone(indexSearchAttributes.customSearchAttributes)
 	}
 
+	// TODO (rodrigozhou): remove following block for v1.21.
+	// Try to look for the empty string indexName for backward compatibility: up to v1.19,
+	// empty string was used when Elasticsearch was not configured.
+	// If there's a value, merging with current index name value. This is to avoid handling
+	// all code references to GetSearchAttributes.
 	if indexName != "" {
-		// Try to look for the empty string indexName for backward compatibility: up to v1.19,
-		// empty string was used when Elasticsearch was not configured.
 		indexSearchAttributes, ok = saCache.searchAttributes[""]
 		if ok {
-			return indexSearchAttributes, nil
+			maps.Copy(result.customSearchAttributes, indexSearchAttributes.customSearchAttributes)
 		}
 	}
-	return NameTypeMap{}, nil
+	return result, nil
 }
 
 func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, now time.Time) bool {

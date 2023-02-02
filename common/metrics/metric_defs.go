@@ -1460,7 +1460,11 @@ var (
 	CommandTypeUpsertWorkflowSearchAttributesCounter  = NewCounterDef("upsert_workflow_search_attributes_command")
 	CommandTypeModifyWorkflowPropertiesCounter        = NewCounterDef("modify_workflow_properties_command")
 	CommandTypeChildWorkflowCounter                   = NewCounterDef("child_workflow_command")
-	ActivityEagerExecutionCounter                     = NewCounterDef("activity_eager_execution")
+	MessageTypeAcceptWorkflowExecutionUpdateCounter   = NewCounterDef("accept_workflow_update_message")
+	MessageTypeCompleteWorkflowExecutionUpdateCounter = NewCounterDef("complete_workflow_update_message")
+	MessageTypeRejectWorkflowExecutionUpdateCounter   = NewCounterDef("reject_workflow_update_message")
+
+	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
 	WorkflowEagerExecutionCounter = NewCounterDef("workflow_eager_execution")
 	// WorkflowEagerExecutionDeniedCounter is emitted any time eager workflow start is requested and the serer fell back
