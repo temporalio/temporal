@@ -381,7 +381,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 	tl := "testTaskQueue"
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	addWorkflowTaskCompletedEvent(ms, int64(2), int64(3), identity)
+	addWorkflowTaskCompletedEvent(&s.Suite, ms, int64(2), int64(3), identity)
 
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -555,7 +555,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(ms, int64(2), int64(3), identity)
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, int64(2), int64(3), identity)
 	scheduledEvent, _ := addActivityTaskScheduledEvent(ms, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
 
 	ms1 := workflow.TestCloneToProto(ms)
@@ -1002,6 +1002,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 		GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).
 		AnyTimes()
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	s.historyEngine.shard.GetConfig().NumPendingChildExecutionsLimit = func(namespace string) int {
 		return 5
@@ -1016,8 +1017,9 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 	})
 
 	s.Error(err)
-	s.Assert().Equal([]string{"the number of pending child workflow executions, 5, has reached the per-workflow" +
-		" limit of 5"}, s.errorMessages)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Len(s.errorMessages, 1)
+	s.Equal("the number of pending child workflow executions, 5, has reached the per-workflow limit of 5", s.errorMessages[0])
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
@@ -1651,7 +1653,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
@@ -1831,7 +1833,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 	initiatedEvent, ci := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 

@@ -5,10 +5,11 @@ log:
 persistence:
     numHistoryShards: {{ default .Env.NUM_HISTORY_SHARDS "4" }}
     defaultStore: default
-    visibilityStore: visibility
     {{- $es := default .Env.ENABLE_ES "false" | lower -}}
     {{- if eq $es "true" }}
     advancedVisibilityStore: es-visibility
+    {{- else }}
+    visibilityStore: visibility
     {{- end }}
     datastores:
         {{- $db := default .Env.DB "cassandra" | lower -}}

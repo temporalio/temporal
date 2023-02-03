@@ -220,7 +220,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
@@ -289,7 +289,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)

@@ -1479,6 +1479,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		CronSchedule:             command.CronSchedule,
 		Memo:                     command.Memo,
 		SearchAttributes:         command.SearchAttributes,
+		// No need to request eager execution here (for now)
+		RequestEagerExecution: false,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -1513,7 +1515,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	if err != nil {
 		return nil, err
 	}
-	if err = ms.AddFirstWorkflowTaskScheduled(event); err != nil {
+	if _, err = ms.AddFirstWorkflowTaskScheduled(event, false); err != nil {
 		return nil, err
 	}
 
@@ -1715,14 +1717,18 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	return nil
 }
 
+// AddFirstWorkflowTaskScheduled adds the first workflow task scehduled event unless it should be delayed as indicated
+// by the startEvent's FirstWorkflowTaskBackoff.
+// Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
 func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
 	startEvent *historypb.HistoryEvent,
-) error {
+	bypassTaskGeneration bool,
+) (int64, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := ms.checkMutability(opTag); err != nil {
-		return err
+		return common.EmptyEventID, err
 	}
-	return ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent)
+	return ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEvent(
@@ -1885,8 +1891,7 @@ func (ms *MutableStateImpl) CheckResettable() error {
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskCompletedEvent(
-	scheduledEventID int64,
-	startedEventID int64,
+	workflowTask *WorkflowTaskInfo,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	maxResetPoints int,
 ) (*historypb.HistoryEvent, error) {
@@ -1894,7 +1899,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskCompletedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskCompletedEvent(scheduledEventID, startedEventID, request, maxResetPoints)
+	return ms.workflowTaskManager.AddWorkflowTaskCompletedEvent(workflowTask, request, maxResetPoints)
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowTaskCompletedEvent(
@@ -1904,14 +1909,13 @@ func (ms *MutableStateImpl) ReplicateWorkflowTaskCompletedEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskTimedOutEvent(
-	scheduledEventID int64,
-	startedEventID int64,
+	workflowTask *WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskTimedOutEvent(scheduledEventID, startedEventID)
+	return ms.workflowTaskManager.AddWorkflowTaskTimedOutEvent(workflowTask)
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowTaskTimedOutEvent(
@@ -1931,8 +1935,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskScheduleToStartTimeoutEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
-	scheduledEventID int64,
-	startedEventID int64,
+	workflowTask *WorkflowTaskInfo,
 	cause enumspb.WorkflowTaskFailedCause,
 	failure *failurepb.Failure,
 	identity string,
@@ -1946,8 +1949,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 		return nil, err
 	}
 	return ms.workflowTaskManager.AddWorkflowTaskFailedEvent(
-		scheduledEventID,
-		startedEventID,
+		workflowTask,
 		cause,
 		failure,
 		identity,

@@ -22,46 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgresql
+package sqlplugin
 
-import "time"
+import "strings"
 
-var (
-	minPostgreSQLDateTime = getMinPostgreSQLDateTime()
-)
-
-type (
-	// DataConverter defines the API for conversions to/from
-	// go types to mysql datatypes
-	DataConverter interface {
-		ToPostgreSQLDateTime(t time.Time) time.Time
-		FromPostgreSQLDateTime(t time.Time) time.Time
+func appendPrefix(prefix string, fields []string) []string {
+	out := make([]string, len(fields))
+	for i, field := range fields {
+		out[i] = prefix + field
 	}
-	converter struct{}
-)
-
-// ToPostgreSQLDateTime converts to time to PostgreSQL datetime
-func (c *converter) ToPostgreSQLDateTime(t time.Time) time.Time {
-	if t.IsZero() {
-		return minPostgreSQLDateTime
-	}
-	return t.UTC().Truncate(time.Microsecond)
+	return out
 }
 
-// FromPostgreSQLDateTime converts postgresql datetime and returns go time
-func (c *converter) FromPostgreSQLDateTime(t time.Time) time.Time {
-	// NOTE: PostgreSQL will preserve the location of time in a
-	//  weird way, here need to call UTC to remove the time location
-	if t.Equal(minPostgreSQLDateTime) {
-		return time.Time{}.UTC()
-	}
-	return t.UTC()
-}
-
-func getMinPostgreSQLDateTime() time.Time {
-	t, err := time.Parse(time.RFC3339, "1000-01-01T00:00:00Z")
-	if err != nil {
-		return time.Unix(0, 0).UTC()
-	}
-	return t.UTC()
+func BuildNamedPlaceholder(fields ...string) string {
+	return strings.Join(appendPrefix(":", fields), ", ")
 }

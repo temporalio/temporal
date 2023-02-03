@@ -104,6 +104,21 @@ var (
 		VisibilityTaskKey: {},
 	}
 
+	sqlDbSystemNameToColName = map[string]string{
+		NamespaceID:     "namespace_id",
+		WorkflowID:      "workflow_id",
+		RunID:           "run_id",
+		WorkflowType:    "workflow_type_name",
+		StartTime:       "start_time",
+		ExecutionTime:   "execution_time",
+		CloseTime:       "close_time",
+		ExecutionStatus: "status",
+		TaskQueue:       "task_queue",
+		HistoryLength:   "history_length",
+		Memo:            "memo",
+		MemoEncoding:    "encoding",
+	}
+
 	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{
 		"Bool01":        enumspb.INDEXED_VALUE_TYPE_BOOL,
 		"Bool02":        enumspb.INDEXED_VALUE_TYPE_BOOL,
@@ -159,6 +174,15 @@ func IsMappable(name string) bool {
 		return false
 	}
 	return true
+}
+
+// GetSqlDbColName maps system and reserved search attributes to column names for SQL tables.
+// If the input is not a system or reserved search attribute, then it returns the input.
+func GetSqlDbColName(name string) string {
+	if fieldName, ok := sqlDbSystemNameToColName[name]; ok {
+		return fieldName
+	}
+	return name
 }
 
 func GetSqlDbIndexSearchAttributes() *persistencespb.IndexSearchAttributes {

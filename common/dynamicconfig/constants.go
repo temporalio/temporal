@@ -87,8 +87,11 @@ const (
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery = "system.enableStickyQuery"
-	// EnableActivityEagerExecution indicates if acitivty eager execution is enabled per namespace
+	// EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace
 	EnableActivityEagerExecution = "system.enableActivityEagerExecution"
+	// EnableEagerWorkflowStart toggles "eager workflow start" - returning the first workflow task inline in the
+	// response to a StartWorkflowExecution request and skipping the trip through matching.
+	EnableEagerWorkflowStart = "system.enableEagerWorkflowStart"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
@@ -249,6 +252,11 @@ const (
 	FrontendMaxExecutionCountBatchOperationPerNamespace = "frontend.MaxExecutionCountBatchOperationPerNamespace"
 	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
 	FrontendEnableBatcher = "frontend.enableBatcher"
+
+	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
+	//  UpdateWorkflowExecution API is under active development and is not ready for production use.
+	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
+	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
 	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.

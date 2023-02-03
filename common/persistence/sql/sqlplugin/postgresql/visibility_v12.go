@@ -1,7 +1,5 @@
 // The MIT License
 //
-// Copyright (c) 2021 Datadog, Inc.
-//
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
@@ -24,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sqlite
+package postgresql
 
 import (
 	"context"
@@ -36,8 +34,6 @@ import (
 )
 
 var (
-	keywordListSeparator = "♡"
-
 	templateInsertWorkflowExecution = fmt.Sprintf(
 		`INSERT INTO executions_visibility (%s)
 		VALUES (%s)
@@ -55,11 +51,11 @@ var (
 		buildOnDuplicateKeyUpdate(sqlplugin.DbFields...),
 	)
 
-	templateDeleteWorkflowExecution = `
+	templateDeleteWorkflowExecution_v12 = `
 		DELETE FROM executions_visibility
 		WHERE namespace_id = :namespace_id AND run_id = :run_id`
 
-	templateGetWorkflowExecution = fmt.Sprintf(
+	templateGetWorkflowExecution_v12 = fmt.Sprintf(
 		`SELECT %s FROM executions_visibility
 		WHERE namespace_id = :namespace_id AND run_id = :run_id`,
 		strings.Join(sqlplugin.DbFields, ", "),
@@ -79,51 +75,53 @@ func buildOnDuplicateKeyUpdate(fields ...string) string {
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
-func (mdb *db) InsertIntoVisibility(
+func (pdb *dbV12) InsertIntoVisibility(
 	ctx context.Context,
 	row *sqlplugin.VisibilityRow,
 ) (sql.Result, error) {
-	finalRow := mdb.prepareRowForDB(row)
-	return mdb.conn.NamedExecContext(ctx, templateInsertWorkflowExecution, finalRow)
+	finalRow := pdb.prepareRowForDB(row)
+	return pdb.conn.NamedExecContext(ctx, templateInsertWorkflowExecution, finalRow)
 }
 
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
-func (mdb *db) ReplaceIntoVisibility(
+func (pdb *dbV12) ReplaceIntoVisibility(
 	ctx context.Context,
 	row *sqlplugin.VisibilityRow,
 ) (sql.Result, error) {
-	finalRow := mdb.prepareRowForDB(row)
-	return mdb.conn.NamedExecContext(ctx, templateUpsertWorkflowExecution, finalRow)
+	finalRow := pdb.prepareRowForDB(row)
+	return pdb.conn.NamedExecContext(ctx, templateUpsertWorkflowExecution, finalRow)
 }
 
 // DeleteFromVisibility deletes a row from visibility table if it exist
-func (mdb *db) DeleteFromVisibility(
+func (pdb *dbV12) DeleteFromVisibility(
 	ctx context.Context,
 	filter sqlplugin.VisibilityDeleteFilter,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx, templateDeleteWorkflowExecution, filter)
+	return pdb.conn.NamedExecContext(ctx, templateDeleteWorkflowExecution_v12, filter)
 }
 
 // SelectFromVisibility reads one or more rows from visibility table
-func (mdb *db) SelectFromVisibility(
+func (pdb *dbV12) SelectFromVisibility(
 	ctx context.Context,
 	filter sqlplugin.VisibilitySelectFilter,
 ) ([]sqlplugin.VisibilityRow, error) {
 	if len(filter.Query) == 0 {
 		// backward compatibility for existing tests
-		err := sqlplugin.GenerateSelectQuery(&filter, mdb.converter.ToSQLiteDateTime)
+		err := sqlplugin.GenerateSelectQuery(&filter, pdb.converter.ToPostgreSQLDateTime)
 		if err != nil {
 			return nil, err
 		}
 	}
 
+	// Rebind will replace default placeholder `?` with the right placeholder for PostgreSQL.
+	filter.Query = pdb.db.db.Rebind(filter.Query)
 	var rows []sqlplugin.VisibilityRow
-	err := mdb.conn.SelectContext(ctx, &rows, filter.Query, filter.QueryArgs...)
+	err := pdb.conn.SelectContext(ctx, &rows, filter.Query, filter.QueryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	for i := range rows {
-		err = mdb.processRowFromDB(&rows[i])
+		err = pdb.processRowFromDB(&rows[i])
 		if err != nil {
 			return nil, err
 		}
@@ -132,12 +130,12 @@ func (mdb *db) SelectFromVisibility(
 }
 
 // GetFromVisibility reads one row from visibility table
-func (mdb *db) GetFromVisibility(
+func (pdb *dbV12) GetFromVisibility(
 	ctx context.Context,
 	filter sqlplugin.VisibilityGetFilter,
 ) (*sqlplugin.VisibilityRow, error) {
 	var row sqlplugin.VisibilityRow
-	stmt, err := mdb.conn.PrepareNamedContext(ctx, templateGetWorkflowExecution)
+	stmt, err := pdb.conn.PrepareNamedContext(ctx, templateGetWorkflowExecution_v12)
 	if err != nil {
 		return nil, err
 	}
@@ -145,61 +143,58 @@ func (mdb *db) GetFromVisibility(
 	if err != nil {
 		return nil, err
 	}
-	err = mdb.processRowFromDB(&row)
+	err = pdb.processRowFromDB(&row)
 	if err != nil {
 		return nil, err
 	}
 	return &row, nil
 }
 
-func (mdb *db) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.VisibilityRow {
+func (pdb *dbV12) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.VisibilityRow {
 	if row == nil {
 		return nil
 	}
 	finalRow := *row
-	finalRow.StartTime = mdb.converter.ToSQLiteDateTime(finalRow.StartTime)
-	finalRow.ExecutionTime = mdb.converter.ToSQLiteDateTime(finalRow.ExecutionTime)
+	finalRow.StartTime = pdb.converter.ToPostgreSQLDateTime(finalRow.StartTime)
+	finalRow.ExecutionTime = pdb.converter.ToPostgreSQLDateTime(finalRow.ExecutionTime)
 	if finalRow.CloseTime != nil {
-		*finalRow.CloseTime = mdb.converter.ToSQLiteDateTime(*finalRow.CloseTime)
-	}
-	if finalRow.SearchAttributes != nil {
-		finalSearchAttributes := sqlplugin.VisibilitySearchAttributes{}
-		for name, value := range *finalRow.SearchAttributes {
-			switch v := value.(type) {
-			case []string:
-				finalSearchAttributes[name] = strings.Join(v, keywordListSeparator)
-			default:
-				finalSearchAttributes[name] = v
-			}
-		}
-		finalRow.SearchAttributes = &finalSearchAttributes
+		*finalRow.CloseTime = pdb.converter.ToPostgreSQLDateTime(*finalRow.CloseTime)
 	}
 	return &finalRow
 }
 
-func (mdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) error {
+func (pdb *dbV12) processRowFromDB(row *sqlplugin.VisibilityRow) error {
 	if row == nil {
 		return nil
 	}
-	row.StartTime = mdb.converter.FromSQLiteDateTime(row.StartTime)
-	row.ExecutionTime = mdb.converter.FromSQLiteDateTime(row.ExecutionTime)
+	row.StartTime = pdb.converter.FromPostgreSQLDateTime(row.StartTime)
+	row.ExecutionTime = pdb.converter.FromPostgreSQLDateTime(row.ExecutionTime)
 	if row.CloseTime != nil {
-		closeTime := mdb.converter.FromSQLiteDateTime(*row.CloseTime)
+		closeTime := pdb.converter.FromPostgreSQLDateTime(*row.CloseTime)
 		row.CloseTime = &closeTime
 	}
 	if row.SearchAttributes != nil {
 		for saName, saValue := range *row.SearchAttributes {
 			switch typedSaValue := saValue.(type) {
-			case string:
-				if strings.Index(typedSaValue, keywordListSeparator) >= 0 {
-					// If the string contains the keywordListSeparator, then we need to split it
-					// into a list of keywords.
-					(*row.SearchAttributes)[saName] = strings.Split(typedSaValue, keywordListSeparator)
+			case []interface{}:
+				// the only valid type is slice of strings
+				strSlice := make([]string, len(typedSaValue))
+				for i, item := range typedSaValue {
+					switch v := item.(type) {
+					case string:
+						strSlice[i] = v
+					default:
+						return fmt.Errorf("Unexpected data type in keyword list: %T (expected string)", v)
+					}
 				}
+				(*row.SearchAttributes)[saName] = strSlice
 			default:
 				// no-op
 			}
 		}
 	}
+	// need to trim the run ID, or otherwise the returned value will
+	// come with lots of trailing spaces, probably due to the CHAR(64) type
+	row.RunID = strings.TrimSpace(row.RunID)
 	return nil
 }

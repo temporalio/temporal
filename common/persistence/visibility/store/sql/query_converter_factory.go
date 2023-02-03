@@ -22,46 +22,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgresql
+package sql
 
-import "time"
-
-var (
-	minPostgreSQLDateTime = getMinPostgreSQLDateTime()
+import (
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 )
 
-type (
-	// DataConverter defines the API for conversions to/from
-	// go types to mysql datatypes
-	DataConverter interface {
-		ToPostgreSQLDateTime(t time.Time) time.Time
-		FromPostgreSQLDateTime(t time.Time) time.Time
+func NewQueryConverter(
+	pluginName string,
+	request *manager.ListWorkflowExecutionsRequestV2,
+	saTypeMap searchattribute.NameTypeMap,
+	saMapper searchattribute.Mapper,
+) *QueryConverter {
+	switch pluginName {
+	case mysql.PluginNameV8:
+		return newMySQLQueryConverter(request, saTypeMap, saMapper)
+	case postgresql.PluginNameV12:
+		return newPostgreSQLQueryConverter(request, saTypeMap, saMapper)
+	case sqlite.PluginName:
+		return newSqliteQueryConverter(request, saTypeMap, saMapper)
+	default:
+		return nil
 	}
-	converter struct{}
-)
-
-// ToPostgreSQLDateTime converts to time to PostgreSQL datetime
-func (c *converter) ToPostgreSQLDateTime(t time.Time) time.Time {
-	if t.IsZero() {
-		return minPostgreSQLDateTime
-	}
-	return t.UTC().Truncate(time.Microsecond)
-}
-
-// FromPostgreSQLDateTime converts postgresql datetime and returns go time
-func (c *converter) FromPostgreSQLDateTime(t time.Time) time.Time {
-	// NOTE: PostgreSQL will preserve the location of time in a
-	//  weird way, here need to call UTC to remove the time location
-	if t.Equal(minPostgreSQLDateTime) {
-		return time.Time{}.UTC()
-	}
-	return t.UTC()
-}
-
-func getMinPostgreSQLDateTime() time.Time {
-	t, err := time.Parse(time.RFC3339, "1000-01-01T00:00:00Z")
-	if err != nil {
-		return time.Unix(0, 0).UTC()
-	}
-	return t.UTC()
 }

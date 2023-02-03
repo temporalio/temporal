@@ -1311,6 +1311,12 @@ const (
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
 )
 
+// Schedule action types
+const (
+	ScheduleActionTypeTag       = "schedule_action"
+	ScheduleActionStartWorkflow = "start_workflow"
+)
+
 var (
 	ServiceRequests                               = NewCounterDef("service_requests")
 	ServicePendingRequests                        = NewGaugeDef("service_pending_requests")
@@ -1464,7 +1470,14 @@ var (
 	MessageTypeCompleteWorkflowExecutionUpdateCounter = NewCounterDef("complete_workflow_update_message")
 	MessageTypeRejectWorkflowExecutionUpdateCounter   = NewCounterDef("reject_workflow_update_message")
 
-	ActivityEagerExecutionCounter                  = NewCounterDef("activity_eager_execution")
+	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
+	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
+	WorkflowEagerExecutionCounter = NewCounterDef("workflow_eager_execution")
+	// WorkflowEagerExecutionDeniedCounter is emitted any time eager workflow start is requested and the serer fell back
+	// to standard dispatch.
+	// Timeouts and failures are not counted in this metric.
+	// This metric has a "reason" tag attached to it to understand why eager start was denied.
+	WorkflowEagerExecutionDeniedCounter            = NewCounterDef("workflow_eager_execution_denied")
 	EmptyCompletionCommandsCounter                 = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter              = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                     = NewCounterDef("failed_workflow_tasks")
@@ -1707,6 +1720,13 @@ var (
 	NamespaceReplicationEnqueueDLQCount                       = NewCounterDef("namespace_replication_dlq_enqueue_requests")
 	ParentClosePolicyProcessorSuccess                         = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures                        = NewCounterDef("parent_close_policy_processor_errors")
+	ScheduleMissedCatchupWindow                               = NewCounterDef("schedule_missed_catchup_window")
+	ScheduleRateLimited                                       = NewCounterDef("schedule_rate_limited")
+	ScheduleBufferOverruns                                    = NewCounterDef("schedule_buffer_overruns")
+	ScheduleActionSuccess                                     = NewCounterDef("schedule_action_success")
+	ScheduleActionErrors                                      = NewCounterDef("schedule_action_errors")
+	ScheduleCancelWorkflowErrors                              = NewCounterDef("schedule_cancel_workflow_errors")
+	ScheduleTerminateWorkflowErrors                           = NewCounterDef("schedule_terminate_workflow_errors")
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")

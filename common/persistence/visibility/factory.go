@@ -29,13 +29,17 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/sql"
 	"go.temporal.io/server/common/persistence/visibility/store/standard"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/sql"
+	standardSql "go.temporal.io/server/common/persistence/visibility/store/standard/sql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -67,6 +71,8 @@ func NewManager(
 	stdVisibilityManager, err := NewStandardManager(
 		persistenceCfg,
 		persistenceResolver,
+		searchAttributesProvider,
+		searchAttributesMapperProvider,
 		standardVisibilityPersistenceMaxReadQPS,
 		standardVisibilityPersistenceMaxWriteQPS,
 		metricsHandler,
@@ -157,6 +163,8 @@ func NewManager(
 func NewStandardManager(
 	persistenceCfg config.Persistence,
 	persistenceResolver resolver.ServiceResolver,
+	searchAttributesProvider searchattribute.Provider,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 
 	standardVisibilityPersistenceMaxReadQPS dynamicconfig.IntPropertyFn,
 	standardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
@@ -168,6 +176,8 @@ func NewStandardManager(
 	stdVisibilityStore, err := newStandardVisibilityStore(
 		persistenceCfg,
 		persistenceResolver,
+		searchAttributesProvider,
+		searchAttributesMapperProvider,
 		logger)
 	if err != nil {
 		return nil, err
@@ -252,6 +262,8 @@ func newVisibilityManager(
 func newStandardVisibilityStore(
 	persistenceCfg config.Persistence,
 	persistenceResolver resolver.ServiceResolver,
+	searchAttributesProvider searchattribute.Provider,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	logger log.Logger,
 ) (store.VisibilityStore, error) {
 	// If standard visibility is not configured.
@@ -262,26 +274,44 @@ func newStandardVisibilityStore(
 	visibilityStoreCfg := persistenceCfg.DataStores[persistenceCfg.VisibilityStore]
 
 	var (
-		store store.VisibilityStore
-		err   error
+		visStore   store.VisibilityStore
+		isStandard bool
+		err        error
 	)
 	switch {
 	case visibilityStoreCfg.Cassandra != nil:
-		store, err = cassandra.NewVisibilityStore(*visibilityStoreCfg.Cassandra, persistenceResolver, logger)
+		visStore, err = cassandra.NewVisibilityStore(*visibilityStoreCfg.Cassandra, persistenceResolver, logger)
+		isStandard = true
 	case visibilityStoreCfg.SQL != nil:
-		store, err = sql.NewSQLVisibilityStore(*visibilityStoreCfg.SQL, persistenceResolver, logger)
+		switch visibilityStoreCfg.SQL.PluginName {
+		case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+			isStandard = false
+			visStore, err = sql.NewSQLVisibilityStore(
+				*visibilityStoreCfg.SQL,
+				persistenceResolver,
+				searchAttributesProvider,
+				searchAttributesMapperProvider,
+				logger,
+			)
+		default:
+			isStandard = true
+			visStore, err = standardSql.NewSQLVisibilityStore(*visibilityStoreCfg.SQL, persistenceResolver, logger)
+		}
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	if store == nil {
+	if visStore == nil {
 		logger.Fatal("invalid config: one of cassandra or sql params must be specified for visibility store")
 		return nil, nil
 	}
 
-	return standard.NewVisibilityStore(store), nil
+	if isStandard {
+		return standard.NewVisibilityStore(visStore), nil
+	}
+	return visStore, nil
 }
 
 func newAdvancedVisibilityStore(
