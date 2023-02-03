@@ -63,6 +63,8 @@ linters-settings:
         disabled: true
       - name: var-naming
         disabled: true
+      - name: unused-parameter
+        disabled: true
 
       # Rule tuning
       - name: argument-limit
