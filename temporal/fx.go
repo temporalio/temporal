@@ -670,7 +670,7 @@ func ApplyClusterMetadataConfigProvider(
 		var clusterId string
 		if uuid.Parse(clusterInfo.ClusterID) == nil {
 			if clusterInfo.ClusterID != "" {
-				logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id. ")
+				logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id ")
 			}
 			clusterId = uuid.New()
 		} else {
