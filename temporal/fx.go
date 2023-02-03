@@ -667,12 +667,13 @@ func ApplyClusterMetadataConfigProvider(
 			continue
 		}
 
-		clusterId := uuid.New()
-		if clusterInfo.ClusterID != "" {
-			if uuid.Parse(clusterInfo.ClusterID) == nil {
-				return config.ClusterMetadata, config.Persistence, fmt.Errorf("invalid cluster id: %v", clusterInfo.ClusterID)
+		var clusterId string
+		if uuid.Parse(clusterInfo.ClusterID) == nil {
+			if clusterInfo.ClusterID != "" {
+				logger.Warn("Cluster ID in Cluster Metadata config is not a valid uuid. Generated new Cluster ID. ")
 			}
-
+			clusterId = uuid.New()
+		} else {
 			clusterId = clusterInfo.ClusterID
 		}
 
