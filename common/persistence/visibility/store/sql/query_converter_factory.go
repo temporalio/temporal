@@ -22,44 +22,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+package sql
 
-import "time"
-
-var (
-	minMySQLDateTime = getMinMySQLDateTime()
+import (
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 )
 
-type (
-	// DataConverter defines the API for conversions to/from
-	// go types to mysql datatypes
-	DataConverter interface {
-		ToMySQLDateTime(t time.Time) time.Time
-		FromMySQLDateTime(t time.Time) time.Time
+func NewQueryConverter(
+	pluginName string,
+	request *manager.ListWorkflowExecutionsRequestV2,
+	saTypeMap searchattribute.NameTypeMap,
+	saMapper searchattribute.Mapper,
+) *QueryConverter {
+	switch pluginName {
+	case mysql.PluginNameV8:
+		return newMySQLQueryConverter(request, saTypeMap, saMapper)
+	default:
+		return nil
 	}
-	converter struct{}
-)
-
-// ToMySQLDateTime converts to time to MySQL datetime
-func (c *converter) ToMySQLDateTime(t time.Time) time.Time {
-	if t.IsZero() {
-		return minMySQLDateTime
-	}
-	return t.UTC().Truncate(time.Microsecond)
-}
-
-// FromMySQLDateTime converts mysql datetime and returns go time
-func (c *converter) FromMySQLDateTime(t time.Time) time.Time {
-	if t.Equal(minMySQLDateTime) {
-		return time.Time{}.UTC()
-	}
-	return t.UTC()
-}
-
-func getMinMySQLDateTime() time.Time {
-	t, err := time.Parse(time.RFC3339, "1000-01-01T00:00:00Z")
-	if err != nil {
-		return time.Unix(0, 0).UTC()
-	}
-	return t.UTC()
 }

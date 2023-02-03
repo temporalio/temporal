@@ -289,7 +289,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
 }
 
-func (s *visibilitySuite) TestDeleteSelect() {
+func (s *visibilitySuite) TestDeleteGet() {
 	namespaceID := primitives.NewUUID()
 	runID := primitives.NewUUID()
 
@@ -303,15 +303,15 @@ func (s *visibilitySuite) TestDeleteSelect() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	selectFilter := sqlplugin.VisibilitySelectFilter{
+	getFilter := sqlplugin.VisibilityGetFilter{
 		NamespaceID: namespaceID.String(),
-		RunID:       convert.StringPtr(runID.String()),
+		RunID:       runID.String(),
 	}
-	_, err = s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
+	_, err = s.store.GetFromVisibility(newVisibilityContext(), getFilter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
-func (s *visibilitySuite) TestInsertDeleteSelect() {
+func (s *visibilitySuite) TestInsertDeleteGet() {
 	namespaceID := primitives.NewUUID()
 	runID := primitives.NewUUID()
 	workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)
@@ -349,15 +349,15 @@ func (s *visibilitySuite) TestInsertDeleteSelect() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	selectFilter := sqlplugin.VisibilitySelectFilter{
+	getFilter := sqlplugin.VisibilityGetFilter{
 		NamespaceID: namespaceID.String(),
-		RunID:       convert.StringPtr(runID.String()),
+		RunID:       runID.String(),
 	}
-	_, err = s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
+	_, err = s.store.GetFromVisibility(newVisibilityContext(), getFilter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
-func (s *visibilitySuite) TestReplaceDeleteSelect() {
+func (s *visibilitySuite) TestReplaceDeleteGet() {
 	namespaceID := primitives.NewUUID()
 	runID := primitives.NewUUID()
 	workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)
@@ -395,11 +395,11 @@ func (s *visibilitySuite) TestReplaceDeleteSelect() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	selectFilter := sqlplugin.VisibilitySelectFilter{
+	getFilter := sqlplugin.VisibilityGetFilter{
 		NamespaceID: namespaceID.String(),
-		RunID:       convert.StringPtr(runID.String()),
+		RunID:       runID.String(),
 	}
-	_, err = s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
+	_, err = s.store.GetFromVisibility(newVisibilityContext(), getFilter)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
 
