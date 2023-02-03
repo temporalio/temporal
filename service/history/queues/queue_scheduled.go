@@ -75,7 +75,7 @@ func NewScheduledQueue(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *scheduledQueue {
-	paginationFnProvider := func(r Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(readerID int32, r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			ctx, cancel := newQueueIOContext()
 			defer cancel()
@@ -83,6 +83,7 @@ func NewScheduledQueue(
 			request := &persistence.GetHistoryTasksRequest{
 				ShardID:             shard.GetShardID(),
 				TaskCategory:        category,
+				ReaderID:            readerID,
 				InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
 				ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0),
 				BatchSize:           options.BatchSize(),
@@ -261,6 +262,7 @@ func (p *scheduledQueue) lookAheadTask() {
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
 		TaskCategory:        p.category,
+		ReaderID:            DefaultReaderId,
 		InclusiveMinTaskKey: tasks.NewKey(lookAheadMinTime, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(lookAheadMaxTime, 0),
 		BatchSize:           1,

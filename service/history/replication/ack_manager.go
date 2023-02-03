@@ -331,6 +331,7 @@ func (p *ackMgrImpl) getReplicationTasksFn(
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 			ShardID:             p.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
+			ReaderID:            common.DefaultQueueReaderID, // TODO: need different readerID for different remote cluster
 			InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 			BatchSize:           batchSize,

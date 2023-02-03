@@ -747,6 +747,7 @@ func (adh *AdminHandler) ListHistoryTasks(
 	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             request.ShardId,
 		TaskCategory:        taskCategory,
+		ReaderID:            common.DefaultQueueReaderID, // TODO: 1. does this work? need to move to history?
 		InclusiveMinTaskKey: minTaskKey,
 		ExclusiveMaxTaskKey: maxTaskKey,
 		BatchSize:           int(request.BatchSize),

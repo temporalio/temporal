@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -518,6 +519,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        fakeScheduledTaskCategory,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewKey(now, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
 		BatchSize:           10,
@@ -565,6 +567,7 @@ func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	request := &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        category,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: inclusiveMinTaskKey,
 		ExclusiveMaxTaskKey: exclusiveMaxTaskKey,
 		BatchSize:           batchSize,
