@@ -488,6 +488,10 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 	}
 
 	for name, value := range searchAttributes {
+		if value == nil {
+			delete(searchAttributes, name)
+			continue
+		}
 		tp, err := saTypeMap.GetType(name)
 		if err != nil {
 			return nil, err
