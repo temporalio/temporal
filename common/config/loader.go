@@ -118,6 +118,7 @@ func LoadConfig(env string, configDir string, zone string) (*Config, error) {
 
 // getConfigFiles returns the list of config files to
 // process in the hierarchy order
+// test
 func getConfigFiles(env string, configDir string, zone string) ([]string, error) {
 
 	candidates := []string{
