@@ -159,10 +159,13 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+
+	newWorkflowTask, _ := s.mutableState.GetWorkflowTaskInfo(newWorkflowTaskScheduleEvent.GetEventId())
+	s.NotNil(newWorkflowTask)
+
 	_, err := s.mutableState.AddWorkflowTaskTimedOutEvent(
-		newWorkflowTaskScheduleEvent.GetEventId(),
-		newWorkflowTaskStartedEvent.GetEventId(),
+		newWorkflowTask,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.BufferEventSize())
@@ -179,11 +182,13 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+
+	newWorkflowTask, _ := s.mutableState.GetWorkflowTaskInfo(newWorkflowTaskScheduleEvent.GetEventId())
+	s.NotNil(newWorkflowTask)
 
 	_, err := s.mutableState.AddWorkflowTaskFailedEvent(
-		newWorkflowTaskScheduleEvent.GetEventId(),
-		newWorkflowTaskStartedEvent.GetEventId(),
+		newWorkflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 		failure.NewServerFailure("some random workflow task failure details", false),
 		"some random workflow task failure identity",

@@ -1891,8 +1891,7 @@ func (ms *MutableStateImpl) CheckResettable() error {
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskCompletedEvent(
-	scheduledEventID int64,
-	startedEventID int64,
+	workflowTask *WorkflowTaskInfo,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	maxResetPoints int,
 ) (*historypb.HistoryEvent, error) {
@@ -1900,7 +1899,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskCompletedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskCompletedEvent(scheduledEventID, startedEventID, request, maxResetPoints)
+	return ms.workflowTaskManager.AddWorkflowTaskCompletedEvent(workflowTask, request, maxResetPoints)
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowTaskCompletedEvent(
@@ -1910,14 +1909,13 @@ func (ms *MutableStateImpl) ReplicateWorkflowTaskCompletedEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskTimedOutEvent(
-	scheduledEventID int64,
-	startedEventID int64,
+	workflowTask *WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskTimedOutEvent(scheduledEventID, startedEventID)
+	return ms.workflowTaskManager.AddWorkflowTaskTimedOutEvent(workflowTask)
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowTaskTimedOutEvent(
@@ -1937,8 +1935,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskScheduleToStartTimeoutEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
-	scheduledEventID int64,
-	startedEventID int64,
+	workflowTask *WorkflowTaskInfo,
 	cause enumspb.WorkflowTaskFailedCause,
 	failure *failurepb.Failure,
 	identity string,
@@ -1952,8 +1949,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 		return nil, err
 	}
 	return ms.workflowTaskManager.AddWorkflowTaskFailedEvent(
-		scheduledEventID,
-		startedEventID,
+		workflowTask,
 		cause,
 		failure,
 		identity,
