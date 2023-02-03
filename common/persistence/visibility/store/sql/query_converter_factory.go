@@ -27,6 +27,7 @@ package sql
 import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -42,6 +43,8 @@ func NewQueryConverter(
 		return newMySQLQueryConverter(request, saTypeMap, saMapper)
 	case postgresql.PluginNameV12:
 		return newPostgreSQLQueryConverter(request, saTypeMap, saMapper)
+	case sqlite.PluginName:
+		return newSqliteQueryConverter(request, saTypeMap, saMapper)
 	default:
 		return nil
 	}

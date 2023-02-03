@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -283,7 +284,7 @@ func newStandardVisibilityStore(
 		isStandard = true
 	case visibilityStoreCfg.SQL != nil:
 		switch visibilityStoreCfg.SQL.PluginName {
-		case mysql.PluginNameV8, postgresql.PluginNameV12:
+		case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 			isStandard = false
 			visStore, err = sql.NewSQLVisibilityStore(
 				*visibilityStoreCfg.SQL,
