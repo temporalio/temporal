@@ -200,6 +200,7 @@ message AddSearchAttributesRequest {
     map<string, temporal.api.enums.v1.IndexedValueType> search_attributes = 1;
     string index_name = 2;
     bool skip_schema_update = 3;
+    string namespace = 4;
 }
 
 message AddSearchAttributesResponse {
@@ -208,6 +209,7 @@ message AddSearchAttributesResponse {
 message RemoveSearchAttributesRequest {
     repeated string search_attributes = 1;
     string index_name = 2;
+    string namespace = 4;
 }
 
 message RemoveSearchAttributesResponse {
@@ -215,6 +217,7 @@ message RemoveSearchAttributesResponse {
 
 message GetSearchAttributesRequest {
     string index_name = 1;
+    string namespace = 4;
 }
 
 message GetSearchAttributesResponse {
