@@ -495,11 +495,16 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) tryDispatchTaskDirectly(
 	task T,
 ) bool {
 	rateLimiterConfig := s.getRateLimiterConfig()
+	now := s.timeSource.Now()
+	reservation := quotas.NoopReservation
 	if rateLimiterConfig.enableThrottle || rateLimiterConfig.enableShadowMode {
-		if !s.rateLimiter.Allow(
-			s.timeSource.Now(),
+		reservation = s.rateLimiter.Reserve(
+			now,
 			s.options.ChannelQuotaRequestFn(channelKey),
-		) {
+		)
+
+		if reservation.DelayFrom(now) != 0 {
+			reservation.CancelAt(now)
 			s.metricsHandler.Counter(metrics.TaskSchedulerThrottled.GetMetricName()).Record(1, s.options.TaskChannelMetricTagsFn(channelKey)...)
 
 			if rateLimiterConfig.enableThrottle {
@@ -515,6 +520,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) tryDispatchTaskDirectly(
 	dispatched := s.fifoScheduler.TrySubmit(task)
 	if dispatched {
 		atomic.AddInt64(&s.numInflightTask, -1)
+	} else {
+		reservation.CancelAt(now)
 	}
 	return dispatched
 }
