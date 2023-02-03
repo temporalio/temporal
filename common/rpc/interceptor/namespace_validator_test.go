@@ -33,10 +33,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -594,6 +596,91 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 			s.NoError(queryErr)
 			s.True(handlerCalled)
 		}
+	}
+}
+
+func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
+	// it's just a list of requests
+	testCases := []struct {
+		req          any
+		hasNamespace bool
+	}{
+		{
+			req:          &adminservice.AddSearchAttributesRequest{},
+			hasNamespace: false,
+		},
+		{
+			req:          &adminservice.RemoveSearchAttributesRequest{},
+			hasNamespace: false,
+		},
+		{
+			req:          &adminservice.GetSearchAttributesRequest{},
+			hasNamespace: false,
+		},
+		{
+			req:          &operatorservice.AddSearchAttributesRequest{},
+			hasNamespace: false,
+		},
+		{
+			req:          &operatorservice.RemoveSearchAttributesRequest{},
+			hasNamespace: false,
+		},
+		{
+			req:          &operatorservice.ListSearchAttributesRequest{},
+			hasNamespace: false,
+		},
+		{
+			req:          &adminservice.AddSearchAttributesRequest{Namespace: "test-namespace"},
+			hasNamespace: true,
+		},
+		{
+			req:          &adminservice.RemoveSearchAttributesRequest{Namespace: "test-namespace"},
+			hasNamespace: true,
+		},
+		{
+			req:          &adminservice.GetSearchAttributesRequest{Namespace: "test-namespace"},
+			hasNamespace: true,
+		},
+		{
+			req:          &operatorservice.AddSearchAttributesRequest{Namespace: "test-namespace"},
+			hasNamespace: true,
+		},
+		{
+			req:          &operatorservice.RemoveSearchAttributesRequest{Namespace: "test-namespace"},
+			hasNamespace: true,
+		},
+		{
+			req:          &operatorservice.ListSearchAttributesRequest{Namespace: "test-namespace"},
+			hasNamespace: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		if testCase.hasNamespace {
+			s.mockRegistry.EXPECT().GetNamespace(namespace.Name("test-namespace")).Return(nil, nil)
+		}
+
+		nvi := NewNamespaceValidatorInterceptor(
+			s.mockRegistry,
+			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetIntPropertyFn(100),
+		)
+		serverInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/temporal/random",
+		}
+
+		handlerCalled := false
+		_, err := nvi.StateValidationIntercept(
+			context.Background(),
+			testCase.req,
+			serverInfo,
+			func(ctx context.Context, req any) (any, error) {
+				handlerCalled = true
+				return nil, nil
+			},
+		)
+		s.NoError(err)
+		s.True(handlerCalled)
 	}
 }
 
