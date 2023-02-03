@@ -51,6 +51,10 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_Sticky() {
 			return "query works", nil
 		})
 
+		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+			return "query works", nil
+		})
+
 		signalCh := workflow.GetSignalChannel(ctx, "test")
 		var msg string
 		signalCh.Receive(ctx, &msg)
