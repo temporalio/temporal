@@ -504,8 +504,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.Attempt,
 			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
 		)
+		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
-			scheduledEvent.GetEventId(),
+			workflowTask.ScheduledEventID,
 			workflowTask.RequestID,
 			request.GetIdentity(),
 			timestamp.TimeValue(workflowTask.StartedTime),
@@ -539,9 +540,29 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 	forkEventVersion int64,
 ) (*historypb.HistoryEvent, error) {
 
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for speculative WT.
+		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
+			m.ms.TaskQueue(),
+			workflowTask.WorkflowTaskTimeout,
+			workflowTask.Attempt,
+			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
+		)
+		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
+		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
+			workflowTask.ScheduledEventID,
+			workflowTask.RequestID,
+			identity,
+			timestamp.TimeValue(workflowTask.StartedTime),
+		)
+		// TODO (alex-update): Do we need to call next line here same as in AddWorkflowTaskCompletedEvent?
+		m.ms.hBuilder.FlushAndCreateNewBatch()
+		workflowTask.StartedEventID = startedEvent.GetEventId()
+	}
+
 	var event *historypb.HistoryEvent
-	// Only emit WorkflowTaskFailedEvent if workflow task is not transient and not speculative.
-	if !m.ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+	// Only emit WorkflowTaskFailedEvent if workflow task is not transient.
+	if !m.ms.IsTransientWorkflowTask() {
 		event = m.ms.hBuilder.AddWorkflowTaskFailedEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.StartedEventID,
