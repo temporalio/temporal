@@ -78,7 +78,7 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	_, methodName := splitMethodName(info.FullMethod)
+	_, methodName := SplitMethodName(info.FullMethod)
 	// token will default to 0
 	token := ni.tokens[methodName]
 	if token != 0 {

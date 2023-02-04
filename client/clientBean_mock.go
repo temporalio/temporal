@@ -36,6 +36,7 @@ import (
 	v10 "go.temporal.io/server/api/adminservice/v1"
 	v11 "go.temporal.io/server/api/historyservice/v1"
 	v12 "go.temporal.io/server/api/matchingservice/v1"
+	grpc "google.golang.org/grpc"
 )
 
 // MockBean is a mock of Bean interface.
@@ -105,79 +106,44 @@ func (mr *MockBeanMockRecorder) GetMatchingClient(namespaceIDToName interface{})
 }
 
 // GetRemoteAdminClient mocks base method.
-func (m *MockBean) GetRemoteAdminClient(cluster string) (v10.AdminServiceClient, error) {
+func (m *MockBean) GetRemoteAdminClient(arg0 string) (v10.AdminServiceClient, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRemoteAdminClient", cluster)
+	ret := m.ctrl.Call(m, "GetRemoteAdminClient", arg0)
 	ret0, _ := ret[0].(v10.AdminServiceClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetRemoteAdminClient indicates an expected call of GetRemoteAdminClient.
-func (mr *MockBeanMockRecorder) GetRemoteAdminClient(cluster interface{}) *gomock.Call {
+func (mr *MockBeanMockRecorder) GetRemoteAdminClient(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteAdminClient", reflect.TypeOf((*MockBean)(nil).GetRemoteAdminClient), cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteAdminClient", reflect.TypeOf((*MockBean)(nil).GetRemoteAdminClient), arg0)
 }
 
 // GetRemoteFrontendClient mocks base method.
-func (m *MockBean) GetRemoteFrontendClient(cluster string) (v1.WorkflowServiceClient, error) {
+func (m *MockBean) GetRemoteFrontendClient(arg0 string) (grpc.ClientConnInterface, v1.WorkflowServiceClient, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRemoteFrontendClient", cluster)
-	ret0, _ := ret[0].(v1.WorkflowServiceClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "GetRemoteFrontendClient", arg0)
+	ret0, _ := ret[0].(grpc.ClientConnInterface)
+	ret1, _ := ret[1].(v1.WorkflowServiceClient)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetRemoteFrontendClient indicates an expected call of GetRemoteFrontendClient.
-func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(cluster interface{}) *gomock.Call {
+func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteFrontendClient", reflect.TypeOf((*MockBean)(nil).GetRemoteFrontendClient), cluster)
-}
-
-// SetFrontendClient mocks base method.
-func (m *MockBean) SetFrontendClient(client v1.WorkflowServiceClient) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetFrontendClient", client)
-}
-
-// SetFrontendClient indicates an expected call of SetFrontendClient.
-func (mr *MockBeanMockRecorder) SetFrontendClient(client interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFrontendClient", reflect.TypeOf((*MockBean)(nil).SetFrontendClient), client)
-}
-
-// SetHistoryClient mocks base method.
-func (m *MockBean) SetHistoryClient(client v11.HistoryServiceClient) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetHistoryClient", client)
-}
-
-// SetHistoryClient indicates an expected call of SetHistoryClient.
-func (mr *MockBeanMockRecorder) SetHistoryClient(client interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryClient", reflect.TypeOf((*MockBean)(nil).SetHistoryClient), client)
-}
-
-// SetMatchingClient mocks base method.
-func (m *MockBean) SetMatchingClient(client v12.MatchingServiceClient) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetMatchingClient", client)
-}
-
-// SetMatchingClient indicates an expected call of SetMatchingClient.
-func (mr *MockBeanMockRecorder) SetMatchingClient(client interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMatchingClient", reflect.TypeOf((*MockBean)(nil).SetMatchingClient), client)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteFrontendClient", reflect.TypeOf((*MockBean)(nil).GetRemoteFrontendClient), arg0)
 }
 
 // SetRemoteAdminClient mocks base method.
-func (m *MockBean) SetRemoteAdminClient(cluster string, client v10.AdminServiceClient) {
+func (m *MockBean) SetRemoteAdminClient(arg0 string, arg1 v10.AdminServiceClient) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetRemoteAdminClient", cluster, client)
+	m.ctrl.Call(m, "SetRemoteAdminClient", arg0, arg1)
 }
 
 // SetRemoteAdminClient indicates an expected call of SetRemoteAdminClient.
-func (mr *MockBeanMockRecorder) SetRemoteAdminClient(cluster, client interface{}) *gomock.Call {
+func (mr *MockBeanMockRecorder) SetRemoteAdminClient(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRemoteAdminClient", reflect.TypeOf((*MockBean)(nil).SetRemoteAdminClient), cluster, client)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRemoteAdminClient", reflect.TypeOf((*MockBean)(nil).SetRemoteAdminClient), arg0, arg1)
 }

@@ -251,7 +251,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 	request *operatorservice.AddSearchAttributesRequest,
 	currentSearchAttributes searchattribute.NameTypeMap,
 ) error {
-	client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
+	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
 		frontend.DefaultTimeout,
 		frontend.DefaultLongPollTimeout,
 	)
@@ -371,7 +371,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 	ctx context.Context,
 	request *operatorservice.RemoveSearchAttributesRequest,
 ) error {
-	client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
+	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
 		frontend.DefaultTimeout,
 		frontend.DefaultLongPollTimeout,
 	)

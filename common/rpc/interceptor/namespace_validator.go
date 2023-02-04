@@ -248,7 +248,7 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		return nil
 	}
 
-	_, methodName := splitMethodName(fullMethod)
+	_, methodName := SplitMethodName(fullMethod)
 
 	allowedStates, allowedStatesDefined := allowedNamespaceStates[methodName]
 	if !allowedStatesDefined {
@@ -272,7 +272,7 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 		return nil
 	}
 
-	_, methodName := splitMethodName(fullMethod)
+	_, methodName := SplitMethodName(fullMethod)
 
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
 		return nil

@@ -42,6 +42,7 @@ import (
 	log "go.temporal.io/server/common/log"
 	membership "go.temporal.io/server/common/membership"
 	metrics "go.temporal.io/server/common/metrics"
+	grpc "google.golang.org/grpc"
 )
 
 // MockFactory is a mock of Factory interface.
@@ -98,12 +99,13 @@ func (mr *MockFactoryMockRecorder) NewLocalAdminClientWithTimeout(timeout, large
 }
 
 // NewLocalFrontendClientWithTimeout mocks base method.
-func (m *MockFactory) NewLocalFrontendClientWithTimeout(timeout, longPollTimeout time.Duration) (v1.WorkflowServiceClient, error) {
+func (m *MockFactory) NewLocalFrontendClientWithTimeout(timeout, longPollTimeout time.Duration) (grpc.ClientConnInterface, v1.WorkflowServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewLocalFrontendClientWithTimeout", timeout, longPollTimeout)
-	ret0, _ := ret[0].(v1.WorkflowServiceClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(grpc.ClientConnInterface)
+	ret1, _ := ret[1].(v1.WorkflowServiceClient)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // NewLocalFrontendClientWithTimeout indicates an expected call of NewLocalFrontendClientWithTimeout.
@@ -142,11 +144,12 @@ func (mr *MockFactoryMockRecorder) NewRemoteAdminClientWithTimeout(rpcAddress, t
 }
 
 // NewRemoteFrontendClientWithTimeout mocks base method.
-func (m *MockFactory) NewRemoteFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) v1.WorkflowServiceClient {
+func (m *MockFactory) NewRemoteFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) (grpc.ClientConnInterface, v1.WorkflowServiceClient) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewRemoteFrontendClientWithTimeout", rpcAddress, timeout, longPollTimeout)
-	ret0, _ := ret[0].(v1.WorkflowServiceClient)
-	return ret0
+	ret0, _ := ret[0].(grpc.ClientConnInterface)
+	ret1, _ := ret[1].(v1.WorkflowServiceClient)
+	return ret0, ret1
 }
 
 // NewRemoteFrontendClientWithTimeout indicates an expected call of NewRemoteFrontendClientWithTimeout.

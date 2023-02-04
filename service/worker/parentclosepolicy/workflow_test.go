@@ -28,7 +28,7 @@ import (
 	"context"
 	"testing"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -77,7 +77,7 @@ func (s *parentClosePolicyWorkflowSuite) SetupTest() {
 	s.mockRemoteClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 
 	s.mockClientBean.EXPECT().GetHistoryClient().Return(s.mockHistoryClient).AnyTimes()
-	s.mockClientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(s.mockRemoteClient, nil).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(nil, s.mockRemoteClient, nil).AnyTimes()
 
 	s.processor = &Processor{
 		metricsHandler: metrics.NoopMetricsHandler,
