@@ -45,6 +45,8 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
+const QueueFactoryFxGroup = "queueFactory"
+
 type (
 	QueueFactory interface {
 		common.Daemon
