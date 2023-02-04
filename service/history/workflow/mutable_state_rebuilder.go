@@ -216,6 +216,8 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				event.GetEventId(),
 				attributes.GetRequestId(),
 				timestamp.TimeValue(event.GetEventTime()),
+				attributes.GetSuggestContinueAsNew(),
+				attributes.GetHistorySizeBytes(),
 			)
 			if err != nil {
 				return nil, err

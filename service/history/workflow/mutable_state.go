@@ -89,6 +89,13 @@ type (
 
 		// Indicate type of the current workflow task (normal, transient, or speculative).
 		Type enumsspb.WorkflowTaskType
+
+		// These two fields are sent to workers in the WorkflowTaskStarted event. We need to save a
+		// copy here to ensure that we send the same values with every transient WorkflowTaskStarted
+		// event, otherwise a dynamic config change of the suggestion threshold could cause the
+		// event that the worker used to not match the event we saved in history.
+		SuggestContinueAsNew bool
+		HistorySizeBytes     int64
 	}
 
 	MutableState interface {
@@ -224,7 +231,7 @@ type (
 		ReplicateWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowTaskFailedEvent() error
 		ReplicateWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, *time.Duration, int32, *time.Time, *time.Time, enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		ReplicateWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time) (*WorkflowTaskInfo, error)
+		ReplicateWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64) (*WorkflowTaskInfo, error)
 		ReplicateWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
 		ReplicateExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
 		ReplicateExternalWorkflowExecutionSignaled(*historypb.HistoryEvent) error

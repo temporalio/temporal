@@ -1330,6 +1330,10 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 		TaskQueue:             nil,
 		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
 		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
+
+		// QUESTION: should we preserve values here? this is called by nDCBranchMgr
+		SuggestContinueAsNew: false,
+		HistorySizeBytes:     0,
 	}
 	ms.workflowTaskManager.UpdateWorkflowTask(emptyWorkflowTaskInfo)
 	return nil
@@ -1792,9 +1796,11 @@ func (ms *MutableStateImpl) ReplicateWorkflowTaskStartedEvent(
 	startedEventID int64,
 	requestID string,
 	timestamp time.Time,
+	suggestContinueAsNew bool,
+	historySizeBytes int64,
 ) (*WorkflowTaskInfo, error) {
-
-	return ms.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID, startedEventID, requestID, timestamp)
+	return ms.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
+		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes)
 }
 
 // TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"

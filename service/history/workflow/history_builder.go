@@ -218,13 +218,17 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	requestID string,
 	identity string,
 	startTime time.Time,
+	suggestContinueAsNew bool,
+	historySizeBytes int64,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			Identity:         identity,
-			RequestId:        requestID,
+			ScheduledEventId:     scheduledEventID,
+			Identity:             identity,
+			RequestId:            requestID,
+			SuggestContinueAsNew: suggestContinueAsNew,
+			HistorySizeBytes:     historySizeBytes,
 		},
 	}
 

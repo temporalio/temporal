@@ -100,6 +100,8 @@ message WorkflowExecutionInfo {
     google.protobuf.Timestamp workflow_task_original_scheduled_time = 30 [(gogoproto.stdtime) = true];
     string workflow_task_request_id = 31;
     temporal.server.api.enums.v1.WorkflowTaskType workflow_task_type = 68;
+    bool workflow_task_suggest_continue_as_new = 69;
+    int64 workflow_task_history_size_bytes = 70;
 
     bool cancel_requested = 29;
     string cancel_request_id = 32;

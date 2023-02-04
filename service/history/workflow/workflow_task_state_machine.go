@@ -104,6 +104,9 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 		StartedTime:           nil,
 		OriginalScheduledTime: originalScheduledTimestamp,
 		Type:                  workflowTaskType,
+		// preserve these across attempts:
+		SuggestContinueAsNew: m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew,
+		HistorySizeBytes:     m.ms.executionInfo.WorkflowTaskHistorySizeBytes,
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -147,6 +150,11 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 		ScheduledTime: timestamp.TimePtr(m.ms.timeSource.Now()),
 		StartedTime:   timestamp.UnixOrZeroTimePtr(0),
 		Type:          enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		// QUESTION: should we preserve these here? this is used by mutable state rebuilder. it
+		// seems like the same logic as case 1 above applies: if a failover happens right after
+		// this, then AddWorkflowTaskStartedEvent will rewrite these anyway. is that correct?
+		SuggestContinueAsNew: false,
+		HistorySizeBytes:     0,
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -160,6 +168,8 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 	startedEventID int64,
 	requestID string,
 	timestamp time.Time,
+	suggestContinueAsNew bool,
+	historySizeBytes int64,
 ) (*WorkflowTaskInfo, error) {
 	// When this function is called from ApplyEvents, workflowTask is nil.
 	// It is safe to look up the workflow task as it does not have to deal with transient workflow task case.
@@ -196,6 +206,8 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 		TaskQueue:             workflowTask.TaskQueue,
 		OriginalScheduledTime: workflowTask.OriginalScheduledTime,
 		Type:                  workflowTask.Type,
+		SuggestContinueAsNew:  suggestContinueAsNew,
+		HistorySizeBytes:      historySizeBytes,
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
@@ -238,9 +250,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 		)
 		return nil, m.ms.createInternalServerError(opTag)
 	}
-
-	// clear stickiness whenever workflow task fails
-	m.ms.ClearStickyness()
 
 	event := m.ms.hBuilder.AddWorkflowTaskTimedOutEvent(
 		scheduledEventID,
@@ -441,17 +450,24 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// (it wasn't created for transient/speculative WT).
 	var startedEvent *historypb.HistoryEvent
 	if workflowTaskScheduledEventCreated {
+		workflowTask.SuggestContinueAsNew, workflowTask.HistorySizeBytes = m.getHistorySizeInfo()
+
 		startedEvent = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEventID,
 			requestID,
 			identity,
 			startTime,
+			workflowTask.SuggestContinueAsNew,
+			workflowTask.HistorySizeBytes,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
 	}
 
-	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(workflowTask, m.ms.GetCurrentVersion(), scheduledEventID, startedEventID, requestID, startTime)
+	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(
+		workflowTask, m.ms.GetCurrentVersion(), scheduledEventID, startedEventID, requestID, startTime,
+		workflowTask.SuggestContinueAsNew, workflowTask.HistorySizeBytes,
+	)
 
 	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)
 
@@ -510,6 +526,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.RequestID,
 			request.GetIdentity(),
 			timestamp.TimeValue(workflowTask.StartedTime),
+			workflowTask.SuggestContinueAsNew,
+			workflowTask.HistorySizeBytes,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -554,6 +572,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.RequestID,
 			identity,
 			timestamp.TimeValue(workflowTask.StartedTime),
+			workflowTask.SuggestContinueAsNew,
+			workflowTask.HistorySizeBytes,
 		)
 		// TODO (alex-update): Do we need to call next line here same as in AddWorkflowTaskCompletedEvent?
 		m.ms.hBuilder.FlushAndCreateNewBatch()
@@ -630,6 +650,9 @@ func (m *workflowTaskStateMachine) FailWorkflowTask(
 		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
 		Attempt:               1,
 		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
+		// preserve these across attempts:
+		SuggestContinueAsNew: m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew,
+		HistorySizeBytes:     m.ms.executionInfo.WorkflowTaskHistorySizeBytes,
 	}
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
@@ -654,6 +677,8 @@ func (m *workflowTaskStateMachine) DeleteWorkflowTask() {
 		// Keep the last original scheduled Timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
 		OriginalScheduledTime: m.getWorkflowTaskInfo().OriginalScheduledTime,
 		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
+		SuggestContinueAsNew:  false,
+		HistorySizeBytes:      0,
 	}
 	m.UpdateWorkflowTask(resetWorkflowTaskInfo)
 }
@@ -672,6 +697,8 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskScheduledTime = workflowTask.ScheduledTime
 	m.ms.executionInfo.WorkflowTaskOriginalScheduledTime = workflowTask.OriginalScheduledTime
 	m.ms.executionInfo.WorkflowTaskType = workflowTask.Type
+	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew = workflowTask.SuggestContinueAsNew
+	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
 
 	// NOTE: do not update task queue in execution info
 
@@ -803,9 +830,11 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		Version:   m.ms.currentVersion,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 			WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-				ScheduledEventId: workflowTask.ScheduledEventID,
-				Identity:         identity,
-				RequestId:        workflowTask.RequestID,
+				ScheduledEventId:     workflowTask.ScheduledEventID,
+				Identity:             identity,
+				RequestId:            workflowTask.RequestID,
+				SuggestContinueAsNew: workflowTask.SuggestContinueAsNew,
+				HistorySizeBytes:     workflowTask.HistorySizeBytes,
 			},
 		},
 	}
@@ -828,6 +857,8 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *WorkflowTaskInfo {
 		TaskQueue:             m.ms.TaskQueue(),
 		OriginalScheduledTime: m.ms.executionInfo.WorkflowTaskOriginalScheduledTime,
 		Type:                  m.ms.executionInfo.WorkflowTaskType,
+		SuggestContinueAsNew:  m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew,
+		HistorySizeBytes:      m.ms.executionInfo.WorkflowTaskHistorySizeBytes,
 	}
 }
 
@@ -884,4 +915,23 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 		WithExpirationInterval(backoff.NoInterval)
 	startToCloseTimeout := *defaultTimeout + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts)
 	return &startToCloseTimeout
+}
+
+func (m *workflowTaskStateMachine) getHistorySizeInfo() (bool, int64) {
+	stats := m.ms.GetExecutionInfo().ExecutionStats
+	if stats == nil {
+		return false, 0
+	}
+	// QUESTION: in some cases we might have history events in memory that we haven't written
+	// out yet, so they won't show up here. should we try to include them?
+	historySize := stats.HistorySize
+	// This is called right before AddWorkflowTaskStartedEvent, so at this point, nextEventID
+	// is the ID of the workflow task started event.
+	historyCount := m.ms.GetNextEventID()
+	config := m.ms.shard.GetConfig()
+	namespaceName := m.ms.GetNamespaceEntry().Name().String()
+	sizeLimit := int64(config.HistorySizeSuggestContinueAsNew(namespaceName))
+	countLimit := int64(config.HistoryCountSuggestContinueAsNew(namespaceName))
+	suggestContinueAsNew := historySize >= sizeLimit || historyCount >= countLimit
+	return suggestContinueAsNew, historySize
 }
