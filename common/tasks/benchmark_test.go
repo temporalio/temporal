@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -62,15 +63,18 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Sequential(b *testing.B) {
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
-			TaskChannelKeyFn:      func(nt *noopTask) int { return rand.Intn(4) },
-			ChannelWeightFn:       func(key int) int { return channelKeyToWeight[key] },
-			ChannelQuotaRequestFn: func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", "") },
-			EnableRateLimiter:     dynamicconfig.GetBoolPropertyFn(true),
+			TaskChannelKeyFn:            func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelWeightFn:             func(key int) int { return channelKeyToWeight[key] },
+			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", "") },
+			TaskChannelMetricTagsFn:     func(key int) []metrics.Tag { return nil },
+			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
+			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(false),
 		},
 		Scheduler[*noopTask](&noopScheduler{}),
 		quotas.NoopRequestRateLimiter,
 		clock.NewRealTimeSource(),
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -92,15 +96,18 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
-			TaskChannelKeyFn:      func(nt *noopTask) int { return rand.Intn(4) },
-			ChannelWeightFn:       func(key int) int { return channelKeyToWeight[key] },
-			ChannelQuotaRequestFn: func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", "") },
-			EnableRateLimiter:     dynamicconfig.GetBoolPropertyFn(true),
+			TaskChannelKeyFn:            func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelWeightFn:             func(key int) int { return channelKeyToWeight[key] },
+			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", "") },
+			TaskChannelMetricTagsFn:     func(key int) []metrics.Tag { return nil },
+			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
+			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(false),
 		},
 		Scheduler[*noopTask](&noopScheduler{}),
 		quotas.NoopRequestRateLimiter,
 		clock.NewRealTimeSource(),
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 	scheduler.Start()
 	defer scheduler.Stop()

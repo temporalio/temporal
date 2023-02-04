@@ -27,8 +27,6 @@
 package queues
 
 import (
-	"time"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -78,14 +76,16 @@ type (
 		ActiveNamespaceWeights      dynamicconfig.MapPropertyFnWithNamespaceFilter
 		StandbyNamespaceWeights     dynamicconfig.MapPropertyFnWithNamespaceFilter
 		EnableRateLimiter           dynamicconfig.BoolPropertyFn
-		MaxDispatchThrottleDuration time.Duration
+		EnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
+		DispatchThrottleDuration    dynamicconfig.DurationPropertyFn
 	}
 
 	PrioritySchedulerOptions struct {
 		WorkerCount                 dynamicconfig.IntPropertyFn
 		Weight                      dynamicconfig.MapPropertyFn
 		EnableRateLimiter           dynamicconfig.BoolPropertyFn
-		MaxDispatchThrottleDuration time.Duration
+		EnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
+		DispatchThrottleDuration    dynamicconfig.DurationPropertyFn
 	}
 
 	schedulerImpl struct {
@@ -145,6 +145,13 @@ func NewNamespacePriorityScheduler(
 		}
 		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[key.Priority], "")
 	}
+	taskChannelMetricsTagsFn := func(key TaskChannelKey) []metrics.Tag {
+		namespaceName, _ := namespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
+		return []metrics.Tag{
+			metrics.NamespaceTag(string(namespaceName)),
+			metrics.TaskPriorityTag(key.Priority.String()),
+		}
+	}
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
 		QueueSize:   prioritySchedulerProcessorQueueSize,
 		WorkerCount: options.WorkerCount,
@@ -157,8 +164,10 @@ func NewNamespacePriorityScheduler(
 				ChannelWeightFn:             channelWeightFn,
 				ChannelWeightUpdateCh:       channelWeightUpdateCh,
 				ChannelQuotaRequestFn:       channelQuotaRequestFn,
+				TaskChannelMetricTagsFn:     taskChannelMetricsTagsFn,
 				EnableRateLimiter:           options.EnableRateLimiter,
-				MaxDispatchThrottleDuration: options.MaxDispatchThrottleDuration,
+				EnableRateLimiterShadowMode: options.EnableRateLimiterShadowMode,
+				DispatchThrottleDuration:    options.DispatchThrottleDuration,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 				newSchedulerMonitor(
@@ -174,6 +183,7 @@ func NewNamespacePriorityScheduler(
 			rateLimiter,
 			timeSource,
 			logger,
+			metricsHandler,
 		),
 		namespaceRegistry:     namespaceRegistry,
 		taskChannelKeyFn:      taskChannelKeyFn,
@@ -189,6 +199,7 @@ func NewPriorityScheduler(
 	rateLimiter SchedulerRateLimiter,
 	timeSource clock.TimeSource,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) Scheduler {
 	taskChannelKeyFn := func(e Executable) TaskChannelKey {
 		return TaskChannelKey{
@@ -209,6 +220,12 @@ func NewPriorityScheduler(
 	channelQuotaRequestFn := func(key TaskChannelKey) quotas.Request {
 		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityName[key.Priority], "")
 	}
+	taskChannelMetricsTagsFn := func(key TaskChannelKey) []metrics.Tag {
+		return []metrics.Tag{
+			metrics.NamespaceUnknownTag(),
+			metrics.TaskPriorityTag(key.Priority.String()),
+		}
+	}
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
 		QueueSize:   prioritySchedulerProcessorQueueSize,
 		WorkerCount: options.WorkerCount,
@@ -221,8 +238,10 @@ func NewPriorityScheduler(
 				ChannelWeightFn:             channelWeightFn,
 				ChannelWeightUpdateCh:       nil,
 				ChannelQuotaRequestFn:       channelQuotaRequestFn,
+				TaskChannelMetricTagsFn:     taskChannelMetricsTagsFn,
 				EnableRateLimiter:           options.EnableRateLimiter,
-				MaxDispatchThrottleDuration: options.MaxDispatchThrottleDuration,
+				EnableRateLimiterShadowMode: options.EnableRateLimiterShadowMode,
+				DispatchThrottleDuration:    options.DispatchThrottleDuration,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 				noopScheduleMonitor,
@@ -232,6 +251,7 @@ func NewPriorityScheduler(
 			rateLimiter,
 			timeSource,
 			logger,
+			metricsHandler,
 		),
 		taskChannelKeyFn:      taskChannelKeyFn,
 		channelWeightFn:       channelWeightFn,
