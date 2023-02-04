@@ -22,14 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgresql
+package sqlplugin
 
-// NOTE: whenever there is a new database schema update, plz update the following versions
+import "strings"
 
-// Version is the Postgres database release version
-// Temporal supports both MySQL and Postgres officially, so upgrade should be performed for both MySQL and Postgres
-const Version = "1.9"
+func appendPrefix(prefix string, fields []string) []string {
+	out := make([]string, len(fields))
+	for i, field := range fields {
+		out[i] = prefix + field
+	}
+	return out
+}
 
-// VisibilityVersion is the Postgres visibility database release version
-// Temporal supports both MySQL and Postgres officially, so upgrade should be performed for both MySQL and Postgres
-const VisibilityVersion = "1.1"
+func BuildNamedPlaceholder(fields ...string) string {
+	return strings.Join(appendPrefix(":", fields), ", ")
+}

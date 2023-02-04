@@ -65,7 +65,9 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 	// If search attribute value is `nil`, it means that search attribute needs to be removed from the document.
 
 	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+	case enumspb.INDEXED_VALUE_TYPE_TEXT,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		var val *string
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string

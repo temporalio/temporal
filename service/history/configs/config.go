@@ -275,6 +275,7 @@ type Config struct {
 
 	EnableCrossNamespaceCommands  dynamicconfig.BoolPropertyFn
 	EnableActivityEagerExecution  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableEagerWorkflowStart      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 
 	// ArchivalQueueProcessor settings
@@ -494,6 +495,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 
 		EnableCrossNamespaceCommands:  dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
 		EnableActivityEagerExecution:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableActivityEagerExecution, false),
+		EnableEagerWorkflowStart:      dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableEagerWorkflowStart, false),
 		NamespaceCacheRefreshInterval: dc.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
 
 		// Archival related

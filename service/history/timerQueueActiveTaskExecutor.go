@@ -332,8 +332,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
 		if _, err := mutableState.AddWorkflowTaskTimedOutEvent(
-			workflowTask.ScheduledEventID,
-			workflowTask.StartedEventID,
+			workflowTask,
 		); err != nil {
 			return err
 		}

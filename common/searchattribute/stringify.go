@@ -159,7 +159,9 @@ func parseValueTyped(valStr string, t enumspb.IndexedValueType) (interface{}, er
 	var err error
 
 	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+	case enumspb.INDEXED_VALUE_TYPE_TEXT,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		val = valStr
 	case enumspb.INDEXED_VALUE_TYPE_INT:
 		val, err = strconv.ParseInt(valStr, 10, 64)
@@ -207,7 +209,9 @@ func isJsonArray(str string) bool {
 
 func parseJsonArray(str string, t enumspb.IndexedValueType) (interface{}, error) {
 	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+	case enumspb.INDEXED_VALUE_TYPE_TEXT,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		var result []string
 		err := json.Unmarshal([]byte(str), &result)
 		return result, err

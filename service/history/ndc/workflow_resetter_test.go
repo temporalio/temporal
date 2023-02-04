@@ -37,6 +37,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
@@ -47,6 +49,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -139,10 +142,18 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
+	currentMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	currentEventsSize := int64(2333)
 	currentNewEventsSize := int64(3444)
 	currentMutation := &persistence.WorkflowMutation{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{
+				BranchToken: []byte{1, 2, 3},
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 234, Version: 0},
+				},
+			}),
+		},
 	}
 	currentEventsSeq := []*persistence.WorkflowEvents{{
 		NamespaceID: s.namespaceID.String(),
@@ -165,10 +176,18 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
 	resetWorkflow.EXPECT().GetReleaseFn().Return(tarGetReleaseFn).AnyTimes()
 
+	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	resetEventsSize := int64(1444)
 	resetNewEventsSize := int64(4321)
 	resetSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{
+				BranchToken: []byte{1, 2, 3},
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 123, Version: 0},
+				},
+			}),
+		},
 	}
 	resetEventsSeq := []*persistence.WorkflowEvents{{
 		NamespaceID: s.namespaceID.String(),
@@ -189,8 +208,10 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
+		int64(0),
 		currentMutation,
 		currentEventsSeq,
+		convert.Int64Ptr(0),
 		resetSnapshot,
 		resetEventsSeq,
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
@@ -371,8 +392,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		consts.IdentityHistoryService,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTaskStart.ScheduledEventID,
-		workflowTaskStart.StartedEventID,
+		workflowTaskStart,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
@@ -412,8 +432,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 	}
 	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTask, true).AnyTimes()
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
@@ -513,8 +532,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

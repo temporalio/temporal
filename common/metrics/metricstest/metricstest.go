@@ -26,17 +26,17 @@ package metricstest
 
 import (
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
-	"go.opentelemetry.io/otel/exporters/prometheus"
+	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
-	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	"go.opentelemetry.io/otel/sdk/resource"
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
@@ -46,7 +46,7 @@ import (
 type (
 	Handler struct {
 		metrics.Handler
-		exporter *prometheus.Exporter
+		reg *prometheus.Registry
 	}
 
 	sample struct {
@@ -69,32 +69,19 @@ func MustNewHandler(logger log.Logger) *Handler {
 }
 
 func NewHandler(logger log.Logger) (*Handler, error) {
-	ctrl := controller.New(
-		processor.NewFactory(
-			metrics.NewOtelAggregatorSelector(nil),
-			aggregation.CumulativeTemporalitySelector(),
-			processor.WithMemory(true),
-		),
-		controller.WithResource(resource.Empty()),
-		// Set collect period to 0 otherwise Snapshot() will potentially
-		// return an old view of metrics.
-		controller.WithCollectPeriod(0),
-	)
-
-	exporter, err := prometheus.New(prometheus.Config{}, ctrl)
+	registry := prometheus.NewRegistry()
+	exporter, err := exporters.New(exporters.WithRegisterer(registry))
 	if err != nil {
 		return nil, err
 	}
 
-	provider := &otelProvider{
-		meter: ctrl.Meter("temporal"),
-	}
+	provider := sdkmetrics.NewMeterProvider(sdkmetrics.WithReader(exporter))
+	meter := provider.Meter("temporal")
 	clientConfig := metrics.ClientConfig{}
-	otelHandler := metrics.NewOtelMetricsHandler(logger, provider, clientConfig)
-
+	otelHandler := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig)
 	metricsHandler := &Handler{
-		Handler:  otelHandler,
-		exporter: exporter,
+		Handler: otelHandler,
+		reg:     registry,
 	}
 
 	return metricsHandler, nil
@@ -105,7 +92,9 @@ func (*Handler) Stop(log.Logger) {}
 func (h *Handler) Snapshot() (Snapshot, error) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/metrics", nil)
-	h.exporter.ServeHTTP(rec, req)
+	handler := http.NewServeMux()
+	handler.HandleFunc("/metrics", promhttp.HandlerFor(h.reg, promhttp.HandlerOpts{Registry: h.reg}).ServeHTTP)
+	handler.ServeHTTP(rec, req)
 
 	var tp expfmt.TextParser
 	families, err := tp.TextToMetricFamilies(rec.Body)

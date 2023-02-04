@@ -68,14 +68,14 @@ var defaultSorter = []elastic.Sorter{
 
 type (
 	visibilityStore struct {
-		esClient                 client.Client
-		index                    string
-		searchAttributesProvider searchattribute.Provider
-		searchAttributesMapper   searchattribute.Mapper
-		processor                Processor
-		processorAckTimeout      dynamicconfig.DurationPropertyFn
-		disableOrderByClause     dynamicconfig.BoolPropertyFn
-		metricsHandler           metrics.Handler
+		esClient                       client.Client
+		index                          string
+		searchAttributesProvider       searchattribute.Provider
+		searchAttributesMapperProvider searchattribute.MapperProvider
+		processor                      Processor
+		processorAckTimeout            dynamicconfig.DurationPropertyFn
+		disableOrderByClause           dynamicconfig.BoolPropertyFn
+		metricsHandler                 metrics.Handler
 	}
 
 	visibilityPageToken struct {
@@ -100,7 +100,7 @@ func NewVisibilityStore(
 	esClient client.Client,
 	index string,
 	searchAttributesProvider searchattribute.Provider,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	processor Processor,
 	processorAckTimeout dynamicconfig.DurationPropertyFn,
 	disableOrderByClause dynamicconfig.BoolPropertyFn,
@@ -108,14 +108,14 @@ func NewVisibilityStore(
 ) *visibilityStore {
 
 	return &visibilityStore{
-		esClient:                 esClient,
-		index:                    index,
-		searchAttributesProvider: searchAttributesProvider,
-		searchAttributesMapper:   searchAttributesMapper,
-		processor:                processor,
-		processorAckTimeout:      processorAckTimeout,
-		disableOrderByClause:     disableOrderByClause,
-		metricsHandler:           metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
+		esClient:                       esClient,
+		index:                          index,
+		searchAttributesProvider:       searchAttributesProvider,
+		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		processor:                      processor,
+		processorAckTimeout:            processorAckTimeout,
+		disableOrderByClause:           disableOrderByClause,
+		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
 	}
 }
 
@@ -730,7 +730,7 @@ func (s *visibilityStore) convertQuery(
 	if err != nil {
 		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
-	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapper)
+	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapperProvider)
 	queryConverter := newQueryConverter(nameInterceptor, NewValuesInterceptor())
 	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
@@ -991,7 +991,7 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 			s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", docID, err))
 		}
-		aliasedSas, err := searchattribute.AliasFields(s.searchAttributesMapper, record.SearchAttributes, namespace.String())
+		aliasedSas, err := searchattribute.AliasFields(s.searchAttributesMapperProvider, record.SearchAttributes, namespace.String())
 		if err != nil {
 			return nil, err
 		}
@@ -1032,7 +1032,10 @@ func finishParseJSONValue(val interface{}, t enumspb.IndexedValueType) (interfac
 	}
 
 	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD, enumspb.INDEXED_VALUE_TYPE_DATETIME:
+	case enumspb.INDEXED_VALUE_TYPE_TEXT,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		enumspb.INDEXED_VALUE_TYPE_DATETIME:
 		stringVal, isString := val.(string)
 		if !isString {
 			return nil, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, val)

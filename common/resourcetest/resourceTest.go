@@ -63,11 +63,11 @@ import (
 type (
 	// Test is the test implementation used for testing
 	Test struct {
-		MetricsScope             tally.Scope
-		ClusterMetadata          *cluster.MockMetadata
-		SearchAttributesProvider *searchattribute.MockProvider
-		SearchAttributesManager  *searchattribute.MockManager
-		SearchAttributesMapper   *searchattribute.MockMapper
+		MetricsScope                   tally.Scope
+		ClusterMetadata                *cluster.MockMetadata
+		SearchAttributesProvider       *searchattribute.MockProvider
+		SearchAttributesManager        *searchattribute.MockManager
+		SearchAttributesMapperProvider *searchattribute.MockMapperProvider
 
 		// other common resources
 
@@ -174,11 +174,11 @@ func NewTest(
 	)
 
 	return &Test{
-		MetricsScope:             scope,
-		ClusterMetadata:          cluster.NewMockMetadata(controller),
-		SearchAttributesProvider: searchattribute.NewMockProvider(controller),
-		SearchAttributesManager:  searchattribute.NewMockManager(controller),
-		SearchAttributesMapper:   searchattribute.NewMockMapper(controller),
+		MetricsScope:                   scope,
+		ClusterMetadata:                cluster.NewMockMetadata(controller),
+		SearchAttributesProvider:       searchattribute.NewMockProvider(controller),
+		SearchAttributesManager:        searchattribute.NewMockManager(controller),
+		SearchAttributesMapperProvider: searchattribute.NewMockMapperProvider(controller),
 
 		// other common resources
 
@@ -439,8 +439,8 @@ func (t *Test) GetSearchAttributesManager() searchattribute.Manager {
 	return t.SearchAttributesManager
 }
 
-func (t *Test) GetSearchAttributesMapper() searchattribute.Mapper {
-	return t.SearchAttributesMapper
+func (t *Test) GetSearchAttributesMapperProvider() searchattribute.MapperProvider {
+	return t.SearchAttributesMapperProvider
 }
 
 func (t *Test) RefreshNamespaceCache() {

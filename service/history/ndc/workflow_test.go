@@ -286,8 +286,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	}
 	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(inFlightWorkflowTask, true)
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		inFlightWorkflowTask.ScheduledEventID,
-		inFlightWorkflowTask.StartedEventID,
+		inFlightWorkflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

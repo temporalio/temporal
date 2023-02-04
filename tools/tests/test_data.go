@@ -25,13 +25,20 @@
 package tests
 
 const (
-	testUser                            = "temporal"
-	testPassword                        = "temporal"
+	testUser     = "temporal"
+	testPassword = "temporal"
+
 	testMySQLExecutionSchemaFile        = "../../schema/mysql/v57/temporal/schema.sql"
 	testMySQLVisibilitySchemaFile       = "../../schema/mysql/v57/visibility/schema.sql"
 	testMySQLExecutionSchemaVersionDir  = "../../schema/mysql/v57/temporal/versioned"
 	testMySQLVisibilitySchemaVersionDir = "../../schema/mysql/v57/visibility/versioned"
-	testMySQLQuery                      = `
+
+	testMySQL8ExecutionSchemaFile        = "../../schema/mysql/v8/temporal/schema.sql"
+	testMySQL8VisibilitySchemaFile       = "../../schema/mysql/v8/visibility/schema.sql"
+	testMySQL8ExecutionSchemaVersionDir  = "../../schema/mysql/v8/temporal/versioned"
+	testMySQL8VisibilitySchemaVersionDir = "../../schema/mysql/v8/visibility/versioned"
+
+	testMySQLQuery = `
 -- test sql file content
 
 CREATE TABLE executions(
@@ -67,7 +74,13 @@ CREATE TABLE current_executions(
 	testPostgreSQLVisibilitySchemaFile       = "../../schema/postgresql/v96/visibility/schema.sql"
 	testPostgreSQLExecutionSchemaVersionDir  = "../../schema/postgresql/v96/temporal/versioned"
 	testPostgreSQLVisibilitySchemaVersionDir = "../../schema/postgresql/v96/visibility/versioned"
-	testPostgreSQLQuery                      = `
+
+	testPostgreSQL12ExecutionSchemaFile        = "../../schema/postgresql/v12/temporal/schema.sql"
+	testPostgreSQL12VisibilitySchemaFile       = "../../schema/postgresql/v12/visibility/schema.sql"
+	testPostgreSQL12ExecutionSchemaVersionDir  = "../../schema/postgresql/v12/temporal/versioned"
+	testPostgreSQL12VisibilitySchemaVersionDir = "../../schema/postgresql/v12/visibility/versioned"
+
+	testPostgreSQLQuery = `
 -- test sql file content
 
 CREATE TABLE executions(

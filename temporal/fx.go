@@ -644,6 +644,15 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
+	var indexName string
+	var initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes
+	if config.Persistence.IsSQLVisibilityStore() {
+		indexName = config.Persistence.DataStores[config.Persistence.VisibilityStore].SQL.DatabaseName
+		initialIndexSearchAttributes = map[string]*persistencespb.IndexSearchAttributes{
+			indexName: searchattribute.GetSqlDbIndexSearchAttributes(),
+		}
+	}
+
 	clusterData := config.ClusterMetadata
 	for clusterName, clusterInfo := range clusterData.ClusterInformation {
 		if clusterName != clusterData.CurrentClusterName {
@@ -671,6 +680,7 @@ func ApplyClusterMetadataConfigProvider(
 					IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
 					IsConnectionEnabled:      clusterInfo.Enabled,
 					UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
+					IndexSearchAttributes:    initialIndexSearchAttributes,
 				},
 			})
 		if err != nil {
@@ -681,21 +691,51 @@ func ApplyClusterMetadataConfigProvider(
 			continue
 		}
 
-		resp, err := clusterMetadataManager.GetClusterMetadata(ctx, &persistence.GetClusterMetadataRequest{
-			ClusterName: clusterName,
-		})
+		resp, err := clusterMetadataManager.GetClusterMetadata(
+			ctx,
+			&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+		)
 		if err != nil {
 			return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 		}
 
+		currentMetadata := resp.ClusterMetadata
+
+		// TODO (rodrigozhou): Remove this block for v1.21.
+		// Handle registering custom search attributes when upgrading to v1.20.
+		if config.Persistence.IsSQLVisibilityStore() {
+			needSave := false
+			if currentMetadata.IndexSearchAttributes == nil {
+				currentMetadata.IndexSearchAttributes = initialIndexSearchAttributes
+				needSave = true
+			} else if _, ok := currentMetadata.IndexSearchAttributes[indexName]; !ok {
+				currentMetadata.IndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
+				needSave = true
+			}
+
+			if needSave {
+				_, err := clusterMetadataManager.SaveClusterMetadata(
+					ctx,
+					&persistence.SaveClusterMetadataRequest{ClusterMetadata: currentMetadata},
+				)
+				if err != nil {
+					logger.Warn(
+						"Failed to register search attributes.",
+						tag.Error(err),
+						tag.ClusterName(clusterName),
+					)
+				}
+				logger.Info("Successfully registered search attributes.", tag.ClusterName(clusterName))
+			}
+		}
+
 		// Allow updating cluster metadata if global namespace is disabled
 		if !resp.IsGlobalNamespaceEnabled && clusterData.EnableGlobalNamespace {
-			currentMetadata := resp.ClusterMetadata
 			currentMetadata.IsGlobalNamespaceEnabled = clusterData.EnableGlobalNamespace
 			currentMetadata.InitialFailoverVersion = clusterInfo.InitialFailoverVersion
 			currentMetadata.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
 
-			applied, err = clusterMetadataManager.SaveClusterMetadata(
+			applied, err := clusterMetadataManager.SaveClusterMetadata(
 				ctx,
 				&persistence.SaveClusterMetadataRequest{
 					ClusterMetadata: currentMetadata,

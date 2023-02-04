@@ -52,6 +52,7 @@ var (
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait:         time.Millisecond,
 		dynamicconfig.ClusterMetadataRefreshInterval:                 100 * time.Millisecond,
 		dynamicconfig.NamespaceCacheRefreshInterval:                  NamespaceCacheRefreshInterval,
+		dynamicconfig.FrontendEnableUpdateWorkflowExecution:          true,
 	}
 )
 

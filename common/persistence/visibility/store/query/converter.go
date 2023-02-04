@@ -357,11 +357,11 @@ func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error)
 		return nil, wrapConverterError("unable to convert left part of 'between' expression", err)
 	}
 
-	fromValue, err := parseSqlValue(sqlparser.String(rangeCond.From))
+	fromValue, err := ParseSqlValue(sqlparser.String(rangeCond.From))
 	if err != nil {
 		return nil, err
 	}
-	toValue, err := parseSqlValue(sqlparser.String(rangeCond.To))
+	toValue, err := ParseSqlValue(sqlparser.String(rangeCond.To))
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +478,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		v, err := parseSqlValue(sqlparser.String(e))
+		v, err := ParseSqlValue(sqlparser.String(e))
 		if err != nil {
 			return nil, err
 		}
@@ -520,7 +520,7 @@ func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query,
 	return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
 }
 
-func parseSqlValue(sqlValue string) (interface{}, error) {
+func ParseSqlValue(sqlValue string) (interface{}, error) {
 	if sqlValue == "" {
 		return "", nil
 	}

@@ -32,7 +32,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -75,6 +74,7 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -225,7 +225,7 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
 		shard.GetSearchAttributesProvider(),
-		shard.GetSearchAttributesMapper(),
+		shard.GetSearchAttributesMapperProvider(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
@@ -329,7 +329,16 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-	return startworkflow.Invoke(ctx, startRequest, e.shard, e.workflowConsistencyChecker)
+	starter, err := startworkflow.NewStarter(
+		e.shard,
+		e.workflowConsistencyChecker,
+		e.tokenSerializer,
+		startRequest,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return starter.Invoke(ctx)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
@@ -525,11 +534,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 }
 
 func (e *historyEngineImpl) UpdateWorkflowExecution(
-	_ context.Context,
-	_ *historyservice.UpdateWorkflowExecutionRequest,
+	ctx context.Context,
+	req *historyservice.UpdateWorkflowExecutionRequest,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 
-	return nil, serviceerror.NewUnimplemented("UpdateWorkflowExecution is not supported on this server")
+	return updateworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker, e.matchingClient)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate

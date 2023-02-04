@@ -51,7 +51,7 @@ func (s *RpoSuite) SetupTest() {
 
 func (s *RpoSuite) TestRingpopMonitor() {
 	serviceName := primitives.HistoryService
-	testService := NewTestRingpopCluster(s.T(), "rpm-test", 3, "0.0.0.0", "", serviceName, "127.0.0.1")
+	testService := NewTestRingpopCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1")
 	s.NotNil(testService, "Failed to create test service")
 
 	rpm := testService.rings[0]

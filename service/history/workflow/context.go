@@ -40,6 +40,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -147,13 +149,14 @@ type (
 
 type (
 	ContextImpl struct {
-		shard          shard.Context
-		workflowKey    definition.WorkflowKey
-		logger         log.Logger
-		metricsHandler metrics.Handler
-		timeSource     clock.TimeSource
-		config         *configs.Config
-		transaction    Transaction
+		shard           shard.Context
+		workflowKey     definition.WorkflowKey
+		logger          log.Logger
+		metricsHandler  metrics.Handler
+		clusterMetadata cluster.Metadata
+		timeSource      clock.TimeSource
+		config          *configs.Config
+		transaction     Transaction
 
 		mutex        locks.PriorityMutex
 		MutableState MutableState
@@ -169,14 +172,15 @@ func NewContext(
 	logger log.Logger,
 ) *ContextImpl {
 	return &ContextImpl{
-		shard:          shard,
-		workflowKey:    workflowKey,
-		logger:         logger,
-		metricsHandler: shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
-		timeSource:     shard.GetTimeSource(),
-		config:         shard.GetConfig(),
-		mutex:          locks.NewPriorityMutex(),
-		transaction:    NewTransaction(shard),
+		shard:           shard,
+		workflowKey:     workflowKey,
+		logger:          logger,
+		metricsHandler:  shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		clusterMetadata: shard.GetClusterMetadata(),
+		timeSource:      shard.GetTimeSource(),
+		config:          shard.GetConfig(),
+		mutex:           locks.NewPriorityMutex(),
+		transaction:     NewTransaction(shard),
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
 		},
@@ -214,6 +218,10 @@ func (c *ContextImpl) Clear() {
 	c.metricsHandler.Counter(metrics.WorkflowContextCleared.GetMetricName()).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
+		// Updates are stored in-memory in mutable state. When mutable state is unload due to the error,
+		// all pending updates must be cleared to notify UpdateWorkflowExecution API callers immediately
+		// without waiting for timeout.
+		c.MutableState.UpdateRegistry().Clear()
 	}
 	c.MutableState = nil
 	c.stats = &persistencespb.ExecutionStats{
@@ -349,6 +357,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	resp, err := createWorkflowExecution(
 		ctx,
 		c.shard,
+		newMutableState.GetCurrentVersion(),
 		createRequest,
 	)
 	if err != nil {
@@ -361,7 +370,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		return err
 	}
 	NotifyWorkflowSnapshotTasks(engine, newWorkflow)
-	emitStateTransitionCount(c.metricsHandler, newMutableState)
+	emitStateTransitionCount(c.metricsHandler, c.clusterMetadata, newMutableState)
 
 	return nil
 }
@@ -451,10 +460,13 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	if resetWorkflowSizeDiff, newWorkflowSizeDiff, currentWorkflowSizeDiff, err := c.transaction.ConflictResolveWorkflowExecution(
 		ctx,
 		conflictResolveMode,
+		resetMutableState.GetCurrentVersion(),
 		resetWorkflow,
 		resetWorkflowEventsSeq,
+		MutableStateFailoverVersion(newMutableState),
 		newWorkflow,
 		newWorkflowEventsSeq,
+		MutableStateFailoverVersion(currentMutableState),
 		currentWorkflow,
 		currentWorkflowEventsSeq,
 	); err != nil {
@@ -469,9 +481,9 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 
-	emitStateTransitionCount(c.metricsHandler, resetMutableState)
-	emitStateTransitionCount(c.metricsHandler, newMutableState)
-	emitStateTransitionCount(c.metricsHandler, currentMutableState)
+	emitStateTransitionCount(c.metricsHandler, c.clusterMetadata, resetMutableState)
+	emitStateTransitionCount(c.metricsHandler, c.clusterMetadata, newMutableState)
+	emitStateTransitionCount(c.metricsHandler, c.clusterMetadata, currentMutableState)
 
 	return nil
 }
@@ -628,8 +640,10 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if currentWorkflowSizeDiff, newWorkflowSizeDiff, err := c.transaction.UpdateWorkflowExecution(
 		ctx,
 		updateMode,
+		c.MutableState.GetCurrentVersion(),
 		currentWorkflow,
 		currentWorkflowEventsSeq,
+		MutableStateFailoverVersion(newMutableState),
 		newWorkflow,
 		newWorkflowEventsSeq,
 	); err != nil {
@@ -641,8 +655,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}
 
-	emitStateTransitionCount(c.metricsHandler, c.MutableState)
-	emitStateTransitionCount(c.metricsHandler, newMutableState)
+	emitStateTransitionCount(c.metricsHandler, c.clusterMetadata, c.MutableState)
+	emitStateTransitionCount(c.metricsHandler, c.clusterMetadata, newMutableState)
 
 	// finally emit session stats
 	namespace := c.GetNamespace()
@@ -922,12 +936,58 @@ func (c *ContextImpl) enforceSizeCheck(
 
 func emitStateTransitionCount(
 	metricsHandler metrics.Handler,
+	clusterMetadata cluster.Metadata,
 	mutableState MutableState,
 ) {
 	if mutableState == nil {
 		return
 	}
 
-	metricsHandler.Histogram(metrics.StateTransitionCount.GetMetricName(), metrics.StateTransitionCount.GetMetricUnit()).
-		Record(mutableState.GetExecutionInfo().StateTransitionCount, metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name().String()))
+	namespaceEntry := mutableState.GetNamespaceEntry()
+	metricsHandler.Histogram(
+		metrics.StateTransitionCount.GetMetricName(),
+		metrics.StateTransitionCount.GetMetricUnit(),
+	).Record(
+		mutableState.GetExecutionInfo().StateTransitionCount,
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+		metrics.NamespaceStateTag(namespaceState(clusterMetadata, convert.Int64Ptr(mutableState.GetCurrentVersion()))),
+	)
+}
+
+const (
+	namespaceStateActive  = "active"
+	namespaceStatePassive = "passive"
+	namespaceStateUnknown = "_unknown_"
+)
+
+func namespaceState(
+	clusterMetadata cluster.Metadata,
+	mutableStateCurrentVersion *int64,
+) string {
+
+	if mutableStateCurrentVersion == nil {
+		return namespaceStateUnknown
+	}
+
+	// default value, need to special handle
+	if *mutableStateCurrentVersion == 0 {
+		return namespaceStateActive
+	}
+
+	if clusterMetadata.IsVersionFromSameCluster(
+		clusterMetadata.GetClusterID(),
+		*mutableStateCurrentVersion,
+	) {
+		return namespaceStateActive
+	}
+	return namespaceStatePassive
+}
+
+func MutableStateFailoverVersion(
+	mutableState MutableState,
+) *int64 {
+	if mutableState == nil {
+		return nil
+	}
+	return convert.Int64Ptr(mutableState.GetCurrentVersion())
 }

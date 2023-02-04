@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -225,6 +226,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 
 	s.NotNil(ctx.(*workflow.ContextImpl).MutableState)
 	mock.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry())
+	mock.EXPECT().UpdateRegistry().Return(update.NewRegistry())
 	release(errors.New("some random error message"))
 
 	// since last time, the release function receive a non-nil error
@@ -277,6 +279,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 		// all we need is a fake MutableState
 		mock := workflow.NewMockMutableState(s.controller)
 		mock.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry())
+		mock.EXPECT().UpdateRegistry().Return(update.NewRegistry())
 		ctx.(*workflow.ContextImpl).MutableState = mock
 		release(errors.New("some random error message"))
 	}

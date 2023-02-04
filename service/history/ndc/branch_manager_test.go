@@ -244,8 +244,7 @@ func (s *branchMgrSuite) TestFlushBufferedEvents() {
 		VersionHistories: versionHistories,
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

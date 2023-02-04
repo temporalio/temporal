@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -552,6 +553,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 
 	mockSdkClient := mocksdk.NewMockClient(s.controller)
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
 
 	// Start workflow failed.
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
@@ -601,15 +603,17 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_EmptyIndexName() {
 
 	mockSdkClient := mocksdk.NewMockClient(s.controller)
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(s.namespaceEntry, nil).AnyTimes()
 
 	// Elasticsearch is not configured
+	s.mockVisibilityMgr.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 
-	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
+	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
 	s.NoError(err)
 	s.NotNil(resp)
 }
@@ -622,6 +626,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
+	s.mockVisibilityMgr.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
@@ -644,7 +649,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
 		nil, errors.New("random error"))
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
-	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
+	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
 	s.Error(err)
 	s.Nil(resp)
 }
@@ -680,6 +685,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes_EmptyIndexName() {
 	}
 
 	// Elasticsearch is not configured
+	s.mockVisibilityMgr.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	testCases2 := []test{
@@ -742,6 +748,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes_NonEmptyIndexName() {
 	}
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
+	s.mockVisibilityMgr.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	for _, testCase := range testCases {

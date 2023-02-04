@@ -101,7 +101,7 @@ func NewTestController(
 		timeSource:                  resource.GetTimeSource(),
 		namespaceRegistry:           resource.GetNamespaceRegistry(),
 		saProvider:                  resource.GetSearchAttributesProvider(),
-		saMapper:                    resource.GetSearchAttributesMapper(),
+		saMapperProvider:            resource.GetSearchAttributesMapperProvider(),
 		clusterMetadata:             resource.GetClusterMetadata(),
 		archivalMetadata:            resource.GetArchivalMetadata(),
 		hostInfoProvider:            hostInfoProvider,
