@@ -325,7 +325,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 	request *adminservice.AddSearchAttributesRequest,
 	currentSearchAttributes searchattribute.NameTypeMap,
 ) error {
-	client, err := adh.clientFactory.NewLocalFrontendClientWithTimeout(
+	_, client, err := adh.clientFactory.NewLocalFrontendClientWithTimeout(
 		frontend.DefaultTimeout,
 		frontend.DefaultLongPollTimeout,
 	)
@@ -448,7 +448,7 @@ func (adh *AdminHandler) removeSearchAttributesSQL(
 	ctx context.Context,
 	request *adminservice.RemoveSearchAttributesRequest,
 ) error {
-	client, err := adh.clientFactory.NewLocalFrontendClientWithTimeout(
+	_, client, err := adh.clientFactory.NewLocalFrontendClientWithTimeout(
 		frontend.DefaultTimeout,
 		frontend.DefaultLongPollTimeout,
 	)
