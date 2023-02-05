@@ -46,7 +46,7 @@ func NewConditionVariable(
 		lock: lock,
 
 		chanLock: sync.Mutex{},
-		channel:  make(chan struct{}, 1),
+		channel:  newCVChannel(),
 	}
 }
 
@@ -64,7 +64,7 @@ func (c *ConditionVariableImpl) Signal() {
 
 // Broadcast wakes all goroutines waiting on this condition variable.
 func (c *ConditionVariableImpl) Broadcast() {
-	newChannel := make(chan struct{})
+	newChannel := newCVChannel()
 
 	c.chanLock.Lock()
 	defer c.chanLock.Unlock()
@@ -103,4 +103,8 @@ func (c *ConditionVariableImpl) Wait(
 	case <-interrupt:
 		// interrupted
 	}
+}
+
+func newCVChannel() chan struct{} {
+	return make(chan struct{}, 1)
 }
