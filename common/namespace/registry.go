@@ -28,6 +28,7 @@ package namespace
 
 import (
 	"context"
+	enumspb "go.temporal.io/api/enums/v1"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -66,6 +67,7 @@ const (
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
 	CacheRefreshPageSize             = 1000
+	readthroughCacheTTL              = 1 * time.Second // represents minimum time to wait before trying to readthrough again
 )
 
 const (
@@ -79,6 +81,10 @@ var (
 	cacheOpts = cache.Options{
 		InitialCapacity: cacheInitialSize,
 		TTL:             cacheTTL,
+	}
+	readthroughCacheOpts = cache.Options{
+		InitialCapacity: cacheInitialSize,
+		TTL:             readthroughCacheTTL,
 	}
 )
 
@@ -161,6 +167,11 @@ type (
 		cacheNameToID        cache.Cache
 		cacheByID            cache.Cache
 		stateChangeCallbacks map[any]StateChangeCallbackFn
+
+		// readthroughCache stores namespaces that missed the above caches
+		// AND was not found when reading through to the persistence layer
+		readthroughLock  sync.RWMutex
+		readthroughCache cache.Cache
 	}
 )
 
@@ -184,6 +195,7 @@ func NewRegistry(
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
 		refreshInterval:         refreshInterval,
 		stateChangeCallbacks:    make(map[any]StateChangeCallbackFn),
+		readthroughCache:        cache.New(cacheMaxSize, &readthroughCacheOpts),
 	}
 	return reg
 }
@@ -287,7 +299,8 @@ func (r *registry) GetNamespace(name Name) (*Namespace, error) {
 	if name == "" {
 		return nil, serviceerror.NewInvalidArgument("Namespace is empty.")
 	}
-	return r.getNamespace(name)
+	//return r.getNamespace(name)
+	return r.getOrPutNamespace(name)
 }
 
 // GetNamespaceByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -296,7 +309,8 @@ func (r *registry) GetNamespaceByID(id ID) (*Namespace, error) {
 	if id == "" {
 		return nil, serviceerror.NewInvalidArgument("NamespaceID is empty.")
 	}
-	return r.getNamespaceByID(id)
+	//return r.getNamespaceByID(id)
+	return r.getOrPutNamespaceByID(id)
 }
 
 // GetNamespaceID retrieves namespaceID by using GetNamespace
@@ -481,6 +495,132 @@ func (r *registry) getNamespaceByIDLocked(id ID) (*Namespace, error) {
 		return ns, nil
 	}
 	return nil, serviceerror.NewNamespaceNotFound(id.String())
+}
+
+func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
+	// check main caches
+	cacheHit, _ := r.getNamespace(name)
+	if cacheHit != nil {
+		return cacheHit, nil
+	}
+
+	// check readthrough cache
+	prevErr := r.getPreviousReadthroughError(name.String())
+	if prevErr != nil {
+		return nil, prevErr
+	}
+
+	// readthrough to persistence layer
+	ns, err := r.getNamespaceByNamePersistence(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// update main caches if found
+	r.updateCachesSingleNamespace(ns)
+
+	return ns, nil
+}
+
+func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
+	// check main caches
+	cacheHit, _ := r.getNamespaceByID(id)
+	if cacheHit != nil {
+		return cacheHit, nil
+	}
+
+	// check readthrough cache
+	prevErr := r.getPreviousReadthroughError(id.String())
+	if prevErr != nil {
+		return nil, prevErr
+	}
+
+	// readthrough to persistence layer
+	ns, err := r.getNamespaceByIDPersistence(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// update main caches if found
+	r.updateCachesSingleNamespace(ns)
+
+	return ns, nil
+}
+
+func (r *registry) getPreviousReadthroughError(handle string) error {
+	r.readthroughLock.RLock()
+	defer r.readthroughLock.RUnlock()
+
+	if prevErr, ok := r.readthroughCache.Get(handle).(error); ok {
+		return prevErr
+	}
+	return nil
+}
+
+func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
+	var stateChangeCallbacks []StateChangeCallbackFn
+
+	r.cacheLock.Lock()
+	r.cacheByID.Put(ns.ID(), ns)
+	r.cacheNameToID.Put(ns.Name(), ns.ID())
+	stateChangeCallbacks = mapAnyValues(r.stateChangeCallbacks)
+	r.cacheLock.Unlock()
+
+	// call state change callbacks
+	deleted := ns.State() == enumspb.NAMESPACE_STATE_DELETED
+	for _, cb := range stateChangeCallbacks {
+		cb(ns, deleted)
+	}
+}
+
+func (r *registry) updateReadthroughCache(handle string) error {
+	err := serviceerror.NewNamespaceNotFound(handle)
+
+	r.readthroughLock.Lock()
+	defer r.readthroughLock.Unlock()
+	r.readthroughCache.Put(handle, err)
+
+	return err
+}
+
+func (r *registry) getNamespaceByNamePersistence(name Name) (*Namespace, error) {
+	request := &persistence.GetNamespaceRequest{
+		Name: name.String(),
+	}
+
+	ns, err := r.getNamespacePersistence(request)
+	if err != nil {
+		notFoundErr := r.updateReadthroughCache(name.String())
+		return nil, notFoundErr
+	}
+	return ns, nil
+}
+
+func (r *registry) getNamespaceByIDPersistence(id ID) (*Namespace, error) {
+	request := &persistence.GetNamespaceRequest{
+		ID: id.String(),
+	}
+
+	ns, err := r.getNamespacePersistence(request)
+	if err != nil {
+		notFoundErr := r.updateReadthroughCache(id.String())
+		return nil, notFoundErr
+	}
+	return ns, nil
+}
+
+func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequest) (*Namespace, error) {
+	ctx := headers.SetCallerInfo(
+		context.Background(),
+		headers.SystemBackgroundCallerInfo,
+	)
+
+	response, err := r.persistence.GetNamespace(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	return FromPersistentState(response), nil
 }
 
 // This is https://pkg.go.dev/golang.org/x/exp/maps#Values except that it works
