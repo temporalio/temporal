@@ -270,7 +270,12 @@ func (adh *AdminHandler) AddSearchAttributes(
 		}
 	}
 
-	if adh.visibilityMgr.GetName() == elasticsearch.PersistenceName {
+	// TODO (rodrigozhou): Remove condition `indexName == ""`.
+	// If indexName == "", then calling addSearchAttributesElasticsearch will
+	// register the search attributes in the cluster metadata if ES is up or if
+	// `skip-schema-update` is set. This is for backward compatibility using
+	// standard visibility.
+	if adh.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
 		err = adh.addSearchAttributesElasticsearch(ctx, request, indexName)
 	} else {
 		err = adh.addSearchAttributesSQL(ctx, request, currentSearchAttributes)
@@ -404,7 +409,12 @@ func (adh *AdminHandler) RemoveSearchAttributes(
 	}
 
 	var err error
-	if adh.visibilityMgr.GetName() == elasticsearch.PersistenceName {
+	// TODO (rodrigozhou): Remove condition `indexName == ""`.
+	// If indexName == "", then calling addSearchAttributesElasticsearch will
+	// register the search attributes in the cluster metadata if ES is up or if
+	// `skip-schema-update` is set. This is for backward compatibility using
+	// standard visibility.
+	if adh.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
 		err = adh.removeSearchAttributesElasticsearch(ctx, request, indexName)
 	} else {
 		err = adh.removeSearchAttributesSQL(ctx, request)
@@ -505,7 +515,12 @@ func (adh *AdminHandler) GetSearchAttributes(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
-	if adh.visibilityMgr.GetName() == elasticsearch.PersistenceName {
+	// TODO (rodrigozhou): Remove condition `indexName == ""`.
+	// If indexName == "", then calling addSearchAttributesElasticsearch will
+	// register the search attributes in the cluster metadata if ES is up or if
+	// `skip-schema-update` is set. This is for backward compatibility using
+	// standard visibility.
+	if adh.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
 		return adh.getSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
 	}
 	return adh.getSearchAttributesSQL(request, searchAttributes)
