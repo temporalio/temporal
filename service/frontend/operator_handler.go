@@ -192,7 +192,12 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 		}
 	}
 
-	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName {
+	// TODO (rodrigozhou): Remove condition `indexName == ""`.
+	// If indexName == "", then calling addSearchAttributesElasticsearch will
+	// register the search attributes in the cluster metadata if ES is up or if
+	// `skip-schema-update` is set. This is for backward compatibility using
+	// standard visibility.
+	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
 		err = h.addSearchAttributesElasticsearch(ctx, request, indexName)
 	} else {
 		err = h.addSearchAttributesSQL(ctx, request, currentSearchAttributes)
@@ -325,7 +330,12 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(
 
 	var err error
 	indexName := h.visibilityMgr.GetIndexName()
-	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName {
+	// TODO (rodrigozhou): Remove condition `indexName == ""`.
+	// If indexName == "", then calling addSearchAttributesElasticsearch will
+	// register the search attributes in the cluster metadata if ES is up or if
+	// `skip-schema-update` is set. This is for backward compatibility using
+	// standard visibility.
+	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
 		err = h.removeSearchAttributesElasticsearch(ctx, request, indexName)
 	} else {
 		err = h.removeSearchAttributesSQL(ctx, request)
@@ -425,7 +435,12 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 		)
 	}
 
-	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName {
+	// TODO (rodrigozhou): Remove condition `indexName == ""`.
+	// If indexName == "", then calling addSearchAttributesElasticsearch will
+	// register the search attributes in the cluster metadata if ES is up or if
+	// `skip-schema-update` is set. This is for backward compatibility using
+	// standard visibility.
+	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
 		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
 	}
 	return h.listSearchAttributesSQL(request, searchAttributes)

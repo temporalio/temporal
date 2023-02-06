@@ -125,7 +125,11 @@ func (m *managerImpl) GetSearchAttributes(
 	if indexName != "" {
 		indexSearchAttributes, ok = saCache.searchAttributes[""]
 		if ok {
-			maps.Copy(result.customSearchAttributes, indexSearchAttributes.customSearchAttributes)
+			if result.customSearchAttributes == nil {
+				result.customSearchAttributes = maps.Clone(indexSearchAttributes.customSearchAttributes)
+			} else {
+				maps.Copy(result.customSearchAttributes, indexSearchAttributes.customSearchAttributes)
+			}
 		}
 	}
 	return result, nil
