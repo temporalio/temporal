@@ -146,8 +146,9 @@ func (s *ServerImpl) Stop() error {
 }
 
 func (s *ServerImpl) startServices() error {
-	serviceStartMaxTimeout := 3 * s.so.config.Global.Membership.MaxJoinDuration
-
+	// The membership join time may exceed the configured max join duration.
+	// Double the service start timeout to make sure there is enough time for start logic.
+	serviceStartMaxTimeout := 2 * s.so.config.Global.Membership.MaxJoinDuration
 	if serviceStartMaxTimeout < serviceStartTimeout {
 		serviceStartMaxTimeout = serviceStartTimeout
 	}
