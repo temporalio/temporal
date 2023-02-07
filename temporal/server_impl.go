@@ -40,6 +40,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -148,7 +149,7 @@ func (s *ServerImpl) Stop() error {
 func (s *ServerImpl) startServices() error {
 	// The membership join time may exceed the configured max join duration.
 	// Double the service start timeout to make sure there is enough time for start logic.
-	timeout := util.Max(serviceStartTimeout, 2 * s.so.config.Global.Membership.MaxJoinDuration)
+	timeout := util.Max(serviceStartTimeout, 2*s.so.config.Global.Membership.MaxJoinDuration)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	results := make(chan startServiceResult, len(s.servicesMetadata))
