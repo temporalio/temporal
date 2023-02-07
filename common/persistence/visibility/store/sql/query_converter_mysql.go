@@ -223,7 +223,7 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 	return fmt.Sprintf(
 		`SELECT %s
 		FROM executions_visibility ev
-		INNER JOIN custom_search_attributes
+		LEFT JOIN custom_search_attributes
 		USING (%s, %s)
 		WHERE %s
 		ORDER BY %s DESC, %s DESC, %s
