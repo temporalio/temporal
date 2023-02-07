@@ -482,7 +482,7 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 	}
 
 	var searchAttributes sqlplugin.VisibilitySearchAttributes
-	searchAttributes, err = searchattribute.Decode(request.SearchAttributes, &saTypeMap)
+	searchAttributes, err = searchattribute.Decode(request.SearchAttributes, &saTypeMap, false)
 	if err != nil {
 		return nil, err
 	}
