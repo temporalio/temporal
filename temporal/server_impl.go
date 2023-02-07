@@ -146,7 +146,12 @@ func (s *ServerImpl) Stop() error {
 }
 
 func (s *ServerImpl) startServices() error {
-	ctx, cancel := context.WithTimeout(context.Background(), serviceStartTimeout)
+	serviceStartMaxTimeout := 3 * s.so.config.Global.Membership.MaxJoinDuration
+
+	if serviceStartMaxTimeout < serviceStartTimeout {
+		serviceStartMaxTimeout = serviceStartTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), serviceStartMaxTimeout)
 	defer cancel()
 	results := make(chan startServiceResult, len(s.servicesMetadata))
 	for _, svcMeta := range s.servicesMetadata {
