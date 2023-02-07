@@ -125,6 +125,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 			config.DefaultVisibilityIndexName,
+			false,
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, workflowCache),
 	}

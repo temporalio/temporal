@@ -194,6 +194,7 @@ func (s *engine2Suite) SetupTest() {
 			s.config.SearchAttributesSizeOfValueLimit,
 			s.config.SearchAttributesTotalSizeLimit,
 			s.config.DefaultVisibilityIndexName,
+			false,
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
 	}

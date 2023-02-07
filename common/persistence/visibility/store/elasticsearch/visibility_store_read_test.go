@@ -920,7 +920,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
-	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap)
+	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap, true)
 	s.NoError(err)
 
 	s.Len(customSearchAttributes, 7)
