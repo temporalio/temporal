@@ -148,11 +148,8 @@ func (s *ServerImpl) Stop() error {
 func (s *ServerImpl) startServices() error {
 	// The membership join time may exceed the configured max join duration.
 	// Double the service start timeout to make sure there is enough time for start logic.
-	serviceStartMaxTimeout := 2 * s.so.config.Global.Membership.MaxJoinDuration
-	if serviceStartMaxTimeout < serviceStartTimeout {
-		serviceStartMaxTimeout = serviceStartTimeout
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), serviceStartMaxTimeout)
+	timeout := util.Max(serviceStartTimeout, 2 * s.so.config.Global.Membership.MaxJoinDuration)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	results := make(chan startServiceResult, len(s.servicesMetadata))
 	for _, svcMeta := range s.servicesMetadata {
