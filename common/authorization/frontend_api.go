@@ -49,6 +49,7 @@ var readOnlyGlobalAPI = map[string]struct{}{
 	"ListNamespaces":      {},
 	"GetSearchAttributes": {},
 	"GetClusterInfo":      {},
+	"GetSystemInfo":       {},
 }
 
 // note that these use the fully-qualified name
