@@ -37,7 +37,6 @@ var readOnlyNamespaceAPI = map[string]struct{}{
 	"QueryWorkflow":                      {},
 	"DescribeWorkflowExecution":          {},
 	"DescribeTaskQueue":                  {},
-	"GetSystemInfo":                      {},
 	"ListTaskQueuePartitions":            {},
 	"DescribeSchedule":                   {},
 	"ListSchedules":                      {},
@@ -52,6 +51,12 @@ var readOnlyGlobalAPI = map[string]struct{}{
 	"GetClusterInfo":      {},
 }
 
+// note that these use the fully-qualified name
+var healthCheckAPI = map[string]struct{}{
+	"/grpc.health.v1.Health/Check":                                   {},
+	"/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo": {},
+}
+
 func IsReadOnlyNamespaceAPI(api string) bool {
 	_, found := readOnlyNamespaceAPI[api]
 	return found
@@ -59,5 +64,10 @@ func IsReadOnlyNamespaceAPI(api string) bool {
 
 func IsReadOnlyGlobalAPI(api string) bool {
 	_, found := readOnlyGlobalAPI[api]
+	return found
+}
+
+func IsHealthCheckAPI(fullApi string) bool {
+	_, found := healthCheckAPI[fullApi]
 	return found
 }
