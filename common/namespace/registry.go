@@ -299,7 +299,6 @@ func (r *registry) GetNamespace(name Name) (*Namespace, error) {
 	if name == "" {
 		return nil, serviceerror.NewInvalidArgument("Namespace is empty.")
 	}
-	//return r.getNamespace(name)
 	return r.getOrPutNamespace(name)
 }
 
@@ -309,7 +308,6 @@ func (r *registry) GetNamespaceByID(id ID) (*Namespace, error) {
 	if id == "" {
 		return nil, serviceerror.NewInvalidArgument("NamespaceID is empty.")
 	}
-	//return r.getNamespaceByID(id)
 	return r.getOrPutNamespaceByID(id)
 }
 
@@ -429,13 +427,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 		oldNS := r.updateIDToNamespaceCache(newCacheByID, namespace.ID(), namespace)
 		newCacheNameToID.Put(namespace.Name(), namespace.ID())
 
-		// this test should include anything that might affect whether a namespace is active on
-		// this cluster.
-		if oldNS == nil ||
-			oldNS.State() != namespace.State() ||
-			oldNS.IsGlobalNamespace() != namespace.IsGlobalNamespace() ||
-			oldNS.ActiveClusterName() != namespace.ActiveClusterName() ||
-			oldNS.ReplicationState() != namespace.ReplicationState() {
+		if namespaceStateChanged(oldNS, namespace) {
 			stateChanged = append(stateChanged, namespace)
 		}
 	}
@@ -497,6 +489,8 @@ func (r *registry) getNamespaceByIDLocked(id ID) (*Namespace, error) {
 	return nil, serviceerror.NewNamespaceNotFound(id.String())
 }
 
+// getOrPutNamespace retrieves the information from the cache if it exists or reads through
+// to the persistence layer and updates caches if it doesn't
 func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 	// check main caches
 	cacheHit, _ := r.getNamespace(name)
@@ -504,13 +498,13 @@ func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 		return cacheHit, nil
 	}
 
-	// check readthrough cache
+	// check readthrough cache to prevent excessive requests to persistence layer
 	prevErr := r.getPreviousReadthroughError(name.String())
 	if prevErr != nil {
 		return nil, prevErr
 	}
 
-	// readthrough to persistence layer
+	// readthrough to persistence layer and update readthrough cache if not found
 	ns, err := r.getNamespaceByNamePersistence(name)
 	if err != nil {
 		return nil, err
@@ -522,6 +516,8 @@ func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 	return ns, nil
 }
 
+// getOrPutNamespaceByID retrieves the information from the cache if it exists or reads through
+// to the persistence layer and updates caches if it doesn't
 func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
 	// check main caches
 	cacheHit, _ := r.getNamespaceByID(id)
@@ -529,13 +525,13 @@ func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
 		return cacheHit, nil
 	}
 
-	// check readthrough cache
+	// check readthrough cache to prevent excessive requests to persistence layer
 	prevErr := r.getPreviousReadthroughError(id.String())
 	if prevErr != nil {
 		return nil, prevErr
 	}
 
-	// readthrough to persistence layer
+	// readthrough to persistence layer and update readthrough cache if not found
 	ns, err := r.getNamespaceByIDPersistence(id)
 	if err != nil {
 		return nil, err
@@ -561,9 +557,11 @@ func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
 	var stateChangeCallbacks []StateChangeCallbackFn
 
 	r.cacheLock.Lock()
-	r.cacheByID.Put(ns.ID(), ns)
+	oldNS := r.updateIDToNamespaceCache(r.cacheByID, ns.ID(), ns)
 	r.cacheNameToID.Put(ns.Name(), ns.ID())
-	stateChangeCallbacks = mapAnyValues(r.stateChangeCallbacks)
+	if namespaceStateChanged(oldNS, ns) {
+		stateChangeCallbacks = mapAnyValues(r.stateChangeCallbacks)
+	}
 	r.cacheLock.Unlock()
 
 	// call state change callbacks
@@ -573,12 +571,12 @@ func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
 	}
 }
 
-func (r *registry) updateReadthroughCache(handle string) error {
-	err := serviceerror.NewNamespaceNotFound(handle)
+func (r *registry) updateReadthroughCache(identifier string) error {
+	err := serviceerror.NewNamespaceNotFound(identifier)
 
 	r.readthroughLock.Lock()
 	defer r.readthroughLock.Unlock()
-	r.readthroughCache.Put(handle, err)
+	r.readthroughCache.Put(identifier, err)
 
 	return err
 }
@@ -621,6 +619,17 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	}
 
 	return FromPersistentState(response), nil
+}
+
+// this test should include anything that might affect whether a namespace is active on
+// this cluster.
+// returns true if the state was changed or false if not
+func namespaceStateChanged(old *Namespace, new *Namespace) bool {
+	return old == nil ||
+		old.State() != new.State() ||
+		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
+		old.ActiveClusterName() != new.ActiveClusterName() ||
+		old.ReplicationState() != new.ReplicationState()
 }
 
 // This is https://pkg.go.dev/golang.org/x/exp/maps#Values except that it works

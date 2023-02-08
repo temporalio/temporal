@@ -115,6 +115,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 	defer cancel()
 
 	retention := 24 * time.Hour
+	fmt.Println(">>>> CREATE NAMESPACE")
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_san_diego",
 		Description:                      "Namespace to delete",
@@ -123,8 +124,6 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})
 	s.NoError(err)
-	// DescribeNamespace reads directly from database but namespace validator uses cache.
-	s.cluster.RefreshNamespaceCache()
 
 	descResp, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns_name_san_diego",
@@ -176,8 +175,6 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})
 	s.NoError(err)
-	// DescribeNamespace reads directly from database but namespace validator uses cache.
-	s.cluster.RefreshNamespaceCache()
 
 	descResp, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns_name_los_angeles",

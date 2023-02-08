@@ -597,6 +597,11 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	s.NotNil(ns2FromRegistry)
 	s.NoError(err)
 
+	// expect readthrough call for missing ns
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: namespaceRecord1.Namespace.Info.Name,
+	}).Return(nil, serviceerror.NewNamespaceNotFound(namespaceRecord1.Namespace.Info.Name))
+
 	ns1FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
 	s.Nil(ns1FromRegistry)
 	s.Error(err)
