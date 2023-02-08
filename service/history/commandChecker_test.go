@@ -131,6 +131,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 			"index-name",
+			false,
 		))
 }
 

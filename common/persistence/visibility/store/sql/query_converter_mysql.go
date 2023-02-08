@@ -56,7 +56,9 @@ type (
 		JSONDoc2 sqlparser.Expr
 	}
 
-	mysqlQueryConverter struct{}
+	mysqlQueryConverter struct {
+		namespaceID namespace.ID
+	}
 )
 
 var convertTypeJSON = &sqlparser.ConvertType{Type: "json"}
@@ -66,6 +68,10 @@ var _ sqlparser.Expr = (*memberOfExpr)(nil)
 var _ sqlparser.Expr = (*jsonOverlapsExpr)(nil)
 
 var _ pluginQueryConverter = (*mysqlQueryConverter)(nil)
+
+const (
+	mysqlCustomSearchAttributesTableName = "custom_search_attributes"
+)
 
 func (node *castExpr) Format(buf *sqlparser.TrackedBuffer) {
 	buf.Myprintf("cast(%v as %v)", node.Value, node.Type)
@@ -85,7 +91,7 @@ func newMySQLQueryConverter(
 	saMapper searchattribute.Mapper,
 ) *QueryConverter {
 	return newQueryConverterInternal(
-		&mysqlQueryConverter{},
+		&mysqlQueryConverter{namespaceID: request.NamespaceID},
 		request,
 		saTypeMap,
 		saMapper,
@@ -164,10 +170,27 @@ func (c *mysqlQueryConverter) convertTextComparisonExpr(
 	if !isSupportedTextOperator(expr.Operator) {
 		return nil, query.NewConverterError("invalid query")
 	}
+	valueExpr, ok := expr.Right.(*unsafeSQLString)
+	if !ok {
+		return nil, query.NewConverterError("invalid query")
+	}
+	valueExpr.Val = fmt.Sprintf("%s %s", c.namespaceID, valueExpr.Val)
+	// build the following expression:
+	// `match (custom_search_attributes.namespace_id, {expr.Left}) against ({expr.Right} in natural language mode)`
 	var newExpr sqlparser.Expr = &sqlparser.MatchExpr{
-		Columns: []sqlparser.SelectExpr{&sqlparser.AliasedExpr{Expr: expr.Left}},
-		Expr:    expr.Right,
-		Option:  sqlparser.NaturalLanguageModeStr,
+		Columns: []sqlparser.SelectExpr{
+			&sqlparser.AliasedExpr{
+				Expr: &sqlparser.ColName{
+					Name: sqlparser.NewColIdent(searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+					Qualifier: sqlparser.TableName{
+						Name: sqlparser.NewTableIdent(mysqlCustomSearchAttributesTableName),
+					},
+				},
+			},
+			&sqlparser.AliasedExpr{Expr: expr.Left},
+		},
+		Expr:   expr.Right,
+		Option: sqlparser.NaturalLanguageModeStr,
 	}
 	if expr.Operator == sqlparser.NotEqualStr {
 		newExpr = &sqlparser.NotExpr{Expr: newExpr}
@@ -223,7 +246,7 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 	return fmt.Sprintf(
 		`SELECT %s
 		FROM executions_visibility ev
-		INNER JOIN custom_search_attributes
+		LEFT JOIN custom_search_attributes
 		USING (%s, %s)
 		WHERE %s
 		ORDER BY %s DESC, %s DESC, %s

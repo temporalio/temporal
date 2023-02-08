@@ -45,6 +45,9 @@ type (
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		indexName                         string
+
+		// allowList allows list of values when it's not keyword list type.
+		allowList bool
 	}
 )
 
@@ -56,6 +59,7 @@ func NewValidator(
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	indexName string,
+	allowList bool,
 ) *Validator {
 	return &Validator{
 		searchAttributesProvider:          searchAttributesProvider,
@@ -64,6 +68,7 @@ func NewValidator(
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
 		indexName:                         indexName,
+		allowList:                         allowList,
 	}
 }
 
@@ -116,7 +121,8 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			)
 		}
 
-		if _, err = DecodeValue(saPayload, saType); err != nil {
+		_, err = DecodeValue(saPayload, saType, v.allowList)
+		if err != nil {
 			var invalidValue interface{}
 			if err = payload.Decode(saPayload, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
