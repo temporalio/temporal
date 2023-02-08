@@ -115,7 +115,6 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 	defer cancel()
 
 	retention := 24 * time.Hour
-	fmt.Println(">>>> CREATE NAMESPACE")
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_san_diego",
 		Description:                      "Namespace to delete",

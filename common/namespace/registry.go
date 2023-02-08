@@ -28,11 +28,11 @@ package namespace
 
 import (
 	"context"
-	enumspb "go.temporal.io/api/enums/v1"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
