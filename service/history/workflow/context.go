@@ -218,6 +218,10 @@ func (c *ContextImpl) Clear() {
 	c.metricsHandler.Counter(metrics.WorkflowContextCleared.GetMetricName()).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
+		// Updates are stored in-memory in mutable state. When mutable state is unload due to the error,
+		// all pending updates must be cleared to notify UpdateWorkflowExecution API callers immediately
+		// without waiting for timeout.
+		c.MutableState.UpdateRegistry().Clear()
 	}
 	c.MutableState = nil
 	c.stats = &persistencespb.ExecutionStats{

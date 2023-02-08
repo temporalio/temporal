@@ -28,10 +28,12 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -178,6 +180,18 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
+	case *adminservice.AddSearchAttributesRequest,
+		*adminservice.RemoveSearchAttributesRequest,
+		*adminservice.GetSearchAttributesRequest,
+		*operatorservice.AddSearchAttributesRequest,
+		*operatorservice.RemoveSearchAttributesRequest,
+		*operatorservice.ListSearchAttributesRequest:
+		// Namespace is optional for search attributes operations.
+		// It's required when using SQL DB for visibility, but not when using Elasticsearch.
+		if !namespaceName.IsEmpty() {
+			return ni.namespaceRegistry.GetNamespace(namespaceName)
+		}
+		return nil, nil
 	default:
 		// All other APIs.
 		if namespaceName.IsEmpty() {
@@ -234,7 +248,7 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		return nil
 	}
 
-	_, methodName := splitMethodName(fullMethod)
+	_, methodName := SplitMethodName(fullMethod)
 
 	allowedStates, allowedStatesDefined := allowedNamespaceStates[methodName]
 	if !allowedStatesDefined {
@@ -258,7 +272,7 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 		return nil
 	}
 
-	_, methodName := splitMethodName(fullMethod)
+	_, methodName := SplitMethodName(fullMethod)
 
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
 		return nil

@@ -87,8 +87,11 @@ const (
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery = "system.enableStickyQuery"
-	// EnableActivityEagerExecution indicates if acitivty eager execution is enabled per namespace
+	// EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace
 	EnableActivityEagerExecution = "system.enableActivityEagerExecution"
+	// EnableEagerWorkflowStart toggles "eager workflow start" - returning the first workflow task inline in the
+	// response to a StartWorkflowExecution request and skipping the trip through matching.
+	EnableEagerWorkflowStart = "system.enableEagerWorkflowStart"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
@@ -250,6 +253,11 @@ const (
 	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
 	FrontendEnableBatcher = "frontend.enableBatcher"
 
+	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
+	//  UpdateWorkflowExecution API is under active development and is not ready for production use.
+	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
+	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
+
 	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
 	// Default value is 100.
@@ -385,6 +393,11 @@ const (
 
 	// TaskSchedulerEnableRateLimiter indicates if rate limiter should be enabled in task scheduler
 	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
+	// TaskSchedulerEnableRateLimiterShadowMode indicates if task scheduler rate limiter should run in shadow mode
+	// i.e. through rate limiter and emit metrics but do not actually block/throttle task scheduling
+	TaskSchedulerEnableRateLimiterShadowMode = "history.taskSchedulerEnableRateLimiterShadowMode"
+	// TaskSchedulerThrottleDuration is the throttle duration when task scheduled exceeds max qps
+	TaskSchedulerThrottleDuration = "history.taskSchedulerThrottleDuration"
 	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"

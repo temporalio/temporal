@@ -148,6 +148,13 @@ func TestPostgreSQLVisibilityPersistenceSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestPostgreSQL12VisibilityPersistenceSuite(t *testing.T) {
+	s := &VisibilityPersistenceSuite{
+		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption()),
+	}
+	suite.Run(t, s)
+}
+
 // TODO: Merge persistence-tests into the tests directory.
 
 func TestPostgreSQLHistoryV2PersistenceSuite(t *testing.T) {
@@ -188,6 +195,27 @@ FAIL: TestPostgreSQLQueuePersistence/TestNamespaceReplicationQueue (0.26s)
 //	s.TestBase.Setup()
 //	suite.Run(t, s)
 //}
+
+func TestPostgreSQL12HistoryV2PersistenceSuite(t *testing.T) {
+	s := new(persistencetests.HistoryV2PersistenceSuite)
+	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQL12MetadataPersistenceSuiteV2(t *testing.T) {
+	s := new(persistencetests.MetadataPersistenceSuiteV2)
+	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQL12ClusterMetadataPersistence(t *testing.T) {
+	s := new(persistencetests.ClusterMetadataManagerSuite)
+	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
 
 // SQL store tests
 

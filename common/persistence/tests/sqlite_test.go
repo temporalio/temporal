@@ -380,6 +380,12 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 
 // TODO: Merge persistence-tests into the tests directory.
 
+func TestSQLiteVisibilityPersistenceSuite(t *testing.T) {
+	s := new(VisibilityPersistenceSuite)
+	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
+	suite.Run(t, s)
+}
+
 func TestSQLiteHistoryV2PersistenceSuite(t *testing.T) {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())

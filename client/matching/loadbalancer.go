@@ -126,6 +126,6 @@ func (lb *defaultLoadBalancer) pickPartition(
 		return taskQueue.GetName()
 	}
 
-	n := util.Min(1, nPartitions(nsName.String(), tqName.BaseNameString(), taskQueueType))
+	n := util.Max(1, nPartitions(nsName.String(), tqName.BaseNameString(), taskQueueType))
 	return tqName.WithPartition(rand.Intn(n)).FullName()
 }

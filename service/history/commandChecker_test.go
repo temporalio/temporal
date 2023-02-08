@@ -126,11 +126,12 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		config,
 		searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
-			nil,
+			searchattribute.NewTestMapperProvider(nil),
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 			"index-name",
+			false,
 		))
 }
 

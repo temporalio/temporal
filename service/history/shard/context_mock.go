@@ -522,18 +522,18 @@ func (mr *MockContextMockRecorder) GetReplicatorDLQAckLevel(sourceCluster interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicatorDLQAckLevel", reflect.TypeOf((*MockContext)(nil).GetReplicatorDLQAckLevel), sourceCluster)
 }
 
-// GetSearchAttributesMapper mocks base method.
-func (m *MockContext) GetSearchAttributesMapper() searchattribute.Mapper {
+// GetSearchAttributesMapperProvider mocks base method.
+func (m *MockContext) GetSearchAttributesMapperProvider() searchattribute.MapperProvider {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSearchAttributesMapper")
-	ret0, _ := ret[0].(searchattribute.Mapper)
+	ret := m.ctrl.Call(m, "GetSearchAttributesMapperProvider")
+	ret0, _ := ret[0].(searchattribute.MapperProvider)
 	return ret0
 }
 
-// GetSearchAttributesMapper indicates an expected call of GetSearchAttributesMapper.
-func (mr *MockContextMockRecorder) GetSearchAttributesMapper() *gomock.Call {
+// GetSearchAttributesMapperProvider indicates an expected call of GetSearchAttributesMapperProvider.
+func (mr *MockContextMockRecorder) GetSearchAttributesMapperProvider() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributesMapper", reflect.TypeOf((*MockContext)(nil).GetSearchAttributesMapper))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributesMapperProvider", reflect.TypeOf((*MockContext)(nil).GetSearchAttributesMapperProvider))
 }
 
 // GetSearchAttributesProvider mocks base method.

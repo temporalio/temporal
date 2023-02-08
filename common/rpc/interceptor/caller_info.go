@@ -27,9 +27,10 @@ package interceptor
 import (
 	"context"
 
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
-	"google.golang.org/grpc"
 )
 
 type (
@@ -67,7 +68,7 @@ func (i *CallerInfoInterceptor) Intercept(
 	}
 	if callerInfo.CallerType == headers.CallerTypeAPI &&
 		callerInfo.CallOrigin == "" {
-		_, method := splitMethodName(info.FullMethod)
+		_, method := SplitMethodName(info.FullMethod)
 		callerInfo.CallOrigin = method
 		updateInfo = true
 	}

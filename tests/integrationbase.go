@@ -188,6 +188,24 @@ func (s *IntegrationBase) registerNamespace(
 		VisibilityArchivalUri:            visibilityArchivalURI,
 	})
 
+	if err != nil {
+		return err
+	}
+
+	_, err = s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		Config: &namespacepb.NamespaceConfig{
+			CustomSearchAttributeAliases: map[string]string{
+				"Bool01":     "CustomBoolField",
+				"Datetime01": "CustomDatetimeField",
+				"Double01":   "CustomDoubleField",
+				"Int01":      "CustomIntField",
+				"Keyword01":  "CustomKeywordField",
+				"Text01":     "CustomTextField",
+			},
+		},
+	})
+
 	return err
 }
 

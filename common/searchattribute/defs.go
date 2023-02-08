@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 const (
@@ -102,6 +103,52 @@ var (
 		Memo:              {},
 		VisibilityTaskKey: {},
 	}
+
+	sqlDbSystemNameToColName = map[string]string{
+		NamespaceID:     "namespace_id",
+		WorkflowID:      "workflow_id",
+		RunID:           "run_id",
+		WorkflowType:    "workflow_type_name",
+		StartTime:       "start_time",
+		ExecutionTime:   "execution_time",
+		CloseTime:       "close_time",
+		ExecutionStatus: "status",
+		TaskQueue:       "task_queue",
+		HistoryLength:   "history_length",
+		Memo:            "memo",
+		MemoEncoding:    "encoding",
+	}
+
+	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{
+		"Bool01":        enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"Bool02":        enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"Bool03":        enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"Datetime01":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"Datetime02":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"Datetime03":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		"Double01":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"Double02":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"Double03":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"Int01":         enumspb.INDEXED_VALUE_TYPE_INT,
+		"Int02":         enumspb.INDEXED_VALUE_TYPE_INT,
+		"Int03":         enumspb.INDEXED_VALUE_TYPE_INT,
+		"Keyword01":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword02":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword03":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword04":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword05":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword06":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword07":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword08":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword09":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Keyword10":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Text01":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"Text02":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"Text03":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"KeywordList01": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		"KeywordList02": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		"KeywordList03": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+	}
 )
 
 // IsReserved returns true if name is system reserved and can't be used as custom search attribute name.
@@ -127,4 +174,19 @@ func IsMappable(name string) bool {
 		return false
 	}
 	return true
+}
+
+// GetSqlDbColName maps system and reserved search attributes to column names for SQL tables.
+// If the input is not a system or reserved search attribute, then it returns the input.
+func GetSqlDbColName(name string) string {
+	if fieldName, ok := sqlDbSystemNameToColName[name]; ok {
+		return fieldName
+	}
+	return name
+}
+
+func GetSqlDbIndexSearchAttributes() *persistencespb.IndexSearchAttributes {
+	return &persistencespb.IndexSearchAttributes{
+		CustomSearchAttributes: sqlDbCustomSearchAttributes,
+	}
 }

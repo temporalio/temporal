@@ -79,6 +79,11 @@ var (
 	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
 	errBatchOperationNotSet                               = serviceerror.NewInvalidArgument("Batch operation is not set on request.")
 
+	errUpdateMetaNotSet  = serviceerror.NewInvalidArgument("Update meta is not set on request.")
+	errUpdateInputNotSet = serviceerror.NewInvalidArgument("Update input is not set on request.")
+	errUpdateNameNotSet  = serviceerror.NewInvalidArgument("Update name is not set on request.")
+	errUpdateIDTooLong   = serviceerror.NewInvalidArgument("UpdateId length exceeds limit.")
+
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 
 	errSearchAttributeIsReservedMessage               = "Search attribute %s is reserved by system."
@@ -105,4 +110,6 @@ var (
 	errBatchOpsWorkflowFilterNotSet      = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are not set on request.")
 	errBatchOpsWorkflowFiltersNotAllowed = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are both set on request. Only one of them is allowed.")
 	errBatchOpsMaxWorkflowExecutionCount = serviceerror.NewInvalidArgument("Workflow executions count exceeded.")
+
+	errUpdateWorkflowExecutionAPINotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
 )

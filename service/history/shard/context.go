@@ -119,7 +119,7 @@ type (
 		GetPayloadSerializer() serialization.Serializer
 
 		GetSearchAttributesProvider() searchattribute.Provider
-		GetSearchAttributesMapper() searchattribute.Mapper
+		GetSearchAttributesMapperProvider() searchattribute.MapperProvider
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
 		Unload()

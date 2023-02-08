@@ -40,7 +40,7 @@ type (
 		suite.Suite
 
 		lock sync.Locker
-		cv   ConditionVariable
+		cv   *ConditionVariableImpl
 	}
 )
 
@@ -65,6 +65,34 @@ func (s *conditionVariableSuite) SetupTest() {
 
 func (s *conditionVariableSuite) TearDownTest() {
 
+}
+
+func (s *conditionVariableSuite) TestChannelSize_New() {
+	s.testChannelSize(s.cv.channel)
+}
+
+func (s *conditionVariableSuite) TestChannelSize_Broadcast() {
+	s.cv.Broadcast()
+	s.testChannelSize(s.cv.channel)
+}
+
+func (s *conditionVariableSuite) testChannelSize(
+	channel chan struct{},
+) {
+	// assert channel size == 1
+	select {
+	case channel <- struct{}{}:
+		// noop
+	default:
+		s.Fail("conditional variable size should be 1")
+	}
+
+	select {
+	case channel <- struct{}{}:
+		s.Fail("conditional variable size should be 1")
+	default:
+		// noop
+	}
 }
 
 func (s *conditionVariableSuite) TestSignal() {

@@ -33,7 +33,7 @@ import (
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	otelsdkmetricexp "go.opentelemetry.io/otel/sdk/metric/export"
+	"go.opentelemetry.io/otel/sdk/metric"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -149,7 +149,7 @@ type (
 			Dial(context.Context) (*grpc.ClientConn, error)
 		}
 		startOnce sync.Once
-		otelsdkmetricexp.Exporter
+		metric.Exporter
 	}
 
 	// ExportConfig represents YAML structured configuration for a set of OTEL
@@ -168,7 +168,7 @@ func (ec *ExportConfig) SpanExporters() ([]otelsdktrace.SpanExporter, error) {
 	return ec.inner.SpanExporters()
 }
 
-func (ec *ExportConfig) MetricExporters() ([]otelsdkmetricexp.Exporter, error) {
+func (ec *ExportConfig) MetricExporters() ([]metric.Exporter, error) {
 	return ec.inner.MetricExporters()
 }
 
@@ -232,8 +232,8 @@ func (ec *exportConfig) SpanExporters() ([]otelsdktrace.SpanExporter, error) {
 	return out, nil
 }
 
-func (ec *exportConfig) MetricExporters() ([]otelsdkmetricexp.Exporter, error) {
-	out := make([]otelsdkmetricexp.Exporter, 0, len(ec.Exporters))
+func (ec *exportConfig) MetricExporters() ([]metric.Exporter, error) {
+	out := make([]metric.Exporter, 0, len(ec.Exporters))
 	for _, expcfg := range ec.Exporters {
 		if !strings.HasPrefix(expcfg.Kind.Signal, "metric") {
 			continue
@@ -255,7 +255,7 @@ func (ec *exportConfig) MetricExporters() ([]otelsdkmetricexp.Exporter, error) {
 
 func (ec *exportConfig) buildOtlpGrpcMetricExporter(
 	cfg *otlpGrpcMetricExporter,
-) (otelsdkmetricexp.Exporter, error) {
+) (metric.Exporter, error) {
 	dopts := cfg.Connection.dialOpts()
 	opts := []otlpmetricgrpc.Option{
 		otlpmetricgrpc.WithEndpoint(cfg.Connection.Endpoint),
@@ -276,7 +276,7 @@ func (ec *exportConfig) buildOtlpGrpcMetricExporter(
 	}
 
 	if cfg.ConnectionName == "" {
-		return otlpmetricgrpc.NewUnstarted(opts...), nil
+		return otlpmetricgrpc.New(context.Background(), opts...)
 	}
 
 	conncfg, ok := ec.findNamedGrpcConnCfg(cfg.ConnectionName)

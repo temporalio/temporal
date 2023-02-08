@@ -198,117 +198,6 @@ const (
 	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecution
 	AdminDeleteWorkflowExecutionScope = "AdminDeleteWorkflowExecution"
 
-	// DCRedirectionDeleteWorkflowExecutionScope tracks RPC calls for dc redirection
-	DCRedirectionDeleteWorkflowExecutionScope = "DCRedirectionDeleteWorkflowExecution"
-	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
-	DCRedirectionDeprecateNamespaceScope = "DCRedirectionDeprecateNamespace"
-	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
-	DCRedirectionDescribeNamespaceScope = "DCRedirectionDescribeNamespace"
-	// DCRedirectionDescribeTaskQueueScope tracks RPC calls for dc redirection
-	DCRedirectionDescribeTaskQueueScope = "DCRedirectionDescribeTaskQueue"
-	// DCRedirectionDescribeWorkflowExecutionScope tracks RPC calls for dc redirection
-	DCRedirectionDescribeWorkflowExecutionScope = "DCRedirectionDescribeWorkflowExecution"
-	// DCRedirectionGetWorkflowExecutionHistoryScope tracks RPC calls for dc redirection
-	DCRedirectionGetWorkflowExecutionHistoryScope = "DCRedirectionGetWorkflowExecutionHistory"
-	// DCRedirectionGetWorkflowExecutionHistoryReverseScope tracks RPC calls for dc redirection
-	DCRedirectionGetWorkflowExecutionHistoryReverseScope = "DCRedirectionGetWorkflowExecutionHistoryReverse"
-	// DCRedirectionGetWorkflowExecutionRawHistoryScope tracks RPC calls for dc redirection
-	DCRedirectionGetWorkflowExecutionRawHistoryScope = "DCRedirectionGetWorkflowExecutionRawHistory"
-	// DCRedirectionPollForWorkflowExecutionRawHistoryScope tracks RPC calls for dc redirection
-	DCRedirectionPollForWorkflowExecutionRawHistoryScope = "DCRedirectionPollForWorkflowExecutionRawHistory"
-	// DCRedirectionListArchivedWorkflowExecutionsScope tracks RPC calls for dc redirection
-	DCRedirectionListArchivedWorkflowExecutionsScope = "DCRedirectionListArchivedWorkflowExecutions"
-	// DCRedirectionListClosedWorkflowExecutionsScope tracks RPC calls for dc redirection
-	DCRedirectionListClosedWorkflowExecutionsScope = "DCRedirectionListClosedWorkflowExecutions"
-	// DCRedirectionListNamespacesScope tracks RPC calls for dc redirection
-	DCRedirectionListNamespacesScope = "DCRedirectionListNamespaces"
-	// DCRedirectionListOpenWorkflowExecutionsScope tracks RPC calls for dc redirection
-	DCRedirectionListOpenWorkflowExecutionsScope = "DCRedirectionListOpenWorkflowExecutions"
-	// DCRedirectionListWorkflowExecutionsScope tracks RPC calls for dc redirection
-	DCRedirectionListWorkflowExecutionsScope = "DCRedirectionListWorkflowExecutions"
-	// DCRedirectionScanWorkflowExecutionsScope tracks RPC calls for dc redirection
-	DCRedirectionScanWorkflowExecutionsScope = "DCRedirectionScanWorkflowExecutions"
-	// DCRedirectionCountWorkflowExecutionsScope tracks RPC calls for dc redirection
-	DCRedirectionCountWorkflowExecutionsScope = "DCRedirectionCountWorkflowExecutions"
-	// DCRedirectionGetSearchAttributesScope tracks RPC calls for dc redirection
-	DCRedirectionGetSearchAttributesScope = "DCRedirectionGetSearchAttributes"
-	// DCRedirectionPollActivityTaskQueueScope tracks RPC calls for dc redirection
-	DCRedirectionPollActivityTaskQueueScope = "DCRedirectionPollActivityTaskQueue"
-	// DCRedirectionPollWorkflowTaskQueueScope tracks RPC calls for dc redirection
-	DCRedirectionPollWorkflowTaskQueueScope = "DCRedirectionPollWorkflowTaskQueue"
-	// DCRedirectionQueryWorkflowScope tracks RPC calls for dc redirection
-	DCRedirectionQueryWorkflowScope = "DCRedirectionQueryWorkflow"
-	// DCRedirectionRecordActivityTaskHeartbeatScope tracks RPC calls for dc redirection
-	DCRedirectionRecordActivityTaskHeartbeatScope = "DCRedirectionRecordActivityTaskHeartbeat"
-	// DCRedirectionRecordActivityTaskHeartbeatByIdScope tracks RPC calls for dc redirection
-	DCRedirectionRecordActivityTaskHeartbeatByIdScope = "DCRedirectionRecordActivityTaskHeartbeatById"
-	// DCRedirectionRegisterNamespaceScope tracks RPC calls for dc redirection
-	DCRedirectionRegisterNamespaceScope = "DCRedirectionRegisterNamespace"
-	// DCRedirectionRequestCancelWorkflowExecutionScope tracks RPC calls for dc redirection
-	DCRedirectionRequestCancelWorkflowExecutionScope = "DCRedirectionRequestCancelWorkflowExecution"
-	// DCRedirectionResetStickyTaskQueueScope tracks RPC calls for dc redirection
-	DCRedirectionResetStickyTaskQueueScope = "DCRedirectionResetStickyTaskQueue"
-	// DCRedirectionResetWorkflowExecutionScope tracks RPC calls for dc redirection
-	DCRedirectionResetWorkflowExecutionScope = "DCRedirectionResetWorkflowExecution"
-	// DCRedirectionRespondActivityTaskCanceledScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskCanceledScope = "DCRedirectionRespondActivityTaskCanceled"
-	// DCRedirectionRespondActivityTaskCanceledByIdScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskCanceledByIdScope = "DCRedirectionRespondActivityTaskCanceledById"
-	// DCRedirectionRespondActivityTaskCompletedScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskCompletedScope = "DCRedirectionRespondActivityTaskCompleted"
-	// DCRedirectionRespondActivityTaskCompletedByIdScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskCompletedByIdScope = "DCRedirectionRespondActivityTaskCompletedById"
-	// DCRedirectionRespondActivityTaskFailedScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskFailedScope = "DCRedirectionRespondActivityTaskFailed"
-	// DCRedirectionRespondActivityTaskFailedByIdScope tracks RPC calls for dc redirection
-	DCRedirectionRespondActivityTaskFailedByIdScope = "DCRedirectionRespondActivityTaskFailedById"
-	// DCRedirectionRespondWorkflowTaskCompletedScope tracks RPC calls for dc redirection
-	DCRedirectionRespondWorkflowTaskCompletedScope = "DCRedirectionRespondWorkflowTaskCompleted"
-	// DCRedirectionRespondWorkflowTaskFailedScope tracks RPC calls for dc redirection
-	DCRedirectionRespondWorkflowTaskFailedScope = "DCRedirectionRespondWorkflowTaskFailed"
-	// DCRedirectionRespondQueryTaskCompletedScope tracks RPC calls for dc redirection
-	DCRedirectionRespondQueryTaskCompletedScope = "DCRedirectionRespondQueryTaskCompleted"
-	// DCRedirectionSignalWithStartWorkflowExecutionScope tracks RPC calls for dc redirection
-	DCRedirectionSignalWithStartWorkflowExecutionScope = "DCRedirectionSignalWithStartWorkflowExecution"
-	// DCRedirectionSignalWorkflowExecutionScope tracks RPC calls for dc redirection
-	DCRedirectionSignalWorkflowExecutionScope = "DCRedirectionSignalWorkflowExecution"
-	// DCRedirectionStartWorkflowExecutionScope tracks RPC calls for dc redirection
-	DCRedirectionStartWorkflowExecutionScope = "DCRedirectionStartWorkflowExecution"
-	// DCRedirectionTerminateWorkflowExecutionScope tracks RPC calls for dc redirection
-	DCRedirectionTerminateWorkflowExecutionScope = "DCRedirectionTerminateWorkflowExecution"
-	// DCRedirectionUpdateNamespaceScope tracks RPC calls for dc redirection
-	DCRedirectionUpdateNamespaceScope = "DCRedirectionUpdateNamespace"
-	// DCRedirectionListTaskQueuePartitionsScope tracks RPC calls for dc redirection
-	DCRedirectionListTaskQueuePartitionsScope = "DCRedirectionListTaskQueuePartitions"
-	// DCRedirectionCreateScheduleScope tracks RPC calls for dc redirection
-	DCRedirectionCreateScheduleScope = "DCRedirectionCreateSchedule"
-	// DCRedirectionDescribeScheduleScope tracks RPC calls for dc redirection
-	DCRedirectionDescribeScheduleScope = "DCRedirectionDescribeSchedule"
-	// DCRedirectionUpdateScheduleScope tracks RPC calls for dc redirection
-	DCRedirectionUpdateScheduleScope = "DCRedirectionUpdateSchedule"
-	// DCRedirectionPatchScheduleScope tracks RPC calls for dc redirection
-	DCRedirectionPatchScheduleScope = "DCRedirectionPatchSchedule"
-	// DCRedirectionListScheduleMatchingTimesScope tracks RPC calls for dc redirection
-	DCRedirectionListScheduleMatchingTimesScope = "DCRedirectionListScheduleMatchingTimes"
-	// DCRedirectionDeleteScheduleScope tracks RPC calls for dc redirection
-	DCRedirectionDeleteScheduleScope = "DCRedirectionDeleteSchedule"
-	// DCRedirectionListSchedulesScope tracks RPC calls for dc redirection
-	DCRedirectionListSchedulesScope = "DCRedirectionListSchedules"
-	// DCRedirectionUpdateWorkerBuildIdOrderingScope tracks RPC calls for dc redirection
-	DCRedirectionUpdateWorkerBuildIdOrderingScope = "DCRedirectionUpdateWorkerBuildIdOrdering"
-	// DCRedirectionGetWorkerBuildIdOrderingScope tracks RPC calls for dc redirection
-	DCRedirectionGetWorkerBuildIdOrderingScope = "DCRedirectionGetWorkerBuildIdOrdering"
-	// DCRedirectionUpdateWorkflowExecutionScope tracks RPC calls for dc redirection
-	DCRedirectionUpdateWorkflowExecutionScope = "DCRedirectionUpdateWorkflowExecution"
-	// DCRedirectionDescribeBatchOperationScope tracks RPC calls for dc redirection
-	DCRedirectionDescribeBatchOperationScope = "DCRedirectionDescribeBatchOperation"
-	// DCRedirectionListBatchOperationsScope tracks RPC calls for dc redirection
-	DCRedirectionListBatchOperationsScope = "DCRedirectionListBatchOperations"
-	// DCRedirectionStartBatchOperationScope tracks RPC calls for dc redirection
-	DCRedirectionStartBatchOperationScope = "DCRedirectionStartBatchOperation"
-	// DCRedirectionStopBatchOperationScope tracks RPC calls for dc redirection
-	DCRedirectionStopBatchOperationScope = "DCRedirectionStopBatchOperation"
-
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope
 	// OperatorRemoveSearchAttributesScope is the metric scope for operator.RemoveSearchAttributes
@@ -1311,6 +1200,12 @@ const (
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
 )
 
+// Schedule action types
+const (
+	ScheduleActionTypeTag       = "schedule_action"
+	ScheduleActionStartWorkflow = "start_workflow"
+)
+
 var (
 	ServiceRequests                               = NewCounterDef("service_requests")
 	ServicePendingRequests                        = NewGaugeDef("service_pending_requests")
@@ -1439,6 +1334,7 @@ var (
 	TaskBatchCompleteCounter                          = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks                       = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
 	PendingTasksCounter                               = NewDimensionlessHistogramDef("pending_tasks")
+	TaskSchedulerThrottled                            = NewCounterDef("task_scheduler_throttled")
 	QueueScheduleLatency                              = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram                         = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram                          = NewDimensionlessHistogramDef("queue_slice_count")
@@ -1460,111 +1356,122 @@ var (
 	CommandTypeUpsertWorkflowSearchAttributesCounter  = NewCounterDef("upsert_workflow_search_attributes_command")
 	CommandTypeModifyWorkflowPropertiesCounter        = NewCounterDef("modify_workflow_properties_command")
 	CommandTypeChildWorkflowCounter                   = NewCounterDef("child_workflow_command")
-	ActivityEagerExecutionCounter                     = NewCounterDef("activity_eager_execution")
-	EmptyCompletionCommandsCounter                    = NewCounterDef("empty_completion_commands")
-	MultipleCompletionCommandsCounter                 = NewCounterDef("multiple_completion_commands")
-	FailedWorkflowTasksCounter                        = NewCounterDef("failed_workflow_tasks")
-	WorkflowTaskAttempt                               = NewDimensionlessHistogramDef("workflow_task_attempt")
-	StaleMutableStateCounter                          = NewCounterDef("stale_mutable_state")
-	AutoResetPointsLimitExceededCounter               = NewCounterDef("auto_reset_points_exceed_limit")
-	AutoResetPointCorruptionCounter                   = NewCounterDef("auto_reset_point_corruption")
-	ConcurrencyUpdateFailureCounter                   = NewCounterDef("concurrency_update_failure")
-	ServiceErrShardOwnershipLostCounter               = NewCounterDef("service_errors_shard_ownership_lost")
-	ServiceErrTaskAlreadyStartedCounter               = NewCounterDef("service_errors_task_already_started")
-	HeartbeatTimeoutCounter                           = NewCounterDef("heartbeat_timeout")
-	ScheduleToStartTimeoutCounter                     = NewCounterDef("schedule_to_start_timeout")
-	StartToCloseTimeoutCounter                        = NewCounterDef("start_to_close_timeout")
-	ScheduleToCloseTimeoutCounter                     = NewCounterDef("schedule_to_close_timeout")
-	NewTimerNotifyCounter                             = NewCounterDef("new_timer_notifications")
-	AcquireShardsCounter                              = NewCounterDef("acquire_shards_count")
-	AcquireShardsLatency                              = NewTimerDef("acquire_shards_latency")
-	MembershipChangedCounter                          = NewCounterDef("membership_changed_count")
-	NumShardsGauge                                    = NewGaugeDef("numshards_gauge")
-	GetEngineForShardErrorCounter                     = NewCounterDef("get_engine_for_shard_errors")
-	GetEngineForShardLatency                          = NewTimerDef("get_engine_for_shard_latency")
-	RemoveEngineForShardLatency                       = NewTimerDef("remove_engine_for_shard_latency")
-	CompleteWorkflowTaskWithStickyEnabledCounter      = NewCounterDef("complete_workflow_task_sticky_enabled_count")
-	CompleteWorkflowTaskWithStickyDisabledCounter     = NewCounterDef("complete_workflow_task_sticky_disabled_count")
-	WorkflowTaskHeartbeatTimeoutCounter               = NewCounterDef("workflow_task_heartbeat_timeout_count")
-	EmptyReplicationEventsCounter                     = NewCounterDef("empty_replication_events")
-	DuplicateReplicationEventsCounter                 = NewCounterDef("duplicate_replication_events")
-	StaleReplicationEventsCounter                     = NewCounterDef("stale_replication_events")
-	ReplicationEventsSizeTimer                        = NewTimerDef("replication_events_size")
-	BufferReplicationTaskTimer                        = NewTimerDef("buffer_replication_tasks")
-	UnbufferReplicationTaskTimer                      = NewTimerDef("unbuffer_replication_tasks")
-	HistoryConflictsCounter                           = NewCounterDef("history_conflicts")
-	CompleteTaskFailedCounter                         = NewCounterDef("complete_task_fail_count")
-	AcquireLockFailedCounter                          = NewCounterDef("acquire_lock_failed")
-	WorkflowContextCleared                            = NewCounterDef("workflow_context_cleared")
-	MutableStateSize                                  = NewBytesHistogramDef("mutable_state_size")
-	ExecutionInfoSize                                 = NewBytesHistogramDef("execution_info_size")
-	ExecutionStateSize                                = NewBytesHistogramDef("execution_state_size")
-	ActivityInfoSize                                  = NewBytesHistogramDef("activity_info_size")
-	TimerInfoSize                                     = NewBytesHistogramDef("timer_info_size")
-	ChildInfoSize                                     = NewBytesHistogramDef("child_info_size")
-	RequestCancelInfoSize                             = NewBytesHistogramDef("request_cancel_info_size")
-	SignalInfoSize                                    = NewBytesHistogramDef("signal_info_size")
-	BufferedEventsSize                                = NewBytesHistogramDef("buffered_events_size")
-	ActivityInfoCount                                 = NewDimensionlessHistogramDef("activity_info_count")
-	TimerInfoCount                                    = NewDimensionlessHistogramDef("timer_info_count")
-	ChildInfoCount                                    = NewDimensionlessHistogramDef("child_info_count")
-	SignalInfoCount                                   = NewDimensionlessHistogramDef("signal_info_count")
-	RequestCancelInfoCount                            = NewDimensionlessHistogramDef("request_cancel_info_count")
-	BufferedEventsCount                               = NewDimensionlessHistogramDef("buffered_events_count")
-	TaskCount                                         = NewDimensionlessHistogramDef("task_count")
-	WorkflowRetryBackoffTimerCount                    = NewCounterDef("workflow_retry_backoff_timer")
-	WorkflowCronBackoffTimerCount                     = NewCounterDef("workflow_cron_backoff_timer")
-	WorkflowCleanupDeleteCount                        = NewCounterDef("workflow_cleanup_delete")
-	WorkflowCleanupArchiveCount                       = NewCounterDef("workflow_cleanup_archive")
-	WorkflowCleanupNopCount                           = NewCounterDef("workflow_cleanup_nop")
-	WorkflowCleanupDeleteHistoryInlineCount           = NewCounterDef("workflow_cleanup_delete_history_inline")
-	WorkflowSuccessCount                              = NewCounterDef("workflow_success")
-	WorkflowCancelCount                               = NewCounterDef("workflow_cancel")
-	WorkflowFailedCount                               = NewCounterDef("workflow_failed")
-	WorkflowTimeoutCount                              = NewCounterDef("workflow_timeout")
-	WorkflowTerminateCount                            = NewCounterDef("workflow_terminate")
-	WorkflowContinuedAsNewCount                       = NewCounterDef("workflow_continued_as_new")
-	LastRetrievedMessageID                            = NewGaugeDef("last_retrieved_message_id")
-	LastProcessedMessageID                            = NewGaugeDef("last_processed_message_id")
-	ReplicationTasksApplied                           = NewCounterDef("replication_tasks_applied")
-	ReplicationTasksFailed                            = NewCounterDef("replication_tasks_failed")
-	ReplicationTasksLag                               = NewTimerDef("replication_tasks_lag")
-	ReplicationLatency                                = NewTimerDef("replication_latency")
-	ReplicationTasksFetched                           = NewTimerDef("replication_tasks_fetched")
-	ReplicationTasksReturned                          = NewTimerDef("replication_tasks_returned")
-	ReplicationTasksAppliedLatency                    = NewTimerDef("replication_tasks_applied_latency")
-	ReplicationDLQFailed                              = NewCounterDef("replication_dlq_enqueue_failed")
-	ReplicationDLQMaxLevelGauge                       = NewGaugeDef("replication_dlq_max_level")
-	ReplicationDLQAckLevelGauge                       = NewGaugeDef("replication_dlq_ack_level")
-	GetReplicationMessagesForShardLatency             = NewTimerDef("get_replication_messages_for_shard")
-	GetDLQReplicationMessagesLatency                  = NewTimerDef("get_dlq_replication_messages")
-	EventReapplySkippedCount                          = NewCounterDef("event_reapply_skipped_count")
-	DirectQueryDispatchLatency                        = NewTimerDef("direct_query_dispatch_latency")
-	DirectQueryDispatchStickyLatency                  = NewTimerDef("direct_query_dispatch_sticky_latency")
-	DirectQueryDispatchNonStickyLatency               = NewTimerDef("direct_query_dispatch_non_sticky_latency")
-	DirectQueryDispatchStickySuccessCount             = NewCounterDef("direct_query_dispatch_sticky_success")
-	DirectQueryDispatchNonStickySuccessCount          = NewCounterDef("direct_query_dispatch_non_sticky_success")
-	DirectQueryDispatchClearStickinessLatency         = NewTimerDef("direct_query_dispatch_clear_stickiness_latency")
-	DirectQueryDispatchClearStickinessSuccessCount    = NewCounterDef("direct_query_dispatch_clear_stickiness_success")
-	DirectQueryDispatchTimeoutBeforeNonStickyCount    = NewCounterDef("direct_query_dispatch_timeout_before_non_sticky")
-	WorkflowTaskQueryLatency                          = NewTimerDef("workflow_task_query_latency")
-	ConsistentQueryTimeoutCount                       = NewCounterDef("consistent_query_timeout")
-	QueryBeforeFirstWorkflowTaskCount                 = NewCounterDef("query_before_first_workflow_task")
-	QueryBufferExceededCount                          = NewCounterDef("query_buffer_exceeded")
-	QueryRegistryInvalidStateCount                    = NewCounterDef("query_registry_invalid_state")
-	WorkerNotSupportsConsistentQueryCount             = NewCounterDef("worker_not_supports_consistent_query")
-	WorkflowTaskTimeoutOverrideCount                  = NewCounterDef("workflow_task_timeout_overrides")
-	WorkflowRunTimeoutOverrideCount                   = NewCounterDef("workflow_run_timeout_overrides")
-	ReplicationTaskCleanupCount                       = NewCounterDef("replication_task_cleanup_count")
-	ReplicationTaskCleanupFailure                     = NewCounterDef("replication_task_cleanup_failed")
-	MutableStateChecksumMismatch                      = NewCounterDef("mutable_state_checksum_mismatch")
-	MutableStateChecksumInvalidated                   = NewCounterDef("mutable_state_checksum_invalidated")
-	ClusterMetadataLockLatency                        = NewTimerDef("cluster_metadata_lock_latency")
-	ClusterMetadataCallbackLockLatency                = NewTimerDef("cluster_metadata_callback_lock_latency")
-	ShardControllerLockLatency                        = NewTimerDef("shard_controller_lock_latency")
-	ShardLockLatency                                  = NewTimerDef("shard_lock_latency")
-	NamespaceRegistryLockLatency                      = NewTimerDef("namespace_registry_lock_latency")
-	ClosedWorkflowBufferEventCount                    = NewCounterDef("closed_workflow_buffer_event_counter")
+	MessageTypeAcceptWorkflowExecutionUpdateCounter   = NewCounterDef("accept_workflow_update_message")
+	MessageTypeCompleteWorkflowExecutionUpdateCounter = NewCounterDef("complete_workflow_update_message")
+	MessageTypeRejectWorkflowExecutionUpdateCounter   = NewCounterDef("reject_workflow_update_message")
+
+	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
+	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
+	WorkflowEagerExecutionCounter = NewCounterDef("workflow_eager_execution")
+	// WorkflowEagerExecutionDeniedCounter is emitted any time eager workflow start is requested and the serer fell back
+	// to standard dispatch.
+	// Timeouts and failures are not counted in this metric.
+	// This metric has a "reason" tag attached to it to understand why eager start was denied.
+	WorkflowEagerExecutionDeniedCounter            = NewCounterDef("workflow_eager_execution_denied")
+	EmptyCompletionCommandsCounter                 = NewCounterDef("empty_completion_commands")
+	MultipleCompletionCommandsCounter              = NewCounterDef("multiple_completion_commands")
+	FailedWorkflowTasksCounter                     = NewCounterDef("failed_workflow_tasks")
+	WorkflowTaskAttempt                            = NewDimensionlessHistogramDef("workflow_task_attempt")
+	StaleMutableStateCounter                       = NewCounterDef("stale_mutable_state")
+	AutoResetPointsLimitExceededCounter            = NewCounterDef("auto_reset_points_exceed_limit")
+	AutoResetPointCorruptionCounter                = NewCounterDef("auto_reset_point_corruption")
+	ConcurrencyUpdateFailureCounter                = NewCounterDef("concurrency_update_failure")
+	ServiceErrShardOwnershipLostCounter            = NewCounterDef("service_errors_shard_ownership_lost")
+	ServiceErrTaskAlreadyStartedCounter            = NewCounterDef("service_errors_task_already_started")
+	HeartbeatTimeoutCounter                        = NewCounterDef("heartbeat_timeout")
+	ScheduleToStartTimeoutCounter                  = NewCounterDef("schedule_to_start_timeout")
+	StartToCloseTimeoutCounter                     = NewCounterDef("start_to_close_timeout")
+	ScheduleToCloseTimeoutCounter                  = NewCounterDef("schedule_to_close_timeout")
+	NewTimerNotifyCounter                          = NewCounterDef("new_timer_notifications")
+	AcquireShardsCounter                           = NewCounterDef("acquire_shards_count")
+	AcquireShardsLatency                           = NewTimerDef("acquire_shards_latency")
+	MembershipChangedCounter                       = NewCounterDef("membership_changed_count")
+	NumShardsGauge                                 = NewGaugeDef("numshards_gauge")
+	GetEngineForShardErrorCounter                  = NewCounterDef("get_engine_for_shard_errors")
+	GetEngineForShardLatency                       = NewTimerDef("get_engine_for_shard_latency")
+	RemoveEngineForShardLatency                    = NewTimerDef("remove_engine_for_shard_latency")
+	CompleteWorkflowTaskWithStickyEnabledCounter   = NewCounterDef("complete_workflow_task_sticky_enabled_count")
+	CompleteWorkflowTaskWithStickyDisabledCounter  = NewCounterDef("complete_workflow_task_sticky_disabled_count")
+	WorkflowTaskHeartbeatTimeoutCounter            = NewCounterDef("workflow_task_heartbeat_timeout_count")
+	EmptyReplicationEventsCounter                  = NewCounterDef("empty_replication_events")
+	DuplicateReplicationEventsCounter              = NewCounterDef("duplicate_replication_events")
+	StaleReplicationEventsCounter                  = NewCounterDef("stale_replication_events")
+	ReplicationEventsSizeTimer                     = NewTimerDef("replication_events_size")
+	BufferReplicationTaskTimer                     = NewTimerDef("buffer_replication_tasks")
+	UnbufferReplicationTaskTimer                   = NewTimerDef("unbuffer_replication_tasks")
+	HistoryConflictsCounter                        = NewCounterDef("history_conflicts")
+	CompleteTaskFailedCounter                      = NewCounterDef("complete_task_fail_count")
+	AcquireLockFailedCounter                       = NewCounterDef("acquire_lock_failed")
+	WorkflowContextCleared                         = NewCounterDef("workflow_context_cleared")
+	MutableStateSize                               = NewBytesHistogramDef("mutable_state_size")
+	ExecutionInfoSize                              = NewBytesHistogramDef("execution_info_size")
+	ExecutionStateSize                             = NewBytesHistogramDef("execution_state_size")
+	ActivityInfoSize                               = NewBytesHistogramDef("activity_info_size")
+	TimerInfoSize                                  = NewBytesHistogramDef("timer_info_size")
+	ChildInfoSize                                  = NewBytesHistogramDef("child_info_size")
+	RequestCancelInfoSize                          = NewBytesHistogramDef("request_cancel_info_size")
+	SignalInfoSize                                 = NewBytesHistogramDef("signal_info_size")
+	BufferedEventsSize                             = NewBytesHistogramDef("buffered_events_size")
+	ActivityInfoCount                              = NewDimensionlessHistogramDef("activity_info_count")
+	TimerInfoCount                                 = NewDimensionlessHistogramDef("timer_info_count")
+	ChildInfoCount                                 = NewDimensionlessHistogramDef("child_info_count")
+	SignalInfoCount                                = NewDimensionlessHistogramDef("signal_info_count")
+	RequestCancelInfoCount                         = NewDimensionlessHistogramDef("request_cancel_info_count")
+	BufferedEventsCount                            = NewDimensionlessHistogramDef("buffered_events_count")
+	TaskCount                                      = NewDimensionlessHistogramDef("task_count")
+	WorkflowRetryBackoffTimerCount                 = NewCounterDef("workflow_retry_backoff_timer")
+	WorkflowCronBackoffTimerCount                  = NewCounterDef("workflow_cron_backoff_timer")
+	WorkflowCleanupDeleteCount                     = NewCounterDef("workflow_cleanup_delete")
+	WorkflowCleanupArchiveCount                    = NewCounterDef("workflow_cleanup_archive")
+	WorkflowCleanupNopCount                        = NewCounterDef("workflow_cleanup_nop")
+	WorkflowCleanupDeleteHistoryInlineCount        = NewCounterDef("workflow_cleanup_delete_history_inline")
+	WorkflowSuccessCount                           = NewCounterDef("workflow_success")
+	WorkflowCancelCount                            = NewCounterDef("workflow_cancel")
+	WorkflowFailedCount                            = NewCounterDef("workflow_failed")
+	WorkflowTimeoutCount                           = NewCounterDef("workflow_timeout")
+	WorkflowTerminateCount                         = NewCounterDef("workflow_terminate")
+	WorkflowContinuedAsNewCount                    = NewCounterDef("workflow_continued_as_new")
+	LastRetrievedMessageID                         = NewGaugeDef("last_retrieved_message_id")
+	LastProcessedMessageID                         = NewGaugeDef("last_processed_message_id")
+	ReplicationTasksApplied                        = NewCounterDef("replication_tasks_applied")
+	ReplicationTasksFailed                         = NewCounterDef("replication_tasks_failed")
+	ReplicationTasksLag                            = NewTimerDef("replication_tasks_lag")
+	ReplicationLatency                             = NewTimerDef("replication_latency")
+	ReplicationTasksFetched                        = NewTimerDef("replication_tasks_fetched")
+	ReplicationTasksReturned                       = NewTimerDef("replication_tasks_returned")
+	ReplicationTasksAppliedLatency                 = NewTimerDef("replication_tasks_applied_latency")
+	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
+	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
+	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
+	GetReplicationMessagesForShardLatency          = NewTimerDef("get_replication_messages_for_shard")
+	GetDLQReplicationMessagesLatency               = NewTimerDef("get_dlq_replication_messages")
+	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
+	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
+	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")
+	DirectQueryDispatchNonStickyLatency            = NewTimerDef("direct_query_dispatch_non_sticky_latency")
+	DirectQueryDispatchStickySuccessCount          = NewCounterDef("direct_query_dispatch_sticky_success")
+	DirectQueryDispatchNonStickySuccessCount       = NewCounterDef("direct_query_dispatch_non_sticky_success")
+	DirectQueryDispatchClearStickinessLatency      = NewTimerDef("direct_query_dispatch_clear_stickiness_latency")
+	DirectQueryDispatchClearStickinessSuccessCount = NewCounterDef("direct_query_dispatch_clear_stickiness_success")
+	DirectQueryDispatchTimeoutBeforeNonStickyCount = NewCounterDef("direct_query_dispatch_timeout_before_non_sticky")
+	WorkflowTaskQueryLatency                       = NewTimerDef("workflow_task_query_latency")
+	ConsistentQueryTimeoutCount                    = NewCounterDef("consistent_query_timeout")
+	QueryBeforeFirstWorkflowTaskCount              = NewCounterDef("query_before_first_workflow_task")
+	QueryBufferExceededCount                       = NewCounterDef("query_buffer_exceeded")
+	QueryRegistryInvalidStateCount                 = NewCounterDef("query_registry_invalid_state")
+	WorkerNotSupportsConsistentQueryCount          = NewCounterDef("worker_not_supports_consistent_query")
+	WorkflowTaskTimeoutOverrideCount               = NewCounterDef("workflow_task_timeout_overrides")
+	WorkflowRunTimeoutOverrideCount                = NewCounterDef("workflow_run_timeout_overrides")
+	ReplicationTaskCleanupCount                    = NewCounterDef("replication_task_cleanup_count")
+	ReplicationTaskCleanupFailure                  = NewCounterDef("replication_task_cleanup_failed")
+	MutableStateChecksumMismatch                   = NewCounterDef("mutable_state_checksum_mismatch")
+	MutableStateChecksumInvalidated                = NewCounterDef("mutable_state_checksum_invalidated")
+	ClusterMetadataLockLatency                     = NewTimerDef("cluster_metadata_lock_latency")
+	ClusterMetadataCallbackLockLatency             = NewTimerDef("cluster_metadata_callback_lock_latency")
+	ShardControllerLockLatency                     = NewTimerDef("shard_controller_lock_latency")
+	ShardLockLatency                               = NewTimerDef("shard_lock_latency")
+	NamespaceRegistryLockLatency                   = NewTimerDef("namespace_registry_lock_latency")
+	ClosedWorkflowBufferEventCount                 = NewCounterDef("closed_workflow_buffer_event_counter")
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
@@ -1703,6 +1610,13 @@ var (
 	NamespaceReplicationEnqueueDLQCount                       = NewCounterDef("namespace_replication_dlq_enqueue_requests")
 	ParentClosePolicyProcessorSuccess                         = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures                        = NewCounterDef("parent_close_policy_processor_errors")
+	ScheduleMissedCatchupWindow                               = NewCounterDef("schedule_missed_catchup_window")
+	ScheduleRateLimited                                       = NewCounterDef("schedule_rate_limited")
+	ScheduleBufferOverruns                                    = NewCounterDef("schedule_buffer_overruns")
+	ScheduleActionSuccess                                     = NewCounterDef("schedule_action_success")
+	ScheduleActionErrors                                      = NewCounterDef("schedule_action_errors")
+	ScheduleCancelWorkflowErrors                              = NewCounterDef("schedule_cancel_workflow_errors")
+	ScheduleTerminateWorkflowErrors                           = NewCounterDef("schedule_terminate_workflow_errors")
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")

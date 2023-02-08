@@ -57,7 +57,7 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap
 		if typeMap != nil {
 			saType, _ = typeMap.getType(saName, customCategory|predefinedCategory)
 		}
-		saValue, err := DecodeValue(saPayload, saType)
+		saValue, err := DecodeValue(saPayload, saType, true)
 		if err != nil {
 			// If DecodeValue failed, save error and use raw JSON from Data field.
 			result[saName] = string(saPayload.GetData())

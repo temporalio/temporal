@@ -39,11 +39,11 @@ import (
 
 type (
 	nameInterceptor struct {
-		namespace               namespace.Name
-		index                   string
-		searchAttributesTypeMap searchattribute.NameTypeMap
-		searchAttributesMapper  searchattribute.Mapper
-		seenNamespaceDivision   bool
+		namespace                      namespace.Name
+		index                          string
+		searchAttributesTypeMap        searchattribute.NameTypeMap
+		searchAttributesMapperProvider searchattribute.MapperProvider
+		seenNamespaceDivision          bool
 	}
 	valuesInterceptor struct{}
 )
@@ -52,13 +52,13 @@ func newNameInterceptor(
 	namespace namespace.Name,
 	index string,
 	saTypeMap searchattribute.NameTypeMap,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 ) *nameInterceptor {
 	return &nameInterceptor{
-		namespace:               namespace,
-		index:                   index,
-		searchAttributesTypeMap: saTypeMap,
-		searchAttributesMapper:  searchAttributesMapper,
+		namespace:                      namespace,
+		index:                          index,
+		searchAttributesTypeMap:        saTypeMap,
+		searchAttributesMapperProvider: searchAttributesMapperProvider,
 	}
 }
 
@@ -68,11 +68,16 @@ func NewValuesInterceptor() *valuesInterceptor {
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	fieldName := name
-	if searchattribute.IsMappable(name) && ni.searchAttributesMapper != nil {
-		var err error
-		fieldName, err = ni.searchAttributesMapper.GetFieldName(name, ni.namespace.String())
+	if searchattribute.IsMappable(name) {
+		mapper, err := ni.searchAttributesMapperProvider.GetMapper(ni.namespace)
 		if err != nil {
 			return "", err
+		}
+		if mapper != nil {
+			fieldName, err = mapper.GetFieldName(name, ni.namespace.String())
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 

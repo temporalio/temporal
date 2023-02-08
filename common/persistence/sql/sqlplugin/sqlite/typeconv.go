@@ -47,7 +47,7 @@ func (c *converter) ToSQLiteDateTime(t time.Time) time.Time {
 	if t.IsZero() {
 		return minSQLiteDateTime
 	}
-	return t.UTC()
+	return t.UTC().Truncate(time.Microsecond)
 }
 
 // FromSQLiteDateTime converts SQLite datetime and returns go time
