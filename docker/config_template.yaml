@@ -98,7 +98,7 @@ persistence:
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.SQL_HOST_NAME "" }}
         visibility:
-            sql:                
+            sql:
                 {{ $visibility_seeds_default := default .Env.MYSQL_SEEDS "" }}
                 {{ $visibility_seeds := default .Env.VISIBILITY_MYSQL_SEEDS $visibility_seeds_default }}
                 {{ $visibility_port_default := default .Env.DB_PORT "3306" }}
@@ -184,6 +184,9 @@ persistence:
                 password: "{{ default .Env.ES_PWD "" }}"
                 indices:
                     visibility: "{{ default .Env.ES_VIS_INDEX "temporal_visibility_v1_dev" }}"
+                    {{- if .Env.ES_SEC_VIS_INDEX }}
+                    secondary_visibility: "{{ default .Env.ES_SEC_VIS_INDEX "" }}"
+                    {{- end }}
         {{- end }}
 
 global:
