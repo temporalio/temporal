@@ -42,6 +42,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -165,11 +168,11 @@ func ConfigProvider(
 	indexName := ""
 	if persistenceConfig.StandardVisibilityConfigExist() {
 		storeConfig := persistenceConfig.DataStores[persistenceConfig.VisibilityStore]
-		switch {
-		case storeConfig.Cassandra != nil:
-			indexName = storeConfig.Cassandra.Keyspace
-		case storeConfig.SQL != nil:
-			indexName = storeConfig.SQL.DatabaseName
+		if storeConfig.SQL != nil {
+			switch storeConfig.SQL.PluginName {
+			case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+				indexName = storeConfig.SQL.DatabaseName
+			}
 		}
 	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
 		indexName = esConfig.GetVisibilityIndex()

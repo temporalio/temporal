@@ -874,7 +874,7 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 
-	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
+	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap, true)
 	if err != nil {
 		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))

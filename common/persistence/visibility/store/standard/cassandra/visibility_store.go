@@ -140,7 +140,6 @@ type (
 	visibilityStore struct {
 		session      gocql.Session
 		lowConslevel gocql.Consistency
-		keyspace     string
 	}
 )
 
@@ -159,7 +158,6 @@ func NewVisibilityStore(
 	return &visibilityStore{
 		session:      session,
 		lowConslevel: gocql.One,
-		keyspace:     cfg.Keyspace,
 	}, nil
 }
 
@@ -168,7 +166,9 @@ func (v *visibilityStore) GetName() string {
 }
 
 func (v *visibilityStore) GetIndexName() string {
-	return v.keyspace
+	// GetIndexName is used to get cluster metadata, which in verstions < v1.20
+	// were stored in an empty string key.
+	return ""
 }
 
 // Close releases the resources held by this object

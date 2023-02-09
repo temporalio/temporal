@@ -177,11 +177,11 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		}
 	} else {
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
-		switch {
-		case storeConfig.Cassandra != nil:
-			indexName = storeConfig.Cassandra.Keyspace
-		case storeConfig.SQL != nil:
-			indexName = storeConfig.SQL.DatabaseName
+		if storeConfig.SQL != nil {
+			switch storeConfig.SQL.PluginName {
+			case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+				indexName = storeConfig.SQL.DatabaseName
+			}
 		}
 	}
 

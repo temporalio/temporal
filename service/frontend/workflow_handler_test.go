@@ -160,6 +160,8 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	mockMonitor := s.mockResource.MembershipMonitor
 	mockMonitor.EXPECT().GetMemberCount(primitives.FrontendService).Return(5, nil).AnyTimes()
+
+	s.mockVisibilityMgr.EXPECT().GetName().Return("").AnyTimes()
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {

@@ -73,6 +73,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -184,6 +185,7 @@ func NewWorkflowHandler(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 			visibilityMrg.GetIndexName(),
+			visibility.AllowListForValidation(visibilityMrg.GetName()),
 		),
 		archivalMetadata: archivalMetadata,
 		healthServer:     healthServer,

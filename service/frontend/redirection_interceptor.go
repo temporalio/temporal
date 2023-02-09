@@ -177,8 +177,8 @@ func (i *RedirectionInterceptor) Intercept(
 		return i.handleRedirectAPIInvocation(ctx, req, info, handler, methodName, respAllocFn, namespaceName)
 	}
 
-	// this should not happen, log warn and move on
-	i.logger.Warn(fmt.Sprintf("RedirectionInterceptor encountered unknown API: %v", methodName))
+	// this should not happen for frontend APIs but ok for admin and other future handlers	
+	i.logger.Debug(fmt.Sprintf("RedirectionInterceptor encountered unknown API: %v", info.FullMethod))
 	return handler(ctx, req)
 }
 

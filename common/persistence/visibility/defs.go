@@ -24,6 +24,12 @@
 
 package visibility
 
+import (
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+)
+
 const (
 	// AdvancedVisibilityWritingModeOff means do not write to advanced visibility store
 	AdvancedVisibilityWritingModeOff = "off"
@@ -39,4 +45,15 @@ func DefaultAdvancedVisibilityWritingMode(advancedVisibilityConfigExist bool) st
 		return AdvancedVisibilityWritingModeOn
 	}
 	return AdvancedVisibilityWritingModeOff
+}
+
+func AllowListForValidation(pluginName string) bool {
+	switch pluginName {
+	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+		// Advanced visibility with SQL DB don't support list of values
+		return false
+	default:
+		// Otherwise, enable for backward compatibility.
+		return true
+	}
 }
