@@ -152,7 +152,7 @@ func (c *mysqlQueryConverter) convertToJsonOverlapsExpr(
 	return &jsonOverlapsExpr{
 		JSONDoc1: expr.Left,
 		JSONDoc2: &castExpr{
-			Value: sqlparser.NewStrVal(jsonValue),
+			Value: newUnsafeSQLString(string(jsonValue)),
 			Type:  convertTypeJSON,
 		},
 	}, nil
@@ -164,6 +164,8 @@ func (c *mysqlQueryConverter) convertTextComparisonExpr(
 	if !isSupportedTextOperator(expr.Operator) {
 		return nil, query.NewConverterError("invalid query")
 	}
+	// build the following expression:
+	// `match ({expr.Left}) against ({expr.Right} in natural language mode)`
 	var newExpr sqlparser.Expr = &sqlparser.MatchExpr{
 		Columns: []sqlparser.SelectExpr{&sqlparser.AliasedExpr{Expr: expr.Left}},
 		Expr:    expr.Right,

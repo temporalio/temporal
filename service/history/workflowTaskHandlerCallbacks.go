@@ -453,7 +453,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	hasPendingUpdates := ms.UpdateRegistry().HasPending(request.GetMessages())
 	hasBufferedEvents := ms.HasBufferedEvents()
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
-		wtFailedCause = NewWorkflowTaskFailedCause(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY, serviceerror.NewInvalidArgument(fmt.Sprintf("binary %v is already marked as bad deployment", request.GetBinaryChecksum())))
+		wtFailedCause = newWorkflowTaskFailedCause(
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
+			serviceerror.NewInvalidArgument(
+				fmt.Sprintf(
+					"binary %v is marked as bad deployment",
+					request.GetBinaryChecksum())),
+			nil)
 	} else {
 		namespace := namespaceEntry.Name()
 		workflowSizeChecker := newWorkflowSizeChecker(

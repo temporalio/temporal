@@ -121,9 +121,9 @@ CREATE INDEX by_keyword_07        ON custom_search_attributes (namespace_id, Key
 CREATE INDEX by_keyword_08        ON custom_search_attributes (namespace_id, Keyword08);
 CREATE INDEX by_keyword_09        ON custom_search_attributes (namespace_id, Keyword09);
 CREATE INDEX by_keyword_10        ON custom_search_attributes (namespace_id, Keyword10);
-CREATE FULLTEXT INDEX by_text_01  ON custom_search_attributes (namespace_id, Text01);
-CREATE FULLTEXT INDEX by_text_02  ON custom_search_attributes (namespace_id, Text02);
-CREATE FULLTEXT INDEX by_text_03  ON custom_search_attributes (namespace_id, Text03);
+CREATE FULLTEXT INDEX by_text_01  ON custom_search_attributes (Text01);
+CREATE FULLTEXT INDEX by_text_02  ON custom_search_attributes (Text02);
+CREATE FULLTEXT INDEX by_text_03  ON custom_search_attributes (Text03);
 CREATE INDEX by_keyword_list_01   ON custom_search_attributes (namespace_id, (CAST(KeywordList01 AS CHAR(255) ARRAY)));
 CREATE INDEX by_keyword_list_02   ON custom_search_attributes (namespace_id, (CAST(KeywordList02 AS CHAR(255) ARRAY)));
 CREATE INDEX by_keyword_list_03   ON custom_search_attributes (namespace_id, (CAST(KeywordList03 AS CHAR(255) ARRAY)));

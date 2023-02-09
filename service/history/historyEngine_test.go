@@ -1586,7 +1586,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("BadBinary: binary test-bad-binary is already marked as bad deployment", err.Error())
+	s.Equal("BadBinary: binary test-bad-binary is marked as bad deployment", err.Error())
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
