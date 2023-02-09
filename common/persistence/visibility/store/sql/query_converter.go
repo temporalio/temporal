@@ -55,6 +55,8 @@ type (
 		) (string, []any)
 
 		getDatetimeFormat() string
+
+		getCoalesceCloseTimeExpr() sqlparser.Expr
 	}
 
 	QueryConverter struct {
@@ -347,7 +349,7 @@ func (c *QueryConverter) convertColName(
 	}
 	var newExpr sqlparser.Expr = newColName(searchattribute.GetSqlDbColName(saFieldName))
 	if saAlias == searchattribute.CloseTime {
-		newExpr = getCoalesceCloseTimeExpr(c.getDatetimeFormat())
+		newExpr = c.getCoalesceCloseTimeExpr()
 	}
 	*exprRef = newExpr
 	return saAlias, saFieldName, nil
