@@ -107,7 +107,11 @@ func (s *integrationSuite) pollWorkflowTaskQueue() *workflowservice.PollWorkflow
 }
 
 func (s *integrationSuite) getWorkflowStringResult(workflowID, runID string) string {
-	c, err := client.Dial(client.Options{HostPort: s.testClusterConfig.FrontendAddress, Namespace: s.namespace})
+	hostPort := "127.0.0.1:7134"
+	if TestFlags.FrontendAddr != "" {
+		hostPort = TestFlags.FrontendAddr
+	}
+	c, err := client.Dial(client.Options{HostPort: hostPort, Namespace: s.namespace})
 	s.Require().NoError(err)
 	run := c.GetWorkflow(NewContext(), workflowID, runID)
 	var result string
