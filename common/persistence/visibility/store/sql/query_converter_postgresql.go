@@ -148,6 +148,23 @@ func (c *pgQueryConverter) convertTextComparisonExpr(
 	if !isSupportedTextOperator(expr.Operator) {
 		return nil, query.NewConverterError("invalid query")
 	}
+	valueExpr, ok := expr.Right.(*unsafeSQLString)
+	if !ok {
+		return nil, query.NewConverterError(
+			"%s: unexpected value type (expected string, got %s)",
+			query.InvalidExpressionErrMessage,
+			sqlparser.String(expr.Right),
+		)
+	}
+	tokens := tokenizeTextQueryString(valueExpr.Val)
+	if len(tokens) == 0 {
+		return nil, query.NewConverterError(
+			"%s: unexpected value for Text type search attribute (no tokens found in %s)",
+			query.InvalidExpressionErrMessage,
+			sqlparser.String(expr.Right),
+		)
+	}
+	valueExpr.Val = strings.Join(tokens, " | ")
 	var newExpr sqlparser.Expr = &sqlparser.ComparisonExpr{
 		Operator: ftsMatchOp,
 		Left:     expr.Left,

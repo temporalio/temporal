@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"strings"
 	"time"
 
 	"github.com/xwb1989/sqlparser"
@@ -102,4 +103,16 @@ func getCoalesceCloseTimeExpr(format string) sqlparser.Expr {
 		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
 		newUnsafeSQLString(maxDatetimeValue.Format(format)),
 	)
+}
+
+func tokenizeTextQueryString(s string) []string {
+	tokens := strings.Split(s, " ")
+	n := 0
+	for i, token := range tokens {
+		if token != "" {
+			tokens[n] = tokens[i]
+			n++
+		}
+	}
+	return tokens[:n]
 }
