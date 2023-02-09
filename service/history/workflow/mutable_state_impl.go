@@ -1331,7 +1331,6 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
 		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 
-		// QUESTION: should we preserve values here? this is called by nDCBranchMgr
 		SuggestContinueAsNew: false,
 		HistorySizeBytes:     0,
 	}
