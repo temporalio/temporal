@@ -128,10 +128,6 @@ service AdminService {
     rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
     }
 
-    // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
-    rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
-    }
-
     // GetTaskQueueTasks returns tasks from task queue.
     rpc GetTaskQueueTasks(GetTaskQueueTasksRequest) returns (GetTaskQueueTasksResponse) {
     }

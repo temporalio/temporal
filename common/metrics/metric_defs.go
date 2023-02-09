@@ -136,8 +136,6 @@ const (
 	AdminClientMergeDLQMessagesScope = "AdminClientMergeDLQMessages"
 	// AdminClientRefreshWorkflowTasksScope tracks RPC calls to admin service
 	AdminClientRefreshWorkflowTasksScope = "AdminClientRefreshWorkflowTasks"
-	// AdminClientResendReplicationTasksScope tracks RPC calls to admin service
-	AdminClientResendReplicationTasksScope = "AdminClientResendReplicationTasks"
 	// AdminClientGetTaskQueueTasksScope tracks RPC calls to admin service
 	AdminClientGetTaskQueueTasksScope = "AdminClientGetTaskQueueTasks"
 	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
@@ -211,8 +209,8 @@ const (
 	OperatorRemoveRemoteClusterScope = "OperatorRemoveRemoteCluster"
 	// OperatorListClustersScope is the metric scope for operator.OperatorListClusters
 	OperatorListClustersScope = "OperatorListClusters"
-	// OperatorDeleteWorkflowExecutionScope is the metric scope for operator.DeleteWorkflowExecution
-	OperatorDeleteWorkflowExecutionScope = "OperatorDeleteWorkflowExecution"
+	// OperatorResendWorkflowHistory is the metric scope for operator.ResendWorkflowHistory
+	OperatorResendWorkflowHistory = "OperatorResendWorkflowHistory"
 )
 
 // Frontend Client Operations

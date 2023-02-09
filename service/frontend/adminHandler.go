@@ -1509,26 +1509,6 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	return &adminservice.RefreshWorkflowTasksResponse{}, nil
 }
 
-// ResendReplicationTasks requests replication task from remote cluster
-func (adh *AdminHandler) ResendReplicationTasks(
-	ctx context.Context,
-	request *adminservice.ResendReplicationTasksRequest,
-) (_ *adminservice.ResendReplicationTasksResponse, err error) {
-	defer log.CapturePanic(adh.logger, &err)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if _, err := adh.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
-		NamespaceId: request.GetNamespaceId(),
-		Execution:   request.GetExecution(),
-	}); err != nil {
-		return nil, err
-	}
-	return &adminservice.ResendReplicationTasksResponse{}, nil
-}
-
 // GetTaskQueueTasks returns tasks from task queue
 func (adh *AdminHandler) GetTaskQueueTasks(
 	ctx context.Context,

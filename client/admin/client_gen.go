@@ -292,13 +292,3 @@ func (c *clientImpl) RemoveTask(
 	defer cancel()
 	return c.client.RemoveTask(ctx, request, opts...)
 }
-
-func (c *clientImpl) ResendReplicationTasks(
-	ctx context.Context,
-	request *adminservice.ResendReplicationTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ResendReplicationTasksResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.ResendReplicationTasks(ctx, request, opts...)
-}

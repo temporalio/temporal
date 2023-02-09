@@ -338,21 +338,6 @@ message RefreshWorkflowTasksRequest {
 message RefreshWorkflowTasksResponse {
 }
 
-message ResendReplicationTasksRequest {
-    string namespace_id = 1;
-    string workflow_id = 2[deprecated = true];
-    string run_id = 3 [deprecated = true];
-    string remote_cluster = 4 [deprecated = true];
-    int64 start_event_id = 5 [deprecated = true];
-    int64 start_version = 6 [deprecated = true];
-    int64 end_event_id = 7 [deprecated = true];
-    int64 end_version = 8 [deprecated = true];
-    temporal.api.common.v1.WorkflowExecution execution = 9;
-}
-
-message ResendReplicationTasksResponse {
-}
-
 message GetTaskQueueTasksRequest {
     string namespace = 1;
     string task_queue = 2;

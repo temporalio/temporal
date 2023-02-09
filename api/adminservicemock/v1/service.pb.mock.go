@@ -580,26 +580,6 @@ func (mr *MockAdminServiceClientMockRecorder) RemoveTask(ctx, in interface{}, op
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTask", reflect.TypeOf((*MockAdminServiceClient)(nil).RemoveTask), varargs...)
 }
 
-// ResendReplicationTasks mocks base method.
-func (m *MockAdminServiceClient) ResendReplicationTasks(ctx context.Context, in *adminservice.ResendReplicationTasksRequest, opts ...grpc.CallOption) (*adminservice.ResendReplicationTasksResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "ResendReplicationTasks", varargs...)
-	ret0, _ := ret[0].(*adminservice.ResendReplicationTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ResendReplicationTasks indicates an expected call of ResendReplicationTasks.
-func (mr *MockAdminServiceClientMockRecorder) ResendReplicationTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ResendReplicationTasks), varargs...)
-}
-
 // MockAdminServiceServer is a mock of AdminServiceServer interface.
 type MockAdminServiceServer struct {
 	ctrl     *gomock.Controller
@@ -1011,19 +991,4 @@ func (m *MockAdminServiceServer) RemoveTask(arg0 context.Context, arg1 *adminser
 func (mr *MockAdminServiceServerMockRecorder) RemoveTask(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTask", reflect.TypeOf((*MockAdminServiceServer)(nil).RemoveTask), arg0, arg1)
-}
-
-// ResendReplicationTasks mocks base method.
-func (m *MockAdminServiceServer) ResendReplicationTasks(arg0 context.Context, arg1 *adminservice.ResendReplicationTasksRequest) (*adminservice.ResendReplicationTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResendReplicationTasks", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.ResendReplicationTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ResendReplicationTasks indicates an expected call of ResendReplicationTasks.
-func (mr *MockAdminServiceServerMockRecorder) ResendReplicationTasks(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ResendReplicationTasks), arg0, arg1)
 }

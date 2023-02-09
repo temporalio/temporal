@@ -398,17 +398,3 @@ func (c *metricClient) RemoveTask(
 
 	return c.client.RemoveTask(ctx, request, opts...)
 }
-
-func (c *metricClient) ResendReplicationTasks(
-	ctx context.Context,
-	request *adminservice.ResendReplicationTasksRequest,
-	opts ...grpc.CallOption,
-) (_ *adminservice.ResendReplicationTasksResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.AdminClientResendReplicationTasksScope)
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.ResendReplicationTasks(ctx, request, opts...)
-}
