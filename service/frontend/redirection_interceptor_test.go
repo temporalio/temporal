@@ -106,7 +106,7 @@ func (s *redirectionInterceptorSuite) TearDownTest() {
 
 func (s *redirectionInterceptorSuite) TestLocalAPI() {
 	apis := make(map[string]struct{})
-	for api := range localAPIResults {
+	for api := range localAPIResponses {
 		apis[api] = struct{}{}
 	}
 	s.Equal(map[string]struct{}{
@@ -124,7 +124,7 @@ func (s *redirectionInterceptorSuite) TestLocalAPI() {
 
 func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 	apis := make(map[string]struct{})
-	for api := range globalAPIResults {
+	for api := range globalAPIResponses {
 		apis[api] = struct{}{}
 	}
 	s.Equal(map[string]struct{}{
@@ -189,10 +189,10 @@ func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	}
 
 	actualAPIs := make(map[string]interface{})
-	for api, respAllocFn := range localAPIResults {
+	for api, respAllocFn := range localAPIResponses {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
-	for api, respAllocFn := range globalAPIResults {
+	for api, respAllocFn := range globalAPIResponses {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
 	s.Equal(expectedAPIs, actualAPIs)
@@ -250,7 +250,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Local() {
 		info,
 		handler,
 		methodName,
-		globalAPIResults[methodName],
+		globalAPIResponses[methodName],
 		namespaceName,
 	)
 	s.NoError(err)
@@ -293,7 +293,7 @@ func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation_Redirect() {
 		info,
 		nil,
 		methodName,
-		globalAPIResults[methodName],
+		globalAPIResponses[methodName],
 		namespaceName,
 	)
 	s.NoError(err)
