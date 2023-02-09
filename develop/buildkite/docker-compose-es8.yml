@@ -56,7 +56,6 @@ services:
       - "ES_VERSION=v8"
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
-      - "TEST_TAG=esintegration"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID

@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build esintegration
-
 package tests
 
 import (
@@ -48,6 +46,9 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/rpc"
 )
@@ -82,15 +83,25 @@ func dynamicConfig() map[dynamicconfig.Key]interface{} {
 func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 
-	clusterConfig, err := GetTestClusterConfig("testdata/integration_namespace_cluster.yaml")
-	s.Require().NoError(err)
+	var clusterConfig *TestClusterConfig
+	if TestFlags.PersistenceDriver == mysql.PluginNameV8 ||
+		TestFlags.PersistenceDriver == postgresql.PluginNameV12 ||
+		TestFlags.PersistenceDriver == sqlite.PluginName {
+		var err error
+		clusterConfig, err = GetTestClusterConfig("testdata/integration_test_cluster.yaml")
+		s.Require().NoError(err)
+	} else {
+		var err error
+		clusterConfig, err = GetTestClusterConfig("testdata/integration_namespace_cluster.yaml")
+		s.Require().NoError(err)
+		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
+		s.esClient = CreateESClient(&s.Suite, clusterConfig.ESConfig, s.logger)
+		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", clusterConfig.ESConfig.Version), "test-visibility-template")
+		CreateIndex(&s.Suite, s.esClient, clusterConfig.ESConfig.GetVisibilityIndex())
+	}
+
 	s.clusterConfig = clusterConfig
 	clusterConfig.DynamicConfigOverrides = dynamicConfig()
-
-	// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
-	s.esClient = CreateESClient(&s.Suite, clusterConfig.ESConfig, s.logger)
-	PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", clusterConfig.ESConfig.Version), "test-visibility-template")
-	CreateIndex(&s.Suite, s.esClient, clusterConfig.ESConfig.GetVisibilityIndex())
 
 	cluster, err := NewCluster(clusterConfig, s.logger)
 	s.Require().NoError(err)
@@ -102,7 +113,9 @@ func (s *namespaceTestSuite) SetupSuite() {
 
 func (s *namespaceTestSuite) TearDownSuite() {
 	s.cluster.TearDownCluster()
-	DeleteIndex(&s.Suite, s.esClient, s.clusterConfig.ESConfig.GetVisibilityIndex())
+	if s.esClient != nil {
+		DeleteIndex(&s.Suite, s.esClient, s.clusterConfig.ESConfig.GetVisibilityIndex())
+	}
 }
 
 func (s *namespaceTestSuite) SetupTest() {
