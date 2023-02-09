@@ -817,10 +817,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		namespaceName.String(),
 	)
 	if err != nil {
-		handler.stopProcessing = true
-		return err
+		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 	if unaliasedSas != nil {
+		// Create a shallow copy of the `attr` to avoid modification of original `attr`,
+		// which can be needed again in case of retry.
 		newAttr := *attr
 		newAttr.SearchAttributes = unaliasedSas
 		attr = &newAttr
@@ -928,10 +929,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		targetNamespace.String(),
 	)
 	if err != nil {
-		handler.stopProcessing = true
-		return err
+		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 	if unaliasedSas != nil {
+		// Create a shallow copy of the `attr` to avoid modification of original `attr`,
+		// which can be needed again in case of retry.
 		newAttr := *attr
 		newAttr.SearchAttributes = unaliasedSas
 		attr = &newAttr
@@ -1072,10 +1074,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		namespace.String(),
 	)
 	if err != nil {
-		handler.stopProcessing = true
-		return err
+		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 	if unaliasedSas != nil {
+		// Create a shallow copy of the `attr` to avoid modification of original `attr`,
+		// which can be needed again in case of retry.
 		newAttr := *attr
 		newAttr.SearchAttributes = unaliasedSas
 		attr = &newAttr

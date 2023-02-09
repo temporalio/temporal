@@ -45,6 +45,11 @@ var resultAllow = Result{Decision: DecisionAllow}
 var resultDeny = Result{Decision: DecisionDeny}
 
 func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target *CallTarget) (Result, error) {
+	// APIs that are essentially read-only health checks with no sensitive information are
+	// always allowed
+	if IsHealthCheckAPI(target.APIName) {
+		return resultAllow, nil
+	}
 
 	if claims == nil {
 		return resultDeny, nil
