@@ -83,7 +83,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
@@ -1520,28 +1519,11 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	resender := xdc.NewNDCHistoryResender(
-		adh.namespaceRegistry,
-		adh.clientBean,
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			_, err1 := adh.historyClient.ReplicateEventsV2(ctx, request)
-			return err1
-		},
-		adh.eventSerializer,
-		nil,
-		adh.logger,
-	)
-	if err := resender.SendSingleWorkflowHistory(
-		ctx,
-		request.GetRemoteCluster(),
-		namespace.ID(request.GetNamespaceId()),
-		request.GetWorkflowId(),
-		request.GetRunId(),
-		resendStartEventID,
-		request.StartVersion,
-		common.EmptyEventID,
-		common.EmptyVersion,
-	); err != nil {
+
+	if _, err := adh.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
+		NamespaceId: request.GetNamespaceId(),
+		Execution:   request.GetExecution(),
+	}); err != nil {
 		return nil, err
 	}
 	return &adminservice.ResendReplicationTasksResponse{}, nil
