@@ -118,6 +118,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 				VisibilityArchivalState:       config.VisibilityArchivalState,
 				VisibilityArchivalUri:         config.VisibilityArchivalUri,
 				BadBinaries:                   config.BadBinaries,
+				CustomSearchAttributeAliases:  config.CustomSearchAttributeAliases,
 			},
 			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 				ActiveClusterName: replicationConfig.ActiveClusterName,
