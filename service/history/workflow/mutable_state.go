@@ -91,9 +91,10 @@ type (
 		Type enumsspb.WorkflowTaskType
 
 		// These two fields are sent to workers in the WorkflowTaskStarted event. We need to save a
-		// copy here to ensure that we send the same values with every transient WorkflowTaskStarted
-		// event, otherwise a dynamic config change of the suggestion threshold could cause the
-		// event that the worker used to not match the event we saved in history.
+		// copy in mutable state to know the last values we sent (which might have been in a
+		// transient event), otherwise a dynamic config change of the suggestion threshold could
+		// cause the WorkflowTaskStarted event that the worker used to not match the event we saved
+		// in history.
 		SuggestContinueAsNew bool
 		HistorySizeBytes     int64
 	}
