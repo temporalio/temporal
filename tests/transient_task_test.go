@@ -168,7 +168,14 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 	stage := 0
 	workflowComplete := false
 	largeValue := make([]byte, 1024*1024)
-	var sawHistorySize int64
+	// record the values that we see for completed tasks here
+	type fields struct {
+		size    int64
+		suggest bool
+	}
+	var sawFields []fields
+	// record value for failed wft
+	var failedTaskSawSize int64
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
@@ -184,6 +191,7 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 			s.Less(attrs.HistorySizeBytes, int64(1024*1024))
 			s.False(attrs.SuggestContinueAsNew)
 			// record a large marker
+			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
@@ -196,6 +204,7 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 			s.Greater(attrs.HistorySizeBytes, int64(1024*1024))
 			s.False(attrs.SuggestContinueAsNew)
 			// record another large marker
+			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
 				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
@@ -207,25 +216,27 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 		case 3:
 			s.Greater(attrs.HistorySizeBytes, int64(2048*1024))
 			s.True(attrs.SuggestContinueAsNew)
-			sawHistorySize = attrs.HistorySizeBytes
+			failedTaskSawSize = attrs.HistorySizeBytes
 			// fail workflow task and we'll get a transient one
 			return nil, errors.New("oops")
 
 		case 4:
-			// we should get the exact same value
-			s.Equal(sawHistorySize, attrs.HistorySizeBytes)
-			s.True(attrs.SuggestContinueAsNew)
-
-			workflowComplete = true
+			// we might not get the same value but it shouldn't be smaller, and not too much larger
+			s.GreaterOrEqual(attrs.HistorySizeBytes, failedTaskSawSize)
+			s.Less(attrs.HistorySizeBytes, failedTaskSawSize+10000)
+			s.False(attrs.SuggestContinueAsNew)
+			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
 			return nil, nil
 
 		case 5:
 			// we should get just a little larger
-			s.Greater(attrs.HistorySizeBytes, sawHistorySize)
-			s.Less(attrs.HistorySizeBytes, sawHistorySize+10000)
+			prevSize := sawFields[len(sawFields)-1].size
+			s.Greater(attrs.HistorySizeBytes, prevSize)
+			s.Less(attrs.HistorySizeBytes, prevSize+10000)
 			s.False(attrs.SuggestContinueAsNew) // now false
 
 			workflowComplete = true
+			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -292,6 +303,26 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 	s.NoError(err)
 
 	s.True(workflowComplete)
+
+	// check history
+	// we should have 4 workflow task completed events
+	allEvents := s.getHistory(s.namespace, workflowExecution)
+	var completedEvents []*historypb.HistoryEvent
+	for _, event := range allEvents {
+		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			completedEvents = append(completedEvents, event)
+		}
+	}
+	s.Equal(4, len(completedEvents))
+	for i, event := range completedEvents {
+		// find the corresponding started event, and make sure it matches the values we
+		// recorded in the workflow
+		completedAttrs := event.GetWorkflowTaskCompletedEventAttributes()
+		startedEvent := allEvents[completedAttrs.StartedEventId-1]
+		startedAttrs := startedEvent.GetWorkflowTaskStartedEventAttributes()
+		s.Equal(sawFields[i].size, startedAttrs.HistorySizeBytes)
+		s.Equal(sawFields[i].suggest, startedAttrs.SuggestContinueAsNew)
+	}
 }
 
 func (s *integrationSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
