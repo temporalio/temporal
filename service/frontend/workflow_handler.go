@@ -3071,7 +3071,9 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errIDReusePolicyNotAllowed
 	}
 
-	// Unalias startWorkflow search attributes only for validation. Keep aliases in request.
+	// Unalias startWorkflow search attributes only for validation.
+	// Keep aliases in the request, because the request will be
+	// sent back to frontend to start workflows, which will unalias at that point.
 	unaliasedStartWorkflowSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, startWorkflow.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		return err
@@ -3169,6 +3171,8 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if err != nil {
 			return err
 		}
+
+		// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
 
 		// for all running workflows started by the schedule, we should check that they're
 		// still running, and if not, poke the schedule to refresh

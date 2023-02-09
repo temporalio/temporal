@@ -83,27 +83,26 @@ func dynamicConfig() map[dynamicconfig.Key]interface{} {
 func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 
-	var clusterConfig *TestClusterConfig
-	if TestFlags.PersistenceDriver == mysql.PluginNameV8 ||
-		TestFlags.PersistenceDriver == postgresql.PluginNameV12 ||
-		TestFlags.PersistenceDriver == sqlite.PluginName {
+	switch TestFlags.PersistenceDriver {
+	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 		var err error
-		clusterConfig, err = GetTestClusterConfig("testdata/integration_test_cluster.yaml")
+		s.clusterConfig, err = GetTestClusterConfig("testdata/integration_test_cluster.yaml")
 		s.Require().NoError(err)
-	} else {
+		s.logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
+	default:
 		var err error
-		clusterConfig, err = GetTestClusterConfig("testdata/integration_test_es_cluster.yaml")
+		s.clusterConfig, err = GetTestClusterConfig("testdata/integration_test_es_cluster.yaml")
 		s.Require().NoError(err)
+		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
 		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
-		s.esClient = CreateESClient(&s.Suite, clusterConfig.ESConfig, s.logger)
-		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", clusterConfig.ESConfig.Version), "test-visibility-template")
-		CreateIndex(&s.Suite, s.esClient, clusterConfig.ESConfig.GetVisibilityIndex())
+		s.esClient = CreateESClient(&s.Suite, s.clusterConfig.ESConfig, s.logger)
+		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.clusterConfig.ESConfig.Version), "test-visibility-template")
+		CreateIndex(&s.Suite, s.esClient, s.clusterConfig.ESConfig.GetVisibilityIndex())
 	}
 
-	s.clusterConfig = clusterConfig
-	clusterConfig.DynamicConfigOverrides = dynamicConfig()
+	s.clusterConfig.DynamicConfigOverrides = dynamicConfig()
 
-	cluster, err := NewCluster(clusterConfig, s.logger)
+	cluster, err := NewCluster(s.clusterConfig, s.logger)
 	s.Require().NoError(err)
 	s.cluster = cluster
 	s.frontendClient = s.cluster.GetFrontendClient()

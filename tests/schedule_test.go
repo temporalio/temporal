@@ -96,12 +96,13 @@ func (s *scheduleIntegrationSuite) SetupSuite() {
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr
 	}
-	if TestFlags.PersistenceDriver == mysql.PluginNameV8 ||
-		TestFlags.PersistenceDriver == postgresql.PluginNameV12 ||
-		TestFlags.PersistenceDriver == sqlite.PluginName {
+	switch TestFlags.PersistenceDriver {
+	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 		s.setupSuite("testdata/integration_test_cluster.yaml")
-	} else {
+		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
+	default:
 		s.setupSuite("testdata/integration_test_es_cluster.yaml")
+		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
 		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
 		CreateIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
