@@ -164,11 +164,12 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				Data:        task.Info.Data,
 			},
 			Config: &persistencespb.NamespaceConfig{
-				Retention:               task.Config.GetWorkflowExecutionRetentionTtl(),
-				HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
-				HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),
-				VisibilityArchivalState: task.Config.GetVisibilityArchivalState(),
-				VisibilityArchivalUri:   task.Config.GetVisibilityArchivalUri(),
+				Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
+				HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
+				HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
+				VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),
+				VisibilityArchivalUri:        task.Config.GetVisibilityArchivalUri(),
+				CustomSearchAttributeAliases: task.Config.GetCustomSearchAttributeAliases(),
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
@@ -279,11 +280,12 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 			Data:        task.Info.Data,
 		}
 		request.Namespace.Config = &persistencespb.NamespaceConfig{
-			Retention:               task.Config.GetWorkflowExecutionRetentionTtl(),
-			HistoryArchivalState:    task.Config.GetHistoryArchivalState(),
-			HistoryArchivalUri:      task.Config.GetHistoryArchivalUri(),
-			VisibilityArchivalState: task.Config.GetVisibilityArchivalState(),
-			VisibilityArchivalUri:   task.Config.GetVisibilityArchivalUri(),
+			Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),
+			HistoryArchivalState:         task.Config.GetHistoryArchivalState(),
+			HistoryArchivalUri:           task.Config.GetHistoryArchivalUri(),
+			VisibilityArchivalState:      task.Config.GetVisibilityArchivalState(),
+			VisibilityArchivalUri:        task.Config.GetVisibilityArchivalUri(),
+			CustomSearchAttributeAliases: task.Config.GetCustomSearchAttributeAliases(),
 		}
 		if task.Config.GetBadBinaries() != nil {
 			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
