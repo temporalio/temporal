@@ -56,9 +56,7 @@ type (
 		JSONDoc2 sqlparser.Expr
 	}
 
-	mysqlQueryConverter struct {
-		namespaceID namespace.ID
-	}
+	mysqlQueryConverter struct{}
 )
 
 var convertTypeJSON = &sqlparser.ConvertType{Type: "json"}
@@ -68,10 +66,6 @@ var _ sqlparser.Expr = (*memberOfExpr)(nil)
 var _ sqlparser.Expr = (*jsonOverlapsExpr)(nil)
 
 var _ pluginQueryConverter = (*mysqlQueryConverter)(nil)
-
-const (
-	mysqlCustomSearchAttributesTableName = "custom_search_attributes"
-)
 
 func (node *castExpr) Format(buf *sqlparser.TrackedBuffer) {
 	buf.Myprintf("cast(%v as %v)", node.Value, node.Type)
@@ -91,7 +85,7 @@ func newMySQLQueryConverter(
 	saMapper searchattribute.Mapper,
 ) *QueryConverter {
 	return newQueryConverterInternal(
-		&mysqlQueryConverter{namespaceID: request.NamespaceID},
+		&mysqlQueryConverter{},
 		request,
 		saTypeMap,
 		saMapper,
@@ -158,7 +152,7 @@ func (c *mysqlQueryConverter) convertToJsonOverlapsExpr(
 	return &jsonOverlapsExpr{
 		JSONDoc1: expr.Left,
 		JSONDoc2: &castExpr{
-			Value: sqlparser.NewStrVal(jsonValue),
+			Value: newUnsafeSQLString(string(jsonValue)),
 			Type:  convertTypeJSON,
 		},
 	}, nil
@@ -170,27 +164,12 @@ func (c *mysqlQueryConverter) convertTextComparisonExpr(
 	if !isSupportedTextOperator(expr.Operator) {
 		return nil, query.NewConverterError("invalid query")
 	}
-	valueExpr, ok := expr.Right.(*unsafeSQLString)
-	if !ok {
-		return nil, query.NewConverterError("invalid query")
-	}
-	valueExpr.Val = fmt.Sprintf("%s %s", c.namespaceID, valueExpr.Val)
 	// build the following expression:
-	// `match (custom_search_attributes.namespace_id, {expr.Left}) against ({expr.Right} in natural language mode)`
+	// `match ({expr.Left}) against ({expr.Right} in natural language mode)`
 	var newExpr sqlparser.Expr = &sqlparser.MatchExpr{
-		Columns: []sqlparser.SelectExpr{
-			&sqlparser.AliasedExpr{
-				Expr: &sqlparser.ColName{
-					Name: sqlparser.NewColIdent(searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
-					Qualifier: sqlparser.TableName{
-						Name: sqlparser.NewTableIdent(mysqlCustomSearchAttributesTableName),
-					},
-				},
-			},
-			&sqlparser.AliasedExpr{Expr: expr.Left},
-		},
-		Expr:   expr.Right,
-		Option: sqlparser.NaturalLanguageModeStr,
+		Columns: []sqlparser.SelectExpr{&sqlparser.AliasedExpr{Expr: expr.Left}},
+		Expr:    expr.Right,
+		Option:  sqlparser.NaturalLanguageModeStr,
 	}
 	if expr.Operator == sqlparser.NotEqualStr {
 		newExpr = &sqlparser.NotExpr{Expr: newExpr}
