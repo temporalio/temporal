@@ -126,7 +126,7 @@ func (s *integrationSuite) TestEagerWorkflowStart_StartNew() {
 	s.Require().Equal("ok", result)
 }
 
-func (s *integrationSuite) TestEagerWorkflowStart_RetryAfterTimeout() {
+func (s *integrationSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() {
 	response := s.startEagerWorkflow(workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
 		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -135,6 +135,59 @@ func (s *integrationSuite) TestEagerWorkflowStart_RetryAfterTimeout() {
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
 	// Let it timeout so it can be polled via standard matching based dispatch
 	task = s.pollWorkflowTaskQueue()
+	s.respondWorkflowTaskCompleted(task, "ok")
+	// Verify workflow completes and client can get the result
+	result := s.getWorkflowStringResult(s.defaultWorkflowID(), response.RunId)
+	s.Require().Equal("ok", result)
+}
+
+func (s *integrationSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
+	request := workflowservice.StartWorkflowExecutionRequest{
+		// Should give enough grace time even in slow CI
+		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+		RequestId:           uuid.New(),
+	}
+	response := s.startEagerWorkflow(request)
+	task := response.GetEagerWorkflowTask()
+	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+
+	// Let it timeout
+	time.Sleep(*request.WorkflowTaskTimeout)
+	response = s.startEagerWorkflow(request)
+	task = response.GetEagerWorkflowTask()
+	s.Require().Nil(task, "StartWorkflowExecution response contained a workflow task")
+
+	task = s.pollWorkflowTaskQueue()
+	s.respondWorkflowTaskCompleted(task, "ok")
+	// Verify workflow completes and client can get the result
+	result := s.getWorkflowStringResult(s.defaultWorkflowID(), response.RunId)
+	s.Require().Equal("ok", result)
+}
+
+func (s *integrationSuite) TestEagerWorkflowStart_RetryStartImmediately() {
+	request := workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.New()}
+	response := s.startEagerWorkflow(request)
+	task := response.GetEagerWorkflowTask()
+	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+	response = s.startEagerWorkflow(request)
+	task = response.GetEagerWorkflowTask()
+	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+
+	s.respondWorkflowTaskCompleted(task, "ok")
+	// Verify workflow completes and client can get the result
+	result := s.getWorkflowStringResult(s.defaultWorkflowID(), response.RunId)
+	s.Require().Equal("ok", result)
+}
+
+func (s *integrationSuite) TestEagerWorkflowStart_TerminateDuplicate() {
+	request := workflowservice.StartWorkflowExecutionRequest{
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+	}
+	s.startEagerWorkflow(request)
+	response := s.startEagerWorkflow(request)
+	task := response.GetEagerWorkflowTask()
+	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+
 	s.respondWorkflowTaskCompleted(task, "ok")
 	// Verify workflow completes and client can get the result
 	result := s.getWorkflowStringResult(s.defaultWorkflowID(), response.RunId)
