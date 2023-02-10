@@ -86,7 +86,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 		2: 2,
 		3: 1,
 	}
-	s.channelWeightUpdateCh = make(chan struct{})
+	s.channelWeightUpdateCh = make(chan struct{}, 1)
 	logger := log.NewTestLogger()
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
