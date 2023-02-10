@@ -27,6 +27,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.temporal.io/api/common/v1"
@@ -199,13 +200,11 @@ func (s *VisibilityStore) ListOpenWorkflowExecutions(
 			Namespace:     request.Namespace,
 			PageSize:      request.PageSize,
 			NextPageToken: request.NextPageToken,
-			Query: fmt.Sprintf(
-				"%s = %d AND %s BETWEEN '%s' AND '%s'",
-				searchattribute.ExecutionStatus,
-				int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-				searchattribute.StartTime,
-				request.EarliestStartTime.UTC().Format(time.RFC3339Nano),
-				request.LatestStartTime.UTC().Format(time.RFC3339Nano),
+			Query: s.buildQueryStringFromListRequest(
+				request,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				"",
+				"",
 			),
 		},
 	)
@@ -222,13 +221,11 @@ func (s *VisibilityStore) ListClosedWorkflowExecutions(
 			Namespace:     request.Namespace,
 			PageSize:      request.PageSize,
 			NextPageToken: request.NextPageToken,
-			Query: fmt.Sprintf(
-				"%s != %d AND %s BETWEEN '%s' AND '%s'",
-				searchattribute.ExecutionStatus,
-				int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-				searchattribute.CloseTime,
-				request.EarliestStartTime.UTC().Format(time.RFC3339Nano),
-				request.LatestStartTime.UTC().Format(time.RFC3339Nano),
+			Query: s.buildQueryStringFromListRequest(
+				request,
+				enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+				"",
+				"",
 			),
 		},
 	)
@@ -245,15 +242,11 @@ func (s *VisibilityStore) ListOpenWorkflowExecutionsByType(
 			Namespace:     request.Namespace,
 			PageSize:      request.PageSize,
 			NextPageToken: request.NextPageToken,
-			Query: fmt.Sprintf(
-				"%s = %d AND %s = '%s' AND %s BETWEEN '%s' AND '%s'",
-				searchattribute.ExecutionStatus,
-				int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-				searchattribute.WorkflowType,
+			Query: s.buildQueryStringFromListRequest(
+				request.ListWorkflowExecutionsRequest,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				"",
 				request.WorkflowTypeName,
-				searchattribute.StartTime,
-				request.EarliestStartTime.UTC().Format(time.RFC3339Nano),
-				request.LatestStartTime.UTC().Format(time.RFC3339Nano),
 			),
 		},
 	)
@@ -270,15 +263,11 @@ func (s *VisibilityStore) ListClosedWorkflowExecutionsByType(
 			Namespace:     request.Namespace,
 			PageSize:      request.PageSize,
 			NextPageToken: request.NextPageToken,
-			Query: fmt.Sprintf(
-				"%s != %d AND %s = '%s' AND %s BETWEEN '%s' AND '%s'",
-				searchattribute.ExecutionStatus,
-				int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-				searchattribute.WorkflowType,
+			Query: s.buildQueryStringFromListRequest(
+				request.ListWorkflowExecutionsRequest,
+				enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+				"",
 				request.WorkflowTypeName,
-				searchattribute.CloseTime,
-				request.EarliestStartTime.UTC().Format(time.RFC3339Nano),
-				request.LatestStartTime.UTC().Format(time.RFC3339Nano),
 			),
 		},
 	)
@@ -295,15 +284,11 @@ func (s *VisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 			Namespace:     request.Namespace,
 			PageSize:      request.PageSize,
 			NextPageToken: request.NextPageToken,
-			Query: fmt.Sprintf(
-				"%s = %d AND %s = '%s' AND %s BETWEEN '%s' AND '%s'",
-				searchattribute.ExecutionStatus,
-				int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-				searchattribute.WorkflowID,
+			Query: s.buildQueryStringFromListRequest(
+				request.ListWorkflowExecutionsRequest,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				request.WorkflowID,
-				searchattribute.StartTime,
-				request.EarliestStartTime.UTC().Format(time.RFC3339Nano),
-				request.LatestStartTime.UTC().Format(time.RFC3339Nano),
+				"",
 			),
 		},
 	)
@@ -320,15 +305,11 @@ func (s *VisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 			Namespace:     request.Namespace,
 			PageSize:      request.PageSize,
 			NextPageToken: request.NextPageToken,
-			Query: fmt.Sprintf(
-				"%s != %d AND %s = '%s' AND %s BETWEEN '%s' AND '%s'",
-				searchattribute.ExecutionStatus,
-				int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-				searchattribute.WorkflowID,
+			Query: s.buildQueryStringFromListRequest(
+				request.ListWorkflowExecutionsRequest,
+				enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
 				request.WorkflowID,
-				searchattribute.CloseTime,
-				request.EarliestStartTime.UTC().Format(time.RFC3339Nano),
-				request.LatestStartTime.UTC().Format(time.RFC3339Nano),
+				"",
 			),
 		},
 	)
@@ -345,13 +326,11 @@ func (s *VisibilityStore) ListClosedWorkflowExecutionsByStatus(
 			Namespace:     request.Namespace,
 			PageSize:      request.PageSize,
 			NextPageToken: request.NextPageToken,
-			Query: fmt.Sprintf(
-				"%s = %d AND %s BETWEEN '%s' AND '%s'",
-				searchattribute.ExecutionStatus,
-				int32(request.Status),
-				searchattribute.CloseTime,
-				request.EarliestStartTime.UTC().Format(time.RFC3339Nano),
-				request.LatestStartTime.UTC().Format(time.RFC3339Nano),
+			Query: s.buildQueryStringFromListRequest(
+				request.ListWorkflowExecutionsRequest,
+				request.Status,
+				"",
+				"",
 			),
 		},
 	)
@@ -586,4 +565,78 @@ func (s *VisibilityStore) processRowSearchAttributes(
 		searchAttributes = aliasedSas
 	}
 	return searchAttributes, nil
+}
+
+func (s *VisibilityStore) buildQueryStringFromListRequest(
+	request *manager.ListWorkflowExecutionsRequest,
+	executionStatus enumspb.WorkflowExecutionStatus,
+	workflowID string,
+	workflowTypeName string,
+) string {
+	var queryTerms []string
+
+	switch executionStatus {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED:
+		queryTerms = append(
+			queryTerms,
+			fmt.Sprintf(
+				"%s != %d",
+				searchattribute.ExecutionStatus,
+				int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
+			),
+		)
+	default:
+		queryTerms = append(
+			queryTerms,
+			fmt.Sprintf("%s = %d", searchattribute.ExecutionStatus, int32(executionStatus)),
+		)
+	}
+
+	var timeAttr string
+	if executionStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		timeAttr = searchattribute.StartTime
+	} else {
+		timeAttr = searchattribute.CloseTime
+	}
+	queryTerms = append(
+		queryTerms,
+		fmt.Sprintf(
+			"%s BETWEEN '%s' AND '%s'",
+			timeAttr,
+			request.EarliestStartTime.UTC().Format(time.RFC3339Nano),
+			request.LatestStartTime.UTC().Format(time.RFC3339Nano),
+		),
+	)
+
+	if request.NamespaceDivision != "" {
+		queryTerms = append(
+			queryTerms,
+			fmt.Sprintf(
+				"%s = '%s'",
+				searchattribute.TemporalNamespaceDivision,
+				request.NamespaceDivision,
+			),
+		)
+	} else {
+		queryTerms = append(
+			queryTerms,
+			fmt.Sprintf("%s IS NULL", searchattribute.TemporalNamespaceDivision),
+		)
+	}
+
+	if workflowID != "" {
+		queryTerms = append(
+			queryTerms,
+			fmt.Sprintf("%s = '%s'", searchattribute.WorkflowID, workflowID),
+		)
+	}
+
+	if workflowTypeName != "" {
+		queryTerms = append(
+			queryTerms,
+			fmt.Sprintf("%s = '%s'", searchattribute.WorkflowType, workflowTypeName),
+		)
+	}
+
+	return strings.Join(queryTerms, " AND ")
 }
