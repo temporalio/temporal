@@ -560,7 +560,10 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 	return defaultSettings
 }
 
-// CreateHistoryStartWorkflowRequest create a start workflow request for history
+// CreateHistoryStartWorkflowRequest create a start workflow request for history.
+// Note: this mutates startRequest by unsetting the fields ContinuedFailure and
+// LastCompletionResult (these should only be set on workflows created by the scheduler
+// worker).
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
@@ -574,7 +577,11 @@ func CreateHistoryStartWorkflowRequest(
 		Attempt:                  1,
 		ParentExecutionInfo:      parentExecutionInfo,
 		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now),
+		ContinuedFailure:         startRequest.ContinuedFailure,
+		LastCompletionResult:     startRequest.LastCompletionResult,
 	}
+	startRequest.ContinuedFailure = nil
+	startRequest.LastCompletionResult = nil
 
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
 		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))
