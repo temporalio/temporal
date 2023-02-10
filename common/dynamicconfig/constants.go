@@ -202,6 +202,8 @@ const (
 	FrontendThrottledLogRPS = "frontend.throttledLogRPS"
 	// FrontendShutdownDrainDuration is the duration of traffic drain during shutdown
 	FrontendShutdownDrainDuration = "frontend.shutdownDrainDuration"
+	// FrontendShutdownFailHealthcheckDuration is the duration of shutdown failure detection
+	FrontendShutdownFailHealthcheckDuration = "frontend.shutdownFailHealthcheckDuration"
 	// FrontendMaxBadBinaries is the max number of bad binaries in namespace config
 	FrontendMaxBadBinaries = "frontend.maxBadBinaries"
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
