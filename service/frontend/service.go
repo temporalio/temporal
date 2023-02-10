@@ -31,13 +31,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -85,7 +84,7 @@ type Config struct {
 	WorkerBuildIdSizeLimit                 dynamicconfig.IntPropertyFn
 	DisallowQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
-	ShutdownFailHealthcheckDuration        dynamicconfig.DurationPropertyFn
+	ShutdownFailHealthCheckDuration        dynamicconfig.DurationPropertyFn
 
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -208,7 +207,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		BlobSizeLimitWarn:                      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 256*1024),
 		ThrottledLogRPS:                        dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
 		ShutdownDrainDuration:                  dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0*time.Second),
-		ShutdownFailHealthcheckDuration:        dc.GetDurationProperty(dynamicconfig.FrontendShutdownFailHealthcheckDuration, 10*time.Second),
+		ShutdownFailHealthCheckDuration:        dc.GetDurationProperty(dynamicconfig.FrontendShutdownFailHealthCheckDuration, 0*time.Second),
 		EnableNamespaceNotActiveAutoForwarding: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableNamespaceNotActiveAutoForwarding, true),
 		SearchAttributesNumberOfKeysLimit:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
@@ -342,7 +341,7 @@ func (s *Service) Stop() {
 	// 5. Stop everything forcefully and return
 
 	requestDrainTime := util.Max(time.Second, s.config.ShutdownDrainDuration())
-	failureDetectionTime := util.Max(0, s.config.ShutdownFailHealthcheckDuration())
+	failureDetectionTime := util.Max(0, s.config.ShutdownFailHealthCheckDuration())
 
 	logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
 	s.healthServer.Shutdown()
