@@ -311,8 +311,8 @@ func (s *workflowSuite) TestStart() {
 
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Nil(req.LastCompletionResult)
-		s.Nil(req.ContinuedFailure)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
 		s.Equal("mywf", req.Request.WorkflowType.Name)
 		s.Equal("mytq", req.Request.TaskQueue.Name)
@@ -843,8 +843,8 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
-		s.Nil(req.LastCompletionResult)
-		s.Nil(req.ContinuedFailure)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
@@ -859,8 +859,8 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 	})
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.Equal("myid-2022-06-01T00:10:00Z", req.Request.WorkflowId)
-		s.Equal(`["res1"]`, payloads.ToString(req.LastCompletionResult))
-		s.Nil(req.ContinuedFailure)
+		s.Equal(`["res1"]`, payloads.ToString(req.Request.LastCompletionResult))
+		s.Nil(req.Request.ContinuedFailure)
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
@@ -875,8 +875,8 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 	})
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
-		s.Equal(`["res1"]`, payloads.ToString(req.LastCompletionResult))
-		s.Equal(`oops`, req.ContinuedFailure.Message)
+		s.Equal(`["res1"]`, payloads.ToString(req.Request.LastCompletionResult))
+		s.Equal(`oops`, req.Request.ContinuedFailure.Message)
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
@@ -891,8 +891,8 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 	})
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.Equal("myid-2022-06-01T00:20:00Z", req.Request.WorkflowId)
-		s.Equal(`["works again"]`, payloads.ToString(req.LastCompletionResult))
-		s.Nil(req.ContinuedFailure)
+		s.Equal(`["works again"]`, payloads.ToString(req.Request.LastCompletionResult))
+		s.Nil(req.Request.ContinuedFailure)
 		return nil, nil
 	})
 
@@ -916,8 +916,8 @@ func (s *workflowSuite) TestPauseOnFailure() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
-		s.Nil(req.LastCompletionResult)
-		s.Nil(req.ContinuedFailure)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {

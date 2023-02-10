@@ -91,9 +91,6 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkf
 	}
 
 	req.Request.Namespace = a.namespace.String()
-	// for historical reasons, these are passed separately. move them into the request here.
-	req.Request.ContinuedFailure = req.ContinuedFailure
-	req.Request.LastCompletionResult = req.LastCompletionResult
 
 	res, err := a.FrontendClient.StartWorkflowExecution(ctx, req.Request)
 	if err != nil {

@@ -840,9 +840,9 @@ func (s *scheduler) startWorkflow(
 			Memo:                     newWorkflow.Memo,
 			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),
 			Header:                   newWorkflow.Header,
+			LastCompletionResult:     s.State.LastCompletionResult,
+			ContinuedFailure:         s.State.ContinuedFailure,
 		},
-		LastCompletionResult: s.State.LastCompletionResult,
-		ContinuedFailure:     s.State.ContinuedFailure,
 	}
 	for {
 		var res schedspb.StartWorkflowResponse
