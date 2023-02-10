@@ -91,17 +91,11 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkf
 	}
 
 	req.Request.Namespace = a.namespace.String()
+	// for historical reasons, these are passed separately. move them into the request here.
+	req.Request.ContinuedFailure = req.ContinuedFailure
+	req.Request.LastCompletionResult = req.LastCompletionResult
 
-	request := common.CreateHistoryStartWorkflowRequest(
-		a.namespaceID.String(),
-		req.Request,
-		nil,
-		time.Now().UTC(),
-	)
-	request.LastCompletionResult = req.LastCompletionResult
-	request.ContinuedFailure = req.ContinuedFailure
-
-	res, err := a.HistoryClient.StartWorkflowExecution(ctx, request)
+	res, err := a.FrontendClient.StartWorkflowExecution(ctx, req.Request)
 	if err != nil {
 		return nil, translateError(err, "StartWorkflowExecution")
 	}

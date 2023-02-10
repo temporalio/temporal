@@ -80,9 +80,11 @@ type StartWorkflowExecutionRequest struct {
 	Attempt                         int32                             `protobuf:"varint,4,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	WorkflowExecutionExpirationTime *time.Time                        `protobuf:"bytes,5,opt,name=workflow_execution_expiration_time,json=workflowExecutionExpirationTime,proto3,stdtime" json:"workflow_execution_expiration_time,omitempty"`
 	ContinueAsNewInitiator          v12.ContinueAsNewInitiator        `protobuf:"varint,6,opt,name=continue_as_new_initiator,json=continueAsNewInitiator,proto3,enum=temporal.api.enums.v1.ContinueAsNewInitiator" json:"continue_as_new_initiator,omitempty"`
-	ContinuedFailure                *v13.Failure                      `protobuf:"bytes,7,opt,name=continued_failure,json=continuedFailure,proto3" json:"continued_failure,omitempty"`
-	LastCompletionResult            *v14.Payloads                     `protobuf:"bytes,8,opt,name=last_completion_result,json=lastCompletionResult,proto3" json:"last_completion_result,omitempty"`
-	FirstWorkflowTaskBackoff        *time.Duration                    `protobuf:"bytes,9,opt,name=first_workflow_task_backoff,json=firstWorkflowTaskBackoff,proto3,stdduration" json:"first_workflow_task_backoff,omitempty"`
+	// History service should use the values of continued_failure and last_completion_result
+	// here, not the ones in start_request (those are moved into here in the frontend).
+	ContinuedFailure         *v13.Failure   `protobuf:"bytes,7,opt,name=continued_failure,json=continuedFailure,proto3" json:"continued_failure,omitempty"`
+	LastCompletionResult     *v14.Payloads  `protobuf:"bytes,8,opt,name=last_completion_result,json=lastCompletionResult,proto3" json:"last_completion_result,omitempty"`
+	FirstWorkflowTaskBackoff *time.Duration `protobuf:"bytes,9,opt,name=first_workflow_task_backoff,json=firstWorkflowTaskBackoff,proto3,stdduration" json:"first_workflow_task_backoff,omitempty"`
 }
 
 func (m *StartWorkflowExecutionRequest) Reset()      { *m = StartWorkflowExecutionRequest{} }
