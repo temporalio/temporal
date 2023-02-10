@@ -132,10 +132,16 @@ const (
 	HistorySizeLimitError = "limit.historySize.error"
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning
 	HistorySizeLimitWarn = "limit.historySize.warn"
+	// HistorySizeSuggestContinueAsNew is the workflow execution history size limit to suggest
+	// continue-as-new (in workflow task started event)
+	HistorySizeSuggestContinueAsNew = "limit.historySize.suggestContinueAsNew"
 	// HistoryCountLimitError is the per workflow execution history event count limit
 	HistoryCountLimitError = "limit.historyCount.error"
 	// HistoryCountLimitWarn is the per workflow execution history event count limit for warning
 	HistoryCountLimitWarn = "limit.historyCount.warn"
+	// HistoryCountSuggestContinueAsNew is the workflow execution history event count limit to
+	// suggest continue-as-new (in workflow task started event)
+	HistoryCountSuggestContinueAsNew = "limit.historyCount.suggestContinueAsNew"
 	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit = "limit.maxIDLength"

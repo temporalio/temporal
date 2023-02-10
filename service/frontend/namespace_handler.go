@@ -237,12 +237,13 @@ func (d *namespaceHandlerImpl) RegisterNamespace(
 		Data:        registerRequest.Data,
 	}
 	config := &persistencespb.NamespaceConfig{
-		Retention:               registerRequest.GetWorkflowExecutionRetentionPeriod(),
-		HistoryArchivalState:    nextHistoryArchivalState.State,
-		HistoryArchivalUri:      nextHistoryArchivalState.URI,
-		VisibilityArchivalState: nextVisibilityArchivalState.State,
-		VisibilityArchivalUri:   nextVisibilityArchivalState.URI,
-		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+		Retention:                    registerRequest.GetWorkflowExecutionRetentionPeriod(),
+		HistoryArchivalState:         nextHistoryArchivalState.State,
+		HistoryArchivalUri:           nextHistoryArchivalState.URI,
+		VisibilityArchivalState:      nextVisibilityArchivalState.State,
+		VisibilityArchivalUri:        nextVisibilityArchivalState.URI,
+		BadBinaries:                  &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+		CustomSearchAttributeAliases: nil,
 	}
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
@@ -720,6 +721,7 @@ func (d *namespaceHandlerImpl) createResponse(
 		VisibilityArchivalState:       config.VisibilityArchivalState,
 		VisibilityArchivalUri:         config.VisibilityArchivalUri,
 		BadBinaries:                   config.BadBinaries,
+		CustomSearchAttributeAliases:  config.CustomSearchAttributeAliases,
 	}
 
 	var clusters []*replicationpb.ClusterReplicationConfig

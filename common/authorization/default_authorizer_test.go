@@ -37,6 +37,12 @@ import (
 )
 
 var (
+	claimsNone          = Claims{}
+	claimsNamespaceOnly = Claims{
+		Namespaces: map[string]Role{
+			testNamespace: RoleWriter,
+		},
+	}
 	claimsSystemAdmin = Claims{
 		System: RoleAdmin,
 	}
@@ -74,6 +80,14 @@ var (
 	targetDescribeNamespace = CallTarget{
 		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
 		Namespace: "BAR",
+	}
+	targetGrpcHealthCheck = CallTarget{
+		APIName:   "/grpc.health.v1.Health/Check",
+		Namespace: "",
+	}
+	targetGetSystemInfo = CallTarget{
+		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo",
+		Namespace: "",
 	}
 )
 
@@ -161,6 +175,29 @@ func (s *defaultAuthorizerSuite) TestSystemAdminListNamespaces() {
 	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetListNamespaces)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestNamespaceOnly() {
+	// don't need any system-level claims to do namespace-level apis
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsNamespaceOnly, startWorkflowExecutionTarget)
+	s.NoError(err)
+	s.Equal(DecisionAllow, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestHealthChecks() {
+	// all health checks should work all the time
+	for _, claims := range []*Claims{
+		nil,
+		&claimsNone,
+		&claimsNamespaceOnly,
+	} {
+		for _, target := range []*CallTarget{
+			&targetGrpcHealthCheck,
+			&targetGetSystemInfo,
+		} {
+			result, err := s.authorizer.Authorize(context.TODO(), claims, target)
+			s.NoError(err)
+			s.Equal(DecisionAllow, result.Decision)
+		}
+	}
 }
 
 func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigNoop() {
