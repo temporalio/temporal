@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"strings"
@@ -62,8 +63,6 @@ more tests to write:
 various validation errors
 
 overlap policies, esp. buffer
-
-last completion result and last error
 
 worker restart/long-poll activity failure:
 	get it in a state where it's waiting for a wf to exit, say with bufferone
@@ -467,6 +466,85 @@ func (s *scheduleIntegrationSuite) TestInput() {
 	_, err = s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 5*time.Second, 200*time.Millisecond)
+
+	// cleanup
+	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	s.NoError(err)
+}
+
+func (s *scheduleIntegrationSuite) TestLastCompletionAndError() {
+	sid := "sched-test-last"
+	wid := "sched-test-last-wf"
+	wt := "sched-test-last-wt"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: timestamp.DurationPtr(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	}
+
+	runs := make(map[string]struct{})
+	var testComplete int32
+
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		var num int
+		_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			runs[workflow.GetInfo(ctx).WorkflowExecution.ID] = struct{}{}
+			return len(runs)
+		}).Get(&num)
+
+		var lcr string
+		if workflow.HasLastCompletionResult(ctx) {
+			s.NoError(workflow.GetLastCompletionResult(ctx, &lcr))
+		}
+
+		lastErr := workflow.GetLastError(ctx)
+
+		switch num {
+		case 1:
+			s.Equal("", lcr)
+			s.NoError(lastErr)
+			return "this one succeeds", nil
+		case 2:
+			s.NoError(lastErr)
+			s.Equal("this one succeeds", lcr)
+			return "", errors.New("this one fails")
+		case 3:
+			s.Equal("this one succeeds", lcr)
+			s.ErrorContains(lastErr, "this one fails")
+			atomic.StoreInt32(&testComplete, 1)
+			return "done", nil
+		default:
+			panic("shouldn't be running anymore")
+		}
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	_, err := s.engine.CreateSchedule(NewContext(), req)
+	s.NoError(err)
+	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 15*time.Second, 200*time.Millisecond)
 
 	// cleanup
 	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
