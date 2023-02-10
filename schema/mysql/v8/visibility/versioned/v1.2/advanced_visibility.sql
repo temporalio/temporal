@@ -95,8 +95,7 @@ CREATE TABLE custom_search_attributes (
   KeywordList02     JSON            GENERATED ALWAYS AS (search_attributes->"$.KeywordList02"),
   KeywordList03     JSON            GENERATED ALWAYS AS (search_attributes->"$.KeywordList03"),
 
-  PRIMARY KEY (namespace_id, run_id),
-  FOREIGN KEY (namespace_id, run_id) REFERENCES executions_visibility (namespace_id, run_id) ON DELETE CASCADE
+  PRIMARY KEY (namespace_id, run_id)
 );
 
 CREATE INDEX by_bool_01           ON custom_search_attributes (namespace_id, Bool01);
