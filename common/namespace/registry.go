@@ -569,15 +569,10 @@ func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
 	}
 }
 
-func (r *registry) updateReadthroughCache(identifier string) error {
-	// TODO: we should cache and return the actual error we got (e.g. timeout)
-	err := serviceerror.NewNamespaceNotFound(identifier)
-
+func (r *registry) updateReadthroughCache(identifier string, err error) {
 	r.readthroughLock.Lock()
 	defer r.readthroughLock.Unlock()
 	r.readthroughErrorsCache.Put(identifier, err)
-
-	return err
 }
 
 func (r *registry) getNamespaceByNamePersistence(name Name) (*Namespace, error) {
@@ -587,7 +582,11 @@ func (r *registry) getNamespaceByNamePersistence(name Name) (*Namespace, error) 
 
 	ns, err := r.getNamespacePersistence(request)
 	if err != nil {
-		notFoundErr := r.updateReadthroughCache(name.String())
+		notFoundErr := serviceerror.NewNamespaceNotFound(name.String())
+		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
+			// TODO: we should cache and return the actual error we got (e.g. timeout)
+			r.updateReadthroughCache(name.String(), notFoundErr)
+		}
 		return nil, notFoundErr
 	}
 	return ns, nil
@@ -600,7 +599,11 @@ func (r *registry) getNamespaceByIDPersistence(id ID) (*Namespace, error) {
 
 	ns, err := r.getNamespacePersistence(request)
 	if err != nil {
-		notFoundErr := r.updateReadthroughCache(id.String())
+		notFoundErr := serviceerror.NewNamespaceNotFound(id.String())
+		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
+			// TODO: we should cache and return the actual error we got (e.g. timeout)
+			r.updateReadthroughCache(id.String(), notFoundErr)
+		}
 		return nil, notFoundErr
 	}
 	return ns, nil

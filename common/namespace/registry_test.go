@@ -437,7 +437,6 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	entries = []*namespace.Namespace{}
 
 	wg.Add(1)
-	s.registry.Refresh()
 	wg.Wait()
 
 	// entry1 only has descrption update, so won't trigger the state change callback
@@ -590,8 +589,6 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 			namespaceRecord2},
 		NextPageToken: nil,
 	}, nil)
-
-	s.registry.Refresh()
 
 	ns2FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
 	s.NotNil(ns2FromRegistry)
