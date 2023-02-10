@@ -32,7 +32,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
@@ -82,7 +81,7 @@ var (
 		InitialCapacity: cacheInitialSize,
 		TTL:             cacheTTL,
 	}
-	readthroughCacheOpts = cache.Options{
+	readthroughErrorsCacheOpts = cache.Options{
 		InitialCapacity: cacheInitialSize,
 		TTL:             readthroughCacheTTL,
 	}
@@ -140,8 +139,6 @@ type (
 		GetNamespaceID(name Name) (ID, error)
 		GetNamespaceName(id ID) (Name, error)
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
-		// Refresh forces an immediate refresh of the namespace cache and blocks until it's complete.
-		Refresh()
 		// Registers callback for namespace state changes.
 		// StateChangeCallbackFn will be invoked for a new/deleted namespace or namespace that has
 		// State, ReplicationState, ActiveCluster, or isGlobalNamespace config changed.
@@ -168,10 +165,10 @@ type (
 		cacheByID            cache.Cache
 		stateChangeCallbacks map[any]StateChangeCallbackFn
 
-		// readthroughCache stores namespaces that missed the above caches
+		// readthroughErrorsCache stores namespaces that missed the above caches
 		// AND was not found when reading through to the persistence layer
-		readthroughLock  sync.RWMutex
-		readthroughCache cache.Cache
+		readthroughLock        sync.RWMutex
+		readthroughErrorsCache cache.Cache
 	}
 )
 
@@ -195,7 +192,7 @@ func NewRegistry(
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
 		refreshInterval:         refreshInterval,
 		stateChangeCallbacks:    make(map[any]StateChangeCallbackFn),
-		readthroughCache:        cache.New(cacheMaxSize, &readthroughCacheOpts),
+		readthroughErrorsCache:  cache.New(cacheMaxSize, &readthroughErrorsCacheOpts),
 	}
 	return reg
 }
@@ -328,17 +325,11 @@ func (r *registry) GetNamespaceName(
 	id ID,
 ) (Name, error) {
 
-	ns, err := r.getNamespaceByID(id)
+	ns, err := r.getOrPutNamespaceByID(id)
 	if err != nil {
 		return "", err
 	}
 	return ns.Name(), nil
-}
-
-func (r *registry) Refresh() {
-	replyCh := make(chan struct{})
-	r.triggerRefreshCh <- replyCh
-	<-replyCh
 }
 
 func (r *registry) refreshLoop(ctx context.Context) error {
@@ -493,8 +484,8 @@ func (r *registry) getNamespaceByIDLocked(id ID) (*Namespace, error) {
 // to the persistence layer and updates caches if it doesn't
 func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 	// check main caches
-	cacheHit, _ := r.getNamespace(name)
-	if cacheHit != nil {
+	cacheHit, cacheErr := r.getNamespace(name)
+	if cacheErr == nil {
 		return cacheHit, nil
 	}
 
@@ -520,8 +511,8 @@ func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 // to the persistence layer and updates caches if it doesn't
 func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
 	// check main caches
-	cacheHit, _ := r.getNamespaceByID(id)
-	if cacheHit != nil {
+	cacheHit, cacheErr := r.getNamespaceByID(id)
+	if cacheErr == nil {
 		return cacheHit, nil
 	}
 
@@ -547,7 +538,7 @@ func (r *registry) getPreviousReadthroughError(handle string) error {
 	r.readthroughLock.RLock()
 	defer r.readthroughLock.RUnlock()
 
-	if prevErr, ok := r.readthroughCache.Get(handle).(error); ok {
+	if prevErr, ok := r.readthroughErrorsCache.Get(handle).(error); ok {
 		return prevErr
 	}
 	return nil
@@ -557,6 +548,14 @@ func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
 	var stateChangeCallbacks []StateChangeCallbackFn
 
 	r.cacheLock.Lock()
+	if curEntry, ok := r.cacheByID.Get(ns.ID()).(*Namespace); ok {
+		if curEntry.ConfigVersion() >= ns.ConfigVersion() {
+			// More up to date version already put in cache by refresh
+			r.cacheLock.Unlock()
+			return
+		}
+	}
+
 	oldNS := r.updateIDToNamespaceCache(r.cacheByID, ns.ID(), ns)
 	r.cacheNameToID.Put(ns.Name(), ns.ID())
 	if namespaceStateChanged(oldNS, ns) {
@@ -565,18 +564,18 @@ func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
 	r.cacheLock.Unlock()
 
 	// call state change callbacks
-	deleted := ns.State() == enumspb.NAMESPACE_STATE_DELETED
 	for _, cb := range stateChangeCallbacks {
-		cb(ns, deleted)
+		cb(ns, false)
 	}
 }
 
 func (r *registry) updateReadthroughCache(identifier string) error {
+	// TODO: we should cache and return the actual error we got (e.g. timeout)
 	err := serviceerror.NewNamespaceNotFound(identifier)
 
 	r.readthroughLock.Lock()
 	defer r.readthroughLock.Unlock()
-	r.readthroughCache.Put(identifier, err)
+	r.readthroughErrorsCache.Put(identifier, err)
 
 	return err
 }
