@@ -179,22 +179,23 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 	}
 	colNameStr := sqlparser.String(colName)
 
-	value, err := query.ParseSqlValue(sqlparser.String(expr.Right))
-	if err != nil {
-		return nil, err
-	}
-
-	var ftsQuery string
-	switch v := value.(type) {
-	case string:
-		ftsQuery = fmt.Sprintf(`%s:(%s)`, colNameStr, v)
-	default:
+	valueExpr, ok := expr.Right.(*unsafeSQLString)
+	if !ok {
 		return nil, query.NewConverterError(
-			"%s: unexpected value type %T",
+			"%s: unexpected value type (expected string, got %s)",
 			query.InvalidExpressionErrMessage,
-			expr,
+			sqlparser.String(expr.Right),
 		)
 	}
+	tokens := tokenizeTextQueryString(valueExpr.Val)
+	if len(tokens) == 0 {
+		return nil, query.NewConverterError(
+			"%s: unexpected value for Text type search attribute (no tokens found in %s)",
+			query.InvalidExpressionErrMessage,
+			sqlparser.String(expr.Right),
+		)
+	}
+	ftsQuery := fmt.Sprintf("%s:(%s)", colNameStr, strings.Join(tokens, " OR "))
 
 	var oper string
 	switch expr.Operator {
