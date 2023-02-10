@@ -85,7 +85,7 @@ type Config struct {
 	WorkerBuildIdSizeLimit                 dynamicconfig.IntPropertyFn
 	DisallowQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
-	MembershipFailureDetectionDuration     dynamicconfig.DurationPropertyFn
+	ShutdownFailureDetectionDuration       dynamicconfig.DurationPropertyFn
 
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -208,7 +208,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		BlobSizeLimitWarn:                      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 256*1024),
 		ThrottledLogRPS:                        dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
 		ShutdownDrainDuration:                  dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0*time.Second),
-		MembershipFailureDetectionDuration:     dc.GetDurationProperty(dynamicconfig.FrontendMembershipFailureDetectionDuration, 10*time.Second),
+		ShutdownFailureDetectionDuration:       dc.GetDurationProperty(dynamicconfig.FrontendShutdownFailHealthcheckDuration, 10*time.Second),
 		EnableNamespaceNotActiveAutoForwarding: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableNamespaceNotActiveAutoForwarding, true),
 		SearchAttributesNumberOfKeysLimit:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
@@ -342,7 +342,7 @@ func (s *Service) Stop() {
 	// 5. Stop everything forcefully and return
 
 	requestDrainTime := util.Max(time.Second, s.config.ShutdownDrainDuration())
-	failureDetectionTime := util.Max(0, s.config.MembershipFailureDetectionDuration())
+	failureDetectionTime := util.Max(0, s.config.ShutdownFailureDetectionDuration())
 
 	logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
 	s.healthServer.Shutdown()
