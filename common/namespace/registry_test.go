@@ -583,12 +583,14 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 		PageSize:       namespace.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  nil,
-	}).Return(&persistence.ListNamespacesResponse{
+	}).MinTimes(1).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{
 			// namespaceRecord1 is removed
 			namespaceRecord2},
 		NextPageToken: nil,
 	}, nil)
+
+	time.Sleep(2 * time.Second) // wait for cache refresh to pick up deleted ns
 
 	ns2FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
 	s.NotNil(ns2FromRegistry)
