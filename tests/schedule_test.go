@@ -100,11 +100,9 @@ func (s *scheduleIntegrationSuite) SetupSuite() {
 	if TestFlags.PersistenceDriver == mysql.PluginNameV8 ||
 		TestFlags.PersistenceDriver == postgresql.PluginNameV12 ||
 		TestFlags.PersistenceDriver == sqlite.PluginName {
-		// SQL tests are run without Elasticsearch.
-		s.setupSuite("testdata/schedule_integration_test_cluster_std_vis.yaml")
+		s.setupSuite("testdata/integration_test_cluster.yaml")
 	} else {
-		s.setupSuite("testdata/schedule_integration_test_cluster_adv_vis.yaml")
-		// ES setup so we can test search attributes
+		s.setupSuite("testdata/integration_test_es_cluster.yaml")
 		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
 		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
 		CreateIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())

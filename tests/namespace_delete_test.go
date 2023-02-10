@@ -92,7 +92,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 		s.Require().NoError(err)
 	} else {
 		var err error
-		clusterConfig, err = GetTestClusterConfig("testdata/integration_namespace_cluster.yaml")
+		clusterConfig, err = GetTestClusterConfig("testdata/integration_test_es_cluster.yaml")
 		s.Require().NoError(err)
 		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
 		s.esClient = CreateESClient(&s.Suite, clusterConfig.ESConfig, s.logger)
