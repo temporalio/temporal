@@ -357,10 +357,6 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 		NextPageToken: nil,
 	}, nil)
 
-	// load namespaces
-	s.registry.Start()
-	defer s.registry.Stop()
-
 	namespaceRecord2New := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info:   namespaceRecord2Old.Namespace.Info,
@@ -403,6 +399,21 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	}
 	namespaceNotificationVersion++
 
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
+		PageSize:       namespace.CacheRefreshPageSize,
+		IncludeDeleted: true,
+		NextPageToken:  nil,
+	}).Return(&persistence.ListNamespacesResponse{
+		Namespaces: []*persistence.GetNamespaceResponse{
+			namespaceRecord1New,
+			namespaceRecord2New},
+		NextPageToken: nil,
+	}, nil)
+
+	// load namespaces
+	s.registry.Start()
+	defer s.registry.Stop()
+
 	var entries []*namespace.Namespace
 
 	wg := &sync.WaitGroup{}
@@ -423,25 +434,14 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	}
 	s.Equal([]*namespace.Namespace{entry1Old, entry2Old}, entries)
 
-	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:       namespace.CacheRefreshPageSize,
-		IncludeDeleted: true,
-		NextPageToken:  nil,
-	}).Return(&persistence.ListNamespacesResponse{
-		Namespaces: []*persistence.GetNamespaceResponse{
-			namespaceRecord1New,
-			namespaceRecord2New},
-		NextPageToken: nil,
-	}, nil)
-
-	entries = []*namespace.Namespace{}
-
 	wg.Add(1)
 	wg.Wait()
 
+	newEntries := entries[2:]
+
 	// entry1 only has descrption update, so won't trigger the state change callback
-	s.Len(entries, 1)
-	s.Equal([]*namespace.Namespace{entry2New}, entries)
+	s.Len(newEntries, 1)
+	s.Equal([]*namespace.Namespace{entry2New}, newEntries)
 }
 
 func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
@@ -575,22 +575,33 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 		NextPageToken: nil,
 	}, nil)
 
-	// load namespaces
-	s.registry.Start()
-	defer s.registry.Stop()
-
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:       namespace.CacheRefreshPageSize,
 		IncludeDeleted: true,
 		NextPageToken:  nil,
-	}).MinTimes(1).Return(&persistence.ListNamespacesResponse{
+	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{
 			// namespaceRecord1 is removed
 			namespaceRecord2},
 		NextPageToken: nil,
 	}, nil)
 
-	time.Sleep(2 * time.Second) // wait for cache refresh to pick up deleted ns
+	// load namespaces
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	// use WaitGroup and callback to wait until refresh loop picks up delete
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	s.registry.RegisterStateChangeCallback(
+		"1",
+		func(ns *namespace.Namespace, deletedFromDb bool) {
+			if deletedFromDb {
+				wg.Done()
+			}
+		},
+	)
+	wg.Wait()
 
 	ns2FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
 	s.NotNil(ns2FromRegistry)
