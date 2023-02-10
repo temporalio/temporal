@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/xwb1989/sqlparser"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -94,12 +93,4 @@ func addPrefix(prefix string, fields []string) []string {
 func getMaxDatetimeValue() time.Time {
 	t, _ := time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
 	return t
-}
-
-func getCoalesceCloseTimeExpr(format string) sqlparser.Expr {
-	return newFuncExpr(
-		coalesceFuncName,
-		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
-		newUnsafeSQLString(maxDatetimeValue.Format(format)),
-	)
 }

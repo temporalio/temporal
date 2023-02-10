@@ -64,6 +64,14 @@ func (c *sqliteQueryConverter) getDatetimeFormat() string {
 	return "2006-01-02 15:04:05.999999-07:00"
 }
 
+func (c *sqliteQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
+	return newFuncExpr(
+		coalesceFuncName,
+		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
+		newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
+	)
+}
+
 //nolint:revive // cyclomatic complexity 17 (> 15)
 func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
@@ -233,12 +241,12 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 			whereClauses,
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
 				searchattribute.GetSqlDbColName(searchattribute.RunID),
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 			),
 		)
 		queryArgs = append(
@@ -262,7 +270,7 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 		LIMIT ?`,
 		strings.Join(sqlplugin.DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
-		sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+		sqlparser.String(c.getCoalesceCloseTimeExpr()),
 		searchattribute.GetSqlDbColName(searchattribute.StartTime),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
 	), queryArgs

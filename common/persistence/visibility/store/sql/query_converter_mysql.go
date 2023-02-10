@@ -59,7 +59,10 @@ type (
 	mysqlQueryConverter struct{}
 )
 
-var convertTypeJSON = &sqlparser.ConvertType{Type: "json"}
+var (
+	convertTypeDatetime = &sqlparser.ConvertType{Type: "datetime"}
+	convertTypeJSON     = &sqlparser.ConvertType{Type: "json"}
+)
 
 var _ sqlparser.Expr = (*castExpr)(nil)
 var _ sqlparser.Expr = (*memberOfExpr)(nil)
@@ -94,6 +97,17 @@ func newMySQLQueryConverter(
 
 func (c *mysqlQueryConverter) getDatetimeFormat() string {
 	return "2006-01-02 15:04:05.999999"
+}
+
+func (c *mysqlQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
+	return newFuncExpr(
+		coalesceFuncName,
+		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
+		&castExpr{
+			Value: newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
+			Type:  convertTypeDatetime,
+		},
+	)
 }
 
 func (c *mysqlQueryConverter) convertKeywordListComparisonExpr(
@@ -201,12 +215,12 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 			whereClauses,
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
 				searchattribute.GetSqlDbColName(searchattribute.RunID),
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 			),
 		)
 		queryArgs = append(
@@ -234,7 +248,7 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
 		strings.Join(whereClauses, " AND "),
-		sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+		sqlparser.String(c.getCoalesceCloseTimeExpr()),
 		searchattribute.GetSqlDbColName(searchattribute.StartTime),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
 	), queryArgs
