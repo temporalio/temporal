@@ -555,6 +555,7 @@ func HandlerProvider(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
+	membershipMonitor membership.Monitor,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -576,6 +577,7 @@ func HandlerProvider(
 		archivalMetadata,
 		healthServer,
 		timeSource,
+		membershipMonitor,
 	)
 	return wfHandler
 }

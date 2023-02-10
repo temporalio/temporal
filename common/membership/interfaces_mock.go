@@ -29,6 +29,7 @@
 package membership
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -182,6 +183,20 @@ func (m *MockMonitor) Stop() {
 func (mr *MockMonitorMockRecorder) Stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockMonitor)(nil).Stop))
+}
+
+// WaitUntilInitialized mocks base method.
+func (m *MockMonitor) WaitUntilInitialized(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitUntilInitialized", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WaitUntilInitialized indicates an expected call of WaitUntilInitialized.
+func (mr *MockMonitorMockRecorder) WaitUntilInitialized(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilInitialized", reflect.TypeOf((*MockMonitor)(nil).WaitUntilInitialized), arg0)
 }
 
 // WhoAmI mocks base method.
