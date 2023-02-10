@@ -64,6 +64,8 @@ type (
 		request   *manager.ListWorkflowExecutionsRequestV2
 		saTypeMap searchattribute.NameTypeMap
 		saMapper  searchattribute.Mapper
+
+		seenNamespaceDivision bool
 	}
 )
 
@@ -121,6 +123,8 @@ func newQueryConverterInternal(
 		request:              request,
 		saTypeMap:            saTypeMap,
 		saMapper:             saMapper,
+
+		seenNamespaceDivision: false,
 	}
 }
 
@@ -180,8 +184,38 @@ func (c *QueryConverter) convertSelectStmt(sel *sqlparser.Select) error {
 		return query.NewConverterError("%s: 'limit' clause", query.NotSupportedErrMessage)
 	}
 
-	if sel.Where != nil {
-		return c.convertWhereExpr(&sel.Where.Expr)
+	if sel.Where == nil {
+		sel.Where = &sqlparser.Where{
+			Type: sqlparser.WhereStr,
+			Expr: nil,
+		}
+	}
+
+	if sel.Where.Expr != nil {
+		err := c.convertWhereExpr(&sel.Where.Expr)
+		if err != nil {
+			return err
+		}
+	}
+
+	// This logic comes from elasticsearch/visibility_store.go#convertQuery function.
+	// If the query did not explicitly filter on TemporalNamespaceDivision,
+	// then add "is null" query to it.
+	if !c.seenNamespaceDivision {
+		namespaceDivisionExpr := &sqlparser.IsExpr{
+			Operator: sqlparser.IsNullStr,
+			Expr: newColName(
+				searchattribute.GetSqlDbColName(searchattribute.TemporalNamespaceDivision),
+			),
+		}
+		if sel.Where.Expr == nil {
+			sel.Where.Expr = namespaceDivisionExpr
+		} else {
+			sel.Where.Expr = &sqlparser.AndExpr{
+				Left:  sel.Where.Expr,
+				Right: namespaceDivisionExpr,
+			}
+		}
 	}
 
 	return nil
@@ -346,6 +380,9 @@ func (c *QueryConverter) convertColName(
 		if err != nil {
 			return "", "", err
 		}
+	}
+	if saFieldName == searchattribute.TemporalNamespaceDivision {
+		c.seenNamespaceDivision = true
 	}
 	var newExpr sqlparser.Expr = newColName(searchattribute.GetSqlDbColName(saFieldName))
 	if saAlias == searchattribute.CloseTime {
