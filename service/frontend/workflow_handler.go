@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -123,6 +124,7 @@ type (
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
 		overrides                       *Overrides
+		membershipMonitor               membership.Monitor
 	}
 )
 
@@ -147,6 +149,7 @@ func NewWorkflowHandler(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	timeSource clock.TimeSource,
+	membershipMonitor membership.Monitor,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -187,9 +190,10 @@ func NewWorkflowHandler(
 			visibilityMrg.GetIndexName(),
 			visibility.AllowListForValidation(visibilityMrg.GetName()),
 		),
-		archivalMetadata: archivalMetadata,
-		healthServer:     healthServer,
-		overrides:        NewOverrides(),
+		archivalMetadata:  archivalMetadata,
+		healthServer:      healthServer,
+		overrides:         NewOverrides(),
+		membershipMonitor: membershipMonitor,
 	}
 
 	return handler
@@ -202,7 +206,13 @@ func (wh *WorkflowHandler) Start() {
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+		// Start in NOT_SERVING state and switch to SERVING after membership is ready
+		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
+		go func() {
+			_ = wh.membershipMonitor.WaitUntilInitialized(context.Background())
+			wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+			wh.logger.Info("Frontend is now healthy")
+		}()
 	}
 }
 
