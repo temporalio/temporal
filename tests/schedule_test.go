@@ -50,6 +50,8 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -90,19 +92,16 @@ func TestScheduleIntegrationSuite(t *testing.T) {
 }
 
 func (s *scheduleIntegrationSuite) SetupSuite() {
-	if TestFlags.PersistenceDriver == sqlite.PluginName {
-		// sqlite tests are run without elasticsearch
-		s.setupSuite("testdata/schedule_integration_test_cluster_std_vis.yaml")
-	} else {
-		s.setupSuite("testdata/schedule_integration_test_cluster_adv_vis.yaml")
-	}
 	s.hostPort = "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr
 	}
-	// sqlite tests are run without elasticsearch
-	if TestFlags.PersistenceDriver != sqlite.PluginName {
-		// ES setup so we can test search attributes
+	if TestFlags.PersistenceDriver == mysql.PluginNameV8 ||
+		TestFlags.PersistenceDriver == postgresql.PluginNameV12 ||
+		TestFlags.PersistenceDriver == sqlite.PluginName {
+		s.setupSuite("testdata/integration_test_cluster.yaml")
+	} else {
+		s.setupSuite("testdata/integration_test_es_cluster.yaml")
 		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
 		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
 		CreateIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
@@ -141,11 +140,6 @@ func (s *scheduleIntegrationSuite) TearDownTest() {
 }
 
 func (s *scheduleIntegrationSuite) TestBasics() {
-	// sqlite tests are run without elasticsearch
-	if s.esClient == nil {
-		s.T().Skip()
-	}
-
 	sid := "sched-test-basics"
 	wid := "sched-test-basics-wf"
 	wt := "sched-test-basics-wt"

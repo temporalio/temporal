@@ -1,12 +1,12 @@
 - persistence:
-    dbname: integration_active_es
+    dbname: integration_active_adv_vis
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-    masterClusterName: "active-es"
-    currentClusterName: "active-es"
+    masterClusterName: "active-adv-vis"
+    currentClusterName: "active-adv-vis"
     clusterInformation:
-      active-es:
+      active-adv-vis:
         enabled: true
         initialFailoverVersion: 1
         rpcName: "frontend"
@@ -28,14 +28,14 @@
       visibility: test-visibility-4b3e75-
 
 - persistence:
-    dbname: integration_standby_es
+    dbname: integration_standby_adv_vis
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-    masterClusterName: "standby-es"
-    currentClusterName: "standby-es"
+    masterClusterName: "standby-adv-vis"
+    currentClusterName: "standby-adv-vis"
     clusterInformation:
-      standby-es:
+      standby-adv-vis:
         enabled: true
         initialFailoverVersion: 2
         rpcName: "frontend"

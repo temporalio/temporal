@@ -82,3 +82,9 @@ linters-settings:
       - name: unhandled-error
         arguments:
           - "fmt.Printf"
+issues:
+  exclude-rules:
+    - path: tests\/.+\.go
+      text: "(cyclomatic|cognitive)"
+      linters:
+        - revive

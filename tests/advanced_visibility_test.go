@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build esintegration
-
 package tests
 
 import (
@@ -55,6 +53,9 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -66,7 +67,7 @@ const (
 	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
 )
 
-type elasticsearchIntegrationSuite struct {
+type advancedVisibilitySuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
@@ -77,34 +78,48 @@ type elasticsearchIntegrationSuite struct {
 	testSearchAttributeVal string
 }
 
+func (s *advancedVisibilitySuite) isElasticsearchEnabled() bool {
+	return s.esClient != nil
+}
+
 // This cluster use customized threshold for history config
-func (s *elasticsearchIntegrationSuite) SetupSuite() {
-	s.setupSuite("testdata/integration_elasticsearch_cluster.yaml")
-	s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
-	PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
-	indexName := s.testClusterConfig.ESConfig.GetVisibilityIndex()
-	CreateIndex(&s.Suite, s.esClient, indexName)
-	s.putIndexSettings(indexName, defaultTestValueOfESIndexMaxResultWindow)
+func (s *advancedVisibilitySuite) SetupSuite() {
+	if TestFlags.PersistenceDriver == mysql.PluginNameV8 ||
+		TestFlags.PersistenceDriver == postgresql.PluginNameV12 ||
+		TestFlags.PersistenceDriver == sqlite.PluginName {
+		s.setupSuite("testdata/integration_test_cluster.yaml")
+		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
+	} else {
+		s.setupSuite("testdata/integration_test_es_cluster.yaml")
+		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
+		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
+		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
+		indexName := s.testClusterConfig.ESConfig.GetVisibilityIndex()
+		CreateIndex(&s.Suite, s.esClient, indexName)
+		s.putIndexSettings(indexName, defaultTestValueOfESIndexMaxResultWindow)
+	}
 }
 
-func (s *elasticsearchIntegrationSuite) TearDownSuite() {
+func (s *advancedVisibilitySuite) TearDownSuite() {
 	s.tearDownSuite()
-	DeleteIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	if s.isElasticsearchEnabled() {
+		DeleteIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	}
 }
 
-func (s *elasticsearchIntegrationSuite) SetupTest() {
+func (s *advancedVisibilitySuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
 
-func TestElasticsearchIntegrationSuite(t *testing.T) {
+func TestAdvancedVisibilitySuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(elasticsearchIntegrationSuite))
+	suite.Run(t, new(advancedVisibilitySuite))
 }
 
-func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
+func (s *advancedVisibilitySuite) TestListOpenWorkflow() {
 	id := "es-integration-start-workflow-test"
 	wt := "es-integration-start-workflow-test-type"
 	tl := "es-integration-start-workflow-test-taskqueue"
@@ -155,7 +170,7 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 	s.True(len(attrType) > 0)
 }
 
-func (s *elasticsearchIntegrationSuite) TestListWorkflow() {
+func (s *advancedVisibilitySuite) TestListWorkflow() {
 	id := "es-integration-list-workflow-test"
 	wt := "es-integration-list-workflow-test-type"
 	tl := "es-integration-list-workflow-test-taskqueue"
@@ -168,7 +183,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
-func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
+func (s *advancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
 	id := "es-integration-list-workflow-execution-time-test"
 	wt := "es-integration-list-workflow-execution-time-test-type"
 	tl := "es-integration-list-workflow-execution-time-test-taskqueue"
@@ -210,7 +225,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	s.testHelperForReadOnce(weCron.GetRunId(), cronQuery, false)
 }
 
-func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
+func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	id := "es-integration-list-workflow-by-search-attr-test"
 	wt := "es-integration-list-workflow-by-search-attr-test-type"
 	tl := "es-integration-list-workflow-by-search-attr-test-taskqueue"
@@ -296,7 +311,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	}
 }
 
-func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
+func (s *advancedVisibilitySuite) TestListWorkflow_PageToken() {
 	id := "es-integration-list-workflow-token-test"
 	wt := "es-integration-list-workflow-token-test-type"
 	tl := "es-integration-list-workflow-token-test-taskqueue"
@@ -308,7 +323,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_PageToken() {
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, false)
 }
 
-func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAfter() {
+func (s *advancedVisibilitySuite) TestListWorkflow_SearchAfter() {
 	id := "es-integration-list-workflow-searchAfter-test"
 	wt := "es-integration-list-workflow-searchAfter-test-type"
 	tl := "es-integration-list-workflow-searchAfter-test-taskqueue"
@@ -320,7 +335,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAfter() {
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, false)
 }
 
-func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
+func (s *advancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	id := "es-integration-list-workflow-or-query-test"
 	wt := "es-integration-list-workflow-or-query-test-type"
 	tl := "es-integration-list-workflow-or-query-test-taskqueue"
@@ -427,7 +442,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	s.Equal(3, searchVal)
 }
 
-func (s *elasticsearchIntegrationSuite) TestListWorkflow_KeywordQuery() {
+func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	id := "es-integration-list-workflow-keyword-query-test"
 	wt := "es-integration-list-workflow-keyword-query-test-type"
 	tl := "es-integration-list-workflow-keyword-query-test-taskqueue"
@@ -489,58 +504,62 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_KeywordQuery() {
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 0)
 
-	// LIKE exact match on Keyword (supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomKeywordField LIKE "%justice for all%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 1)
+	if s.isElasticsearchEnabled() {
+		// LIKE is supported on Elasticsearch only.
 
-	// LIKE %word% on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomKeywordField LIKE "%justice%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
-
-	// LIKE %chars% on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomKeywordField LIKE "%ice%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
-
-	// LIKE NOT %chars% on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomKeywordField NOT LIKE "%ice%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	executionCount := 0
-	for _, execution := range resp.GetExecutions() {
-		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
-		var saValue string
-		err = payload.Decode(saPayload, &saValue)
-		s.NoError(err)
-		if strings.Contains(saValue, "ice") {
-			executionCount++ // execution will be found because NOT LIKE is not supported.
+		// LIKE exact match on Keyword (supported)
+		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+			Query:     `CustomKeywordField LIKE "%justice for all%"`,
 		}
+		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), 1)
+
+		// LIKE %word% on Keyword (not supported)
+		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+			Query:     `CustomKeywordField LIKE "%justice%"`,
+		}
+		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), 0)
+
+		// LIKE %chars% on Keyword (not supported)
+		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+			Query:     `CustomKeywordField LIKE "%ice%"`,
+		}
+		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), 0)
+
+		// LIKE NOT %chars% on Keyword (not supported)
+		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+			Query:     `CustomKeywordField NOT LIKE "%ice%"`,
+		}
+		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		executionCount := 0
+		for _, execution := range resp.GetExecutions() {
+			saPayload := execution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
+			var saValue string
+			err = payload.Decode(saPayload, &saValue)
+			s.NoError(err)
+			if strings.Contains(saValue, "ice") {
+				executionCount++ // execution will be found because NOT LIKE is not supported.
+			}
+		}
+		s.Equal(executionCount, 1)
 	}
-	s.Equal(executionCount, 1)
 }
 
-func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
+func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	id := "es-integration-list-workflow-string-query-test"
 	wt := "es-integration-list-workflow-string-query-test-type"
 	tl := "es-integration-list-workflow-string-query-test-taskqueue"
@@ -602,59 +621,62 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 1)
 
-	// LIKE %word% on String (supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomTextField LIKE "%else%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 1)
-
-	// LIKE word on String (supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomTextField LIKE "else"`, // Same as previous because % just removed for LIKE queries.
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 1)
-
-	// LIKE %chars% on String (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomTextField LIKE "%ls%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
-
-	// LIKE NOT %word% on String (supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomTextField NOT LIKE "%else%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	executionCount := 0
-	for _, execution := range resp.GetExecutions() {
-		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomTextField"]
-		var saValue string
-		err = payload.Decode(saPayload, &saValue)
-		s.NoError(err)
-		if strings.Contains(saValue, "else") {
-			executionCount++
+	if s.isElasticsearchEnabled() {
+		// LIKE is supported on Elasticsearch only.
+		// LIKE %word% on String (supported)
+		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+			Query:     `CustomTextField LIKE "%else%"`,
 		}
+		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), 1)
+
+		// LIKE word on String (supported)
+		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+			Query:     `CustomTextField LIKE "else"`, // Same as previous because % just removed for LIKE queries.
+		}
+		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), 1)
+
+		// LIKE %chars% on String (not supported)
+		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+			Query:     `CustomTextField LIKE "%ls%"`,
+		}
+		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), 0)
+
+		// LIKE NOT %word% on String (supported)
+		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+			Query:     `CustomTextField NOT LIKE "%else%"`,
+		}
+		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		executionCount := 0
+		for _, execution := range resp.GetExecutions() {
+			saPayload := execution.SearchAttributes.GetIndexedFields()["CustomTextField"]
+			var saValue string
+			err = payload.Decode(saPayload, &saValue)
+			s.NoError(err)
+			if strings.Contains(saValue, "else") {
+				executionCount++
+			}
+		}
+		s.Equal(executionCount, 0)
 	}
-	s.Equal(executionCount, 0)
 }
 
 // To test last page search trigger max window size error
-func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
+func (s *advancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 	id := "es-integration-list-workflow-max-window-size-test"
 	wt := "es-integration-list-workflow-max-window-size-test-type"
 	tl := "es-integration-list-workflow-max-window-size-test-taskqueue"
@@ -699,7 +721,11 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 	s.Nil(resp.GetNextPageToken())
 }
 
-func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
+func (s *advancedVisibilitySuite) TestListWorkflow_OrderBy() {
+	if !s.isElasticsearchEnabled() {
+		s.T().Skip("This test is only for Elasticsearch")
+	}
+
 	id := "es-integration-list-workflow-order-by-test"
 	wt := "es-integration-list-workflow-order-by-test-type"
 	tl := "es-integration-list-workflow-order-by-test-taskqueue"
@@ -837,7 +863,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 	testHelper(query, field, t1, t2)
 }
 
-func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, pageSize int,
+//nolint:revive // isScan is a control flag
+func (s *advancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSize int,
 	startRequest *workflowservice.StartWorkflowExecutionRequest, wid, wType string, isScan bool) {
 
 	// start enough number of workflows
@@ -923,7 +950,8 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 	s.Nil(nextPageToken)
 }
 
-func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
+//nolint:revive // isScan is a control flag
+func (s *advancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -967,7 +995,11 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(expectedRunID stri
 	}
 }
 
-func (s *elasticsearchIntegrationSuite) TestScanWorkflow() {
+func (s *advancedVisibilitySuite) TestScanWorkflow() {
+	if !s.isElasticsearchEnabled() {
+		s.T().Skip("This test is only for Elasticsearch")
+	}
+
 	id := "es-integration-scan-workflow-test"
 	wt := "es-integration-scan-workflow-test-type"
 	tl := "es-integration-scan-workflow-test-taskqueue"
@@ -995,7 +1027,11 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow() {
 	s.testHelperForReadOnce(we.GetRunId(), query, true)
 }
 
-func (s *elasticsearchIntegrationSuite) TestScanWorkflow_SearchAttribute() {
+func (s *advancedVisibilitySuite) TestScanWorkflow_SearchAttribute() {
+	if !s.isElasticsearchEnabled() {
+		s.T().Skip("This test is only for Elasticsearch")
+	}
+
 	id := "es-integration-scan-workflow-search-attr-test"
 	wt := "es-integration-scan-workflow-search-attr-test-type"
 	tl := "es-integration-scan-workflow-search-attr-test-taskqueue"
@@ -1015,7 +1051,11 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow_SearchAttribute() {
 	s.testHelperForReadOnce(we.GetRunId(), query, true)
 }
 
-func (s *elasticsearchIntegrationSuite) TestScanWorkflow_PageToken() {
+func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
+	if !s.isElasticsearchEnabled() {
+		s.T().Skip("This test is only for Elasticsearch")
+	}
+
 	id := "es-integration-scan-workflow-token-test"
 	wt := "es-integration-scan-workflow-token-test-type"
 	tl := "es-integration-scan-workflow-token-test-taskqueue"
@@ -1041,7 +1081,11 @@ func (s *elasticsearchIntegrationSuite) TestScanWorkflow_PageToken() {
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, true)
 }
 
-func (s *elasticsearchIntegrationSuite) TestCountWorkflow() {
+func (s *advancedVisibilitySuite) TestCountWorkflow() {
+	if !s.isElasticsearchEnabled() {
+		s.T().Skip("This test is only for Elasticsearch")
+	}
+
 	id := "es-integration-count-workflow-test"
 	wt := "es-integration-count-workflow-test-type"
 	tl := "es-integration-count-workflow-test-taskqueue"
@@ -1081,7 +1125,7 @@ func (s *elasticsearchIntegrationSuite) TestCountWorkflow() {
 	s.Equal(int64(0), resp.GetCount())
 }
 
-func (s *elasticsearchIntegrationSuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
+func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1099,7 +1143,7 @@ func (s *elasticsearchIntegrationSuite) createStartWorkflowExecutionRequest(id, 
 	return request
 }
 
-func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecutionSearchAttributes() {
+func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() {
 	id := "es-integration-upsert-workflow-search-attributes-test"
 	wt := "es-integration-upsert-workflow-search-attributes-test-type"
 	tl := "es-integration-upsert-workflow-search-attributes-test-taskqueue"
@@ -1404,7 +1448,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecutionSearchAttribu
 	}
 }
 
-func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() {
+func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	id := "es-integration-modify-workflow-properties-test"
 	wt := "es-integration-modify-workflow-properties-test-type"
 	tl := "es-integration-modify-workflow-properties-test-taskqueue"
@@ -1626,7 +1670,7 @@ func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() 
 	s.True(proto.Equal(expectedMemo, descResp.WorkflowExecutionInfo.Memo))
 }
 
-func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
+func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
 	verified := false
 	for i := 0; i < numOfRetry; i++ {
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
@@ -1670,7 +1714,7 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 	s.True(verified)
 }
 
-func (s *elasticsearchIntegrationSuite) createSearchAttributes() *commonpb.SearchAttributes {
+func (s *advancedVisibilitySuite) createSearchAttributes() *commonpb.SearchAttributes {
 	searchAttributes, err := searchattribute.Encode(map[string]interface{}{
 		"CustomTextField":               "another string",
 		"CustomIntField":                123,
@@ -1681,7 +1725,7 @@ func (s *elasticsearchIntegrationSuite) createSearchAttributes() *commonpb.Searc
 	return searchAttributes
 }
 
-func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey() {
+func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	id := "es-integration-upsert-workflow-failed-test"
 	wt := "es-integration-upsert-workflow-failed-test-type"
 	tl := "es-integration-upsert-workflow-failed-test-taskqueue"
@@ -1737,7 +1781,11 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("BadSearchAttributes: search attribute INVALIDKEY is not defined", err.Error())
+	if s.isElasticsearchEnabled() {
+		s.Equal("BadSearchAttributes: search attribute INVALIDKEY is not defined", err.Error())
+	} else {
+		s.Equal(fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.namespace), err.Error())
+	}
 
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
@@ -1755,7 +1803,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	s.NotNil(failedEventAttr.GetFailure())
 }
 
-func (s *elasticsearchIntegrationSuite) Test_LongWorkflowID() {
+func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
 	if s.testClusterConfig.Persistence.StoreType == config.StoreTypeSQL {
 		// TODO: remove this when workflow_id field size is increased from varchar(255) in SQL schema.
 		return
@@ -1773,7 +1821,7 @@ func (s *elasticsearchIntegrationSuite) Test_LongWorkflowID() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
-func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxResultWindowSize int) {
+func (s *advancedVisibilitySuite) putIndexSettings(indexName string, maxResultWindowSize int) {
 	acknowledged, err := s.esClient.IndexPutSettings(
 		context.Background(),
 		indexName,
@@ -1783,7 +1831,7 @@ func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxRe
 	s.verifyMaxResultWindowSize(indexName, defaultTestValueOfESIndexMaxResultWindow)
 }
 
-func (s *elasticsearchIntegrationSuite) verifyMaxResultWindowSize(indexName string, targetSize int) {
+func (s *advancedVisibilitySuite) verifyMaxResultWindowSize(indexName string, targetSize int) {
 	for i := 0; i < numOfRetry; i++ {
 		settings, err := s.esClient.IndexGetSettings(context.Background(), indexName)
 		s.Require().NoError(err)

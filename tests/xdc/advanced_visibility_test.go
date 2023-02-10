@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !race && esintegration
+//go:build !race
 
 package xdc
 
@@ -33,8 +33,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/api/adminservice/v1"
-
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -43,24 +41,29 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"gopkg.in/yaml.v3"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
 )
 
-type esCrossDCTestSuite struct {
+type advVisCrossDCTestSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
@@ -75,27 +78,43 @@ type esCrossDCTestSuite struct {
 	testSearchAttributeVal string
 }
 
-func TestESCrossDCTestSuite(t *testing.T) {
+func TestAdvVisCrossDCTestSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(esCrossDCTestSuite))
+	suite.Run(t, new(advVisCrossDCTestSuite))
 }
 
 var (
-	clusterNameES              = []string{"active-es", "standby-es"}
-	clusterReplicationConfigES = []*replicationpb.ClusterReplicationConfig{
+	clusterNameAdvVis              = []string{"active-adv-vis", "standby-adv-vis"}
+	clusterReplicationConfigAdvVis = []*replicationpb.ClusterReplicationConfig{
 		{
-			ClusterName: clusterNameES[0],
+			ClusterName: clusterNameAdvVis[0],
 		},
 		{
-			ClusterName: clusterNameES[1],
+			ClusterName: clusterNameAdvVis[1],
 		},
 	}
 )
 
-func (s *esCrossDCTestSuite) SetupSuite() {
-	s.logger = log.NewTestLogger()
+func (s *advVisCrossDCTestSuite) isElasticsearchEnabled() bool {
+	return s.esClient != nil
+}
 
-	fileName := "../testdata/xdc_integration_es_clusters.yaml"
+func (s *advVisCrossDCTestSuite) SetupSuite() {
+	s.logger = log.NewTestLogger()
+	var fileName string
+	isElasticsearchEnabled := false
+	if tests.TestFlags.PersistenceDriver == mysql.PluginNameV8 ||
+		tests.TestFlags.PersistenceDriver == postgresql.PluginNameV12 ||
+		tests.TestFlags.PersistenceDriver == sqlite.PluginName {
+		// NOTE: can't use xdc_integration_test_clusters.yaml here because it somehow interferes with the other xDC tests.
+		fileName = "../testdata/xdc_integration_adv_vis_clusters.yaml"
+		s.logger.Info(fmt.Sprintf("Running xDC advanced visibility test with %s/%s persistence", tests.TestFlags.PersistenceType, tests.TestFlags.PersistenceDriver))
+	} else {
+		fileName = "../testdata/xdc_integration_adv_vis_es_clusters.yaml"
+		isElasticsearchEnabled = true
+		s.logger.Info("Running xDC advanced visibility test with Elasticsearch persistence")
+	}
+
 	if tests.TestFlags.TestClusterConfigFile != "" {
 		fileName = tests.TestFlags.TestClusterConfigFile
 	}
@@ -109,11 +128,11 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	s.clusterConfigs = clusterConfigs
 
-	c, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterNameES[0])))
+	c, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterNameAdvVis[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = tests.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterNameES[1])))
+	c, err = tests.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterNameAdvVis[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 
@@ -133,34 +152,38 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	// Wait for cluster metadata to refresh new added clusters
 	time.Sleep(time.Millisecond * 200)
 
-	s.esClient = tests.CreateESClient(&s.Suite, s.clusterConfigs[0].ESConfig, s.logger)
-	tests.PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("../testdata/es_%s_index_template.json", s.clusterConfigs[0].ESConfig.Version), "test-visibility-template")
-	tests.CreateIndex(&s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
-	tests.CreateIndex(&s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
+	if isElasticsearchEnabled {
+		s.esClient = tests.CreateESClient(&s.Suite, s.clusterConfigs[0].ESConfig, s.logger)
+		tests.PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("../testdata/es_%s_index_template.json", s.clusterConfigs[0].ESConfig.Version), "test-visibility-template")
+		tests.CreateIndex(&s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
+		tests.CreateIndex(&s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
+	}
 
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
 
-func (s *esCrossDCTestSuite) SetupTest() {
+func (s *advVisCrossDCTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
 
-func (s *esCrossDCTestSuite) TearDownSuite() {
+func (s *advVisCrossDCTestSuite) TearDownSuite() {
 	s.cluster1.TearDownCluster()
 	s.cluster2.TearDownCluster()
-	tests.DeleteIndex(&s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
-	tests.DeleteIndex(&s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
+	if s.isElasticsearchEnabled() {
+		tests.DeleteIndex(&s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
+		tests.DeleteIndex(&s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
+	}
 }
 
-func (s *esCrossDCTestSuite) TestSearchAttributes() {
+func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
-		Clusters:                         clusterReplicationConfigES,
-		ActiveClusterName:                clusterNameES[0],
+		Clusters:                         clusterReplicationConfigAdvVis,
+		ActiveClusterName:                clusterNameAdvVis[0],
 		IsGlobalNamespace:                true,
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
@@ -169,6 +192,26 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
+	if !s.isElasticsearchEnabled() {
+		// When Elasticsearch is enabled, the search attribute aliases are not used.
+		_, err = client1.UpdateNamespace(tests.NewContext(), &workflowservice.UpdateNamespaceRequest{
+			Namespace: namespace,
+			Config: &namespacepb.NamespaceConfig{
+				CustomSearchAttributeAliases: map[string]string{
+					"Bool01":     "CustomBoolField",
+					"Datetime01": "CustomDatetimeField",
+					"Double01":   "CustomDoubleField",
+					"Int01":      "CustomIntField",
+					"Keyword01":  "CustomKeywordField",
+					"Text01":     "CustomTextField",
+				},
+			},
+		})
+		s.NoError(err)
+		// Wait for namespace cache to pick the UpdateNamespace changes.
+		time.Sleep(cacheRefreshInterval)
+	}
+
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	}
@@ -189,10 +232,9 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
-	attrValPayload, _ := payload.Encode(s.testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			s.testSearchAttributeKey: attrValPayload,
+			s.testSearchAttributeKey: payload.EncodeString(s.testSearchAttributeVal),
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -216,19 +258,18 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	startFilter := &filterpb.StartTimeFilter{}
 	startFilter.EarliestTime = &startTime
-	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
-	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+	saListRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: namespace,
 		PageSize:  5,
-		Query:     query,
+		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal),
 	}
 
-	testListResult := func(client tests.FrontendClient) {
+	testListResult := func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
 		for i := 0; i < numOfRetry; i++ {
 			startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 
-			resp, err := client.ListWorkflowExecutions(tests.NewContext(), listRequest)
+			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				openExecution = resp.GetExecutions()[0]
@@ -247,11 +288,11 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	// List workflow in active
 	engine1 := s.cluster1.GetFrontendClient()
-	testListResult(engine1)
+	testListResult(engine1, saListRequest)
 
 	// List workflow in standby
 	engine2 := s.cluster2.GetFrontendClient()
-	testListResult(engine2)
+	testListResult(engine2, saListRequest)
 
 	// upsert search attributes
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
@@ -282,16 +323,10 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 
 	time.Sleep(waitForESToSettle)
 
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: namespace,
-		PageSize:  int32(2),
-		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
-	}
-
-	testListResult = func(client tests.FrontendClient) {
+	testListResult = func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		verified := false
 		for i := 0; i < numOfRetry; i++ {
-			resp, err := client.ListWorkflowExecutions(tests.NewContext(), listRequest)
+			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				execution := resp.GetExecutions()[0]
@@ -317,8 +352,26 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 		s.True(verified)
 	}
 
+	saListRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: namespace,
+		PageSize:  int32(2),
+		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "another string"`, id, s.testSearchAttributeKey),
+	}
+
 	// test upsert result in active
-	testListResult(engine1)
+	testListResult(engine1, saListRequest)
+	// test upsert result in standby
+	testListResult(engine2, saListRequest)
+
+	runningListRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: namespace,
+		PageSize:  int32(2),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
+	}
+	// test upsert result in active
+	testListResult(engine1, runningListRequest)
+	// test upsert result in standby
+	testListResult(engine2, runningListRequest)
 
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
@@ -387,16 +440,22 @@ GetHistoryLoop2:
 	s.NoError(err)
 	s.True(eventsReplicated)
 
+	terminatedListRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: namespace,
+		PageSize:  int32(2),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Terminated'`, wt),
+	}
+	// test upsert result in active
+	testListResult(engine1, terminatedListRequest)
 	// test upsert result in standby
-	testListResult(engine2)
+	testListResult(engine2, terminatedListRequest)
 }
 
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	attrValPayload1, _ := payload.Encode("another string")
 	attrValPayload2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomTextField": attrValPayload1,
+			"CustomTextField": payload.EncodeString("another string"),
 			"CustomIntField":  attrValPayload2,
 		},
 	}

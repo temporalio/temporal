@@ -1,7 +1,0 @@
-enablearchival: false
-clusterno: 0
-historyconfig:
-  numhistoryshards: 4
-  numhistoryhosts: 1
-workerconfig:
-  startworkeranyway: true
