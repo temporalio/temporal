@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"strings"
 	"time"
 
 	"github.com/xwb1989/sqlparser"
@@ -93,4 +94,17 @@ func addPrefix(prefix string, fields []string) []string {
 func getMaxDatetimeValue() time.Time {
 	t, _ := time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
 	return t
+}
+
+// Simple tokenizer by spaces. It's a temporary solution as it doesn't cover tokenizer used by
+// PostgreSQL or SQLite.
+func tokenizeTextQueryString(s string) []string {
+	tokens := strings.Split(s, " ")
+	nonEmptyTokens := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if token != "" {
+			nonEmptyTokens = append(nonEmptyTokens, token)
+		}
+	}
+	return nonEmptyTokens
 }
