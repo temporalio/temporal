@@ -950,6 +950,7 @@ func (s *advancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 	s.Nil(nextPageToken)
 }
 
+//nolint:revive // isScan is a control flag
 func (s *advancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
