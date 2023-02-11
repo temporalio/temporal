@@ -74,10 +74,10 @@ persistence:
                         advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
                     {{- end }}
                 {{- end }}
-        {{- else if eq $db "mysql" }}
+        {{- else if eq $db "mysql" "mysql8" }}
         default:
             sql:
-                pluginName: "mysql"
+                pluginName: "{{ $db }}"
                 databaseName: "{{ default .Env.DBNAME "temporal" }}"
                 connectAddr: "{{ default .Env.MYSQL_SEEDS "" }}:{{ default .Env.DB_PORT "3306" }}"
                 connectProtocol: "tcp"
@@ -98,7 +98,7 @@ persistence:
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.SQL_HOST_NAME "" }}
         visibility:
-            sql:                
+            sql:
                 {{ $visibility_seeds_default := default .Env.MYSQL_SEEDS "" }}
                 {{ $visibility_seeds := default .Env.VISIBILITY_MYSQL_SEEDS $visibility_seeds_default }}
                 {{ $visibility_port_default := default .Env.DB_PORT "3306" }}
@@ -107,7 +107,7 @@ persistence:
                 {{ $visibility_user := default .Env.VISIBILITY_MYSQL_USER $visibility_user_default }}
                 {{ $visibility_pwd_default := default .Env.MYSQL_PWD "" }}
                 {{ $visibility_pwd := default .Env.VISIBILITY_MYSQL_PWD $visibility_pwd_default }}
-                pluginName: "mysql"
+                pluginName: "{{ $db }}"
                 databaseName: "{{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}"
                 connectAddr: "{{ $visibility_seeds }}:{{ $visibility_port }}"
                 connectProtocol: "tcp"
@@ -127,10 +127,11 @@ persistence:
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.SQL_HOST_NAME "" }}
-        {{- else if eq $db "postgresql" }}
+        {{- else if eq $db "postgresql" "postgres" "postgres12" }}
+        {{- $db := replace $db "postgresql" "postgres" 1 }}
         default:
             sql:
-                pluginName: "postgres"
+                pluginName: "{{ $db }}"
                 databaseName: "{{ default .Env.DBNAME "temporal" }}"
                 connectAddr: "{{ default .Env.POSTGRES_SEEDS "" }}:{{ default .Env.DB_PORT "5432" }}"
                 connectProtocol: "tcp"
@@ -156,7 +157,7 @@ persistence:
                 {{ $visibility_user := default .Env.VISIBILITY_POSTGRES_USER $visibility_user_default }}
                 {{ $visibility_pwd_default := default .Env.POSTGRES_PWD "" }}
                 {{ $visibility_pwd := default .Env.VISIBILITY_POSTGRES_PWD $visibility_pwd_default }}
-                pluginName: "postgres"
+                pluginName: "{{ $db }}"
                 databaseName: "{{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}"
                 connectAddr: "{{ $visibility_seeds }}:{{ $visibility_port }}"
                 connectProtocol: "tcp"
