@@ -84,12 +84,11 @@ func (s *advancedVisibilitySuite) isElasticsearchEnabled() bool {
 
 // This cluster use customized threshold for history config
 func (s *advancedVisibilitySuite) SetupSuite() {
-	if TestFlags.PersistenceDriver == mysql.PluginNameV8 ||
-		TestFlags.PersistenceDriver == postgresql.PluginNameV12 ||
-		TestFlags.PersistenceDriver == sqlite.PluginName {
+	switch TestFlags.PersistenceDriver {
+	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 		s.setupSuite("testdata/integration_test_cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
-	} else {
+	default:
 		s.setupSuite("testdata/integration_test_es_cluster.yaml")
 		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
 		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
@@ -1782,9 +1781,9 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	if s.isElasticsearchEnabled() {
-		s.Equal("BadSearchAttributes: search attribute INVALIDKEY is not defined", err.Error())
+		s.ErrorContains(err, "BadSearchAttributes: search attribute INVALIDKEY is not defined")
 	} else {
-		s.Equal(fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.namespace), err.Error())
+		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.namespace))
 	}
 
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
