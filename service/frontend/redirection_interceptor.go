@@ -177,7 +177,10 @@ func (i *RedirectionInterceptor) Intercept(
 		return i.handleLocalAPIInvocation(ctx, req, handler, methodName)
 	}
 	if raFn, ok := globalAPIResponses[methodName]; ok {
-		namespaceName := interceptor.GetNamespace(i.namespaceCache, req)
+		namespaceName, err := interceptor.GetNamespaceName(i.namespaceCache, req)
+		if err != nil {
+			return raFn(), err
+		}
 		return i.handleRedirectAPIInvocation(ctx, req, info, handler, methodName, raFn, namespaceName)
 	}
 
