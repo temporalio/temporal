@@ -125,6 +125,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_EmptyIndexName() {
 		},
 	}
 
+	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 	for _, testCase := range testCases1 {
 		s.T().Run(testCase.Name, func(t *testing.T) {
