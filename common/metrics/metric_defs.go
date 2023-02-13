@@ -490,6 +490,8 @@ const (
 	PersistenceReadHistoryBranchScope = "ReadHistoryBranch"
 	// PersistenceReadHistoryBranchReverseScope tracks ReadHistoryBranchReverse calls made by service to persistence layer
 	PersistenceReadHistoryBranchReverseScope = "ReadHistoryBranchReverse"
+	// PersistenceReadRawHistoryBranchScope tracks ReadRawHistoryBranch calls made by service to persistence layer
+	PersistenceReadRawHistoryBranchScope = "ReadRawHistoryBranch"
 	// PersistenceForkHistoryBranchScope tracks ForkHistoryBranch calls made by service to persistence layer
 	PersistenceForkHistoryBranchScope = "ForkHistoryBranch"
 	// PersistenceDeleteHistoryBranchScope tracks DeleteHistoryBranch calls made by service to persistence layer
