@@ -184,9 +184,6 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 		if searchattribute.IsReserved(saName) {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName))
 		}
-		if currentSearchAttributes.IsDefined(saName) {
-			return nil, serviceerror.NewAlreadyExist(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
-		}
 		if _, ok := enumspb.IndexedValueType_name[int32(saType)]; !ok {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownSearchAttributeTypeMessage, saType))
 		}
@@ -198,16 +195,21 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 	// `skip-schema-update` is set. This is for backward compatibility using
 	// standard visibility.
 	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
-		err = h.addSearchAttributesElasticsearch(ctx, request, indexName)
+		err = h.addSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
+		if err != nil {
+			if _, isWorkflowErr := err.(*serviceerror.SystemWorkflow); isWorkflowErr {
+				scope.Counter(metrics.AddSearchAttributesWorkflowFailuresCount.GetMetricName()).Record(1)
+			}
+		} else {
+			scope.Counter(metrics.AddSearchAttributesWorkflowSuccessCount.GetMetricName()).Record(1)
+		}
 	} else {
 		err = h.addSearchAttributesSQL(ctx, request, currentSearchAttributes)
 	}
 
 	if err != nil {
-		scope.Counter(metrics.AddSearchAttributesWorkflowFailuresCount.GetMetricName()).Record(1)
 		return nil, err
 	}
-	scope.Counter(metrics.AddSearchAttributesWorkflowSuccessCount.GetMetricName()).Record(1)
 	return &operatorservice.AddSearchAttributesResponse{}, nil
 }
 
@@ -215,7 +217,17 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 	ctx context.Context,
 	request *operatorservice.AddSearchAttributesRequest,
 	indexName string,
+	currentSearchAttributes searchattribute.NameTypeMap,
 ) error {
+	// Check if custom search attribute already exists in cluster metadata.
+	// This check is not needed in SQL DB because no custom search attributes
+	// are pre-allocated, and only aliases are created.
+	for saName := range request.GetSearchAttributes() {
+		if currentSearchAttributes.IsDefined(saName) {
+			return serviceerror.NewAlreadyExist(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
+		}
+	}
+
 	// Execute workflow.
 	wfParams := addsearchattributes.WorkflowParams{
 		CustomAttributesToAdd: request.GetSearchAttributes(),
