@@ -80,68 +80,60 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedKeywordListOperator(expr.Operator) {
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for KeywordList type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
-	colName, isColName := expr.Left.(*colName)
-	if !isColName {
+	colNameExpr, isColNameExpr := expr.Left.(*colName)
+	if !isColNameExpr {
 		return nil, query.NewConverterError(
 			"%s: must be a column name but was %T",
 			query.InvalidExpressionErrMessage,
 			expr.Left,
 		)
 	}
-	colNameStr := sqlparser.String(colName)
 
 	var ftsQuery string
 	switch expr.Operator {
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
-		value, err := query.ParseSqlValue(sqlparser.String(expr.Right))
-		if err != nil {
-			return nil, err
-		}
-		switch v := value.(type) {
-		case string:
-			ftsQuery = fmt.Sprintf(`%s:"%s"`, colNameStr, v)
-		default:
+		valueExpr, ok := expr.Right.(*unsafeSQLString)
+		if !ok {
 			return nil, query.NewConverterError(
-				"%s: unexpected value type %T",
+				"%s: unexpected value type (expected string, got %s)",
 				query.InvalidExpressionErrMessage,
-				expr,
+				sqlparser.String(expr.Right),
 			)
 		}
+		ftsQuery = fmt.Sprintf(`%s:"%s"`, colNameExpr.Name, valueExpr.Val)
 
 	case sqlparser.InStr, sqlparser.NotInStr:
 		valTupleExpr, isValTuple := expr.Right.(sqlparser.ValTuple)
 		if !isValTuple {
 			return nil, query.NewConverterError(
-				"%s: unexpected value type %T",
+				"%s: unexpected value type (expected tuple of strings, got %s)",
 				query.InvalidExpressionErrMessage,
-				expr,
+				sqlparser.String(expr.Right),
 			)
 		}
-		var values []string
-		for _, valExpr := range valTupleExpr {
-			value, err := query.ParseSqlValue(sqlparser.String(valExpr))
-			if err != nil {
-				return nil, err
-			}
-			switch v := value.(type) {
-			case string:
-				values = append(values, fmt.Sprintf(`"%s"`, v))
-			default:
-				return nil, query.NewConverterError(
-					"%s: unexpected value type %T",
-					query.InvalidExpressionErrMessage,
-					expr,
-				)
-			}
+		values, err := getUnsafeStringTupleValues(valTupleExpr)
+		if err != nil {
+			return nil, err
 		}
-		ftsQuery = fmt.Sprintf("%s:(%s)", colNameStr, strings.Join(values, " OR "))
+		for i := range values {
+			values[i] = fmt.Sprintf(`"%s"`, values[i])
+		}
+		ftsQuery = fmt.Sprintf("%s:(%s)", colNameExpr.Name, strings.Join(values, " OR "))
 
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for KeywordList type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
 	var oper string
@@ -152,7 +144,11 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 		oper = sqlparser.NotInStr
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for KeywordList type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
 	newExpr := sqlparser.ComparisonExpr{
@@ -169,18 +165,21 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedTextOperator(expr.Operator) {
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for Text type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
-	colName, isColName := expr.Left.(*colName)
-	if !isColName {
+	colNameExpr, isColNameExpr := expr.Left.(*colName)
+	if !isColNameExpr {
 		return nil, query.NewConverterError(
 			"%s: must be a column name but was %T",
 			query.InvalidExpressionErrMessage,
 			expr.Left,
 		)
 	}
-	colNameStr := sqlparser.String(colName)
 
 	valueExpr, ok := expr.Right.(*unsafeSQLString)
 	if !ok {
@@ -198,7 +197,7 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 			sqlparser.String(expr.Right),
 		)
 	}
-	ftsQuery := fmt.Sprintf("%s:(%s)", colNameStr, strings.Join(tokens, " OR "))
+	ftsQuery := fmt.Sprintf("%s:(%s)", colNameExpr.Name, strings.Join(tokens, " OR "))
 
 	var oper string
 	switch expr.Operator {
@@ -208,7 +207,11 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 		oper = sqlparser.NotInStr
 	default:
 		// this should never happen since isSupportedTextOperator should already fail
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for Text type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
 	newExpr := sqlparser.ComparisonExpr{
@@ -227,8 +230,8 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 	pageSize int,
 	token *pageToken,
 ) (string, []any) {
-	whereClauses := make([]string, 0, 3)
-	queryArgs := make([]any, 0, 8)
+	var whereClauses []string
+	var queryArgs []any
 
 	whereClauses = append(
 		whereClauses,
