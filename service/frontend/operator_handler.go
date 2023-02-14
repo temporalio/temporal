@@ -285,7 +285,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
 	}
 
-	customSearchAttributes := currentSearchAttributes.Custom()
+	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
+	cmCustomSearchAttributes := currentSearchAttributes.Custom()
 	mapper := ns.CustomSearchAttributesMapper()
 	fieldToAliasMap := util.CloneMapNonNil(mapper.FieldToAliasMap())
 	for saName, saType := range request.GetSearchAttributes() {
@@ -298,8 +299,12 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		// find the first available field for the given type
 		targetFieldName := ""
 		cntUsed := 0
-		for fieldName, fieldType := range customSearchAttributes {
+		for fieldName, fieldType := range dbCustomSearchAttributes {
 			if fieldType != saType {
+				continue
+			}
+			// make sure the pre-allocated custom search attributes are created in cluster metadata
+			if _, ok := cmCustomSearchAttributes[fieldName]; !ok {
 				continue
 			}
 			if _, ok := fieldToAliasMap[fieldName]; !ok {
