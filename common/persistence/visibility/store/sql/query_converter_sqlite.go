@@ -234,7 +234,7 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 	queryArgs = append(queryArgs, namespaceID.String())
 
 	if len(queryString) > 0 {
-		whereClauses = append(whereClauses, queryString)
+		whereClauses = append(whereClauses, fmt.Sprintf("(%s)", queryString))
 	}
 
 	if token != nil {
