@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
@@ -72,7 +71,7 @@ type advVisCrossDCTestSuite struct {
 	cluster2       *tests.TestCluster
 	logger         log.Logger
 	clusterConfigs []*tests.TestClusterConfig
-	esClient       esclient.IntegrationTestsClient
+	isElasticsearchEnabled       bool
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
@@ -95,23 +94,18 @@ var (
 	}
 )
 
-func (s *advVisCrossDCTestSuite) isElasticsearchEnabled() bool {
-	return s.esClient != nil
-}
-
 func (s *advVisCrossDCTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	var fileName string
-	var isElasticsearchEnabled bool
 	switch tests.TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 		// NOTE: can't use xdc_integration_test_clusters.yaml here because it somehow interferes with the other xDC tests.
 		fileName = "../testdata/xdc_integration_adv_vis_clusters.yaml"
-		isElasticsearchEnabled = false
+		s.isElasticsearchEnabled = false
 		s.logger.Info(fmt.Sprintf("Running xDC advanced visibility test with %s/%s persistence", tests.TestFlags.PersistenceType, tests.TestFlags.PersistenceDriver))
 	default:
 		fileName = "../testdata/xdc_integration_adv_vis_es_clusters.yaml"
-		isElasticsearchEnabled = true
+		s.isElasticsearchEnabled = true
 		s.logger.Info("Running xDC advanced visibility test with Elasticsearch persistence")
 	}
 
@@ -152,12 +146,6 @@ func (s *advVisCrossDCTestSuite) SetupSuite() {
 	// Wait for cluster metadata to refresh new added clusters
 	time.Sleep(time.Millisecond * 200)
 
-	if isElasticsearchEnabled {
-		s.esClient = tests.CreateESClient(&s.Suite, s.clusterConfigs[0].ESConfig, s.logger)
-		tests.CreateIndex(&s.Suite, s.esClient, "../../schema/elasticsearch/visibility/index_template_v7.json", s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
-		tests.CreateIndex(&s.Suite, s.esClient, "../../schema/elasticsearch/visibility/index_template_v7.json", s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
-	}
-
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
@@ -170,10 +158,6 @@ func (s *advVisCrossDCTestSuite) SetupTest() {
 func (s *advVisCrossDCTestSuite) TearDownSuite() {
 	s.cluster1.TearDownCluster()
 	s.cluster2.TearDownCluster()
-	if s.isElasticsearchEnabled() {
-		tests.DeleteIndex(&s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
-		tests.DeleteIndex(&s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
-	}
 }
 
 func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
@@ -191,7 +175,7 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
-	if !s.isElasticsearchEnabled() {
+	if !s.isElasticsearchEnabled {
 		// When Elasticsearch is enabled, the search attribute aliases are not used.
 		_, err = client1.UpdateNamespace(tests.NewContext(), &workflowservice.UpdateNamespaceRequest{
 			Namespace: namespace,

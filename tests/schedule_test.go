@@ -53,7 +53,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -80,7 +79,6 @@ type (
 		hostPort      string
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
-		esClient      esclient.IntegrationTestsClient
 		taskQueue     string
 		dataConverter converter.DataConverter
 	}
@@ -103,16 +101,11 @@ func (s *scheduleIntegrationSuite) SetupSuite() {
 	default:
 		s.setupSuite("testdata/integration_test_es_cluster.yaml")
 		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
-		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
-		CreateIndex(&s.Suite, s.esClient, "../schema/elasticsearch/visibility/index_template_v7.json", s.testClusterConfig.ESConfig.GetVisibilityIndex())
 	}
 }
 
 func (s *scheduleIntegrationSuite) TearDownSuite() {
 	s.tearDownSuite()
-	if s.esClient != nil {
-		DeleteIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
-	}
 }
 
 func (s *scheduleIntegrationSuite) SetupTest() {
