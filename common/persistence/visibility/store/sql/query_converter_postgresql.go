@@ -31,7 +31,6 @@ import (
 	"github.com/xwb1989/sqlparser"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -64,15 +63,19 @@ func (node *pgCastExpr) Format(buf *sqlparser.TrackedBuffer) {
 }
 
 func newPostgreSQLQueryConverter(
-	request *manager.ListWorkflowExecutionsRequestV2,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	queryString string,
 ) *QueryConverter {
 	return newQueryConverterInternal(
 		&pgQueryConverter{},
-		request,
+		namespaceName,
+		namespaceID,
 		saTypeMap,
 		saMapper,
+		queryString,
 	)
 }
 
@@ -254,5 +257,28 @@ func (c *pgQueryConverter) buildSelectStmt(
 		sqlparser.String(c.getCoalesceCloseTimeExpr()),
 		searchattribute.GetSqlDbColName(searchattribute.StartTime),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
+	), queryArgs
+}
+
+func (c *pgQueryConverter) buildCountStmt(
+	namespaceID namespace.ID,
+	queryString string,
+) (string, []any) {
+	var whereClauses []string
+	var queryArgs []any
+
+	whereClauses = append(
+		whereClauses,
+		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+	)
+	queryArgs = append(queryArgs, namespaceID.String())
+
+	if len(queryString) > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("(%s)", queryString))
+	}
+
+	return fmt.Sprintf(
+		"SELECT COUNT(1) FROM executions_visibility WHERE %s",
+		strings.Join(whereClauses, " AND "),
 	), queryArgs
 }
