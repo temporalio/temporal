@@ -502,6 +502,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTask
 
 	// fail this workflow task to flush buffer, and then another workflow task will be scheduled
 	_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: s.namespace,
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
 		Identity:  "integ test",
@@ -683,6 +684,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 		}
 
 		_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			Namespace: s.namespace,
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
