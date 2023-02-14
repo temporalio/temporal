@@ -27,9 +27,8 @@ package tests
 import (
 	"context"
 	"os"
-	"time"
+	"path"
 
-	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/log"
@@ -43,41 +42,20 @@ func CreateESClient(s *suite.Suite, config *esclient.Config, logger log.Logger) 
 	return client
 }
 
-// PutIndexTemplate put index template for test
-func PutIndexTemplate(s *suite.Suite, esClient esclient.IntegrationTestsClient, templateConfigFile, templateName string) {
-	// This function is used exclusively in tests. Excluding it from security checks.
-	// #nosec
-	template, err := os.ReadFile(templateConfigFile)
-	s.Require().NoError(err)
-	acknowledged, err := esClient.IndexPutTemplate(context.Background(), templateName, string(template))
-	s.Require().NoError(err)
-	s.Require().True(acknowledged)
-}
-
 // CreateIndex create test index
-func CreateIndex(s *suite.Suite, esClient esclient.IntegrationTestsClient, indexName string) {
-	_, err := esClient.DeleteIndex(context.Background(), indexName)
-	if err != nil {
-		if elasticErr, isElasticError := err.(*elastic.Error); !isElasticError || elasticErr.Details.Type != "index_not_found_exception" {
-			s.Require().NoError(err)
-		}
-	}
+func CreateIndex(s *suite.Suite, esClient esclient.IntegrationTestsClient, indexTemplateFilePath, indexName string) {
+	template, err := os.ReadFile(path.Join(indexTemplateFilePath, "es_index_template.json"))
+	s.Require().NoError(err)
+	// Template name doesn't matter.
+	// This operation is idempotent and won't return an error even if template already exists.
+	ack, err := esClient.IndexPutTemplate(context.Background(), "test-visibility-template", string(template))
+	s.Require().NoError(err)
+	s.Require().True(ack)
 
-	s.Eventually(func() bool {
-		exists, err := esClient.IndexExists(context.Background(), indexName)
-		s.Require().NoError(err)
-		return !exists
-	}, 10*time.Second, time.Second)
-
-	_, err = esClient.CreateIndex(context.Background(), indexName)
-	if err != nil {
-		s.Require().NoError(err)
-	}
-	s.Eventually(func() bool {
-		exists, err := esClient.IndexExists(context.Background(), indexName)
-		s.Require().NoError(err)
-		return exists
-	}, 10*time.Second, time.Second)
+	// Elasticsearch automatically creates an index on the first access.
+	exists, err := esClient.IndexExists(context.Background(), indexName)
+	s.Require().NoError(err)
+	s.Require().True(exists)
 }
 
 // DeleteIndex delete test index

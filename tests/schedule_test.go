@@ -104,8 +104,7 @@ func (s *scheduleIntegrationSuite) SetupSuite() {
 		s.setupSuite("testdata/integration_test_es_cluster.yaml")
 		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
-		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
-		CreateIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+		CreateIndex(&s.Suite, s.esClient, "testdata", s.testClusterConfig.ESConfig.GetVisibilityIndex())
 	}
 }
 

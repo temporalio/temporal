@@ -96,8 +96,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
 		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
 		s.esClient = CreateESClient(&s.Suite, s.clusterConfig.ESConfig, s.logger)
-		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.clusterConfig.ESConfig.Version), "test-visibility-template")
-		CreateIndex(&s.Suite, s.esClient, s.clusterConfig.ESConfig.GetVisibilityIndex())
+		CreateIndex(&s.Suite, s.esClient, "testdata", s.clusterConfig.ESConfig.GetVisibilityIndex())
 	}
 
 	s.clusterConfig.DynamicConfigOverrides = dynamicConfig()
