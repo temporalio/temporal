@@ -154,8 +154,8 @@ func (s *advVisCrossDCTestSuite) SetupSuite() {
 
 	if isElasticsearchEnabled {
 		s.esClient = tests.CreateESClient(&s.Suite, s.clusterConfigs[0].ESConfig, s.logger)
-		tests.CreateIndex(&s.Suite, s.esClient, "../testdata", s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
-		tests.CreateIndex(&s.Suite, s.esClient, "../testdata", s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
+		tests.CreateIndex(&s.Suite, s.esClient, "../../schema/elasticsearch/visibility/index_template_v7.json", s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
+		tests.CreateIndex(&s.Suite, s.esClient, "../../schema/elasticsearch/visibility/index_template_v7.json", s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
 	}
 
 	s.testSearchAttributeKey = "CustomTextField"

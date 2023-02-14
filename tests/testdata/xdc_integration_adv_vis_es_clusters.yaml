@@ -25,7 +25,7 @@
       scheme: "http"
       host: "${ES_SEEDS}:9200"
     indices:
-      visibility: test-visibility-4b3e75
+      visibility: temporal_visibility_v1_xdc_test_active
 
 - persistence:
     dbname: integration_standby_adv_vis
@@ -54,4 +54,4 @@
       scheme: "http"
       host: "${ES_SEEDS}:9200"
     indices:
-      visibility: test-visibility-73af9f
+      visibility: temporal_visibility_v1_xdc_test_standby

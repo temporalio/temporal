@@ -27,7 +27,6 @@ package tests
 import (
 	"context"
 	"os"
-	"path"
 
 	"github.com/stretchr/testify/suite"
 
@@ -43,18 +42,25 @@ func CreateESClient(s *suite.Suite, config *esclient.Config, logger log.Logger) 
 }
 
 // CreateIndex create test index
-func CreateIndex(s *suite.Suite, esClient esclient.IntegrationTestsClient, indexTemplateFilePath, indexName string) {
-	template, err := os.ReadFile(path.Join(indexTemplateFilePath, "es_index_template.json"))
+func CreateIndex(s *suite.Suite, esClient esclient.IntegrationTestsClient, indexTemplateFile, indexName string) {
+	template, err := os.ReadFile(indexTemplateFile)
 	s.Require().NoError(err)
 	// Template name doesn't matter.
 	// This operation is idempotent and won't return an error even if template already exists.
-	ack, err := esClient.IndexPutTemplate(context.Background(), "test-visibility-template", string(template))
+	ack, err := esClient.IndexPutTemplate(context.Background(), "temporal_visibility_v1_template", string(template))
 	s.Require().NoError(err)
 	s.Require().True(ack)
 
-	// Elasticsearch automatically creates an index on the first access.
+	// Default configuration of Elasticsearch automatically creates an index on the first access.
 	exists, err := esClient.IndexExists(context.Background(), indexName)
 	s.Require().NoError(err)
+	if !exists {
+		// If automatic index creation is disabled, create the index manually.
+		_, err = esClient.CreateIndex(context.Background(), indexName)
+		s.Require().NoError(err)
+		exists, err = esClient.IndexExists(context.Background(), indexName)
+		s.Require().NoError(err)
+	}
 	s.Require().True(exists)
 }
 

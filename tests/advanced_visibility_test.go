@@ -93,7 +93,7 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
 		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
 		indexName := s.testClusterConfig.ESConfig.GetVisibilityIndex()
-		CreateIndex(&s.Suite, s.esClient, "testdata", indexName)
+		CreateIndex(&s.Suite, s.esClient, "../schema/elasticsearch/visibility/index_template_v7.json", indexName)
 		s.putIndexSettings(indexName, defaultTestValueOfESIndexMaxResultWindow)
 	}
 }
