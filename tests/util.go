@@ -26,13 +26,12 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"time"
 
+	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
@@ -57,27 +56,28 @@ func PutIndexTemplate(s *suite.Suite, esClient esclient.IntegrationTestsClient, 
 
 // CreateIndex create test index
 func CreateIndex(s *suite.Suite, esClient esclient.IntegrationTestsClient, indexName string) {
-	exists, err := esClient.IndexExists(context.Background(), indexName)
-	s.Require().NoError(err)
-	if exists {
-		acknowledged, err := esClient.DeleteIndex(context.Background(), indexName)
-		s.Require().NoError(err)
-		s.Require().True(acknowledged)
+	_, err := esClient.DeleteIndex(context.Background(), indexName)
+	if err != nil {
+		if elasticErr, isElasticError := err.(*elastic.Error); !isElasticError || elasticErr.Details.Type != "index_not_found_exception" {
+			s.Require().NoError(err)
+		}
 	}
 
-	// we need to retry because DeleteIndex is not synchronous
-	err = backoff.ThrottleRetry(func() error {
-		acknowledged, err := esClient.CreateIndex(context.Background(), indexName)
-		if err != nil {
-			return err
-		}
-		if !acknowledged {
-			return fmt.Errorf("create request not acknowledged")
-		}
-		return nil
-	}, backoff.NewExponentialRetryPolicy(100*time.Millisecond), func(err error) bool { return true })
+	s.Eventually(func() bool {
+		exists, err := esClient.IndexExists(context.Background(), indexName)
+		s.Require().NoError(err)
+		return !exists
+	}, 10*time.Second, time.Second)
 
-	s.NoError(err)
+	_, err = esClient.CreateIndex(context.Background(), indexName)
+	if err != nil {
+		s.Require().NoError(err)
+	}
+	s.Eventually(func() bool {
+		exists, err := esClient.IndexExists(context.Background(), indexName)
+		s.Require().NoError(err)
+		return exists
+	}, 10*time.Second, time.Second)
 }
 
 // DeleteIndex delete test index
