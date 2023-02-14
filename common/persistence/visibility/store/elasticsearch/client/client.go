@@ -73,6 +73,7 @@ type (
 		DeleteIndex(ctx context.Context, indexName string) (bool, error)
 		IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error)
 		IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error)
+		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
 	}
 
 	// SearchParameters holds all required and optional parameters for executing a search.
