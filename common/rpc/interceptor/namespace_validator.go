@@ -96,7 +96,7 @@ func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	err := ni.setNamespaceIfNotPresent(ni.namespaceRegistry, req)
+	err := ni.setNamespaceIfNotPresent(req)
 	if err != nil {
 		return nil, err
 	}
@@ -112,20 +112,21 @@ func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 }
 
 func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
-	namespaceRegistry namespace.Registry,
 	req interface{},
 ) error {
-	namespaceName := GetNamespace(namespaceRegistry, req)
-	if namespaceName != "" {
+	switch request := req.(type) {
+	case NamespaceNameGetter:
+		if request.GetNamespace() == "" {
+			namespaceEntry, err := ni.extractNamespaceFromTaskToken(req)
+			if err != nil {
+				return err
+			}
+			ni.setNamespace(namespaceEntry, req)
+		}
+		return nil
+	default:
 		return nil
 	}
-
-	namespaceEntry, err := ni.extractNamespaceFromTaskToken(req)
-	if err != nil {
-		return err
-	}
-	ni.setNamespace(namespaceEntry, req)
-	return nil
 }
 
 func (ni *NamespaceValidatorInterceptor) setNamespace(
