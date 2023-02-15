@@ -28,6 +28,8 @@ package namespace
 
 import (
 	"context"
+	"github.com/dgryski/go-farm"
+	"go.temporal.io/server/common/collection"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -156,6 +158,7 @@ type (
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		refreshInterval         dynamicconfig.DurationPropertyFn
+		readthroughConcurrency  uint32
 
 		// cacheLock protects cachNameToID, cacheByID and stateChangeCallbacks.
 		// If the exclusive side is to be held at the same time as the
@@ -169,6 +172,9 @@ type (
 		// AND was not found when reading through to the persistence layer
 		readthroughLock        sync.RWMutex
 		readthroughErrorsCache cache.Cache
+		// readthroughRequestLocks contains namespace -> Lock mappings to prevent
+		// concurrent requests to persistence to get the same namespace
+		readthroughRequestLocks collection.ConcurrentTxMap
 	}
 )
 
@@ -178,6 +184,7 @@ func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
 	refreshInterval dynamicconfig.DurationPropertyFn,
+	readthroughConcurrency dynamicconfig.IntPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Registry {
@@ -191,6 +198,7 @@ func NewRegistry(
 		cacheNameToID:           cache.New(cacheMaxSize, &cacheOpts),
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
 		refreshInterval:         refreshInterval,
+		readthroughConcurrency:  uint32(readthroughConcurrency()),
 		stateChangeCallbacks:    make(map[any]StateChangeCallbackFn),
 		readthroughErrorsCache:  cache.New(cacheMaxSize, &readthroughErrorsCacheOpts),
 	}
@@ -211,6 +219,8 @@ func (r *registry) Start() {
 		return
 	}
 	defer atomic.StoreInt32(&r.status, running)
+
+	r.readthroughRequestLocks = collection.NewShardedConcurrentTxMap(1024, r.hashFn)
 
 	// initialize the cache by initial scan
 	ctx := headers.SetCallerInfo(
@@ -483,16 +493,21 @@ func (r *registry) getNamespaceByIDLocked(id ID) (*Namespace, error) {
 // getOrPutNamespace retrieves the information from the cache if it exists or reads through
 // to the persistence layer and updates caches if it doesn't
 func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
-	// check main caches
-	cacheHit, cacheErr := r.getNamespace(name)
-	if cacheErr == nil {
-		return cacheHit, nil
+	// check caches
+	cachedNS, cachedErr := r.checkCachesByName(name)
+	if cachedNS != nil || cachedErr != nil {
+		return cachedNS, cachedErr
 	}
 
-	// check readthrough cache to prevent excessive requests to persistence layer
-	prevErr := r.getPreviousReadthroughError(name.String())
-	if prevErr != nil {
-		return nil, prevErr
+	// acquire per-namespace persistence request lock
+	lock := r.getOrPutRequestLock(name.String())
+	lock.Lock()
+	defer r.cleanupRequestLock(lock, name.String())
+
+	// check caches again in case there was an update while waiting
+	cachedNS, cachedErr = r.checkCachesByName(name)
+	if cachedNS != nil || cachedErr != nil {
+		return cachedNS, cachedErr
 	}
 
 	// readthrough to persistence layer and update readthrough cache if not found
@@ -507,19 +522,41 @@ func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 	return ns, nil
 }
 
-// getOrPutNamespaceByID retrieves the information from the cache if it exists or reads through
-// to the persistence layer and updates caches if it doesn't
-func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
+func (r *registry) checkCachesByName(name Name) (*Namespace, error) {
 	// check main caches
-	cacheHit, cacheErr := r.getNamespaceByID(id)
+	cacheHit, cacheErr := r.getNamespace(name)
 	if cacheErr == nil {
 		return cacheHit, nil
 	}
 
 	// check readthrough cache to prevent excessive requests to persistence layer
-	prevErr := r.getPreviousReadthroughError(id.String())
+	prevErr := r.getPreviousReadthroughError(name.String())
 	if prevErr != nil {
 		return nil, prevErr
+	}
+
+	// missed both caches, should readthrough
+	return nil, nil
+}
+
+// getOrPutNamespaceByID retrieves the information from the cache if it exists or reads through
+// to the persistence layer and updates caches if it doesn't
+func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
+	// check caches
+	cachedNS, cachedErr := r.checkCachesByID(id)
+	if cachedNS != nil || cachedErr != nil {
+		return cachedNS, cachedErr
+	}
+
+	// acquire per-namespace persistence request lock
+	lock := r.getOrPutRequestLock(id.String())
+	lock.Lock()
+	defer r.cleanupRequestLock(lock, id.String())
+
+	// check caches again in case there was an update while waiting
+	cachedNS, cachedErr = r.checkCachesByID(id)
+	if cachedNS != nil || cachedErr != nil {
+		return cachedNS, cachedErr
 	}
 
 	// readthrough to persistence layer and update readthrough cache if not found
@@ -532,6 +569,41 @@ func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
 	r.updateCachesSingleNamespace(ns)
 
 	return ns, nil
+}
+
+func (r *registry) checkCachesByID(id ID) (*Namespace, error) {
+	// check main caches
+	cacheHit, cacheErr := r.getNamespaceByID(id)
+	if cacheErr == nil {
+		return cacheHit, nil
+	}
+
+	// check readthrough error cache to prevent excessive requests to persistence layer
+	prevErr := r.getPreviousReadthroughError(id.String())
+	if prevErr != nil {
+		return nil, prevErr
+	}
+
+	// missed both caches, should readthrough
+	return nil, nil
+}
+
+func (r *registry) getOrPutRequestLock(handle string) *sync.Mutex {
+	r.readthroughRequestLocks.PutIfNotExist(handle, &sync.Mutex{})
+	if v, ok := r.readthroughRequestLocks.Get(handle); ok {
+		if lock, ok := v.(*sync.Mutex); ok {
+			return lock
+		}
+	}
+	return nil
+}
+
+func (r *registry) cleanupRequestLock(lock *sync.Mutex, handle string) {
+	lock.Unlock()
+	if lock.TryLock() {
+		// if there are no other waiters for this namespace lock, remove from map to prevent memory leak
+		r.readthroughRequestLocks.Remove(handle)
+	}
 }
 
 func (r *registry) getPreviousReadthroughError(handle string) error {
@@ -621,6 +693,16 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	}
 
 	return FromPersistentState(response), nil
+}
+
+func (r *registry) hashFn(key interface{}) uint32 {
+	id, ok := key.(string)
+	if !ok {
+		return 0
+	}
+	idBytes := []byte(id)
+	hash := farm.Hash32(idBytes)
+	return hash % r.readthroughConcurrency
 }
 
 // this test should include anything that might affect whether a namespace is active on
