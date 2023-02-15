@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -90,6 +91,8 @@ type (
 
 		// scheduled to started event ID mapping
 		scheduledIDToStartedID map[int64]int64
+
+		metricsHandler metrics.Handler
 	}
 )
 
@@ -99,6 +102,7 @@ func NewMutableHistoryBuilder(
 	version int64,
 	nextEventID int64,
 	dbBufferBatch []*historypb.HistoryEvent,
+	metricsHandler metrics.Handler,
 ) *HistoryBuilder {
 	return &HistoryBuilder{
 		state:           HistoryBuilderStateMutable,
@@ -116,6 +120,8 @@ func NewMutableHistoryBuilder(
 		memLatestBatch:         nil,
 		memBufferBatch:         nil,
 		scheduledIDToStartedID: make(map[int64]int64),
+
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -139,6 +145,8 @@ func NewImmutableHistoryBuilder(
 		memLatestBatch:         history,
 		memBufferBatch:         nil,
 		scheduledIDToStartedID: nil,
+
+		metricsHandler: nil,
 	}
 }
 
@@ -1401,6 +1409,7 @@ func (b *HistoryBuilder) wireEventIDs(
 func (b *HistoryBuilder) reorderBuffer(
 	bufferEvents []*historypb.HistoryEvent,
 ) []*historypb.HistoryEvent {
+	b.emitInorderedBufferedEvents(bufferEvents)
 	reorderBuffer := make([]*historypb.HistoryEvent, 0, len(bufferEvents))
 	reorderEvents := make([]*historypb.HistoryEvent, 0, len(bufferEvents))
 	for _, event := range bufferEvents {
@@ -1421,6 +1430,47 @@ func (b *HistoryBuilder) reorderBuffer(
 	}
 
 	return append(reorderEvents, reorderBuffer...)
+}
+
+func (b *HistoryBuilder) emitInorderedBufferedEvents(bufferedEvents []*historypb.HistoryEvent) {
+	completedActivities := make(map[int64]struct{})
+	completedChildWorkflows := make(map[int64]struct{})
+	var inorderedEventsCount int64
+	for _, event := range bufferedEvents {
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
+			if _, seenCompleted := completedActivities[event.GetEventId()]; seenCompleted {
+				inorderedEventsCount++
+			}
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+			completedActivities[event.GetActivityTaskCompletedEventAttributes().GetStartedEventId()] = struct{}{}
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
+			completedActivities[event.GetActivityTaskFailedEventAttributes().GetStartedEventId()] = struct{}{}
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
+			completedActivities[event.GetActivityTaskTimedOutEventAttributes().GetStartedEventId()] = struct{}{}
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
+			completedActivities[event.GetActivityTaskCanceledEventAttributes().GetStartedEventId()] = struct{}{}
+
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
+			if _, seenCompleted := completedChildWorkflows[event.GetEventId()]; seenCompleted {
+				inorderedEventsCount++
+			}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+			completedChildWorkflows[event.GetChildWorkflowExecutionCompletedEventAttributes().GetStartedEventId()] = struct{}{}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+			completedChildWorkflows[event.GetChildWorkflowExecutionFailedEventAttributes().GetStartedEventId()] = struct{}{}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+			completedChildWorkflows[event.GetChildWorkflowExecutionTimedOutEventAttributes().GetStartedEventId()] = struct{}{}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+			completedChildWorkflows[event.GetChildWorkflowExecutionCanceledEventAttributes().GetStartedEventId()] = struct{}{}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			completedChildWorkflows[event.GetChildWorkflowExecutionTerminatedEventAttributes().GetStartedEventId()] = struct{}{}
+		}
+	}
+
+	if inorderedEventsCount > 0 && b.metricsHandler != nil {
+		b.metricsHandler.Counter(metrics.InorderBufferedEventsCounter.GetMetricName()).Record(inorderedEventsCount)
+	}
 }
 
 func (b *HistoryBuilder) HasActivityFinishEvent(
