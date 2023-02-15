@@ -12,8 +12,12 @@ jobs:
         with:
           go-version: 1.19
       - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
       - name: make-lint
         run: make lint
+        env:
+          MERGE_BASE: HEAD~1
       - name: check-is-dirty
         run: |
           if [[ -n $(git status --porcelain) ]]; then
