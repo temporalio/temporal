@@ -2879,6 +2879,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			EncodedFailureAttributes:        true,
 			UpsertMemo:                      true,
 			EagerWorkflowStart:              true,
+			SdkMetadata:                     true,
 		},
 	}, nil
 }
