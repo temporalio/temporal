@@ -71,8 +71,8 @@ ALL_SRC         += go.mod
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
 MAIN_BRANCH	   = master
-MODIFIED_FILES = $(shell git diff --name-status $(MAIN_BRANCH) -- | cut -f2)
-MERGE_BASE     = $(shell git merge-base $(MAIN_BRANCH) HEAD)
+MERGE_BASE     := $(shell git merge-base $(MAIN_BRANCH) HEAD)
+MODIFIED_FILES := $(shell git diff --name-status $(MERGE_BASE) -- | cut -f2)
 
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 FUNCTIONAL_TEST_ROOT          := ./tests
@@ -238,6 +238,8 @@ copyright:
 
 goimports: update-goimports
 	@printf $(COLOR) "Run goimports for modified files..."
+	@printf "Merge base: $(MERGE_BASE)\n"
+	@printf "Modified files: $(MODIFIED_FILES)\n"
 	@goimports -w $(filter %.go, $(MODIFIED_FILES))
 
 lint: update-linters goimports
