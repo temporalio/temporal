@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/headers"
@@ -59,6 +60,19 @@ func NewMetricClient(
 		logger:          logger,
 		throttledLogger: throttledLogger,
 	}
+}
+
+func (c *metricClient) StreamReplicationMessages(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (_ historyservice.HistoryService_StreamReplicationMessagesClient, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientStreamReplicationMessagesScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.StreamReplicationMessages(ctx, opts...)
 }
 
 func (c *metricClient) startMetricsRecording(

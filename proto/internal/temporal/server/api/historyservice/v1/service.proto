@@ -283,4 +283,7 @@ service HistoryService {
     //     aip.dev/not-precedent: This service does not follow the update method API --)
     rpc UpdateWorkflowExecution(UpdateWorkflowExecutionRequest) returns (UpdateWorkflowExecutionResponse) {
     }
+
+    rpc StreamReplicationMessages(stream StreamReplicationMessagesRequest) returns (stream StreamReplicationMessagesResponse) {
+    }
 }

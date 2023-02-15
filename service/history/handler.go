@@ -37,12 +37,14 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
+	"google.golang.org/grpc/metadata"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -63,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -1844,6 +1847,38 @@ func (h *Handler) UpdateWorkflowExecution(
 	}
 
 	return engine.UpdateWorkflowExecution(ctx, request)
+}
+
+func (h *Handler) StreamReplicationMessages(
+	server historyservice.HistoryService_StreamReplicationMessagesServer,
+) (retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return errShuttingDown
+	}
+
+	ctxMetadata, ok := metadata.FromIncomingContext(server.Context())
+	if !ok {
+		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
+	}
+	sourceClusterShardID, targetClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	if err != nil {
+		return err
+	}
+	if targetClusterShardID.ClusterName != h.clusterMetadata.GetCurrentClusterName() {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"wrong cluster: target: %v, current: %v",
+			targetClusterShardID.ClusterName,
+			h.clusterMetadata.GetCurrentClusterName(),
+		))
+	}
+	shardContext, err := h.controller.GetShardByID(targetClusterShardID.ShardID)
+	if err != nil {
+		return err
+	}
+	return ndc.StreamReplicationTasks(server, shardContext, sourceClusterShardID, targetClusterShardID)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

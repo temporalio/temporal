@@ -35,6 +35,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	grpc "google.golang.org/grpc"
+	metadata "google.golang.org/grpc/metadata"
 )
 
 // MockHistoryServiceClient is a mock of HistoryServiceClient interface.
@@ -860,6 +861,26 @@ func (mr *MockHistoryServiceClientMockRecorder) StartWorkflowExecution(ctx, in i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).StartWorkflowExecution), varargs...)
 }
 
+// StreamReplicationMessages mocks base method.
+func (m *MockHistoryServiceClient) StreamReplicationMessages(ctx context.Context, opts ...grpc.CallOption) (historyservice.HistoryService_StreamReplicationMessagesClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StreamReplicationMessages", varargs...)
+	ret0, _ := ret[0].(historyservice.HistoryService_StreamReplicationMessagesClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StreamReplicationMessages indicates an expected call of StreamReplicationMessages.
+func (mr *MockHistoryServiceClientMockRecorder) StreamReplicationMessages(ctx interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamReplicationMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).StreamReplicationMessages), varargs...)
+}
+
 // SyncActivity mocks base method.
 func (m *MockHistoryServiceClient) SyncActivity(ctx context.Context, in *historyservice.SyncActivityRequest, opts ...grpc.CallOption) (*historyservice.SyncActivityResponse, error) {
 	m.ctrl.T.Helper()
@@ -978,6 +999,143 @@ func (mr *MockHistoryServiceClientMockRecorder) VerifyFirstWorkflowTaskScheduled
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockHistoryServiceClient)(nil).VerifyFirstWorkflowTaskScheduled), varargs...)
+}
+
+// MockHistoryService_StreamReplicationMessagesClient is a mock of HistoryService_StreamReplicationMessagesClient interface.
+type MockHistoryService_StreamReplicationMessagesClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockHistoryService_StreamReplicationMessagesClientMockRecorder
+}
+
+// MockHistoryService_StreamReplicationMessagesClientMockRecorder is the mock recorder for MockHistoryService_StreamReplicationMessagesClient.
+type MockHistoryService_StreamReplicationMessagesClientMockRecorder struct {
+	mock *MockHistoryService_StreamReplicationMessagesClient
+}
+
+// NewMockHistoryService_StreamReplicationMessagesClient creates a new mock instance.
+func NewMockHistoryService_StreamReplicationMessagesClient(ctrl *gomock.Controller) *MockHistoryService_StreamReplicationMessagesClient {
+	mock := &MockHistoryService_StreamReplicationMessagesClient{ctrl: ctrl}
+	mock.recorder = &MockHistoryService_StreamReplicationMessagesClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHistoryService_StreamReplicationMessagesClient) EXPECT() *MockHistoryService_StreamReplicationMessagesClientMockRecorder {
+	return m.recorder
+}
+
+// CloseSend mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesClient) CloseSend() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseSend")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CloseSend indicates an expected call of CloseSend.
+func (mr *MockHistoryService_StreamReplicationMessagesClientMockRecorder) CloseSend() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseSend", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesClient)(nil).CloseSend))
+}
+
+// Context mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesClient) Context() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Context")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// Context indicates an expected call of Context.
+func (mr *MockHistoryService_StreamReplicationMessagesClientMockRecorder) Context() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesClient)(nil).Context))
+}
+
+// Header mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesClient) Header() (metadata.MD, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Header")
+	ret0, _ := ret[0].(metadata.MD)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Header indicates an expected call of Header.
+func (mr *MockHistoryService_StreamReplicationMessagesClientMockRecorder) Header() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Header", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesClient)(nil).Header))
+}
+
+// Recv mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesClient) Recv() (*historyservice.StreamReplicationMessagesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Recv")
+	ret0, _ := ret[0].(*historyservice.StreamReplicationMessagesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Recv indicates an expected call of Recv.
+func (mr *MockHistoryService_StreamReplicationMessagesClientMockRecorder) Recv() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recv", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesClient)(nil).Recv))
+}
+
+// RecvMsg mocks base method.
+func (m_2 *MockHistoryService_StreamReplicationMessagesClient) RecvMsg(m interface{}) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecvMsg indicates an expected call of RecvMsg.
+func (mr *MockHistoryService_StreamReplicationMessagesClientMockRecorder) RecvMsg(m interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesClient)(nil).RecvMsg), m)
+}
+
+// Send mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesClient) Send(arg0 *historyservice.StreamReplicationMessagesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Send", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Send indicates an expected call of Send.
+func (mr *MockHistoryService_StreamReplicationMessagesClientMockRecorder) Send(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesClient)(nil).Send), arg0)
+}
+
+// SendMsg mocks base method.
+func (m_2 *MockHistoryService_StreamReplicationMessagesClient) SendMsg(m interface{}) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendMsg indicates an expected call of SendMsg.
+func (mr *MockHistoryService_StreamReplicationMessagesClientMockRecorder) SendMsg(m interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesClient)(nil).SendMsg), m)
+}
+
+// Trailer mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesClient) Trailer() metadata.MD {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Trailer")
+	ret0, _ := ret[0].(metadata.MD)
+	return ret0
+}
+
+// Trailer indicates an expected call of Trailer.
+func (mr *MockHistoryService_StreamReplicationMessagesClientMockRecorder) Trailer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trailer", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesClient)(nil).Trailer))
 }
 
 // MockHistoryServiceServer is a mock of HistoryServiceServer interface.
@@ -1603,6 +1761,20 @@ func (mr *MockHistoryServiceServerMockRecorder) StartWorkflowExecution(arg0, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).StartWorkflowExecution), arg0, arg1)
 }
 
+// StreamReplicationMessages mocks base method.
+func (m *MockHistoryServiceServer) StreamReplicationMessages(arg0 historyservice.HistoryService_StreamReplicationMessagesServer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StreamReplicationMessages", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StreamReplicationMessages indicates an expected call of StreamReplicationMessages.
+func (mr *MockHistoryServiceServerMockRecorder) StreamReplicationMessages(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamReplicationMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).StreamReplicationMessages), arg0)
+}
+
 // SyncActivity mocks base method.
 func (m *MockHistoryServiceServer) SyncActivity(arg0 context.Context, arg1 *historyservice.SyncActivityRequest) (*historyservice.SyncActivityResponse, error) {
 	m.ctrl.T.Helper()
@@ -1691,4 +1863,138 @@ func (m *MockHistoryServiceServer) VerifyFirstWorkflowTaskScheduled(arg0 context
 func (mr *MockHistoryServiceServerMockRecorder) VerifyFirstWorkflowTaskScheduled(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockHistoryServiceServer)(nil).VerifyFirstWorkflowTaskScheduled), arg0, arg1)
+}
+
+// MockHistoryService_StreamReplicationMessagesServer is a mock of HistoryService_StreamReplicationMessagesServer interface.
+type MockHistoryService_StreamReplicationMessagesServer struct {
+	ctrl     *gomock.Controller
+	recorder *MockHistoryService_StreamReplicationMessagesServerMockRecorder
+}
+
+// MockHistoryService_StreamReplicationMessagesServerMockRecorder is the mock recorder for MockHistoryService_StreamReplicationMessagesServer.
+type MockHistoryService_StreamReplicationMessagesServerMockRecorder struct {
+	mock *MockHistoryService_StreamReplicationMessagesServer
+}
+
+// NewMockHistoryService_StreamReplicationMessagesServer creates a new mock instance.
+func NewMockHistoryService_StreamReplicationMessagesServer(ctrl *gomock.Controller) *MockHistoryService_StreamReplicationMessagesServer {
+	mock := &MockHistoryService_StreamReplicationMessagesServer{ctrl: ctrl}
+	mock.recorder = &MockHistoryService_StreamReplicationMessagesServerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHistoryService_StreamReplicationMessagesServer) EXPECT() *MockHistoryService_StreamReplicationMessagesServerMockRecorder {
+	return m.recorder
+}
+
+// Context mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesServer) Context() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Context")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// Context indicates an expected call of Context.
+func (mr *MockHistoryService_StreamReplicationMessagesServerMockRecorder) Context() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesServer)(nil).Context))
+}
+
+// Recv mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesServer) Recv() (*historyservice.StreamReplicationMessagesRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Recv")
+	ret0, _ := ret[0].(*historyservice.StreamReplicationMessagesRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Recv indicates an expected call of Recv.
+func (mr *MockHistoryService_StreamReplicationMessagesServerMockRecorder) Recv() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recv", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesServer)(nil).Recv))
+}
+
+// RecvMsg mocks base method.
+func (m_2 *MockHistoryService_StreamReplicationMessagesServer) RecvMsg(m interface{}) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecvMsg indicates an expected call of RecvMsg.
+func (mr *MockHistoryService_StreamReplicationMessagesServerMockRecorder) RecvMsg(m interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesServer)(nil).RecvMsg), m)
+}
+
+// Send mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesServer) Send(arg0 *historyservice.StreamReplicationMessagesResponse) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Send", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Send indicates an expected call of Send.
+func (mr *MockHistoryService_StreamReplicationMessagesServerMockRecorder) Send(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesServer)(nil).Send), arg0)
+}
+
+// SendHeader mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesServer) SendHeader(arg0 metadata.MD) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendHeader", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendHeader indicates an expected call of SendHeader.
+func (mr *MockHistoryService_StreamReplicationMessagesServerMockRecorder) SendHeader(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendHeader", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesServer)(nil).SendHeader), arg0)
+}
+
+// SendMsg mocks base method.
+func (m_2 *MockHistoryService_StreamReplicationMessagesServer) SendMsg(m interface{}) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendMsg indicates an expected call of SendMsg.
+func (mr *MockHistoryService_StreamReplicationMessagesServerMockRecorder) SendMsg(m interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesServer)(nil).SendMsg), m)
+}
+
+// SetHeader mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesServer) SetHeader(arg0 metadata.MD) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetHeader", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetHeader indicates an expected call of SetHeader.
+func (mr *MockHistoryService_StreamReplicationMessagesServerMockRecorder) SetHeader(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHeader", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesServer)(nil).SetHeader), arg0)
+}
+
+// SetTrailer mocks base method.
+func (m *MockHistoryService_StreamReplicationMessagesServer) SetTrailer(arg0 metadata.MD) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetTrailer", arg0)
+}
+
+// SetTrailer indicates an expected call of SetTrailer.
+func (mr *MockHistoryService_StreamReplicationMessagesServerMockRecorder) SetTrailer(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTrailer", reflect.TypeOf((*MockHistoryService_StreamReplicationMessagesServer)(nil).SetTrailer), arg0)
 }
