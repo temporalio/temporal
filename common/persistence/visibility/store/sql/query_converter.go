@@ -317,9 +317,10 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 
 	if !isSupportedComparisonOperator(expr.Operator) {
 		return query.NewConverterError(
-			"%s: invalid operator '%s'",
+			"%s: invalid operator '%s' in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			sqlparser.String(expr),
 		)
 	}
 
@@ -400,7 +401,11 @@ func (c *QueryConverter) convertColName(
 		var err error
 		saFieldName, err = c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
 		if err != nil {
-			return "", "", err
+			return "", "", query.NewConverterError(
+				"%s: column name '%s' is not a valid search attribute",
+				query.InvalidExpressionErrMessage,
+				saAlias,
+			)
 		}
 	}
 	if saFieldName == searchattribute.TemporalNamespaceDivision {
@@ -437,7 +442,12 @@ func (c *QueryConverter) convertValueExpr(
 			*exprRef = sqlparser.NewFloatVal([]byte(strconv.FormatFloat(v, 'f', -1, 64)))
 		default:
 			// this should never happen: query.ParseSqlValue returns one of the types above
-			panic(fmt.Sprintf("Unexpected value type: %T", v))
+			return query.NewConverterError(
+				"%s: unexpected value type %T for search attribute %s",
+				query.InvalidExpressionErrMessage,
+				v,
+				saName,
+			)
 		}
 		return nil
 	case sqlparser.BoolVal:
@@ -472,6 +482,7 @@ func (c *QueryConverter) convertValueExpr(
 }
 
 // parseSQLVal handles values for specific search attributes.
+// Returns a string, an int64 or a float64 if there are no errors.
 // For datetime, converts to UTC.
 // For execution status, converts string to enum value.
 func (c *QueryConverter) parseSQLVal(
@@ -502,10 +513,14 @@ func (c *QueryConverter) parseSQLVal(
 			var err error
 			tm, err = time.Parse(time.RFC3339Nano, v)
 			if err != nil {
-				return "", err
+				return nil, query.NewConverterError(
+					"%s: unable to parse datetime '%s'",
+					query.InvalidExpressionErrMessage,
+					v,
+				)
 			}
 		default:
-			return "", query.NewConverterError(
+			return nil, query.NewConverterError(
 				"%s: unexpected value type %T for search attribute %s",
 				query.InvalidExpressionErrMessage,
 				v,
@@ -531,7 +546,7 @@ func (c *QueryConverter) parseSQLVal(
 			}
 			status = int64(code)
 		default:
-			return "", query.NewConverterError(
+			return nil, query.NewConverterError(
 				"%s: unexpected value type %T for search attribute %s",
 				query.InvalidExpressionErrMessage,
 				v,
