@@ -150,6 +150,19 @@ func (pdb *dbV12) GetFromVisibility(
 	return &row, nil
 }
 
+func (pdb *dbV12) CountFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) (int64, error) {
+	var count int64
+	filter.Query = pdb.db.db.Rebind(filter.Query)
+	err := pdb.conn.GetContext(ctx, &count, filter.Query, filter.QueryArgs...)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (pdb *dbV12) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.VisibilityRow {
 	if row == nil {
 		return nil

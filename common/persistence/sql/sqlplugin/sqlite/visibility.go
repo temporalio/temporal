@@ -152,6 +152,18 @@ func (mdb *db) GetFromVisibility(
 	return &row, nil
 }
 
+func (mdb *db) CountFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) (int64, error) {
+	var count int64
+	err := mdb.conn.GetContext(ctx, &count, filter.Query, filter.QueryArgs...)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (mdb *db) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.VisibilityRow {
 	if row == nil {
 		return nil

@@ -25,26 +25,28 @@
 package sql
 
 import (
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 )
 
 func NewQueryConverter(
 	pluginName string,
-	request *manager.ListWorkflowExecutionsRequestV2,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	queryString string,
 ) *QueryConverter {
 	switch pluginName {
 	case mysql.PluginNameV8:
-		return newMySQLQueryConverter(request, saTypeMap, saMapper)
+		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
 	case postgresql.PluginNameV12:
-		return newPostgreSQLQueryConverter(request, saTypeMap, saMapper)
+		return newPostgreSQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
 	case sqlite.PluginName:
-		return newSqliteQueryConverter(request, saTypeMap, saMapper)
+		return newSqliteQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
 	default:
 		return nil
 	}
