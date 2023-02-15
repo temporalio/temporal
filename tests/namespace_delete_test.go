@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -61,7 +60,6 @@ type (
 		frontendClient workflowservice.WorkflowServiceClient
 		adminClient    adminservice.AdminServiceClient
 		operatorClient operatorservice.OperatorServiceClient
-		esClient       esclient.IntegrationTestsClient
 
 		cluster       *TestCluster
 		clusterConfig *TestClusterConfig
@@ -91,13 +89,10 @@ func (s *namespaceTestSuite) SetupSuite() {
 		s.logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 	default:
 		var err error
+		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
 		s.clusterConfig, err = GetTestClusterConfig("testdata/integration_test_es_cluster.yaml")
 		s.Require().NoError(err)
 		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
-		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
-		s.esClient = CreateESClient(&s.Suite, s.clusterConfig.ESConfig, s.logger)
-		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.clusterConfig.ESConfig.Version), "test-visibility-template")
-		CreateIndex(&s.Suite, s.esClient, s.clusterConfig.ESConfig.GetVisibilityIndex())
 	}
 
 	s.clusterConfig.DynamicConfigOverrides = dynamicConfig()
@@ -112,9 +107,6 @@ func (s *namespaceTestSuite) SetupSuite() {
 
 func (s *namespaceTestSuite) TearDownSuite() {
 	s.cluster.TearDownCluster()
-	if s.esClient != nil {
-		DeleteIndex(&s.Suite, s.esClient, s.clusterConfig.ESConfig.GetVisibilityIndex())
-	}
 }
 
 func (s *namespaceTestSuite) SetupTest() {
