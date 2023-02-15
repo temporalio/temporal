@@ -234,11 +234,11 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
-goimports:
+goimports: update-goimports
 	@printf $(COLOR) "Run goimports for modified files..."
 	@goimports -w $(filter %.go, $(MODIFIED_FILES))
 
-lint: goimports
+lint: update-linters goimports
 	@printf $(COLOR) "Run linters..."
 	@golangci-lint run --verbose --timeout 10m --fix=false --new-from-rev=HEAD~ --config=.golangci.yml
 
