@@ -28,14 +28,11 @@ package namespace
 
 import (
 	"context"
-	"github.com/dgryski/go-farm"
-	"go.temporal.io/server/common/collection"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -170,11 +167,11 @@ type (
 
 		// readthroughErrorsCache stores namespaces that missed the above caches
 		// AND was not found when reading through to the persistence layer
-		readthroughLock        sync.RWMutex
+		readthroughCacheLock   sync.RWMutex
 		readthroughErrorsCache cache.Cache
-		// readthroughRequestLocks contains namespace -> Lock mappings to prevent
-		// concurrent requests to persistence to get the same namespace
-		readthroughRequestLocks collection.ConcurrentTxMap
+		// readthroughRequestLock enforces a limit of 1 pending request to the
+		// persistence layer to avoid excessive load
+		readthroughRequestLock sync.Mutex
 	}
 )
 
@@ -184,7 +181,6 @@ func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
 	refreshInterval dynamicconfig.DurationPropertyFn,
-	readthroughConcurrency dynamicconfig.IntPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Registry {
@@ -198,7 +194,6 @@ func NewRegistry(
 		cacheNameToID:           cache.New(cacheMaxSize, &cacheOpts),
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
 		refreshInterval:         refreshInterval,
-		readthroughConcurrency:  uint32(readthroughConcurrency()),
 		stateChangeCallbacks:    make(map[any]StateChangeCallbackFn),
 		readthroughErrorsCache:  cache.New(cacheMaxSize, &readthroughErrorsCacheOpts),
 	}
@@ -219,8 +214,6 @@ func (r *registry) Start() {
 		return
 	}
 	defer atomic.StoreInt32(&r.status, running)
-
-	r.readthroughRequestLocks = collection.NewShardedConcurrentTxMap(1024, r.hashFn)
 
 	// initialize the cache by initial scan
 	ctx := headers.SetCallerInfo(
@@ -499,10 +492,8 @@ func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 		return cachedNS, cachedErr
 	}
 
-	// acquire per-namespace persistence request lock
-	lock := r.getOrPutRequestLock(name.String())
-	lock.Lock()
-	defer r.cleanupRequestLock(lock, name.String())
+	r.readthroughRequestLock.Lock()
+	defer r.readthroughRequestLock.Unlock()
 
 	// check caches again in case there was an update while waiting
 	cachedNS, cachedErr = r.checkCachesByName(name)
@@ -548,10 +539,8 @@ func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
 		return cachedNS, cachedErr
 	}
 
-	// acquire per-namespace persistence request lock
-	lock := r.getOrPutRequestLock(id.String())
-	lock.Lock()
-	defer r.cleanupRequestLock(lock, id.String())
+	r.readthroughRequestLock.Lock()
+	defer r.readthroughRequestLock.Unlock()
 
 	// check caches again in case there was an update while waiting
 	cachedNS, cachedErr = r.checkCachesByID(id)
@@ -588,27 +577,9 @@ func (r *registry) checkCachesByID(id ID) (*Namespace, error) {
 	return nil, nil
 }
 
-func (r *registry) getOrPutRequestLock(handle string) *sync.Mutex {
-	r.readthroughRequestLocks.PutIfNotExist(handle, &sync.Mutex{})
-	if v, ok := r.readthroughRequestLocks.Get(handle); ok {
-		if lock, ok := v.(*sync.Mutex); ok {
-			return lock
-		}
-	}
-	return nil
-}
-
-func (r *registry) cleanupRequestLock(lock *sync.Mutex, handle string) {
-	lock.Unlock()
-	if lock.TryLock() {
-		// if there are no other waiters for this namespace lock, remove from map to prevent memory leak
-		r.readthroughRequestLocks.Remove(handle)
-	}
-}
-
 func (r *registry) getPreviousReadthroughError(handle string) error {
-	r.readthroughLock.RLock()
-	defer r.readthroughLock.RUnlock()
+	r.readthroughCacheLock.RLock()
+	defer r.readthroughCacheLock.RUnlock()
 
 	if prevErr, ok := r.readthroughErrorsCache.Get(handle).(error); ok {
 		return prevErr
@@ -642,8 +613,8 @@ func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
 }
 
 func (r *registry) updateReadthroughCache(identifier string, err error) {
-	r.readthroughLock.Lock()
-	defer r.readthroughLock.Unlock()
+	r.readthroughCacheLock.Lock()
+	defer r.readthroughCacheLock.Unlock()
 	r.readthroughErrorsCache.Put(identifier, err)
 }
 
@@ -682,10 +653,10 @@ func (r *registry) getNamespaceByIDPersistence(id ID) (*Namespace, error) {
 }
 
 func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequest) (*Namespace, error) {
-	ctx := headers.SetCallerInfo(
-		context.Background(),
-		headers.SystemBackgroundCallerInfo,
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	headers.SetCallerType(ctx, headers.CallerTypeAPI)
+	headers.SetCallerName(ctx, headers.CallerNameSystem)
+	defer cancel()
 
 	response, err := r.persistence.GetNamespace(ctx, request)
 	if err != nil {
@@ -693,16 +664,6 @@ func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequ
 	}
 
 	return FromPersistentState(response), nil
-}
-
-func (r *registry) hashFn(key interface{}) uint32 {
-	id, ok := key.(string)
-	if !ok {
-		return 0
-	}
-	idBytes := []byte(id)
-	hash := farm.Hash32(idBytes)
-	return hash % r.readthroughConcurrency
 }
 
 // this test should include anything that might affect whether a namespace is active on

@@ -74,7 +74,6 @@ func (s *registrySuite) SetupTest() {
 		s.regPersistence,
 		true,
 		dynamicconfig.GetDurationPropertyFn(time.Second),
-		dynamicconfig.GetIntPropertyFn(2),
 		metrics.NoopMetricsHandler,
 		log.NewTestLogger())
 }
