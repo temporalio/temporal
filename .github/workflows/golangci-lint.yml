@@ -16,3 +16,11 @@ jobs:
           fetch-depth: 0
       - name: make-lint
         run: make lint
+      - name: check-is-dirty
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Detected uncommitted changes."
+            git status
+            git diff
+            exit 1
+          fi

@@ -70,7 +70,9 @@ ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
-MODIFIED_FILES := $(shell git diff --name-status master | cut -f2)
+MAIN_BRANCH	   := master
+MODIFIED_FILES := $(shell git diff --name-status $(MAIN_BRANCH) | cut -f2)
+MERGE_BASE     := $(shell git merge-base $(MAIN_BRANCH) HEAD)
 
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 FUNCTIONAL_TEST_ROOT          := ./tests
@@ -240,7 +242,7 @@ goimports: update-goimports
 
 lint: update-linters goimports
 	@printf $(COLOR) "Run linters..."
-	@golangci-lint run --verbose --timeout 10m --fix=false --new-from-rev=HEAD~ --config=.golangci.yml
+	@golangci-lint run --verbose --timeout 10m --fix=false --new-from-rev=$(MERGE_BASE) --config=.golangci.yml
 
 api-linter:
 	@printf $(COLOR) "Run api-linter..."
