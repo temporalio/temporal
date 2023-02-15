@@ -25,17 +25,24 @@
 package replication
 
 import (
+	"context"
+
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 )
 
 var Module = fx.Options(
 	fx.Provide(ReplicationTaskFetcherFactoryProvider),
 	fx.Provide(ReplicationTaskExecutorProvider),
+	fx.Provide(NDCHistoryResenderProvider),
 )
 
 func ReplicationTaskFetcherFactoryProvider(
@@ -62,4 +69,24 @@ func ReplicationTaskExecutorProvider() TaskExecutorProvider {
 			params.WorkflowCache,
 		)
 	}
+}
+
+func NDCHistoryResenderProvider(
+	config *configs.Config,
+	namespaceRegistry namespace.Registry,
+	clientBean client.Bean,
+	serializer serialization.Serializer,
+	logger log.Logger,
+) xdc.NDCHistoryResender {
+	return xdc.NewNDCHistoryResender(
+		namespaceRegistry,
+		clientBean,
+		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			_, err := clientBean.GetHistoryClient().ReplicateEventsV2(ctx, request)
+			return err
+		},
+		serializer,
+		config.StandbyTaskReReplicationContextTimeout,
+		logger,
+	)
 }

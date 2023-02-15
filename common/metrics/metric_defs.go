@@ -197,6 +197,8 @@ const (
 	AdminRemoveRemoteClusterScope = "AdminRemoveRemoteCluster"
 	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecution
 	AdminDeleteWorkflowExecutionScope = "AdminDeleteWorkflowExecution"
+	// AdminStreamReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
+	AdminStreamReplicationMessagesScope = "AdminStreamReplicationMessages"
 
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope
@@ -433,6 +435,8 @@ const (
 	HistoryClientDescribeHistoryHostScope = "HistoryClientDescribeHistoryHost"
 	// HistoryClientGetReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
+	// HistoryClientStreamReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientStreamReplicationMessagesScope = "HistoryClientStreamReplicationMessages"
 )
 
 // Matching Client Operations
@@ -1152,12 +1156,14 @@ const (
 	HistoryMetadataReplicationTaskScope = "HistoryMetadataReplicationTask"
 	// SyncShardTaskScope is the scope used by sync shrad information processing
 	SyncShardTaskScope = "SyncShardTask"
-	// SyncActivityTaskScope is the scope used by sync activity information processing
+	// SyncActivityTaskScope is the scope used by sync activity
 	SyncActivityTaskScope = "SyncActivityTask"
-	// ESProcessorScope is scope used by all metric emitted by esProcessor
-	ESProcessorScope = "ESProcessor"
-	// IndexProcessorScope is scope used by all metric emitted by index processor
-	IndexProcessorScope = "IndexProcessor"
+	// SyncWorkflowTaskScope is the scope used by sync workflow
+	SyncWorkflowTaskScope = "SyncWorkflowTask"
+	// NoopTaskScope is the scope used by noop task
+	NoopTaskScope = "NoopTask"
+	// UnknownTaskScope is the scope used by unknown task
+	UnknownTaskScope = "UnknownTask"
 	// ParentClosePolicyProcessorScope is scope used by all metrics emitted by worker.ParentClosePolicyProcessor
 	ParentClosePolicyProcessorScope = "ParentClosePolicyProcessor"
 	DeleteNamespaceWorkflowScope    = "DeleteNamespaceWorkflow"
