@@ -668,13 +668,15 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	checksum := "random checksum"
-	metadata := &sdkpb.WorkflowTaskCompletedMetadata{CoreUsedFlags: []uint32{1, 2, 3}, LangUsedFlags: []uint32{4, 5, 6}}
+	sdkMetadata := &sdkpb.WorkflowTaskCompletedMetadata{CoreUsedFlags: []uint32{1, 2, 3}, LangUsedFlags: []uint32{4, 5, 6}}
+	meteringMeta := &commonpb.MeteringMetadata{NonfirstLocalActivityExecutionAttempts: 42}
 	event := s.historyBuilder.AddWorkflowTaskCompletedEvent(
 		scheduledEventID,
 		startedEventID,
 		testIdentity,
 		checksum,
-		metadata,
+		sdkMetadata,
+		meteringMeta,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -689,7 +691,8 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 				StartedEventId:   startedEventID,
 				Identity:         testIdentity,
 				BinaryChecksum:   checksum,
-				SdkMetadata:      metadata,
+				SdkMetadata:      sdkMetadata,
+				MeteringMetadata: meteringMeta,
 			},
 		},
 	}, event)
