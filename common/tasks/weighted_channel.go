@@ -24,6 +24,8 @@
 
 package tasks
 
+import "sync"
+
 const (
 	WeightedChannelDefaultSize = 1000
 )
@@ -32,6 +34,8 @@ type (
 	WeightedChannels[T Task] []*WeightedChannel[T]
 
 	WeightedChannel[T Task] struct {
+		sync.RWMutex
+
 		weight  int
 		channel chan T
 	}
@@ -52,10 +56,14 @@ func (c *WeightedChannel[T]) Chan() chan T {
 }
 
 func (c *WeightedChannel[T]) Weight() int {
+	c.Lock()
+	defer c.Unlock()
 	return c.weight
 }
 
 func (c *WeightedChannel[T]) SetWeight(newWeight int) {
+	c.Lock()
+	defer c.Unlock()
 	c.weight = newWeight
 }
 
