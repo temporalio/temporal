@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -684,7 +685,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 	}
 }
 
-func (s *namespaceValidatorSuite) Test_LengthValidationIntercept() {
+func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
 	nvi := NewNamespaceValidatorInterceptor(
 		s.mockRegistry,
 		dynamicconfig.GetBoolPropertyFn(false),
@@ -692,10 +693,36 @@ func (s *namespaceValidatorSuite) Test_LengthValidationIntercept() {
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/random",
 	}
+	requestNamespace := namespace.FromPersistentState(
+		&persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+				Info: &persistencespb.NamespaceInfo{
+					Id:    uuid.New().String(),
+					Name:  "namespace",
+					State: enumspb.NAMESPACE_STATE_REGISTERED,
+				},
+			},
+		})
+	requestNamespaceTooLong := namespace.FromPersistentState(
+		&persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+				Info: &persistencespb.NamespaceInfo{
+					Id:    uuid.New().String(),
+					Name:  "namespaceTooLong",
+					State: enumspb.NAMESPACE_STATE_REGISTERED,
+				},
+			},
+		})
+	s.mockRegistry.EXPECT().GetNamespace(namespace.Name("namespace")).Return(requestNamespace, nil).AnyTimes()
+	s.mockRegistry.EXPECT().GetNamespace(namespace.Name("namespaceTooLong")).Return(requestNamespaceTooLong, nil).AnyTimes()
 
 	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespace"}
 	handlerCalled := false
-	_, err := nvi.LengthValidationIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+	_, err := nvi.NamespaceValidateIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
 		handlerCalled = true
 		return &workflowservice.StartWorkflowExecutionResponse{}, nil
 	})
@@ -704,10 +731,82 @@ func (s *namespaceValidatorSuite) Test_LengthValidationIntercept() {
 
 	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespaceTooLong"}
 	handlerCalled = false
-	_, err = nvi.LengthValidationIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+	_, err = nvi.NamespaceValidateIntercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
 		handlerCalled = true
 		return &workflowservice.StartWorkflowExecutionResponse{}, nil
 	})
 	s.False(handlerCalled)
 	s.Error(err)
+}
+
+func (s *namespaceValidatorSuite) TestSetNamespace() {
+	namespaceRequestName := uuid.New().String()
+	namespaceEntryName := uuid.New().String()
+	namespaceEntry := namespace.FromPersistentState(
+		&persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+				Info: &persistencespb.NamespaceInfo{
+					Id:    uuid.New().String(),
+					Name:  namespaceEntryName,
+					State: enumspb.NAMESPACE_STATE_REGISTERED,
+				},
+			},
+		})
+
+	nvi := NewNamespaceValidatorInterceptor(
+		s.mockRegistry,
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetIntPropertyFn(10),
+	)
+
+	queryReq := &workflowservice.RespondQueryTaskCompletedRequest{}
+	nvi.setNamespace(namespaceEntry, queryReq)
+	s.Equal(namespaceEntryName, queryReq.Namespace)
+	queryReq.Namespace = namespaceRequestName
+	nvi.setNamespace(namespaceEntry, queryReq)
+	s.Equal(namespaceRequestName, queryReq.Namespace)
+
+	completeWorkflowTaskReq := &workflowservice.RespondWorkflowTaskCompletedRequest{}
+	nvi.setNamespace(namespaceEntry, completeWorkflowTaskReq)
+	s.Equal(namespaceEntryName, completeWorkflowTaskReq.Namespace)
+	completeWorkflowTaskReq.Namespace = namespaceRequestName
+	nvi.setNamespace(namespaceEntry, completeWorkflowTaskReq)
+	s.Equal(namespaceRequestName, completeWorkflowTaskReq.Namespace)
+
+	failWorkflowTaskReq := &workflowservice.RespondWorkflowTaskFailedRequest{}
+	nvi.setNamespace(namespaceEntry, failWorkflowTaskReq)
+	s.Equal(namespaceEntryName, failWorkflowTaskReq.Namespace)
+	failWorkflowTaskReq.Namespace = namespaceRequestName
+	nvi.setNamespace(namespaceEntry, failWorkflowTaskReq)
+	s.Equal(namespaceRequestName, failWorkflowTaskReq.Namespace)
+
+	heartbeatActivityTaskReq := &workflowservice.RecordActivityTaskHeartbeatRequest{}
+	nvi.setNamespace(namespaceEntry, heartbeatActivityTaskReq)
+	s.Equal(namespaceEntryName, heartbeatActivityTaskReq.Namespace)
+	heartbeatActivityTaskReq.Namespace = namespaceRequestName
+	nvi.setNamespace(namespaceEntry, heartbeatActivityTaskReq)
+	s.Equal(namespaceRequestName, heartbeatActivityTaskReq.Namespace)
+
+	cancelActivityTaskReq := &workflowservice.RespondActivityTaskCanceledRequest{}
+	nvi.setNamespace(namespaceEntry, cancelActivityTaskReq)
+	s.Equal(namespaceEntryName, cancelActivityTaskReq.Namespace)
+	cancelActivityTaskReq.Namespace = namespaceRequestName
+	nvi.setNamespace(namespaceEntry, cancelActivityTaskReq)
+	s.Equal(namespaceRequestName, cancelActivityTaskReq.Namespace)
+
+	completeActivityTaskReq := &workflowservice.RespondActivityTaskCompletedRequest{}
+	nvi.setNamespace(namespaceEntry, completeActivityTaskReq)
+	s.Equal(namespaceEntryName, completeActivityTaskReq.Namespace)
+	completeActivityTaskReq.Namespace = namespaceRequestName
+	nvi.setNamespace(namespaceEntry, completeActivityTaskReq)
+	s.Equal(namespaceRequestName, completeActivityTaskReq.Namespace)
+
+	failActivityTaskReq := &workflowservice.RespondActivityTaskFailedRequest{}
+	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
+	s.Equal(namespaceEntryName, failActivityTaskReq.Namespace)
+	failActivityTaskReq.Namespace = namespaceRequestName
+	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
+	s.Equal(namespaceRequestName, failActivityTaskReq.Namespace)
 }
