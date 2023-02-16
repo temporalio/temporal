@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
@@ -65,8 +66,16 @@ func (m *visibilityManagerMetrics) Close() {
 	m.delegate.Close()
 }
 
-func (m *visibilityManagerMetrics) GetName() string {
-	return m.delegate.GetName()
+func (m *visibilityManagerMetrics) GetReadStoreName(nsName namespace.Name) string {
+	return m.delegate.GetReadStoreName(nsName)
+}
+
+func (m *visibilityManagerMetrics) GetStoreNames() []string {
+	return m.delegate.GetStoreNames()
+}
+
+func (m *visibilityManagerMetrics) HasStoreName(stName string) bool {
+	return m.delegate.HasStoreName(stName)
 }
 
 func (m *visibilityManagerMetrics) GetIndexName() string {
