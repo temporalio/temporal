@@ -341,6 +341,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(internalExe
 	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		executionInfo.CloseTime = &internalExecution.CloseTime
 		executionInfo.HistoryLength = internalExecution.HistoryLength
+		executionInfo.HistorySizeBytes = internalExecution.HistorySizeBytes
 	}
 
 	// Workflows created before 1.11 have ExecutionTime set to Unix epoch zero time (1/1/1970) for non-cron/non-retry case.
