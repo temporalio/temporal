@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/xwb1989/sqlparser"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
 type (
@@ -107,4 +108,21 @@ func tokenizeTextQueryString(s string) []string {
 		}
 	}
 	return nonEmptyTokens
+}
+
+func getUnsafeStringTupleValues(valTuple sqlparser.ValTuple) ([]string, error) {
+	values := make([]string, len(valTuple))
+	for i, val := range valTuple {
+		switch v := val.(type) {
+		case *unsafeSQLString:
+			values[i] = v.Val
+		default:
+			return nil, query.NewConverterError(
+				"%s: unexpected value type in tuple (expected string, got %v)",
+				query.InvalidExpressionErrMessage,
+				sqlparser.String(v),
+			)
+		}
+	}
+	return values, nil
 }

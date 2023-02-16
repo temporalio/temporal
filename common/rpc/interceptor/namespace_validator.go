@@ -40,7 +40,11 @@ import (
 )
 
 type (
-	// NamespaceValidatorInterceptor contains LengthValidationIntercept and StateValidationIntercept
+	TaskTokenGetter interface {
+		GetTaskToken() []byte
+	}
+
+	// NamespaceValidatorInterceptor contains NamespaceValidateIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
 		namespaceRegistry               namespace.Registry
 		tokenSerializer                 common.TaskTokenSerializer
@@ -71,7 +75,7 @@ var (
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).StateValidationIntercept
-var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).LengthValidationIntercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).NamespaceValidateIntercept
 
 func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
@@ -86,12 +90,16 @@ func NewNamespaceValidatorInterceptor(
 	}
 }
 
-func (ni *NamespaceValidatorInterceptor) LengthValidationIntercept(
+func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
+	err := ni.setNamespaceIfNotPresent(req)
+	if err != nil {
+		return nil, err
+	}
 	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
 	if hasNamespace {
 		namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
@@ -101,6 +109,60 @@ func (ni *NamespaceValidatorInterceptor) LengthValidationIntercept(
 	}
 
 	return handler(ctx, req)
+}
+
+func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
+	req interface{},
+) error {
+	switch request := req.(type) {
+	case NamespaceNameGetter:
+		if request.GetNamespace() == "" {
+			namespaceEntry, err := ni.extractNamespaceFromTaskToken(req)
+			if err != nil {
+				return err
+			}
+			ni.setNamespace(namespaceEntry, req)
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (ni *NamespaceValidatorInterceptor) setNamespace(
+	namespaceEntry *namespace.Namespace,
+	req interface{},
+) {
+	switch request := req.(type) {
+	case *workflowservice.RespondQueryTaskCompletedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondWorkflowTaskCompletedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondWorkflowTaskFailedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RecordActivityTaskHeartbeatRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondActivityTaskCanceledRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondActivityTaskCompletedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondActivityTaskFailedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	}
 }
 
 // StateValidationIntercept validates:
@@ -202,7 +264,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req interface{}) (*namespace.Namespace, error) {
-	reqWithTaskToken, hasTaskToken := req.(interface{ GetTaskToken() []byte })
+	reqWithTaskToken, hasTaskToken := req.(TaskTokenGetter)
 	if !hasTaskToken {
 		return nil, nil
 	}

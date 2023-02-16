@@ -364,8 +364,15 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	converter := NewQueryConverter(s.GetName(), request, saTypeMap, saMapper)
-	selectFilter, err := converter.BuildSelectStmt()
+	converter := NewQueryConverter(
+		s.GetName(),
+		request.Namespace,
+		request.NamespaceID,
+		saTypeMap,
+		saMapper,
+		request.Query,
+	)
+	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -417,10 +424,39 @@ func (s *VisibilityStore) ScanWorkflowExecutions(
 }
 
 func (s *VisibilityStore) CountWorkflowExecutions(
-	_ context.Context,
-	_ *manager.CountWorkflowExecutionsRequest,
+	ctx context.Context,
+	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	return nil, store.OperationNotSupportedErr
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	converter := NewQueryConverter(
+		s.GetName(),
+		request.Namespace,
+		request.NamespaceID,
+		saTypeMap,
+		saMapper,
+		request.Query,
+	)
+	selectFilter, err := converter.BuildCountStmt()
+	if err != nil {
+		return nil, err
+	}
+
+	count, err := s.sqlStore.Db.CountFromVisibility(ctx, *selectFilter)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("CountWorkflowExecutions operation failed. Query failed: %v", err))
+	}
+
+	return &manager.CountWorkflowExecutionsResponse{Count: count}, nil
 }
 
 func (s *VisibilityStore) GetWorkflowExecution(

@@ -105,6 +105,7 @@ type (
 		SelectFromVisibility(ctx context.Context, filter VisibilitySelectFilter) ([]VisibilityRow, error)
 		GetFromVisibility(ctx context.Context, filter VisibilityGetFilter) (*VisibilityRow, error)
 		DeleteFromVisibility(ctx context.Context, filter VisibilityDeleteFilter) (sql.Result, error)
+		CountFromVisibility(ctx context.Context, filter VisibilitySelectFilter) (int64, error)
 	}
 )
 
