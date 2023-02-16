@@ -218,6 +218,17 @@ func (c *QueryConverter) convertSelectStmt(sel *sqlparser.Select) error {
 		if err != nil {
 			return err
 		}
+
+		// Wrap user's query in parenthesis. This is to ensure that further changes
+		// to the query won't affect the user's query.
+		switch sel.Where.Expr.(type) {
+		case *sqlparser.ParenExpr:
+			// no-op: top-level expression is already a parenthesis
+		default:
+			sel.Where.Expr = &sqlparser.ParenExpr{
+				Expr: sel.Where.Expr,
+			}
+		}
 	}
 
 	// This logic comes from elasticsearch/visibility_store.go#convertQuery function.
