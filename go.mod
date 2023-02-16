@@ -44,7 +44,7 @@ require (
 	go.opentelemetry.io/otel/metric v0.34.0
 	go.opentelemetry.io/otel/sdk v1.11.2
 	go.opentelemetry.io/otel/sdk/metric v0.34.0
-	go.temporal.io/api v1.17.0
+	go.temporal.io/api v1.18.0
 	go.temporal.io/sdk v1.21.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.10.0
@@ -121,7 +121,7 @@ require (
 	go.uber.org/dig v1.15.0 // indirect
 	golang.org/x/crypto v0.3.0 // indirect
 	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/net v0.6.0 // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/tools v0.3.0 // indirect

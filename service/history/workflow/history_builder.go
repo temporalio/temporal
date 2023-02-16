@@ -250,6 +250,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	identity string,
 	checksum string,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
+	meteringMetadata *commonpb.MeteringMetadata,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
@@ -259,6 +260,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 			Identity:         identity,
 			BinaryChecksum:   checksum,
 			SdkMetadata:      sdkMetadata,
+			MeteringMetadata: meteringMetadata,
 		},
 	}
 
