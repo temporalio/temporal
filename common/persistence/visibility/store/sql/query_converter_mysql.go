@@ -32,7 +32,6 @@ import (
 	"github.com/xwb1989/sqlparser"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -59,7 +58,10 @@ type (
 	mysqlQueryConverter struct{}
 )
 
-var convertTypeJSON = &sqlparser.ConvertType{Type: "json"}
+var (
+	convertTypeDatetime = &sqlparser.ConvertType{Type: "datetime"}
+	convertTypeJSON     = &sqlparser.ConvertType{Type: "json"}
+)
 
 var _ sqlparser.Expr = (*castExpr)(nil)
 var _ sqlparser.Expr = (*memberOfExpr)(nil)
@@ -80,15 +82,19 @@ func (node *jsonOverlapsExpr) Format(buf *sqlparser.TrackedBuffer) {
 }
 
 func newMySQLQueryConverter(
-	request *manager.ListWorkflowExecutionsRequestV2,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	queryString string,
 ) *QueryConverter {
 	return newQueryConverterInternal(
 		&mysqlQueryConverter{},
-		request,
+		namespaceName,
+		namespaceID,
 		saTypeMap,
 		saMapper,
+		queryString,
 	)
 }
 
@@ -96,38 +102,57 @@ func (c *mysqlQueryConverter) getDatetimeFormat() string {
 	return "2006-01-02 15:04:05.999999"
 }
 
+func (c *mysqlQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
+	return newFuncExpr(
+		coalesceFuncName,
+		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
+		&castExpr{
+			Value: newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
+			Type:  convertTypeDatetime,
+		},
+	)
+}
+
 func (c *mysqlQueryConverter) convertKeywordListComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedKeywordListOperator(expr.Operator) {
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for KeywordList type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
+	var negate bool
+	var newExpr sqlparser.Expr
 	switch expr.Operator {
-	case sqlparser.EqualStr:
-		return &memberOfExpr{
+	case sqlparser.EqualStr, sqlparser.NotEqualStr:
+		newExpr = &memberOfExpr{
 			Value:   expr.Right,
 			JSONArr: expr.Left,
-		}, nil
-	case sqlparser.NotEqualStr:
-		return &sqlparser.NotExpr{
-			Expr: &memberOfExpr{
-				Value:   expr.Right,
-				JSONArr: expr.Left,
-			},
-		}, nil
-	case sqlparser.InStr:
-		return c.convertToJsonOverlapsExpr(expr)
-	case sqlparser.NotInStr:
-		jsonOverlapsExpr, err := c.convertToJsonOverlapsExpr(expr)
+		}
+		negate = expr.Operator == sqlparser.NotEqualStr
+	case sqlparser.InStr, sqlparser.NotInStr:
+		var err error
+		newExpr, err = c.convertToJsonOverlapsExpr(expr)
 		if err != nil {
 			return nil, err
 		}
-		return &sqlparser.NotExpr{Expr: jsonOverlapsExpr}, nil
+		negate = expr.Operator == sqlparser.NotInStr
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for KeywordList type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
+
+	if negate {
+		newExpr = &sqlparser.NotExpr{Expr: newExpr}
+	}
+	return newExpr, nil
 }
 
 func (c *mysqlQueryConverter) convertToJsonOverlapsExpr(
@@ -135,15 +160,15 @@ func (c *mysqlQueryConverter) convertToJsonOverlapsExpr(
 ) (*jsonOverlapsExpr, error) {
 	valTuple, isValTuple := expr.Right.(sqlparser.ValTuple)
 	if !isValTuple {
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: unexpected value type (expected tuple of strings, got %s)",
+			query.InvalidExpressionErrMessage,
+			sqlparser.String(expr.Right),
+		)
 	}
-	values := make([]any, len(valTuple))
-	for i, val := range valTuple {
-		value, err := query.ParseSqlValue(sqlparser.String(val))
-		if err != nil {
-			return nil, err
-		}
-		values[i] = value
+	values, err := getUnsafeStringTupleValues(valTuple)
+	if err != nil {
+		return nil, err
 	}
 	jsonValue, err := json.Marshal(values)
 	if err != nil {
@@ -162,7 +187,11 @@ func (c *mysqlQueryConverter) convertTextComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedTextOperator(expr.Operator) {
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for Text type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 	// build the following expression:
 	// `match ({expr.Left}) against ({expr.Right} in natural language mode)`
@@ -183,8 +212,8 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 	pageSize int,
 	token *pageToken,
 ) (string, []any) {
-	whereClauses := make([]string, 0, 3)
-	queryArgs := make([]any, 0, 8)
+	var whereClauses []string
+	var queryArgs []any
 
 	whereClauses = append(
 		whereClauses,
@@ -193,7 +222,7 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 	queryArgs = append(queryArgs, namespaceID.String())
 
 	if len(queryString) > 0 {
-		whereClauses = append(whereClauses, queryString)
+		whereClauses = append(whereClauses, fmt.Sprintf("(%s)", queryString))
 	}
 
 	if token != nil {
@@ -201,12 +230,12 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 			whereClauses,
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
 				searchattribute.GetSqlDbColName(searchattribute.RunID),
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 			),
 		)
 		queryArgs = append(
@@ -234,8 +263,37 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
 		strings.Join(whereClauses, " AND "),
-		sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+		sqlparser.String(c.getCoalesceCloseTimeExpr()),
 		searchattribute.GetSqlDbColName(searchattribute.StartTime),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
+	), queryArgs
+}
+
+func (c *mysqlQueryConverter) buildCountStmt(
+	namespaceID namespace.ID,
+	queryString string,
+) (string, []any) {
+	var whereClauses []string
+	var queryArgs []any
+
+	whereClauses = append(
+		whereClauses,
+		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+	)
+	queryArgs = append(queryArgs, namespaceID.String())
+
+	if len(queryString) > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("(%s)", queryString))
+	}
+
+	return fmt.Sprintf(
+		`SELECT COUNT(1)
+		FROM executions_visibility ev
+		LEFT JOIN custom_search_attributes
+		USING (%s, %s)
+		WHERE %s`,
+		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
+		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		strings.Join(whereClauses, " AND "),
 	), queryArgs
 }

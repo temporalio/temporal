@@ -93,7 +93,6 @@ services:
       - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
-      - "TEST_TAG=esintegration"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
@@ -120,7 +119,6 @@ services:
       - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql"
-      - "TEST_TAG=esintegration"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
@@ -143,11 +141,8 @@ services:
       dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "MYSQL_SEEDS=mysql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql8"
-      - "TEST_TAG=esintegration"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
@@ -155,7 +150,6 @@ services:
       - BUILDKITE_BUILD_NUMBER
     depends_on:
       - mysql
-      - elasticsearch
     volumes:
       - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
@@ -174,7 +168,6 @@ services:
       - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres"
-      - "TEST_TAG=esintegration"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
@@ -197,11 +190,8 @@ services:
       dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "POSTGRES_SEEDS=postgresql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres12"
-      - "TEST_TAG=esintegration"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
@@ -209,7 +199,6 @@ services:
       - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
-      - elasticsearch
     volumes:
       - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
@@ -248,7 +237,6 @@ services:
       - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
-      - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
@@ -276,7 +264,6 @@ services:
       - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql"
-      - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
@@ -300,11 +287,8 @@ services:
       dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "MYSQL_SEEDS=mysql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql8"
-      - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
@@ -313,7 +297,6 @@ services:
       - BUILDKITE_BUILD_NUMBER
     depends_on:
       - mysql
-      - elasticsearch
     volumes:
       - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
@@ -332,7 +315,6 @@ services:
       - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres"
-      - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
@@ -356,11 +338,8 @@ services:
       dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "POSTGRES_SEEDS=postgresql"
-      - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres12"
-      - "TEST_TAG=esintegration"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
@@ -369,7 +348,6 @@ services:
       - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
-      - elasticsearch
     volumes:
       - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent

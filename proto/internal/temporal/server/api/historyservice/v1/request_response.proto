@@ -58,6 +58,8 @@ message StartWorkflowExecutionRequest {
     int32 attempt = 4;
     google.protobuf.Timestamp workflow_execution_expiration_time = 5 [(gogoproto.stdtime) = true];
     temporal.api.enums.v1.ContinueAsNewInitiator continue_as_new_initiator = 6;
+    // History service should use the values of continued_failure and last_completion_result
+    // here, not the ones in start_request (those are moved into here in the frontend).
     temporal.api.failure.v1.Failure continued_failure = 7;
     temporal.api.common.v1.Payloads last_completion_result = 8;
     google.protobuf.Duration first_workflow_task_backoff = 9 [(gogoproto.stdduration) = true];

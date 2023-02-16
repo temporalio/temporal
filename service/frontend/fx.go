@@ -178,7 +178,7 @@ func GrpcServerOptionsProvider(
 	interceptors := []grpc.UnaryServerInterceptor{
 		// Service Error Interceptor should be the most outer interceptor on error handling
 		rpc.ServiceErrorInterceptor,
-		namespaceValidatorInterceptor.LengthValidationIntercept,
+		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
@@ -555,6 +555,7 @@ func HandlerProvider(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
+	membershipMonitor membership.Monitor,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -576,6 +577,7 @@ func HandlerProvider(
 		archivalMetadata,
 		healthServer,
 		timeSource,
+		membershipMonitor,
 	)
 	return wfHandler
 }

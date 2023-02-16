@@ -190,6 +190,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
 		clock.NewRealTimeSource(),
+		s.mockResource.GetMembershipMonitor(),
 	)
 }
 

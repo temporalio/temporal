@@ -25,10 +25,11 @@
 package sql
 
 import (
+	"strings"
 	"time"
 
 	"github.com/xwb1989/sqlparser"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
 type (
@@ -96,10 +97,32 @@ func getMaxDatetimeValue() time.Time {
 	return t
 }
 
-func getCoalesceCloseTimeExpr(format string) sqlparser.Expr {
-	return newFuncExpr(
-		coalesceFuncName,
-		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
-		newUnsafeSQLString(maxDatetimeValue.Format(format)),
-	)
+// Simple tokenizer by spaces. It's a temporary solution as it doesn't cover tokenizer used by
+// PostgreSQL or SQLite.
+func tokenizeTextQueryString(s string) []string {
+	tokens := strings.Split(s, " ")
+	nonEmptyTokens := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if token != "" {
+			nonEmptyTokens = append(nonEmptyTokens, token)
+		}
+	}
+	return nonEmptyTokens
+}
+
+func getUnsafeStringTupleValues(valTuple sqlparser.ValTuple) ([]string, error) {
+	values := make([]string, len(valTuple))
+	for i, val := range valTuple {
+		switch v := val.(type) {
+		case *unsafeSQLString:
+			values[i] = v.Val
+		default:
+			return nil, query.NewConverterError(
+				"%s: unexpected value type in tuple (expected string, got %v)",
+				query.InvalidExpressionErrMessage,
+				sqlparser.String(v),
+			)
+		}
+	}
+	return values, nil
 }

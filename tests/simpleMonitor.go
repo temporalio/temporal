@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 
 	"go.temporal.io/server/common/membership"
@@ -91,4 +92,8 @@ func (s *simpleMonitor) GetReachableMembers() ([]string, error) {
 
 func (s *simpleMonitor) GetMemberCount(service primitives.ServiceName) (int, error) {
 	return 0, nil
+}
+
+func (s *simpleMonitor) WaitUntilInitialized(_ context.Context) error {
+	return nil
 }

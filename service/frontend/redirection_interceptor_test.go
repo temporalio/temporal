@@ -33,6 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
@@ -106,7 +107,7 @@ func (s *redirectionInterceptorSuite) TearDownTest() {
 
 func (s *redirectionInterceptorSuite) TestLocalAPI() {
 	apis := make(map[string]struct{})
-	for api := range localAPIResults {
+	for api := range localAPIResponses {
 		apis[api] = struct{}{}
 	}
 	s.Equal(map[string]struct{}{
@@ -124,7 +125,7 @@ func (s *redirectionInterceptorSuite) TestLocalAPI() {
 
 func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 	apis := make(map[string]struct{})
-	for api := range globalAPIResults {
+	for api := range globalAPIResponses {
 		apis[api] = struct{}{}
 	}
 	s.Equal(map[string]struct{}{
@@ -189,10 +190,10 @@ func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	}
 
 	actualAPIs := make(map[string]interface{})
-	for api, respAllocFn := range localAPIResults {
+	for api, respAllocFn := range localAPIResponses {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
-	for api, respAllocFn := range globalAPIResults {
+	for api, respAllocFn := range globalAPIResponses {
 		actualAPIs[api] = reflect.TypeOf(respAllocFn())
 	}
 	s.Equal(expectedAPIs, actualAPIs)
@@ -250,7 +251,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Local() {
 		info,
 		handler,
 		methodName,
-		globalAPIResults[methodName],
+		globalAPIResponses[methodName],
 		namespaceName,
 	)
 	s.NoError(err)
@@ -258,7 +259,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Local() {
 	s.True(functionInvoked)
 }
 
-func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation_Redirect() {
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Redirect() {
 	ctx := context.Background()
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
 	info := &grpc.UnaryServerInfo{
@@ -293,11 +294,35 @@ func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation_Redirect() {
 		info,
 		nil,
 		methodName,
-		globalAPIResults[methodName],
+		globalAPIResponses[methodName],
 		namespaceName,
 	)
 	s.NoError(err)
 	s.IsType(&workflowservice.SignalWithStartWorkflowExecutionResponse{}, resp)
+}
+
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NamespaceNotFound() {
+	ctx := context.Background()
+	req := &workflowservice.PollWorkflowTaskQueueRequest{}
+	info := &grpc.UnaryServerInfo{
+		FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue",
+	}
+
+	namespaceName := namespace.Name("unknown_namespace")
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(nil, &serviceerror.NamespaceNotFound{}).AnyTimes()
+	methodName := "PollWorkflowTaskQueue"
+
+	resp, err := s.redirector.handleRedirectAPIInvocation(
+		ctx,
+		req,
+		info,
+		nil,
+		methodName,
+		globalAPIResponses[methodName],
+		namespaceName,
+	)
+	s.Nil(resp)
+	s.IsType(&serviceerror.NamespaceNotFound{}, err)
 }
 
 type (

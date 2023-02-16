@@ -166,6 +166,7 @@ func NewTest(
 	membershipMonitor.EXPECT().GetResolver(primitives.MatchingService).Return(matchingServiceResolver, nil).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(primitives.HistoryService).Return(historyServiceResolver, nil).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(primitives.WorkerService).Return(workerServiceResolver, nil).AnyTimes()
+	membershipMonitor.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
 	serviceName, _ := metrics.MetricsServiceIdxToServiceName(serviceMetricsIndex)

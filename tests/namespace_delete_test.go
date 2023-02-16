@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build esintegration
-
 package tests
 
 import (
@@ -48,7 +46,9 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -60,7 +60,6 @@ type (
 		frontendClient workflowservice.WorkflowServiceClient
 		adminClient    adminservice.AdminServiceClient
 		operatorClient operatorservice.OperatorServiceClient
-		esClient       esclient.IntegrationTestsClient
 
 		cluster       *TestCluster
 		clusterConfig *TestClusterConfig
@@ -82,17 +81,23 @@ func dynamicConfig() map[dynamicconfig.Key]interface{} {
 func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 
-	clusterConfig, err := GetTestClusterConfig("testdata/integration_namespace_cluster.yaml")
-	s.Require().NoError(err)
-	s.clusterConfig = clusterConfig
-	clusterConfig.DynamicConfigOverrides = dynamicConfig()
+	switch TestFlags.PersistenceDriver {
+	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+		var err error
+		s.clusterConfig, err = GetTestClusterConfig("testdata/integration_test_cluster.yaml")
+		s.Require().NoError(err)
+		s.logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
+	default:
+		var err error
+		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
+		s.clusterConfig, err = GetTestClusterConfig("testdata/integration_test_es_cluster.yaml")
+		s.Require().NoError(err)
+		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
+	}
 
-	// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
-	s.esClient = CreateESClient(&s.Suite, clusterConfig.ESConfig, s.logger)
-	PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", clusterConfig.ESConfig.Version), "test-visibility-template")
-	CreateIndex(&s.Suite, s.esClient, clusterConfig.ESConfig.GetVisibilityIndex())
+	s.clusterConfig.DynamicConfigOverrides = dynamicConfig()
 
-	cluster, err := NewCluster(clusterConfig, s.logger)
+	cluster, err := NewCluster(s.clusterConfig, s.logger)
 	s.Require().NoError(err)
 	s.cluster = cluster
 	s.frontendClient = s.cluster.GetFrontendClient()
@@ -102,7 +107,6 @@ func (s *namespaceTestSuite) SetupSuite() {
 
 func (s *namespaceTestSuite) TearDownSuite() {
 	s.cluster.TearDownCluster()
-	DeleteIndex(&s.Suite, s.esClient, s.clusterConfig.ESConfig.GetVisibilityIndex())
 }
 
 func (s *namespaceTestSuite) SetupTest() {

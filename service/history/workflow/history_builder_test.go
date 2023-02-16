@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -45,6 +46,7 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tests"
@@ -154,6 +156,7 @@ func (s *historyBuilderSuite) SetupTest() {
 		s.version,
 		s.nextEventID,
 		nil,
+		metrics.NoopMetricsHandler,
 	)
 }
 
@@ -665,11 +668,13 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	checksum := "random checksum"
+	metadata := &sdkpb.WorkflowTaskCompletedMetadata{CoreUsedFlags: []uint32{1, 2, 3}, LangUsedFlags: []uint32{4, 5, 6}}
 	event := s.historyBuilder.AddWorkflowTaskCompletedEvent(
 		scheduledEventID,
 		startedEventID,
 		testIdentity,
 		checksum,
+		metadata,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -684,6 +689,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 				StartedEventId:   startedEventID,
 				Identity:         testIdentity,
 				BinaryChecksum:   checksum,
+				SdkMetadata:      metadata,
 			},
 		},
 	}, event)
@@ -2088,6 +2094,7 @@ func (s *historyBuilderSuite) testWireEventIDs(
 		s.version,
 		s.nextEventID,
 		nil,
+		metrics.NoopMetricsHandler,
 	)
 	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{startEvent}
 	s.historyBuilder.memEventsBatches = nil
@@ -2134,6 +2141,7 @@ func (s *historyBuilderSuite) TestHasBufferEvent() {
 		s.version,
 		s.nextEventID,
 		nil,
+		metrics.NoopMetricsHandler,
 	)
 	historyBuilder.dbBufferBatch = nil
 	historyBuilder.memEventsBatches = nil

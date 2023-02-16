@@ -31,7 +31,6 @@ import (
 	"github.com/xwb1989/sqlparser"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -48,15 +47,19 @@ const (
 )
 
 func newSqliteQueryConverter(
-	request *manager.ListWorkflowExecutionsRequestV2,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	queryString string,
 ) *QueryConverter {
 	return newQueryConverterInternal(
 		&sqliteQueryConverter{},
-		request,
+		namespaceName,
+		namespaceID,
 		saTypeMap,
 		saMapper,
+		queryString,
 	)
 }
 
@@ -64,73 +67,73 @@ func (c *sqliteQueryConverter) getDatetimeFormat() string {
 	return "2006-01-02 15:04:05.999999-07:00"
 }
 
+func (c *sqliteQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
+	return newFuncExpr(
+		coalesceFuncName,
+		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
+		newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
+	)
+}
+
 //nolint:revive // cyclomatic complexity 17 (> 15)
 func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedKeywordListOperator(expr.Operator) {
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for KeywordList type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
-	colName, isColName := expr.Left.(*colName)
-	if !isColName {
+	colNameExpr, isColNameExpr := expr.Left.(*colName)
+	if !isColNameExpr {
 		return nil, query.NewConverterError(
 			"%s: must be a column name but was %T",
 			query.InvalidExpressionErrMessage,
 			expr.Left,
 		)
 	}
-	colNameStr := sqlparser.String(colName)
 
 	var ftsQuery string
 	switch expr.Operator {
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
-		value, err := query.ParseSqlValue(sqlparser.String(expr.Right))
-		if err != nil {
-			return nil, err
-		}
-		switch v := value.(type) {
-		case string:
-			ftsQuery = fmt.Sprintf(`%s:"%s"`, colNameStr, v)
-		default:
+		valueExpr, ok := expr.Right.(*unsafeSQLString)
+		if !ok {
 			return nil, query.NewConverterError(
-				"%s: unexpected value type %T",
+				"%s: unexpected value type (expected string, got %s)",
 				query.InvalidExpressionErrMessage,
-				expr,
+				sqlparser.String(expr.Right),
 			)
 		}
+		ftsQuery = fmt.Sprintf(`%s:"%s"`, colNameExpr.Name, valueExpr.Val)
 
 	case sqlparser.InStr, sqlparser.NotInStr:
 		valTupleExpr, isValTuple := expr.Right.(sqlparser.ValTuple)
 		if !isValTuple {
 			return nil, query.NewConverterError(
-				"%s: unexpected value type %T",
+				"%s: unexpected value type (expected tuple of strings, got %s)",
 				query.InvalidExpressionErrMessage,
-				expr,
+				sqlparser.String(expr.Right),
 			)
 		}
-		var values []string
-		for _, valExpr := range valTupleExpr {
-			value, err := query.ParseSqlValue(sqlparser.String(valExpr))
-			if err != nil {
-				return nil, err
-			}
-			switch v := value.(type) {
-			case string:
-				values = append(values, fmt.Sprintf(`"%s"`, v))
-			default:
-				return nil, query.NewConverterError(
-					"%s: unexpected value type %T",
-					query.InvalidExpressionErrMessage,
-					expr,
-				)
-			}
+		values, err := getUnsafeStringTupleValues(valTupleExpr)
+		if err != nil {
+			return nil, err
 		}
-		ftsQuery = fmt.Sprintf("%s:(%s)", colNameStr, strings.Join(values, " OR "))
+		for i := range values {
+			values[i] = fmt.Sprintf(`"%s"`, values[i])
+		}
+		ftsQuery = fmt.Sprintf("%s:(%s)", colNameExpr.Name, strings.Join(values, " OR "))
 
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for KeywordList type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
 	var oper string
@@ -141,7 +144,11 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 		oper = sqlparser.NotInStr
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for KeywordList type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
 	newExpr := sqlparser.ComparisonExpr{
@@ -158,35 +165,39 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedTextOperator(expr.Operator) {
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for Text type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
-	colName, isColName := expr.Left.(*colName)
-	if !isColName {
+	colNameExpr, isColNameExpr := expr.Left.(*colName)
+	if !isColNameExpr {
 		return nil, query.NewConverterError(
 			"%s: must be a column name but was %T",
 			query.InvalidExpressionErrMessage,
 			expr.Left,
 		)
 	}
-	colNameStr := sqlparser.String(colName)
 
-	value, err := query.ParseSqlValue(sqlparser.String(expr.Right))
-	if err != nil {
-		return nil, err
-	}
-
-	var ftsQuery string
-	switch v := value.(type) {
-	case string:
-		ftsQuery = fmt.Sprintf(`%s:(%s)`, colNameStr, v)
-	default:
+	valueExpr, ok := expr.Right.(*unsafeSQLString)
+	if !ok {
 		return nil, query.NewConverterError(
-			"%s: unexpected value type %T",
+			"%s: unexpected value type (expected string, got %s)",
 			query.InvalidExpressionErrMessage,
-			expr,
+			sqlparser.String(expr.Right),
 		)
 	}
+	tokens := tokenizeTextQueryString(valueExpr.Val)
+	if len(tokens) == 0 {
+		return nil, query.NewConverterError(
+			"%s: unexpected value for Text type search attribute (no tokens found in %s)",
+			query.InvalidExpressionErrMessage,
+			sqlparser.String(expr.Right),
+		)
+	}
+	ftsQuery := fmt.Sprintf("%s:(%s)", colNameExpr.Name, strings.Join(tokens, " OR "))
 
 	var oper string
 	switch expr.Operator {
@@ -196,7 +207,11 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 		oper = sqlparser.NotInStr
 	default:
 		// this should never happen since isSupportedTextOperator should already fail
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator %s not supported for Text type search attribute",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+		)
 	}
 
 	newExpr := sqlparser.ComparisonExpr{
@@ -215,8 +230,8 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 	pageSize int,
 	token *pageToken,
 ) (string, []any) {
-	whereClauses := make([]string, 0, 3)
-	queryArgs := make([]any, 0, 8)
+	var whereClauses []string
+	var queryArgs []any
 
 	whereClauses = append(
 		whereClauses,
@@ -225,7 +240,7 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 	queryArgs = append(queryArgs, namespaceID.String())
 
 	if len(queryString) > 0 {
-		whereClauses = append(whereClauses, queryString)
+		whereClauses = append(whereClauses, fmt.Sprintf("(%s)", queryString))
 	}
 
 	if token != nil {
@@ -233,12 +248,12 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 			whereClauses,
 			fmt.Sprintf(
 				"((%s = ? AND %s = ? AND %s > ?) OR (%s = ? AND %s < ?) OR %s < ?)",
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
 				searchattribute.GetSqlDbColName(searchattribute.RunID),
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 				searchattribute.GetSqlDbColName(searchattribute.StartTime),
-				sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+				sqlparser.String(c.getCoalesceCloseTimeExpr()),
 			),
 		)
 		queryArgs = append(
@@ -262,7 +277,7 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 		LIMIT ?`,
 		strings.Join(sqlplugin.DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
-		sqlparser.String(getCoalesceCloseTimeExpr(c.getDatetimeFormat())),
+		sqlparser.String(c.getCoalesceCloseTimeExpr()),
 		searchattribute.GetSqlDbColName(searchattribute.StartTime),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
 	), queryArgs
@@ -297,4 +312,27 @@ func (c *sqliteQueryConverter) buildFtsSelectStmt(
 			},
 		),
 	}
+}
+
+func (c *sqliteQueryConverter) buildCountStmt(
+	namespaceID namespace.ID,
+	queryString string,
+) (string, []any) {
+	var whereClauses []string
+	var queryArgs []any
+
+	whereClauses = append(
+		whereClauses,
+		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+	)
+	queryArgs = append(queryArgs, namespaceID.String())
+
+	if len(queryString) > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("(%s)", queryString))
+	}
+
+	return fmt.Sprintf(
+		"SELECT COUNT(1) FROM executions_visibility WHERE %s",
+		strings.Join(whereClauses, " AND "),
+	), queryArgs
 }

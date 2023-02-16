@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -123,6 +124,7 @@ type (
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
 		overrides                       *Overrides
+		membershipMonitor               membership.Monitor
 	}
 )
 
@@ -147,6 +149,7 @@ func NewWorkflowHandler(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	timeSource clock.TimeSource,
+	membershipMonitor membership.Monitor,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -187,9 +190,10 @@ func NewWorkflowHandler(
 			visibilityMrg.GetIndexName(),
 			visibility.AllowListForValidation(visibilityMrg.GetName()),
 		),
-		archivalMetadata: archivalMetadata,
-		healthServer:     healthServer,
-		overrides:        NewOverrides(),
+		archivalMetadata:  archivalMetadata,
+		healthServer:      healthServer,
+		overrides:         NewOverrides(),
+		membershipMonitor: membershipMonitor,
 	}
 
 	return handler
@@ -202,7 +206,13 @@ func (wh *WorkflowHandler) Start() {
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+		// Start in NOT_SERVING state and switch to SERVING after membership is ready
+		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
+		go func() {
+			_ = wh.membershipMonitor.WaitUntilInitialized(context.Background())
+			wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+			wh.logger.Info("Frontend is now healthy")
+		}()
 	}
 }
 
@@ -2869,6 +2879,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			EncodedFailureAttributes:        true,
 			UpsertMemo:                      true,
 			EagerWorkflowStart:              true,
+			SdkMetadata:                     true,
 		},
 	}, nil
 }
@@ -2956,6 +2967,9 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// Add namespace division before unaliasing search attributes.
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+
 	request, err = wh.unaliasCreateScheduleRequestSearchAttributes(request, namespaceName)
 	if err != nil {
 		return nil, err
@@ -2991,8 +3005,6 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	}
 	// Add initial memo for list schedules
 	wh.addInitialScheduleMemo(request, input)
-	// Add namespace division
-	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
@@ -3060,7 +3072,14 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errIDReusePolicyNotAllowed
 	}
 
-	if err := wh.validateSearchAttributes(startWorkflow.GetSearchAttributes(), namespaceName); err != nil {
+	// Unalias startWorkflow search attributes only for validation.
+	// Keep aliases in the request, because the request will be
+	// sent back to frontend to start workflows, which will unalias at that point.
+	unaliasedStartWorkflowSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, startWorkflow.GetSearchAttributes(), namespaceName.String())
+	if err != nil {
+		return err
+	}
+	if err := wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName); err != nil {
 		return err
 	}
 
@@ -3154,21 +3173,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 			return err
 		}
 
-		// map action search attributes
-		if sa := queryResponse.Schedule.Action.GetStartWorkflow().SearchAttributes; sa != nil {
-			saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
-			if err != nil {
-				return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-			}
-			searchattribute.ApplyTypeMap(sa, saTypeMap)
-			aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, sa, request.Namespace)
-			if err != nil {
-				return err
-			}
-			if aliasedSas != nil {
-				queryResponse.Schedule.Action.GetStartWorkflow().SearchAttributes = aliasedSas
-			}
-		}
+		// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
 
 		// for all running workflows started by the schedule, we should check that they're
 		// still running, and if not, poke the schedule to refresh
@@ -3300,11 +3305,6 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 	}
 
 	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
-		return nil, err
-	}
-
-	request, err = wh.unaliasUpdateScheduleRequestStartWorkflowSearchAttributes(request, namespaceName)
-	if err != nil {
 		return nil, err
 	}
 
@@ -4950,13 +4950,7 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 		return nil, err
 	}
 
-	startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow()
-	unaliasedStartWorkflowSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, startWorkflow.GetSearchAttributes(), namespaceName.String())
-	if err != nil {
-		return nil, err
-	}
-
-	if unaliasedSas == nil && unaliasedStartWorkflowSas == nil {
+	if unaliasedSas == nil {
 		return request, nil
 	}
 
@@ -4967,41 +4961,5 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 		newRequest.SearchAttributes = unaliasedSas
 	}
 
-	if unaliasedStartWorkflowSas != nil && startWorkflow != nil {
-		newStartWorkflow := *startWorkflow
-		newStartWorkflow.SearchAttributes = unaliasedStartWorkflowSas
-		newSchedule := *request.GetSchedule()
-		newSchedule.Action = &schedpb.ScheduleAction{
-			Action: &schedpb.ScheduleAction_StartWorkflow{
-				StartWorkflow: &newStartWorkflow,
-			}}
-		newRequest.Schedule = &newSchedule
-	}
-
-	return &newRequest, nil
-}
-
-func (wh *WorkflowHandler) unaliasUpdateScheduleRequestStartWorkflowSearchAttributes(request *workflowservice.UpdateScheduleRequest, namespaceName namespace.Name) (*workflowservice.UpdateScheduleRequest, error) {
-	startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow()
-	if startWorkflow == nil {
-		return request, nil
-	}
-
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, startWorkflow.GetSearchAttributes(), namespaceName.String())
-	if err != nil {
-		return nil, err
-	}
-	if unaliasedSas == nil {
-		return request, nil
-	}
-	newStartWorkflow := *startWorkflow
-	newStartWorkflow.SearchAttributes = unaliasedSas
-	newSchedule := *request.GetSchedule()
-	newSchedule.Action = &schedpb.ScheduleAction{
-		Action: &schedpb.ScheduleAction_StartWorkflow{
-			StartWorkflow: &newStartWorkflow,
-		}}
-	newRequest := *request
-	newRequest.Schedule = &newSchedule
 	return &newRequest, nil
 }
