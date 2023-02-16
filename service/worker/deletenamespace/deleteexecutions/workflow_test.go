@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -189,7 +190,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	var a *Activities
 
 	env.OnActivity(a.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return([]byte{3, 22, 83}, nil).Times(78)
-	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{}, nil).Times(78)
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{SuccessCount: 1}, nil).Times(78)
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
@@ -205,6 +206,14 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	require.Error(t, wfErr)
 	var errContinueAsNew *workflow.ContinueAsNewError
 	require.ErrorAs(t, wfErr, &errContinueAsNew)
+
+	require.NotNil(t, errContinueAsNew.Input)
+	var newWfParams DeleteExecutionsParams
+	err := payloads.Decode(errContinueAsNew.Input, &newWfParams)
+	require.NoError(t, err)
+	require.Equal(t, 78, newWfParams.PreviousSuccessCount)
+	require.Equal(t, 0, newWfParams.PreviousErrorCount)
+	require.Equal(t, []byte{3, 22, 83}, newWfParams.NextPageToken)
 }
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
