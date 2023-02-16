@@ -66,6 +66,7 @@ const (
 	CacheRefreshFailureRetryInterval = 1 * time.Second
 	CacheRefreshPageSize             = 1000
 	readthroughCacheTTL              = 1 * time.Second // represents minimum time to wait before trying to readthrough again
+	readthroughTimeout               = 3 * time.Second
 )
 
 const (
@@ -155,7 +156,6 @@ type (
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		refreshInterval         dynamicconfig.DurationPropertyFn
-		readthroughConcurrency  uint32
 
 		// cacheLock protects cachNameToID, cacheByID and stateChangeCallbacks.
 		// If the exclusive side is to be held at the same time as the
@@ -171,6 +171,7 @@ type (
 		readthroughErrorsCache cache.Cache
 		// readthroughRequestLock enforces a limit of 1 pending request to the
 		// persistence layer to avoid excessive load
+		// this lock must be acquired before grabbing the exclusive side of readthroughCacheLock
 		readthroughRequestLock sync.Mutex
 	}
 )
@@ -592,7 +593,7 @@ func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
 
 	r.cacheLock.Lock()
 	if curEntry, ok := r.cacheByID.Get(ns.ID()).(*Namespace); ok {
-		if curEntry.ConfigVersion() >= ns.ConfigVersion() {
+		if curEntry.NotificationVersion() >= ns.NotificationVersion() {
 			// More up to date version already put in cache by refresh
 			r.cacheLock.Unlock()
 			return
@@ -653,7 +654,7 @@ func (r *registry) getNamespaceByIDPersistence(id ID) (*Namespace, error) {
 }
 
 func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequest) (*Namespace, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), readthroughTimeout)
 	headers.SetCallerType(ctx, headers.CallerTypeAPI)
 	headers.SetCallerName(ctx, headers.CallerNameSystem)
 	defer cancel()
