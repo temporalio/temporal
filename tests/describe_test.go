@@ -82,6 +82,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	s.Equal(int64(2), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowStarted, WorkflowTaskScheduled
 	s.Equal(dweResponse.WorkflowExecutionInfo.GetStartTime(), dweResponse.WorkflowExecutionInfo.GetExecutionTime())
 	s.Equal(tq, dweResponse.WorkflowExecutionInfo.TaskQueue)
+	s.Greater(dweResponse.WorkflowExecutionInfo.GetHistorySizeBytes(), int64(0))
 
 	// workflow logic
 	workflowComplete := false
