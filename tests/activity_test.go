@@ -134,7 +134,10 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		for i := 0; i < 10; i++ {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 			_, err := s.engine.RecordActivityTaskHeartbeat(NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
-				TaskToken: taskToken, Details: payloads.EncodeString("details")})
+				Namespace: s.namespace,
+				TaskToken: taskToken,
+				Details:   payloads.EncodeString("details"),
+			})
 			s.NoError(err)
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -685,7 +688,10 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(activityID), tag.Counter(i))
 			response, err := s.engine.RecordActivityTaskHeartbeat(NewContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
-					TaskToken: taskToken, Details: payloads.EncodeString("details")})
+					Namespace: s.namespace,
+					TaskToken: taskToken,
+					Details:   payloads.EncodeString("details"),
+				})
 			if response != nil && response.CancelRequested {
 				activityCanceled = true
 				return payloads.EncodeString("Activity Cancelled"), true, nil

@@ -59,7 +59,7 @@ func (i *CallerInfoInterceptor) Intercept(
 
 	updateInfo := false
 	if callerInfo.CallerName == "" {
-		callerInfo.CallerName = string(GetNamespace(i.namespaceRegistry, req))
+		callerInfo.CallerName = string(MustGetNamespaceName(i.namespaceRegistry, req))
 		updateInfo = callerInfo.CallerName != ""
 	}
 	if callerInfo.CallerType == "" {
