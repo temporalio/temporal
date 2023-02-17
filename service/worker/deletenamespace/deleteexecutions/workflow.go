@@ -172,6 +172,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		}
 	}
 
+	// If nextPageToken is nil then there are no more workflow executions to delete.
 	if nextPageToken == nil {
 		if result.ErrorCount == 0 {
 			logger.Info("Successfully deleted workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount))
@@ -181,7 +182,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		return result, nil
 	}
 
-	// Too many workflow executions, and ConcurrentDeleteExecutionsActivities activities has been started already.
+	// Too many workflow executions, and ConcurrentDeleteExecutionsActivities number of activities has been completed already.
 	// Continue as new to prevent workflow history size explosion.
 
 	params.PreviousSuccessCount = result.SuccessCount
