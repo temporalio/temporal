@@ -152,6 +152,10 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 			Interval: []*schedulepb.IntervalSpec{
 				{Interval: timestamp.DurationPtr(5 * time.Second)},
 			},
+			Calendar: []*schedulepb.CalendarSpec{
+				{DayOfMonth: "10", Year: "2010"},
+			},
+			CronString: []string{"11 11/11 11 11 1 2011"},
 		},
 		Action: &schedulepb.ScheduleAction{
 			Action: &schedulepb.ScheduleAction_StartWorkflow{
@@ -219,7 +223,33 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	})
 	s.NoError(err)
 
-	s.Equal(schedule.Spec, describeResp.Schedule.Spec)
+	checkSpec := func(spec *schedulepb.ScheduleSpec) {
+		s.Equal(schedule.Spec.Interval, spec.Interval)
+		s.Nil(spec.Calendar)
+		s.Nil(spec.CronString)
+		s.ElementsMatch([]*schedulepb.StructuredCalendarSpec{
+			{
+				Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				Minute:     []*schedulepb.Range{{Start: 11, End: 11, Step: 1}},
+				Hour:       []*schedulepb.Range{{Start: 11, End: 23, Step: 11}},
+				DayOfMonth: []*schedulepb.Range{{Start: 11, End: 11, Step: 1}},
+				Month:      []*schedulepb.Range{{Start: 11, End: 11, Step: 1}},
+				DayOfWeek:  []*schedulepb.Range{{Start: 1, End: 1, Step: 1}},
+				Year:       []*schedulepb.Range{{Start: 2011, End: 2011, Step: 1}},
+			},
+			{
+				Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				Hour:       []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+				DayOfMonth: []*schedulepb.Range{{Start: 10, End: 10, Step: 1}},
+				Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
+				DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
+				Year:       []*schedulepb.Range{{Start: 2010, End: 2010, Step: 1}},
+			},
+		}, spec.StructuredCalendar)
+	}
+	checkSpec(describeResp.Schedule.Spec)
+
 	s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, describeResp.Schedule.Policies.OverlapPolicy) // set to default value
 	s.EqualValues(60, describeResp.Schedule.Policies.CatchupWindow.Seconds())                   // set to default value
 
@@ -254,7 +284,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 		s.Equal(sid, entry.ScheduleId)
 		s.Equal(schSAValue.Data, entry.SearchAttributes.IndexedFields[csa].Data)
 		s.Equal(schMemo.Data, entry.Memo.Fields["schedmemo1"].Data)
-		s.Equal(schedule.Spec, entry.Info.Spec)
+		checkSpec(entry.Info.Spec)
 		s.Equal(wt, entry.Info.WorkflowType.Name)
 		s.False(entry.Info.Paused)
 		s.Equal(describeResp.Info.RecentActions, entry.Info.RecentActions) // 2 is below the limit where list entry might be cut off
