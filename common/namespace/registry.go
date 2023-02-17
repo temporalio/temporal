@@ -165,14 +165,13 @@ type (
 		cacheByID            cache.Cache
 		stateChangeCallbacks map[any]StateChangeCallbackFn
 
-		// readthroughErrorsCache stores namespaces that missed the above caches
+		// readthroughLock protects readthroughNotFoundCache and requests to persistence
+		// it should be acquired before checking readthroughNotFoundCache, making a request
+		// to persistence, or updating readthroughNotFoundCache
+		readthroughLock sync.Mutex
+		// readthroughNotFoundCache stores namespaces that missed the above caches
 		// AND was not found when reading through to the persistence layer
-		readthroughCacheLock   sync.RWMutex
-		readthroughErrorsCache cache.Cache
-		// readthroughRequestLock enforces a limit of 1 pending request to the
-		// persistence layer to avoid excessive load
-		// this lock must be acquired before grabbing the exclusive side of readthroughCacheLock
-		readthroughRequestLock sync.Mutex
+		readthroughNotFoundCache cache.Cache
 	}
 )
 
@@ -186,17 +185,17 @@ func NewRegistry(
 	logger log.Logger,
 ) Registry {
 	reg := &registry{
-		triggerRefreshCh:        make(chan chan struct{}, 1),
-		persistence:             persistence,
-		globalNamespacesEnabled: enableGlobalNamespaces,
-		clock:                   clock.NewRealTimeSource(),
-		metricsHandler:          metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceCacheScope)),
-		logger:                  logger,
-		cacheNameToID:           cache.New(cacheMaxSize, &cacheOpts),
-		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
-		refreshInterval:         refreshInterval,
-		stateChangeCallbacks:    make(map[any]StateChangeCallbackFn),
-		readthroughErrorsCache:  cache.New(cacheMaxSize, &readthroughErrorsCacheOpts),
+		triggerRefreshCh:         make(chan chan struct{}, 1),
+		persistence:              persistence,
+		globalNamespacesEnabled:  enableGlobalNamespaces,
+		clock:                    clock.NewRealTimeSource(),
+		metricsHandler:           metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceCacheScope)),
+		logger:                   logger,
+		cacheNameToID:            cache.New(cacheMaxSize, &cacheOpts),
+		cacheByID:                cache.New(cacheMaxSize, &cacheOpts),
+		refreshInterval:          refreshInterval,
+		stateChangeCallbacks:     make(map[any]StateChangeCallbackFn),
+		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughErrorsCacheOpts),
 	}
 	return reg
 }
@@ -487,19 +486,24 @@ func (r *registry) getNamespaceByIDLocked(id ID) (*Namespace, error) {
 // getOrPutNamespace retrieves the information from the cache if it exists or reads through
 // to the persistence layer and updates caches if it doesn't
 func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
-	// check caches
-	cachedNS, cachedErr := r.checkCachesByName(name)
-	if cachedNS != nil || cachedErr != nil {
-		return cachedNS, cachedErr
+	// check main caches
+	cacheHit, cacheErr := r.getNamespace(name)
+	if cacheErr == nil {
+		return cacheHit, nil
 	}
 
-	r.readthroughRequestLock.Lock()
-	defer r.readthroughRequestLock.Unlock()
+	r.readthroughLock.Lock()
+	defer r.readthroughLock.Unlock()
 
 	// check caches again in case there was an update while waiting
-	cachedNS, cachedErr = r.checkCachesByName(name)
-	if cachedNS != nil || cachedErr != nil {
-		return cachedNS, cachedErr
+	cacheHit, cacheErr = r.getNamespace(name)
+	if cacheErr == nil {
+		return cacheHit, nil
+	}
+
+	// check readthrough cache
+	if cachedNotFound := r.readthroughNotFoundCache.Get(name.String()); cachedNotFound != nil {
+		return nil, serviceerror.NewNamespaceNotFound(name.String())
 	}
 
 	// readthrough to persistence layer and update readthrough cache if not found
@@ -514,39 +518,27 @@ func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 	return ns, nil
 }
 
-func (r *registry) checkCachesByName(name Name) (*Namespace, error) {
+// getOrPutNamespaceByID retrieves the information from the cache if it exists or reads through
+// to the persistence layer and updates caches if it doesn't
+func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
 	// check main caches
-	cacheHit, cacheErr := r.getNamespace(name)
+	cacheHit, cacheErr := r.getNamespaceByID(id)
 	if cacheErr == nil {
 		return cacheHit, nil
 	}
 
-	// check readthrough cache to prevent excessive requests to persistence layer
-	prevErr := r.getPreviousReadthroughError(name.String())
-	if prevErr != nil {
-		return nil, prevErr
-	}
-
-	// missed both caches, should readthrough
-	return nil, nil
-}
-
-// getOrPutNamespaceByID retrieves the information from the cache if it exists or reads through
-// to the persistence layer and updates caches if it doesn't
-func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
-	// check caches
-	cachedNS, cachedErr := r.checkCachesByID(id)
-	if cachedNS != nil || cachedErr != nil {
-		return cachedNS, cachedErr
-	}
-
-	r.readthroughRequestLock.Lock()
-	defer r.readthroughRequestLock.Unlock()
+	r.readthroughLock.Lock()
+	defer r.readthroughLock.Unlock()
 
 	// check caches again in case there was an update while waiting
-	cachedNS, cachedErr = r.checkCachesByID(id)
-	if cachedNS != nil || cachedErr != nil {
-		return cachedNS, cachedErr
+	cacheHit, cacheErr = r.getNamespaceByID(id)
+	if cacheErr == nil {
+		return cacheHit, nil
+	}
+
+	// check readthrough cache
+	if cachedNotFound := r.readthroughNotFoundCache.Get(id.String()); cachedNotFound != nil {
+		return nil, serviceerror.NewNamespaceNotFound(id.String())
 	}
 
 	// readthrough to persistence layer and update readthrough cache if not found
@@ -559,33 +551,6 @@ func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
 	r.updateCachesSingleNamespace(ns)
 
 	return ns, nil
-}
-
-func (r *registry) checkCachesByID(id ID) (*Namespace, error) {
-	// check main caches
-	cacheHit, cacheErr := r.getNamespaceByID(id)
-	if cacheErr == nil {
-		return cacheHit, nil
-	}
-
-	// check readthrough error cache to prevent excessive requests to persistence layer
-	prevErr := r.getPreviousReadthroughError(id.String())
-	if prevErr != nil {
-		return nil, prevErr
-	}
-
-	// missed both caches, should readthrough
-	return nil, nil
-}
-
-func (r *registry) getPreviousReadthroughError(handle string) error {
-	r.readthroughCacheLock.RLock()
-	defer r.readthroughCacheLock.RUnlock()
-
-	if prevErr, ok := r.readthroughErrorsCache.Get(handle).(error); ok {
-		return prevErr
-	}
-	return nil
 }
 
 func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
@@ -613,12 +578,6 @@ func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
 	}
 }
 
-func (r *registry) updateReadthroughCache(identifier string, err error) {
-	r.readthroughCacheLock.Lock()
-	defer r.readthroughCacheLock.Unlock()
-	r.readthroughErrorsCache.Put(identifier, err)
-}
-
 func (r *registry) getNamespaceByNamePersistence(name Name) (*Namespace, error) {
 	request := &persistence.GetNamespaceRequest{
 		Name: name.String(),
@@ -626,12 +585,11 @@ func (r *registry) getNamespaceByNamePersistence(name Name) (*Namespace, error) 
 
 	ns, err := r.getNamespacePersistence(request)
 	if err != nil {
-		notFoundErr := serviceerror.NewNamespaceNotFound(name.String())
 		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
-			// TODO: we should cache and return the actual error we got (e.g. timeout)
-			r.updateReadthroughCache(name.String(), notFoundErr)
+			r.readthroughNotFoundCache.Put(name.String(), struct{}{})
 		}
-		return nil, notFoundErr
+		// TODO: we should return the actual error we got (e.g. timeout)
+		return nil, serviceerror.NewNamespaceNotFound(name.String())
 	}
 	return ns, nil
 }
@@ -643,12 +601,11 @@ func (r *registry) getNamespaceByIDPersistence(id ID) (*Namespace, error) {
 
 	ns, err := r.getNamespacePersistence(request)
 	if err != nil {
-		notFoundErr := serviceerror.NewNamespaceNotFound(id.String())
 		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
-			// TODO: we should cache and return the actual error we got (e.g. timeout)
-			r.updateReadthroughCache(id.String(), notFoundErr)
+			r.readthroughNotFoundCache.Put(id.String(), struct{}{})
 		}
-		return nil, notFoundErr
+		// TODO: we should return the actual error we got (e.g. timeout)
+		return nil, serviceerror.NewNamespaceNotFound(id.String())
 	}
 	return ns, nil
 }
