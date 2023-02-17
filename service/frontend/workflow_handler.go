@@ -188,7 +188,7 @@ func NewWorkflowHandler(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
 			visibilityMrg.GetIndexName(),
-			visibility.AllowListForValidation(visibilityMrg.GetName()),
+			visibility.AllowListForValidation(visibilityMrg.GetStoreNames()),
 		),
 		archivalMetadata:  archivalMetadata,
 		healthServer:      healthServer,
@@ -2850,7 +2850,7 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 		ClusterName:       metadata.ClusterName,
 		HistoryShardCount: metadata.HistoryShardCount,
 		PersistenceStore:  wh.persistenceExecutionManager.GetName(),
-		VisibilityStore:   wh.visibilityMrg.GetName(),
+		VisibilityStore:   strings.Join(wh.visibilityMrg.GetStoreNames(), ","),
 	}, nil
 }
 

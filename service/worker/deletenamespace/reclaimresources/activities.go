@@ -66,8 +66,8 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, error) {
-	switch a.visibilityManager.GetName() {
+func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context, nsName namespace.Name) (bool, error) {
+	switch a.visibilityManager.GetReadStoreName(nsName) {
 	case elasticsearch.PersistenceName, mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 		return true, nil
 	default:

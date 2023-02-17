@@ -194,7 +194,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 	// register the search attributes in the cluster metadata if ES is up or if
 	// `skip-schema-update` is set. This is for backward compatibility using
 	// standard visibility.
-	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
+	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
 		err = h.addSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
 		if err != nil {
 			if _, isWorkflowErr := err.(*serviceerror.SystemWorkflow); isWorkflowErr {
@@ -352,7 +352,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(
 	// register the search attributes in the cluster metadata if ES is up or if
 	// `skip-schema-update` is set. This is for backward compatibility using
 	// standard visibility.
-	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
+	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
 		err = h.removeSearchAttributesElasticsearch(ctx, request, indexName)
 	} else {
 		err = h.removeSearchAttributesSQL(ctx, request)
@@ -457,7 +457,7 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 	// register the search attributes in the cluster metadata if ES is up or if
 	// `skip-schema-update` is set. This is for backward compatibility using
 	// standard visibility.
-	if h.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
+	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
 		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
 	}
 	return h.listSearchAttributesSQL(request, searchAttributes)

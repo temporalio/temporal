@@ -36,6 +36,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 )
@@ -72,8 +73,16 @@ func (p *visibilityManagerImpl) Close() {
 	p.store.Close()
 }
 
-func (p *visibilityManagerImpl) GetName() string {
+func (p *visibilityManagerImpl) GetReadStoreName(_ namespace.Name) string {
 	return p.store.GetName()
+}
+
+func (p *visibilityManagerImpl) GetStoreNames() []string {
+	return []string{p.store.GetName()}
+}
+
+func (p *visibilityManagerImpl) HasStoreName(stName string) bool {
+	return p.store.GetName() == stName
 }
 
 func (p *visibilityManagerImpl) GetIndexName() string {
