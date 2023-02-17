@@ -229,7 +229,7 @@ func (c *pgQueryConverter) buildSelectStmt(
 	queryArgs = append(queryArgs, namespaceID.String())
 
 	if len(queryString) > 0 {
-		whereClauses = append(whereClauses, fmt.Sprintf("(%s)", queryString))
+		whereClauses = append(whereClauses, queryString)
 	}
 
 	if token != nil {
@@ -286,7 +286,7 @@ func (c *pgQueryConverter) buildCountStmt(
 	queryArgs = append(queryArgs, namespaceID.String())
 
 	if len(queryString) > 0 {
-		whereClauses = append(whereClauses, fmt.Sprintf("(%s)", queryString))
+		whereClauses = append(whereClauses, queryString)
 	}
 
 	return fmt.Sprintf(

@@ -125,7 +125,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_EmptyIndexName() {
 		},
 	}
 
-	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 	for _, testCase := range testCases1 {
 		s.T().Run(testCase.Name, func(t *testing.T) {
@@ -197,7 +197,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_NonEmptyIndexName() {
 	}
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	for _, testCase := range testCases {
@@ -255,7 +255,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_EmptyIndexName() {
 	handler := s.handler
 	ctx := context.Background()
 
-	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 	resp, err := handler.ListSearchAttributes(ctx, nil)
 	s.Error(err)
@@ -276,7 +276,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_NonEmptyIndexName() {
 	ctx := context.Background()
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil)
@@ -313,7 +313,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_EmptyIndexName() {
 		},
 	}
 
-	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 	for _, testCase := range testCases1 {
 		s.T().Run(testCase.Name, func(t *testing.T) {
@@ -385,7 +385,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_NonEmptyIndexName() {
 	}
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	s.mockResource.VisibilityManager.EXPECT().GetName().Return(elasticsearch.PersistenceName).AnyTimes()
+	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	for _, testCase := range testCases {

@@ -102,6 +102,7 @@ func Invoke(
 			AutoResetPoints:      executionInfo.AutoResetPoints,
 			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,
+			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
 		},
 	}
 

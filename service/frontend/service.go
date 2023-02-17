@@ -231,7 +231,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		DeleteNamespacePageSize:                             dc.GetIntProperty(dynamicconfig.DeleteNamespacePageSize, 1000),
 		DeleteNamespacePagesPerExecution:                    dc.GetIntProperty(dynamicconfig.DeleteNamespacePagesPerExecution, 256),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dc.GetIntProperty(dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities, 4),
-		DeleteNamespaceNamespaceDeleteDelay:                 dc.GetDurationProperty(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, 0),
+		DeleteNamespaceNamespaceDeleteDelay:                 dc.GetDurationProperty(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, 0*time.Hour),
 
 		EnableSchedules: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableSchedules, true),
 

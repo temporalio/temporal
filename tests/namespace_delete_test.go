@@ -43,9 +43,11 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -186,24 +188,28 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	nsID := descResp.GetNamespaceInfo().GetId()
 
 	// Start few workflow executions.
+	var executions []*commonpb.WorkflowExecution
 	for i := 0; i < 100; i++ {
-		_, err = s.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		wid := "wf_id_" + strconv.Itoa(i)
+		resp, err := s.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    "ns_name_los_angeles",
-			WorkflowId:   "wf_id_" + strconv.Itoa(i),
+			WorkflowId:   wid,
 			WorkflowType: &commonpb.WorkflowType{Name: "workflowTypeName"},
 			TaskQueue:    &taskqueuepb.TaskQueue{Name: "taskQueueName"},
 		})
 		s.NoError(err)
+		executions = append(executions, &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      resp.GetRunId(),
+		})
 	}
 
 	// Terminate some workflow executions.
-	for i := 0; i < 30; i++ {
+	for _, execution := range executions[:30] {
 		_, err = s.frontendClient.TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace: "ns_name_los_angeles",
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: "wf_id_" + strconv.Itoa(i),
-			},
+			Namespace:         "ns_name_los_angeles",
+			WorkflowExecution: execution,
 		})
 		s.NoError(err)
 	}
@@ -220,37 +226,123 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
 
-	namespaceExistsOp := func() error {
+	s.Eventually(func() bool {
 		_, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
-		if errors.As(err, &notFound) {
-			_, err0 := s.frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		if !errors.As(err, &notFound) {
+			return false // namespace still exists
+		}
+
+		for _, execution := range executions {
+			_, err = s.frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: "ns_name_los_angeles",
 				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: "wf_id_0",
+					WorkflowId: execution.GetWorkflowId(),
 				},
 			})
-			_, err99 := s.frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: "ns_name_los_angeles",
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: "wf_id_99",
-				},
-			})
-			if errors.As(err0, &notFound) && errors.As(err99, &notFound) {
-				return nil
+			if !errors.As(err, &notFound) {
+				return false // should never happen
 			}
 		}
-		return errors.New("namespace still exists")
+		return true
+	}, 20*time.Second, time.Second)
+}
+
+func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
+	defer cancel()
+
+	retention := 24 * time.Hour
+	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        "ns_name_los_angeles",
+		Description:                      "Namespace to delete",
+		WorkflowExecutionRetentionPeriod: &retention,
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
+		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
+	})
+	s.NoError(err)
+	// DescribeNamespace reads directly from database but namespace validator uses cache.
+	s.cluster.RefreshNamespaceCache()
+
+	descResp, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: "ns_name_los_angeles",
+	})
+	s.NoError(err)
+	nsID := descResp.GetNamespaceInfo().GetId()
+
+	// Start few workflow executions.
+
+	var executions []*commonpb.WorkflowExecution
+	for i := 0; i < 10; i++ {
+		wid := "wf_id_" + strconv.Itoa(i)
+		resp, err := s.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:    uuid.New(),
+			Namespace:    "ns_name_los_angeles",
+			WorkflowId:   wid,
+			WorkflowType: &commonpb.WorkflowType{Name: "workflowTypeName"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "taskQueueName"},
+		})
+		s.NoError(err)
+		executions = append(executions, &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      resp.GetRunId(),
+		})
 	}
 
-	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second).
-		WithBackoffCoefficient(1).
-		WithExpirationInterval(30 * time.Second)
+	// Delete some workflow executions from DB but not from visibility.
+	// Every subsequent delete (from deleteexecutions.Workflow) from ES will take at least 1s due to bulk processor.
+	for _, execution := range executions[0:5] {
+		shardID := common.WorkflowIDToHistoryShard(
+			nsID,
+			execution.GetWorkflowId(),
+			s.clusterConfig.HistoryConfig.NumHistoryShards,
+		)
 
-	err = backoff.ThrottleRetry(namespaceExistsOp, namespaceExistsPolicy, func(_ error) bool { return true })
+		err = s.cluster.GetExecutionManager().DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
+			ShardID:     shardID,
+			NamespaceID: nsID,
+			WorkflowID:  execution.GetWorkflowId(),
+			RunID:       execution.GetRunId(),
+		})
+		s.NoError(err)
+	}
+
+	delResp, err := s.operatorClient.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace: "ns_name_los_angeles",
+	})
 	s.NoError(err)
+	s.Equal("ns_name_los_angeles-deleted-"+nsID[:5], delResp.GetDeletedNamespace())
+
+	descResp2, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Id: nsID,
+	})
+	s.NoError(err)
+	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
+
+	s.Eventually(func() bool {
+		_, err := s.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Id: nsID,
+		})
+		var notFound *serviceerror.NamespaceNotFound
+		if !errors.As(err, &notFound) {
+			return false // namespace still exists
+		}
+
+		for _, execution := range executions {
+			_, err = s.frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: "ns_name_los_angeles",
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: execution.GetWorkflowId(),
+				},
+			})
+			if !errors.As(err, &notFound) {
+				return false // should never happen
+			}
+		}
+		return true
+	}, 20*time.Second, time.Second)
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_CrossNamespaceChild() {

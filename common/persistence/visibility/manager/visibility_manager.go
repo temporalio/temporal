@@ -43,7 +43,9 @@ type (
 	// VisibilityManager is used to manage the visibility store
 	VisibilityManager interface {
 		persistence.Closeable
-		GetName() string
+		GetReadStoreName(nsName namespace.Name) string
+		GetStoreNames() []string
+		HasStoreName(stName string) bool
 		GetIndexName() string
 
 		// Write APIs.
