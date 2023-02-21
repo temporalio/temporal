@@ -466,8 +466,8 @@ func (c *QueryConverter) convertValueExpr(
 		return nil
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
-		for _, subExpr := range e {
-			err := c.convertValueExpr(&subExpr, saName, saType)
+		for i := range e {
+			err := c.convertValueExpr(&e[i], saName, saType)
 			if err != nil {
 				return err
 			}
