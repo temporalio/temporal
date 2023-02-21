@@ -51,7 +51,8 @@ import (
 )
 
 const (
-	clusterCallbackKey = "%s-%d" // <cluster name>-<polling shard id>
+	clusterCallbackKey   = "%s-%d" // <cluster name>-<polling shard id>
+	dlqSizeCheckInterval = time.Minute * 5
 )
 
 type (
@@ -134,6 +135,7 @@ func (r *taskProcessorManagerImpl) Start() {
 	// Listen to cluster metadata and dynamically update replication processor for remote clusters.
 	r.listenToClusterMetadataChange()
 	go r.completeReplicationTaskLoop()
+	go r.checkReplicationDLQEmptyLoop()
 }
 
 func (r *taskProcessorManagerImpl) Stop() {
@@ -238,6 +240,17 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 	}
 }
 
+func (r *taskProcessorManagerImpl) checkReplicationDLQEmptyLoop() {
+	for {
+		select {
+		case <-time.After(backoff.FullJitter(dlqSizeCheckInterval)):
+			r.checkReplicationDLQSize()
+		case <-r.shutdownChan:
+			return
+		}
+	}
+}
+
 func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	clusterMetadata := r.shard.GetClusterMetadata()
 	currentCluster := clusterMetadata.GetCurrentClusterName()
@@ -288,4 +301,22 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 		r.minTxAckedTaskID = *minAckedTaskID
 	}
 	return err
+}
+
+func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	defer cancel()
+	isEmpty, err := r.shard.GetExecutionManager().IsReplicationDLQEmpty(ctx, &persistence.GetReplicationTasksFromDLQRequest{
+		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
+			ShardID: r.shard.GetShardID(),
+		},
+	})
+	if err != nil {
+		r.logger.Error("Failed to check replication DLQ size.", tag.Error(err))
+		return
+	}
+	if isEmpty {
+		r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
+	}
 }
