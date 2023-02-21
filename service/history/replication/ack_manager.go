@@ -241,8 +241,8 @@ func (p *ackMgrImpl) GetTasks(
 		float64(maxTaskID-lastTaskID),
 		metrics.TargetClusterTag(pollingCluster))
 
-	p.metricsHandler.Gauge(metrics.ReplicationTasksReturned.GetMetricName()).
-		Record(float64(len(replicationTasks)))
+	p.metricsHandler.Counter(metrics.ReplicationTasksFetched.GetMetricName()).Record(int64(len(replicationTasks)))
+	p.metricsHandler.Counter(metrics.ReplicationTasksReturned.GetMetricName()).Record(int64(len(replicationTasks)))
 
 	replicationEventTime := timestamp.TimePtr(p.shard.GetTimeSource().Now())
 	if len(replicationTasks) > 0 {
