@@ -237,13 +237,11 @@ func (p *ackMgrImpl) GetTasks(
 	}
 
 	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
-	p.metricsHandler.Gauge(metrics.ReplicationTasksLag.GetMetricName()).Record(
-		float64(maxTaskID-lastTaskID),
+	p.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
+		maxTaskID-lastTaskID,
 		metrics.TargetClusterTag(pollingCluster))
 
-	p.metricsHandler.Counter(metrics.ReplicationTasksFetched.GetMetricName()).Record(int64(len(replicationTasks)))
 	p.metricsHandler.Counter(metrics.ReplicationTasksReturned.GetMetricName()).Record(int64(len(replicationTasks)))
-
 	replicationEventTime := timestamp.TimePtr(p.shard.GetTimeSource().Now())
 	if len(replicationTasks) > 0 {
 		replicationEventTime = replicationTasks[len(replicationTasks)-1].GetVisibilityTime()

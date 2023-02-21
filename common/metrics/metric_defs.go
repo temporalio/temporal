@@ -1439,7 +1439,6 @@ var (
 	ReplicationTasksFailed                         = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksLag                            = NewTimerDef("replication_tasks_lag")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
-	ReplicationTasksFetched                        = NewTimerDef("replication_tasks_fetched")
 	ReplicationTasksReturned                       = NewTimerDef("replication_tasks_returned")
 	ReplicationTasksAppliedLatency                 = NewTimerDef("replication_tasks_applied_latency")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
