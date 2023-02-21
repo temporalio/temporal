@@ -452,11 +452,6 @@ type (
 		ExclusiveMaxTaskKey tasks.Key
 	}
 
-	IsQueueEmptyRequest struct {
-		ShardID      int32
-		TaskCategory tasks.Category
-	}
-
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
 	GetReplicationTasksRequest struct {
 		ShardID       int32
