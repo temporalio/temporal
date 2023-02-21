@@ -477,6 +477,18 @@ func (p *executionPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
 	return p.persistence.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 }
 
+func (p *executionPersistenceClient) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *GetReplicationTasksFromDLQRequest,
+) (_ bool, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetReplicationTasksFromDLQScope, caller, startTime, retErr)
+	}()
+	return p.persistence.IsReplicationDLQEmpty(ctx, request)
+}
+
 func (p *executionPersistenceClient) Close() {
 	p.persistence.Close()
 }

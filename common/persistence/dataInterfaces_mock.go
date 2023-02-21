@@ -475,6 +475,21 @@ func (mr *MockExecutionManagerMockRecorder) GetWorkflowExecution(ctx, request in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).GetWorkflowExecution), ctx, request)
 }
 
+// IsReplicationDLQEmpty mocks base method.
+func (m *MockExecutionManager) IsReplicationDLQEmpty(ctx context.Context, request *GetReplicationTasksFromDLQRequest) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsReplicationDLQEmpty", ctx, request)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsReplicationDLQEmpty indicates an expected call of IsReplicationDLQEmpty.
+func (mr *MockExecutionManagerMockRecorder) IsReplicationDLQEmpty(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsReplicationDLQEmpty", reflect.TypeOf((*MockExecutionManager)(nil).IsReplicationDLQEmpty), ctx, request)
+}
+
 // ListConcreteExecutions mocks base method.
 func (m *MockExecutionManager) ListConcreteExecutions(ctx context.Context, request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error) {
 	m.ctrl.T.Helper()

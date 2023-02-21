@@ -630,6 +630,16 @@ func (e *FaultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 	return e.baseExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 }
 
+func (e *FaultInjectionExecutionStore) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *persistence.GetReplicationTasksFromDLQRequest,
+) (bool, error) {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return true, err
+	}
+	return e.baseExecutionStore.IsReplicationDLQEmpty(ctx, request)
+}
+
 func (e *FaultInjectionExecutionStore) AppendHistoryNodes(
 	ctx context.Context,
 	request *persistence.InternalAppendHistoryNodesRequest,

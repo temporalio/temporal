@@ -28,6 +28,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -886,6 +887,23 @@ func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 		return err
 	}
 	return nil
+}
+
+func (m *sqlExecutionStore) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *p.GetReplicationTasksFromDLQRequest,
+) (bool, error) {
+	res, err := m.Db.SelectFromReplicationDLQTasksByShardID(ctx, sqlplugin.ReplicationDLQTasksFilter{
+		ShardID: request.ShardID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// The queue is empty
+			return true, nil
+		}
+		return false, err
+	}
+	return len(res) == 0, nil
 }
 
 func (m *sqlExecutionStore) getVisibilityTask(

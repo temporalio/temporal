@@ -1536,6 +1536,7 @@ var (
 	ReplicationDLQFailed                              = NewCounterDef("replication_dlq_enqueue_failed")
 	ReplicationDLQMaxLevelGauge                       = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                       = NewGaugeDef("replication_dlq_ack_level")
+	ReplicationNonEmptyDLQCount                       = NewCounterDef("replication_non_empty_dlq")
 	GetReplicationMessagesForShardLatency             = NewTimerDef("get_replication_messages_for_shard")
 	GetDLQReplicationMessagesLatency                  = NewTimerDef("get_dlq_replication_messages")
 	EventReapplySkippedCount                          = NewCounterDef("event_reapply_skipped_count")

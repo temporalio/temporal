@@ -28,6 +28,7 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+
 	"go.temporal.io/server/common/backoff"
 )
 
@@ -439,6 +440,21 @@ func (p *executionRetryablePersistenceClient) RangeDeleteReplicationTaskFromDLQ(
 	}
 
 	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+}
+
+func (p *executionRetryablePersistenceClient) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *GetReplicationTasksFromDLQRequest,
+) (bool, error) {
+	var isEmpty bool
+	op := func(ctx context.Context) error {
+		var err error
+		isEmpty, err = p.persistence.IsReplicationDLQEmpty(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return isEmpty, err
 }
 
 // AppendHistoryNodes add a node to history node table

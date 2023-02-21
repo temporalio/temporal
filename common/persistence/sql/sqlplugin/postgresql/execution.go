@@ -155,6 +155,8 @@ shard_id = $2 AND
 task_id >= $3 AND
 task_id < $4
 ORDER BY task_id LIMIT $5`
+	getOneReplicationTaskDLQQuery = `SELECT task_id FROM replication_tasks_dlq WHERE
+shard_id = $1 LIMIT 1`
 
 	createVisibilityTasksQuery = `INSERT INTO visibility_tasks(shard_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :task_id, :data, :data_encoding)`
@@ -833,7 +835,7 @@ func (pdb *db) RangeDeleteFromReplicationTasks(
 	)
 }
 
-// InsertIntoReplicationTasksDLQ inserts one or more rows into replication_tasks_dlq table
+// InsertIntoReplicationDLQTasks inserts one or more rows into replication_tasks_dlq table
 func (pdb *db) InsertIntoReplicationDLQTasks(
 	ctx context.Context,
 	rows []sqlplugin.ReplicationDLQTasksRow,
@@ -844,7 +846,7 @@ func (pdb *db) InsertIntoReplicationDLQTasks(
 	)
 }
 
-// SelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
+// SelectFromReplicationDLQTasks reads one or more rows from replication_tasks_dlq table
 func (pdb *db) SelectFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksFilter,
@@ -859,7 +861,23 @@ func (pdb *db) SelectFromReplicationDLQTasks(
 	return rows, err
 }
 
-// RangeSelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
+// SelectFromReplicationDLQTasksByShardID reads one row from replication_tasks_dlq table by shard id
+func (pdb *db) SelectFromReplicationDLQTasksByShardID(
+	ctx context.Context,
+	filter sqlplugin.ReplicationDLQTasksFilter,
+) ([]sqlplugin.ReplicationDLQTasksRow, error) {
+
+	var rows []sqlplugin.ReplicationDLQTasksRow
+	err := pdb.conn.SelectContext(
+		ctx,
+		&rows,
+		getOneReplicationTaskDLQQuery,
+		filter.ShardID,
+	)
+	return rows, err
+}
+
+// RangeSelectFromReplicationDLQTasks reads one or more rows from replication_tasks_dlq table
 func (pdb *db) RangeSelectFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksRangeFilter,
@@ -876,7 +894,7 @@ func (pdb *db) RangeSelectFromReplicationDLQTasks(
 	return rows, err
 }
 
-// DeleteMessageFromReplicationTasksDLQ deletes one row from replication_tasks_dlq table
+// DeleteFromReplicationDLQTasks deletes one row from replication_tasks_dlq table
 func (pdb *db) DeleteFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksFilter,
@@ -890,7 +908,7 @@ func (pdb *db) DeleteFromReplicationDLQTasks(
 	)
 }
 
-// DeleteMessageFromReplicationTasksDLQ deletes one or more rows from replication_tasks_dlq table
+// RangeDeleteFromReplicationDLQTasks deletes one or more rows from replication_tasks_dlq table
 func (pdb *db) RangeDeleteFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksRangeFilter,

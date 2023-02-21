@@ -200,6 +200,9 @@ VALUES     (:source_cluster_name,
 		AND shard_id = ? 
 		AND task_id >= ?
 		AND task_id < ?`
+
+	getOneReplicationTaskDLQQuery = `SELECT task_id FROM replication_tasks_dlq WHERE 
+	shard_id = ? LIMIT 1`
 )
 
 // InsertIntoExecutions inserts a row into executions table
@@ -832,7 +835,7 @@ func (mdb *db) RangeDeleteFromReplicationTasks(
 	)
 }
 
-// InsertIntoReplicationTasksDLQ inserts one or more rows into replication_tasks_dlq table
+// InsertIntoReplicationDLQTasks inserts one or more rows into replication_tasks_dlq table
 func (mdb *db) InsertIntoReplicationDLQTasks(
 	ctx context.Context,
 	rows []sqlplugin.ReplicationDLQTasksRow,
@@ -843,7 +846,7 @@ func (mdb *db) InsertIntoReplicationDLQTasks(
 	)
 }
 
-// SelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
+// SelectFromReplicationDLQTasks reads one or more rows from replication_tasks_dlq table
 func (mdb *db) SelectFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksFilter,
@@ -858,7 +861,22 @@ func (mdb *db) SelectFromReplicationDLQTasks(
 	return rows, err
 }
 
-// RangeSelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
+// SelectFromReplicationDLQTasksByShardID reads one row from replication_tasks_dlq table by shard id
+func (mdb *db) SelectFromReplicationDLQTasksByShardID(
+	ctx context.Context,
+	filter sqlplugin.ReplicationDLQTasksFilter,
+) ([]sqlplugin.ReplicationDLQTasksRow, error) {
+
+	var rows []sqlplugin.ReplicationDLQTasksRow
+	err := mdb.conn.SelectContext(ctx,
+		&rows,
+		getOneReplicationTaskDLQQuery,
+		filter.ShardID,
+	)
+	return rows, err
+}
+
+// RangeSelectFromReplicationDLQTasks reads one or more rows from replication_tasks_dlq table
 func (mdb *db) RangeSelectFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksRangeFilter,
@@ -875,7 +893,7 @@ func (mdb *db) RangeSelectFromReplicationDLQTasks(
 	return rows, err
 }
 
-// DeleteMessageFromReplicationTasksDLQ deletes one row from replication_tasks_dlq table
+// DeleteFromReplicationDLQTasks deletes one row from replication_tasks_dlq table
 func (mdb *db) DeleteFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksFilter,
@@ -889,7 +907,7 @@ func (mdb *db) DeleteFromReplicationDLQTasks(
 	)
 }
 
-// DeleteMessageFromReplicationTasksDLQ deletes one or more rows from replication_tasks_dlq table
+// RangeDeleteFromReplicationDLQTasks deletes one or more rows from replication_tasks_dlq table
 func (mdb *db) RangeDeleteFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksRangeFilter,

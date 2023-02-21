@@ -153,6 +153,13 @@ const (
 		`and task_id >= ? ` +
 		`and task_id < ?`
 
+	templateIsQueueEmptyQuery = `SELECT task_id ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`limit 1`
+
 	templateCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -763,6 +770,26 @@ func (d *MutableStateTaskStore) RangeDeleteReplicationTaskFromDLQ(
 
 	err := query.Exec()
 	return gocql.ConvertError("RangeDeleteReplicationTaskFromDLQ", err)
+}
+
+func (d *MutableStateTaskStore) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *p.GetReplicationTasksFromDLQRequest,
+) (bool, error) {
+
+	query := d.Session.Query(templateIsQueueEmptyQuery,
+		request.ShardID,
+		rowTypeDLQ,
+		rowTypeDLQNamespaceID,
+	).WithContext(ctx)
+
+	if err := query.Scan(nil); err != nil {
+		if gocql.IsNotFoundError(err) {
+			return true, nil
+		}
+		return true, gocql.ConvertError("IsReplicationDLQEmpty", err)
+	}
+	return false, nil
 }
 
 func (d *MutableStateTaskStore) getVisibilityTask(
