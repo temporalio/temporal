@@ -823,7 +823,7 @@ func (p *executionPersistenceClient) ReadRawHistoryBranch(
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
 	defer func() {
-		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, startTime, retErr)
+		p.recordRequestMetrics(metrics.PersistenceReadRawHistoryBranchScope, caller, startTime, retErr)
 	}()
 	return p.persistence.ReadRawHistoryBranch(ctx, request)
 }

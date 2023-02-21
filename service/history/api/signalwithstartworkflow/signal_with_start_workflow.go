@@ -86,6 +86,7 @@ func startAndSignalWorkflow(
 ) (string, error) {
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
+	// TODO(bergundy): Support eager workflow task
 	newWorkflowContext, err := api.NewWorkflowWithSignal(
 		ctx,
 		shard,

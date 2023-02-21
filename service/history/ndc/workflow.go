@@ -238,8 +238,7 @@ func (r *WorkflowImpl) failWorkflowTask(
 	}
 
 	if _, err := r.mutableState.AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

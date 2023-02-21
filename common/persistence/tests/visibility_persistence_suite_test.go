@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -56,9 +57,12 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		controller *gomock.Controller
 
 		persistencetests.TestBase
-		VisibilityMgr manager.VisibilityManager
+		VisibilityMgr                  manager.VisibilityManager
+		SearchAttributesProvider       searchattribute.Provider
+		SearchAttributesMapperProvider searchattribute.MapperProvider
 
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -71,13 +75,19 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 	cfg := s.DefaultTestCluster.Config()
 
 	var err error
+	s.controller = gomock.NewController(s.T())
+	s.SearchAttributesProvider = searchattribute.NewTestProvider()
+	s.SearchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
 	s.VisibilityMgr, err = visibility.NewStandardManager(
 		cfg,
 		resolver.NewNoopResolver(),
+		s.SearchAttributesProvider,
+		s.SearchAttributesMapperProvider,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
 		metrics.NoopMetricsHandler,
-		s.Logger)
+		s.Logger,
+	)
 
 	if err != nil {
 		// s.NoError doesn't work here.

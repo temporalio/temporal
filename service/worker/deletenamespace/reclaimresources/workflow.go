@@ -158,7 +158,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	var isAdvancedVisibility bool
-	err := workflow.ExecuteLocalActivity(ctx1, a.IsAdvancedVisibilityActivity).Get(ctx, &isAdvancedVisibility)
+	err := workflow.ExecuteLocalActivity(ctx1, a.IsAdvancedVisibilityActivity, params.Namespace).Get(ctx, &isAdvancedVisibility)
 	if err != nil {
 		return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}

@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -85,16 +86,18 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 		2: 2,
 		3: 1,
 	}
-	s.channelWeightUpdateCh = make(chan struct{})
+	s.channelWeightUpdateCh = make(chan struct{}, 1)
 	logger := log.NewTestLogger()
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
-			TaskChannelKeyFn:      func(task *testTask) int { return task.channelKey },
-			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
-			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
-			ChannelQuotaRequestFn: func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", "") },
-			EnableRateLimiter:     dynamicconfig.GetBoolPropertyFn(true),
+			TaskChannelKeyFn:            func(task *testTask) int { return task.channelKey },
+			ChannelWeightFn:             func(key int) int { return s.channelKeyToWeight[key] },
+			ChannelWeightUpdateCh:       s.channelWeightUpdateCh,
+			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", "") },
+			TaskChannelMetricTagsFn:     func(key int) []metrics.Tag { return nil },
+			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
+			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(false),
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
 		quotas.NewRequestRateLimiterAdapter(
@@ -104,6 +107,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 		),
 		clock.NewRealTimeSource(),
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 }
 
@@ -374,15 +378,32 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
 		2: 1,
 		3: 1,
 	}
+	totalWeight := 0
+	for _, weight := range s.channelKeyToWeight {
+		totalWeight += weight
+	}
 	s.channelWeightUpdateCh <- struct{}{}
 
-	taskWG.Add(1)
-	s.scheduler.Submit(mockTask0)
-	taskWG.Wait()
+	// we don't know when the weight update signal will be picked up
+	// so need to retry a few times here.
+	for i := 0; i != 10; i++ {
+		// submit a task may or may not trigger a new round of dispatch loop
+		// which updates weight
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask0)
+		taskWG.Wait()
 
-	channelWeights = []int{}
-	for _, channel := range s.scheduler.channels().flattenedChannels {
-		channelWeights = append(channelWeights, channel.Weight())
+		flattenedChannels := s.scheduler.channels().flattenedChannels
+		if len(flattenedChannels) != totalWeight {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+
+		channelWeights = []int{}
+		for _, channel := range flattenedChannels {
+			channelWeights = append(channelWeights, channel.Weight())
+		}
+
 	}
 	s.Equal([]int{8, 8, 8, 8, 5, 8, 5, 8, 5, 8, 5, 8, 5, 1, 1}, channelWeights)
 }

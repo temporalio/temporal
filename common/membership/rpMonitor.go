@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/primitives"
 
@@ -69,6 +70,7 @@ type ringpopMonitor struct {
 	metadataManager           persistence.ClusterMetadataManager
 	broadcastHostPortResolver func() (string, error)
 	hostID                    uuid.UUID
+	initialized               *future.FutureImpl[struct{}]
 }
 
 var _ Monitor = (*ringpopMonitor)(nil)
@@ -103,6 +105,7 @@ func NewRingpopMonitor(
 		metadataManager:           metadataManager,
 		broadcastHostPortResolver: broadcastHostPortResolver,
 		hostID:                    uuid.NewUUID(),
+		initialized:               future.NewFuture[struct{}](),
 	}
 	for service, port := range services {
 		rpo.rings[service] = newRingpopServiceResolver(service, port, rp, logger)
@@ -152,6 +155,13 @@ func (rpo *ringpopMonitor) Start() {
 	for _, ring := range rpo.rings {
 		ring.Start()
 	}
+
+	rpo.initialized.Set(struct{}{}, nil)
+}
+
+func (rpo *ringpopMonitor) WaitUntilInitialized(ctx context.Context) error {
+	_, err := rpo.initialized.Get(ctx)
+	return err
 }
 
 func ServiceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.ServiceType, error) {

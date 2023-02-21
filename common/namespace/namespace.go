@@ -25,14 +25,18 @@
 package namespace
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/exp/maps"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -67,6 +71,13 @@ type (
 		isGlobalNamespace           bool
 		failoverNotificationVersion int64
 		notificationVersion         int64
+
+		customSearchAttributesMapper CustomSearchAttributesMapper
+	}
+
+	CustomSearchAttributesMapper struct {
+		fieldToAlias map[string]string
+		aliasToField map[string]string
 	}
 )
 
@@ -89,6 +100,10 @@ func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
 		isGlobalNamespace:           record.IsGlobalNamespace,
 		failoverNotificationVersion: record.Namespace.FailoverNotificationVersion,
 		notificationVersion:         record.NotificationVersion,
+		customSearchAttributesMapper: CustomSearchAttributesMapper{
+			fieldToAlias: record.Namespace.Config.CustomSearchAttributeAliases,
+			aliasToField: util.InverseMap(record.Namespace.Config.CustomSearchAttributeAliases),
+		},
 	}
 }
 
@@ -250,6 +265,10 @@ func (ns *Namespace) Retention() time.Duration {
 	return *ns.config.Retention
 }
 
+func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper {
+	return ns.customSearchAttributesMapper
+}
+
 // Error returns the reason associated with this bad binary.
 func (e BadBinaryError) Error() string {
 	return e.info.Reason
@@ -289,4 +308,28 @@ func (n Name) String() string {
 
 func (n Name) IsEmpty() bool {
 	return n == EmptyName
+}
+
+func (m *CustomSearchAttributesMapper) GetAlias(fieldName string, namespace string) (string, error) {
+	alias, ok := m.fieldToAlias[fieldName]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(
+			fmt.Sprintf("Namespace %s has no mapping defined for field name %s", namespace, fieldName),
+		)
+	}
+	return alias, nil
+}
+
+func (m *CustomSearchAttributesMapper) GetFieldName(alias string, namespace string) (string, error) {
+	fieldName, ok := m.aliasToField[alias]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(
+			fmt.Sprintf("Namespace %s has no mapping defined for search attribute %s", namespace, alias),
+		)
+	}
+	return fieldName, nil
+}
+
+func (m *CustomSearchAttributesMapper) FieldToAliasMap() map[string]string {
+	return maps.Clone(m.fieldToAlias)
 }

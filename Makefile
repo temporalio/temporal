@@ -264,7 +264,7 @@ clean-test-results:
 
 build-tests:
 	@printf $(COLOR) "Build tests..."
-	@go test -exec="true" -count=0 -tags=esintegration $(TEST_DIRS)
+	@go test -exec="true" -count=0 $(TEST_DIRS)
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
@@ -278,18 +278,18 @@ integration-test: clean-test-results
 
 functional-test: clean-test-results
 	@printf $(COLOR) "Run functional tests..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 functional-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 test: unit-test integration-test functional-test functional-with-fault-injection-test
@@ -361,6 +361,17 @@ install-schema-mysql: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) update-schema -d ./schema/mysql/v57/visibility/versioned
 
+install-schema-mysql8: temporal-sql-tool
+	@printf $(COLOR) "Install MySQL schema..."
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) update-schema -d ./schema/mysql/v8/temporal/versioned
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) drop  -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) update-schema -d ./schema/mysql/v8/visibility/versioned
+
 install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) drop -f
@@ -371,6 +382,17 @@ install-schema-postgresql: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) create
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v96/visibility/versioned
+
+install-schema-postgresql12: temporal-sql-tool
+	@printf $(COLOR) "Install Postgres schema..."
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) setup -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) update-schema -d ./schema/postgresql/v12/temporal/versioned
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v12/visibility/versioned
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
@@ -430,11 +452,17 @@ start-es: temporal-server
 start-mysql: temporal-server
 	./temporal-server --env development-mysql --allow-no-auth start
 
+start-mysql8: temporal-server
+	./temporal-server --env development-mysql8 --allow-no-auth start
+
 start-mysql-es: temporal-server
 	./temporal-server --env development-mysql-es --allow-no-auth start
 
 start-postgres: temporal-server
 	./temporal-server --env development-postgres --allow-no-auth start
+
+start-postgres12: temporal-server
+	./temporal-server --env development-postgres12 --allow-no-auth start
 
 start-sqlite: temporal-server
 	./temporal-server --env development-sqlite --allow-no-auth start

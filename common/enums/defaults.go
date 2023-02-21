@@ -69,3 +69,9 @@ func SetDefaultResetReapplyType(f *enumspb.ResetReapplyType) {
 		*f = enumspb.RESET_REAPPLY_TYPE_SIGNAL
 	}
 }
+
+func SetDefaultUpdateWorkflowExecutionLifecycleStage(f *enumspb.UpdateWorkflowExecutionLifecycleStage) {
+	if *f == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED {
+		*f = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
+	}
+}

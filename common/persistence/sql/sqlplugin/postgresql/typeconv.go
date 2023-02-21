@@ -45,7 +45,7 @@ func (c *converter) ToPostgreSQLDateTime(t time.Time) time.Time {
 	if t.IsZero() {
 		return minPostgreSQLDateTime
 	}
-	return t.UTC()
+	return t.UTC().Truncate(time.Microsecond)
 }
 
 // FromPostgreSQLDateTime converts postgresql datetime and returns go time

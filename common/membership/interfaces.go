@@ -27,6 +27,7 @@
 package membership
 
 import (
+	"context"
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
@@ -82,6 +83,11 @@ type (
 		// GetMemberCount returns the number of reachable members
 		// currently in this node's membership list for the given service
 		GetMemberCount(service primitives.ServiceName) (int, error)
+		// WaitUntilInitialized blocks until initialization is completed and returns the result
+		// of initialization. The current implementation does log.Fatal if it can't initialize,
+		// so currently this will never return non-nil, except for context cancel/timeout. A
+		// future implementation might return more errors.
+		WaitUntilInitialized(context.Context) error
 	}
 
 	// ServiceResolver provides membership information for a specific temporal service.

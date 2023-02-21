@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -250,6 +251,11 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 	workflowTask, ok := mutableState.GetPendingWorkflowTask()
 	if !ok {
 		return serviceerror.NewInternal("it could be a bug, cannot get pending workflow task")
+	}
+
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Do not generate tasks because speculative WT doesn't have any timer or transfer tasks associated with it.
+		return nil
 	}
 
 	// workflowTask already started

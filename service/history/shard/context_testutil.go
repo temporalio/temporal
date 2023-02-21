@@ -107,7 +107,7 @@ func NewTestContext(
 		persistenceShardManager: resourceTest.GetShardManager(),
 		clientBean:              resourceTest.GetClientBean(),
 		saProvider:              resourceTest.GetSearchAttributesProvider(),
-		saMapper:                resourceTest.GetSearchAttributesMapper(),
+		saMapperProvider:        resourceTest.GetSearchAttributesMapperProvider(),
 		historyClient:           resourceTest.GetHistoryClient(),
 		archivalMetadata:        resourceTest.GetArchivalMetadata(),
 		hostInfoProvider:        hostInfoProvider,

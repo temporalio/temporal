@@ -57,12 +57,12 @@ type (
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		*require.Assertions
-		controller                 *gomock.Controller
-		visibilityStore            *visibilityStore
-		mockESClient               *client.MockClient
-		mockProcessor              *MockProcessor
-		mockMetricsHandler         *metrics.MockHandler
-		mockSearchAttributesMapper *searchattribute.MockMapper
+		controller                         *gomock.Controller
+		visibilityStore                    *visibilityStore
+		mockESClient                       *client.MockClient
+		mockProcessor                      *MockProcessor
+		mockMetricsHandler                 *metrics.MockHandler
+		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
 	}
 )
 
@@ -126,12 +126,12 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
-	s.mockSearchAttributesMapper = searchattribute.NewMockMapper(s.controller)
+	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
 	s.visibilityStore = NewVisibilityStore(
 		s.mockESClient,
 		testIndex,
 		searchattribute.NewTestProvider(),
-		nil,
+		searchattribute.NewTestMapperProvider(nil),
 		s.mockProcessor,
 		esProcessorAckTimeout,
 		visibilityDisableOrderByClause,
@@ -649,15 +649,10 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 }
 
 func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
-	s.mockSearchAttributesMapper.EXPECT().GetFieldName(gomock.Any(), testNamespace.String()).DoAndReturn(
-		func(alias string, namespace string) (string, error) {
-			if strings.HasPrefix(alias, "AliasFor") {
-				return strings.TrimPrefix(alias, "AliasFor"), nil
-			}
-			return "", serviceerror.NewInvalidArgument("mapper error")
-		}).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
+		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
 
-	s.visibilityStore.searchAttributesMapper = s.mockSearchAttributesMapper
+	s.visibilityStore.searchAttributesMapperProvider = s.mockSearchAttributesMapperProvider
 
 	query := `WorkflowId = 'wid'`
 	qry, srt, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
@@ -707,16 +702,14 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert 'order by' column name: invalid search attribute: AliasForUnknownField")
-	s.visibilityStore.searchAttributesMapper = nil
+	s.visibilityStore.searchAttributesMapperProvider = nil
 }
 
 func (s *ESVisibilitySuite) Test_convertQuery_Mapper_Error() {
-	s.mockSearchAttributesMapper.EXPECT().GetFieldName(gomock.Any(), testNamespace.String()).DoAndReturn(
-		func(fieldName string, namespace string) (string, error) {
-			return "", serviceerror.NewInvalidArgument("mapper error")
-		}).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
+		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
 
-	s.visibilityStore.searchAttributesMapper = s.mockSearchAttributesMapper
+	s.visibilityStore.searchAttributesMapperProvider = s.mockSearchAttributesMapperProvider
 
 	query := `WorkflowId = 'wid'`
 	qry, srt, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
@@ -743,7 +736,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper_Error() {
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")
 
-	s.visibilityStore.searchAttributesMapper = nil
+	s.visibilityStore.searchAttributesMapperProvider = nil
 }
 
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
@@ -752,7 +745,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		Hits: &elastic.SearchHits{
 			TotalHits: &elastic.TotalHits{},
 		}}
-	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, 1, nil)
+	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, 1)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(0, len(resp.Executions))
@@ -775,14 +768,14 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	}
 	searchResult.Hits.Hits = []*elastic.SearchHit{searchHit}
 	searchResult.Hits.TotalHits.Value = 1
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, 1, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, 1)
 	s.NoError(err)
 	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{SearchAfter: []interface{}{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"}})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for last page hits
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, 2, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, 2)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(1, len(resp.Executions))
@@ -793,7 +786,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		searchResult.Hits.Hits = append(searchResult.Hits.Hits, searchHit)
 	}
 	numOfHits := len(searchResult.Hits.Hits)
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits)
 	s.NoError(err)
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
@@ -803,7 +796,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(int64(1547596872371234567), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.SearchAfter[1])
 	// for last page
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(numOfHits, len(resp.Executions))
@@ -927,7 +920,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
-	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap)
+	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap, true)
 	s.NoError(err)
 
 	s.Len(customSearchAttributes, 7)
@@ -966,12 +959,10 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
           "CustomIntField": [111,222],
           "CustomBoolField": true,
           "UnknownField": "random"}`)
-	s.visibilityStore.searchAttributesMapper = s.mockSearchAttributesMapper
+	s.visibilityStore.searchAttributesMapperProvider = s.mockSearchAttributesMapperProvider
 
-	s.mockSearchAttributesMapper.EXPECT().GetAlias(gomock.Any(), testNamespace.String()).DoAndReturn(
-		func(fieldName string, namespace string) (string, error) {
-			return "AliasOf" + fieldName, nil
-		}).Times(6)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
+		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
 
 	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.NoError(err)
@@ -979,24 +970,16 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 
 	s.Len(info.SearchAttributes.GetIndexedFields(), 7)
 	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalChangeVersion")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomKeywordField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomTextField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomDatetimeField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomDoubleField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomBoolField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomIntField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomKeywordField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomTextField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomDatetimeField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomDoubleField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomBoolField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasForCustomIntField")
 	s.NotContains(info.SearchAttributes.GetIndexedFields(), "UnknownField")
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
 
-	s.mockSearchAttributesMapper.EXPECT().GetAlias(gomock.Any(), testNamespace.String()).DoAndReturn(
-		func(fieldName string, namespace string) (string, error) {
-			return "", serviceerror.NewUnavailable("error")
-		})
-	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
-	s.Error(err)
-	s.Nil(info)
-
-	s.visibilityStore.searchAttributesMapper = nil
+	s.visibilityStore.searchAttributesMapperProvider = nil
 }
 
 func (s *ESVisibilitySuite) TestListWorkflowExecutions() {

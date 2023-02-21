@@ -57,7 +57,7 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap
 		if typeMap != nil {
 			saType, _ = typeMap.getType(saName, customCategory|predefinedCategory)
 		}
-		saValue, err := DecodeValue(saPayload, saType)
+		saValue, err := DecodeValue(saPayload, saType, true)
 		if err != nil {
 			// If DecodeValue failed, save error and use raw JSON from Data field.
 			result[saName] = string(saPayload.GetData())
@@ -159,7 +159,9 @@ func parseValueTyped(valStr string, t enumspb.IndexedValueType) (interface{}, er
 	var err error
 
 	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+	case enumspb.INDEXED_VALUE_TYPE_TEXT,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		val = valStr
 	case enumspb.INDEXED_VALUE_TYPE_INT:
 		val, err = strconv.ParseInt(valStr, 10, 64)
@@ -207,7 +209,9 @@ func isJsonArray(str string) bool {
 
 func parseJsonArray(str string, t enumspb.IndexedValueType) (interface{}, error) {
 	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+	case enumspb.INDEXED_VALUE_TYPE_TEXT,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		var result []string
 		err := json.Unmarshal([]byte(str), &result)
 		return result, err

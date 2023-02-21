@@ -45,7 +45,7 @@ func (c *converter) ToMySQLDateTime(t time.Time) time.Time {
 	if t.IsZero() {
 		return minMySQLDateTime
 	}
-	return t.UTC()
+	return t.UTC().Truncate(time.Microsecond)
 }
 
 // FromMySQLDateTime converts mysql datetime and returns go time

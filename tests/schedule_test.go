@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"strings"
@@ -49,8 +50,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -62,8 +64,6 @@ more tests to write:
 various validation errors
 
 overlap policies, esp. buffer
-
-last completion result and last error
 
 worker restart/long-poll activity failure:
 	get it in a state where it's waiting for a wf to exit, say with bufferone
@@ -79,7 +79,6 @@ type (
 		hostPort      string
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
-		esClient      esclient.IntegrationTestsClient
 		taskQueue     string
 		dataConverter converter.DataConverter
 	}
@@ -91,30 +90,22 @@ func TestScheduleIntegrationSuite(t *testing.T) {
 }
 
 func (s *scheduleIntegrationSuite) SetupSuite() {
-	if TestFlags.PersistenceDriver == sqlite.PluginName {
-		// sqlite tests are run without elasticsearch
-		s.setupSuite("testdata/schedule_integration_test_cluster_std_vis.yaml")
-	} else {
-		s.setupSuite("testdata/schedule_integration_test_cluster_adv_vis.yaml")
-	}
 	s.hostPort = "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr
 	}
-	// sqlite tests are run without elasticsearch
-	if TestFlags.PersistenceDriver != sqlite.PluginName {
-		// ES setup so we can test search attributes
-		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
-		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
-		CreateIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	switch TestFlags.PersistenceDriver {
+	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+		s.setupSuite("testdata/integration_test_cluster.yaml")
+		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
+	default:
+		s.setupSuite("testdata/integration_test_es_cluster.yaml")
+		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 	}
 }
 
 func (s *scheduleIntegrationSuite) TearDownSuite() {
 	s.tearDownSuite()
-	if s.esClient != nil {
-		DeleteIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
-	}
 }
 
 func (s *scheduleIntegrationSuite) SetupTest() {
@@ -142,11 +133,6 @@ func (s *scheduleIntegrationSuite) TearDownTest() {
 }
 
 func (s *scheduleIntegrationSuite) TestBasics() {
-	// sqlite tests are run without elasticsearch
-	if s.esClient == nil {
-		s.T().Skip()
-	}
-
 	sid := "sched-test-basics"
 	wid := "sched-test-basics-wf"
 	wt := "sched-test-basics-wt"
@@ -467,6 +453,85 @@ func (s *scheduleIntegrationSuite) TestInput() {
 	_, err = s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 5*time.Second, 200*time.Millisecond)
+
+	// cleanup
+	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	s.NoError(err)
+}
+
+func (s *scheduleIntegrationSuite) TestLastCompletionAndError() {
+	sid := "sched-test-last"
+	wid := "sched-test-last-wf"
+	wt := "sched-test-last-wt"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: timestamp.DurationPtr(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	}
+
+	runs := make(map[string]struct{})
+	var testComplete int32
+
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		var num int
+		_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			runs[workflow.GetInfo(ctx).WorkflowExecution.ID] = struct{}{}
+			return len(runs)
+		}).Get(&num)
+
+		var lcr string
+		if workflow.HasLastCompletionResult(ctx) {
+			s.NoError(workflow.GetLastCompletionResult(ctx, &lcr))
+		}
+
+		lastErr := workflow.GetLastError(ctx)
+
+		switch num {
+		case 1:
+			s.Equal("", lcr)
+			s.NoError(lastErr)
+			return "this one succeeds", nil
+		case 2:
+			s.NoError(lastErr)
+			s.Equal("this one succeeds", lcr)
+			return "", errors.New("this one fails")
+		case 3:
+			s.Equal("this one succeeds", lcr)
+			s.ErrorContains(lastErr, "this one fails")
+			atomic.StoreInt32(&testComplete, 1)
+			return "done", nil
+		default:
+			panic("shouldn't be running anymore")
+		}
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	_, err := s.engine.CreateSchedule(NewContext(), req)
+	s.NoError(err)
+	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 15*time.Second, 200*time.Millisecond)
 
 	// cleanup
 	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{

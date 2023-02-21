@@ -204,5 +204,7 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 		// assume pragma
 		parameters.Add("_pragma", fmt.Sprintf("%s=%s", key, value))
 	}
+	// set time format
+	parameters.Add("_time_format", "sqlite")
 	return parameters, nil
 }

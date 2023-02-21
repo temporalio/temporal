@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/visibility/store"
 )
 
 const (
@@ -137,6 +138,7 @@ func (pdb *db) InsertIntoVisibility(
 	row *sqlplugin.VisibilityRow,
 ) (sql.Result, error) {
 	row.StartTime = pdb.converter.ToPostgreSQLDateTime(row.StartTime)
+	row.ExecutionTime = pdb.converter.ToPostgreSQLDateTime(row.ExecutionTime)
 	return pdb.conn.ExecContext(ctx,
 		templateCreateWorkflowExecutionStarted,
 		row.NamespaceID,
@@ -160,6 +162,7 @@ func (pdb *db) ReplaceIntoVisibility(
 	switch {
 	case row.CloseTime != nil && row.HistoryLength != nil:
 		row.StartTime = pdb.converter.ToPostgreSQLDateTime(row.StartTime)
+		row.ExecutionTime = pdb.converter.ToPostgreSQLDateTime(row.ExecutionTime)
 		closeTime := pdb.converter.ToPostgreSQLDateTime(*row.CloseTime)
 		return pdb.conn.ExecContext(ctx,
 			templateCreateWorkflowExecutionClosed,
@@ -312,6 +315,13 @@ func (pdb *db) GetFromVisibility(
 	}
 	pdb.processRowFromDB(&row)
 	return &row, nil
+}
+
+func (pdb *db) CountFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) (int64, error) {
+	return 0, store.OperationNotSupportedErr
 }
 
 func (pdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) {

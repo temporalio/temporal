@@ -52,6 +52,7 @@ type (
 func (s *integrationSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.RetentionTimerJitterDuration: time.Second,
+		dynamicconfig.EnableEagerWorkflowStart:     true,
 	}
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }

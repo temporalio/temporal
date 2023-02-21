@@ -63,11 +63,11 @@ import (
 type (
 	// Test is the test implementation used for testing
 	Test struct {
-		MetricsScope             tally.Scope
-		ClusterMetadata          *cluster.MockMetadata
-		SearchAttributesProvider *searchattribute.MockProvider
-		SearchAttributesManager  *searchattribute.MockManager
-		SearchAttributesMapper   *searchattribute.MockMapper
+		MetricsScope                   tally.Scope
+		ClusterMetadata                *cluster.MockMetadata
+		SearchAttributesProvider       *searchattribute.MockProvider
+		SearchAttributesManager        *searchattribute.MockManager
+		SearchAttributesMapperProvider *searchattribute.MockMapperProvider
 
 		// other common resources
 
@@ -137,7 +137,7 @@ func NewTest(
 	clientBean.EXPECT().GetMatchingClient(gomock.Any()).Return(matchingClient, nil).AnyTimes()
 	clientBean.EXPECT().GetHistoryClient().Return(historyClient).AnyTimes()
 	clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(remoteAdminClient, nil).AnyTimes()
-	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(remoteFrontendClient, nil).AnyTimes()
+	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(nil, remoteFrontendClient, nil).AnyTimes()
 	clientFactory := client.NewMockFactory(controller)
 
 	metadataMgr := persistence.NewMockMetadataManager(controller)
@@ -166,6 +166,7 @@ func NewTest(
 	membershipMonitor.EXPECT().GetResolver(primitives.MatchingService).Return(matchingServiceResolver, nil).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(primitives.HistoryService).Return(historyServiceResolver, nil).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(primitives.WorkerService).Return(workerServiceResolver, nil).AnyTimes()
+	membershipMonitor.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
 	serviceName, _ := metrics.MetricsServiceIdxToServiceName(serviceMetricsIndex)
@@ -174,11 +175,11 @@ func NewTest(
 	)
 
 	return &Test{
-		MetricsScope:             scope,
-		ClusterMetadata:          cluster.NewMockMetadata(controller),
-		SearchAttributesProvider: searchattribute.NewMockProvider(controller),
-		SearchAttributesManager:  searchattribute.NewMockManager(controller),
-		SearchAttributesMapper:   searchattribute.NewMockMapper(controller),
+		MetricsScope:                   scope,
+		ClusterMetadata:                cluster.NewMockMetadata(controller),
+		SearchAttributesProvider:       searchattribute.NewMockProvider(controller),
+		SearchAttributesManager:        searchattribute.NewMockManager(controller),
+		SearchAttributesMapperProvider: searchattribute.NewMockMapperProvider(controller),
 
 		// other common resources
 
@@ -439,8 +440,8 @@ func (t *Test) GetSearchAttributesManager() searchattribute.Manager {
 	return t.SearchAttributesManager
 }
 
-func (t *Test) GetSearchAttributesMapper() searchattribute.Mapper {
-	return t.SearchAttributesMapper
+func (t *Test) GetSearchAttributesMapperProvider() searchattribute.MapperProvider {
+	return t.SearchAttributesMapperProvider
 }
 
 func (t *Test) RefreshNamespaceCache() {

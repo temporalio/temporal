@@ -137,7 +137,7 @@ func Test_Decode_Success(t *testing.T) {
 	}, typeMap)
 	assert.NoError(err)
 
-	vals, err := Decode(sa, typeMap)
+	vals, err := Decode(sa, typeMap, true)
 	assert.NoError(err)
 	assert.Len(vals, 6)
 	assert.Equal("val1", vals["key1"])
@@ -154,7 +154,7 @@ func Test_Decode_Success(t *testing.T) {
 	delete(sa.IndexedFields["key5"].Metadata, "type")
 	delete(sa.IndexedFields["key6"].Metadata, "type")
 
-	vals, err = Decode(sa, typeMap)
+	vals, err = Decode(sa, typeMap, true)
 	assert.NoError(err)
 	assert.Len(vals, 6)
 	assert.Equal("val1", vals["key1"])
@@ -185,7 +185,7 @@ func Test_Decode_NilMap(t *testing.T) {
 	}, typeMap)
 	assert.NoError(err)
 
-	vals, err := Decode(sa, nil)
+	vals, err := Decode(sa, nil, true)
 	assert.NoError(err)
 	assert.Len(sa.IndexedFields, 6)
 	assert.Equal("val1", vals["key1"])
@@ -211,11 +211,15 @@ func Test_Decode_Error(t *testing.T) {
 	}, typeMap)
 	assert.NoError(err)
 
-	vals, err := Decode(sa, &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"key4": enumspb.INDEXED_VALUE_TYPE_INT,
-		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
-	}})
+	vals, err := Decode(
+		sa,
+		&NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
+			"key4": enumspb.INDEXED_VALUE_TYPE_INT,
+			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+		}},
+		true,
+	)
 	assert.Error(err)
 	assert.True(errors.Is(err, ErrInvalidName))
 	assert.Len(sa.IndexedFields, 3)
@@ -227,7 +231,7 @@ func Test_Decode_Error(t *testing.T) {
 	delete(sa.IndexedFields["key2"].Metadata, "type")
 	delete(sa.IndexedFields["key3"].Metadata, "type")
 
-	vals, err = Decode(sa, nil)
+	vals, err = Decode(sa, nil, true)
 	assert.Error(err)
 	assert.True(errors.Is(err, ErrInvalidType))
 	assert.Len(vals, 3)

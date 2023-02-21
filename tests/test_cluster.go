@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
@@ -52,6 +53,7 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/tests/testutils"
 )
 
 type (
@@ -97,8 +99,8 @@ type (
 )
 
 const (
-	defaultTestValueOfESIndexMaxResultWindow = 5
-	pprofTestPort                            = 7000
+	defaultPageSize = 5
+	pprofTestPort   = 7000
 )
 
 // NewCluster creates and sets up the test cluster
@@ -125,8 +127,12 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		switch TestFlags.PersistenceDriver {
 		case mysql.PluginName:
 			ops = persistencetests.GetMySQLTestClusterOption()
+		case mysql.PluginNameV8:
+			ops = persistencetests.GetMySQL8TestClusterOption()
 		case postgresql.PluginName:
 			ops = persistencetests.GetPostgreSQLTestClusterOption()
+		case postgresql.PluginNameV12:
+			ops = persistencetests.GetPostgreSQL12TestClusterOption()
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
@@ -163,21 +169,25 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		esClient  esclient.Client
 	)
 	if options.ESConfig != nil {
+		err := setupIndex(options.ESConfig, logger)
+		if err != nil {
+			return nil, err
+		}
+
 		// Disable standard to elasticsearch dual visibility
 		pConfig.VisibilityStore = ""
 		indexName = options.ESConfig.GetVisibilityIndex()
-		var err error
 		esClient, err = esclient.NewClient(options.ESConfig, nil, logger)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
-		switch {
-		case storeConfig.Cassandra != nil:
-			indexName = storeConfig.Cassandra.Keyspace
-		case storeConfig.SQL != nil:
-			indexName = storeConfig.SQL.DatabaseName
+		if storeConfig.SQL != nil {
+			switch storeConfig.SQL.PluginName {
+			case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+				indexName = storeConfig.SQL.DatabaseName
+			}
 		}
 	}
 
@@ -203,7 +213,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	clusterMetadataConfig.ClusterInformation = clusterInfoMap
 
 	// This will save custom test search attributes to cluster metadata.
-	// Actual Elasticsearch fields are created from index template (testdata/es_v7_index_template.json).
+	// Actual Elasticsearch fields are created in setupIndex.
 	err := testBase.SearchAttributesManager.SaveSearchAttributes(
 		context.Background(),
 		indexName,
@@ -246,6 +256,70 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	}
 
 	return &TestCluster{testBase: testBase, archiverBase: archiverBase, host: cluster}, nil
+}
+
+func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
+	esClient, err := esclient.NewIntegrationTestsClient(esConfig, logger)
+	if err != nil {
+		return err
+	}
+
+	exists, err := esClient.IndexExists(context.Background(), esConfig.GetVisibilityIndex())
+	if err != nil {
+		return err
+	}
+	if exists {
+		logger.Info("Index already exists.", tag.ESIndex(esConfig.GetVisibilityIndex()))
+		err = deleteIndex(esConfig, logger)
+		if err != nil {
+			return err
+		}
+	}
+
+	indexTemplateFile := path.Join(testutils.GetRepoRootDirectory(), "schema/elasticsearch/visibility/index_template_v7.json")
+	logger.Info("Creating index template.", tag.NewStringTag("templatePath", indexTemplateFile))
+	template, err := os.ReadFile(indexTemplateFile)
+	if err != nil {
+		return err
+	}
+	// Template name doesn't matter.
+	// This operation is idempotent and won't return an error even if template already exists.
+	_, err = esClient.IndexPutTemplate(context.Background(), "temporal_visibility_v1_template", string(template))
+	if err != nil {
+		return err
+	}
+	logger.Info("Index template created.")
+
+	logger.Info("Creating index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
+	_, err = esClient.CreateIndex(context.Background(), esConfig.GetVisibilityIndex())
+	if err != nil {
+		return err
+	}
+	logger.Info("Index created.", tag.ESIndex(esConfig.GetVisibilityIndex()))
+
+	logger.Info("Add custom search attributes for tests.")
+	_, err = esClient.PutMapping(context.Background(), esConfig.GetVisibilityIndex(), searchattribute.TestNameTypeMap.Custom())
+	if err != nil {
+		return err
+	}
+	logger.Info("Index setup complete.", tag.ESIndex(esConfig.GetVisibilityIndex()))
+
+	return nil
+}
+
+func deleteIndex(esConfig *esclient.Config, logger log.Logger) error {
+	esClient, err := esclient.NewIntegrationTestsClient(esConfig, logger)
+	if err != nil {
+		return err
+	}
+
+	logger.Info("Deleting index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
+	_, err = esClient.DeleteIndex(context.Background(), esConfig.GetVisibilityIndex())
+	if err != nil {
+		return err
+	}
+	logger.Info("Index deleted.", tag.ESIndex(esConfig.GetVisibilityIndex()))
+	return nil
 }
 
 func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitializerImpl {
@@ -327,8 +401,12 @@ func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 func (tc *TestCluster) TearDownCluster() error {
 	tc.SetFaultInjectionRate(0)
 	errs := tc.host.Stop()
-	tc.host = nil
 	tc.testBase.TearDownWorkflowStore()
+	if tc.host.esConfig != nil {
+		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
+			errs = multierr.Combine(errs, err)
+		}
+	}
 	if err := os.RemoveAll(tc.archiverBase.historyStoreDirectory); err != nil {
 		errs = multierr.Combine(errs, err)
 	}

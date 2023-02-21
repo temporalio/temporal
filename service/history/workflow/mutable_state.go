@@ -36,6 +36,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -44,11 +45,11 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type TransactionPolicy int
@@ -88,6 +89,14 @@ type (
 
 		// Indicate type of the current workflow task (normal, transient, or speculative).
 		Type enumsspb.WorkflowTaskType
+
+		// These two fields are sent to workers in the WorkflowTaskStarted event. We need to save a
+		// copy in mutable state to know the last values we sent (which might have been in a
+		// transient event), otherwise a dynamic config change of the suggestion threshold could
+		// cause the WorkflowTaskStarted event that the worker used to not match the event we saved
+		// in history.
+		SuggestContinueAsNew bool
+		HistorySizeBytes     int64
 	}
 
 	MutableState interface {
@@ -106,14 +115,14 @@ type (
 		AddChildWorkflowExecutionTimedOutEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTimedOutEventAttributes) (*historypb.HistoryEvent, error)
 		AddCompletedWorkflowEvent(int64, *commandpb.CompleteWorkflowExecutionCommandAttributes, string) (*historypb.HistoryEvent, error)
 		AddContinueAsNewEvent(context.Context, int64, int64, namespace.Name, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, MutableState, error)
-		AddWorkflowTaskCompletedEvent(int64, int64, *workflowservice.RespondWorkflowTaskCompletedRequest, int) (*historypb.HistoryEvent, error)
-		AddWorkflowTaskFailedEvent(scheduledEventID int64, startedEventID int64, cause enumspb.WorkflowTaskFailedCause, failure *failurepb.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*historypb.HistoryEvent, error)
+		AddWorkflowTaskCompletedEvent(*WorkflowTaskInfo, *workflowservice.RespondWorkflowTaskCompletedRequest, int) (*historypb.HistoryEvent, error)
+		AddWorkflowTaskFailedEvent(workflowTask *WorkflowTaskInfo, cause enumspb.WorkflowTaskFailedCause, failure *failurepb.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskScheduleToStartTimeoutEvent(int64) (*historypb.HistoryEvent, error)
-		AddFirstWorkflowTaskScheduled(*historypb.HistoryEvent) error
+		AddFirstWorkflowTaskScheduled(event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *time.Time, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
-		AddWorkflowTaskTimedOutEvent(int64, int64) (*historypb.HistoryEvent, error)
+		AddWorkflowTaskTimedOutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, namespace.Name, namespace.ID, string, string) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionSignaled(int64, namespace.Name, namespace.ID, string, string, string) (*historypb.HistoryEvent, error)
 		AddFailWorkflowEvent(int64, enumspb.RetryState, *commandpb.FailWorkflowExecutionCommandAttributes, string) (*historypb.HistoryEvent, error)
@@ -137,6 +146,9 @@ type (
 		AddWorkflowExecutionStartedEvent(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, updAcceptance *updatepb.Acceptance) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionUpdateCompletedEvent(updResp *updatepb.Response) (*historypb.HistoryEvent, error)
+		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
 		ClearStickyness()
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
@@ -186,6 +198,8 @@ type (
 		GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus)
 		GetQueryRegistry() QueryRegistry
 		IsTransientWorkflowTask() bool
+		// TODO (alex-update): move this out from mutable state.
+		UpdateRegistry() update.Registry
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
 		HasInFlightWorkflowTask() bool
@@ -218,7 +232,7 @@ type (
 		ReplicateWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowTaskFailedEvent() error
 		ReplicateWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, *time.Duration, int32, *time.Time, *time.Time, enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		ReplicateWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time) (*WorkflowTaskInfo, error)
+		ReplicateWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64) (*WorkflowTaskInfo, error)
 		ReplicateWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
 		ReplicateExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
 		ReplicateExternalWorkflowExecutionSignaled(*historypb.HistoryEvent) error

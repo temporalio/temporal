@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
@@ -94,14 +95,14 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller                   *gomock.Controller
-		mockResource                 *resourcetest.Test
-		mockNamespaceCache           *namespace.MockRegistry
-		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
-		mockClusterMetadata          *cluster.MockMetadata
-		mockSearchAttributesProvider *searchattribute.MockProvider
-		mockSearchAttributesMapper   *searchattribute.MockMapper
-		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
+		controller                         *gomock.Controller
+		mockResource                       *resourcetest.Test
+		mockNamespaceCache                 *namespace.MockRegistry
+		mockHistoryClient                  *historyservicemock.MockHistoryServiceClient
+		mockClusterMetadata                *cluster.MockMetadata
+		mockSearchAttributesProvider       *searchattribute.MockProvider
+		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
+		mockMatchingClient                 *matchingservicemock.MockMatchingServiceClient
 
 		mockProducer           *persistence.MockNamespaceReplicationQueue
 		mockMetadataMgr        *persistence.MockMetadataManager
@@ -144,7 +145,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockSearchAttributesProvider = s.mockResource.SearchAttributesProvider
-	s.mockSearchAttributesMapper = s.mockResource.SearchAttributesMapper
+	s.mockSearchAttributesMapperProvider = s.mockResource.SearchAttributesMapperProvider
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
 	s.mockExecutionManager = s.mockResource.ExecutionMgr
 	s.mockVisibilityMgr = s.mockResource.VisibilityManager
@@ -160,6 +161,8 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	mockMonitor := s.mockResource.MembershipMonitor
 	mockMonitor.EXPECT().GetMemberCount(primitives.FrontendService).Return(5, nil).AnyTimes()
+
+	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
@@ -182,12 +185,13 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetPayloadSerializer(),
 		s.mockResource.GetNamespaceRegistry(),
-		s.mockResource.GetSearchAttributesMapper(),
+		s.mockResource.GetSearchAttributesMapperProvider(),
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
 		clock.NewRealTimeSource(),
+		s.mockResource.GetMembershipMonitor(),
 	)
 }
 
@@ -401,6 +405,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 	wh := s.getWorkflowHandler(config)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.EmptyName).Return(namespace.EmptyID, serviceerror.NewNamespaceNotFound("missing-namespace")).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(namespace.EmptyName).Return(nil, nil)
 
 	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
 		// Namespace: "forget to specify",
@@ -1363,7 +1368,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 
 func (s *workflowHandlerSuite) TestGetHistory() {
 	namespaceID := namespace.ID(uuid.New())
-	namespace := namespace.Name("namespace")
+	namespaceName := namespace.Name("test-namespace")
 	firstEventID := int64(100)
 	nextEventID := int64(102)
 	branchToken := []byte{1}
@@ -1406,7 +1411,8 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	}, nil)
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
-	s.mockSearchAttributesMapper.EXPECT().GetAlias("CustomKeywordField", namespace.String()).Return("AliasOfCustomKeyword", nil)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(namespaceName).
+		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1414,7 +1420,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		context.Background(),
 		metrics.NoopMetricsHandler,
 		namespaceID,
-		namespace,
+		namespaceName,
 		we,
 		firstEventID,
 		nextEventID,
@@ -1427,7 +1433,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
 
-	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasOfCustomKeyword"].GetMetadata()["type"])
+	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasForCustomKeywordField"].GetMetadata()["type"])
 	s.EqualValues(`"random-data"`, history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
 }
 

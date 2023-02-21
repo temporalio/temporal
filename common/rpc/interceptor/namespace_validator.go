@@ -28,17 +28,23 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 )
 
 type (
-	// NamespaceValidatorInterceptor contains LengthValidationIntercept and StateValidationIntercept
+	TaskTokenGetter interface {
+		GetTaskToken() []byte
+	}
+
+	// NamespaceValidatorInterceptor contains NamespaceValidateIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
 		namespaceRegistry               namespace.Registry
 		tokenSerializer                 common.TaskTokenSerializer
@@ -69,7 +75,7 @@ var (
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).StateValidationIntercept
-var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).LengthValidationIntercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).NamespaceValidateIntercept
 
 func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
@@ -84,12 +90,16 @@ func NewNamespaceValidatorInterceptor(
 	}
 }
 
-func (ni *NamespaceValidatorInterceptor) LengthValidationIntercept(
+func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
+	err := ni.setNamespaceIfNotPresent(req)
+	if err != nil {
+		return nil, err
+	}
 	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
 	if hasNamespace {
 		namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
@@ -99,6 +109,60 @@ func (ni *NamespaceValidatorInterceptor) LengthValidationIntercept(
 	}
 
 	return handler(ctx, req)
+}
+
+func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
+	req interface{},
+) error {
+	switch request := req.(type) {
+	case NamespaceNameGetter:
+		if request.GetNamespace() == "" {
+			namespaceEntry, err := ni.extractNamespaceFromTaskToken(req)
+			if err != nil {
+				return err
+			}
+			ni.setNamespace(namespaceEntry, req)
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (ni *NamespaceValidatorInterceptor) setNamespace(
+	namespaceEntry *namespace.Namespace,
+	req interface{},
+) {
+	switch request := req.(type) {
+	case *workflowservice.RespondQueryTaskCompletedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondWorkflowTaskCompletedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondWorkflowTaskFailedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RecordActivityTaskHeartbeatRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondActivityTaskCanceledRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondActivityTaskCompletedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondActivityTaskFailedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	}
 }
 
 // StateValidationIntercept validates:
@@ -178,6 +242,18 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
+	case *adminservice.AddSearchAttributesRequest,
+		*adminservice.RemoveSearchAttributesRequest,
+		*adminservice.GetSearchAttributesRequest,
+		*operatorservice.AddSearchAttributesRequest,
+		*operatorservice.RemoveSearchAttributesRequest,
+		*operatorservice.ListSearchAttributesRequest:
+		// Namespace is optional for search attributes operations.
+		// It's required when using SQL DB for visibility, but not when using Elasticsearch.
+		if !namespaceName.IsEmpty() {
+			return ni.namespaceRegistry.GetNamespace(namespaceName)
+		}
+		return nil, nil
 	default:
 		// All other APIs.
 		if namespaceName.IsEmpty() {
@@ -188,7 +264,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req interface{}) (*namespace.Namespace, error) {
-	reqWithTaskToken, hasTaskToken := req.(interface{ GetTaskToken() []byte })
+	reqWithTaskToken, hasTaskToken := req.(TaskTokenGetter)
 	if !hasTaskToken {
 		return nil, nil
 	}
@@ -234,7 +310,7 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		return nil
 	}
 
-	_, methodName := splitMethodName(fullMethod)
+	_, methodName := SplitMethodName(fullMethod)
 
 	allowedStates, allowedStatesDefined := allowedNamespaceStates[methodName]
 	if !allowedStatesDefined {
@@ -258,7 +334,7 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 		return nil
 	}
 
-	_, methodName := splitMethodName(fullMethod)
+	_, methodName := SplitMethodName(fullMethod)
 
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
 		return nil
