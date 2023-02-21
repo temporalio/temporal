@@ -105,7 +105,7 @@ func (c *mysqlQueryConverter) getDatetimeFormat() string {
 func (c *mysqlQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
 	return newFuncExpr(
 		coalesceFuncName,
-		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
+		closeTimeSaColName,
 		&castExpr{
 			Value: newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
 			Type:  convertTypeDatetime,
@@ -118,9 +118,10 @@ func (c *mysqlQueryConverter) convertKeywordListComparisonExpr(
 ) (sqlparser.Expr, error) {
 	if !isSupportedKeywordListOperator(expr.Operator) {
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for KeywordList type search attribute",
+			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 
@@ -143,9 +144,10 @@ func (c *mysqlQueryConverter) convertKeywordListComparisonExpr(
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for KeywordList type search attribute",
+			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 
@@ -188,9 +190,10 @@ func (c *mysqlQueryConverter) convertTextComparisonExpr(
 ) (sqlparser.Expr, error) {
 	if !isSupportedTextOperator(expr.Operator) {
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for Text type search attribute",
+			"%s: operator '%s' not supported for Text type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 	// build the following expression:
