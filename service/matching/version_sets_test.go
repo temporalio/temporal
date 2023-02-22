@@ -52,34 +52,34 @@ func mkInitialData(numSets int) *persistencepb.VersioningData {
 	}
 }
 
-func mkNewDefReq(id string) *workflowservice.UpdateWorkerBuildIdOrderingRequest {
-	return &workflowservice.UpdateWorkerBuildIdOrderingRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdOrderingRequest_NewDefaultVersionId{
-			NewDefaultVersionId: id,
+func mkNewDefReq(id string) *workflowservice.UpdateWorkerBuildIdCompatabilityRequest {
+	return &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewVersionIdInNewDefaultSet{
+			AddNewVersionIdInNewDefaultSet: id,
 		},
 	}
 }
-func mkNewCompatReq(id, compat string, becomeDefault bool) *workflowservice.UpdateWorkerBuildIdOrderingRequest {
-	return &workflowservice.UpdateWorkerBuildIdOrderingRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdOrderingRequest_NewCompatibleVersion_{
-			NewCompatibleVersion: &workflowservice.UpdateWorkerBuildIdOrderingRequest_NewCompatibleVersion{
+func mkNewCompatReq(id, compat string, becomeDefault bool) *workflowservice.UpdateWorkerBuildIdCompatabilityRequest {
+	return &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion_{
+			AddNewCompatibleVersion: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
 				NewVersionId:              id,
 				ExistingCompatibleVersion: compat,
-				BecomeDefault:             becomeDefault,
+				MakeSetDefault:            becomeDefault,
 			},
 		},
 	}
 }
-func mkExistingDefault(id string) *workflowservice.UpdateWorkerBuildIdOrderingRequest {
-	return &workflowservice.UpdateWorkerBuildIdOrderingRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdOrderingRequest_ExistingVersionIdInSetToPromote{
-			ExistingVersionIdInSetToPromote: id,
+func mkExistingDefault(id string) *workflowservice.UpdateWorkerBuildIdCompatabilityRequest {
+	return &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByVersionId{
+			PromoteSetByVersionId: id,
 		},
 	}
 }
-func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdOrderingRequest {
-	return &workflowservice.UpdateWorkerBuildIdOrderingRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdOrderingRequest_PromoteVersionIdWithinSet{
+func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdCompatabilityRequest {
+	return &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteVersionIdWithinSet{
 			PromoteVersionIdWithinSet: id,
 		},
 	}

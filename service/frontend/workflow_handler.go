@@ -3602,7 +3602,7 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 	}, nil
 }
 
-func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdOrderingRequest) (_ *workflowservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatabilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if wh.isStopped() {
@@ -3626,7 +3626,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdOrdering(ctx, &matchingservice.UpdateWorkerBuildIdOrderingRequest{
+	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdCompatability(ctx, &matchingservice.UpdateWorkerBuildIdCompatabilityRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
@@ -3635,7 +3635,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 		return nil, err
 	}
 
-	return &workflowservice.UpdateWorkerBuildIdOrderingResponse{}, err
+	return &workflowservice.UpdateWorkerBuildIdCompatabilityResponse{}, err
 }
 
 func (wh *WorkflowHandler) UpdateWorkflowExecution(
@@ -3698,7 +3698,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	return histResp.GetResponse(), err
 }
 
-func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.GetWorkerBuildIdOrderingRequest) (_ *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
+func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.GetWorkerBuildIdCompatabilityRequest) (_ *workflowservice.GetWorkerBuildIdCompatabilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if wh.isStopped() {
@@ -3718,7 +3718,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdOrdering(ctx, &matchingservice.GetWorkerBuildIdOrderingRequest{
+	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdCompatability(ctx, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
@@ -4352,7 +4352,7 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 }
 
 func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
-	req *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
 ) error {
 	errstr := "request to update worker build id ordering requires:"
 	hadErr := false
@@ -4377,7 +4377,7 @@ func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
 		errstr += " an operation to be specified."
 		hadErr = true
 	}
-	if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_NewCompatibleVersion_); ok {
+	if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_NewCompatibleVersion_); ok {
 		if x.NewCompatibleVersion.GetNewVersionId() == "" {
 			errstr += " `new_version_id` to be set."
 			hadErr = true
@@ -4388,14 +4388,14 @@ func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
 			errstr += " `existing_compatible_version` to be set."
 			hadErr = true
 		}
-	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_NewDefaultVersionId); ok {
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_NewDefaultVersionId); ok {
 		if x.NewDefaultVersionId == "" {
 			errstr += " `new_default_major_version_id` to be set."
 			hadErr = true
 		} else {
 			checkIdLen(x.NewDefaultVersionId)
 		}
-	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_ExistingVersionIdInSetToPromote); ok {
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_ExistingVersionIdInSetToPromote); ok {
 		if x.ExistingVersionIdInSetToPromote == "" {
 			errstr += " `existing_version_id_in_set_to_promote` to be set."
 			hadErr = true

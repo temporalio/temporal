@@ -706,10 +706,10 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 	return partitionHostInfo, nil
 }
 
-func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
+func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatability(
 	hCtx *handlerContext,
-	req *matchingservice.UpdateWorkerBuildIdOrderingRequest,
-) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	req *matchingservice.UpdateWorkerBuildIdCompatabilityRequest,
+) (*matchingservice.UpdateWorkerBuildIdCompatabilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -726,13 +726,13 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.UpdateWorkerBuildIdOrderingResponse{}, nil
+	return &matchingservice.UpdateWorkerBuildIdCompatabilityResponse{}, nil
 }
 
-func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
+func (e *matchingEngineImpl) GetWorkerBuildIdCompatability(
 	hCtx *handlerContext,
-	req *matchingservice.GetWorkerBuildIdOrderingRequest,
-) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+	req *matchingservice.GetWorkerBuildIdCompatabilityRequest,
+) (*matchingservice.GetWorkerBuildIdCompatabilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -742,18 +742,18 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+			return &matchingservice.GetWorkerBuildIdCompatabilityResponse{}, nil
 		}
 		return nil, err
 	}
 	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+			return &matchingservice.GetWorkerBuildIdCompatabilityResponse{}, nil
 		}
 		return nil, err
 	}
-	return &matchingservice.GetWorkerBuildIdOrderingResponse{
+	return &matchingservice.GetWorkerBuildIdCompatabilityResponse{
 		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxSets())),
 	}, nil
 }

@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/api/persistence/v1"
 )
 
-func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdOrderingResponse {
+func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
 	// TODO: Current default pointer not represented in response. Can either shuffle it to front or change API.
 	return depthLimiter(g, maxDepth, false)
 }
@@ -54,15 +54,15 @@ func HashVersioningData(data *persistence.VersioningData) []byte {
 	return b
 }
 
-func depthLimiter(g *persistence.VersioningData, maxDepth int, mutate bool) *workflowservice.GetWorkerBuildIdOrderingResponse {
+func depthLimiter(g *persistence.VersioningData, maxDepth int, mutate bool) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
 	if maxDepth <= 0 || maxDepth >= len(g.GetVersionSets()) {
-		return &workflowservice.GetWorkerBuildIdOrderingResponse{MajorVersionSets: g.VersionSets}
+		return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: g.VersionSets}
 	}
 	shortened := g.GetVersionSets()[maxDepth:]
 	if mutate {
 		g.VersionSets = shortened
 	}
-	return &workflowservice.GetWorkerBuildIdOrderingResponse{MajorVersionSets: shortened}
+	return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: shortened}
 }
 
 // Given existing versioning data and an update request, update the version sets appropriately. The request is expected
@@ -92,7 +92,7 @@ func depthLimiter(g *persistence.VersioningData, maxDepth int, mutate bool) *wor
 // Deletions are not permitted, as inserting new versions can accomplish the same goals with less complexity. However,
 // sets may be dropped when the number of sets limit is reached. They are dropped oldest first - the current default set
 // is never dropped, instead dropping the next oldest set.
-func UpdateVersionsGraph(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdOrderingRequest, maxSize int) error {
+func UpdateVersionsGraph(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest, maxSize int) error {
 	err := updateImpl(existingData, req)
 	if err != nil {
 		return err
@@ -102,12 +102,12 @@ func UpdateVersionsGraph(existingData *persistence.VersioningData, req *workflow
 	return nil
 }
 
-func updateImpl(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdOrderingRequest) error {
+func updateImpl(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) error {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
 	targetSetIx, versionInSetIx := findVersion(existingData, targetedVersion)
 
-	if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_NewDefaultVersionId); ok {
+	if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewVersionIdInNewDefaultSet); ok {
 		// If it's not already in the sets, add it as the new default set
 		if targetSetIx != -1 {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
@@ -116,8 +116,8 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 		existingData.VersionSets = append(existingData.GetVersionSets(), &taskqueuepb.CompatibleVersionSet{
 			Versions: []string{targetedVersion},
 		})
-	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_NewCompatibleVersion_); ok {
-		compatVer := op.NewCompatibleVersion.GetExistingCompatibleVersion()
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion_); ok {
+		compatVer := op.AddNewCompatibleVersion.GetExistingCompatibleVersion()
 		compatSetIx, _ := findVersion(existingData, compatVer)
 		if compatSetIx == -1 {
 			return serviceerror.NewNotFound(
@@ -132,15 +132,15 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 		// If the version doesn't exist, add it to the compatible set
 		existingData.VersionSets[compatSetIx].Versions =
 			append(existingData.VersionSets[compatSetIx].Versions, targetedVersion)
-		if op.NewCompatibleVersion.GetBecomeDefault() {
+		if op.AddNewCompatibleVersion.GetMakeSetDefault() {
 			makeDefaultSet(existingData, compatSetIx)
 		}
-	} else if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_ExistingVersionIdInSetToPromote); ok {
+	} else if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByVersionId); ok {
 		if targetSetIx == -1 {
 			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
 		makeDefaultSet(existingData, targetSetIx)
-	} else if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_PromoteVersionIdWithinSet); ok {
+	} else if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteVersionIdWithinSet); ok {
 		if targetSetIx == -1 {
 			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
@@ -150,15 +150,15 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 	return nil
 }
 
-func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdOrderingRequest) string {
-	if req.GetNewCompatibleVersion() != nil {
-		return req.GetNewCompatibleVersion().GetNewVersionId()
-	} else if req.GetExistingVersionIdInSetToPromote() != "" {
-		return req.GetExistingVersionIdInSetToPromote()
+func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) string {
+	if req.GetAddNewCompatibleVersion() != nil {
+		return req.GetAddNewCompatibleVersion().GetNewVersionId()
+	} else if req.GetPromoteSetByVersionId() != "" {
+		return req.GetPromoteSetByVersionId()
 	} else if req.GetPromoteVersionIdWithinSet() != "" {
 		return req.GetPromoteVersionIdWithinSet()
 	}
-	return req.GetNewDefaultVersionId()
+	return req.GetAddNewVersionIdInNewDefaultSet()
 }
 
 // Finds the version in the version sets, returning (set index, index within that set)

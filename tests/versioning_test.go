@@ -95,7 +95,7 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	ctx := NewContext()
 	tq := "integration-versioning-basic"
 
-	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
 		Namespace:          s.namespace,
 		TaskQueue:          tq,
 		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo"},
@@ -105,7 +105,7 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	s.NoError(err)
 	s.NotNil(res)
 
-	res2, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+	res2, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
@@ -119,7 +119,7 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	tq := "integration-versioning-series"
 
 	for i := 0; i < 10; i++ {
-		res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
 			Namespace:          s.namespace,
 			TaskQueue:          tq,
 			VersionId:          &taskqueuepb.VersionId{WorkerBuildId: fmt.Sprintf("foo-%d", i)},
@@ -129,7 +129,7 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 		s.NoError(err)
 		s.NotNil(res)
 	}
-	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
 		Namespace:          s.namespace,
 		TaskQueue:          tq,
 		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo-2.1"},
@@ -139,7 +139,7 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	s.NoError(err)
 	s.NotNil(res)
 
-	res2, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+	res2, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
@@ -155,7 +155,7 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 	ctx := NewContext()
 	tq := "integration-versioning-compat-not-found"
 
-	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
 		Namespace:          s.namespace,
 		TaskQueue:          tq,
 		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo"},
@@ -172,7 +172,7 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
 
-	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
 		Namespace:          s.namespace,
 		TaskQueue:          tq,
 		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo"},
@@ -204,7 +204,7 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	s.NoError(err)
 	sdkWorker.Stop()
 
-	res2, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+	res2, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
@@ -217,7 +217,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	ctx := NewContext()
 	tq := "integration-versioning-sub-partitions"
 
-	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     tq,
 		VersionId:     &taskqueuepb.VersionId{WorkerBuildId: "foo"},
@@ -226,7 +226,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	s.NoError(err)
 	s.NotNil(res)
 
-	res2, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+	res2, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
@@ -245,7 +245,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 		subPartName, err := tqname.FromBaseName(tq)
 		s.NoError(err)
 		subPartName = subPartName.WithPartition(i)
-		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+		res, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
 			Namespace: s.namespace,
 			TaskQueue: subPartName.FullName(),
 		})
@@ -255,7 +255,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	}
 
 	// Make a modification, verify it propagates to partitions
-	res, err = s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+	res, err = s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
 		Namespace:     s.namespace,
 		TaskQueue:     tq,
 		VersionId:     &taskqueuepb.VersionId{WorkerBuildId: "foo-2"},
@@ -268,7 +268,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 		subPartName, err := tqname.FromBaseName(tq)
 		s.NoError(err)
 		subPartName = subPartName.WithPartition(i)
-		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+		res, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
 			Namespace: s.namespace,
 			TaskQueue: subPartName.FullName(),
 		})
