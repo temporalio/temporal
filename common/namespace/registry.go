@@ -160,10 +160,11 @@ type (
 		// cacheLock protects cachNameToID, cacheByID and stateChangeCallbacks.
 		// If the exclusive side is to be held at the same time as the
 		// callbackLock (below), this lock MUST be acquired *first*.
-		cacheLock            sync.RWMutex
-		cacheNameToID        cache.Cache
-		cacheByID            cache.Cache
-		stateChangeCallbacks map[any]StateChangeCallbackFn
+		cacheLock                     sync.RWMutex
+		cacheNameToID                 cache.Cache
+		cacheByID                     cache.Cache
+		stateChangeCallbacks          map[any]StateChangeCallbackFn
+		stateChangedDuringReadthrough []*Namespace
 
 		// readthroughLock protects readthroughNotFoundCache and requests to persistence
 		// it should be acquired before checking readthroughNotFoundCache, making a request
@@ -431,6 +432,8 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	r.cacheLock.Lock()
 	r.cacheByID = newCacheByID
 	r.cacheNameToID = newCacheNameToID
+	stateChanged = append(stateChanged, r.stateChangedDuringReadthrough...)
+	r.stateChangedDuringReadthrough = nil
 	stateChangeCallbacks = mapAnyValues(r.stateChangeCallbacks)
 	r.cacheLock.Unlock()
 
@@ -554,13 +557,12 @@ func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
 }
 
 func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
-	var stateChangeCallbacks []StateChangeCallbackFn
-
 	r.cacheLock.Lock()
+	defer r.cacheLock.Unlock()
+
 	if curEntry, ok := r.cacheByID.Get(ns.ID()).(*Namespace); ok {
 		if curEntry.NotificationVersion() >= ns.NotificationVersion() {
 			// More up to date version already put in cache by refresh
-			r.cacheLock.Unlock()
 			return
 		}
 	}
@@ -568,13 +570,7 @@ func (r *registry) updateCachesSingleNamespace(ns *Namespace) {
 	oldNS := r.updateIDToNamespaceCache(r.cacheByID, ns.ID(), ns)
 	r.cacheNameToID.Put(ns.Name(), ns.ID())
 	if namespaceStateChanged(oldNS, ns) {
-		stateChangeCallbacks = mapAnyValues(r.stateChangeCallbacks)
-	}
-	r.cacheLock.Unlock()
-
-	// call state change callbacks
-	for _, cb := range stateChangeCallbacks {
-		cb(ns, false)
+		r.stateChangedDuringReadthrough = append(r.stateChangedDuringReadthrough, ns)
 	}
 }
 
@@ -612,9 +608,9 @@ func (r *registry) getNamespaceByIDPersistence(id ID) (*Namespace, error) {
 
 func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequest) (*Namespace, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), readthroughTimeout)
+	defer cancel()
 	headers.SetCallerType(ctx, headers.CallerTypeAPI)
 	headers.SetCallerName(ctx, headers.CallerNameSystem)
-	defer cancel()
 
 	response, err := r.persistence.GetNamespace(ctx, request)
 	if err != nil {
