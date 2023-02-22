@@ -66,7 +66,7 @@ func TestMeter(t *testing.T) {
 		sdkmetrics.WithView(
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
-					Kind: sdkmetrics.InstrumentKindSyncHistogram,
+					Kind: sdkmetrics.InstrumentKindHistogram,
 					Unit: unit.Bytes,
 				},
 				sdkmetrics.Stream{
@@ -77,7 +77,7 @@ func TestMeter(t *testing.T) {
 			),
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
-					Kind: sdkmetrics.InstrumentKindSyncHistogram,
+					Kind: sdkmetrics.InstrumentKindHistogram,
 					Unit: unit.Dimensionless,
 				},
 				sdkmetrics.Stream{
@@ -88,7 +88,7 @@ func TestMeter(t *testing.T) {
 			),
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
-					Kind: sdkmetrics.InstrumentKindSyncHistogram,
+					Kind: sdkmetrics.InstrumentKindHistogram,
 					Unit: unit.Milliseconds,
 				},
 				sdkmetrics.Stream{
@@ -123,8 +123,8 @@ func TestMeter(t *testing.T) {
 			Data: metricdata.Sum[int64]{
 				DataPoints: []metricdata.DataPoint[int64]{
 					{
-						//Attributes: attribute.NewSet(attribute.String("taskqueue", "__sticky__")),
-						Value: 11,
+						Attributes: attribute.NewSet(attribute.String("taskqueue", "__sticky__")),
+						Value:      11,
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -136,7 +136,9 @@ func TestMeter(t *testing.T) {
 			Data: metricdata.Sum[int64]{
 				DataPoints: []metricdata.DataPoint[int64]{
 					{
-						Value: 14,
+
+						Attributes: attribute.NewSet(attribute.String("taskqueue", tagExcludedValue)),
+						Value:      14,
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -150,8 +152,8 @@ func TestMeter(t *testing.T) {
 					{
 						Count:        2,
 						BucketCounts: []uint64{0, 0, 0, 1, 1, 0},
-						Min:          &minLatency,
-						Max:          &maxLatency,
+						Min:          metricdata.NewExtrema(minLatency),
+						Max:          metricdata.NewExtrema(maxLatency),
 						Sum:          6503,
 					},
 				},
@@ -164,8 +166,8 @@ func TestMeter(t *testing.T) {
 			Data: metricdata.Gauge[float64]{
 				DataPoints: []metricdata.DataPoint[float64]{
 					{
-						//Attributes: attribute.NewSet(attribute.String("location", "Mare Imbrium")),
-						Value: 100,
+						Attributes: attribute.NewSet(attribute.String("location", "Mare Imbrium")),
+						Value:      100,
 					},
 				},
 			},
@@ -177,8 +179,8 @@ func TestMeter(t *testing.T) {
 					{
 						Count:        1,
 						BucketCounts: []uint64{0, 0, 1},
-						Min:          &testBytes,
-						Max:          &testBytes,
+						Min:          metricdata.NewExtrema(testBytes),
+						Max:          metricdata.NewExtrema(testBytes),
 						Sum:          testBytes,
 					},
 				},
@@ -187,21 +189,24 @@ func TestMeter(t *testing.T) {
 			Unit: unit.Bytes,
 		},
 	}
-	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics, cmp.Comparer(valuesEqual),
+	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,
+		cmp.Comparer(func(e1, e2 metricdata.Extrema) bool {
+			v1, ok1 := e1.Value()
+			v2, ok2 := e2.Value()
+			return ok1 && ok2 && v1 == v2
+		}),
+		cmp.Comparer(func(a1, a2 attribute.Set) bool {
+			return a1.Equals(&a2)
+		}),
 		cmpopts.SortSlices(func(x, y metricdata.Metrics) bool {
 			return x.Name < y.Name
 		}),
-		// TODO: No good way to verify metrics tag in attributes as a private field in the attribute.Set.
-		cmpopts.IgnoreFields(metricdata.DataPoint[int64]{}, "Attributes", "StartTime", "Time"),
-		cmpopts.IgnoreFields(metricdata.DataPoint[float64]{}, "Attributes", "StartTime", "Time"),
-		cmpopts.IgnoreFields(metricdata.HistogramDataPoint{}, "Attributes", "StartTime", "Time", "Bounds"),
+		cmpopts.IgnoreFields(metricdata.DataPoint[int64]{}, "StartTime", "Time"),
+		cmpopts.IgnoreFields(metricdata.DataPoint[float64]{}, "StartTime", "Time"),
+		cmpopts.IgnoreFields(metricdata.HistogramDataPoint{}, "StartTime", "Time", "Bounds"),
 	); diff != "" {
 		t.Errorf("mismatch (-want, got):\n%s", diff)
 	}
-}
-
-func valuesEqual(v1, v2 attribute.Value) bool {
-	return v1.AsInterface() == v2.AsInterface()
 }
 
 func recordMetrics(mp Handler) {
