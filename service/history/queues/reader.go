@@ -436,6 +436,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	}
 
 	if r.nextReadSlice == nil {
+		r.completionFn(r.readerID)
 		return
 	}
 
@@ -466,6 +467,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 
 	if r.nextReadSlice = r.nextReadSlice.Next(); r.nextReadSlice != nil {
 		r.notify()
+		return
 	}
 
 	// no more task to load, trigger completion callback
@@ -483,7 +485,11 @@ func (r *ReaderImpl) resetNextReadSliceLocked() {
 
 	if r.nextReadSlice != nil {
 		r.notify()
+		return
 	}
+
+	// no more task to load, trigger completion callback
+	r.completionFn(r.readerID)
 }
 
 func (r *ReaderImpl) notify() {
