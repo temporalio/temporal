@@ -52,12 +52,13 @@ var (
 			"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
 
-			"Int01":      enumspb.INDEXED_VALUE_TYPE_INT,
-			"Text01":     enumspb.INDEXED_VALUE_TYPE_TEXT,
-			"Keyword01":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			"Datetime01": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			"Double01":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			"Bool01":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"Int01":         enumspb.INDEXED_VALUE_TYPE_INT,
+			"Text01":        enumspb.INDEXED_VALUE_TYPE_TEXT,
+			"Keyword01":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"Datetime01":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			"Double01":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			"Bool01":        enumspb.INDEXED_VALUE_TYPE_BOOL,
+			"KeywordList01": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		},
 	}
 )
