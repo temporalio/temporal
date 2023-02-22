@@ -73,7 +73,7 @@ func NewOpenTelemetryProvider(
 	for _, u := range []string{Dimensionless, Bytes, Milliseconds} {
 		views = append(views, sdkmetrics.NewView(
 			sdkmetrics.Instrument{
-				Kind: sdkmetrics.InstrumentKindSyncHistogram,
+				Kind: sdkmetrics.InstrumentKindHistogram,
 				Unit: unit.Unit(u),
 			},
 			sdkmetrics.Stream{
