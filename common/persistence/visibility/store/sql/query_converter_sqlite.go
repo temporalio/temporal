@@ -70,7 +70,7 @@ func (c *sqliteQueryConverter) getDatetimeFormat() string {
 func (c *sqliteQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
 	return newFuncExpr(
 		coalesceFuncName,
-		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
+		closeTimeSaColName,
 		newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
 	)
 }
@@ -81,16 +81,17 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 ) (sqlparser.Expr, error) {
 	if !isSupportedKeywordListOperator(expr.Operator) {
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for KeywordList type search attribute",
+			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 
-	colNameExpr, isColNameExpr := expr.Left.(*colName)
-	if !isColNameExpr {
+	saColNameExpr, isSAColNameExpr := expr.Left.(*saColName)
+	if !isSAColNameExpr {
 		return nil, query.NewConverterError(
-			"%s: must be a column name but was %T",
+			"%s: must be a search attribute column name but was %T",
 			query.InvalidExpressionErrMessage,
 			expr.Left,
 		)
@@ -107,7 +108,7 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 				sqlparser.String(expr.Right),
 			)
 		}
-		ftsQuery = fmt.Sprintf(`%s:"%s"`, colNameExpr.Name, valueExpr.Val)
+		ftsQuery = fmt.Sprintf(`%s:"%s"`, saColNameExpr.dbColName.Name, valueExpr.Val)
 
 	case sqlparser.InStr, sqlparser.NotInStr:
 		valTupleExpr, isValTuple := expr.Right.(sqlparser.ValTuple)
@@ -125,14 +126,15 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 		for i := range values {
 			values[i] = fmt.Sprintf(`"%s"`, values[i])
 		}
-		ftsQuery = fmt.Sprintf("%s:(%s)", colNameExpr.Name, strings.Join(values, " OR "))
+		ftsQuery = fmt.Sprintf("%s:(%s)", saColNameExpr.dbColName.Name, strings.Join(values, " OR "))
 
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for KeywordList type search attribute",
+			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 
@@ -145,9 +147,10 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for KeywordList type search attribute",
+			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 
@@ -166,16 +169,17 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 ) (sqlparser.Expr, error) {
 	if !isSupportedTextOperator(expr.Operator) {
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for Text type search attribute",
+			"%s: operator '%s' not supported for Text type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 
-	colNameExpr, isColNameExpr := expr.Left.(*colName)
-	if !isColNameExpr {
+	saColNameExpr, isSAColNameExpr := expr.Left.(*saColName)
+	if !isSAColNameExpr {
 		return nil, query.NewConverterError(
-			"%s: must be a column name but was %T",
+			"%s: must be a search attribute column name but was %T",
 			query.InvalidExpressionErrMessage,
 			expr.Left,
 		)
@@ -197,7 +201,7 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 			sqlparser.String(expr.Right),
 		)
 	}
-	ftsQuery := fmt.Sprintf("%s:(%s)", colNameExpr.Name, strings.Join(tokens, " OR "))
+	ftsQuery := fmt.Sprintf("%s:(%s)", saColNameExpr.dbColName.Name, strings.Join(tokens, " OR "))
 
 	var oper string
 	switch expr.Operator {
@@ -208,9 +212,10 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 	default:
 		// this should never happen since isSupportedTextOperator should already fail
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for Text type search attribute",
+			"%s: operator '%s' not supported for Text type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 
