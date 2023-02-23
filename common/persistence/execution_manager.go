@@ -714,6 +714,27 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 	return newResponse, nil
 }
 
+func (m *executionManagerImpl) RegisterHistoryTaskReader(
+	ctx context.Context,
+	request *RegisterHistoryTaskReaderRequest,
+) error {
+	return m.persistence.RegisterHistoryTaskReader(ctx, request)
+}
+
+func (m *executionManagerImpl) UnregisterHistoryTaskReader(
+	ctx context.Context,
+	request *UnregisterHistoryTaskReaderRequest,
+) error {
+	return m.persistence.UnregisterHistoryTaskReader(ctx, request)
+}
+
+func (m *executionManagerImpl) UpdateHistoryTaskReaderProgress(
+	ctx context.Context,
+	request *UpdateHistoryTaskReaderProgressRequest,
+) error {
+	return m.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
+}
+
 func (m *executionManagerImpl) AddHistoryTasks(
 	ctx context.Context,
 	input *AddHistoryTasksRequest,
