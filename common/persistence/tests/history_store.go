@@ -113,7 +113,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_First() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 
 	eventsPacket := s.newHistoryEvents(
@@ -131,7 +131,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 	var events []*historypb.HistoryEvent
 
@@ -160,7 +160,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
@@ -201,7 +201,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
@@ -244,7 +244,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
@@ -304,7 +304,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
@@ -354,7 +354,7 @@ func (s *HistoryEventsSuite) TestAppendSelectTrim() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 	var events []*historypb.HistoryEvent
 
@@ -389,7 +389,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
 	var events1 []*historypb.HistoryEvent
@@ -449,7 +449,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 	var events []*historypb.HistoryEvent
 
@@ -491,7 +491,7 @@ func (s *HistoryEventsSuite) TestAppendBatches() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	branchToken, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	branchToken, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 
 	eventsPacket1 := s.newHistoryEvents(
@@ -523,7 +523,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	br1Token, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	br1Token, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 
 	eventsPacket0 := s.newHistoryEvents(
@@ -582,7 +582,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
-	br1Token, err := p.NewHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
+	br1Token, err := p.CreateHistoryBranchToken(treeID, branchID, []*persistencespb.HistoryBranchRange{})
 	s.NoError(err)
 
 	transactionID := rand.Int63()

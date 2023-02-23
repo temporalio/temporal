@@ -128,7 +128,7 @@ func (s *ScavengerTestSuite) createTestScavenger(
 }
 
 func (s *ScavengerTestSuite) toBranchToken(treeID string, branchID string) []byte {
-	data, err := persistence.NewHistoryBranchToken(treeID, branchID, []*persistencepb.HistoryBranchRange{})
+	data, err := persistence.CreateHistoryBranchToken(treeID, branchID, []*persistencepb.HistoryBranchRange{})
 	s.NoError(err)
 	return data
 }
@@ -379,25 +379,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 
-	branchToken1, err := persistence.NewHistoryBranchToken(treeID1, branchID1, []*persistencepb.HistoryBranchRange{})
+	branchToken1, err := persistence.CreateHistoryBranchToken(treeID1, branchID1, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID1", "workflowID1", s.numShards),
 	}).Return(nil)
-	branchToken2, err := persistence.NewHistoryBranchToken(treeID2, branchID2, []*persistencepb.HistoryBranchRange{})
+	branchToken2, err := persistence.CreateHistoryBranchToken(treeID2, branchID2, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.numShards),
 	}).Return(nil)
-	branchToken3, err := persistence.NewHistoryBranchToken(treeID3, branchID3, []*persistencepb.HistoryBranchRange{})
+	branchToken3, err := persistence.CreateHistoryBranchToken(treeID3, branchID3, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
-	branchToken4, err := persistence.NewHistoryBranchToken(treeID4, branchID4, []*persistencepb.HistoryBranchRange{})
+	branchToken4, err := persistence.CreateHistoryBranchToken(treeID4, branchID4, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
@@ -497,14 +497,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		},
 	}).Return(ms, nil)
 
-	branchToken3, err := persistence.NewHistoryBranchToken(treeID3, branchID3, []*persistencepb.HistoryBranchRange{})
+	branchToken3, err := persistence.CreateHistoryBranchToken(treeID3, branchID3, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
 
-	branchToken4, err := persistence.NewHistoryBranchToken(treeID4, branchID4, []*persistencepb.HistoryBranchRange{})
+	branchToken4, err := persistence.CreateHistoryBranchToken(treeID4, branchID4, []*persistencepb.HistoryBranchRange{})
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,

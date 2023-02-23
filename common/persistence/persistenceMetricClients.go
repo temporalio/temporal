@@ -197,6 +197,10 @@ func (p *executionPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
+func (p *executionPersistenceClient) GetHistoryBranchUtil() HistoryBranchUtil {
+	return p.persistence.GetHistoryBranchUtil()
+}
+
 func (p *executionPersistenceClient) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
@@ -724,32 +728,6 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 		p.recordRequestMetrics(metrics.PersistenceAppendRawHistoryNodesScope, caller, startTime, retErr)
 	}()
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
-}
-
-// ParseHistoryBranchInfo parses the history branch for branch information
-func (p *executionPersistenceClient) ParseHistoryBranchInfo(
-	ctx context.Context,
-	request *ParseHistoryBranchInfoRequest,
-) (_ *ParseHistoryBranchInfoResponse, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.recordRequestMetrics(metrics.PersistenceParseHistoryBranchInfoScope, caller, startTime, retErr)
-	}()
-	return p.persistence.ParseHistoryBranchInfo(ctx, request)
-}
-
-// UpdateHistoryBranchInfo updates the history branch with branch information
-func (p *executionPersistenceClient) UpdateHistoryBranchInfo(
-	ctx context.Context,
-	request *UpdateHistoryBranchInfoRequest,
-) (_ *UpdateHistoryBranchInfoResponse, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.recordRequestMetrics(metrics.PersistenceUpdateHistoryBranchInfoScope, caller, startTime, retErr)
-	}()
-	return p.persistence.UpdateHistoryBranchInfo(ctx, request)
 }
 
 // NewHistoryBranch initializes a new history branch

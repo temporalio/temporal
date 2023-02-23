@@ -203,6 +203,10 @@ func (p *executionRetryablePersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
+func (p *executionRetryablePersistenceClient) GetHistoryBranchUtil() HistoryBranchUtil {
+	return p.persistence.GetHistoryBranchUtil()
+}
+
 func (p *executionRetryablePersistenceClient) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
@@ -466,38 +470,6 @@ func (p *executionRetryablePersistenceClient) AppendRawHistoryNodes(
 	op := func(ctx context.Context) error {
 		var err error
 		response, err = p.persistence.AppendRawHistoryNodes(ctx, request)
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
-	return response, err
-}
-
-// ParseHistoryBranchInfo parses the history branch for branch information
-func (p *executionRetryablePersistenceClient) ParseHistoryBranchInfo(
-	ctx context.Context,
-	request *ParseHistoryBranchInfoRequest,
-) (*ParseHistoryBranchInfoResponse, error) {
-	var response *ParseHistoryBranchInfoResponse
-	op := func(ctx context.Context) error {
-		var err error
-		response, err = p.persistence.ParseHistoryBranchInfo(ctx, request)
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
-	return response, err
-}
-
-// UpdateHistoryBranchInfo updates the history branch with branch information
-func (p *executionRetryablePersistenceClient) UpdateHistoryBranchInfo(
-	ctx context.Context,
-	request *UpdateHistoryBranchInfoRequest,
-) (*UpdateHistoryBranchInfoResponse, error) {
-	var response *UpdateHistoryBranchInfoResponse
-	op := func(ctx context.Context) error {
-		var err error
-		response, err = p.persistence.UpdateHistoryBranchInfo(ctx, request)
 		return err
 	}
 

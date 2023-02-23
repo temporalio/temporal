@@ -71,6 +71,7 @@ type (
 	}
 
 	FaultInjectionExecutionStore struct {
+		persistence.HistoryBranchUtilImpl
 		baseExecutionStore persistence.ExecutionStore
 		ErrorGenerator     ErrorGenerator
 	}
@@ -648,26 +649,6 @@ func (e *FaultInjectionExecutionStore) DeleteHistoryNodes(
 		return err
 	}
 	return e.baseExecutionStore.DeleteHistoryNodes(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) ParseHistoryBranchInfo(
-	ctx context.Context,
-	request *persistence.ParseHistoryBranchInfoRequest,
-) (*persistence.ParseHistoryBranchInfoResponse, error) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.ParseHistoryBranchInfo(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) UpdateHistoryBranchInfo(
-	ctx context.Context,
-	request *persistence.UpdateHistoryBranchInfoRequest,
-) (*persistence.UpdateHistoryBranchInfoResponse, error) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.UpdateHistoryBranchInfo(ctx, request)
 }
 
 func (e *FaultInjectionExecutionStore) NewHistoryBranch(

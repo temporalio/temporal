@@ -25,6 +25,7 @@
 package resourcetest
 
 import (
+	"context"
 	"net"
 
 	"github.com/golang/mock/gomock"
@@ -144,7 +145,10 @@ func NewTest(
 	taskMgr := persistence.NewMockTaskManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
-	executionMgr.EXPECT().NewHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.NewHistoryBranchResponse{BranchToken: []byte{1, 2, 3}}, nil).AnyTimes()
+	executionMgr.EXPECT().NewHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, request *persistence.NewHistoryBranchRequest) (*persistence.NewHistoryBranchResponse, error) {
+			return persistence.CreateHistoryBranch(request)
+		}).AnyTimes()
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
 	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
 	namespaceReplicationQueue.EXPECT().Stop().AnyTimes()

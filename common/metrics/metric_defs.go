@@ -480,10 +480,6 @@ const (
 	PersistenceAppendRawHistoryNodesScope = "AppendRawHistoryNodes"
 	// PersistenceDeleteHistoryNodesScope tracks DeleteHistoryNodes calls made by service to persistence layer
 	PersistenceDeleteHistoryNodesScope = "DeleteHistoryNodes"
-	// PersistenceParseHistoryBranchInfoScope tracks NewHistoryBranch calls made by service to persistence layer
-	PersistenceParseHistoryBranchInfoScope = "ParseHistoryBranchInfo"
-	// PersistenceUpdateHistoryBranchInfoScope tracks NewHistoryBranch calls made by service to persistence layer
-	PersistenceUpdateHistoryBranchInfoScope = "UpdateHistoryBranchInfo"
 	// PersistenceNewHistoryBranchScope tracks NewHistoryBranch calls made by service to persistence layer
 	PersistenceNewHistoryBranchScope = "NewHistoryBranch"
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer

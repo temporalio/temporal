@@ -271,18 +271,18 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 	}
 
 	// The following sanitizes the branch token from the source cluster to this target cluster by re-initializing it.
-	historyBranchResp, err := r.shard.GetExecutionManager().ParseHistoryBranchInfo(ctx,
-		&persistence.ParseHistoryBranchInfoRequest{
-			BranchToken: currentVersionHistory.GetBranchToken(),
-		})
+
+	branchInfo, err := r.shard.GetExecutionManager().GetHistoryBranchUtil().ParseHistoryBranchInfo(
+		currentVersionHistory.GetBranchToken(),
+	)
 	if err != nil {
 		return err
 	}
 	newHistoryBranchResp, err := r.shard.GetExecutionManager().NewHistoryBranch(ctx,
 		&persistence.NewHistoryBranchRequest{
-			TreeID:    historyBranchResp.BranchInfo.GetTreeId(),
-			BranchID:  &historyBranchResp.BranchInfo.BranchId,
-			Ancestors: historyBranchResp.BranchInfo.Ancestors,
+			TreeID:    branchInfo.GetTreeId(),
+			BranchID:  &branchInfo.BranchId,
+			Ancestors: branchInfo.Ancestors,
 		})
 	if err != nil {
 		return err
@@ -896,16 +896,11 @@ func (r *HistoryReplicatorImpl) backfillHistory(
 		lastEventID,
 		lastEventVersion),
 	)
-	resp, err := r.executionMgr.ParseHistoryBranchInfo(
-		ctx,
-		&persistence.ParseHistoryBranchInfoRequest{
-			BranchToken: branchToken,
-		},
-	)
+	historyBranchUtil := r.executionMgr.GetHistoryBranchUtil()
+	historyBranch, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken)
 	if err != nil {
 		return nil, common.EmptyEventTaskID, err
 	}
-	historyBranch := resp.BranchInfo
 
 	prevTxnID := common.EmptyEventTaskID
 	var lastHistoryBatch *commonpb.DataBlob
@@ -949,16 +944,14 @@ BackfillLoop:
 			}
 		}
 
-		filteredHistoryBranch, err := r.executionMgr.UpdateHistoryBranchInfo(
-			ctx,
-			&persistence.UpdateHistoryBranchInfoRequest{
-				BranchToken: branchToken,
-				BranchInfo: &persistencespb.HistoryBranch{
-					TreeId:    historyBranch.GetTreeId(),
-					BranchId:  branchID,
-					Ancestors: ancestors,
-				},
-			})
+		filteredHistoryBranch, err := historyBranchUtil.UpdateHistoryBranchInfo(
+			branchToken,
+			&persistencespb.HistoryBranch{
+				TreeId:    historyBranch.GetTreeId(),
+				BranchId:  branchID,
+				Ancestors: ancestors,
+			},
+		)
 		if err != nil {
 			return nil, common.EmptyEventTaskID, err
 		}
@@ -969,7 +962,7 @@ BackfillLoop:
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shard.GetShardID(),
 			IsNewBranch:       prevBranchID != branchID,
-			BranchToken:       filteredHistoryBranch.BranchToken,
+			BranchToken:       filteredHistoryBranch,
 			History:           historyBlob.rawHistory,
 			PrevTransactionID: prevTxnID,
 			TransactionID:     txnID,
