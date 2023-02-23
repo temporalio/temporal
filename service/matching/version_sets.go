@@ -35,7 +35,6 @@ import (
 )
 
 func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
-	// TODO: Current default pointer not represented in response. Can either shuffle it to front or change API.
 	return depthLimiter(g, maxDepth, false)
 }
 
@@ -56,9 +55,11 @@ func HashVersioningData(data *persistence.VersioningData) []byte {
 
 func depthLimiter(g *persistence.VersioningData, maxDepth int, mutate bool) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
 	if maxDepth <= 0 || maxDepth >= len(g.GetVersionSets()) {
-		return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: g.VersionSets}
+		return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: g.GetVersionSets()}
 	}
-	shortened := g.GetVersionSets()[maxDepth:]
+	sets := g.GetVersionSets()
+	startIndex := len(sets) - maxDepth
+	shortened := g.GetVersionSets()[startIndex:]
 	if mutate {
 		g.VersionSets = shortened
 	}
@@ -92,7 +93,7 @@ func depthLimiter(g *persistence.VersioningData, maxDepth int, mutate bool) *wor
 // Deletions are not permitted, as inserting new versions can accomplish the same goals with less complexity. However,
 // sets may be dropped when the number of sets limit is reached. They are dropped oldest first - the current default set
 // is never dropped, instead dropping the next oldest set.
-func UpdateVersionsGraph(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest, maxSize int) error {
+func UpdateVersionSets(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest, maxSize int) error {
 	err := updateImpl(existingData, req)
 	if err != nil {
 		return err

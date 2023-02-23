@@ -89,7 +89,7 @@ func TestNewDefaultUpdate(t *testing.T) {
 	data := mkInitialData(2)
 
 	req := mkNewDefReq("2")
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
@@ -105,7 +105,7 @@ func TestNewDefaultGraphUpdateOfEmptyGraph(t *testing.T) {
 	data := &persistencepb.VersioningData{}
 
 	req := mkNewDefReq("1")
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
@@ -117,7 +117,7 @@ func TestNewDefaultGraphUpdateCompatWithCurDefault(t *testing.T) {
 	data := mkInitialData(2)
 
 	req := mkNewCompatReq("1.1", "1", true)
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
@@ -130,7 +130,7 @@ func TestNewDefaultGraphUpdateCompatWithNonDefaultSet(t *testing.T) {
 	data := mkInitialData(2)
 
 	req := mkNewCompatReq("0.1", "0", true)
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
@@ -143,7 +143,7 @@ func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
 	data := mkInitialData(3)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
@@ -159,11 +159,11 @@ func TestNewCompatibleWithNonDefaultGraphUpdate(t *testing.T) {
 	data := mkInitialData(2)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	req = mkNewCompatReq("0.2", "0.1", false)
-	err = UpdateVersionsGraph(data, req, 0)
+	err = UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
@@ -174,7 +174,7 @@ func TestNewCompatibleWithNonDefaultGraphUpdate(t *testing.T) {
 
 	// Ensure setting a compatible version which targets a non-leaf compat version ends up without a branch
 	req = mkNewCompatReq("0.3", "0.1", false)
-	err = UpdateVersionsGraph(data, req, 0)
+	err = UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.Equal(t, "1", curd.Versions[0])
@@ -188,7 +188,7 @@ func TestCompatibleTargetsNotFound(t *testing.T) {
 	data := mkInitialData(1)
 
 	req := mkNewCompatReq("1.1", "1", false)
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
 }
@@ -197,7 +197,7 @@ func TestMakeExistingSetDefault(t *testing.T) {
 	data := mkInitialData(4)
 
 	req := mkExistingDefault("2")
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "0", data.VersionSets[0].Versions[0])
@@ -208,7 +208,7 @@ func TestMakeExistingSetDefault(t *testing.T) {
 	// Add a compatible version to a set and then make that set the default via the compatible version
 	req = mkNewCompatReq("1.1", "1", true)
 
-	err = UpdateVersionsGraph(data, req, 0)
+	err = UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, "0", data.VersionSets[0].Versions[0])
 	assert.Equal(t, "3", data.VersionSets[1].Versions[0])
@@ -220,11 +220,11 @@ func TestSayVersionIsCompatWithDifferentSetThanItsAlreadyCompatWithNotAllowed(t 
 	data := mkInitialData(3)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	req = mkNewCompatReq("0.1", "1", false)
-	err = UpdateVersionsGraph(data, req, 0)
+	err = UpdateVersionSets(data, req, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
@@ -236,7 +236,7 @@ func TestLimitsMaxSize(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		id := fmt.Sprintf("%d", i)
 		req := mkNewDefReq(id)
-		err := UpdateVersionsGraph(data, req, maxSize)
+		err := UpdateVersionSets(data, req, maxSize)
 		assert.NoError(t, err)
 	}
 
@@ -250,12 +250,12 @@ func TestPromoteWithinVersion(t *testing.T) {
 
 	for i := 1; i <= 5; i++ {
 		req := mkNewCompatReq(fmt.Sprintf("0.%d", i), "0", false)
-		err := UpdateVersionsGraph(data, req, 0)
+		err := UpdateVersionSets(data, req, 0)
 		assert.NoError(t, err)
 	}
 
 	req := mkPromoteInSet("0.1")
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[0].Versions[len(data.VersionSets[0].Versions)-1]
@@ -266,7 +266,16 @@ func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
 	data := mkInitialData(3)
 
 	req := mkNewDefReq("0")
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+}
+
+func TestAddAlreadyExtantVersionToAnotherSetErrors(t *testing.T) {
+	data := mkInitialData(3)
+
+	req := mkNewCompatReq("0", "1", false)
+	err := UpdateVersionSets(data, req, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
@@ -275,7 +284,7 @@ func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
 	data := mkInitialData(3)
 
 	req := mkExistingDefault("crab boi")
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
 }
@@ -284,7 +293,7 @@ func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
 	data := mkInitialData(3)
 
 	req := mkPromoteInSet("i'd rather be writing rust ;)")
-	err := UpdateVersionsGraph(data, req, 0)
+	err := UpdateVersionSets(data, req, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
 }

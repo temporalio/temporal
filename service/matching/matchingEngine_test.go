@@ -1978,14 +1978,13 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		},
 	})
 	s.NoError(err)
-	//s.NotNil(res.GetResponse().GetCurrentDefault())
-	//lastNode := res.GetResponse().GetCurrentDefault()
-	//s.Equal(mkVerId("99"), lastNode.GetVersion())
-	//for lastNode.GetPreviousIncompatible() != nil {
-	//	lastNode = lastNode.GetPreviousIncompatible()
-	//}
-	//s.Equal(mkVerId("0"), lastNode.GetVersion())
-	//s.Equal(mkVerId("99.9"), res.GetResponse().GetCompatibleLeaves()[0].GetVersion())
+	majorSets := res.GetResponse().GetMajorVersionSets()
+	curDefault := majorSets[len(majorSets)-1]
+	s.NotNil(curDefault)
+	s.Equal("99", curDefault.GetVersions()[0])
+	lastNode := curDefault.GetVersions()[len(curDefault.GetVersions())-1]
+	s.Equal("99.9", lastNode)
+	s.Equal("0", majorSets[0].GetVersions()[0])
 
 	// Ensure depth limiting works
 	res, err = s.matchingEngine.GetWorkerBuildIdCompatability(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
@@ -1997,9 +1996,12 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		},
 	})
 	s.NoError(err)
-	//s.NotNil(res.GetResponse().GetCurrentDefault())
-	//s.Nil(res.GetResponse().GetCurrentDefault().GetPreviousIncompatible())
-	//s.Nil(res.GetResponse().GetCompatibleLeaves()[0].GetPreviousCompatible())
+	majorSets = res.GetResponse().GetMajorVersionSets()
+	curDefault = majorSets[len(majorSets)-1]
+	s.Equal("99", curDefault.GetVersions()[0])
+	lastNode = curDefault.GetVersions()[len(curDefault.GetVersions())-1]
+	s.Equal("99.9", lastNode)
+	s.Equal(1, len(majorSets))
 
 	res, err = s.matchingEngine.GetWorkerBuildIdCompatability(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
 		NamespaceId: namespaceID.String(),
@@ -2010,23 +2012,8 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		},
 	})
 	s.NoError(err)
-	//s.NotNil(res.GetResponse().GetCurrentDefault())
-	//lastNode = res.GetResponse().GetCurrentDefault()
-	//for {
-	//	if lastNode.GetPreviousIncompatible() == nil {
-	//		break
-	//	}
-	//	lastNode = lastNode.GetPreviousIncompatible()
-	//}
-	//s.Equal(mkVerId("95"), lastNode.GetVersion())
-	//lastNode = res.GetResponse().GetCompatibleLeaves()[0]
-	//for {
-	//	if lastNode.GetPreviousCompatible() == nil {
-	//		break
-	//	}
-	//	lastNode = lastNode.GetPreviousCompatible()
-	//}
-	//s.Equal(mkVerId("99.5"), lastNode.GetVersion())
+	majorSets = res.GetResponse().GetMajorVersionSets()
+	s.Equal("95", majorSets[0].GetVersions()[0])
 }
 
 func (s *matchingEngineSuite) TestActivityQueueMetadataInvalidate() {

@@ -721,7 +721,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatability(
 		return nil, err
 	}
 	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) error {
-		return UpdateVersionsGraph(data, req.GetRequest(), e.config.MaxVersionGraphSize())
+		return UpdateVersionSets(data, req.GetRequest(), e.config.MaxVersionGraphSize())
 	})
 	if err != nil {
 		return nil, err

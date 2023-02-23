@@ -3613,7 +3613,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatability(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateBuildIdOrderingUpdate(request); err != nil {
+	if err := wh.validateBuildIdCompatabilityUpdate(request); err != nil {
 		return nil, err
 	}
 
@@ -4351,10 +4351,10 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	return nil
 }
 
-func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
+func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
 	req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
 ) error {
-	errstr := "request to update worker build id ordering requires:"
+	errstr := "request to update worker build id compatability requires:"
 	hadErr := false
 
 	checkIdLen := func(id string) {
@@ -4377,30 +4377,37 @@ func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
 		errstr += " an operation to be specified."
 		hadErr = true
 	}
-	if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_NewCompatibleVersion_); ok {
-		if x.NewCompatibleVersion.GetNewVersionId() == "" {
-			errstr += " `new_version_id` to be set."
+	if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion_); ok {
+		if x.AddNewCompatibleVersion.GetNewVersionId() == "" {
+			errstr += " `add_new_compatible_version` to be set."
 			hadErr = true
 		} else {
-			checkIdLen(x.NewCompatibleVersion.GetNewVersionId())
+			checkIdLen(x.AddNewCompatibleVersion.GetNewVersionId())
 		}
-		if x.NewCompatibleVersion.GetExistingCompatibleVersion() == "" {
+		if x.AddNewCompatibleVersion.GetExistingCompatibleVersion() == "" {
 			errstr += " `existing_compatible_version` to be set."
 			hadErr = true
 		}
-	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_NewDefaultVersionId); ok {
-		if x.NewDefaultVersionId == "" {
-			errstr += " `new_default_major_version_id` to be set."
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewVersionIdInNewDefaultSet); ok {
+		if x.AddNewVersionIdInNewDefaultSet == "" {
+			errstr += " `add_new_version_id_in_new_default_set` to be set."
 			hadErr = true
 		} else {
-			checkIdLen(x.NewDefaultVersionId)
+			checkIdLen(x.AddNewVersionIdInNewDefaultSet)
 		}
-	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_ExistingVersionIdInSetToPromote); ok {
-		if x.ExistingVersionIdInSetToPromote == "" {
-			errstr += " `existing_version_id_in_set_to_promote` to be set."
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByVersionId); ok {
+		if x.PromoteSetByVersionId == "" {
+			errstr += " `promote_set_by_version_id` to be set."
 			hadErr = true
 		} else {
-			checkIdLen(x.ExistingVersionIdInSetToPromote)
+			checkIdLen(x.PromoteSetByVersionId)
+		}
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteVersionIdWithinSet); ok {
+		if x.PromoteVersionIdWithinSet == "" {
+			errstr += " `promote_version_id_within_set` to be set."
+			hadErr = true
+		} else {
+			checkIdLen(x.PromoteVersionIdWithinSet)
 		}
 	}
 	if hadErr {
