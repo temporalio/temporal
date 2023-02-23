@@ -1996,6 +1996,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		VisibilityTimestamp: time.Now().UTC(),
 	}
 
+	childClock := vclock.NewVectorClock(rand.Int63(), rand.Int31(), rand.Int63())
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), s.createChildWorkflowExecutionRequest(
@@ -2004,17 +2005,33 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		transferTask,
 		mutableState,
 		ci,
-	)).Return(&historyservice.StartWorkflowExecutionResponse{RunId: childRunID}, nil)
+	)).Return(&historyservice.StartWorkflowExecutionResponse{RunId: childRunID, Clock: childClock}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), &historyservice.ScheduleWorkflowTaskRequest{
-		NamespaceId: tests.ChildNamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: childWorkflowID,
-			RunId:      childRunID,
+	currentShardClock := s.mockShard.CurrentVectorClock()
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *historyservice.ScheduleWorkflowTaskRequest, _ ...grpc.CallOption) (*historyservice.ScheduleWorkflowTaskResponse, error) {
+			parentClock := request.ParentClock
+			request.ParentClock = nil
+			s.Equal(&historyservice.ScheduleWorkflowTaskRequest{
+				NamespaceId: tests.ChildNamespaceID.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: childWorkflowID,
+					RunId:      childRunID,
+				},
+				IsFirstWorkflowTask: true,
+				ParentClock:         nil,
+				ChildClock:          childClock,
+			}, request)
+			cmpResult, err := vclock.Compare(currentShardClock, parentClock)
+			if err != nil {
+				return nil, err
+			}
+			s.NoError(err)
+			s.True(cmpResult <= 0)
+			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
-		IsFirstWorkflowTask: true,
-	}).Return(nil, nil)
+	)
 
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
@@ -2250,15 +2267,30 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), &historyservice.ScheduleWorkflowTaskRequest{
-		NamespaceId: tests.ChildNamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: childWorkflowID,
-			RunId:      childRunID,
+	currentShardClock := s.mockShard.CurrentVectorClock()
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *historyservice.ScheduleWorkflowTaskRequest, _ ...grpc.CallOption) (*historyservice.ScheduleWorkflowTaskResponse, error) {
+			parentClock := request.ParentClock
+			request.ParentClock = nil
+			s.Equal(&historyservice.ScheduleWorkflowTaskRequest{
+				NamespaceId: tests.ChildNamespaceID.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: childWorkflowID,
+					RunId:      childRunID,
+				},
+				IsFirstWorkflowTask: true,
+				ParentClock:         nil,
+				ChildClock:          childClock,
+			}, request)
+			cmpResult, err := vclock.Compare(currentShardClock, parentClock)
+			if err != nil {
+				return nil, err
+			}
+			s.NoError(err)
+			s.True(cmpResult <= 0)
+			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
-		IsFirstWorkflowTask: true,
-		Clock:               childClock,
-	}).Return(nil, nil)
+	)
 
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
@@ -2428,15 +2460,30 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), &historyservice.ScheduleWorkflowTaskRequest{
-		NamespaceId: s.childNamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: childExecution.WorkflowId,
-			RunId:      childExecution.RunId,
+	currentShardClock := s.mockShard.CurrentVectorClock()
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *historyservice.ScheduleWorkflowTaskRequest, _ ...grpc.CallOption) (*historyservice.ScheduleWorkflowTaskResponse, error) {
+			parentClock := request.ParentClock
+			request.ParentClock = nil
+			s.Equal(&historyservice.ScheduleWorkflowTaskRequest{
+				NamespaceId: s.childNamespaceID.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: childExecution.WorkflowId,
+					RunId:      childExecution.RunId,
+				},
+				IsFirstWorkflowTask: true,
+				ParentClock:         nil,
+				ChildClock:          childClock,
+			}, request)
+			cmpResult, err := vclock.Compare(currentShardClock, parentClock)
+			if err != nil {
+				return nil, err
+			}
+			s.NoError(err)
+			s.True(cmpResult <= 0)
+			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
-		IsFirstWorkflowTask: true,
-		Clock:               childClock,
-	}).Return(&historyservice.ScheduleWorkflowTaskResponse{}, nil).Times(1)
+	)
 
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)

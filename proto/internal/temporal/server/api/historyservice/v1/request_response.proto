@@ -320,7 +320,8 @@ message ScheduleWorkflowTaskRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     bool is_first_workflow_task = 3;
-    temporal.server.api.clock.v1.VectorClock clock = 4;
+    temporal.server.api.clock.v1.VectorClock child_clock = 4;
+    temporal.server.api.clock.v1.VectorClock parent_clock = 5;
 }
 
 message ScheduleWorkflowTaskResponse {

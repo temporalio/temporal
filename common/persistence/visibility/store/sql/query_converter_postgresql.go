@@ -86,7 +86,7 @@ func (c *pgQueryConverter) getDatetimeFormat() string {
 func (c *pgQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
 	return newFuncExpr(
 		coalesceFuncName,
-		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
+		closeTimeSaColName,
 		newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
 	)
 }
@@ -96,9 +96,10 @@ func (c *pgQueryConverter) convertKeywordListComparisonExpr(
 ) (sqlparser.Expr, error) {
 	if !isSupportedKeywordListOperator(expr.Operator) {
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for KeywordList type search attribute",
+			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 
@@ -128,9 +129,10 @@ func (c *pgQueryConverter) convertKeywordListComparisonExpr(
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for KeywordList type search attribute",
+			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 }
@@ -166,9 +168,10 @@ func (c *pgQueryConverter) convertTextComparisonExpr(
 ) (sqlparser.Expr, error) {
 	if !isSupportedTextOperator(expr.Operator) {
 		return nil, query.NewConverterError(
-			"%s: operator %s not supported for Text type search attribute",
+			"%s: operator '%s' not supported for Text type search attribute in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			formatComparisonExprStringForError(*expr),
 		)
 	}
 	valueExpr, ok := expr.Right.(*unsafeSQLString)

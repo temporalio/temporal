@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"golang.org/x/exp/slices"
 
+	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -266,7 +267,11 @@ func SetupNewWorkflowForRetryOrCron(
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
-	if _, err = newMutableState.AddFirstWorkflowTaskScheduled(event, false); err != nil {
+	var parentClock *clock.VectorClock
+	if parentInfo != nil {
+		parentClock = parentInfo.Clock
+	}
+	if _, err = newMutableState.AddFirstWorkflowTaskScheduled(parentClock, event, false); err != nil {
 		return err
 	}
 

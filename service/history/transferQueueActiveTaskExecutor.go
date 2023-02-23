@@ -776,7 +776,12 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// release the context lock since we no longer need mutable state and
 		// the rest of logic is making RPC call, which takes time.
 		release(nil)
-		return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, childClock)
+
+		parentClock, err := t.shard.NewVectorClock()
+		if err != nil {
+			return err
+		}
+		return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
 	}
 
 	// remaining 2 cases:
@@ -865,10 +870,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// Release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
+	parentClock, err := t.shard.NewVectorClock()
+	if err != nil {
+		return err
+	}
 	return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, &commonpb.WorkflowExecution{
 		WorkflowId: task.TargetWorkflowID,
 		RunId:      childRunID,
-	}, childClock)
+	}, parentClock, childClock)
 }
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
@@ -1064,15 +1073,16 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	clock *clockspb.VectorClock,
+	parentClock *clockspb.VectorClock,
+	childClock *clockspb.VectorClock,
 ) error {
 	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId:         namespaceID,
 		WorkflowExecution:   execution,
 		IsFirstWorkflowTask: true,
-		Clock:               clock,
+		ParentClock:         parentClock,
+		ChildClock:          childClock,
 	})
-
 	return err
 }
 

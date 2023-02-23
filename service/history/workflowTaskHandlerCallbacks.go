@@ -123,7 +123,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 
 	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		req.Clock,
+		req.ChildClock,
 		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
@@ -146,7 +146,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 			if err != nil {
 				return nil, err
 			}
-			if _, err := mutableState.AddFirstWorkflowTaskScheduled(startEvent, false); err != nil {
+			if _, err := mutableState.AddFirstWorkflowTaskScheduled(req.ParentClock, startEvent, false); err != nil {
 				return nil, err
 			}
 
