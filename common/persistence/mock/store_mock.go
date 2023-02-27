@@ -1080,11 +1080,9 @@ func (mr *MockExecutionStoreMockRecorder) SetWorkflowExecution(ctx, request inte
 }
 
 // UnregisterHistoryTaskReader mocks base method.
-func (m *MockExecutionStore) UnregisterHistoryTaskReader(ctx context.Context, request *persistence.UnregisterHistoryTaskReaderRequest) error {
+func (m *MockExecutionStore) UnregisterHistoryTaskReader(ctx context.Context, request *persistence.UnregisterHistoryTaskReaderRequest) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnregisterHistoryTaskReader", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "UnregisterHistoryTaskReader", ctx, request)
 }
 
 // UnregisterHistoryTaskReader indicates an expected call of UnregisterHistoryTaskReader.
@@ -1109,11 +1107,9 @@ func (mr *MockExecutionStoreMockRecorder) UpdateHistoryBranchInfo(ctx, request i
 }
 
 // UpdateHistoryTaskReaderProgress mocks base method.
-func (m *MockExecutionStore) UpdateHistoryTaskReaderProgress(ctx context.Context, request *persistence.UpdateHistoryTaskReaderProgressRequest) error {
+func (m *MockExecutionStore) UpdateHistoryTaskReaderProgress(ctx context.Context, request *persistence.UpdateHistoryTaskReaderProgressRequest) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateHistoryTaskReaderProgress", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "UpdateHistoryTaskReaderProgress", ctx, request)
 }
 
 // UpdateHistoryTaskReaderProgress indicates an expected call of UpdateHistoryTaskReaderProgress.
