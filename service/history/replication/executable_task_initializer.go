@@ -31,18 +31,18 @@ type (
 	}
 )
 
-func (i *ProcessToolBox) Convert(
+func (i *ProcessToolBox) ConvertTasks(
 	sourceClusterName string,
 	replicationTasks ...*replicationspb.ReplicationTask,
 ) []TrackableExecutableTask {
 	tasks := make([]TrackableExecutableTask, len(replicationTasks))
 	for _, replicationTask := range replicationTasks {
-		tasks = append(tasks, i.convert(sourceClusterName, replicationTask))
+		tasks = append(tasks, i.convertOne(sourceClusterName, replicationTask))
 	}
 	return tasks
 }
 
-func (i *ProcessToolBox) convert(
+func (i *ProcessToolBox) convertOne(
 	sourceClusterName string,
 	replicationTask *replicationspb.ReplicationTask,
 ) TrackableExecutableTask {
