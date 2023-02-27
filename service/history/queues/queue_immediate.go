@@ -96,6 +96,7 @@ func NewImmediateQueue(
 			executor,
 			options,
 			hostRateLimiter,
+			NoopReaderCompletionFn,
 			logger,
 			metricsHandler,
 		),
@@ -159,9 +160,7 @@ func (p *immediateQueue) processEventLoop() {
 		case <-p.shutdownCh:
 			return
 		case <-p.notifyCh:
-			if err := p.processNewRange(); err != nil {
-				p.logger.Error("Unable to process new range", tag.Error(err))
-			}
+			p.processNewRange()
 		case <-pollTimer.C:
 			p.processPollTimer(pollTimer)
 		case <-p.checkpointTimer.C:
@@ -173,10 +172,7 @@ func (p *immediateQueue) processEventLoop() {
 }
 
 func (p *immediateQueue) processPollTimer(pollTimer *time.Timer) {
-	if err := p.processNewRange(); err != nil {
-		p.logger.Error("Unable to process new range", tag.Error(err))
-	}
-
+	p.processNewRange()
 	pollTimer.Reset(backoff.Jitter(
 		p.options.MaxPollInterval(),
 		p.options.MaxPollIntervalJitterCoefficient(),

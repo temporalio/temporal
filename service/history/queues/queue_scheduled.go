@@ -54,6 +54,7 @@ type (
 		newTimeLock sync.Mutex
 		newTime     time.Time
 
+		lookAheadCh               chan struct{}
 		lookAheadRateLimitRequest quotas.Request
 	}
 )
@@ -106,6 +107,18 @@ func NewScheduledQueue(
 		}
 	}
 
+	lookAheadCh := make(chan struct{}, 1)
+	readerCompletionFn := func(readerID int32) {
+		if readerID != DefaultReaderId {
+			return
+		}
+
+		select {
+		case lookAheadCh <- struct{}{}:
+		default:
+		}
+	}
+
 	return &scheduledQueue{
 		queueBase: newQueueBase(
 			shard,
@@ -117,6 +130,7 @@ func NewScheduledQueue(
 			executor,
 			options,
 			hostRateLimiter,
+			readerCompletionFn,
 			logger,
 			metricsHandler,
 		),
@@ -124,6 +138,7 @@ func NewScheduledQueue(
 		timerGate:  timer.NewLocalGate(shard.GetTimeSource()),
 		newTimerCh: make(chan struct{}, 1),
 
+		lookAheadCh:               lookAheadCh,
 		lookAheadRateLimitRequest: newReaderRequest(DefaultReaderId),
 	}
 }
@@ -188,6 +203,8 @@ func (p *scheduledQueue) processEventLoop() {
 		case <-p.newTimerCh:
 			p.metricsHandler.Counter(metrics.NewTimerNotifyCounter.GetMetricName()).Record(1)
 			p.processNewTime()
+		case <-p.lookAheadCh:
+			p.lookAheadTask()
 		case <-p.timerGate.FireChan():
 			p.processNewRange()
 		case <-p.checkpointTimer.C:
@@ -220,26 +237,6 @@ func (p *scheduledQueue) processNewTime() {
 	p.newTimeLock.Unlock()
 
 	p.timerGate.Update(newTime)
-}
-
-func (p *scheduledQueue) processNewRange() {
-	if err := p.queueBase.processNewRange(); err != nil {
-		// This only happens when shard state is invalid,
-		// in which case no look ahead is needed.
-		// Notification will be sent when shard is reacquired, but
-		// still set a max poll timer here as a catch all case.
-		p.timerGate.Update(p.timeSource.Now().Add(backoff.Jitter(
-			p.options.MaxPollInterval(),
-			p.options.MaxPollIntervalJitterCoefficient(),
-		)))
-		return
-	}
-
-	// Only do look ahead when shard state is valid.
-	// When shard is invalid, even look ahead task is found,
-	// it can't be loaded as scheduled queue max read level can't move
-	// forward.
-	p.lookAheadTask()
 }
 
 func (p *scheduledQueue) lookAheadTask() {
