@@ -38,7 +38,6 @@ import (
 	history "go.temporal.io/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
-	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	events "go.temporal.io/server/service/history/events"
 	tasks "go.temporal.io/server/service/history/tasks"
@@ -110,20 +109,6 @@ func (m *MockEngine) DescribeWorkflowExecution(ctx context.Context, request *his
 func (mr *MockEngineMockRecorder) DescribeWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).DescribeWorkflowExecution), ctx, request)
-}
-
-// ForceDeleteWorkflowExecution mocks base method.
-func (m *MockEngine) ForceDeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ForceDeleteWorkflowExecution", ctx, workflowKey)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ForceDeleteWorkflowExecution indicates an expected call of ForceDeleteWorkflowExecution.
-func (mr *MockEngineMockRecorder) ForceDeleteWorkflowExecution(ctx, workflowKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceDeleteWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).ForceDeleteWorkflowExecution), ctx, workflowKey)
 }
 
 // GenerateLastHistoryReplicationTasks mocks base method.

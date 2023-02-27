@@ -3,6 +3,8 @@ package replication
 import (
 	"time"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
@@ -86,5 +88,10 @@ func (e *ExecutableWorkflowTask) Execute() error {
 
 func (e *ExecutableWorkflowTask) HandleErr(err error) error {
 	// TODO original logic does not seem to have resend logic?
-	return err
+	switch err.(type) {
+	case nil, *serviceerror.NotFound:
+		return nil
+	default:
+		return err
+	}
 }

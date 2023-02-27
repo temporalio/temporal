@@ -148,6 +148,9 @@ func (s *executableWorkflowTaskSuite) TestHandleErr() {
 	err := errors.New("（╯‵□′）╯︵┴─┴")
 	s.Equal(err, s.task.HandleErr(err))
 
+	err = serviceerror.NewNotFound("")
+	s.Equal(nil, s.task.HandleErr(err))
+
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
 }

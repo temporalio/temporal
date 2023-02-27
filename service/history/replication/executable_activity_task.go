@@ -3,6 +3,8 @@ package replication
 import (
 	"time"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
@@ -93,7 +95,7 @@ func (e *ExecutableActivityTask) Execute() error {
 
 func (e *ExecutableActivityTask) HandleErr(err error) error {
 	switch retryErr := err.(type) {
-	case nil:
+	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
 		namespaceName, _, nsError := e.GetNamespaceInfo(e.NamespaceID)
@@ -106,7 +108,6 @@ func (e *ExecutableActivityTask) HandleErr(err error) error {
 		if resendErr := e.Resend(
 			ctx,
 			e.sourceClusterName,
-			e.ProcessToolBox,
 			retryErr,
 		); resendErr != nil {
 			return err

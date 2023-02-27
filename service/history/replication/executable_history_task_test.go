@@ -180,7 +180,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		rand.Int63(),
 		rand.Int63(),
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, gomock.Any(), err).Return(nil)
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(nil)
 
 	s.NoError(s.task.HandleErr(err))
 }
@@ -199,7 +199,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Error() {
 		rand.Int63(),
 		rand.Int63(),
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, gomock.Any(), err).Return(errors.New("（╯‵□′）╯︵┴─┴"))
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(errors.New("（╯‵□′）╯︵┴─┴"))
 
 	s.Equal(err, s.task.HandleErr(err))
 }
@@ -207,6 +207,9 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Error() {
 func (s *executableHistoryTaskSuite) TestHandleErr_Other() {
 	err := errors.New("（╯‵□′）╯︵┴─┴")
 	s.Equal(err, s.task.HandleErr(err))
+
+	err = serviceerror.NewNotFound("")
+	s.Equal(nil, s.task.HandleErr(err))
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))

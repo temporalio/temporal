@@ -6,8 +6,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -51,7 +54,6 @@ type (
 		Resend(
 			ctx context.Context,
 			remoteCluster string,
-			processToolBox ProcessToolBox,
 			retryErr *serviceerrors.RetryReplication,
 		) error
 		DeleteWorkflow(
@@ -72,9 +74,8 @@ type (
 		taskReceivedTime time.Time
 
 		// mutable data
-		taskState    int32
-		attempt      int32
-		scheduleTime int64
+		taskState int32
+		attempt   int32
 	}
 )
 
@@ -92,9 +93,8 @@ func NewExecutableTask(
 		taskCreationTime: taskCreationTime,
 		taskReceivedTime: taskReceivedTime,
 
-		taskState:    taskStatePending,
-		attempt:      0,
-		scheduleTime: 0,
+		taskState: taskStatePending,
+		attempt:   1,
 	}
 }
 
@@ -213,7 +213,6 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 func (e *ExecutableTaskImpl) Resend(
 	ctx context.Context,
 	remoteCluster string,
-	processToolBox ProcessToolBox,
 	retryErr *serviceerrors.RetryReplication,
 ) error {
 	e.MetricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
@@ -228,7 +227,7 @@ func (e *ExecutableTaskImpl) Resend(
 		)
 	}()
 
-	resendErr := processToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
+	resendErr := e.ProcessToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
 		ctx,
 		remoteCluster,
 		namespace.ID(retryErr.NamespaceId),
@@ -280,7 +279,16 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 	if err != nil {
 		return err
 	}
-	return engine.ForceDeleteWorkflowExecution(ctx, workflowKey)
+	_, err = engine.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: workflowKey.NamespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowKey.WorkflowID,
+			RunId:      workflowKey.RunID,
+		},
+		WorkflowVersion:    common.EmptyVersion,
+		ClosedWorkflowOnly: false,
+	})
+	return err
 }
 
 func (e *ExecutableTaskImpl) GetNamespaceInfo(
