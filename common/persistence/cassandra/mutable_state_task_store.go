@@ -253,17 +253,15 @@ func (d *MutableStateTaskStore) RegisterHistoryTaskReader(
 func (d *MutableStateTaskStore) UnregisterHistoryTaskReader(
 	_ context.Context,
 	_ *p.UnregisterHistoryTaskReaderRequest,
-) error {
+) {
 	// no-op
-	return nil
 }
 
 func (d *MutableStateTaskStore) UpdateHistoryTaskReaderProgress(
 	_ context.Context,
 	_ *p.UpdateHistoryTaskReaderProgressRequest,
-) error {
+) {
 	// no-op
-	return nil
 }
 
 func (d *MutableStateTaskStore) AddHistoryTasks(

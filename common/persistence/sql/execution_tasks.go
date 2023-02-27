@@ -51,17 +51,15 @@ func (m *sqlExecutionStore) RegisterHistoryTaskReader(
 func (m *sqlExecutionStore) UnregisterHistoryTaskReader(
 	_ context.Context,
 	_ *p.UnregisterHistoryTaskReaderRequest,
-) error {
+) {
 	// no-op
-	return nil
 }
 
 func (m *sqlExecutionStore) UpdateHistoryTaskReaderProgress(
 	_ context.Context,
 	_ *p.UpdateHistoryTaskReaderProgressRequest,
-) error {
+) {
 	// no-op
-	return nil
 }
 
 func (m *sqlExecutionStore) AddHistoryTasks(

@@ -1092,8 +1092,8 @@ type (
 
 		// Hints for persistence implementaion regarding hisotry task readers
 		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
-		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest) error
-		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest) error
+		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
+		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
 
 		AddHistoryTasks(ctx context.Context, request *AddHistoryTasksRequest) error
 		// TODO: deprecate GetHistoryTask persistence API

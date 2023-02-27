@@ -548,17 +548,17 @@ func (e *FaultInjectionExecutionStore) RegisterHistoryTaskReader(
 func (e *FaultInjectionExecutionStore) UnregisterHistoryTaskReader(
 	ctx context.Context,
 	request *persistence.UnregisterHistoryTaskReaderRequest,
-) error {
+) {
 	// hint methods don't actually hint DB, so don't inject any failure
-	return e.baseExecutionStore.UnregisterHistoryTaskReader(ctx, request)
+	e.baseExecutionStore.UnregisterHistoryTaskReader(ctx, request)
 }
 
 func (e *FaultInjectionExecutionStore) UpdateHistoryTaskReaderProgress(
 	ctx context.Context,
 	request *persistence.UpdateHistoryTaskReaderProgressRequest,
-) error {
+) {
 	// hint methods don't actually hint DB, so don't inject any failure
-	return e.baseExecutionStore.UpdateHistoryTaskReaderProgress(ctx, request)
+	e.baseExecutionStore.UpdateHistoryTaskReaderProgress(ctx, request)
 }
 
 func (e *FaultInjectionExecutionStore) AddHistoryTasks(

@@ -724,15 +724,15 @@ func (m *executionManagerImpl) RegisterHistoryTaskReader(
 func (m *executionManagerImpl) UnregisterHistoryTaskReader(
 	ctx context.Context,
 	request *UnregisterHistoryTaskReaderRequest,
-) error {
-	return m.persistence.UnregisterHistoryTaskReader(ctx, request)
+) {
+	m.persistence.UnregisterHistoryTaskReader(ctx, request)
 }
 
 func (m *executionManagerImpl) UpdateHistoryTaskReaderProgress(
 	ctx context.Context,
 	request *UpdateHistoryTaskReaderProgressRequest,
-) error {
-	return m.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
+) {
+	m.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
 }
 
 func (m *executionManagerImpl) AddHistoryTasks(

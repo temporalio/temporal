@@ -341,17 +341,17 @@ func (p *executionRetryablePersistenceClient) RegisterHistoryTaskReader(
 func (p *executionRetryablePersistenceClient) UnregisterHistoryTaskReader(
 	ctx context.Context,
 	request *UnregisterHistoryTaskReaderRequest,
-) error {
+) {
 	// hint methods don't actually hint DB, retry won't help
-	return p.persistence.UnregisterHistoryTaskReader(ctx, request)
+	p.persistence.UnregisterHistoryTaskReader(ctx, request)
 }
 
 func (p *executionRetryablePersistenceClient) UpdateHistoryTaskReaderProgress(
 	ctx context.Context,
 	request *UpdateHistoryTaskReaderProgressRequest,
-) error {
+) {
 	// hint methods don't actually hint DB, retry won't help
-	return p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
+	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
 }
 
 func (p *executionRetryablePersistenceClient) AddHistoryTasks(

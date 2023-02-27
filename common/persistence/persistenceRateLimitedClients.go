@@ -313,17 +313,17 @@ func (p *executionRateLimitedPersistenceClient) RegisterHistoryTaskReader(
 func (p *executionRateLimitedPersistenceClient) UnregisterHistoryTaskReader(
 	ctx context.Context,
 	request *UnregisterHistoryTaskReaderRequest,
-) error {
+) {
 	// hint methods don't actually hint DB, so don't go through persistence rate limiter
-	return p.persistence.UnregisterHistoryTaskReader(ctx, request)
+	p.persistence.UnregisterHistoryTaskReader(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) UpdateHistoryTaskReaderProgress(
 	ctx context.Context,
 	request *UpdateHistoryTaskReaderProgressRequest,
-) error {
+) {
 	// hint methods don't actually hint DB, so don't go through persistence rate limiter
-	return p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
+	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(

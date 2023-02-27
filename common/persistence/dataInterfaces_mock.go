@@ -667,11 +667,9 @@ func (mr *MockExecutionManagerMockRecorder) TrimHistoryBranch(ctx, request inter
 }
 
 // UnregisterHistoryTaskReader mocks base method.
-func (m *MockExecutionManager) UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest) error {
+func (m *MockExecutionManager) UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnregisterHistoryTaskReader", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "UnregisterHistoryTaskReader", ctx, request)
 }
 
 // UnregisterHistoryTaskReader indicates an expected call of UnregisterHistoryTaskReader.
@@ -696,11 +694,9 @@ func (mr *MockExecutionManagerMockRecorder) UpdateHistoryBranchInfo(ctx, request
 }
 
 // UpdateHistoryTaskReaderProgress mocks base method.
-func (m *MockExecutionManager) UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest) error {
+func (m *MockExecutionManager) UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateHistoryTaskReaderProgress", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "UpdateHistoryTaskReaderProgress", ctx, request)
 }
 
 // UpdateHistoryTaskReaderProgress indicates an expected call of UpdateHistoryTaskReaderProgress.
