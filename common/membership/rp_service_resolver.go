@@ -158,9 +158,7 @@ func (r *ringpopServiceResolver) RequestRefresh() {
 }
 
 // Lookup finds the host in the ring responsible for serving the given key
-func (r *ringpopServiceResolver) Lookup(
-	key string,
-) (*HostInfo, error) {
+func (r *ringpopServiceResolver) Lookup(key string) (HostInfo, error) {
 
 	addr, found := r.ring().Lookup(key)
 	if !found {
@@ -168,7 +166,7 @@ func (r *ringpopServiceResolver) Lookup(
 		return nil, ErrInsufficientHosts
 	}
 
-	return NewHostInfo(addr, r.getLabelsMap()), nil
+	return newRingpopHostInfo(addr, r.getLabelsMap()), nil
 }
 
 func (r *ringpopServiceResolver) AddListener(
@@ -204,10 +202,10 @@ func (r *ringpopServiceResolver) MemberCount() int {
 	return r.ring().ServerCount()
 }
 
-func (r *ringpopServiceResolver) Members() []*HostInfo {
-	var servers []*HostInfo
+func (r *ringpopServiceResolver) Members() []HostInfo {
+	var servers []HostInfo
 	for _, s := range r.ring().Servers() {
-		servers = append(servers, NewHostInfo(s, r.getLabelsMap()))
+		servers = append(servers, newRingpopHostInfo(s, r.getLabelsMap()))
 	}
 
 	return servers
@@ -274,7 +272,7 @@ func (r *ringpopServiceResolver) refreshNoLock() (*ChangedEvent, error) {
 
 	ring := newHashRing()
 	for _, addr := range addrs {
-		host := NewHostInfo(addr, r.getLabelsMap())
+		host := newRingpopHostInfo(addr, r.getLabelsMap())
 		ring.AddMembers(host)
 	}
 
@@ -373,13 +371,13 @@ func (r *ringpopServiceResolver) compareMembers(addrs []string) (map[string]stru
 	for _, addr := range addrs {
 		newMembersMap[addr] = struct{}{}
 		if _, ok := r.membersMap[addr]; !ok {
-			event.HostsAdded = append(event.HostsAdded, NewHostInfo(addr, r.getLabelsMap()))
+			event.HostsAdded = append(event.HostsAdded, newRingpopHostInfo(addr, r.getLabelsMap()))
 			changed = true
 		}
 	}
 	for addr := range r.membersMap {
 		if _, ok := newMembersMap[addr]; !ok {
-			event.HostsRemoved = append(event.HostsRemoved, NewHostInfo(addr, r.getLabelsMap()))
+			event.HostsRemoved = append(event.HostsRemoved, newRingpopHostInfo(addr, r.getLabelsMap()))
 			changed = true
 		}
 	}

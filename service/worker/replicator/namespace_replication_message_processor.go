@@ -61,7 +61,7 @@ func newNamespaceReplicationMessageProcessor(
 	remotePeer adminservice.AdminServiceClient,
 	metricsHandler metrics.Handler,
 	taskExecutor namespace.ReplicationTaskExecutor,
-	hostInfo *membership.HostInfo,
+	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 ) *namespaceReplicationMessageProcessor {
@@ -89,7 +89,7 @@ func newNamespaceReplicationMessageProcessor(
 
 type (
 	namespaceReplicationMessageProcessor struct {
-		hostInfo                  *membership.HostInfo
+		hostInfo                  membership.HostInfo
 		serviceResolver           membership.ServiceResolver
 		status                    int32
 		currentCluster            string

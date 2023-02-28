@@ -98,7 +98,7 @@ func NewTestRingpopCluster(
 			logger.Error("Failed to build broadcast hostport", tag.Error(err))
 			return nil
 		}
-		cluster.hostInfoList[i] = HostInfo{addr: cluster.hostAddrs[i]}
+		cluster.hostInfoList[i] = newRingpopHostInfo(cluster.hostAddrs[i], nil)
 	}
 
 	// if seed node is already supplied, use it; if not, set it
@@ -209,9 +209,9 @@ func (c *TestRingpopCluster) GetHostAddrs() []string {
 // the given addr, if it exists
 func (c *TestRingpopCluster) FindHostByAddr(addr string) (HostInfo, bool) {
 	for _, hi := range c.hostInfoList {
-		if hi.addr == addr {
+		if hi.GetAddress() == addr {
 			return hi, true
 		}
 	}
-	return HostInfo{}, false
+	return nil, false
 }
