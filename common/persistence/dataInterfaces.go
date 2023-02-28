@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dataInterfaces_mock.go -aux_files go.temporal.io/server/common/persistence=history_branch_util.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dataInterfaces_mock.go
 
 package persistence
 
@@ -730,25 +730,6 @@ type (
 		NodeID int64
 	}
 
-	NewHistoryBranchRequest struct {
-		// The tree ID for the new branch token
-		TreeID string
-		// optional: can specify BranchID or allow random UUID to be generated
-		BranchID *string
-		// optional: can specify Ancestors to leave as empty
-		Ancestors []*persistencespb.HistoryBranchRange
-
-		// optional: supply optionally configured workflow settings as hints
-		RunTimeout        *time.Duration
-		ExecutionTimeout  *time.Duration
-		RetentionDuration *time.Duration
-	}
-
-	NewHistoryBranchResponse struct {
-		// The newly created branch token
-		BranchToken []byte
-	}
-
 	// ReadHistoryBranchRequest is used to read a history branch
 	ReadHistoryBranchRequest struct {
 		// The shard to get history branch data
@@ -1061,8 +1042,6 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// AppendRawHistoryNodes add a node of raw histories to history node table
 		AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
-		// NewHistoryBranch initializes a new history branch
-		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch

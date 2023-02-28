@@ -504,21 +504,6 @@ func (mr *MockExecutionManagerMockRecorder) ListConcreteExecutions(ctx, request 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConcreteExecutions", reflect.TypeOf((*MockExecutionManager)(nil).ListConcreteExecutions), ctx, request)
 }
 
-// NewHistoryBranch mocks base method.
-func (m *MockExecutionManager) NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewHistoryBranch", ctx, request)
-	ret0, _ := ret[0].(*NewHistoryBranchResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewHistoryBranch indicates an expected call of NewHistoryBranch.
-func (mr *MockExecutionManagerMockRecorder) NewHistoryBranch(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).NewHistoryBranch), ctx, request)
-}
-
 // PutReplicationTaskToDLQ mocks base method.
 func (m *MockExecutionManager) PutReplicationTaskToDLQ(ctx context.Context, request *PutReplicationTaskToDLQRequest) error {
 	m.ctrl.T.Helper()

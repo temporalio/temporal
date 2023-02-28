@@ -102,7 +102,6 @@ func (s *historyReplicatorSuite) SetupTest() {
 	)
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
-	s.mockExecutionManager.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockWorkflowCache = wcache.NewMockCache(s.controller)
 	s.mockEventCache = s.mockShard.MockEventsCache
@@ -190,9 +189,6 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		gomock.Any(),
 		[]*persistence.WorkflowEvents{},
 	).Return(nil)
-	s.mockExecutionManager.EXPECT().NewHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.NewHistoryBranchResponse{
-		BranchToken: historyBranch.GetData(),
-	}, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: namespaceName},
 		nil,
@@ -355,9 +351,6 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		},
 		nil,
 	)
-	s.mockExecutionManager.EXPECT().NewHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.NewHistoryBranchResponse{
-		BranchToken: historyBranch.GetData(),
-	}, nil).AnyTimes()
 	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History: []*historypb.History{
 			{

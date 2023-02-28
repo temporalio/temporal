@@ -162,14 +162,6 @@ func (h *HistoryStore) DeleteHistoryNodes(
 	return nil
 }
 
-// NewHistoryBranch initializes a new history branch
-func (h *HistoryStore) NewHistoryBranch(
-	ctx context.Context,
-	request *p.NewHistoryBranchRequest,
-) (*p.NewHistoryBranchResponse, error) {
-	return p.CreateHistoryBranch(request)
-}
-
 // ReadHistoryBranch returns history node data for a branch
 // NOTE: For branch that has ancestors, we need to query Cassandra multiple times, because it doesn't support OR/UNION operator
 func (h *HistoryStore) ReadHistoryBranch(

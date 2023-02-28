@@ -65,7 +65,7 @@ func (s *historyBranchUtilSuite) TestHistoryBranchUtil() {
 	treeID0 := primitives.NewUUID().String()
 	branchID0 := primitives.NewUUID().String()
 	ancestors := []*persistencespb.HistoryBranchRange(nil)
-	branchToken0, err := CreateHistoryBranchToken(treeID0, branchID0, ancestors)
+	branchToken0, err := NewHistoryBranch(treeID0, &branchID0, ancestors)
 	s.NoError(err)
 
 	branchInfo0, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken0)

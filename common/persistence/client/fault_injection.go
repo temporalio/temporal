@@ -651,16 +651,6 @@ func (e *FaultInjectionExecutionStore) DeleteHistoryNodes(
 	return e.baseExecutionStore.DeleteHistoryNodes(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) NewHistoryBranch(
-	ctx context.Context,
-	request *persistence.NewHistoryBranchRequest,
-) (*persistence.NewHistoryBranchResponse, error) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.NewHistoryBranch(ctx, request)
-}
-
 func (e *FaultInjectionExecutionStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *persistence.InternalReadHistoryBranchRequest,

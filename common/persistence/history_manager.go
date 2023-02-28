@@ -573,15 +573,6 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 	}, err
 }
 
-// NewHistoryBranch initializes a new history branch
-func (m *executionManagerImpl) NewHistoryBranch(
-	ctx context.Context,
-	request *NewHistoryBranchRequest,
-) (*NewHistoryBranchResponse, error) {
-
-	return m.persistence.NewHistoryBranch(ctx, request)
-}
-
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranchByBatch(

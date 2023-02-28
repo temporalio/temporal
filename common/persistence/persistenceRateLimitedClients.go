@@ -669,19 +669,6 @@ func (p *executionRateLimitedPersistenceClient) AppendRawHistoryNodes(
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
 }
 
-// NewHistoryBranch initializes a new history branch
-func (p *executionRateLimitedPersistenceClient) NewHistoryBranch(
-	ctx context.Context,
-	request *NewHistoryBranchRequest,
-) (*NewHistoryBranchResponse, error) {
-	// NewHistoryBranch implementation currently doesn't actually query DB
-	// TODO: uncomment if necessary
-	// if ok := allow(ctx, "NewHistoryBranch", p.rateLimiter); !ok {
-	// 	return nil, ErrPersistenceLimitExceeded
-	// }
-	return p.persistence.NewHistoryBranch(ctx, request)
-}
-
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionRateLimitedPersistenceClient) ReadHistoryBranch(
 	ctx context.Context,

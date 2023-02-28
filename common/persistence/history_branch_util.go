@@ -22,9 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination history_branch_util_mock.go
+
 package persistence
 
 import (
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -33,6 +37,14 @@ import (
 
 type (
 	HistoryBranchUtil interface {
+		NewHistoryBranch(
+			treeID string,
+			branchID *string,
+			ancestors []*persistencespb.HistoryBranchRange,
+			runTimeout *time.Duration,
+			executionTimeout *time.Duration,
+			retentionDuration *time.Duration,
+		) ([]byte, error)
 		// ParseHistoryBranchInfo parses the history branch for branch information
 		ParseHistoryBranchInfo(branchToken []byte) (*persistencespb.HistoryBranch, error)
 		// UpdateHistoryBranchInfo updates the history branch with branch information
@@ -43,10 +55,20 @@ type (
 	}
 )
 
-func CreateHistoryBranchToken(treeID, branchID string, ancestors []*persistencespb.HistoryBranchRange) ([]byte, error) {
+func NewHistoryBranch(
+	treeID string,
+	branchID *string,
+	ancestors []*persistencespb.HistoryBranchRange,
+) ([]byte, error) {
+	var id string
+	if branchID == nil {
+		id = primitives.NewUUID().String()
+	} else {
+		id = *branchID
+	}
 	bi := &persistencespb.HistoryBranch{
 		TreeId:    treeID,
-		BranchId:  branchID,
+		BranchId:  id,
 		Ancestors: ancestors,
 	}
 	data, err := serialization.HistoryBranchToBlob(bi)
@@ -56,22 +78,15 @@ func CreateHistoryBranchToken(treeID, branchID string, ancestors []*persistences
 	return data.Data, nil
 }
 
-func CreateHistoryBranch(
-	request *NewHistoryBranchRequest,
-) (*NewHistoryBranchResponse, error) {
-	var branchID string
-	if request.BranchID == nil {
-		branchID = primitives.NewUUID().String()
-	} else {
-		branchID = *request.BranchID
-	}
-	branchToken, err := CreateHistoryBranchToken(request.TreeID, branchID, request.Ancestors)
-	if err != nil {
-		return nil, err
-	}
-	return &NewHistoryBranchResponse{
-		BranchToken: branchToken,
-	}, nil
+func (u *HistoryBranchUtilImpl) NewHistoryBranch(
+	treeID string,
+	branchID *string,
+	ancestors []*persistencespb.HistoryBranchRange,
+	runTimeout *time.Duration,
+	executionTimeout *time.Duration,
+	retentionDuration *time.Duration,
+) ([]byte, error) {
+	return NewHistoryBranch(treeID, branchID, ancestors)
 }
 
 func (u *HistoryBranchUtilImpl) ParseHistoryBranchInfo(branchToken []byte) (*persistencespb.HistoryBranch, error) {

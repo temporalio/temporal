@@ -730,19 +730,6 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
 }
 
-// NewHistoryBranch initializes a new history branch
-func (p *executionPersistenceClient) NewHistoryBranch(
-	ctx context.Context,
-	request *NewHistoryBranchRequest,
-) (_ *NewHistoryBranchResponse, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.recordRequestMetrics(metrics.PersistenceNewHistoryBranchScope, caller, startTime, retErr)
-	}()
-	return p.persistence.NewHistoryBranch(ctx, request)
-}
-
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionPersistenceClient) ReadHistoryBranch(
 	ctx context.Context,

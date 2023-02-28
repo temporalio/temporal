@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=dataInterfaces.go,go.temporal.io/server/common/persistence=history_branch_util.go
+//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=dataInterfaces.go
 
 package persistence
 
@@ -142,8 +142,6 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *InternalAppendHistoryNodesRequest) error
 		// DeleteHistoryNodes delete a node from history node table
 		DeleteHistoryNodes(ctx context.Context, request *InternalDeleteHistoryNodesRequest) error
-		// NewHistoryBranch initializes a new history branch
-		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch

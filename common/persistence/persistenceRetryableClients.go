@@ -477,22 +477,6 @@ func (p *executionRetryablePersistenceClient) AppendRawHistoryNodes(
 	return response, err
 }
 
-// NewHistoryBranch initializes a new history branch
-func (p *executionRetryablePersistenceClient) NewHistoryBranch(
-	ctx context.Context,
-	request *NewHistoryBranchRequest,
-) (*NewHistoryBranchResponse, error) {
-	var response *NewHistoryBranchResponse
-	op := func(ctx context.Context) error {
-		var err error
-		response, err = p.persistence.NewHistoryBranch(ctx, request)
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
-	return response, err
-}
-
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionRetryablePersistenceClient) ReadHistoryBranch(
 	ctx context.Context,
