@@ -204,7 +204,7 @@ func newQueueBase(
 	}
 
 	exclusiveDeletionHighWatermark := exclusiveReaderHighWatermark
-	readerGroup := NewReaderGroup(readerInitializer)
+	readerGroup := NewReaderGroup(shard.GetShardID(), category, readerInitializer, shard.GetExecutionManager())
 	for readerID, scopes := range readerScopes {
 		if len(scopes) == 0 {
 			continue

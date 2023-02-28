@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,8 @@ import (
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -40,7 +43,10 @@ type (
 	ReaderGroup struct {
 		sync.Mutex
 
-		initializer ReaderInitializer
+		shardID          int32
+		category         tasks.Category
+		initializer      ReaderInitializer
+		executionManager persistence.ExecutionManager
 
 		status    int32
 		readerMap map[int32]Reader
@@ -48,12 +54,19 @@ type (
 )
 
 func NewReaderGroup(
+	shardID int32,
+	category tasks.Category,
 	initializer ReaderInitializer,
+	executionManager persistence.ExecutionManager,
 ) *ReaderGroup {
 	return &ReaderGroup{
-		initializer: initializer,
-		status:      common.DaemonStatusInitialized,
-		readerMap:   make(map[int32]Reader),
+		shardID:          shardID,
+		category:         category,
+		initializer:      initializer,
+		executionManager: executionManager,
+
+		status:    common.DaemonStatusInitialized,
+		readerMap: make(map[int32]Reader),
 	}
 }
 
@@ -78,8 +91,8 @@ func (g *ReaderGroup) Stop() {
 	g.Lock()
 	defer g.Unlock()
 
-	for _, reader := range g.readerMap {
-		reader.Stop()
+	for readerID := range g.readerMap {
+		g.removeReaderLocked(readerID)
 	}
 }
 
@@ -112,6 +125,15 @@ func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
 	}
 
 	g.readerMap[readerID] = reader
+	err := g.executionManager.RegisterHistoryTaskReader(context.Background(), &persistence.RegisterHistoryTaskReaderRequest{
+		ShardID:      g.shardID,
+		TaskCategory: g.category,
+		ReaderID:     readerID,
+	})
+	if err != nil {
+		// TODO: bubble up the error when registring task reader
+		panic(fmt.Sprintf("Unable to register history task reader: %v", err))
+	}
 	if g.isStarted() {
 		reader.Start()
 	}
@@ -122,12 +144,21 @@ func (g *ReaderGroup) RemoveReader(readerID int32) {
 	g.Lock()
 	defer g.Unlock()
 
+	g.removeReaderLocked(readerID)
+}
+
+func (g *ReaderGroup) removeReaderLocked(readerID int32) {
 	reader, ok := g.readerMap[readerID]
 	if !ok {
 		return
 	}
 
 	reader.Stop()
+	g.executionManager.UnregisterHistoryTaskReader(context.Background(), &persistence.UnregisterHistoryTaskReaderRequest{
+		ShardID:      g.shardID,
+		TaskCategory: g.category,
+		ReaderID:     readerID,
+	})
 	delete(g.readerMap, readerID)
 }
 
