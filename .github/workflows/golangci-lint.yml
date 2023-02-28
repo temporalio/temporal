@@ -1,4 +1,4 @@
-name: lint
+name: golangci-lint
 on:
   pull_request:
 permissions:
@@ -14,10 +14,11 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: make-lint
-        run: make lint
-        env:
-          MERGE_BASE: HEAD~1
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: v1.50.1
+          args: --verbose --timeout 10m --fix=true --new-from-rev=HEAD~ --config=.golangci.yml
       - name: check-is-dirty
         run: |
           if [[ -n $(git status --porcelain) ]]; then
