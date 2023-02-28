@@ -329,9 +329,11 @@ func (p *ackMgrImpl) getReplicationTasksFn(
 ) collection.PaginationFn[tasks.Task] {
 	return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-			ShardID:             p.shard.GetShardID(),
-			TaskCategory:        tasks.CategoryReplication,
-			ReaderID:            common.DefaultQueueReaderID, // TODO: need different readerID for different remote cluster
+			ShardID:      p.shard.GetShardID(),
+			TaskCategory: tasks.CategoryReplication,
+			// TODO: need different readerID for different remote clusters
+			// e.g. use cluster's initial failover version
+			ReaderID:            common.DefaultQueueReaderID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 			BatchSize:           batchSize,

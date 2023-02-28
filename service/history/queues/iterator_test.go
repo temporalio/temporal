@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -89,6 +90,56 @@ func (s *iteratorSuite) TestNext_IncreaseTaskKey() {
 	s.Equal(NewRange(taskKey.Next(), r.ExclusiveMax), iterator.Range())
 
 	s.False(iterator.HasNext(DefaultReaderId))
+}
+
+func (s *iteratorSuite) TestNext_ReaderIDChange() {
+	r := NewRandomRange()
+
+	firstPageReaderID := int32(DefaultReaderId)
+	taskKey := NewRandomKeyInRange(r)
+	mockTask := tasks.NewMockTask(s.controller)
+	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
+
+	secondPageReaderID := int32(DefaultReaderId + 1)
+	secondPageRange := NewRange(taskKey.Next(), r.ExclusiveMax)
+	taskKey2 := NewRandomKeyInRange(secondPageRange)
+	mockTask2 := tasks.NewMockTask(s.controller)
+	mockTask2.EXPECT().GetKey().Return(taskKey2).Times(1)
+
+	paginationFnProvider := func(readerID int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
+		switch readerID {
+		case firstPageReaderID:
+			s.Equal(r, paginationRange)
+			return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+				return []tasks.Task{mockTask}, []byte("nextPageToken"), nil
+			}
+		case secondPageReaderID:
+			s.Equal(secondPageRange, paginationRange)
+			return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+				return []tasks.Task{mockTask2}, nil, nil
+			}
+		default:
+			return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+				return nil, nil, fmt.Errorf("unexpected readerID: %v", readerID)
+			}
+		}
+	}
+
+	iterator := NewIterator(paginationFnProvider, r)
+	s.Equal(r, iterator.Range())
+
+	s.True(iterator.HasNext(firstPageReaderID))
+	task, err := iterator.Next(firstPageReaderID)
+	s.NoError(err)
+	s.Equal(mockTask, task)
+	s.Equal(NewRange(taskKey.Next(), r.ExclusiveMax), iterator.Range())
+
+	s.True(iterator.HasNext(secondPageReaderID))
+	task2, err := iterator.Next(secondPageReaderID)
+	s.NoError(err)
+	s.Equal(mockTask2, task2)
+
+	s.Equal(NewRange(taskKey2.Next(), r.ExclusiveMax), iterator.Range())
 }
 
 func (s *iteratorSuite) TestCanSplit() {
@@ -260,5 +311,3 @@ func (s *iteratorSuite) TestRemaining() {
 	// test if Remaining returns a new iterator
 	s.Equal(2, numLoad)
 }
-
-// TODO: add a test on readerID change
