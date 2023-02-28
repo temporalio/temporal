@@ -47,7 +47,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log/tag"
@@ -815,19 +815,19 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrderBy() {
 			s.NoError(err)
 			switch searchAttrKey {
 			case "CustomIntField":
-				v1, _ := prevVal.(json.Number).Int64()
-				v2, _ := currVal.(json.Number).Int64()
-				s.Greater(v1, v2)
+				val1, _ := prevVal.(json.Number).Int64()
+				val2, _ := currVal.(json.Number).Int64()
+				s.Greater(val1, val2)
 			case "CustomDoubleField":
-				v1, _ := prevVal.(json.Number).Float64()
-				v2, _ := currVal.(json.Number).Float64()
-				s.Greater(v1, v2)
+				val1, _ := prevVal.(json.Number).Float64()
+				val2, _ := currVal.(json.Number).Float64()
+				s.Greater(val1, val2)
 			case "CustomKeywordField":
 				s.Greater(prevVal.(string), currVal.(string))
 			case "CustomDatetimeField":
-				v1, _ := time.Parse(time.RFC3339Nano, prevVal.(string))
-				v2, _ := time.Parse(time.RFC3339Nano, currVal.(string))
-				s.Greater(v1, v2)
+				val1, _ := time.Parse(time.RFC3339Nano, prevVal.(string))
+				val2, _ := time.Parse(time.RFC3339Nano, currVal.(string))
+				s.Greater(val1, val2)
 			}
 			prevVal = currVal
 		}
