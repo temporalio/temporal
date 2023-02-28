@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/visibility/store"
 )
 
 const (
@@ -314,6 +315,13 @@ func (pdb *db) GetFromVisibility(
 	}
 	pdb.processRowFromDB(&row)
 	return &row, nil
+}
+
+func (pdb *db) CountFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) (int64, error) {
+	return 0, store.OperationNotSupportedErr
 }
 
 func (pdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) {

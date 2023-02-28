@@ -265,6 +265,7 @@ func NewMutableState(
 		s.currentVersion,
 		common.FirstEventID,
 		s.bufferEventsInDB,
+		s.metricsHandler,
 	)
 	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s)
@@ -326,6 +327,7 @@ func newMutableStateFromDB(
 		common.EmptyVersion,
 		dbRecord.NextEventId,
 		dbRecord.BufferedEvents,
+		mutableState.metricsHandler,
 	)
 
 	mutableState.currentVersion = common.EmptyVersion
@@ -527,6 +529,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.currentVersion,
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
+		ms.metricsHandler,
 	)
 
 	return nil
@@ -1518,7 +1521,11 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	if err != nil {
 		return nil, err
 	}
-	if _, err = ms.AddFirstWorkflowTaskScheduled(event, false); err != nil {
+	var parentClock *clockspb.VectorClock
+	if parentExecutionInfo != nil {
+		parentClock = parentExecutionInfo.Clock
+	}
+	if _, err = ms.AddFirstWorkflowTaskScheduled(parentClock, event, false); err != nil {
 		return nil, err
 	}
 
@@ -1724,6 +1731,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 // by the startEvent's FirstWorkflowTaskBackoff.
 // Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
 func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
+	parentClock *clockspb.VectorClock,
 	startEvent *historypb.HistoryEvent,
 	bypassTaskGeneration bool,
 ) (int64, error) {
@@ -1731,7 +1739,14 @@ func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
 	if err := ms.checkMutability(opTag); err != nil {
 		return common.EmptyEventID, err
 	}
-	return ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
+	scheduleEventID, err := ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
+	if err != nil {
+		return 0, err
+	}
+	if parentClock != nil {
+		ms.executionInfo.ParentClock = parentClock
+	}
+	return scheduleEventID, nil
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEvent(
@@ -4140,6 +4155,7 @@ func (ms *MutableStateImpl) cleanupTransaction(
 		ms.GetCurrentVersion(),
 		ms.nextEventIDInDB,
 		ms.bufferEventsInDB,
+		ms.metricsHandler,
 	)
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)

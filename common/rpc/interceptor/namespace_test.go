@@ -190,7 +190,7 @@ func (s *namespaceSuite) TestGetNamespace() {
 	}
 
 	for _, testCase := range testCases {
-		extractedNamespace := GetNamespace(register, testCase.method)
+		extractedNamespace := MustGetNamespaceName(register, testCase.method)
 		s.Equal(testCase.namespaceName, extractedNamespace)
 	}
 }

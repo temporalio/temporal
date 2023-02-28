@@ -33,6 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
@@ -258,7 +259,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Local() {
 	s.True(functionInvoked)
 }
 
-func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation_Redirect() {
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_Redirect() {
 	ctx := context.Background()
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
 	info := &grpc.UnaryServerInfo{
@@ -298,6 +299,30 @@ func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation_Redirect() {
 	)
 	s.NoError(err)
 	s.IsType(&workflowservice.SignalWithStartWorkflowExecutionResponse{}, resp)
+}
+
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NamespaceNotFound() {
+	ctx := context.Background()
+	req := &workflowservice.PollWorkflowTaskQueueRequest{}
+	info := &grpc.UnaryServerInfo{
+		FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue",
+	}
+
+	namespaceName := namespace.Name("unknown_namespace")
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(nil, &serviceerror.NamespaceNotFound{}).AnyTimes()
+	methodName := "PollWorkflowTaskQueue"
+
+	resp, err := s.redirector.handleRedirectAPIInvocation(
+		ctx,
+		req,
+		info,
+		nil,
+		methodName,
+		globalAPIResponses[methodName],
+		namespaceName,
+	)
+	s.Nil(resp)
+	s.IsType(&serviceerror.NamespaceNotFound{}, err)
 }
 
 type (

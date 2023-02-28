@@ -539,6 +539,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		workflowTask.StartedEventID,
 		request.Identity,
 		request.BinaryChecksum,
+		request.SdkMetadata,
+		request.MeteringMetadata,
 	)
 
 	err := m.afterAddWorkflowTaskCompletedEvent(event, maxResetPoints)

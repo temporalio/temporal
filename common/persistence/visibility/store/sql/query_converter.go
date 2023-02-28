@@ -36,7 +36,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -54,6 +53,8 @@ type (
 			token *pageToken,
 		) (string, []any)
 
+		buildCountStmt(namespaceID namespace.ID, queryString string) (string, []any)
+
 		getDatetimeFormat() string
 
 		getCoalesceCloseTimeExpr() sqlparser.Expr
@@ -61,9 +62,11 @@ type (
 
 	QueryConverter struct {
 		pluginQueryConverter
-		request   *manager.ListWorkflowExecutionsRequestV2
-		saTypeMap searchattribute.NameTypeMap
-		saMapper  searchattribute.Mapper
+		namespaceName namespace.Name
+		namespaceID   namespace.ID
+		saTypeMap     searchattribute.NameTypeMap
+		saMapper      searchattribute.Mapper
+		queryString   string
 
 		seenNamespaceDivision bool
 	}
@@ -73,7 +76,7 @@ var (
 	// strings.Replacer takes a sequence of old to new replacements
 	escapeCharMap = []string{
 		"'", "''",
-		`"`, `\\"`,
+		"\"", "\\\"",
 		"\b", "\\b",
 		"\n", "\\n",
 		"\r", "\\r",
@@ -114,34 +117,53 @@ var (
 
 func newQueryConverterInternal(
 	pqc pluginQueryConverter,
-	request *manager.ListWorkflowExecutionsRequestV2,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	queryString string,
 ) *QueryConverter {
 	return &QueryConverter{
 		pluginQueryConverter: pqc,
-		request:              request,
+		namespaceName:        namespaceName,
+		namespaceID:          namespaceID,
 		saTypeMap:            saTypeMap,
 		saMapper:             saMapper,
+		queryString:          queryString,
 
 		seenNamespaceDivision: false,
 	}
 }
 
-func (c *QueryConverter) BuildSelectStmt() (*sqlplugin.VisibilitySelectFilter, error) {
-	token, err := deserializePageToken(c.request.NextPageToken)
+func (c *QueryConverter) BuildSelectStmt(
+	pageSize int,
+	nextPageToken []byte,
+) (*sqlplugin.VisibilitySelectFilter, error) {
+	token, err := deserializePageToken(nextPageToken)
 	if err != nil {
 		return nil, err
 	}
-	queryString, err := c.convertWhereString(c.request.Query)
+	queryString, err := c.convertWhereString(c.queryString)
 	if err != nil {
 		return nil, err
 	}
 	queryString, queryArgs := c.buildSelectStmt(
-		c.request.NamespaceID,
+		c.namespaceID,
 		queryString,
-		c.request.PageSize,
+		pageSize,
 		token,
+	)
+	return &sqlplugin.VisibilitySelectFilter{Query: queryString, QueryArgs: queryArgs}, nil
+}
+
+func (c *QueryConverter) BuildCountStmt() (*sqlplugin.VisibilitySelectFilter, error) {
+	queryString, err := c.convertWhereString(c.queryString)
+	if err != nil {
+		return nil, err
+	}
+	queryString, queryArgs := c.buildCountStmt(
+		c.namespaceID,
+		queryString,
 	)
 	return &sqlplugin.VisibilitySelectFilter{Query: queryString, QueryArgs: queryArgs}, nil
 }
@@ -196,6 +218,17 @@ func (c *QueryConverter) convertSelectStmt(sel *sqlparser.Select) error {
 		if err != nil {
 			return err
 		}
+
+		// Wrap user's query in parenthesis. This is to ensure that further changes
+		// to the query won't affect the user's query.
+		switch sel.Where.Expr.(type) {
+		case *sqlparser.ParenExpr:
+			// no-op: top-level expression is already a parenthesis
+		default:
+			sel.Where.Expr = &sqlparser.ParenExpr{
+				Expr: sel.Where.Expr,
+			}
+		}
 	}
 
 	// This logic comes from elasticsearch/visibility_store.go#convertQuery function.
@@ -244,7 +277,7 @@ func (c *QueryConverter) convertWhereExpr(expr *sqlparser.Expr) error {
 	case *sqlparser.FuncExpr:
 		return query.NewConverterError("%s: function expression", query.NotSupportedErrMessage)
 	case *sqlparser.ColName:
-		return query.NewConverterError("incomplete expression")
+		return query.NewConverterError("%s: incomplete expression", query.InvalidExpressionErrMessage)
 	default:
 		return query.NewConverterError("%s: expression of type %T", query.NotSupportedErrMessage, e)
 	}
@@ -253,7 +286,7 @@ func (c *QueryConverter) convertWhereExpr(expr *sqlparser.Expr) error {
 func (c *QueryConverter) convertAndExpr(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.AndExpr)
 	if !ok {
-		return query.NewConverterError("%v is not an 'and' expression", sqlparser.String(*exprRef))
+		return query.NewConverterError("`%s` is not an 'AND' expression", sqlparser.String(*exprRef))
 	}
 	err := c.convertWhereExpr(&expr.Left)
 	if err != nil {
@@ -265,7 +298,7 @@ func (c *QueryConverter) convertAndExpr(exprRef *sqlparser.Expr) error {
 func (c *QueryConverter) convertOrExpr(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.OrExpr)
 	if !ok {
-		return query.NewConverterError("%v is not an 'or' expression", sqlparser.String(*exprRef))
+		return query.NewConverterError("`%s` is not an 'OR' expression", sqlparser.String(*exprRef))
 	}
 	err := c.convertWhereExpr(&expr.Left)
 	if err != nil {
@@ -277,35 +310,31 @@ func (c *QueryConverter) convertOrExpr(exprRef *sqlparser.Expr) error {
 func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.ComparisonExpr)
 	if !ok {
-		return query.NewConverterError("%v is not a comparison expression", sqlparser.String(*exprRef))
-	}
-
-	saName, saFieldName, err := c.convertColName(&expr.Left)
-	if err != nil {
-		return err
-	}
-	saType, err := c.saTypeMap.GetType(saFieldName)
-	if err != nil {
 		return query.NewConverterError(
-			"%s: column name '%s' is not a valid search attribute",
-			query.InvalidExpressionErrMessage,
-			saName,
+			"`%s` is not a comparison expression",
+			sqlparser.String(*exprRef),
 		)
 	}
 
 	if !isSupportedComparisonOperator(expr.Operator) {
 		return query.NewConverterError(
-			"%s: invalid operator '%s'",
+			"%s: invalid operator '%s' in `%s`",
 			query.InvalidExpressionErrMessage,
 			expr.Operator,
+			sqlparser.String(expr),
 		)
 	}
 
-	err = c.convertValueExpr(&expr.Right, saName, saType)
+	saColNameExpr, err := c.convertColName(&expr.Left)
 	if err != nil {
 		return err
 	}
-	switch saType {
+
+	err = c.convertValueExpr(&expr.Right, saColNameExpr.alias, saColNameExpr.valueType)
+	if err != nil {
+		return err
+	}
+	switch saColNameExpr.valueType {
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		newExpr, err := c.convertKeywordListComparisonExpr(expr)
 		if err != nil {
@@ -326,70 +355,79 @@ func (c *QueryConverter) convertRangeCond(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.RangeCond)
 	if !ok {
 		return query.NewConverterError(
-			"%v is not a range condition expression",
+			"`%s` is not a range condition expression",
 			sqlparser.String(*exprRef),
 		)
 	}
-	saName, saFieldName, err := c.convertColName(&expr.Left)
+	saColNameExpr, err := c.convertColName(&expr.Left)
 	if err != nil {
 		return err
 	}
-	saType, err := c.saTypeMap.GetType(saFieldName)
-	if err != nil {
-		return query.NewConverterError(
-			"%s: column name '%s' is not a valid search attribute",
-			query.InvalidExpressionErrMessage,
-			saName,
-		)
-	}
-	if !isSupportedTypeRangeCond(saType) {
+	if !isSupportedTypeRangeCond(saColNameExpr.valueType) {
 		return query.NewConverterError(
 			"%s: cannot do range condition on search attribute '%s' of type %s",
 			query.InvalidExpressionErrMessage,
-			saName,
-			saType.String(),
+			saColNameExpr.alias,
+			saColNameExpr.valueType.String(),
 		)
 	}
-	err = c.convertValueExpr(&expr.From, saName, saType)
+	err = c.convertValueExpr(&expr.From, saColNameExpr.alias, saColNameExpr.valueType)
 	if err != nil {
 		return err
 	}
-	err = c.convertValueExpr(&expr.To, saName, saType)
+	err = c.convertValueExpr(&expr.To, saColNameExpr.alias, saColNameExpr.valueType)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *QueryConverter) convertColName(
-	exprRef *sqlparser.Expr,
-) (saAlias string, saFieldName string, retError error) {
+func (c *QueryConverter) convertColName(exprRef *sqlparser.Expr) (*saColName, error) {
 	expr, ok := (*exprRef).(*sqlparser.ColName)
 	if !ok {
-		return "", "", query.NewConverterError(
+		return nil, query.NewConverterError(
 			"%s: must be a column name but was %T",
 			query.InvalidExpressionErrMessage,
 			*exprRef,
 		)
 	}
-	saAlias = strings.ReplaceAll(sqlparser.String(expr), "`", "")
-	saFieldName = saAlias
+	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
+	saFieldName := saAlias
 	if searchattribute.IsMappable(saAlias) {
 		var err error
-		saFieldName, err = c.saMapper.GetFieldName(saAlias, c.request.Namespace.String())
+		saFieldName, err = c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
 		if err != nil {
-			return "", "", err
+			return nil, query.NewConverterError(
+				"%s: column name '%s' is not a valid search attribute",
+				query.InvalidExpressionErrMessage,
+				saAlias,
+			)
 		}
+	}
+	saType, err := c.saTypeMap.GetType(saFieldName)
+	if err != nil {
+		// This should never happen since it came from mapping.
+		return nil, query.NewConverterError(
+			"%s: column name '%s' is not a valid search attribute",
+			query.InvalidExpressionErrMessage,
+			saAlias,
+		)
 	}
 	if saFieldName == searchattribute.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
 	}
-	var newExpr sqlparser.Expr = newColName(searchattribute.GetSqlDbColName(saFieldName))
 	if saAlias == searchattribute.CloseTime {
-		newExpr = c.getCoalesceCloseTimeExpr()
+		*exprRef = c.getCoalesceCloseTimeExpr()
+		return closeTimeSaColName, nil
 	}
+	newExpr := newSAColName(
+		searchattribute.GetSqlDbColName(saFieldName),
+		saAlias,
+		saFieldName,
+		saType,
+	)
 	*exprRef = newExpr
-	return saAlias, saFieldName, nil
+	return newExpr, nil
 }
 
 func (c *QueryConverter) convertValueExpr(
@@ -415,7 +453,12 @@ func (c *QueryConverter) convertValueExpr(
 			*exprRef = sqlparser.NewFloatVal([]byte(strconv.FormatFloat(v, 'f', -1, 64)))
 		default:
 			// this should never happen: query.ParseSqlValue returns one of the types above
-			panic(fmt.Sprintf("Unexpected value type: %T", v))
+			return query.NewConverterError(
+				"%s: unexpected value type %T for search attribute %s",
+				query.InvalidExpressionErrMessage,
+				v,
+				saName,
+			)
 		}
 		return nil
 	case sqlparser.BoolVal:
@@ -423,8 +466,8 @@ func (c *QueryConverter) convertValueExpr(
 		return nil
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
-		for _, subExpr := range e {
-			err := c.convertValueExpr(&subExpr, saName, saType)
+		for i := range e {
+			err := c.convertValueExpr(&e[i], saName, saType)
 			if err != nil {
 				return err
 			}
@@ -450,6 +493,7 @@ func (c *QueryConverter) convertValueExpr(
 }
 
 // parseSQLVal handles values for specific search attributes.
+// Returns a string, an int64 or a float64 if there are no errors.
 // For datetime, converts to UTC.
 // For execution status, converts string to enum value.
 func (c *QueryConverter) parseSQLVal(
@@ -480,10 +524,14 @@ func (c *QueryConverter) parseSQLVal(
 			var err error
 			tm, err = time.Parse(time.RFC3339Nano, v)
 			if err != nil {
-				return "", err
+				return nil, query.NewConverterError(
+					"%s: unable to parse datetime '%s'",
+					query.InvalidExpressionErrMessage,
+					v,
+				)
 			}
 		default:
-			return "", query.NewConverterError(
+			return nil, query.NewConverterError(
 				"%s: unexpected value type %T for search attribute %s",
 				query.InvalidExpressionErrMessage,
 				v,
@@ -509,7 +557,7 @@ func (c *QueryConverter) parseSQLVal(
 			}
 			status = int64(code)
 		default:
-			return "", query.NewConverterError(
+			return nil, query.NewConverterError(
 				"%s: unexpected value type %T for search attribute %s",
 				query.InvalidExpressionErrMessage,
 				v,
@@ -525,19 +573,11 @@ func (c *QueryConverter) parseSQLVal(
 func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 	expr, ok := (*exprRef).(*sqlparser.IsExpr)
 	if !ok {
-		return query.NewConverterError("%v is not an 'IS' expression", sqlparser.String(*exprRef))
+		return query.NewConverterError("`%s` is not an 'IS' expression", sqlparser.String(*exprRef))
 	}
-	saName, saFieldName, err := c.convertColName(&expr.Expr)
+	_, err := c.convertColName(&expr.Expr)
 	if err != nil {
 		return err
-	}
-	_, err = c.saTypeMap.GetType(saFieldName)
-	if err != nil {
-		return query.NewConverterError(
-			"%s: column name '%s' is not a valid search attribute",
-			query.InvalidExpressionErrMessage,
-			saName,
-		)
 	}
 	switch expr.Operator {
 	case sqlparser.IsNullStr, sqlparser.IsNotNullStr:

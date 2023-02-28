@@ -31,7 +31,6 @@ import (
 	"github.com/xwb1989/sqlparser"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -64,15 +63,19 @@ func (node *pgCastExpr) Format(buf *sqlparser.TrackedBuffer) {
 }
 
 func newPostgreSQLQueryConverter(
-	request *manager.ListWorkflowExecutionsRequestV2,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	queryString string,
 ) *QueryConverter {
 	return newQueryConverterInternal(
 		&pgQueryConverter{},
-		request,
+		namespaceName,
+		namespaceID,
 		saTypeMap,
 		saMapper,
+		queryString,
 	)
 }
 
@@ -83,7 +86,7 @@ func (c *pgQueryConverter) getDatetimeFormat() string {
 func (c *pgQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
 	return newFuncExpr(
 		coalesceFuncName,
-		newColName(searchattribute.GetSqlDbColName(searchattribute.CloseTime)),
+		closeTimeSaColName,
 		newUnsafeSQLString(maxDatetimeValue.Format(c.getDatetimeFormat())),
 	)
 }
@@ -92,13 +95,17 @@ func (c *pgQueryConverter) convertKeywordListComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedKeywordListOperator(expr.Operator) {
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+			formatComparisonExprStringForError(*expr),
+		)
 	}
 
-	var newExpr sqlparser.Expr
 	switch expr.Operator {
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
-		newExpr = c.newJsonContainsExpr(expr.Left, expr.Right)
+		newExpr := c.newJsonContainsExpr(expr.Left, expr.Right)
 		if expr.Operator == sqlparser.NotEqualStr {
 			newExpr = &sqlparser.NotExpr{Expr: newExpr}
 		}
@@ -107,54 +114,65 @@ func (c *pgQueryConverter) convertKeywordListComparisonExpr(
 		valTupleExpr, isValTuple := expr.Right.(sqlparser.ValTuple)
 		if !isValTuple {
 			return nil, query.NewConverterError(
-				"%s: unexpected value type %T",
+				"%s: unexpected value type (expected tuple of strings, got %s)",
 				query.InvalidExpressionErrMessage,
-				expr,
+				sqlparser.String(expr.Right),
 			)
 		}
-		newExpr, err := c.convertInExpr(expr.Left, valTupleExpr...)
-		if err != nil {
-			return nil, err
+		var newExpr sqlparser.Expr = &sqlparser.ParenExpr{
+			Expr: c.convertInExpr(expr.Left, valTupleExpr),
 		}
-		newExpr = &sqlparser.ParenExpr{Expr: newExpr}
 		if expr.Operator == sqlparser.NotInStr {
 			newExpr = &sqlparser.NotExpr{Expr: newExpr}
 		}
 		return newExpr, nil
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator '%s' not supported for KeywordList type search attribute in `%s`",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+			formatComparisonExprStringForError(*expr),
+		)
 	}
 }
 
 func (c *pgQueryConverter) convertInExpr(
 	leftExpr sqlparser.Expr,
-	values ...sqlparser.Expr,
-) (sqlparser.Expr, error) {
-	if len(values) == 0 {
-		return nil, nil
+	values sqlparser.ValTuple,
+) sqlparser.Expr {
+	exprs := make([]sqlparser.Expr, len(values))
+	for i, value := range values {
+		exprs[i] = c.newJsonContainsExpr(leftExpr, value)
 	}
-
-	newExpr := c.newJsonContainsExpr(leftExpr, values[0])
-	if len(values) == 1 {
-		return newExpr, nil
+	for len(exprs) > 1 {
+		k := 0
+		for i := 0; i < len(exprs); i += 2 {
+			if i+1 < len(exprs) {
+				exprs[k] = &sqlparser.OrExpr{
+					Left:  exprs[i],
+					Right: exprs[i+1],
+				}
+			} else {
+				exprs[k] = exprs[i]
+			}
+			k++
+		}
+		exprs = exprs[:k]
 	}
-
-	orRightExpr, err := c.convertInExpr(leftExpr, values[1:]...)
-	if err != nil {
-		return nil, err
-	}
-	return &sqlparser.OrExpr{
-		Left:  newExpr,
-		Right: orRightExpr,
-	}, nil
+	return exprs[0]
 }
 
 func (c *pgQueryConverter) convertTextComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {
 	if !isSupportedTextOperator(expr.Operator) {
-		return nil, query.NewConverterError("invalid query")
+		return nil, query.NewConverterError(
+			"%s: operator '%s' not supported for Text type search attribute in `%s`",
+			query.InvalidExpressionErrMessage,
+			expr.Operator,
+			formatComparisonExprStringForError(*expr),
+		)
 	}
 	valueExpr, ok := expr.Right.(*unsafeSQLString)
 	if !ok {
@@ -204,8 +222,8 @@ func (c *pgQueryConverter) buildSelectStmt(
 	pageSize int,
 	token *pageToken,
 ) (string, []any) {
-	whereClauses := make([]string, 0, 3)
-	queryArgs := make([]any, 0, 8)
+	var whereClauses []string
+	var queryArgs []any
 
 	whereClauses = append(
 		whereClauses,
@@ -254,5 +272,28 @@ func (c *pgQueryConverter) buildSelectStmt(
 		sqlparser.String(c.getCoalesceCloseTimeExpr()),
 		searchattribute.GetSqlDbColName(searchattribute.StartTime),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
+	), queryArgs
+}
+
+func (c *pgQueryConverter) buildCountStmt(
+	namespaceID namespace.ID,
+	queryString string,
+) (string, []any) {
+	var whereClauses []string
+	var queryArgs []any
+
+	whereClauses = append(
+		whereClauses,
+		fmt.Sprintf("(%s = ?)", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+	)
+	queryArgs = append(queryArgs, namespaceID.String())
+
+	if len(queryString) > 0 {
+		whereClauses = append(whereClauses, queryString)
+	}
+
+	return fmt.Sprintf(
+		"SELECT COUNT(1) FROM executions_visibility WHERE %s",
+		strings.Join(whereClauses, " AND "),
 	), queryArgs
 }

@@ -178,7 +178,7 @@ func GrpcServerOptionsProvider(
 	interceptors := []grpc.UnaryServerInterceptor{
 		// Service Error Interceptor should be the most outer interceptor on error handling
 		rpc.ServiceErrorInterceptor,
-		namespaceValidatorInterceptor.LengthValidationIntercept,
+		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),

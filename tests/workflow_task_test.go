@@ -95,6 +95,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	hbTimeout := 0
 	for i := 0; i < 12; i++ {
 		resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace: s.namespace,
 			TaskToken: taskToken,
 			Commands:  []*commandpb.Command{},
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
@@ -125,6 +126,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	s.Equal(2, hbTimeout)
 
 	resp5, err5 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.namespace,
 		TaskToken: taskToken,
 		Commands: []*commandpb.Command{
 			{
@@ -198,6 +200,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 	s.assertLastHistoryEvent(we, 3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED)
 
 	resp2, err2 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.namespace,
 		TaskToken: resp1.GetTaskToken(),
 		Commands:  []*commandpb.Command{},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
@@ -210,6 +213,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 	s.NoError(err2)
 
 	resp3, err3 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.namespace,
 		TaskToken: resp2.WorkflowTask.GetTaskToken(),
 		Commands: []*commandpb.Command{
 			{
@@ -231,6 +235,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 	s.NoError(err3)
 
 	resp4, err4 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.namespace,
 		TaskToken: resp3.WorkflowTask.GetTaskToken(),
 		Commands: []*commandpb.Command{
 			{
@@ -252,6 +257,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 	s.NoError(err4)
 
 	resp5, err5 := s.engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.namespace,
 		TaskToken: resp4.WorkflowTask.GetTaskToken(),
 		Commands: []*commandpb.Command{
 			{
@@ -496,6 +502,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTask
 
 	// fail this workflow task to flush buffer, and then another workflow task will be scheduled
 	_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: s.namespace,
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
 		Identity:  "integ test",
@@ -573,6 +580,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowT
 		}
 
 		_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			Namespace: s.namespace,
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
@@ -676,6 +684,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 		}
 
 		_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			Namespace: s.namespace,
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
@@ -776,6 +785,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 		}
 
 		_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			Namespace: s.namespace,
 			TaskToken: resp1.GetTaskToken(),
 			Cause:     cause,
 			Identity:  "integ test",
@@ -809,6 +819,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 
 	// fail this workflow task to flush buffer
 	_, err2 := s.engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: s.namespace,
 		TaskToken: resp1.GetTaskToken(),
 		Cause:     cause,
 		Identity:  "integ test",

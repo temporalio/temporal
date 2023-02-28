@@ -1081,10 +1081,6 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
 }
 
 func (s *advancedVisibilitySuite) TestCountWorkflow() {
-	if !s.isElasticsearchEnabled {
-		s.T().Skip("This test is only for Elasticsearch")
-	}
-
 	id := "es-integration-count-workflow-test"
 	wt := "es-integration-count-workflow-test-type"
 	tl := "es-integration-count-workflow-test-taskqueue"

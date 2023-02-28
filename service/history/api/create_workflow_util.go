@@ -166,7 +166,7 @@ func GenerateFirstWorkflowTask(
 ) (int64, error) {
 	if parentInfo == nil {
 		// WorkflowTask is only created when it is not a Child Workflow and no backoff is needed
-		return mutableState.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
+		return mutableState.AddFirstWorkflowTaskScheduled(nil, startEvent, bypassTaskGeneration)
 	}
 	return 0, nil
 }
