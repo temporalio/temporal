@@ -444,19 +444,18 @@ func (ms *MutableStateImpl) SetHistoryTree(
 	if duration := ms.namespaceEntry.Retention(); duration > 0 {
 		retentionDuration = &duration
 	}
-	initialBranch, err := ms.shard.GetExecutionManager().NewHistoryBranch(
-		ctx,
-		&persistence.NewHistoryBranchRequest{
-			TreeID:            treeID,
-			RunTimeout:        runTimeout,
-			ExecutionTimeout:  executionTimeout,
-			RetentionDuration: retentionDuration,
-		},
+	initialBranchToken, err := ms.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+		treeID,
+		nil,
+		[]*persistencespb.HistoryBranchRange{},
+		runTimeout,
+		executionTimeout,
+		retentionDuration,
 	)
 	if err != nil {
 		return err
 	}
-	return ms.SetCurrentBranchToken(initialBranch.BranchToken)
+	return ms.SetCurrentBranchToken(initialBranchToken)
 }
 
 func (ms *MutableStateImpl) SetCurrentBranchToken(

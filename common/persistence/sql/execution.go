@@ -42,6 +42,7 @@ import (
 
 type sqlExecutionStore struct {
 	SqlStore
+	p.HistoryBranchUtilImpl
 }
 
 var _ p.ExecutionStore = (*sqlExecutionStore)(nil)

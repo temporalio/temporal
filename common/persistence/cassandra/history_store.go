@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -72,6 +71,7 @@ type (
 	HistoryStore struct {
 		Session gocql.Session
 		Logger  log.Logger
+		p.HistoryBranchUtilImpl
 	}
 )
 
@@ -160,56 +160,6 @@ func (h *HistoryStore) DeleteHistoryNodes(
 		return gocql.ConvertError("DeleteHistoryNodes", err)
 	}
 	return nil
-}
-
-// ParseHistoryBranchInfo parses the history branch for branch information
-func (h *HistoryStore) ParseHistoryBranchInfo(
-	ctx context.Context,
-	request *p.ParseHistoryBranchInfoRequest,
-) (*p.ParseHistoryBranchInfoResponse, error) {
-
-	branchInfo, err := p.ParseHistoryBranchToken(request.BranchToken)
-	if err != nil {
-		return nil, err
-	}
-	return &p.ParseHistoryBranchInfoResponse{
-		BranchInfo: branchInfo,
-	}, nil
-}
-
-// UpdateHistoryBranchInfo updates the history branch with branch information
-func (h *HistoryStore) UpdateHistoryBranchInfo(
-	ctx context.Context,
-	request *p.UpdateHistoryBranchInfoRequest,
-) (*p.UpdateHistoryBranchInfoResponse, error) {
-
-	branchToken, err := p.UpdateHistoryBranchToken(request.BranchToken, request.BranchInfo)
-	if err != nil {
-		return nil, err
-	}
-	return &p.UpdateHistoryBranchInfoResponse{
-		BranchToken: branchToken,
-	}, nil
-}
-
-// NewHistoryBranch initializes a new history branch
-func (h *HistoryStore) NewHistoryBranch(
-	ctx context.Context,
-	request *p.NewHistoryBranchRequest,
-) (*p.NewHistoryBranchResponse, error) {
-	var branchID string
-	if request.BranchID == nil {
-		branchID = primitives.NewUUID().String()
-	} else {
-		branchID = *request.BranchID
-	}
-	branchToken, err := p.NewHistoryBranchToken(request.TreeID, branchID, request.Ancestors)
-	if err != nil {
-		return nil, err
-	}
-	return &p.NewHistoryBranchResponse{
-		BranchToken: branchToken,
-	}, nil
 }
 
 // ReadHistoryBranch returns history node data for a branch

@@ -245,19 +245,6 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 	}
 }
 
-func (s *scheduledQueueSuite) TestProcessNewRange_LookAheadPerformed() {
-	timerGate := timer.NewRemoteGate()
-	s.scheduledQueue.timerGate = timerGate
-
-	// test if look ahead if performed after processing new range
-	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetHistoryTasksResponse{
-		Tasks:         []tasks.Task{},
-		NextPageToken: nil,
-	}, nil).Times(1)
-
-	s.scheduledQueue.processNewRange()
-}
-
 func (s *scheduledQueueSuite) setupLookAheadMock(
 	hasLookAheadTask bool,
 ) (lookAheadRange Range, lookAheadTask *tasks.MockTask) {

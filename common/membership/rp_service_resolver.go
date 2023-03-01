@@ -51,10 +51,10 @@ const (
 	// ringpop instance. The data for this key is the service name
 	RoleKey = "serviceName"
 
-	// RolePort label is set by every single service as soon as it bootstraps its
+	// rolePort label is set by every single service as soon as it bootstraps its
 	// ringpop instance. The data for this key represents the TCP port through which
 	// the service can be accessed.
-	RolePort = "servicePort"
+	rolePort = "servicePort"
 
 	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
@@ -299,7 +299,7 @@ func (r *ringpopServiceResolver) getReachableMembers() ([]string, error) {
 		// Each temporal service in the ring should advertise which port it has its gRPC listener
 		// on via a RingPop label. If we cannot find the label, we will assume that that the
 		// temporal service is listening on the same port that this node is listening on.
-		servicePortLabel, ok := member.Label(RolePort)
+		servicePortLabel, ok := member.Label(rolePort)
 		if ok {
 			servicePort, err = strconv.Atoi(servicePortLabel)
 			if err != nil {
