@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -43,6 +44,8 @@ import (
 
 func TestArchivalQueueFactory(t *testing.T) {
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	metricsHandler := metrics.NewMockHandler(ctrl)
 	metricsHandler.EXPECT().WithTags(gomock.Any()).Do(func(tags ...metrics.Tag) metrics.Handler {
 		require.Len(t, tags, 1)
@@ -50,15 +53,23 @@ func TestArchivalQueueFactory(t *testing.T) {
 		assert.Equal(t, "ArchivalQueueProcessor", tags[0].Value())
 		return metricsHandler
 	}).Times(2)
-	shardContext := shard.NewMockContext(ctrl)
-	shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).Times(2)
-	shardContext.EXPECT().GetQueueState(tasks.CategoryArchival).Return(&persistence.QueueState{
-		ReaderStates: nil,
-		ExclusiveReaderHighWatermark: &persistence.TaskKey{
-			FireTime: timestamp.TimeNowPtrUtc(),
+
+	mockShard := shard.NewTestContext(
+		ctrl,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				tasks.CategoryIDArchival: &persistence.QueueState{
+					ReaderStates: nil,
+					ExclusiveReaderHighWatermark: &persistence.TaskKey{
+						FireTime: timestamp.TimeNowPtrUtc(),
+					},
+				},
+			},
 		},
-	}, true)
-	shardContext.EXPECT().GetTimeSource().Return(namespace.NewMockClock(ctrl)).AnyTimes()
+		tests.NewDynamicConfig(),
+	)
 
 	queueFactory := NewArchivalQueueFactory(ArchivalQueueFactoryParams{
 		QueueFactoryBaseParams: QueueFactoryBaseParams{
@@ -68,7 +79,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 			Logger:         log.NewNoopLogger(),
 		},
 	})
-	queue := queueFactory.CreateQueue(shardContext, nil)
+	queue := queueFactory.CreateQueue(mockShard, nil)
 
 	require.NotNil(t, queue)
 	assert.Equal(t, tasks.CategoryArchival, queue.Category())

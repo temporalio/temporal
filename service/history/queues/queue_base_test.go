@@ -182,7 +182,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 					},
 				},
 			},
-			1: {
+			DefaultReaderId + 1: {
 				Scopes: []*persistencespb.QueueSliceScope{
 					{
 						Range: &persistencespb.QueueSliceRange{
@@ -215,6 +215,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 		},
 		s.config,
 	)
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(2)
 
 	base := newQueueBase(
 		mockShard,
@@ -258,6 +259,8 @@ func (s *queueBaseSuite) TestStartStop() {
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(1)
+	mockShard.Resource.ExecutionMgr.EXPECT().UnregisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(1)
 
 	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -325,6 +328,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(1)
 
 	base := newQueueBase(
 		mockShard,
@@ -356,7 +360,8 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 	scopeMinKey := tasks.MaximumKey
 	readerScopes := map[int32][]Scope{}
-	for _, readerID := range []int32{DefaultReaderId, 2, 3} {
+	readerIDs := []int32{DefaultReaderId, 2, 3}
+	for _, readerID := range readerIDs {
 		scopes := NewRandomScopes(10)
 		readerScopes[readerID] = scopes
 		if len(scopes) != 0 {
@@ -382,6 +387,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(len(readerIDs))
 
 	base := newQueueBase(
 		mockShard,
@@ -543,6 +549,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(2)
 
 	base := newQueueBase(
 		mockShard,
