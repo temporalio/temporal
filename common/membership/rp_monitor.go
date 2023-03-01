@@ -135,7 +135,7 @@ func (rpo *ringpopMonitor) Start() {
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
 	}
 
-	rpo.rp.Start(
+	rpo.rp.start(
 		func() ([]string, error) { return rpo.fetchCurrentBootstrapHostports() },
 		healthyHostLastHeartbeatCutoff/2)
 
@@ -144,7 +144,7 @@ func (rpo *ringpopMonitor) Start() {
 		rpo.logger.Fatal("unable to get ring pop labels", tag.Error(err))
 	}
 
-	if err = labels.Set(RolePort, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
+	if err = labels.Set(rolePort, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
 		rpo.logger.Fatal("unable to set ring pop ServicePort label", tag.Error(err))
 	}
 
@@ -164,7 +164,7 @@ func (rpo *ringpopMonitor) WaitUntilInitialized(ctx context.Context) error {
 	return err
 }
 
-func ServiceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.ServiceType, error) {
+func serviceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.ServiceType, error) {
 	switch name {
 	case primitives.AllServices:
 		return persistence.All, nil
@@ -199,8 +199,8 @@ func (rpo *ringpopMonitor) upsertMyMembership(
 	return err
 }
 
-// SplitHostPortTyped expands upon net.SplitHostPort by providing type parsing.
-func SplitHostPortTyped(hostPort string) (net.IP, uint16, error) {
+// splitHostPortTyped expands upon net.SplitHostPort by providing type parsing.
+func splitHostPortTyped(hostPort string) (net.IP, uint16, error) {
 	ipstr, portstr, err := net.SplitHostPort(hostPort)
 	if err != nil {
 		return nil, 0, err
@@ -225,13 +225,13 @@ func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	sessionStarted := time.Now().UTC()
 
 	// Parse and validate broadcast hostport
-	broadcastAddress, broadcastPort, err := SplitHostPortTyped(broadcastHostport)
+	broadcastAddress, broadcastPort, err := splitHostPortTyped(broadcastHostport)
 	if err != nil {
 		return err
 	}
 
 	// Parse and validate existing service name
-	role, err := ServiceNameToServiceTypeEnum(rpo.serviceName)
+	role, err := serviceNameToServiceTypeEnum(rpo.serviceName)
 	if err != nil {
 		return err
 	}
