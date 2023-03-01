@@ -107,7 +107,7 @@ func NewTestRingpopCluster(
 	}
 	logger.Info("seedNode", tag.Name(cluster.seedNode))
 
-	seedAddress, seedPort, err := SplitHostPortTyped(cluster.seedNode)
+	seedAddress, seedPort, err := splitHostPortTyped(cluster.seedNode)
 	if err != nil {
 		logger.Error("unable to split host port", tag.Error(err))
 		return nil
@@ -154,7 +154,7 @@ func NewTestRingpopCluster(
 			return nil
 		}
 		rpWrapper := NewRingPop(ringPop, time.Second*2, logger)
-		_, port, _ := SplitHostPortTyped(cluster.hostAddrs[i])
+		_, port, _ := splitHostPortTyped(cluster.hostAddrs[i])
 		cluster.rings[i] = NewRingpopMonitor(
 			serviceName,
 			map[primitives.ServiceName]int{serviceName: int(port)}, // use same port for "grpc" port
