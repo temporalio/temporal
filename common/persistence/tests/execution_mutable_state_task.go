@@ -624,6 +624,7 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	key := task.GetKey()
 	resp, err := s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
 		ShardID:      s.ShardID,
+		ReaderID:     common.DefaultQueueReaderID,
 		TaskCategory: category,
 		TaskKey:      key,
 	})
@@ -639,6 +640,7 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 
 	_, err = s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
 		ShardID:      s.ShardID,
+		ReaderID:     common.DefaultQueueReaderID,
 		TaskCategory: category,
 		TaskKey:      key,
 	})
