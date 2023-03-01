@@ -408,6 +408,7 @@ type (
 	// RegisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
 	// that a new queue reader is created by queue processing logic
 	RegisterHistoryTaskReaderRequest struct {
+		// TODO: use shard identity = shardID + owner, instead of just shardID here.
 		ShardID      int32
 		TaskCategory tasks.Category
 		ReaderID     int32
@@ -421,6 +422,7 @@ type (
 	// that a certain queue reader's process and the fact that it won't try to load tasks with
 	// key less than InclusiveMinPendingTaskKey
 	UpdateHistoryTaskReaderProgressRequest struct {
+		// TODO: use shard identity = shardID + owner, instead of just shardID here.
 		ShardID                    int32
 		TaskCategory               tasks.Category
 		ReaderID                   int32
