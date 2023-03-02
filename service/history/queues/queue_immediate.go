@@ -62,7 +62,7 @@ func NewImmediateQueue(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *immediateQueue {
-	paginationFnProvider := func(readerID int32, r Range) collection.PaginationFn[tasks.Task] { // readerID
+	paginationFnProvider := func(readerID int32, r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			ctx, cancel := newQueueIOContext()
 			defer cancel()
