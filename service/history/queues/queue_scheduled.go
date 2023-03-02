@@ -61,6 +61,8 @@ type (
 
 const (
 	lookAheadRateLimitDelay = 3 * time.Second
+
+	lookAheadReadID = DefaultReaderId
 )
 
 func NewScheduledQueue(
@@ -201,6 +203,12 @@ func (p *scheduledQueue) processEventLoop() {
 		select {
 		case <-p.shutdownCh:
 			return
+		default:
+		}
+
+		select {
+		case <-p.shutdownCh:
+			return
 		case <-p.newTimerCh:
 			p.metricsHandler.Counter(metrics.NewTimerNotifyCounter.GetMetricName()).Record(1)
 			p.processNewTime()
@@ -259,10 +267,16 @@ func (p *scheduledQueue) lookAheadTask() {
 	ctx, cancel := newQueueIOContext()
 	defer cancel()
 
+	if err := p.registerLookAheadReader(); err != nil {
+		p.logger.Error("Failed to load look ahead task", tag.Error(err))
+		p.timerGate.Update(lookAheadMinTime)
+		return
+	}
+
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
 		TaskCategory:        p.category,
-		ReaderID:            DefaultReaderId,
+		ReaderID:            lookAheadReadID,
 		InclusiveMinTaskKey: tasks.NewKey(lookAheadMinTime, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(lookAheadMaxTime, 0),
 		BatchSize:           1,
@@ -292,6 +306,21 @@ func (p *scheduledQueue) lookAheadTask() {
 	// NOTE: with this we don't need a separate max poll timer, loading will be triggerred
 	// every maxPollInterval + jitter.
 	p.timerGate.Update(lookAheadMaxTime)
+}
+
+func (p *scheduledQueue) registerLookAheadReader() error {
+	_, ok := p.readerGroup.ReaderByID(lookAheadReadID)
+	if ok {
+		return nil
+	}
+
+	// This should not happen actually
+	// since lookAheadReadID == DefaultReaderID and defaultReaderID should
+	// always be available (unless during shutdown)
+
+	// TODO: return error from NewReader
+	p.readerGroup.NewReader(lookAheadReadID)
+	return nil
 }
 
 // IsTimeExpired checks if the testing time is equal or before

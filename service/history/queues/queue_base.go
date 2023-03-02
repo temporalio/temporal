@@ -298,30 +298,29 @@ func (p *queueBase) processNewRange() {
 		panic(fmt.Sprintf("Unknown task category type: %v", categoryType.String()))
 	}
 
-	if !p.nonReadableScope.CanSplitByRange(newMaxKey) {
-		return
+	slices := make([]Slice, 0, 1)
+	if p.nonReadableScope.CanSplitByRange(newMaxKey) {
+		var newReadScope Scope
+		newReadScope, p.nonReadableScope = p.nonReadableScope.SplitByRange(newMaxKey)
+		slices = append(slices, NewSlice(
+			p.paginationFnProvider,
+			p.executableInitializer,
+			p.monitor,
+			newReadScope,
+		))
 	}
-
-	var newReadScope Scope
-	newReadScope, p.nonReadableScope = p.nonReadableScope.SplitByRange(newMaxKey)
-	newSlice := NewSlice(
-		p.paginationFnProvider,
-		p.executableInitializer,
-		p.monitor,
-		newReadScope,
-	)
 
 	reader, ok := p.readerGroup.ReaderByID(DefaultReaderId)
 	if !ok {
-		p.readerGroup.NewReader(DefaultReaderId, newSlice)
+		p.readerGroup.NewReader(DefaultReaderId, slices...)
 		return
 	}
 
 	if now := p.timeSource.Now(); now.After(p.nextForceNewSliceTime) {
-		reader.AppendSlices(newSlice)
+		reader.AppendSlices(slices...)
 		p.nextForceNewSliceTime = now.Add(forceNewSliceDuration)
 	} else {
-		reader.MergeSlices(newSlice)
+		reader.MergeSlices(slices...)
 	}
 }
 

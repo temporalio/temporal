@@ -114,6 +114,8 @@ func (g *ReaderGroup) ReaderByID(readerID int32) (Reader, bool) {
 	return reader, ok
 }
 
+// TODO: this method should return error
+// if reader registration fails or reader group already closed
 func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
 	reader := g.initializer(readerID, slices)
 
@@ -123,6 +125,8 @@ func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
 	if _, ok := g.readerMap[readerID]; ok {
 		panic(fmt.Sprintf("reader with ID %v already exists", readerID))
 	}
+
+	// TODO: return error if reader group already stopped
 
 	g.readerMap[readerID] = reader
 	err := g.executionManager.RegisterHistoryTaskReader(context.Background(), &persistence.RegisterHistoryTaskReaderRequest{
@@ -153,6 +157,10 @@ func (g *ReaderGroup) removeReaderLocked(readerID int32) {
 		return
 	}
 
+	// TODO: reader.Stop() does not guarantee reader won't issue new read requests
+	// But it's very unlikely as it waits for 1min.
+	// If UnregisterHistoryTaskReader requires no more read requests after the call
+	// we need to wait for the separate reader goroutine to complete.
 	reader.Stop()
 	g.executionManager.UnregisterHistoryTaskReader(context.Background(), &persistence.UnregisterHistoryTaskReaderRequest{
 		ShardID:      g.shardID,

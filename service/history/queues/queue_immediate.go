@@ -160,6 +160,12 @@ func (p *immediateQueue) processEventLoop() {
 		select {
 		case <-p.shutdownCh:
 			return
+		default:
+		}
+
+		select {
+		case <-p.shutdownCh:
+			return
 		case <-p.notifyCh:
 			p.processNewRange()
 		case <-pollTimer.C:

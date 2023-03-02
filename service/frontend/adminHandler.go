@@ -744,6 +744,11 @@ func (adh *AdminHandler) ListHistoryTasks(
 			}
 		}
 	}
+
+	// Queue reader registration is only meaning for history service
+	// we are on frontend service, so no need to do registration
+	// TODO: move the logic to history service
+
 	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             request.ShardId,
 		TaskCategory:        taskCategory,

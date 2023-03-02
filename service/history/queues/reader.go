@@ -248,6 +248,10 @@ func (r *ReaderImpl) SplitSlices(splitter SliceSplitter) {
 }
 
 func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
+	if len(incomingSlices) == 0 {
+		return
+	}
+
 	validateSlicesOrderedDisjoint(incomingSlices)
 
 	r.Lock()
@@ -405,6 +409,13 @@ func (r *ReaderImpl) eventLoop() {
 	}()
 
 	for {
+		// prioritize shutdown
+		select {
+		case <-r.shutdownCh:
+			return
+		default:
+		}
+
 		select {
 		case <-r.shutdownCh:
 			return

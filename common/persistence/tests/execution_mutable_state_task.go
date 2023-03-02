@@ -85,8 +85,6 @@ var (
 		fakeImmediateTaskCategory,
 		fakeScheduledTaskCategory,
 	}
-
-	testReaderID = int32(0)
 )
 
 func NewExecutionMutableStateTaskSuite(
@@ -145,7 +143,7 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 		s.ExecutionManager.RegisterHistoryTaskReader(s.Ctx, &p.RegisterHistoryTaskReaderRequest{
 			ShardID:      s.ShardID,
 			TaskCategory: category,
-			ReaderID:     testReaderID,
+			ReaderID:     common.DefaultQueueReaderID,
 		})
 	}
 }
@@ -172,7 +170,7 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 		s.ExecutionManager.UnregisterHistoryTaskReader(s.Ctx, &p.UnregisterHistoryTaskReaderRequest{
 			ShardID:      s.ShardID,
 			TaskCategory: category,
-			ReaderID:     testReaderID,
+			ReaderID:     common.DefaultQueueReaderID,
 		})
 	}
 

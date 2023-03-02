@@ -296,6 +296,7 @@ func (e *historyEngineImpl) Stop() {
 		queueProcessor.Stop()
 	}
 	e.replicationProcessorMgr.Stop()
+	e.replicationAckMgr.Close()
 	// unset the failover callback
 	e.shard.GetNamespaceRegistry().UnregisterStateChangeCallback(e)
 }
