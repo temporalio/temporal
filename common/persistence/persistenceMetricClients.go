@@ -197,6 +197,10 @@ func (p *executionPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
+func (p *executionPersistenceClient) GetHistoryBranchUtil() HistoryBranchUtil {
+	return p.persistence.GetHistoryBranchUtil()
+}
+
 func (p *executionPersistenceClient) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
@@ -303,6 +307,33 @@ func (p *executionPersistenceClient) ListConcreteExecutions(
 		p.recordRequestMetrics(metrics.PersistenceListConcreteExecutionsScope, caller, startTime, retErr)
 	}()
 	return p.persistence.ListConcreteExecutions(ctx, request)
+}
+
+func (p *executionPersistenceClient) RegisterHistoryTaskReader(
+	ctx context.Context,
+	request *RegisterHistoryTaskReaderRequest,
+) error {
+	// hint methods won't go through persistence rate limiter
+	// so also not emitting any persistence request/error metrics
+	return p.persistence.RegisterHistoryTaskReader(ctx, request)
+}
+
+func (p *executionPersistenceClient) UnregisterHistoryTaskReader(
+	ctx context.Context,
+	request *UnregisterHistoryTaskReaderRequest,
+) {
+	// hint methods won't go through persistence rate limiter
+	// so also not emitting any persistence request/error metrics
+	p.persistence.UnregisterHistoryTaskReader(ctx, request)
+}
+
+func (p *executionPersistenceClient) UpdateHistoryTaskReaderProgress(
+	ctx context.Context,
+	request *UpdateHistoryTaskReaderProgressRequest,
+) {
+	// hint methods won't go through persistence rate limiter
+	// so also not emitting any persistence request/error metrics
+	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
 }
 
 func (p *executionPersistenceClient) AddHistoryTasks(
@@ -724,45 +755,6 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 		p.recordRequestMetrics(metrics.PersistenceAppendRawHistoryNodesScope, caller, startTime, retErr)
 	}()
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
-}
-
-// ParseHistoryBranchInfo parses the history branch for branch information
-func (p *executionPersistenceClient) ParseHistoryBranchInfo(
-	ctx context.Context,
-	request *ParseHistoryBranchInfoRequest,
-) (_ *ParseHistoryBranchInfoResponse, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.recordRequestMetrics(metrics.PersistenceParseHistoryBranchInfoScope, caller, startTime, retErr)
-	}()
-	return p.persistence.ParseHistoryBranchInfo(ctx, request)
-}
-
-// UpdateHistoryBranchInfo updates the history branch with branch information
-func (p *executionPersistenceClient) UpdateHistoryBranchInfo(
-	ctx context.Context,
-	request *UpdateHistoryBranchInfoRequest,
-) (_ *UpdateHistoryBranchInfoResponse, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.recordRequestMetrics(metrics.PersistenceUpdateHistoryBranchInfoScope, caller, startTime, retErr)
-	}()
-	return p.persistence.UpdateHistoryBranchInfo(ctx, request)
-}
-
-// NewHistoryBranch initializes a new history branch
-func (p *executionPersistenceClient) NewHistoryBranch(
-	ctx context.Context,
-	request *NewHistoryBranchRequest,
-) (_ *NewHistoryBranchResponse, retErr error) {
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.recordRequestMetrics(metrics.PersistenceNewHistoryBranchScope, caller, startTime, retErr)
-	}()
-	return p.persistence.NewHistoryBranch(ctx, request)
 }
 
 // ReadHistoryBranch returns history node data for a branch

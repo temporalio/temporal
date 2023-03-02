@@ -79,6 +79,10 @@ func (m *executionManagerImpl) GetName() string {
 	return m.persistence.GetName()
 }
 
+func (m *executionManagerImpl) GetHistoryBranchUtil() HistoryBranchUtil {
+	return m.persistence.GetHistoryBranchUtil()
+}
+
 // The below three APIs are related to serialization/deserialization
 
 func (m *executionManagerImpl) CreateWorkflowExecution(
@@ -712,6 +716,27 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 		newResponse.States[i] = state
 	}
 	return newResponse, nil
+}
+
+func (m *executionManagerImpl) RegisterHistoryTaskReader(
+	ctx context.Context,
+	request *RegisterHistoryTaskReaderRequest,
+) error {
+	return m.persistence.RegisterHistoryTaskReader(ctx, request)
+}
+
+func (m *executionManagerImpl) UnregisterHistoryTaskReader(
+	ctx context.Context,
+	request *UnregisterHistoryTaskReaderRequest,
+) {
+	m.persistence.UnregisterHistoryTaskReader(ctx, request)
+}
+
+func (m *executionManagerImpl) UpdateHistoryTaskReaderProgress(
+	ctx context.Context,
+	request *UpdateHistoryTaskReaderProgressRequest,
+) {
+	m.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
 }
 
 func (m *executionManagerImpl) AddHistoryTasks(

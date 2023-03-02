@@ -69,7 +69,7 @@ func NewRingPop(
 }
 
 // Start start ring pop
-func (r *RingPop) Start(
+func (r *RingPop) start(
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
 ) {

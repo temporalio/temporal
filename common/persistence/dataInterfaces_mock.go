@@ -386,6 +386,20 @@ func (mr *MockExecutionManagerMockRecorder) GetCurrentExecution(ctx, request int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentExecution", reflect.TypeOf((*MockExecutionManager)(nil).GetCurrentExecution), ctx, request)
 }
 
+// GetHistoryBranchUtil mocks base method.
+func (m *MockExecutionManager) GetHistoryBranchUtil() HistoryBranchUtil {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryBranchUtil")
+	ret0, _ := ret[0].(HistoryBranchUtil)
+	return ret0
+}
+
+// GetHistoryBranchUtil indicates an expected call of GetHistoryBranchUtil.
+func (mr *MockExecutionManagerMockRecorder) GetHistoryBranchUtil() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryBranchUtil", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryBranchUtil))
+}
+
 // GetHistoryTask mocks base method.
 func (m *MockExecutionManager) GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -490,36 +504,6 @@ func (mr *MockExecutionManagerMockRecorder) ListConcreteExecutions(ctx, request 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConcreteExecutions", reflect.TypeOf((*MockExecutionManager)(nil).ListConcreteExecutions), ctx, request)
 }
 
-// NewHistoryBranch mocks base method.
-func (m *MockExecutionManager) NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewHistoryBranch", ctx, request)
-	ret0, _ := ret[0].(*NewHistoryBranchResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewHistoryBranch indicates an expected call of NewHistoryBranch.
-func (mr *MockExecutionManagerMockRecorder) NewHistoryBranch(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).NewHistoryBranch), ctx, request)
-}
-
-// ParseHistoryBranchInfo mocks base method.
-func (m *MockExecutionManager) ParseHistoryBranchInfo(ctx context.Context, request *ParseHistoryBranchInfoRequest) (*ParseHistoryBranchInfoResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ParseHistoryBranchInfo", ctx, request)
-	ret0, _ := ret[0].(*ParseHistoryBranchInfoResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ParseHistoryBranchInfo indicates an expected call of ParseHistoryBranchInfo.
-func (mr *MockExecutionManagerMockRecorder) ParseHistoryBranchInfo(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParseHistoryBranchInfo", reflect.TypeOf((*MockExecutionManager)(nil).ParseHistoryBranchInfo), ctx, request)
-}
-
 // PutReplicationTaskToDLQ mocks base method.
 func (m *MockExecutionManager) PutReplicationTaskToDLQ(ctx context.Context, request *PutReplicationTaskToDLQRequest) error {
 	m.ctrl.T.Helper()
@@ -622,6 +606,20 @@ func (mr *MockExecutionManagerMockRecorder) ReadRawHistoryBranch(ctx, request in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadRawHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ReadRawHistoryBranch), ctx, request)
 }
 
+// RegisterHistoryTaskReader mocks base method.
+func (m *MockExecutionManager) RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterHistoryTaskReader", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegisterHistoryTaskReader indicates an expected call of RegisterHistoryTaskReader.
+func (mr *MockExecutionManagerMockRecorder) RegisterHistoryTaskReader(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterHistoryTaskReader", reflect.TypeOf((*MockExecutionManager)(nil).RegisterHistoryTaskReader), ctx, request)
+}
+
 // SetWorkflowExecution mocks base method.
 func (m *MockExecutionManager) SetWorkflowExecution(ctx context.Context, request *SetWorkflowExecutionRequest) (*SetWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -652,19 +650,28 @@ func (mr *MockExecutionManagerMockRecorder) TrimHistoryBranch(ctx, request inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrimHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).TrimHistoryBranch), ctx, request)
 }
 
-// UpdateHistoryBranchInfo mocks base method.
-func (m *MockExecutionManager) UpdateHistoryBranchInfo(ctx context.Context, request *UpdateHistoryBranchInfoRequest) (*UpdateHistoryBranchInfoResponse, error) {
+// UnregisterHistoryTaskReader mocks base method.
+func (m *MockExecutionManager) UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateHistoryBranchInfo", ctx, request)
-	ret0, _ := ret[0].(*UpdateHistoryBranchInfoResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	m.ctrl.Call(m, "UnregisterHistoryTaskReader", ctx, request)
 }
 
-// UpdateHistoryBranchInfo indicates an expected call of UpdateHistoryBranchInfo.
-func (mr *MockExecutionManagerMockRecorder) UpdateHistoryBranchInfo(ctx, request interface{}) *gomock.Call {
+// UnregisterHistoryTaskReader indicates an expected call of UnregisterHistoryTaskReader.
+func (mr *MockExecutionManagerMockRecorder) UnregisterHistoryTaskReader(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHistoryBranchInfo", reflect.TypeOf((*MockExecutionManager)(nil).UpdateHistoryBranchInfo), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterHistoryTaskReader", reflect.TypeOf((*MockExecutionManager)(nil).UnregisterHistoryTaskReader), ctx, request)
+}
+
+// UpdateHistoryTaskReaderProgress mocks base method.
+func (m *MockExecutionManager) UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateHistoryTaskReaderProgress", ctx, request)
+}
+
+// UpdateHistoryTaskReaderProgress indicates an expected call of UpdateHistoryTaskReaderProgress.
+func (mr *MockExecutionManagerMockRecorder) UpdateHistoryTaskReaderProgress(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHistoryTaskReaderProgress", reflect.TypeOf((*MockExecutionManager)(nil).UpdateHistoryTaskReaderProgress), ctx, request)
 }
 
 // UpdateWorkflowExecution mocks base method.
