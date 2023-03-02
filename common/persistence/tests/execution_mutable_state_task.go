@@ -37,7 +37,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -622,29 +622,28 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	task tasks.Task,
 ) {
 	key := task.GetKey()
-	resp, err := s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
+	var minKey, maxKey tasks.Key
+	if category.Type() == tasks.CategoryTypeImmediate {
+		minKey = key
+		maxKey = minKey.Next()
+	} else {
+		minKey = tasks.NewKey(key.FireTime, 0)
+		maxKey = tasks.NewKey(key.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0)
+	}
+
+	tasks := s.PaginateTasks(category, minKey, maxKey, 1)
+	s.Len(tasks, 1)
+	s.Equal(task, tasks[0])
+
+	err := s.ExecutionManager.CompleteHistoryTask(s.Ctx, &p.CompleteHistoryTaskRequest{
 		ShardID:      s.ShardID,
-		ReaderID:     common.DefaultQueueReaderID,
 		TaskCategory: category,
 		TaskKey:      key,
 	})
 	s.NoError(err)
-	s.Equal(task, resp.Task)
 
-	err = s.ExecutionManager.CompleteHistoryTask(s.Ctx, &p.CompleteHistoryTaskRequest{
-		ShardID:      s.ShardID,
-		TaskCategory: category,
-		TaskKey:      key,
-	})
-	s.NoError(err)
-
-	_, err = s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
-		ShardID:      s.ShardID,
-		ReaderID:     common.DefaultQueueReaderID,
-		TaskCategory: category,
-		TaskKey:      key,
-	})
-	s.IsType(&serviceerror.NotFound{}, err)
+	tasks = s.PaginateTasks(category, minKey, maxKey, 1)
+	s.Empty(tasks)
 }
 
 func newTestSerializer(

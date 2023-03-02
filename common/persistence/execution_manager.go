@@ -760,28 +760,6 @@ func (m *executionManagerImpl) AddHistoryTasks(
 	})
 }
 
-func (m *executionManagerImpl) GetHistoryTask(
-	ctx context.Context,
-	request *GetHistoryTaskRequest,
-) (*GetHistoryTaskResponse, error) {
-	resp, err := m.persistence.GetHistoryTask(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	task, err := m.serializer.DeserializeTask(request.TaskCategory, resp.Blob)
-	if err != nil {
-		return nil, err
-	}
-	if !resp.Key.FireTime.Equal(tasks.DefaultFireTime) {
-		task.SetVisibilityTime(resp.Key.FireTime)
-	}
-	task.SetTaskID(resp.Key.TaskID)
-	return &GetHistoryTaskResponse{
-		Task: task,
-	}, nil
-}
-
 func (m *executionManagerImpl) GetHistoryTasks(
 	ctx context.Context,
 	request *GetHistoryTasksRequest,

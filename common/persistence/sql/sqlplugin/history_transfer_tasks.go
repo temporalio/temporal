@@ -58,8 +58,6 @@ type (
 	HistoryTransferTask interface {
 		// InsertIntoTransferTasks inserts rows that into transfer_tasks table.
 		InsertIntoTransferTasks(ctx context.Context, rows []TransferTasksRow) (sql.Result, error)
-		// SelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
-		SelectFromTransferTasks(ctx context.Context, filter TransferTasksFilter) ([]TransferTasksRow, error)
 		// RangeSelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
 		RangeSelectFromTransferTasks(ctx context.Context, filter TransferTasksRangeFilter) ([]TransferTasksRow, error)
 		// DeleteFromTransferTasks deletes one rows from transfer_tasks table.

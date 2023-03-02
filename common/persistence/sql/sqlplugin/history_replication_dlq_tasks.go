@@ -60,8 +60,6 @@ type (
 	HistoryReplicationDLQTask interface {
 		// InsertIntoReplicationDLQTasks puts the replication task into DLQ
 		InsertIntoReplicationDLQTasks(ctx context.Context, row []ReplicationDLQTasksRow) (sql.Result, error)
-		// SelectFromReplicationDLQTasks returns one or more rows from replication_tasks_dlq table
-		SelectFromReplicationDLQTasks(ctx context.Context, filter ReplicationDLQTasksFilter) ([]ReplicationDLQTasksRow, error)
 		// RangeSelectFromReplicationDLQTasks returns one or more rows from replication_tasks_dlq table
 		RangeSelectFromReplicationDLQTasks(ctx context.Context, filter ReplicationDLQTasksRangeFilter) ([]ReplicationDLQTasksRow, error)
 		// DeleteFromReplicationDLQTasks deletes one row from replication_tasks_dlq table
