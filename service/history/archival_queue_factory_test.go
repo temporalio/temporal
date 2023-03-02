@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"go.temporal.io/server/api/persistence/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -60,9 +59,9 @@ func TestArchivalQueueFactory(t *testing.T) {
 			ShardId: 0,
 			RangeId: 1,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDArchival: &persistence.QueueState{
+				tasks.CategoryIDArchival: {
 					ReaderStates: nil,
-					ExclusiveReaderHighWatermark: &persistence.TaskKey{
+					ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 						FireTime: timestamp.TimeNowPtrUtc(),
 					},
 				},

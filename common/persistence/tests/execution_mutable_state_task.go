@@ -140,11 +140,12 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 	)
 
 	for _, category := range taskCategories {
-		s.ExecutionManager.RegisterHistoryTaskReader(s.Ctx, &p.RegisterHistoryTaskReaderRequest{
+		err := s.ExecutionManager.RegisterHistoryTaskReader(s.Ctx, &p.RegisterHistoryTaskReaderRequest{
 			ShardID:      s.ShardID,
 			TaskCategory: category,
 			ReaderID:     common.DefaultQueueReaderID,
 		})
+		s.NoError(err)
 	}
 }
 
