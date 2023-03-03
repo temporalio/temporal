@@ -253,7 +253,11 @@ func (s *readerSuite) TestShrinkSlices() {
 	}
 }
 
-func (s *readerSuite) TestThrottle() {
+func (s *readerSuite) TestNotify() {
+	// TODO
+}
+
+func (s *readerSuite) TestPause() {
 	scopes := NewRandomScopes(1)
 
 	paginationFnProvider := func(_ int32, _ Range) collection.PaginationFn[tasks.Task] {

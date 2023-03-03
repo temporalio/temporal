@@ -96,6 +96,15 @@ func (g *ReaderGroup) Stop() {
 	}
 }
 
+func (g *ReaderGroup) ForEach(f func(r Reader)) {
+	g.Lock()
+	defer g.Unlock()
+
+	for _, reader := range g.readerMap {
+		f(reader)
+	}
+}
+
 func (g *ReaderGroup) Readers() map[int32]Reader {
 	g.Lock()
 	defer g.Unlock()

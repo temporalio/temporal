@@ -588,3 +588,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 
 	s.True(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 }
+
+func (s *queueBaseSuite) TestUpdateReaderProgress() {
+	// TODO
+}
