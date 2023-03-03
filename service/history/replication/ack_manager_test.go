@@ -559,6 +559,7 @@ func (s *ackManagerSuite) TestGetTasks_NoTasksInDB() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -580,6 +581,7 @@ func (s *ackManagerSuite) TestGetTasks_FirstPersistenceErrorReturnsErrorAndEmpty
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -610,6 +612,7 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -661,6 +664,7 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -712,6 +716,7 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -775,6 +780,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -788,6 +794,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -798,6 +805,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),

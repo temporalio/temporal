@@ -276,7 +276,7 @@ func (p *ackMgrImpl) getTasks(
 	replicationTasks := make([]*replicationspb.ReplicationTask, 0, p.pageSize())
 	skippedTaskCount := 0
 	lastTaskID := maxTaskID // If no tasks are returned, then it means there are no tasks bellow maxTaskID.
-	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, minTaskID, maxTaskID, p.pageSize()))
+	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, pollingCluster, minTaskID, maxTaskID, p.pageSize()))
 	// iter.HasNext() should be the last check to avoid extra page read in case if replicationTasks is already full.
 	for len(replicationTasks) < p.pageSize() && skippedTaskCount <= p.maxSkipTaskCount() && iter.HasNext() {
 		task, err := iter.Next()
@@ -323,6 +323,7 @@ func (p *ackMgrImpl) getTasks(
 
 func (p *ackMgrImpl) getReplicationTasksFn(
 	ctx context.Context,
+	pollingCluster string,
 	minTaskID int64,
 	maxTaskID int64,
 	batchSize int,
@@ -331,6 +332,7 @@ func (p *ackMgrImpl) getReplicationTasksFn(
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 			ShardID:             p.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
+			ReaderID:            p.clusterToReaderID(pollingCluster),
 			InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 			BatchSize:           batchSize,
@@ -746,4 +748,12 @@ func (p *ackMgrImpl) handleReadHistoryError(
 	default:
 		return err
 	}
+}
+
+func (p *ackMgrImpl) clusterToReaderID(
+	pollingCluster string,
+) int32 {
+	// TODO: need different readerID for different remote clusters
+	// e.g. use cluster's initial failover version
+	return common.DefaultQueueReaderID
 }
