@@ -62,7 +62,7 @@ type (
 const (
 	lookAheadRateLimitDelay = 3 * time.Second
 
-	lookAheadReadID = DefaultReaderId
+	lookAheadReaderID = DefaultReaderId
 )
 
 func NewScheduledQueue(
@@ -276,7 +276,7 @@ func (p *scheduledQueue) lookAheadTask() {
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
 		TaskCategory:        p.category,
-		ReaderID:            lookAheadReadID,
+		ReaderID:            lookAheadReaderID,
 		InclusiveMinTaskKey: tasks.NewKey(lookAheadMinTime, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(lookAheadMaxTime, 0),
 		BatchSize:           1,
@@ -309,7 +309,7 @@ func (p *scheduledQueue) lookAheadTask() {
 }
 
 func (p *scheduledQueue) registerLookAheadReader() error {
-	_, ok := p.readerGroup.ReaderByID(lookAheadReadID)
+	_, ok := p.readerGroup.ReaderByID(lookAheadReaderID)
 	if ok {
 		return nil
 	}
@@ -319,7 +319,7 @@ func (p *scheduledQueue) registerLookAheadReader() error {
 	// always be available (unless during shutdown)
 
 	// TODO: return error from NewReader
-	p.readerGroup.NewReader(lookAheadReadID)
+	p.readerGroup.NewReader(lookAheadReaderID)
 	return nil
 }
 
