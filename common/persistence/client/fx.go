@@ -53,7 +53,6 @@ type (
 		ClusterName                ClusterName
 		MetricsHandler             metrics.Handler
 		Logger                     log.Logger
-		dc                         dynamicconfig.Collection
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
