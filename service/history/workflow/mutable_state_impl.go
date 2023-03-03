@@ -1879,7 +1879,7 @@ func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
-	if ms.shard.GetConfig().AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
+	if ms.shard.GetConfig().AdvancedVisibilityWritingMode() != visibility.SecondaryVisibilityWritingModeOff {
 		return ms.taskGenerator.GenerateUpsertVisibilityTask()
 	}
 	return nil
