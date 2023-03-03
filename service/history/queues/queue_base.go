@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	DefaultReaderId = 0
+	DefaultReaderId = common.DefaultQueueReaderID
 
 	// Non-default readers will use critical pending task count * this coefficient
 	// as its max pending task count so that their loading will never trigger pending

@@ -259,7 +259,7 @@ func (s *queueBaseSuite) TestStartStop() {
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			key := NewRandomKeyInRange(paginationRange)

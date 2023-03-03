@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -257,6 +258,7 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
+			ReaderID:            common.DefaultQueueReaderID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			BatchSize:           pageSize,
