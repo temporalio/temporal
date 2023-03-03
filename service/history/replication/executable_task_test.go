@@ -185,16 +185,16 @@ func (s *executableTaskSuite) TestRescheduleStateAttempt() {
 }
 
 func (s *executableTaskSuite) TestIsRetryableError() {
-	err := errors.New("（╯‵□′）╯︵┴─┴")
+	err := errors.New("OwO")
 	s.True(s.task.IsRetryableError(err))
 
-	err = serviceerror.NewInternal("（╯‵□′）╯︵┴─┴")
+	err = serviceerror.NewInternal("OwO")
 	s.True(s.task.IsRetryableError(err))
 
-	err = serviceerror.NewUnavailable("（╯‵□′）╯︵┴─┴")
+	err = serviceerror.NewUnavailable("OwO")
 	s.True(s.task.IsRetryableError(err))
 
-	err = serviceerror.NewInvalidArgument("（╯‵□′）╯︵┴─┴")
+	err = serviceerror.NewInvalidArgument("OwO")
 	s.False(s.task.IsRetryableError(err))
 }
 
@@ -355,7 +355,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 
 func (s *executableTaskSuite) TestGetNamespaceInfo_Error() {
 	namespaceID := uuid.NewString()
-	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, errors.New("（╯‵□′）╯︵┴─┴")).AnyTimes()
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, errors.New("OwO")).AnyTimes()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	_, _, err := s.task.GetNamespaceInfo(namespaceID)

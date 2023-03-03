@@ -91,7 +91,7 @@ func (i *ProcessToolBox) convertOne(
 			taskCreationTime,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
-		return NewExecutableActivityTask(
+		return NewExecutableActivityStateTask(
 			*i,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
@@ -99,7 +99,7 @@ func (i *ProcessToolBox) convertOne(
 			sourceClusterName,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
-		return NewExecutableWorkflowTask(
+		return NewExecutableWorkflowStateTask(
 			*i,
 			replicationTask.SourceTaskId,
 			taskCreationTime,

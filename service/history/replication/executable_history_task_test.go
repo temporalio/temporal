@@ -164,7 +164,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Skip() {
 }
 
 func (s *executableHistoryTaskSuite) TestExecute_Err() {
-	err := errors.New("（╯‵□′）╯︵┴─┴")
+	err := errors.New("OwO")
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		"", false, err,
 	).AnyTimes()
@@ -223,13 +223,13 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Error() {
 		rand.Int63(),
 		rand.Int63(),
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(errors.New("（╯‵□′）╯︵┴─┴"))
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(errors.New("OwO"))
 
 	s.Equal(err, s.task.HandleErr(err))
 }
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Other() {
-	err := errors.New("（╯‵□′）╯︵┴─┴")
+	err := errors.New("OwO")
 	s.Equal(err, s.task.HandleErr(err))
 
 	err = serviceerror.NewNotFound("")

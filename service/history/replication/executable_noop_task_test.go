@@ -110,7 +110,7 @@ func (s *executableNoopTaskSuite) TestExecute() {
 }
 
 func (s *executableNoopTaskSuite) TestHandleErr() {
-	err := errors.New("（╯‵□′）╯︵┴─┴")
+	err := errors.New("OwO")
 	s.Equal(err, s.task.HandleErr(err))
 
 	err = serviceerror.NewUnavailable("")

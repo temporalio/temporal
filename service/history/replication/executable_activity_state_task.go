@@ -39,7 +39,7 @@ import (
 )
 
 type (
-	ExecutableActivityTask struct {
+	ExecutableActivityStateTask struct {
 		ProcessToolBox
 
 		definition.WorkflowKey
@@ -51,17 +51,17 @@ type (
 	}
 )
 
-var _ ctasks.Task = (*ExecutableActivityTask)(nil)
-var _ TrackableExecutableTask = (*ExecutableActivityTask)(nil)
+var _ ctasks.Task = (*ExecutableActivityStateTask)(nil)
+var _ TrackableExecutableTask = (*ExecutableActivityStateTask)(nil)
 
-func NewExecutableActivityTask(
+func NewExecutableActivityStateTask(
 	processToolBox ProcessToolBox,
 	taskID int64,
 	taskCreationTime time.Time,
 	task *replicationspb.SyncActivityTaskAttributes,
 	sourceClusterName string,
-) *ExecutableActivityTask {
-	return &ExecutableActivityTask{
+) *ExecutableActivityStateTask {
+	return &ExecutableActivityStateTask{
 		ProcessToolBox: processToolBox,
 
 		WorkflowKey: definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
@@ -93,7 +93,7 @@ func NewExecutableActivityTask(
 	}
 }
 
-func (e *ExecutableActivityTask) Execute() error {
+func (e *ExecutableActivityStateTask) Execute() error {
 	namespaceName, apply, nsError := e.GetNamespaceInfo(e.NamespaceID)
 	if nsError != nil {
 		return nsError
@@ -117,7 +117,7 @@ func (e *ExecutableActivityTask) Execute() error {
 	return engine.SyncActivity(ctx, e.req)
 }
 
-func (e *ExecutableActivityTask) HandleErr(err error) error {
+func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil

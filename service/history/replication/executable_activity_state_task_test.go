@@ -53,7 +53,7 @@ import (
 )
 
 type (
-	executableActivityTaskSuite struct {
+	executableActivityStateTaskSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -70,24 +70,24 @@ type (
 		replicationTask   *replicationspb.SyncActivityTaskAttributes
 		sourceClusterName string
 
-		task *ExecutableActivityTask
+		task *ExecutableActivityStateTask
 	}
 )
 
-func TestExecutableActivityTaskSuite(t *testing.T) {
-	s := new(executableActivityTaskSuite)
+func TestExecutableActivityStateTaskSuite(t *testing.T) {
+	s := new(executableActivityStateTaskSuite)
 	suite.Run(t, s)
 }
 
-func (s *executableActivityTaskSuite) SetupSuite() {
+func (s *executableActivityStateTaskSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *executableActivityTaskSuite) TearDownSuite() {
+func (s *executableActivityStateTaskSuite) TearDownSuite() {
 
 }
 
-func (s *executableActivityTaskSuite) SetupTest() {
+func (s *executableActivityStateTaskSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.clientBean = client.NewMockBean(s.controller)
@@ -115,7 +115,7 @@ func (s *executableActivityTaskSuite) SetupTest() {
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 
-	s.task = NewExecutableActivityTask(
+	s.task = NewExecutableActivityStateTask(
 		ProcessToolBox{
 			ClusterMetadata:    s.clusterMetadata,
 			ClientBean:         s.clientBean,
@@ -133,11 +133,11 @@ func (s *executableActivityTaskSuite) SetupTest() {
 	s.task.ExecutableTask = s.executableTask
 }
 
-func (s *executableActivityTaskSuite) TearDownTest() {
+func (s *executableActivityStateTaskSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *executableActivityTaskSuite) TestExecute_Process() {
+func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -170,7 +170,7 @@ func (s *executableActivityTaskSuite) TestExecute_Process() {
 	s.NoError(err)
 }
 
-func (s *executableActivityTaskSuite) TestExecute_Skip() {
+func (s *executableActivityStateTaskSuite) TestExecute_Skip() {
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
@@ -179,8 +179,8 @@ func (s *executableActivityTaskSuite) TestExecute_Skip() {
 	s.NoError(err)
 }
 
-func (s *executableActivityTaskSuite) TestExecute_Err() {
-	err := errors.New("（╯‵□′）╯︵┴─┴")
+func (s *executableActivityStateTaskSuite) TestExecute_Err() {
+	err := errors.New("OwO")
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		"", false, err,
 	).AnyTimes()
@@ -188,7 +188,7 @@ func (s *executableActivityTaskSuite) TestExecute_Err() {
 	s.Equal(err, s.task.Execute())
 }
 
-func (s *executableActivityTaskSuite) TestHandleErr_Resend_Success() {
+func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -231,7 +231,7 @@ func (s *executableActivityTaskSuite) TestHandleErr_Resend_Success() {
 	s.NoError(s.task.HandleErr(err))
 }
 
-func (s *executableActivityTaskSuite) TestHandleErr_Resend_Error() {
+func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Error() {
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -245,13 +245,13 @@ func (s *executableActivityTaskSuite) TestHandleErr_Resend_Error() {
 		rand.Int63(),
 		rand.Int63(),
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(errors.New("（╯‵□′）╯︵┴─┴"))
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(errors.New("OwO"))
 
 	s.Equal(err, s.task.HandleErr(err))
 }
 
-func (s *executableActivityTaskSuite) TestHandleErr_Other() {
-	err := errors.New("（╯‵□′）╯︵┴─┴")
+func (s *executableActivityStateTaskSuite) TestHandleErr_Other() {
+	err := errors.New("OwO")
 	s.Equal(err, s.task.HandleErr(err))
 
 	err = serviceerror.NewNotFound("")

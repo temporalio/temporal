@@ -86,7 +86,6 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -748,41 +747,4 @@ func (e *historyEngineImpl) GetReplicationStatus(
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 	return replicationapi.GetStatus(ctx, request, e.shard, e.replicationAckMgr)
-}
-
-func (e *historyEngineImpl) ForceDeleteWorkflowExecution(
-	ctx context.Context,
-	workflowKey definition.WorkflowKey,
-) (retError error) {
-	workflowCache := e.workflowConsistencyChecker.GetWorkflowCache()
-	wfCtx, releaseFn, err := workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: workflowKey.WorkflowID,
-			RunId:      workflowKey.RunID,
-		},
-		workflow.CallerTypeTask,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { releaseFn(retError) }()
-
-	mutableState, err := wfCtx.LoadMutableState(ctx)
-	if err != nil {
-		return err
-	}
-	return e.workflowDeleteManager.DeleteWorkflowExecution(
-		ctx,
-		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: workflowKey.WorkflowID,
-			RunId:      workflowKey.RunID,
-		},
-		wfCtx,
-		mutableState,
-		false,
-		nil, // stage is not stored during cleanup process.
-	)
 }

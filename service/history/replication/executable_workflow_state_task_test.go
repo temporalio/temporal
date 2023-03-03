@@ -49,7 +49,7 @@ import (
 )
 
 type (
-	executableWorkflowTaskSuite struct {
+	executableWorkflowStateTaskSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -66,24 +66,24 @@ type (
 		replicationTask   *replicationspb.SyncWorkflowStateTaskAttributes
 		sourceClusterName string
 
-		task *ExecutableWorkflowTask
+		task *ExecutableWorkflowStateTask
 	}
 )
 
-func TestExecutableWorkflowTaskSuite(t *testing.T) {
-	s := new(executableWorkflowTaskSuite)
+func TestExecutableWorkflowStateTaskSuite(t *testing.T) {
+	s := new(executableWorkflowStateTaskSuite)
 	suite.Run(t, s)
 }
 
-func (s *executableWorkflowTaskSuite) SetupSuite() {
+func (s *executableWorkflowStateTaskSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *executableWorkflowTaskSuite) TearDownSuite() {
+func (s *executableWorkflowStateTaskSuite) TearDownSuite() {
 
 }
 
-func (s *executableWorkflowTaskSuite) SetupTest() {
+func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.clientBean = client.NewMockBean(s.controller)
@@ -106,7 +106,7 @@ func (s *executableWorkflowTaskSuite) SetupTest() {
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 
-	s.task = NewExecutableWorkflowTask(
+	s.task = NewExecutableWorkflowStateTask(
 		ProcessToolBox{
 			ClusterMetadata:    s.clusterMetadata,
 			ClientBean:         s.clientBean,
@@ -124,11 +124,11 @@ func (s *executableWorkflowTaskSuite) SetupTest() {
 	s.task.ExecutableTask = s.executableTask
 }
 
-func (s *executableWorkflowTaskSuite) TearDownTest() {
+func (s *executableWorkflowStateTaskSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *executableWorkflowTaskSuite) TestExecute_Process() {
+func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -150,7 +150,7 @@ func (s *executableWorkflowTaskSuite) TestExecute_Process() {
 	s.NoError(err)
 }
 
-func (s *executableWorkflowTaskSuite) TestExecute_Skip() {
+func (s *executableWorkflowStateTaskSuite) TestExecute_Skip() {
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
@@ -159,8 +159,8 @@ func (s *executableWorkflowTaskSuite) TestExecute_Skip() {
 	s.NoError(err)
 }
 
-func (s *executableWorkflowTaskSuite) TestExecute_Err() {
-	err := errors.New("（╯‵□′）╯︵┴─┴")
+func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
+	err := errors.New("OwO")
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		"", false, err,
 	).AnyTimes()
@@ -168,8 +168,8 @@ func (s *executableWorkflowTaskSuite) TestExecute_Err() {
 	s.Equal(err, s.task.Execute())
 }
 
-func (s *executableWorkflowTaskSuite) TestHandleErr() {
-	err := errors.New("（╯‵□′）╯︵┴─┴")
+func (s *executableWorkflowStateTaskSuite) TestHandleErr() {
+	err := errors.New("OwO")
 	s.Equal(err, s.task.HandleErr(err))
 
 	err = serviceerror.NewNotFound("")

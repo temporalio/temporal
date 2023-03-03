@@ -38,7 +38,7 @@ import (
 )
 
 type (
-	ExecutableWorkflowTask struct {
+	ExecutableWorkflowStateTask struct {
 		ProcessToolBox
 
 		definition.WorkflowKey
@@ -50,29 +50,29 @@ type (
 	}
 )
 
-var _ ctasks.Task = (*ExecutableWorkflowTask)(nil)
-var _ TrackableExecutableTask = (*ExecutableWorkflowTask)(nil)
+var _ ctasks.Task = (*ExecutableWorkflowStateTask)(nil)
+var _ TrackableExecutableTask = (*ExecutableWorkflowStateTask)(nil)
 
 // TODO should workflow task be batched?
 
-func NewExecutableWorkflowTask(
+func NewExecutableWorkflowStateTask(
 	processToolBox ProcessToolBox,
 	taskID int64,
 	taskCreationTime time.Time,
 	task *replicationspb.SyncWorkflowStateTaskAttributes,
 	sourceClusterName string,
-) *ExecutableWorkflowTask {
+) *ExecutableWorkflowStateTask {
 	namespaceID := task.GetWorkflowState().ExecutionInfo.NamespaceId
 	workflowID := task.GetWorkflowState().ExecutionInfo.WorkflowId
 	runID := task.GetWorkflowState().ExecutionState.RunId
-	return &ExecutableWorkflowTask{
+	return &ExecutableWorkflowStateTask{
 		ProcessToolBox: processToolBox,
 
 		WorkflowKey: definition.NewWorkflowKey(namespaceID, workflowID, runID),
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
-			metrics.SyncWorkflowTaskScope,
+			metrics.SyncWorkflowStateTaskScope,
 			taskCreationTime,
 			time.Now().UTC(),
 		),
@@ -86,7 +86,7 @@ func NewExecutableWorkflowTask(
 	}
 }
 
-func (e *ExecutableWorkflowTask) Execute() error {
+func (e *ExecutableWorkflowStateTask) Execute() error {
 	namespaceName, apply, err := e.GetNamespaceInfo(e.NamespaceID)
 	if err != nil {
 		return err
@@ -110,7 +110,7 @@ func (e *ExecutableWorkflowTask) Execute() error {
 	return engine.ReplicateWorkflowState(ctx, e.req)
 }
 
-func (e *ExecutableWorkflowTask) HandleErr(err error) error {
+func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 	// TODO original logic does not seem to have resend logic?
 	switch err.(type) {
 	case nil, *serviceerror.NotFound:

@@ -111,7 +111,7 @@ func (s *executableUnknownTaskSuite) TestExecute() {
 }
 
 func (s *executableUnknownTaskSuite) TestHandleErr() {
-	err := errors.New("（╯‵□′）╯︵┴─┴")
+	err := errors.New("OwO")
 	s.Equal(err, s.task.HandleErr(err))
 
 	err = serviceerror.NewUnavailable("")
