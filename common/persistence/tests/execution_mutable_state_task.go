@@ -631,9 +631,9 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 		maxKey = tasks.NewKey(key.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0)
 	}
 
-	tasks := s.PaginateTasks(category, minKey, maxKey, 1)
-	s.Len(tasks, 1)
-	s.Equal(task, tasks[0])
+	historyTasks := s.PaginateTasks(category, minKey, maxKey, 1)
+	s.Len(historyTasks, 1)
+	s.Equal(task, historyTasks[0])
 
 	err := s.ExecutionManager.CompleteHistoryTask(s.Ctx, &p.CompleteHistoryTaskRequest{
 		ShardID:      s.ShardID,
@@ -642,8 +642,8 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	})
 	s.NoError(err)
 
-	tasks = s.PaginateTasks(category, minKey, maxKey, 1)
-	s.Empty(tasks)
+	historyTasks = s.PaginateTasks(category, minKey, maxKey, 1)
+	s.Empty(historyTasks)
 }
 
 func newTestSerializer(
