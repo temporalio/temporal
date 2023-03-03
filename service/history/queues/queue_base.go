@@ -327,7 +327,7 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
-	p.readerGroup.ForEach(func(r Reader) {
+	p.readerGroup.ForEach(func(_ int32, r Reader) {
 		r.ShrinkSlices()
 	})
 	// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
@@ -340,16 +340,14 @@ func (p *queueBase) checkpoint() {
 	for readerID, reader := range p.readerGroup.Readers() {
 		scopes := reader.Scopes()
 
-		if len(scopes) == 0 {
-			if readerID != DefaultReaderId {
-				p.readerGroup.RemoveReader(readerID)
-			}
+		if len(scopes) == 0 && readerID != DefaultReaderId {
+			p.readerGroup.RemoveReader(readerID)
 			continue
 		}
 
 		readerScopes[readerID] = scopes
-		for _, scope := range scopes {
-			newExclusiveDeletionHighWatermark = tasks.MinKey(newExclusiveDeletionHighWatermark, scope.Range.InclusiveMin)
+		if len(scopes) != 0 {
+			newExclusiveDeletionHighWatermark = tasks.MinKey(newExclusiveDeletionHighWatermark, scopes[0].Range.InclusiveMin)
 		}
 	}
 	p.metricsHandler.Histogram(metrics.QueueReaderCountHistogram.GetMetricName(), metrics.QueueReaderCountHistogram.GetMetricUnit()).
@@ -411,10 +409,7 @@ func (p *queueBase) updateReaderProgress(
 
 		var minKey tasks.Key
 		if len(scopes) == 0 {
-			// this should not happen, caller of this method won't put empty scopes into this map
-			// and the corresponding reader should be removed.
-			// but if it happens, it means the reader has finished it's processing
-			// and it's minKey is the read/write boundary
+			// this should only happen to default reader
 			minKey = p.nonReadableScope.Range.InclusiveMin
 		} else {
 			minKey = scopes[0].Range.InclusiveMin
@@ -458,6 +453,12 @@ func (p *queueBase) updateQueueState(
 	readerScopes map[int32][]Scope,
 ) error {
 	p.metricsHandler.Counter(metrics.AckLevelUpdateCounter.GetMetricName()).Record(1)
+	for readerID, scopes := range readerScopes {
+		if len(scopes) == 0 {
+			delete(readerScopes, readerID)
+		}
+	}
+
 	err := p.shard.UpdateQueueState(p.category, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
@@ -507,7 +508,7 @@ func (p *queueBase) handleAlert(alert *Alert) {
 }
 
 func (p *queueBase) notifyReaders() {
-	p.readerGroup.ForEach(func(r Reader) {
+	p.readerGroup.ForEach(func(_ int32, r Reader) {
 		r.Notify()
 	})
 }

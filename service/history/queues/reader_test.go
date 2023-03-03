@@ -254,7 +254,21 @@ func (s *readerSuite) TestShrinkSlices() {
 }
 
 func (s *readerSuite) TestNotify() {
-	// TODO
+	reader := s.newTestReader([]Scope{}, nil, NoopReaderCompletionFn)
+
+	// pause will set the throttle timer, which notify is supposed to stop
+	reader.Pause(time.Hour)
+
+	reader.Lock()
+	s.NotNil(reader.throttleTimer)
+	reader.Unlock()
+
+	reader.Notify()
+	<-reader.notifyCh
+
+	reader.Lock()
+	s.Nil(reader.throttleTimer)
+	reader.Unlock()
 }
 
 func (s *readerSuite) TestPause() {

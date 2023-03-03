@@ -158,7 +158,18 @@ func (s *readerGroupSuite) TestRemoveReader() {
 }
 
 func (s *readerGroupSuite) TestForEach() {
-	// TODO
+	readerIDs := []int32{1, 2, 3}
+	for _, readerID := range readerIDs {
+		s.setupRegisterReaderMock(readerID)
+		s.readerGroup.NewReader(readerID)
+	}
+
+	forEachResult := make(map[int32]Reader)
+	s.readerGroup.ForEach(func(i int32, r Reader) {
+		forEachResult[i] = r
+	})
+
+	s.Equal(s.readerGroup.Readers(), forEachResult)
 }
 
 func (s *readerGroupSuite) setupRegisterReaderMock(
