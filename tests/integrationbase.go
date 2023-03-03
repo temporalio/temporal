@@ -113,6 +113,8 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.archivalNamespace = s.randomizeStr("integration-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
+
+	time.Sleep(3 * time.Second)
 }
 
 // setupLogger sets the Logger for the test suite.
