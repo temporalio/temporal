@@ -141,14 +141,14 @@ func (r *dlqHandlerImpl) GetMessages(
 	pageToken []byte,
 ) ([]*replicationspb.ReplicationTask, []*replicationspb.ReplicationTaskInfo, []byte, error) {
 
-	tasks, taskInfoList, _, token, err := r.readMessagesWithAckLevel(
+	taskList, taskInfoList, _, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
 		lastMessageID,
 		pageSize,
 		pageToken,
 	)
-	return tasks, taskInfoList, token, err
+	return taskList, taskInfoList, token, err
 }
 
 func (r *dlqHandlerImpl) PurgeMessages(
