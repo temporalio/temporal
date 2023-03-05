@@ -22,42 +22,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+// Package ringpop provides a service-based membership monitor
+package ringpop
 
-type ringpopHostInfo struct {
+type hostInfo struct {
 	addr   string // ip:port
 	labels map[string]string
 }
 
-// newRingpopHostInfo creates a new *ringpopHostInfo instance
-func newRingpopHostInfo(addr string, labels map[string]string) *ringpopHostInfo {
+// newHostInfo creates a new *hostInfo instance
+func newHostInfo(addr string, labels map[string]string) *hostInfo {
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	return &ringpopHostInfo{
+	return &hostInfo{
 		addr:   addr,
 		labels: labels,
 	}
 }
 
 // GetAddress returns the ip:port address
-func (hi *ringpopHostInfo) GetAddress() string {
+func (hi *hostInfo) GetAddress() string {
 	return hi.addr
 }
 
 // Identity implements ringpop's Membership interface
-func (hi *ringpopHostInfo) Identity() string {
+func (hi *hostInfo) Identity() string {
 	// for now we just use the address as the identity
 	return hi.addr
 }
 
 // Label implements ringpop's Membership interface
-func (hi *ringpopHostInfo) Label(key string) (value string, has bool) {
-	value, has = hi.labels[key]
-	return
+func (hi *hostInfo) Label(key string) (string, bool) {
+	value, ok := hi.labels[key]
+	return value, ok
 }
 
 // SetLabel sets the label.
-func (hi *ringpopHostInfo) SetLabel(key string, value string) {
+func (hi *hostInfo) SetLabel(key string, value string) {
 	hi.labels[key] = value
 }

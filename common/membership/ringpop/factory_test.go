@@ -60,12 +60,12 @@ type (
 		internodeConfigMutualTLS config.GroupTLS
 		internodeConfigServerTLS config.GroupTLS
 
-		ringpopMutualTLSFactoryA *ringpopFactory
-		ringpopMutualTLSFactoryB *ringpopFactory
-		ringpopServerTLSFactoryA *ringpopFactory
-		ringpopServerTLSFactoryB *ringpopFactory
+		mutualTLSFactoryA *factory
+		mutualTLSFactoryB *factory
+		serverTLSFactoryA *factory
+		serverTLSFactoryB *factory
 
-		insecureFactory *ringpopFactory
+		insecureFactory *factory
 	}
 )
 
@@ -137,9 +137,9 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Nil(err)
 	s.Equal("1.2.3.4", cfg.BroadcastAddress)
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
-	err = ValidateRingpopConfig(&cfg)
+	err = ValidateConfig(&cfg)
 	s.Nil(err)
-	f, err := NewRingpopFactory(&cfg, "test", nil, log.NewNoopLogger(), nil, nil, nil, nil)
+	f, err := newFactory(&cfg, "test", nil, log.NewNoopLogger(), nil, nil, nil, nil)
 	s.Nil(err)
 	s.NotNil(f)
 }
@@ -147,9 +147,9 @@ func (s *RingpopSuite) TestHostsMode() {
 func (s *RingpopSuite) TestInvalidConfig() {
 	var cfg config.Membership
 	cfg.MaxJoinDuration = time.Minute
-	s.NoError(ValidateRingpopConfig(&cfg))
+	s.NoError(ValidateConfig(&cfg))
 	cfg.BroadcastAddress = "sjhdfskdjhf"
-	s.Error(ValidateRingpopConfig(&cfg))
+	s.Error(ValidateConfig(&cfg))
 }
 
 func getHostsConfig() string {
@@ -164,8 +164,8 @@ func newTestRingpopFactory(
 	rpcConfig *config.RPC,
 	tlsProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
-) *ringpopFactory {
-	return &ringpopFactory{
+) *factory {
+	return &factory{
 		config:          nil,
 		serviceName:     serviceName,
 		servicePortMap:  nil,
@@ -178,18 +178,18 @@ func newTestRingpopFactory(
 }
 
 func (s *RingpopSuite) TestRingpopMutualTLS() {
-	runRingpopTLSTest(s.Suite, s.logger, s.ringpopMutualTLSFactoryA, s.ringpopMutualTLSFactoryB, false)
+	s.NoError(runRingpopTLSTest(&s.Suite, s.mutualTLSFactoryA, s.mutualTLSFactoryB))
 }
 
 func (s *RingpopSuite) TestRingpopServerTLS() {
-	runRingpopTLSTest(s.Suite, s.logger, s.ringpopServerTLSFactoryA, s.ringpopServerTLSFactoryB, false)
+	s.NoError(runRingpopTLSTest(&s.Suite, s.serverTLSFactoryA, s.serverTLSFactoryB))
 }
 
 func (s *RingpopSuite) TestRingpopInvalidTLS() {
-	runRingpopTLSTest(s.Suite, s.logger, s.insecureFactory, s.ringpopServerTLSFactoryB, true)
+	s.Error(runRingpopTLSTest(&s.Suite, s.insecureFactory, s.serverTLSFactoryB))
 }
 
-func runRingpopTLSTest(s suite.Suite, logger log.Logger, serverA *ringpopFactory, serverB *ringpopFactory, expectError bool) {
+func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error {
 	// Start two ringpop nodes
 	chA := serverA.getTChannel()
 	chB := serverB.getTChannel()
@@ -198,11 +198,8 @@ func runRingpopTLSTest(s suite.Suite, logger log.Logger, serverA *ringpopFactory
 
 	// Ping A through B to make sure B's dialer uses TLS to communicate with A
 	hostPortA := chA.PeerInfo().HostPort
-	err := chB.Ping(context.Background(), hostPortA)
-	if expectError {
-		s.Error(err)
-	} else {
-		s.NoError(err)
+	if err := chB.Ping(context.Background(), hostPortA); err != nil {
+		return err
 	}
 
 	// Confirm that A's listener is actually using TLS
@@ -210,14 +207,13 @@ func runRingpopTLSTest(s suite.Suite, logger log.Logger, serverA *ringpopFactory
 	s.NoError(err)
 
 	conn, err := tls.Dial("tcp", hostPortA, clientTLSConfig)
+	if err != nil {
+		return err
+	}
 	if conn != nil {
 		_ = conn.Close()
 	}
-	if expectError {
-		s.Error(err)
-	} else {
-		s.NoError(err)
-	}
+	return nil
 }
 
 func (s *RingpopSuite) setupInternodeRingpop() {
@@ -226,14 +222,14 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 	s.insecureFactory = newTestRingpopFactory("tester", s.logger, rpcTestCfgDefault, provider, dynamicconfig.NewNoopCollection())
 	s.NotNil(s.insecureFactory)
 
-	ringpopServerTLS := &config.Global{
+	serverTLS := &config.Global{
 		Membership: s.membershipConfig,
 		TLS: config.RootTLS{
 			Internode: s.internodeConfigServerTLS,
 		},
 	}
 
-	ringpopMutualTLS := &config.Global{
+	mutualTLS := &config.Global{
 		Membership: s.membershipConfig,
 		TLS: config.RootTLS{
 			Internode: s.internodeConfigMutualTLS,
@@ -247,17 +243,17 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 		dynamicconfig.EnableRingpopTLS: true,
 	}), s.logger)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(mutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
-	s.ringpopMutualTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
-	s.NotNil(s.ringpopMutualTLSFactoryA)
-	s.ringpopMutualTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
-	s.NotNil(s.ringpopMutualTLSFactoryB)
+	s.mutualTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
+	s.NotNil(s.mutualTLSFactoryA)
+	s.mutualTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
+	s.NotNil(s.mutualTLSFactoryB)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopServerTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(serverTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
-	s.ringpopServerTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
-	s.NotNil(s.ringpopServerTLSFactoryA)
-	s.ringpopServerTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
-	s.NotNil(s.ringpopServerTLSFactoryB)
+	s.serverTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
+	s.NotNil(s.serverTLSFactoryA)
+	s.serverTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
+	s.NotNil(s.serverTLSFactoryB)
 }
