@@ -84,7 +84,7 @@ func newMonitor(
 	logger log.Logger,
 	metadataManager persistence.ClusterMetadataManager,
 	broadcastHostPortResolver func() (string, error),
-) membership.Monitor {
+) *monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
 		lifecycleCtx,

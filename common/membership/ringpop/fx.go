@@ -72,7 +72,7 @@ func membershipMonitorProvider(
 		return nil, err
 	}
 
-	m, err := f.getMembershipMonitor()
+	m, err := f.getMonitor()
 	if err != nil {
 		return nil, err
 	}

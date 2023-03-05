@@ -45,8 +45,8 @@ import (
 type testCluster struct {
 	hostUUIDs    []string
 	hostAddrs    []string
-	hostInfoList []membership.HostInfo
-	rings        []membership.Monitor
+	hostInfoList []*hostInfo
+	rings        []*monitor
 	channels     []*tchannel.Channel
 	seedNode     string
 }
@@ -74,8 +74,8 @@ func newTestCluster(
 	cluster := &testCluster{
 		hostUUIDs:    make([]string, size),
 		hostAddrs:    make([]string, size),
-		hostInfoList: make([]membership.HostInfo, size),
-		rings:        make([]membership.Monitor, size),
+		hostInfoList: make([]*hostInfo, size),
+		rings:        make([]*monitor, size),
 		channels:     make([]*tchannel.Channel, size),
 		seedNode:     seed,
 	}
@@ -198,7 +198,11 @@ func (c *testCluster) Stop() {
 
 // GetHostInfoList returns the list of all hosts within the cluster
 func (c *testCluster) GetHostInfoList() []membership.HostInfo {
-	return c.hostInfoList
+	hostInfoList := make([]membership.HostInfo, len(c.hostInfoList))
+	for i := 0; i < len(c.hostInfoList); i++ {
+		hostInfoList[i] = c.hostInfoList[i]
+	}
+	return hostInfoList
 }
 
 // GetHostAddrs returns all host addrs within the cluster

@@ -64,11 +64,11 @@ type factory struct {
 	servicePortMap map[primitives.ServiceName]int
 	logger         log.Logger
 
-	membershipMonitor membership.Monitor
-	metadataManager   persistence.ClusterMetadataManager
-	rpcConfig         *config.RPC
-	tlsFactory        encryption.TLSConfigProvider
-	dc                *dynamicconfig.Collection
+	monitor         *monitor
+	metadataManager persistence.ClusterMetadataManager
+	rpcConfig       *config.RPC
+	tlsFactory      encryption.TLSConfigProvider
+	dc              *dynamicconfig.Collection
 
 	chOnce  sync.Once
 	monOnce sync.Once
@@ -104,12 +104,8 @@ func newFactory(
 	}, nil
 }
 
-// getMembershipMonitor return a membership monitor
-func (f *factory) getMembershipMonitor() (membership.Monitor, error) {
-	return f.getMembership()
-}
-
-func (f *factory) getMembership() (membership.Monitor, error) {
+// getMonitor return a membership monitor
+func (f *factory) getMonitor() (*monitor, error) {
 	var err error
 	f.monOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), persistenceOperationTimeout)
@@ -129,7 +125,7 @@ func (f *factory) getMembership() (membership.Monitor, error) {
 		} else {
 			mrp := newService(rp, f.config.MaxJoinDuration, f.logger)
 
-			f.membershipMonitor = newMonitor(
+			f.monitor = newMonitor(
 				f.serviceName,
 				f.servicePortMap,
 				mrp,
@@ -140,7 +136,7 @@ func (f *factory) getMembership() (membership.Monitor, error) {
 		}
 	})
 
-	return f.membershipMonitor, err
+	return f.monitor, err
 }
 
 func (f *factory) broadcastAddressResolver() (string, error) {
