@@ -52,10 +52,6 @@ const (
 	persistenceOperationTimeout = 10 * time.Second
 )
 
-var (
-	IPV4Localhost = net.IPv4(127, 0, 0, 1)
-)
-
 // factory provides a Monitor
 type factory struct {
 	config         *config.Membership
@@ -217,7 +213,7 @@ func (factory *factory) getListenIP() net.IP {
 	}
 
 	if factory.rpcConfig.BindOnLocalHost {
-		return IPV4Localhost
+		return net.IPv4(127, 0, 0, 1)
 	}
 
 	if len(factory.rpcConfig.BindOnIP) > 0 {
