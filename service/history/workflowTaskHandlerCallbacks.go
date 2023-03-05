@@ -935,6 +935,8 @@ func failWorkflowTask(
 		return nil, nextEventBatchId, err
 	}
 
+	mutableState.FlushBufferedEvents()
+
 	// Return new mutable state back to the caller for further updates
 	return mutableState, nextEventBatchId, nil
 }
