@@ -24,53 +24,40 @@
 
 package membership
 
-import (
-	"context"
+type ringpopHostInfo struct {
+	addr   string // ip:port
+	labels map[string]string
+}
 
-	"go.uber.org/fx"
-)
-
-var HostInfoProviderModule = fx.Options(
-	fx.Provide(newHostInfoProvider),
-	fx.Invoke(hostInfoProviderLifetimeHooks),
-)
-
-type (
-	cachingHostInfoProvider struct {
-		hostInfo          HostInfo
-		membershipMonitor Monitor
+// newRingpopHostInfo creates a new *ringpopHostInfo instance
+func newRingpopHostInfo(addr string, labels map[string]string) *ringpopHostInfo {
+	if labels == nil {
+		labels = make(map[string]string)
 	}
-)
-
-func newHostInfoProvider(membershipMonitor Monitor) HostInfoProvider {
-	return &cachingHostInfoProvider{
-		membershipMonitor: membershipMonitor,
+	return &ringpopHostInfo{
+		addr:   addr,
+		labels: labels,
 	}
 }
 
-func (hip *cachingHostInfoProvider) Start() error {
-	var err error
-	hip.hostInfo, err = hip.membershipMonitor.WhoAmI()
-	if err != nil {
-		return err
-	}
-	return nil
+// GetAddress returns the ip:port address
+func (hi *ringpopHostInfo) GetAddress() string {
+	return hi.addr
 }
 
-func (hip *cachingHostInfoProvider) HostInfo() HostInfo {
-	return hip.hostInfo
+// Identity implements ringpop's Membership interface
+func (hi *ringpopHostInfo) Identity() string {
+	// for now we just use the address as the identity
+	return hi.addr
 }
 
-func hostInfoProviderLifetimeHooks(
-	lc fx.Lifecycle,
-	provider HostInfoProvider,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				return provider.Start()
-			},
-		},
-	)
+// Label implements ringpop's Membership interface
+func (hi *ringpopHostInfo) Label(key string) (value string, has bool) {
+	value, has = hi.labels[key]
+	return
+}
 
+// SetLabel sets the label.
+func (hi *ringpopHostInfo) SetLabel(key string, value string) {
+	hi.labels[key] = value
 }

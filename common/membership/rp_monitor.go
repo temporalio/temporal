@@ -341,7 +341,7 @@ func (rpo *ringpopMonitor) Stop() {
 // This is different from service address as we register ringpop handlers on a separate port.
 // For this reason we need to lookup the port for the service and replace ringpop port with service port before
 // returning HostInfo back.
-func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {
+func (rpo *ringpopMonitor) WhoAmI() (HostInfo, error) {
 	address, err := rpo.rp.WhoAmI()
 	if err != nil {
 		return nil, err
@@ -360,7 +360,7 @@ func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewHostInfo(serviceAddress, labels.AsMap()), nil
+	return newRingpopHostInfo(serviceAddress, labels.AsMap()), nil
 }
 
 func (rpo *ringpopMonitor) EvictSelf() error {
@@ -375,7 +375,7 @@ func (rpo *ringpopMonitor) GetResolver(service primitives.ServiceName) (ServiceR
 	return ring, nil
 }
 
-func (rpo *ringpopMonitor) Lookup(service primitives.ServiceName, key string) (*HostInfo, error) {
+func (rpo *ringpopMonitor) Lookup(service primitives.ServiceName, key string) (HostInfo, error) {
 	ring, err := rpo.GetResolver(service)
 	if err != nil {
 		return nil, err

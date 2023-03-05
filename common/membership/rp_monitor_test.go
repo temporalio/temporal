@@ -120,13 +120,13 @@ func (s *RpoSuite) testCompareMembers(curr []string, new []string, expectedDiff 
 	if event != nil {
 		var diff []string
 		for _, a := range event.HostsAdded {
-			diff = append(diff, "+"+a.addr)
+			diff = append(diff, "+"+a.GetAddress())
 		}
 		for _, a := range event.HostsUpdated {
-			diff = append(diff, "~"+a.addr)
+			diff = append(diff, "~"+a.GetAddress())
 		}
 		for _, a := range event.HostsRemoved {
-			diff = append(diff, "-"+a.addr)
+			diff = append(diff, "-"+a.GetAddress())
 		}
 		s.ElementsMatch(expectedDiff, diff)
 	}
