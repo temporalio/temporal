@@ -48,9 +48,9 @@ import (
 )
 
 const (
-	// RoleKey label is set by every single service as soon as it bootstraps its
+	// roleKey label is set by every single service as soon as it bootstraps its
 	// ringpop instance. The data for this key is the service name
-	RoleKey = "serviceName"
+	roleKey = "serviceName"
 
 	// rolePort label is set by every single service as soon as it bootstraps its
 	// ringpop instance. The data for this key represents the TCP port through which
@@ -282,7 +282,7 @@ func (r *serviceResolver) refreshNoLock() (*membership.ChangedEvent, error) {
 }
 
 func (r *serviceResolver) getReachableMembers() ([]string, error) {
-	members, err := r.rp.GetReachableMemberObjects(swim.MemberWithLabelAndValue(RoleKey, string(r.service)))
+	members, err := r.rp.GetReachableMemberObjects(swim.MemberWithLabelAndValue(roleKey, string(r.service)))
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,7 @@ func (r *serviceResolver) ring() *hashring.HashRing {
 
 func (r *serviceResolver) getLabelsMap() map[string]string {
 	labels := make(map[string]string)
-	labels[RoleKey] = string(r.service)
+	labels[roleKey] = string(r.service)
 	return labels
 }
 
