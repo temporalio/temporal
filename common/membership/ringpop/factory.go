@@ -86,7 +86,7 @@ func newFactory(
 	tlsProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
 ) (*factory, error) {
-	if err := ValidateConfig(rpConfig); err != nil {
+	if err := membership.ValidateConfig(rpConfig); err != nil {
 		return nil, err
 	}
 	if rpConfig.MaxJoinDuration == 0 {
@@ -102,14 +102,6 @@ func newFactory(
 		tlsFactory:      tlsProvider,
 		dc:              dc,
 	}, nil
-}
-
-// ValidateConfig validates that ringpop config is parseable and valid
-func ValidateConfig(cfg *config.Membership) error {
-	if cfg.BroadcastAddress != "" && net.ParseIP(cfg.BroadcastAddress) == nil {
-		return fmt.Errorf("ringpop config malformed `broadcastAddress` param")
-	}
-	return nil
 }
 
 // getMembershipMonitor return a membership monitor
