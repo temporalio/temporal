@@ -161,30 +161,6 @@ func (mr *MockMonitorMockRecorder) RemoveListener(service, name interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveListener", reflect.TypeOf((*MockMonitor)(nil).RemoveListener), service, name)
 }
 
-// Start mocks base method.
-func (m *MockMonitor) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockMonitorMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockMonitor)(nil).Start))
-}
-
-// Stop mocks base method.
-func (m *MockMonitor) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop.
-func (mr *MockMonitorMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockMonitor)(nil).Stop))
-}
-
 // WaitUntilInitialized mocks base method.
 func (m *MockMonitor) WaitUntilInitialized(arg0 context.Context) error {
 	m.ctrl.T.Helper()
