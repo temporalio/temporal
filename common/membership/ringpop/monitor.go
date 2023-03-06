@@ -107,8 +107,8 @@ func newMonitor(
 		hostID:                    uuid.NewUUID(),
 		initialized:               future.NewFuture[struct{}](),
 	}
-	for service, port := range services {
-		rpo.rings[service] = newServiceResolver(service, port, rp, logger)
+	for s, port := range services {
+		rpo.rings[s] = newServiceResolver(s, port, rp, logger)
 	}
 	return rpo
 }

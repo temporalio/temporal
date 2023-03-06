@@ -58,7 +58,7 @@ func membershipMonitorProvider(
 
 	rpcConfig := cfg.Services[string(svcName)].RPC
 
-	factory, err := newFactory(
+	f, err := newFactory(
 		&cfg.Global.Membership,
 		svcName,
 		servicePortMap,
@@ -72,7 +72,7 @@ func membershipMonitorProvider(
 		return nil, err
 	}
 
-	monitor, err := factory.getMembershipMonitor()
+	m, err := f.getMembershipMonitor()
 	if err != nil {
 		return nil, err
 	}
@@ -80,16 +80,16 @@ func membershipMonitorProvider(
 	lc.Append(
 		fx.Hook{
 			OnStart: func(context.Context) error {
-				monitor.Start()
+				m.Start()
 				return nil
 			},
 			OnStop: func(context.Context) error {
-				monitor.Stop()
-				factory.closeTChannel()
+				m.Stop()
+				f.closeTChannel()
 				return nil
 			},
 		},
 	)
 
-	return monitor, nil
+	return m, nil
 }

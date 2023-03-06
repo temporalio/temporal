@@ -105,141 +105,141 @@ func newFactory(
 }
 
 // getMembershipMonitor return a membership monitor
-func (factory *factory) getMembershipMonitor() (membership.Monitor, error) {
-	return factory.getMembership()
+func (f *factory) getMembershipMonitor() (membership.Monitor, error) {
+	return f.getMembership()
 }
 
-func (factory *factory) getMembership() (membership.Monitor, error) {
+func (f *factory) getMembership() (membership.Monitor, error) {
 	var err error
-	factory.monOnce.Do(func() {
+	f.monOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), persistenceOperationTimeout)
 		defer cancel()
 		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
-		currentClusterMetadata, err := factory.metadataManager.GetCurrentClusterMetadata(ctx)
+		currentClusterMetadata, err := f.metadataManager.GetCurrentClusterMetadata(ctx)
 		if err != nil {
-			factory.logger.Fatal("Failed to get current cluster ID", tag.Error(err))
+			f.logger.Fatal("Failed to get current cluster ID", tag.Error(err))
 		}
 		appName := "temporal"
 		if currentClusterMetadata.UseClusterIdMembership {
 			appName = fmt.Sprintf("temporal-%s", currentClusterMetadata.GetClusterId())
 		}
-		if rp, err := ringpop.New(appName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver)); err != nil {
-			factory.logger.Fatal("Failed to get new ringpop", tag.Error(err))
+		if rp, err := ringpop.New(appName, ringpop.Channel(f.getTChannel()), ringpop.AddressResolverFunc(f.broadcastAddressResolver)); err != nil {
+			f.logger.Fatal("Failed to get new ringpop", tag.Error(err))
 		} else {
-			mrp := newService(rp, factory.config.MaxJoinDuration, factory.logger)
+			mrp := newService(rp, f.config.MaxJoinDuration, f.logger)
 
-			factory.membershipMonitor = newMonitor(
-				factory.serviceName,
-				factory.servicePortMap,
+			f.membershipMonitor = newMonitor(
+				f.serviceName,
+				f.servicePortMap,
 				mrp,
-				factory.logger,
-				factory.metadataManager,
-				factory.broadcastAddressResolver,
+				f.logger,
+				f.metadataManager,
+				f.broadcastAddressResolver,
 			)
 		}
 	})
 
-	return factory.membershipMonitor, err
+	return f.membershipMonitor, err
 }
 
-func (factory *factory) broadcastAddressResolver() (string, error) {
-	return buildBroadcastHostPort(factory.getTChannel().PeerInfo(), factory.config.BroadcastAddress)
+func (f *factory) broadcastAddressResolver() (string, error) {
+	return buildBroadcastHostPort(f.getTChannel().PeerInfo(), f.config.BroadcastAddress)
 }
 
-func (factory *factory) getTChannel() *tchannel.Channel {
-	factory.chOnce.Do(func() {
-		ringpopServiceName := fmt.Sprintf("%v-ringpop", factory.serviceName)
-		ringpopHostAddress := net.JoinHostPort(factory.getListenIP().String(), convert.IntToString(factory.rpcConfig.MembershipPort))
-		enableTLS := factory.dc.GetBoolProperty(dynamicconfig.EnableRingpopTLS, false)()
+func (f *factory) getTChannel() *tchannel.Channel {
+	f.chOnce.Do(func() {
+		ringpopServiceName := fmt.Sprintf("%v-ringpop", f.serviceName)
+		ringpopHostAddress := net.JoinHostPort(f.getListenIP().String(), convert.IntToString(f.rpcConfig.MembershipPort))
+		enableTLS := f.dc.GetBoolProperty(dynamicconfig.EnableRingpopTLS, false)()
 
 		var tChannel *tchannel.Channel
 		if enableTLS {
-			tChannel = factory.getTLSChannel(ringpopHostAddress, ringpopServiceName)
+			tChannel = f.getTLSChannel(ringpopHostAddress, ringpopServiceName)
 		} else {
-			tChannel = factory.getTCPChannel(ringpopHostAddress, ringpopServiceName)
+			tChannel = f.getTCPChannel(ringpopHostAddress, ringpopServiceName)
 		}
-		factory.channel = tChannel
+		f.channel = tChannel
 	})
 
-	return factory.channel
+	return f.channel
 }
 
-func (factory *factory) getTCPChannel(ringpopHostAddress string, ringpopServiceName string) *tchannel.Channel {
+func (f *factory) getTCPChannel(ringpopHostAddress string, ringpopServiceName string) *tchannel.Channel {
 	listener, err := net.Listen("tcp", ringpopHostAddress)
 	if err != nil {
-		factory.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+		f.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
 	}
 
 	tChannel, err := tchannel.NewChannel(ringpopServiceName, &tchannel.ChannelOptions{})
 	if err != nil {
-		factory.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
+		f.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
 	}
 
 	if err := tChannel.Serve(listener); err != nil {
-		factory.logger.Fatal("Failed to serve ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+		f.logger.Fatal("Failed to serve ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
 	}
 	return tChannel
 }
 
-func (factory *factory) getTLSChannel(ringpopHostAddress string, ringpopServiceName string) *tchannel.Channel {
-	clientTLSConfig, err := factory.tlsFactory.GetInternodeClientConfig()
+func (f *factory) getTLSChannel(ringpopHostAddress string, ringpopServiceName string) *tchannel.Channel {
+	clientTLSConfig, err := f.tlsFactory.GetInternodeClientConfig()
 	if err != nil {
-		factory.logger.Fatal("Failed to get internode TLS client config", tag.Error(err))
+		f.logger.Fatal("Failed to get internode TLS client config", tag.Error(err))
 	}
 
-	serverTLSConfig, err := factory.tlsFactory.GetInternodeServerConfig()
+	serverTLSConfig, err := f.tlsFactory.GetInternodeServerConfig()
 	if err != nil {
-		factory.logger.Fatal("Failed to get internode TLS server config", tag.Error(err))
+		f.logger.Fatal("Failed to get internode TLS server config", tag.Error(err))
 	}
 
 	listener, err := tls.Listen("tcp", ringpopHostAddress, serverTLSConfig)
 	if err != nil {
-		factory.logger.Fatal("Failed to start ringpop TLS listener", tag.Error(err), tag.Address(ringpopHostAddress))
+		f.logger.Fatal("Failed to start ringpop TLS listener", tag.Error(err), tag.Address(ringpopHostAddress))
 	}
 
 	dialer := tls.Dialer{Config: clientTLSConfig}
 	tChannel, err := tchannel.NewChannel(ringpopServiceName, &tchannel.ChannelOptions{Dialer: dialer.DialContext})
 	if err != nil {
-		factory.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
+		f.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
 	}
 
 	if err := tChannel.Serve(listener); err != nil {
-		factory.logger.Fatal("Failed to serve ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+		f.logger.Fatal("Failed to serve ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
 	}
 	return tChannel
 }
 
-func (factory *factory) getListenIP() net.IP {
-	if factory.rpcConfig.BindOnLocalHost && len(factory.rpcConfig.BindOnIP) > 0 {
-		factory.logger.Fatal("ListenIP failed, bindOnLocalHost and bindOnIP are mutually exclusive")
+func (f *factory) getListenIP() net.IP {
+	if f.rpcConfig.BindOnLocalHost && len(f.rpcConfig.BindOnIP) > 0 {
+		f.logger.Fatal("ListenIP failed, bindOnLocalHost and bindOnIP are mutually exclusive")
 		return nil
 	}
 
-	if factory.rpcConfig.BindOnLocalHost {
+	if f.rpcConfig.BindOnLocalHost {
 		return IPV4Localhost
 	}
 
-	if len(factory.rpcConfig.BindOnIP) > 0 {
-		ip := net.ParseIP(factory.rpcConfig.BindOnIP)
+	if len(f.rpcConfig.BindOnIP) > 0 {
+		ip := net.ParseIP(f.rpcConfig.BindOnIP)
 		if ip != nil {
 			return ip
 		}
-		factory.logger.Fatal("ListenIP failed, unable to parse bindOnIP value", tag.Address(factory.rpcConfig.BindOnIP))
+		f.logger.Fatal("ListenIP failed, unable to parse bindOnIP value", tag.Address(f.rpcConfig.BindOnIP))
 		return nil
 	}
 	ip, err := config.ListenIP()
 	if err != nil {
-		factory.logger.Fatal("ListenIP failed", tag.Error(err))
+		f.logger.Fatal("ListenIP failed", tag.Error(err))
 		return nil
 	}
 	return ip
 }
 
 // closeTChannel allows fx Stop hook to close channel
-func (factory *factory) closeTChannel() {
-	if factory.channel != nil {
-		factory.getTChannel().Close()
-		factory.channel = nil
+func (f *factory) closeTChannel() {
+	if f.channel != nil {
+		f.getTChannel().Close()
+		f.channel = nil
 	}
 }
