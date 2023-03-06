@@ -44,7 +44,7 @@ func GetDLQ(
 		return nil, consts.ErrUnknownCluster
 	}
 
-	tasks, token, err := replicationDLQHandler.GetMessages(
+	tasks, tasksInfo, token, err := replicationDLQHandler.GetMessages(
 		ctx,
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageId(),
@@ -55,8 +55,9 @@ func GetDLQ(
 		return nil, err
 	}
 	return &historyservice.GetDLQMessagesResponse{
-		Type:             request.GetType(),
-		ReplicationTasks: tasks,
-		NextPageToken:    token,
+		Type:                 request.GetType(),
+		ReplicationTasks:     tasks,
+		ReplicationTasksInfo: tasksInfo,
+		NextPageToken:        token,
 	}, nil
 }
