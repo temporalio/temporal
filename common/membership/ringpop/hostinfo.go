@@ -22,42 +22,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replicationadmin
+// Package ringpop provides a service-based membership monitor
+package ringpop
 
-import (
-	"context"
+type hostInfo struct {
+	addr   string // ip:port
+	labels map[string]string
+}
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
-)
-
-func GetDLQ(
-	ctx context.Context,
-	request *historyservice.GetDLQMessagesRequest,
-	shard shard.Context,
-	replicationDLQHandler replication.DLQHandler,
-) (*historyservice.GetDLQMessagesResponse, error) {
-	_, ok := shard.GetClusterMetadata().GetAllClusterInfo()[request.GetSourceCluster()]
-	if !ok {
-		return nil, consts.ErrUnknownCluster
+// newHostInfo creates a new *hostInfo instance
+func newHostInfo(addr string, labels map[string]string) *hostInfo {
+	if labels == nil {
+		labels = make(map[string]string)
 	}
-
-	tasks, tasksInfo, token, err := replicationDLQHandler.GetMessages(
-		ctx,
-		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageId(),
-		int(request.GetMaximumPageSize()),
-		request.GetNextPageToken(),
-	)
-	if err != nil {
-		return nil, err
+	return &hostInfo{
+		addr:   addr,
+		labels: labels,
 	}
-	return &historyservice.GetDLQMessagesResponse{
-		Type:                 request.GetType(),
-		ReplicationTasks:     tasks,
-		ReplicationTasksInfo: tasksInfo,
-		NextPageToken:        token,
-	}, nil
+}
+
+// GetAddress returns the ip:port address
+func (hi *hostInfo) GetAddress() string {
+	return hi.addr
+}
+
+// Identity implements ringpop's Membership interface
+func (hi *hostInfo) Identity() string {
+	// for now we just use the address as the identity
+	return hi.addr
+}
+
+// Label implements ringpop's Membership interface
+func (hi *hostInfo) Label(key string) (string, bool) {
+	value, ok := hi.labels[key]
+	return value, ok
+}
+
+// SetLabel sets the label.
+func (hi *hostInfo) SetLabel(key string, value string) {
+	hi.labels[key] = value
 }

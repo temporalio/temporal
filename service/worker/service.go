@@ -69,7 +69,7 @@ type (
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
 		metadataManager        persistence.MetadataManager
-		hostInfo               *membership.HostInfo
+		hostInfo               membership.HostInfo
 		executionManager       persistence.ExecutionManager
 		taskManager            persistence.TaskManager
 		historyClient          historyservice.HistoryServiceClient

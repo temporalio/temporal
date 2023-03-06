@@ -80,7 +80,7 @@ type (
 		logger            log.Logger
 		sdkClientFactory  sdk.ClientFactory
 		namespaceRegistry namespace.Registry
-		self              *membership.HostInfo
+		self              membership.HostInfo
 		hostName          resource.HostName
 		config            *Config
 		serviceResolver   membership.ServiceResolver
@@ -145,7 +145,7 @@ func (wm *perNamespaceWorkerManager) Running() bool {
 }
 
 func (wm *perNamespaceWorkerManager) Start(
-	self *membership.HostInfo,
+	self membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 ) {
 	if !atomic.CompareAndSwapInt32(

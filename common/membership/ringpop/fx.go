@@ -22,55 +22,74 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+package ringpop
 
 import (
 	"context"
 
 	"go.uber.org/fx"
+
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/rpc/encryption"
 )
 
-var HostInfoProviderModule = fx.Options(
-	fx.Provide(newHostInfoProvider),
-	fx.Invoke(hostInfoProviderLifetimeHooks),
+var Module = fx.Options(
+	fx.Provide(membershipMonitorProvider),
 )
 
-type (
-	cachingHostInfoProvider struct {
-		hostInfo          HostInfo
-		membershipMonitor Monitor
-	}
-)
-
-func newHostInfoProvider(membershipMonitor Monitor) HostInfoProvider {
-	return &cachingHostInfoProvider{
-		membershipMonitor: membershipMonitor,
-	}
-}
-
-func (hip *cachingHostInfoProvider) Start() error {
-	var err error
-	hip.hostInfo, err = hip.membershipMonitor.WhoAmI()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (hip *cachingHostInfoProvider) HostInfo() HostInfo {
-	return hip.hostInfo
-}
-
-func hostInfoProviderLifetimeHooks(
+func membershipMonitorProvider(
 	lc fx.Lifecycle,
-	provider HostInfoProvider,
-) {
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	logger log.SnTaggedLogger,
+	cfg *config.Config,
+	svcName primitives.ServiceName,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	dc *dynamicconfig.Collection,
+) (membership.Monitor, error) {
+	servicePortMap := make(map[primitives.ServiceName]int)
+	for sn, sc := range cfg.Services {
+		servicePortMap[primitives.ServiceName(sn)] = sc.RPC.GRPCPort
+	}
+
+	rpcConfig := cfg.Services[string(svcName)].RPC
+
+	factory, err := newFactory(
+		&cfg.Global.Membership,
+		svcName,
+		servicePortMap,
+		logger,
+		clusterMetadataManager,
+		&rpcConfig,
+		tlsConfigProvider,
+		dc,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	monitor, err := factory.getMembershipMonitor()
+	if err != nil {
+		return nil, err
+	}
+
 	lc.Append(
 		fx.Hook{
 			OnStart: func(context.Context) error {
-				return provider.Start()
+				monitor.Start()
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				monitor.Stop()
+				factory.closeTChannel()
+				return nil
 			},
 		},
 	)
 
+	return monitor, nil
 }
