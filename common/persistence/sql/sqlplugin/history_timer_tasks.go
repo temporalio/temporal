@@ -62,8 +62,6 @@ type (
 	HistoryTimerTask interface {
 		// InsertIntoTimerTasks inserts rows that into timer_tasks table.
 		InsertIntoTimerTasks(ctx context.Context, rows []TimerTasksRow) (sql.Result, error)
-		// SelectFromTimerTasks returns one or more rows from timer_tasks table
-		SelectFromTimerTasks(ctx context.Context, filter TimerTasksFilter) ([]TimerTasksRow, error)
 		// RangeSelectFromTimerTasks returns one or more rows from timer_tasks table
 		RangeSelectFromTimerTasks(ctx context.Context, filter TimerTasksRangeFilter) ([]TimerTasksRow, error)
 		// DeleteFromTimerTasks deletes one or more rows from timer_tasks table

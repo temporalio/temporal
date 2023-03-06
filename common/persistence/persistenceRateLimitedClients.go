@@ -342,22 +342,6 @@ func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 	return err
 }
 
-func (p *executionRateLimitedPersistenceClient) GetHistoryTask(
-	ctx context.Context,
-	request *GetHistoryTaskRequest,
-) (*GetHistoryTaskResponse, error) {
-	if ok := allow(
-		ctx,
-		ConstructHistoryTaskAPI("GetHistoryTask", request.TaskCategory),
-		p.rateLimiter,
-	); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetHistoryTask(ctx, request)
-	return response, err
-}
-
 func (p *executionRateLimitedPersistenceClient) GetHistoryTasks(
 	ctx context.Context,
 	request *GetHistoryTasksRequest,
