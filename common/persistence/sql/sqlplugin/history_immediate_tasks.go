@@ -61,8 +61,6 @@ type (
 	HistoryImmediateTask interface {
 		// InsertIntoHistoryImmediateTasks inserts rows that into history_immediate_tasks table.
 		InsertIntoHistoryImmediateTasks(ctx context.Context, rows []HistoryImmediateTasksRow) (sql.Result, error)
-		// SelectFromHistoryImmediateTasks returns rows that match filter criteria from history_immediate_tasks table.
-		SelectFromHistoryImmediateTasks(ctx context.Context, filter HistoryImmediateTasksFilter) ([]HistoryImmediateTasksRow, error)
 		// RangeSelectFromHistoryImmediateTasks returns rows that match filter criteria from history_immediate_tasks table.
 		RangeSelectFromHistoryImmediateTasks(ctx context.Context, filter HistoryImmediateTasksRangeFilter) ([]HistoryImmediateTasksRow, error)
 		// DeleteFromHistoryImmediateTasks deletes one rows from history_immediate_tasks table.

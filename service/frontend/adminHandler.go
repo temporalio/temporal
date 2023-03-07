@@ -1375,9 +1375,10 @@ func (adh *AdminHandler) GetDLQMessages(
 		}
 
 		return &adminservice.GetDLQMessagesResponse{
-			Type:             resp.GetType(),
-			ReplicationTasks: resp.GetReplicationTasks(),
-			NextPageToken:    resp.GetNextPageToken(),
+			Type:                 resp.GetType(),
+			ReplicationTasks:     resp.GetReplicationTasks(),
+			ReplicationTasksInfo: resp.GetReplicationTasksInfo(),
+			NextPageToken:        resp.GetNextPageToken(),
 		}, err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		tasks, token, err := adh.namespaceDLQHandler.Read(

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+package ringpop
 
 import (
 	"testing"
@@ -30,6 +30,7 @@ import (
 
 	"golang.org/x/exp/maps"
 
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 
 	"github.com/stretchr/testify/require"
@@ -49,16 +50,16 @@ func (s *RpoSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 }
 
-func (s *RpoSuite) TestRingpopMonitor() {
+func (s *RpoSuite) TestMonitor() {
 	serviceName := primitives.HistoryService
-	testService := NewTestRingpopCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1")
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1")
 	s.NotNil(testService, "Failed to create test service")
 
 	rpm := testService.rings[0]
 
 	time.Sleep(time.Second)
 
-	listenCh := make(chan *ChangedEvent, 5)
+	listenCh := make(chan *membership.ChangedEvent, 5)
 	err := rpm.AddListener(serviceName, "test-listener", listenCh)
 	s.Nil(err, "AddListener failed")
 
@@ -68,7 +69,7 @@ func (s *RpoSuite) TestRingpopMonitor() {
 
 	// Force refresh now and drain the notification channel
 	resolver, _ := rpm.GetResolver(serviceName)
-	s.NoError(resolver.(*ringpopServiceResolver).refresh())
+	s.NoError(resolver.(*serviceResolver).refresh())
 	drainChannel(listenCh)
 
 	s.T().Log("Killing host 1")
@@ -96,19 +97,19 @@ func (s *RpoSuite) TestRingpopMonitor() {
 }
 
 func (s *RpoSuite) TestCompareMembers() {
-	s.testCompareMembers([]string{}, []string{"a"}, []string{"+a"})
-	s.testCompareMembers([]string{}, []string{"a", "b"}, []string{"+a", "+b"})
-	s.testCompareMembers([]string{"a"}, []string{"a", "b"}, []string{"+b"})
-	s.testCompareMembers([]string{}, []string{}, nil)
-	s.testCompareMembers([]string{"a"}, []string{"a"}, nil)
-	s.testCompareMembers([]string{"a"}, []string{}, []string{"-a"})
-	s.testCompareMembers([]string{"a", "b"}, []string{}, []string{"-a", "-b"})
-	s.testCompareMembers([]string{"a", "b"}, []string{"a", "b"}, nil)
-	s.testCompareMembers([]string{"a", "b", "c"}, []string{"b", "d", "e"}, []string{"+d", "+e", "-a", "-c"})
+	s.verifyMemberDiff([]string{}, []string{"a"}, []string{"+a"})
+	s.verifyMemberDiff([]string{}, []string{"a", "b"}, []string{"+a", "+b"})
+	s.verifyMemberDiff([]string{"a"}, []string{"a", "b"}, []string{"+b"})
+	s.verifyMemberDiff([]string{}, []string{}, nil)
+	s.verifyMemberDiff([]string{"a"}, []string{"a"}, nil)
+	s.verifyMemberDiff([]string{"a"}, []string{}, []string{"-a"})
+	s.verifyMemberDiff([]string{"a", "b"}, []string{}, []string{"-a", "-b"})
+	s.verifyMemberDiff([]string{"a", "b"}, []string{"a", "b"}, nil)
+	s.verifyMemberDiff([]string{"a", "b", "c"}, []string{"b", "d", "e"}, []string{"+d", "+e", "-a", "-c"})
 }
 
-func (s *RpoSuite) testCompareMembers(curr []string, new []string, expectedDiff []string) {
-	resolver := &ringpopServiceResolver{}
+func (s *RpoSuite) verifyMemberDiff(curr []string, new []string, expectedDiff []string) {
+	resolver := &serviceResolver{}
 	currMembers := make(map[string]struct{}, len(curr))
 	for _, m := range curr {
 		currMembers[m] = struct{}{}
@@ -120,13 +121,13 @@ func (s *RpoSuite) testCompareMembers(curr []string, new []string, expectedDiff 
 	if event != nil {
 		var diff []string
 		for _, a := range event.HostsAdded {
-			diff = append(diff, "+"+a.addr)
+			diff = append(diff, "+"+a.GetAddress())
 		}
 		for _, a := range event.HostsUpdated {
-			diff = append(diff, "~"+a.addr)
+			diff = append(diff, "~"+a.GetAddress())
 		}
 		for _, a := range event.HostsRemoved {
-			diff = append(diff, "-"+a.addr)
+			diff = append(diff, "-"+a.GetAddress())
 		}
 		s.ElementsMatch(expectedDiff, diff)
 	}

@@ -22,42 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replicationadmin
+package membership
 
 import (
-	"context"
+	"fmt"
+	"net"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/common/config"
 )
 
-func GetDLQ(
-	ctx context.Context,
-	request *historyservice.GetDLQMessagesRequest,
-	shard shard.Context,
-	replicationDLQHandler replication.DLQHandler,
-) (*historyservice.GetDLQMessagesResponse, error) {
-	_, ok := shard.GetClusterMetadata().GetAllClusterInfo()[request.GetSourceCluster()]
-	if !ok {
-		return nil, consts.ErrUnknownCluster
+// ValidateConfig validates that the membership config is parseable and valid
+func ValidateConfig(cfg *config.Membership) error {
+	if cfg.BroadcastAddress != "" && net.ParseIP(cfg.BroadcastAddress) == nil {
+		return fmt.Errorf("ringpop config malformed `broadcastAddress` param")
 	}
-
-	tasks, tasksInfo, token, err := replicationDLQHandler.GetMessages(
-		ctx,
-		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageId(),
-		int(request.GetMaximumPageSize()),
-		request.GetNextPageToken(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &historyservice.GetDLQMessagesResponse{
-		Type:                 request.GetType(),
-		ReplicationTasks:     tasks,
-		ReplicationTasksInfo: tasksInfo,
-		NextPageToken:        token,
-	}, nil
+	return nil
 }

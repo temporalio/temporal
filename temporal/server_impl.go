@@ -65,7 +65,7 @@ var ServerFxImplModule = fx.Options(
 	fx.Provide(func(src *ServerImpl) Server { return src }),
 )
 
-// NewServer returns a new instance of server that serves one or many services.
+// NewServerFxImpl returns a new instance of server that serves one or many services.
 func NewServerFxImpl(
 	opts *serverOptions,
 	logger log.Logger,

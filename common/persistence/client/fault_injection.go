@@ -572,16 +572,6 @@ func (e *FaultInjectionExecutionStore) AddHistoryTasks(
 	return e.baseExecutionStore.AddHistoryTasks(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) GetHistoryTask(
-	ctx context.Context,
-	request *persistence.GetHistoryTaskRequest,
-) (*persistence.InternalGetHistoryTaskResponse, error) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.GetHistoryTask(ctx, request)
-}
-
 func (e *FaultInjectionExecutionStore) GetHistoryTasks(
 	ctx context.Context,
 	request *persistence.GetHistoryTasksRequest,
