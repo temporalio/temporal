@@ -25,19 +25,29 @@
 package queues
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
 	readerGroupSuite struct {
 		suite.Suite
 		*require.Assertions
+
+		controller           *gomock.Controller
+		mockExecutionManager *persistence.MockExecutionManager
+
+		shardID  int32
+		category tasks.Category
 
 		readerGroup *ReaderGroup
 	}
@@ -55,29 +65,54 @@ func TestReaderGroupSuite(t *testing.T) {
 func (s *readerGroupSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.readerGroup = NewReaderGroup(func(_ int32, _ []Slice) Reader {
-		return newTestReader()
-	})
+	s.controller = gomock.NewController(s.T())
+	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
+
+	s.shardID = rand.Int31()
+	s.category = tasks.CategoryTransfer
+
+	s.readerGroup = NewReaderGroup(
+		s.shardID,
+		s.category,
+		func(_ int32, _ []Slice) Reader {
+			return newTestReader()
+		},
+		s.mockExecutionManager,
+	)
+}
+
+func (s *readerGroupSuite) TearDownTest() {
+	s.controller.Finish()
 }
 
 func (s *readerGroupSuite) TestStartStop() {
-	r := s.readerGroup.NewReader(DefaultReaderId)
+	readerID := int32(DefaultReaderId)
+	s.setupRegisterReaderMock(readerID)
+	r := s.readerGroup.NewReader(readerID)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
 
 	s.readerGroup.Start()
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
-	r = s.readerGroup.NewReader(DefaultReaderId + 1)
+	readerID = int32(DefaultReaderId + 1)
+	s.setupRegisterReaderMock(readerID)
+	r = s.readerGroup.NewReader(readerID)
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
+	var readers []*testReader
+	for readerID, reader := range s.readerGroup.Readers() {
+		s.setupUnRegisterReaderMock(readerID)
+		readers = append(readers, reader.(*testReader))
+	}
 	s.readerGroup.Stop()
-	readers := s.readerGroup.Readers()
-	s.Len(readers, 2)
+	s.Empty(s.readerGroup.Readers(), 2)
 	for _, r := range readers {
-		s.Equal(common.DaemonStatusStopped, r.(*testReader).status)
+		s.Equal(common.DaemonStatusStopped, r.status)
 	}
 
-	r = s.readerGroup.NewReader(DefaultReaderId + 2)
+	readerID = int32(DefaultReaderId + 2)
+	s.setupRegisterReaderMock(readerID)
+	r = s.readerGroup.NewReader(readerID)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
 }
 
@@ -89,6 +124,7 @@ func (s *readerGroupSuite) TestAddGetReader() {
 	s.Nil(r)
 
 	for i := int32(0); i < 3; i++ {
+		s.setupRegisterReaderMock(i)
 		r = s.readerGroup.NewReader(i)
 
 		readers := s.readerGroup.Readers()
@@ -109,10 +145,40 @@ func (s *readerGroupSuite) TestRemoveReader() {
 	s.readerGroup.Start()
 	defer s.readerGroup.Stop()
 
-	r := s.readerGroup.NewReader(DefaultReaderId)
-	s.readerGroup.RemoveReader(DefaultReaderId)
+	readerID := int32(DefaultReaderId)
+
+	s.setupRegisterReaderMock(readerID)
+	r := s.readerGroup.NewReader(readerID)
+
+	s.setupUnRegisterReaderMock(readerID)
+	s.readerGroup.RemoveReader(readerID)
+
 	s.Equal(common.DaemonStatusStopped, r.(*testReader).status)
 	s.Len(s.readerGroup.Readers(), 0)
+}
+
+func (s *readerGroupSuite) setupRegisterReaderMock(
+	readerID int32,
+) {
+	request := &persistence.RegisterHistoryTaskReaderRequest{
+		ShardID:      s.shardID,
+		TaskCategory: s.category,
+		ReaderID:     readerID,
+	}
+
+	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), request).Return(nil).Times(1)
+}
+
+func (s *readerGroupSuite) setupUnRegisterReaderMock(
+	readerID int32,
+) {
+	request := &persistence.UnregisterHistoryTaskReaderRequest{
+		ShardID:      s.shardID,
+		TaskCategory: s.category,
+		ReaderID:     readerID,
+	}
+
+	s.mockExecutionManager.EXPECT().UnregisterHistoryTaskReader(gomock.Any(), request).Times(1)
 }
 
 func newTestReader() Reader {

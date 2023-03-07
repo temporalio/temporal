@@ -76,6 +76,15 @@ type (
 var (
 	fakeImmediateTaskCategory = tasks.NewCategory(1234, tasks.CategoryTypeImmediate, "fake-immediate")
 	fakeScheduledTaskCategory = tasks.NewCategory(2345, tasks.CategoryTypeScheduled, "fake-scheduled")
+
+	taskCategories = []tasks.Category{
+		tasks.CategoryTransfer,
+		tasks.CategoryTimer,
+		tasks.CategoryReplication,
+		tasks.CategoryVisibility,
+		fakeImmediateTaskCategory,
+		fakeScheduledTaskCategory,
+	}
 )
 
 func NewExecutionMutableStateTaskSuite(
@@ -130,6 +139,14 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 		uuid.New().String(),
 	)
 
+	for _, category := range taskCategories {
+		err := s.ExecutionManager.RegisterHistoryTaskReader(s.Ctx, &p.RegisterHistoryTaskReaderRequest{
+			ShardID:      s.ShardID,
+			TaskCategory: category,
+			ReaderID:     common.DefaultQueueReaderID,
+		})
+		s.NoError(err)
+	}
 }
 
 func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
@@ -149,6 +166,14 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
 	})
 	s.NoError(err)
+
+	for _, category := range taskCategories {
+		s.ExecutionManager.UnregisterHistoryTaskReader(s.Ctx, &p.UnregisterHistoryTaskReaderRequest{
+			ShardID:      s.ShardID,
+			TaskCategory: category,
+			ReaderID:     common.DefaultQueueReaderID,
+		})
+	}
 
 	s.Cancel()
 }
