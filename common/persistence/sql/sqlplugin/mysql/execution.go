@@ -155,6 +155,11 @@ shard_id = ? AND
 task_id >= ? AND
 task_id < ?
 ORDER BY task_id LIMIT ?`
+	getOneReplicationTaskDLQQuery = `SELECT task_id FROM replication_tasks_dlq WHERE 
+source_cluster_name = ? AND
+shard_id = ? AND
+task_id >= ? 
+LIMIT 1`
 
 	createVisibilityTasksQuery = `INSERT INTO visibility_tasks(shard_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :task_id, :data, :data_encoding)`
@@ -200,9 +205,6 @@ VALUES     (:source_cluster_name,
 		AND shard_id = ? 
 		AND task_id >= ?
 		AND task_id < ?`
-
-	getOneReplicationTaskDLQQuery = `SELECT task_id FROM replication_tasks_dlq WHERE 
-	shard_id = ? LIMIT 1`
 )
 
 // InsertIntoExecutions inserts a row into executions table
@@ -861,8 +863,8 @@ func (mdb *db) SelectFromReplicationDLQTasks(
 	return rows, err
 }
 
-// SelectFromReplicationDLQTasksByShardID reads one row from replication_tasks_dlq table by shard id
-func (mdb *db) SelectFromReplicationDLQTasksByShardID(
+// SelectOneFromReplicationDLQTasks reads one row from replication_tasks_dlq table by shard id
+func (mdb *db) SelectOneFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksFilter,
 ) ([]sqlplugin.ReplicationDLQTasksRow, error) {
@@ -871,7 +873,9 @@ func (mdb *db) SelectFromReplicationDLQTasksByShardID(
 	err := mdb.conn.SelectContext(ctx,
 		&rows,
 		getOneReplicationTaskDLQQuery,
+		filter.SourceClusterName,
 		filter.ShardID,
+		filter.TaskID,
 	)
 	return rows, err
 }

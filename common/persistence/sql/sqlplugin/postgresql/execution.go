@@ -156,7 +156,10 @@ task_id >= $3 AND
 task_id < $4
 ORDER BY task_id LIMIT $5`
 	getOneReplicationTaskDLQQuery = `SELECT task_id FROM replication_tasks_dlq WHERE
-shard_id = $1 LIMIT 1`
+source_cluster_name = $1 AND
+shard_id = $2 AND
+task_id >= $3
+LIMIT 1`
 
 	createVisibilityTasksQuery = `INSERT INTO visibility_tasks(shard_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :task_id, :data, :data_encoding)`
@@ -861,8 +864,8 @@ func (pdb *db) SelectFromReplicationDLQTasks(
 	return rows, err
 }
 
-// SelectFromReplicationDLQTasksByShardID reads one row from replication_tasks_dlq table by shard id
-func (pdb *db) SelectFromReplicationDLQTasksByShardID(
+// SelectOneFromReplicationDLQTasks reads one row from replication_tasks_dlq table by shard id
+func (pdb *db) SelectOneFromReplicationDLQTasks(
 	ctx context.Context,
 	filter sqlplugin.ReplicationDLQTasksFilter,
 ) ([]sqlplugin.ReplicationDLQTasksRow, error) {
@@ -872,7 +875,9 @@ func (pdb *db) SelectFromReplicationDLQTasksByShardID(
 		ctx,
 		&rows,
 		getOneReplicationTaskDLQQuery,
+		filter.SourceClusterName,
 		filter.ShardID,
+		filter.TaskID,
 	)
 	return rows, err
 }

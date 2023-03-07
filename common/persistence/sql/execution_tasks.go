@@ -893,8 +893,10 @@ func (m *sqlExecutionStore) IsReplicationDLQEmpty(
 	ctx context.Context,
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (bool, error) {
-	res, err := m.Db.SelectFromReplicationDLQTasksByShardID(ctx, sqlplugin.ReplicationDLQTasksFilter{
-		ShardID: request.ShardID,
+	res, err := m.Db.SelectOneFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksFilter{
+		ShardID:           request.ShardID,
+		SourceClusterName: request.SourceClusterName,
+		TaskID:            request.InclusiveMinTaskKey.TaskID,
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

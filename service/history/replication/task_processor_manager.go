@@ -321,16 +321,28 @@ func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 	defer cancel()
-	isEmpty, err := r.shard.GetExecutionManager().IsReplicationDLQEmpty(ctx, &persistence.GetReplicationTasksFromDLQRequest{
-		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
-			ShardID: r.shard.GetShardID(),
-		},
-	})
-	if err != nil {
-		r.logger.Error("Failed to check replication DLQ size.", tag.Error(err))
-		return
-	}
-	if isEmpty {
-		r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
+	for clusterName := range r.shard.GetClusterMetadata().GetAllClusterInfo() {
+		if clusterName == r.shard.GetClusterMetadata().GetCurrentClusterName() {
+			continue
+		}
+
+		minTaskKey := r.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName)
+		isEmpty, err := r.shard.GetExecutionManager().IsReplicationDLQEmpty(ctx, &persistence.GetReplicationTasksFromDLQRequest{
+			GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
+				ShardID:             r.shard.GetShardID(),
+				TaskCategory:        tasks.CategoryReplication,
+				InclusiveMinTaskKey: minTaskKey.Next(),
+			},
+			SourceClusterName: clusterName,
+		})
+		if err != nil {
+			r.logger.Error("Failed to check replication DLQ size.", tag.Error(err))
+			return
+		}
+		if !isEmpty {
+			r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
+			r.logger.Info("Replication DLQ is not empty.", tag.ShardID(r.shard.GetShardID()), tag.AckLevel(minTaskKey))
+			break
+		}
 	}
 }

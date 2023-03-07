@@ -430,8 +430,11 @@ func (s *ExecutionMutableStateTaskSuite) TestIsReplicationDLQEmpty() {
 	testShardID := int32(1)
 	isEmpty, err := s.ExecutionManager.IsReplicationDLQEmpty(context.Background(), &p.GetReplicationTasksFromDLQRequest{
 		GetHistoryTasksRequest: p.GetHistoryTasksRequest{
-			ShardID: testShardID,
+			ShardID:             testShardID,
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(0),
 		},
+		SourceClusterName: "test",
 	})
 	s.NoError(err)
 	s.True(isEmpty)
@@ -443,8 +446,11 @@ func (s *ExecutionMutableStateTaskSuite) TestIsReplicationDLQEmpty() {
 	s.NoError(err)
 	isEmpty, err = s.ExecutionManager.IsReplicationDLQEmpty(context.Background(), &p.GetReplicationTasksFromDLQRequest{
 		GetHistoryTasksRequest: p.GetHistoryTasksRequest{
-			ShardID: testShardID,
+			ShardID:             testShardID,
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(0),
 		},
+		SourceClusterName: "test",
 	})
 	s.NoError(err)
 	s.False(isEmpty)
