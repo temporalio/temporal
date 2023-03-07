@@ -61,6 +61,7 @@ type (
 		CompactSlices(SlicePredicate)
 		ShrinkSlices()
 
+		Notify()
 		Pause(time.Duration)
 	}
 
@@ -380,6 +381,18 @@ func (r *ReaderImpl) ShrinkSlices() {
 	}
 
 	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
+}
+
+func (r *ReaderImpl) Notify() {
+	r.Lock()
+	defer r.Unlock()
+
+	if r.throttleTimer != nil {
+		r.throttleTimer.Stop()
+		r.throttleTimer = nil
+	}
+
+	r.notify()
 }
 
 func (r *ReaderImpl) Pause(duration time.Duration) {

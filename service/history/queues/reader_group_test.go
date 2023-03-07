@@ -157,6 +157,21 @@ func (s *readerGroupSuite) TestRemoveReader() {
 	s.Len(s.readerGroup.Readers(), 0)
 }
 
+func (s *readerGroupSuite) TestForEach() {
+	readerIDs := []int32{1, 2, 3}
+	for _, readerID := range readerIDs {
+		s.setupRegisterReaderMock(readerID)
+		s.readerGroup.NewReader(readerID)
+	}
+
+	forEachResult := make(map[int32]Reader)
+	s.readerGroup.ForEach(func(i int32, r Reader) {
+		forEachResult[i] = r
+	})
+
+	s.Equal(s.readerGroup.Readers(), forEachResult)
+}
+
 func (s *readerGroupSuite) setupRegisterReaderMock(
 	readerID int32,
 ) {
@@ -197,4 +212,5 @@ func (r *testReader) AppendSlices(...Slice)        { panic("not implemented") }
 func (r *testReader) ClearSlices(SlicePredicate)   { panic("not implemented") }
 func (r *testReader) CompactSlices(SlicePredicate) { panic("not implemented") }
 func (r *testReader) ShrinkSlices()                { panic("not implemented") }
+func (r *testReader) Notify()                      { panic("not implemented") }
 func (r *testReader) Pause(time.Duration)          { panic("not implemented") }
