@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/temporal"
 )
 
@@ -145,10 +146,20 @@ func NewServer(opts ...TestServerOption) *TestServer {
 
 	ts.frontendHostPort = cfg.PublicClient.HostPort
 	ts.serverOptions = append(ts.serverOptions,
+		temporal.ForServices(temporal.DefaultServices),
 		temporal.WithConfig(cfg),
 		temporal.WithLogger(log.NewNoopLogger()),
 		temporal.WithDynamicConfigClient(dynCfg),
 	)
+
+	// Pre-create namespaces
+	sqlConfig := cfg.Persistence.DataStores["sqlite-default"].SQL
+	namespaces := []*sqlite.NamespaceConfig{
+		sqlite.NewNamespaceConfig(cfg.ClusterMetadata.CurrentClusterName, ts.defaultTestNamespace, false),
+	}
+	if err := sqlite.CreateNamespaces(sqlConfig, namespaces...); err != nil {
+		ts.fatal(fmt.Errorf("unable to create default namespace: %w", err))
+	}
 
 	s, err := temporal.NewServer(ts.serverOptions...)
 	if err != nil {
