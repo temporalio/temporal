@@ -158,8 +158,6 @@ type (
 		refreshInterval         dynamicconfig.DurationPropertyFn
 
 		// cacheLock protects cachNameToID, cacheByID and stateChangeCallbacks.
-		// If the exclusive side is to be held at the same time as the
-		// callbackLock (below), this lock MUST be acquired *first*.
 		cacheLock                     sync.RWMutex
 		cacheNameToID                 cache.Cache
 		cacheByID                     cache.Cache
@@ -169,6 +167,7 @@ type (
 		// readthroughLock protects readthroughNotFoundCache and requests to persistence
 		// it should be acquired before checking readthroughNotFoundCache, making a request
 		// to persistence, or updating readthroughNotFoundCache
+		// It should be acquired before cacheLock (above) if both are required
 		readthroughLock sync.Mutex
 		// readthroughNotFoundCache stores namespaces that missed the above caches
 		// AND was not found when reading through to the persistence layer

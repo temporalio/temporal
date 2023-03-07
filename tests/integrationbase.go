@@ -114,7 +114,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(2 * NamespaceCacheRefreshInterval)
 }
 
 // setupLogger sets the Logger for the test suite.
