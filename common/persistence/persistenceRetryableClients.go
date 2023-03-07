@@ -369,21 +369,6 @@ func (p *executionRetryablePersistenceClient) AddHistoryTasks(
 	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 }
 
-func (p *executionRetryablePersistenceClient) GetHistoryTask(
-	ctx context.Context,
-	request *GetHistoryTaskRequest,
-) (*GetHistoryTaskResponse, error) {
-	var response *GetHistoryTaskResponse
-	op := func(ctx context.Context) error {
-		var err error
-		response, err = p.persistence.GetHistoryTask(ctx, request)
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
-	return response, err
-}
-
 func (p *executionRetryablePersistenceClient) GetHistoryTasks(
 	ctx context.Context,
 	request *GetHistoryTasksRequest,

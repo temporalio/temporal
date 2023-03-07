@@ -348,34 +348,6 @@ func (p *executionPersistenceClient) AddHistoryTasks(
 	return p.persistence.AddHistoryTasks(ctx, request)
 }
 
-func (p *executionPersistenceClient) GetHistoryTask(
-	ctx context.Context,
-	request *GetHistoryTaskRequest,
-) (_ *GetHistoryTaskResponse, retErr error) {
-	var operation string
-	switch request.TaskCategory.ID() {
-	case tasks.CategoryIDTransfer:
-		operation = metrics.PersistenceGetTransferTaskScope
-	case tasks.CategoryIDTimer:
-		operation = metrics.PersistenceGetTimerTaskScope
-	case tasks.CategoryIDVisibility:
-		operation = metrics.PersistenceGetVisibilityTaskScope
-	case tasks.CategoryIDReplication:
-		operation = metrics.PersistenceGetReplicationTaskScope
-	case tasks.CategoryIDArchival:
-		operation = metrics.PersistenceGetArchivalTaskScope
-	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
-	}
-
-	caller := headers.GetCallerInfo(ctx).CallerName
-	startTime := time.Now().UTC()
-	defer func() {
-		p.recordRequestMetrics(operation, caller, startTime, retErr)
-	}()
-	return p.persistence.GetHistoryTask(ctx, request)
-}
-
 func (p *executionPersistenceClient) GetHistoryTasks(
 	ctx context.Context,
 	request *GetHistoryTasksRequest,

@@ -117,7 +117,7 @@ const (
 	testHostName = "test_host"
 )
 
-var testHostInfo = membership.NewHostInfo(testHostName, nil)
+var testHostInfo = membership.NewHostInfoFromAddress(testHostName)
 
 // NewTest returns a new test resource instance
 func NewTest(
@@ -248,7 +248,7 @@ func (t *Test) GetHostName() string {
 }
 
 // GetHostInfo for testing
-func (t *Test) GetHostInfo() *membership.HostInfo {
+func (t *Test) GetHostInfo() membership.HostInfo {
 	return testHostInfo
 }
 

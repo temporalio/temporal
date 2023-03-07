@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -148,6 +149,15 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 	s.mockShard.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(tasks.NewImmediateKey(ackedTaskID)).Times(2)
 	s.mockShard.EXPECT().GetQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName).Return(tasks.NewImmediateKey(ackedTaskID))
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID - 1
+	s.mockExecutionManager.EXPECT().UpdateHistoryTaskReaderProgress(
+		gomock.Any(),
+		&persistence.UpdateHistoryTaskReaderProgressRequest{
+			ShardID:                    s.shardID,
+			TaskCategory:               tasks.CategoryReplication,
+			ReaderID:                   common.DefaultQueueReaderID,
+			InclusiveMinPendingTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
+		},
+	).Times(1)
 	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
 		gomock.Any(),
 		&persistence.RangeCompleteHistoryTasksRequest{
@@ -155,7 +165,7 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 			TaskCategory:        tasks.CategoryReplication,
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
 		},
-	).Return(nil)
+	).Return(nil).Times(1)
 	err := s.taskProcessorManager.cleanupReplicationTasks()
 	s.NoError(err)
 }

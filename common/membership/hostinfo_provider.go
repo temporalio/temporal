@@ -37,7 +37,7 @@ var HostInfoProviderModule = fx.Options(
 
 type (
 	cachingHostInfoProvider struct {
-		hostInfo          *HostInfo
+		hostInfo          HostInfo
 		membershipMonitor Monitor
 	}
 )
@@ -57,7 +57,7 @@ func (hip *cachingHostInfoProvider) Start() error {
 	return nil
 }
 
-func (hip *cachingHostInfoProvider) HostInfo() *HostInfo {
+func (hip *cachingHostInfoProvider) HostInfo() HostInfo {
 	return hip.hostInfo
 }
 

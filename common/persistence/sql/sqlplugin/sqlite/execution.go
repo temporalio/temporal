@@ -88,8 +88,6 @@ workflow_id = :workflow_id
 	createHistoryImmediateTasksQuery = `INSERT INTO history_immediate_tasks(shard_id, category_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :category_id, :task_id, :data, :data_encoding)`
 
-	getHistoryImmediateTaskQuery = `SELECT task_id, data, data_encoding 
- FROM history_immediate_tasks WHERE shard_id = ? AND category_id = ? AND task_id = ?`
 	getHistoryImmediateTasksQuery = `SELECT task_id, data, data_encoding 
  FROM history_immediate_tasks WHERE shard_id = ? AND category_id = ? AND task_id >= ? AND task_id < ? ORDER BY task_id LIMIT ?`
 
@@ -99,8 +97,6 @@ workflow_id = :workflow_id
 	createHistoryScheduledTasksQuery = `INSERT INTO history_scheduled_tasks (shard_id, category_id, visibility_timestamp, task_id, data, data_encoding)
   VALUES (:shard_id, :category_id, :visibility_timestamp, :task_id, :data, :data_encoding)`
 
-	getHistoryScheduledTaskQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM history_scheduled_tasks 
-  WHERE shard_id = ? AND category_id = ? AND visibility_timestamp = ? AND task_id = ?`
 	getHistoryScheduledTasksQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM history_scheduled_tasks 
   WHERE shard_id = ? 
   AND category_id = ? 
@@ -114,8 +110,6 @@ workflow_id = :workflow_id
 	createTransferTasksQuery = `INSERT INTO transfer_tasks(shard_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :task_id, :data, :data_encoding)`
 
-	getTransferTaskQuery = `SELECT task_id, data, data_encoding 
- FROM transfer_tasks WHERE shard_id = ? AND task_id = ?`
 	getTransferTasksQuery = `SELECT task_id, data, data_encoding 
  FROM transfer_tasks WHERE shard_id = ? AND task_id >= ? AND task_id < ? ORDER BY task_id LIMIT ?`
 
@@ -125,8 +119,6 @@ workflow_id = :workflow_id
 	createTimerTasksQuery = `INSERT INTO timer_tasks (shard_id, visibility_timestamp, task_id, data, data_encoding)
   VALUES (:shard_id, :visibility_timestamp, :task_id, :data, :data_encoding)`
 
-	getTimerTaskQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM timer_tasks 
-  WHERE shard_id = ? AND visibility_timestamp = ? AND task_id = ?`
 	getTimerTasksQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM timer_tasks 
   WHERE shard_id = ? 
   AND ((visibility_timestamp >= ? AND task_id >= ?) OR visibility_timestamp > ?) 
@@ -139,18 +131,12 @@ workflow_id = :workflow_id
 	createReplicationTasksQuery = `INSERT INTO replication_tasks (shard_id, task_id, data, data_encoding) 
   VALUES(:shard_id, :task_id, :data, :data_encoding)`
 
-	getReplicationTaskQuery = `SELECT task_id, data, data_encoding FROM replication_tasks WHERE 
-shard_id = ? AND task_id = ?`
 	getReplicationTasksQuery = `SELECT task_id, data, data_encoding FROM replication_tasks WHERE 
 shard_id = ? AND task_id >= ? AND task_id < ? ORDER BY task_id LIMIT ?`
 
 	deleteReplicationTaskQuery      = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id = ?`
 	rangeDeleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = ? AND task_id >= ? AND task_id < ?`
 
-	getReplicationTaskDLQQuery = `SELECT task_id, data, data_encoding FROM replication_tasks_dlq WHERE 
-source_cluster_name = ? AND
-shard_id = ? AND
-task_id = ?`
 	getReplicationTasksDLQQuery = `SELECT task_id, data, data_encoding FROM replication_tasks_dlq WHERE 
 source_cluster_name = ? AND
 shard_id = ? AND
@@ -161,8 +147,6 @@ ORDER BY task_id LIMIT ?`
 	createVisibilityTasksQuery = `INSERT INTO visibility_tasks(shard_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :task_id, :data, :data_encoding)`
 
-	getVisibilityTaskQuery = `SELECT task_id, data, data_encoding 
- FROM visibility_tasks WHERE shard_id = ? AND task_id = ?`
 	getVisibilityTasksQuery = `SELECT task_id, data, data_encoding 
  FROM visibility_tasks WHERE shard_id = ? AND task_id >= ? AND task_id < ? ORDER BY task_id LIMIT ?`
 
@@ -389,24 +373,6 @@ func (mdb *db) InsertIntoHistoryImmediateTasks(
 	)
 }
 
-// SelectFromHistoryImmediateTasks reads one or more rows from transfer_tasks table
-func (mdb *db) SelectFromHistoryImmediateTasks(
-	ctx context.Context,
-	filter sqlplugin.HistoryImmediateTasksFilter,
-) ([]sqlplugin.HistoryImmediateTasksRow, error) {
-	var rows []sqlplugin.HistoryImmediateTasksRow
-	if err := mdb.conn.SelectContext(ctx,
-		&rows,
-		getHistoryImmediateTaskQuery,
-		filter.ShardID,
-		filter.CategoryID,
-		filter.TaskID,
-	); err != nil {
-		return nil, err
-	}
-	return rows, nil
-}
-
 // RangeSelectFromHistoryImmediateTasks reads one or more rows from transfer_tasks table
 func (mdb *db) RangeSelectFromHistoryImmediateTasks(
 	ctx context.Context,
@@ -467,30 +433,6 @@ func (mdb *db) InsertIntoHistoryScheduledTasks(
 		createHistoryScheduledTasksQuery,
 		rows,
 	)
-}
-
-// SelectFromHistoryScheduledTasks reads one or more rows from timer_tasks table
-func (mdb *db) SelectFromHistoryScheduledTasks(
-	ctx context.Context,
-	filter sqlplugin.HistoryScheduledTasksFilter,
-) ([]sqlplugin.HistoryScheduledTasksRow, error) {
-	var rows []sqlplugin.HistoryScheduledTasksRow
-	filter.VisibilityTimestamp = mdb.converter.ToSQLiteDateTime(filter.VisibilityTimestamp)
-	err := mdb.conn.SelectContext(ctx,
-		&rows,
-		getHistoryScheduledTaskQuery,
-		filter.ShardID,
-		filter.CategoryID,
-		filter.VisibilityTimestamp,
-		filter.TaskID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	for i := range rows {
-		rows[i].VisibilityTimestamp = mdb.converter.ToSQLiteDateTime(rows[i].VisibilityTimestamp)
-	}
-	return rows, nil
 }
 
 // RangeSelectFromHistoryScheduledTasks reads one or more rows from timer_tasks table
@@ -562,23 +504,6 @@ func (mdb *db) InsertIntoTransferTasks(
 	)
 }
 
-// SelectFromTransferTasks reads one or more rows from transfer_tasks table
-func (mdb *db) SelectFromTransferTasks(
-	ctx context.Context,
-	filter sqlplugin.TransferTasksFilter,
-) ([]sqlplugin.TransferTasksRow, error) {
-	var rows []sqlplugin.TransferTasksRow
-	if err := mdb.conn.SelectContext(ctx,
-		&rows,
-		getTransferTaskQuery,
-		filter.ShardID,
-		filter.TaskID,
-	); err != nil {
-		return nil, err
-	}
-	return rows, nil
-}
-
 // RangeSelectFromTransferTasks reads one or more rows from transfer_tasks table
 func (mdb *db) RangeSelectFromTransferTasks(
 	ctx context.Context,
@@ -636,29 +561,6 @@ func (mdb *db) InsertIntoTimerTasks(
 		createTimerTasksQuery,
 		rows,
 	)
-}
-
-// SelectFromTimerTasks reads one or more rows from timer_tasks table
-func (mdb *db) SelectFromTimerTasks(
-	ctx context.Context,
-	filter sqlplugin.TimerTasksFilter,
-) ([]sqlplugin.TimerTasksRow, error) {
-	var rows []sqlplugin.TimerTasksRow
-	filter.VisibilityTimestamp = mdb.converter.ToSQLiteDateTime(filter.VisibilityTimestamp)
-	err := mdb.conn.SelectContext(ctx,
-		&rows,
-		getTimerTaskQuery,
-		filter.ShardID,
-		filter.VisibilityTimestamp,
-		filter.TaskID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	for i := range rows {
-		rows[i].VisibilityTimestamp = mdb.converter.FromSQLiteDateTime(rows[i].VisibilityTimestamp)
-	}
-	return rows, nil
 }
 
 // RangeSelectFromTimerTasks reads one or more rows from timer_tasks table
@@ -777,21 +679,6 @@ func (mdb *db) InsertIntoReplicationTasks(
 	)
 }
 
-// SelectFromReplicationTasks reads one or more rows from replication_tasks table
-func (mdb *db) SelectFromReplicationTasks(
-	ctx context.Context,
-	filter sqlplugin.ReplicationTasksFilter,
-) ([]sqlplugin.ReplicationTasksRow, error) {
-	var rows []sqlplugin.ReplicationTasksRow
-	err := mdb.conn.SelectContext(ctx,
-		&rows,
-		getReplicationTaskQuery,
-		filter.ShardID,
-		filter.TaskID,
-	)
-	return rows, err
-}
-
 // RangeSelectFromReplicationTasks reads one or more rows from replication_tasks table
 func (mdb *db) RangeSelectFromReplicationTasks(
 	ctx context.Context,
@@ -843,21 +730,6 @@ func (mdb *db) InsertIntoReplicationDLQTasks(
 		insertReplicationTaskDLQQuery,
 		rows,
 	)
-}
-
-// SelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
-func (mdb *db) SelectFromReplicationDLQTasks(
-	ctx context.Context,
-	filter sqlplugin.ReplicationDLQTasksFilter,
-) ([]sqlplugin.ReplicationDLQTasksRow, error) {
-	var rows []sqlplugin.ReplicationDLQTasksRow
-	err := mdb.conn.SelectContext(ctx,
-		&rows, getReplicationTaskDLQQuery,
-		filter.SourceClusterName,
-		filter.ShardID,
-		filter.TaskID,
-	)
-	return rows, err
 }
 
 // RangeSelectFromReplicationTasksDLQ reads one or more rows from replication_tasks_dlq table
@@ -915,23 +787,6 @@ func (mdb *db) InsertIntoVisibilityTasks(
 		createVisibilityTasksQuery,
 		rows,
 	)
-}
-
-// SelectFromVisibilityTasks reads one or more rows from visibility_tasks table
-func (mdb *db) SelectFromVisibilityTasks(
-	ctx context.Context,
-	filter sqlplugin.VisibilityTasksFilter,
-) ([]sqlplugin.VisibilityTasksRow, error) {
-	var rows []sqlplugin.VisibilityTasksRow
-	if err := mdb.conn.SelectContext(ctx,
-		&rows,
-		getVisibilityTaskQuery,
-		filter.ShardID,
-		filter.TaskID,
-	); err != nil {
-		return nil, err
-	}
-	return rows, nil
 }
 
 // RangeSelectFromVisibilityTasks reads one or more rows from visibility_tasks table
