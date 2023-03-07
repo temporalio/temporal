@@ -319,7 +319,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 
 func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 	defer cancel()
 	for clusterName := range r.shard.GetClusterMetadata().GetAllClusterInfo() {
 		if clusterName == r.shard.GetClusterMetadata().GetCurrentClusterName() {
