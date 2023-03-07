@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 type (
@@ -56,20 +57,21 @@ type (
 		interruptCh   <-chan interface{}
 		blockingStart bool
 
-		logger                     log.Logger
-		namespaceLogger            log.Logger
-		authorizer                 authorization.Authorizer
-		tlsConfigProvider          encryption.TLSConfigProvider
-		claimMapper                authorization.ClaimMapper
-		audienceGetter             authorization.JWTAudienceMapper
-		persistenceServiceResolver resolver.ServiceResolver
-		elasticsearchHttpClient    *http.Client
-		dynamicConfigClient        dynamicconfig.Client
-		customDataStoreFactory     persistenceClient.AbstractDataStoreFactory
-		clientFactoryProvider      client.FactoryProvider
-		searchAttributesMapper     searchattribute.Mapper
-		customInterceptors         []grpc.UnaryServerInterceptor
-		metricHandler              metrics.Handler
+		logger                       log.Logger
+		namespaceLogger              log.Logger
+		authorizer                   authorization.Authorizer
+		tlsConfigProvider            encryption.TLSConfigProvider
+		claimMapper                  authorization.ClaimMapper
+		audienceGetter               authorization.JWTAudienceMapper
+		persistenceServiceResolver   resolver.ServiceResolver
+		elasticsearchHttpClient      *http.Client
+		dynamicConfigClient          dynamicconfig.Client
+		customDataStoreFactory       persistenceClient.AbstractDataStoreFactory
+		clientFactoryProvider        client.FactoryProvider
+		searchAttributesMapper       searchattribute.Mapper
+		customInterceptors           []grpc.UnaryServerInterceptor
+		metricHandler                metrics.Handler
+		perNamespaceWorkerComponents []workercommon.PerNSWorkerComponent
 	}
 )
 

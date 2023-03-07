@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 type (
@@ -187,5 +188,13 @@ func WithChainedFrontendGrpcInterceptors(
 func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.metricHandler = provider
+	})
+}
+
+// WithPerNamespaceWorkerComponent will register a component that, if enabled on a namespace,
+// runs within the context of that namespace. Workflow executions are within the Temporal Worker Service
+func WithPerNamespaceWorkerComponent(component workercommon.PerNSWorkerComponent) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.perNamespaceWorkerComponents = append(s.perNamespaceWorkerComponents, component)
 	})
 }

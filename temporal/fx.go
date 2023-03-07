@@ -72,6 +72,8 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+
+	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 type (
@@ -119,15 +121,16 @@ type (
 		ClaimMapper            authorization.ClaimMapper
 		AudienceGetter         authorization.JWTAudienceMapper
 
-		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
-		Logger                  log.Logger
-		ClientFactoryProvider   client.FactoryProvider
-		DynamicConfigClient     dynamicconfig.Client
-		DynamicConfigCollection *dynamicconfig.Collection
-		TLSConfigProvider       encryption.TLSConfigProvider
-		EsConfig                *esclient.Config
-		EsClient                esclient.Client
-		MetricsHandler          metrics.Handler
+		// below are things that could be overwritten by server options or may have a default if not supplied by serverOptions.
+		Logger                       log.Logger
+		ClientFactoryProvider        client.FactoryProvider
+		DynamicConfigClient          dynamicconfig.Client
+		DynamicConfigCollection      *dynamicconfig.Collection
+		TLSConfigProvider            encryption.TLSConfigProvider
+		EsConfig                     *esclient.Config
+		EsClient                     esclient.Client
+		MetricsHandler               metrics.Handler
+		PerNamespaceWorkerComponents []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent,flatten"`
 	}
 )
 
@@ -265,14 +268,15 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ClaimMapper:            so.claimMapper,
 		AudienceGetter:         so.audienceGetter,
 
-		Logger:                  logger,
-		ClientFactoryProvider:   clientFactoryProvider,
-		DynamicConfigClient:     dcClient,
-		DynamicConfigCollection: dynamicconfig.NewCollection(dcClient, logger),
-		TLSConfigProvider:       tlsConfigProvider,
-		EsConfig:                esConfig,
-		EsClient:                esClient,
-		MetricsHandler:          metricHandler,
+		Logger:                       logger,
+		ClientFactoryProvider:        clientFactoryProvider,
+		DynamicConfigClient:          dcClient,
+		DynamicConfigCollection:      dynamicconfig.NewCollection(dcClient, logger),
+		TLSConfigProvider:            tlsConfigProvider,
+		EsConfig:                     esConfig,
+		EsClient:                     esClient,
+		MetricsHandler:               metricHandler,
+		PerNamespaceWorkerComponents: so.perNamespaceWorkerComponents,
 	}, nil
 }
 
