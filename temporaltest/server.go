@@ -111,7 +111,9 @@ func (ts *TestServer) Stop() {
 	for _, c := range ts.clients {
 		c.Close()
 	}
-	ts.server.Stop()
+	if err := ts.server.Stop(); err != nil {
+		ts.fatal(fmt.Errorf("error stopping server: %w", err))
+	}
 }
 
 // NewServer starts and returns a new TestServer.
