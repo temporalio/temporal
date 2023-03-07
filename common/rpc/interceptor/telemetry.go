@@ -238,7 +238,7 @@ func (ti *TelemetryInterceptor) metricsHandlerLogTags(
 
 	overridedMethodName := ti.overrideOperationTag(fullMethod, methodName, req)
 
-	nsName := GetNamespace(ti.namespaceRegistry, req)
+	nsName := MustGetNamespaceName(ti.namespaceRegistry, req)
 	if nsName == "" {
 		return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
 			[]tag.Tag{tag.Operation(overridedMethodName)}

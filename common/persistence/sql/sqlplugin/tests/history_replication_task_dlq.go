@@ -158,12 +158,14 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := sqlplugin.ReplicationDLQTasksFilter{
-		ShardID:           shardID,
-		SourceClusterName: sourceCluster,
-		TaskID:            taskID,
+	rangeFilter := sqlplugin.ReplicationDLQTasksRangeFilter{
+		ShardID:            shardID,
+		SourceClusterName:  sourceCluster,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
+		PageSize:           1,
 	}
-	rows, err := s.store.SelectFromReplicationDLQTasks(newExecutionContext(), filter)
+	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -226,7 +228,14 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromReplicationDLQTasks(newExecutionContext(), filter)
+	rangeFilter := sqlplugin.ReplicationDLQTasksRangeFilter{
+		ShardID:            shardID,
+		SourceClusterName:  sourceCluster,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
+		PageSize:           1,
+	}
+	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -286,7 +295,14 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Single() 
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromReplicationDLQTasks(newExecutionContext(), filter)
+	rangeFilter := sqlplugin.ReplicationDLQTasksRangeFilter{
+		ShardID:            shardID,
+		SourceClusterName:  sourceCluster,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
+		PageSize:           1,
+	}
+	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

@@ -37,13 +37,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -518,6 +519,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        fakeScheduledTaskCategory,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewKey(now, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
 		BatchSize:           10,
@@ -565,6 +567,7 @@ func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	request := &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        category,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: inclusiveMinTaskKey,
 		ExclusiveMaxTaskKey: exclusiveMaxTaskKey,
 		BatchSize:           batchSize,
@@ -619,27 +622,28 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	task tasks.Task,
 ) {
 	key := task.GetKey()
-	resp, err := s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
+	var minKey, maxKey tasks.Key
+	if category.Type() == tasks.CategoryTypeImmediate {
+		minKey = key
+		maxKey = minKey.Next()
+	} else {
+		minKey = tasks.NewKey(key.FireTime, 0)
+		maxKey = tasks.NewKey(key.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0)
+	}
+
+	historyTasks := s.PaginateTasks(category, minKey, maxKey, 1)
+	s.Len(historyTasks, 1)
+	s.Equal(task, historyTasks[0])
+
+	err := s.ExecutionManager.CompleteHistoryTask(s.Ctx, &p.CompleteHistoryTaskRequest{
 		ShardID:      s.ShardID,
 		TaskCategory: category,
 		TaskKey:      key,
 	})
 	s.NoError(err)
-	s.Equal(task, resp.Task)
 
-	err = s.ExecutionManager.CompleteHistoryTask(s.Ctx, &p.CompleteHistoryTaskRequest{
-		ShardID:      s.ShardID,
-		TaskCategory: category,
-		TaskKey:      key,
-	})
-	s.NoError(err)
-
-	_, err = s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
-		ShardID:      s.ShardID,
-		TaskCategory: category,
-		TaskKey:      key,
-	})
-	s.IsType(&serviceerror.NotFound{}, err)
+	historyTasks = s.PaginateTasks(category, minKey, maxKey, 1)
+	s.Empty(historyTasks)
 }
 
 func newTestSerializer(

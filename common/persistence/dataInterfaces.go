@@ -40,7 +40,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -405,16 +404,28 @@ type (
 		RunID       string
 	}
 
-	// GetHistoryTaskRequest is used to get a workflow task
-	GetHistoryTaskRequest struct {
+	// RegisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
+	// that a new queue reader is created by queue processing logic
+	RegisterHistoryTaskReaderRequest struct {
+		// TODO: use shard identity = shardID + owner, instead of just shardID here.
 		ShardID      int32
 		TaskCategory tasks.Category
-		TaskKey      tasks.Key
+		ReaderID     int32
 	}
 
-	// GetHistoryTaskResponse is the response for GetHistoryTask
-	GetHistoryTaskResponse struct {
-		Task tasks.Task
+	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
+	// that queue processing logic is done using an existing queue reader
+	UnregisterHistoryTaskReaderRequest RegisterHistoryTaskReaderRequest
+
+	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying persistence implementation
+	// that a certain queue reader's process and the fact that it won't try to load tasks with
+	// key less than InclusiveMinPendingTaskKey
+	UpdateHistoryTaskReaderProgressRequest struct {
+		// TODO: use shard identity = shardID + owner, instead of just shardID here.
+		ShardID                    int32
+		TaskCategory               tasks.Category
+		ReaderID                   int32
+		InclusiveMinPendingTaskKey tasks.Key
 	}
 
 	// GetHistoryTasksRequest is used to get a range of history tasks
@@ -423,6 +434,7 @@ type (
 	GetHistoryTasksRequest struct {
 		ShardID             int32
 		TaskCategory        tasks.Category
+		ReaderID            int32
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
 		BatchSize           int
@@ -731,47 +743,6 @@ type (
 		NodeID int64
 	}
 
-	ParseHistoryBranchInfoRequest struct {
-		// The branch token to parse the branch info from
-		BranchToken []byte
-	}
-
-	ParseHistoryBranchInfoResponse struct {
-		// The branch info parsed from the branch token
-		BranchInfo *persistencespb.HistoryBranch
-	}
-
-	UpdateHistoryBranchInfoRequest struct {
-		// The original branch token
-		BranchToken []byte
-		// The branch info to update with
-		BranchInfo *persistencespb.HistoryBranch
-	}
-
-	UpdateHistoryBranchInfoResponse struct {
-		// The newly updated branch token
-		BranchToken []byte
-	}
-
-	NewHistoryBranchRequest struct {
-		// The tree ID for the new branch token
-		TreeID string
-		// optional: can specify BranchID or allow random UUID to be generated
-		BranchID *string
-		// optional: can specify Ancestors to leave as empty
-		Ancestors []*persistencespb.HistoryBranchRange
-
-		// optional: supply optionally configured workflow settings as hints
-		RunTimeout        *time.Duration
-		ExecutionTimeout  *time.Duration
-		RetentionDuration *time.Duration
-	}
-
-	NewHistoryBranchResponse struct {
-		// The newly created branch token
-		BranchToken []byte
-	}
-
 	// ReadHistoryBranchRequest is used to read a history branch
 	ReadHistoryBranchRequest struct {
 		// The shard to get history branch data
@@ -1048,6 +1019,7 @@ type (
 	ExecutionManager interface {
 		Closeable
 		GetName() string
+		GetHistoryBranchUtil() HistoryBranchUtil
 
 		CreateWorkflowExecution(ctx context.Context, request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(ctx context.Context, request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
@@ -1064,8 +1036,12 @@ type (
 
 		// Tasks related APIs
 
+		// Hints for persistence implementaion regarding hisotry task readers
+		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
+		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
+		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
+
 		AddHistoryTasks(ctx context.Context, request *AddHistoryTasksRequest) error
-		GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error)
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
 		RangeCompleteHistoryTasks(ctx context.Context, request *RangeCompleteHistoryTasksRequest) error
@@ -1083,12 +1059,6 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// AppendRawHistoryNodes add a node of raw histories to history node table
 		AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
-		// ParseHistoryBranchInfo parses the history branch for branch information
-		ParseHistoryBranchInfo(ctx context.Context, request *ParseHistoryBranchInfoRequest) (*ParseHistoryBranchInfoResponse, error)
-		// UpdateHistoryBranchInfo updates the history branch with branch information
-		UpdateHistoryBranchInfo(ctx context.Context, request *UpdateHistoryBranchInfoRequest) (*UpdateHistoryBranchInfoResponse, error)
-		// NewHistoryBranch initializes a new history branch
-		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch
@@ -1225,43 +1195,6 @@ func UnixMilliseconds(t time.Time) int64 {
 		return 0
 	}
 	return unixNano / int64(time.Millisecond)
-}
-
-func ParseHistoryBranchToken(branchToken []byte) (*persistencespb.HistoryBranch, error) {
-	// TODO: instead of always using the implementation from the serialization package, this should be injected
-	return serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
-}
-
-func UpdateHistoryBranchToken(branchToken []byte, branchInfo *persistencespb.HistoryBranch) ([]byte, error) {
-	bi, err := ParseHistoryBranchToken(branchToken)
-	if err != nil {
-		return nil, err
-	}
-	bi.TreeId = branchInfo.TreeId
-	bi.BranchId = branchInfo.BranchId
-	bi.Ancestors = branchInfo.Ancestors
-
-	// TODO: instead of always using the implementation from the serialization package, this should be injected
-	blob, err := serialization.HistoryBranchToBlob(bi)
-	if err != nil {
-		return nil, err
-	}
-	return blob.Data, nil
-}
-
-// NewHistoryBranchToken return a new branch token
-func NewHistoryBranchToken(treeID, branchID string, ancestors []*persistencespb.HistoryBranchRange) ([]byte, error) {
-	bi := &persistencespb.HistoryBranch{
-		TreeId:    treeID,
-		BranchId:  branchID,
-		Ancestors: ancestors,
-	}
-	datablob, err := serialization.HistoryBranchToBlob(bi)
-	if err != nil {
-		return nil, err
-	}
-	token := datablob.Data
-	return token, nil
 }
 
 // BuildHistoryGarbageCleanupInfo combine the workflow identity information into a string

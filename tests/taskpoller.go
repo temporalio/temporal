@@ -230,7 +230,10 @@ Loop:
 		if response.Query != nil {
 			blob, err := p.QueryHandler(response)
 
-			completeRequest := &workflowservice.RespondQueryTaskCompletedRequest{TaskToken: response.TaskToken}
+			completeRequest := &workflowservice.RespondQueryTaskCompletedRequest{
+				Namespace: p.Namespace,
+				TaskToken: response.TaskToken,
+			}
 			if err != nil {
 				completeType := enumspb.QUERY_RESULT_TYPE_FAILED
 				completeRequest.CompletedType = completeType
@@ -252,6 +255,7 @@ Loop:
 			if err != nil {
 				p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
 				_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+					Namespace: p.Namespace,
 					TaskToken: response.TaskToken,
 					Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 					Failure:   newApplicationFailure(err, false, nil),
@@ -276,6 +280,7 @@ Loop:
 		if err != nil {
 			p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+				Namespace: p.Namespace,
 				TaskToken: response.TaskToken,
 				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 				Failure:   newApplicationFailure(err, false, nil),
@@ -293,6 +298,7 @@ Loop:
 		if !respondStickyTaskQueue {
 			// non sticky taskqueue
 			newTask, err := p.Engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Namespace:                  p.Namespace,
 				TaskToken:                  response.TaskToken,
 				Identity:                   p.Identity,
 				Commands:                   commands,
@@ -307,6 +313,7 @@ Loop:
 		newTask, err := p.Engine.RespondWorkflowTaskCompleted(
 			NewContext(),
 			&workflowservice.RespondWorkflowTaskCompletedRequest{
+				Namespace: p.Namespace,
 				TaskToken: response.TaskToken,
 				Identity:  p.Identity,
 				Commands:  commands,
@@ -354,6 +361,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		if err != nil {
 			p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+				Namespace: p.Namespace,
 				TaskToken: response.TaskToken,
 				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 				Failure:   newApplicationFailure(err, false, nil),
@@ -368,6 +376,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 	if err != nil {
 		p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
 		_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			Namespace: p.Namespace,
 			TaskToken: response.TaskToken,
 			Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 			Failure:   newApplicationFailure(err, false, nil),
@@ -386,6 +395,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 	newTask, err := p.Engine.RespondWorkflowTaskCompleted(
 		NewContext(),
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace: p.Namespace,
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
 			Commands:  commands,
@@ -437,6 +447,7 @@ retry:
 		if cancel {
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
 			_, err := p.Engine.RespondActivityTaskCanceled(NewContext(), &workflowservice.RespondActivityTaskCanceledRequest{
+				Namespace: p.Namespace,
 				TaskToken: response.TaskToken,
 				Details:   payloads.EncodeString("details"),
 				Identity:  p.Identity,
@@ -446,6 +457,7 @@ retry:
 
 		if err2 != nil {
 			_, err := p.Engine.RespondActivityTaskFailed(NewContext(), &workflowservice.RespondActivityTaskFailedRequest{
+				Namespace: p.Namespace,
 				TaskToken: response.TaskToken,
 				Failure:   newApplicationFailure(err2, false, nil),
 				Identity:  p.Identity,
@@ -454,6 +466,7 @@ retry:
 		}
 
 		_, err = p.Engine.RespondActivityTaskCompleted(NewContext(), &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: p.Namespace,
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
 			Result:    result,

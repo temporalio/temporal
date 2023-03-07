@@ -31,24 +31,24 @@ import (
 )
 
 var HostInfoProviderModule = fx.Options(
-	fx.Provide(NewHostInfoProvider),
-	fx.Invoke(HostInfoProviderLifetimeHooks),
+	fx.Provide(newHostInfoProvider),
+	fx.Invoke(hostInfoProviderLifetimeHooks),
 )
 
 type (
-	CachingHostInfoProvider struct {
-		hostInfo          *HostInfo
+	cachingHostInfoProvider struct {
+		hostInfo          HostInfo
 		membershipMonitor Monitor
 	}
 )
 
-func NewHostInfoProvider(membershipMonitor Monitor) HostInfoProvider {
-	return &CachingHostInfoProvider{
+func newHostInfoProvider(membershipMonitor Monitor) HostInfoProvider {
+	return &cachingHostInfoProvider{
 		membershipMonitor: membershipMonitor,
 	}
 }
 
-func (hip *CachingHostInfoProvider) Start() error {
+func (hip *cachingHostInfoProvider) Start() error {
 	var err error
 	hip.hostInfo, err = hip.membershipMonitor.WhoAmI()
 	if err != nil {
@@ -57,11 +57,11 @@ func (hip *CachingHostInfoProvider) Start() error {
 	return nil
 }
 
-func (hip *CachingHostInfoProvider) HostInfo() *HostInfo {
+func (hip *cachingHostInfoProvider) HostInfo() HostInfo {
 	return hip.hostInfo
 }
 
-func HostInfoProviderLifetimeHooks(
+func hostInfoProviderLifetimeHooks(
 	lc fx.Lifecycle,
 	provider HostInfoProvider,
 ) {

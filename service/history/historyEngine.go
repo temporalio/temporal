@@ -231,7 +231,7 @@ func NewEngineWithShardContext(
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
 		config.DefaultVisibilityIndexName,
-		visibility.AllowListForValidation(persistenceVisibilityMgr.GetName()),
+		visibility.AllowListForValidation(persistenceVisibilityMgr.GetStoreNames()),
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)

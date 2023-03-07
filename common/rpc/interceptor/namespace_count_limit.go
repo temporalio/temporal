@@ -82,7 +82,7 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 	// token will default to 0
 	token := ni.tokens[methodName]
 	if token != 0 {
-		nsName := GetNamespace(ni.namespaceRegistry, req)
+		nsName := MustGetNamespaceName(ni.namespaceRegistry, req)
 		counter := ni.counter(nsName, methodName)
 		count := atomic.AddInt32(counter, int32(token))
 		defer atomic.AddInt32(counter, -int32(token))

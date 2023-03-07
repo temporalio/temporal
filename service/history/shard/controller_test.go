@@ -69,7 +69,7 @@ type (
 		mockClusterMetadata *cluster.MockMetadata
 		mockServiceResolver *membership.MockServiceResolver
 
-		hostInfo          *membership.HostInfo
+		hostInfo          membership.HostInfo
 		mockShardManager  *persistence.MockShardManager
 		mockEngineFactory *MockEngineFactory
 
@@ -196,7 +196,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 			}).Return(nil).AnyTimes()
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
-			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil)
+			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfoFromAddress(ownerHost), nil)
 		}
 	}
 
@@ -266,7 +266,9 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 			}).Return(nil).AnyTimes()
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
-			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil)
+			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(
+				membership.NewHostInfoFromAddress(ownerHost), nil,
+			)
 		}
 	}
 
@@ -476,7 +478,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 
 	workerWG.Wait()
 
-	differentHostInfo := membership.NewHostInfo("another-host", nil)
+	differentHostInfo := membership.NewHostInfoFromAddress("another-host")
 	for shardID := int32(1); shardID <= 2; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return()

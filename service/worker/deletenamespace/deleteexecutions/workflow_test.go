@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -189,7 +190,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	var a *Activities
 
 	env.OnActivity(a.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return([]byte{3, 22, 83}, nil).Times(78)
-	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{}, nil).Times(78)
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{SuccessCount: 1, ErrorCount: 0}, nil).Times(78)
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
@@ -205,6 +206,14 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	require.Error(t, wfErr)
 	var errContinueAsNew *workflow.ContinueAsNewError
 	require.ErrorAs(t, wfErr, &errContinueAsNew)
+
+	require.NotNil(t, errContinueAsNew.Input)
+	var newWfParams DeleteExecutionsParams
+	err := payloads.Decode(errContinueAsNew.Input, &newWfParams)
+	require.NoError(t, err)
+	require.Equal(t, 78, newWfParams.PreviousSuccessCount)
+	require.Equal(t, 0, newWfParams.PreviousErrorCount)
+	require.Equal(t, []byte{3, 22, 83}, newWfParams.NextPageToken)
 }
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
@@ -297,8 +306,12 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
 	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
-	// NotFound errors should not affect the error count.
+
 	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).Times(2)
+	// NotFound errors should not affect neither error nor success count.
+	historyClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
+	// NotFound in main store but no error from visibility store adds 1 to success count.
+	historyClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), gomock.Any()).Return(nil, nil)
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
@@ -324,7 +337,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	var result DeleteExecutionsResult
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, 0, result.ErrorCount)
-	require.Equal(t, 2, result.SuccessCount)
+	require.Equal(t, 3, result.SuccessCount)
 }
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing.T) {

@@ -50,6 +50,7 @@ type (
 		PreviousSuccessCount int
 		PreviousErrorCount   int
 		ContinueAsNewCount   int
+		NextPageToken        []byte
 	}
 
 	DeleteExecutionsResult struct {
@@ -105,7 +106,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	logger.Info("Effective config.", tag.Value(params.Config.String()))
 
 	var a *Activities
-	var nextPageToken []byte
+	nextPageToken := params.NextPageToken
 	runningDeleteExecutionsActivityCount := 0
 	runningDeleteExecutionsSelector := workflow.NewSelector(ctx)
 	var lastDeleteExecutionsActivityErr error
@@ -171,6 +172,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		}
 	}
 
+	// If nextPageToken is nil then there are no more workflow executions to delete.
 	if nextPageToken == nil {
 		if result.ErrorCount == 0 {
 			logger.Info("Successfully deleted workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount))
@@ -180,12 +182,13 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		return result, nil
 	}
 
-	// Too many workflow executions, and ConcurrentDeleteExecutionsActivities activities has been started already.
+	// Too many workflow executions, and ConcurrentDeleteExecutionsActivities number of activities has been completed already.
 	// Continue as new to prevent workflow history size explosion.
 
 	params.PreviousSuccessCount = result.SuccessCount
 	params.PreviousErrorCount = result.ErrorCount
 	params.ContinueAsNewCount++
+	params.NextPageToken = nextPageToken
 
 	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount), tag.Counter(params.ContinueAsNewCount))
 	return result, workflow.NewContinueAsNewError(ctx, DeleteExecutionsWorkflow, params)

@@ -378,15 +378,32 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
 		2: 1,
 		3: 1,
 	}
+	totalWeight := 0
+	for _, weight := range s.channelKeyToWeight {
+		totalWeight += weight
+	}
 	s.channelWeightUpdateCh <- struct{}{}
 
-	taskWG.Add(1)
-	s.scheduler.Submit(mockTask0)
-	taskWG.Wait()
+	// we don't know when the weight update signal will be picked up
+	// so need to retry a few times here.
+	for i := 0; i != 10; i++ {
+		// submit a task may or may not trigger a new round of dispatch loop
+		// which updates weight
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask0)
+		taskWG.Wait()
 
-	channelWeights = []int{}
-	for _, channel := range s.scheduler.channels().flattenedChannels {
-		channelWeights = append(channelWeights, channel.Weight())
+		flattenedChannels := s.scheduler.channels().flattenedChannels
+		if len(flattenedChannels) != totalWeight {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+
+		channelWeights = []int{}
+		for _, channel := range flattenedChannels {
+			channelWeights = append(channelWeights, channel.Weight())
+		}
+
 	}
 	s.Equal([]int{8, 8, 8, 8, 5, 8, 5, 8, 5, 8, 5, 8, 5, 1, 1}, channelWeights)
 }

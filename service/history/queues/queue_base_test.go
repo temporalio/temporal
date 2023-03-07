@@ -142,6 +142,7 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 		nil,
 		s.options,
 		s.rateLimiter,
+		NoopReaderCompletionFn,
 		s.logger,
 		s.metricsHandler,
 	)
@@ -225,6 +226,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 		nil,
 		s.options,
 		s.rateLimiter,
+		NoopReaderCompletionFn,
 		s.logger,
 		s.metricsHandler,
 	)
@@ -257,7 +259,7 @@ func (s *queueBaseSuite) TestStartStop() {
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			key := NewRandomKeyInRange(paginationRange)
@@ -284,13 +286,14 @@ func (s *queueBaseSuite) TestStartStop() {
 		nil,
 		s.options,
 		s.rateLimiter,
+		NoopReaderCompletionFn,
 		s.logger,
 		s.metricsHandler,
 	)
 
 	s.mockRescheduler.EXPECT().Start().Times(1)
 	base.Start()
-	s.NoError(base.processNewRange())
+	base.processNewRange()
 
 	<-doneCh
 	<-base.checkpointTimer.C
@@ -333,12 +336,13 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 		nil,
 		s.options,
 		s.rateLimiter,
+		NoopReaderCompletionFn,
 		s.logger,
 		s.metricsHandler,
 	)
 	s.True(base.nonReadableScope.Range.Equals(NewRange(tasks.MinimumKey, tasks.MaximumKey)))
 
-	s.NoError(base.processNewRange())
+	base.processNewRange()
 	defaultReader, ok := base.readerGroup.ReaderByID(DefaultReaderId)
 	s.True(ok)
 	scopes := defaultReader.Scopes()
@@ -389,6 +393,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 		nil,
 		s.options,
 		s.rateLimiter,
+		NoopReaderCompletionFn,
 		s.logger,
 		s.metricsHandler,
 	)
@@ -461,6 +466,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 		nil,
 		s.options,
 		s.rateLimiter,
+		NoopReaderCompletionFn,
 		s.logger,
 		s.metricsHandler,
 	)
@@ -548,6 +554,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 		nil,
 		s.options,
 		s.rateLimiter,
+		NoopReaderCompletionFn,
 		s.logger,
 		s.metricsHandler,
 	)

@@ -49,7 +49,7 @@ type (
 		clientBean                       client.Bean
 		logger                           log.Logger
 		metricsHandler                   metrics.Handler
-		hostInfo                         *membership.HostInfo
+		hostInfo                         membership.HostInfo
 		serviceResolver                  membership.ServiceResolver
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 
@@ -68,7 +68,7 @@ func NewReplicator(
 	clientBean client.Bean,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	hostInfo *membership.HostInfo,
+	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor,
