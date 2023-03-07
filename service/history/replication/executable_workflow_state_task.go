@@ -111,7 +111,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 }
 
 func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
-	// TODO original logic does not seem to have resend logic?
+	// no resend is required
 	switch err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
