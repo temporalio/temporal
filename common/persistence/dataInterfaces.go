@@ -428,21 +428,6 @@ type (
 		InclusiveMinPendingTaskKey tasks.Key
 	}
 
-	// GetHistoryTaskRequest is used to get a workflow task
-	// TODO: deprecate GetHistoryTask persistence API
-	GetHistoryTaskRequest struct {
-		ShardID      int32
-		ReaderID     int32
-		TaskCategory tasks.Category
-		TaskKey      tasks.Key
-	}
-
-	// GetHistoryTaskResponse is the response for GetHistoryTask
-	// TODO: deprecate GetHistoryTask persistence API
-	GetHistoryTaskResponse struct {
-		Task tasks.Task
-	}
-
 	// GetHistoryTasksRequest is used to get a range of history tasks
 	// Either max TaskID or FireTime is required depending on the
 	// task category type. Min TaskID or FireTime is optional.
@@ -1057,8 +1042,6 @@ type (
 		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
 
 		AddHistoryTasks(ctx context.Context, request *AddHistoryTasksRequest) error
-		// TODO: deprecate GetHistoryTask persistence API
-		GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error)
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
 		RangeCompleteHistoryTasks(ctx context.Context, request *RangeCompleteHistoryTasksRequest) error

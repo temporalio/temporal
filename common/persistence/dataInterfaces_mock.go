@@ -400,21 +400,6 @@ func (mr *MockExecutionManagerMockRecorder) GetHistoryBranchUtil() *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryBranchUtil", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryBranchUtil))
 }
 
-// GetHistoryTask mocks base method.
-func (m *MockExecutionManager) GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryTask", ctx, request)
-	ret0, _ := ret[0].(*GetHistoryTaskResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetHistoryTask indicates an expected call of GetHistoryTask.
-func (mr *MockExecutionManagerMockRecorder) GetHistoryTask(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTask", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryTask), ctx, request)
-}
-
 // GetHistoryTasks mocks base method.
 func (m *MockExecutionManager) GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error) {
 	m.ctrl.T.Helper()

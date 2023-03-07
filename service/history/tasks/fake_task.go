@@ -57,6 +57,9 @@ func NewFakeTask(
 }
 
 func (f *FakeTask) GetKey() Key {
+	if f.Category.Type() == CategoryTypeImmediate {
+		return NewImmediateKey(f.TaskID)
+	}
 	return NewKey(f.VisibilityTimestamp, f.TaskID)
 }
 

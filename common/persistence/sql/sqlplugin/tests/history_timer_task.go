@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
 )
@@ -160,12 +161,14 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := sqlplugin.TimerTasksFilter{
-		ShardID:             shardID,
-		VisibilityTimestamp: timestamp,
-		TaskID:              taskID,
+	rangeFilter := sqlplugin.TimerTasksRangeFilter{
+		ShardID:                         shardID,
+		InclusiveMinTaskID:              taskID,
+		InclusiveMinVisibilityTimestamp: timestamp,
+		ExclusiveMaxVisibilityTimestamp: timestamp.Add(persistence.ScheduledTaskMinPrecision),
+		PageSize:                        1,
 	}
-	rows, err := s.store.SelectFromTimerTasks(newExecutionContext(), filter)
+	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -225,7 +228,14 @@ func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTimerTasks(newExecutionContext(), filter)
+	rangeFilter := sqlplugin.TimerTasksRangeFilter{
+		ShardID:                         shardID,
+		InclusiveMinTaskID:              taskID,
+		InclusiveMinVisibilityTimestamp: timestamp,
+		ExclusiveMaxVisibilityTimestamp: timestamp.Add(persistence.ScheduledTaskMinPrecision),
+		PageSize:                        1,
+	}
+	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -284,7 +294,14 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTimerTasks(newExecutionContext(), filter)
+	rangeFilter := sqlplugin.TimerTasksRangeFilter{
+		ShardID:                         shardID,
+		InclusiveMinTaskID:              taskID,
+		InclusiveMinVisibilityTimestamp: timestamp,
+		ExclusiveMaxVisibilityTimestamp: timestamp.Add(persistence.ScheduledTaskMinPrecision),
+		PageSize:                        1,
+	}
+	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

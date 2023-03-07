@@ -58,8 +58,6 @@ type (
 	HistoryReplicationTask interface {
 		// InsertIntoReplicationTasks inserts rows that into replication_tasks table.
 		InsertIntoReplicationTasks(ctx context.Context, rows []ReplicationTasksRow) (sql.Result, error)
-		// SelectFromReplicationTasks returns one or more rows from replication_tasks table
-		SelectFromReplicationTasks(ctx context.Context, filter ReplicationTasksFilter) ([]ReplicationTasksRow, error)
 		// RangeSelectFromReplicationTasks returns one or more rows from replication_tasks table
 		RangeSelectFromReplicationTasks(ctx context.Context, filter ReplicationTasksRangeFilter) ([]ReplicationTasksRow, error)
 		// DeleteFromReplicationTasks deletes a row from replication_tasks table

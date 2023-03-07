@@ -203,10 +203,16 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
-	tasks, token, err := s.replicationMessageHandler.GetMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
+	taskList, tasksInfo, token, err := s.replicationMessageHandler.GetMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Equal(pageToken, token)
-	s.Equal([]*replicationspb.ReplicationTask{remoteTask}, tasks)
+	s.Equal([]*replicationspb.ReplicationTask{remoteTask}, taskList)
+	s.Equal(namespaceID, tasksInfo[0].GetNamespaceId())
+	s.Equal(workflowID, tasksInfo[0].GetWorkflowId())
+	s.Equal(taskID, tasksInfo[0].GetTaskId())
+	s.Equal(version, tasksInfo[0].GetVersion())
+	s.Equal(firstEventID, tasksInfo[0].GetFirstEventId())
+	s.Equal(nextEventID, tasksInfo[0].GetNextEventId())
 }
 
 func (s *dlqHandlerSuite) TestPurgeMessages() {

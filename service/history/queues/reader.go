@@ -61,6 +61,7 @@ type (
 		CompactSlices(SlicePredicate)
 		ShrinkSlices()
 
+		Notify()
 		Pause(time.Duration)
 	}
 
@@ -248,6 +249,10 @@ func (r *ReaderImpl) SplitSlices(splitter SliceSplitter) {
 }
 
 func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
+	if len(incomingSlices) == 0 {
+		return
+	}
+
 	validateSlicesOrderedDisjoint(incomingSlices)
 
 	r.Lock()
@@ -378,6 +383,18 @@ func (r *ReaderImpl) ShrinkSlices() {
 	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
 }
 
+func (r *ReaderImpl) Notify() {
+	r.Lock()
+	defer r.Unlock()
+
+	if r.throttleTimer != nil {
+		r.throttleTimer.Stop()
+		r.throttleTimer = nil
+	}
+
+	r.notify()
+}
+
 func (r *ReaderImpl) Pause(duration time.Duration) {
 	r.Lock()
 	defer r.Unlock()
@@ -405,6 +422,13 @@ func (r *ReaderImpl) eventLoop() {
 	}()
 
 	for {
+		// prioritize shutdown
+		select {
+		case <-r.shutdownCh:
+			return
+		default:
+		}
+
 		select {
 		case <-r.shutdownCh:
 			return

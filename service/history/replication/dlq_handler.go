@@ -56,7 +56,7 @@ type (
 			lastMessageID int64,
 			pageSize int,
 			pageToken []byte,
-		) ([]*replicationspb.ReplicationTask, []byte, error)
+		) ([]*replicationspb.ReplicationTask, []*replicationspb.ReplicationTaskInfo, []byte, error)
 		PurgeMessages(
 			ctx context.Context,
 			sourceCluster string,
@@ -140,16 +140,16 @@ func (r *dlqHandlerImpl) GetMessages(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationspb.ReplicationTask, []byte, error) {
+) ([]*replicationspb.ReplicationTask, []*replicationspb.ReplicationTaskInfo, []byte, error) {
 
-	tasks, _, token, err := r.readMessagesWithAckLevel(
+	taskList, taskInfoList, _, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
 		lastMessageID,
 		pageSize,
 		pageToken,
 	)
-	return tasks, token, err
+	return taskList, taskInfoList, token, err
 }
 
 func (r *dlqHandlerImpl) PurgeMessages(
@@ -193,7 +193,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 	pageToken []byte,
 ) ([]byte, error) {
 
-	replicationTasks, ackLevel, token, err := r.readMessagesWithAckLevel(
+	replicationTasks, _, ackLevel, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
 		lastMessageID,
@@ -251,7 +251,7 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationspb.ReplicationTask, int64, []byte, error) {
+) ([]*replicationspb.ReplicationTask, []*replicationspb.ReplicationTaskInfo, int64, []byte, error) {
 
 	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(ctx, &persistence.GetReplicationTasksFromDLQRequest{
@@ -267,13 +267,13 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 		SourceClusterName: sourceCluster,
 	})
 	if err != nil {
-		return nil, ackLevel, nil, err
+		return nil, nil, ackLevel, nil, err
 	}
 	pageToken = resp.NextPageToken
 
 	remoteAdminClient, err := r.shard.GetRemoteAdminClient(sourceCluster)
 	if err != nil {
-		return nil, ackLevel, nil, err
+		return nil, nil, ackLevel, nil, err
 	}
 	taskInfo := make([]*replicationspb.ReplicationTaskInfo, 0, len(resp.Tasks))
 	for _, task := range resp.Tasks {
@@ -320,7 +320,7 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	}
 
 	if len(taskInfo) == 0 {
-		return nil, ackLevel, pageToken, nil
+		return nil, nil, ackLevel, pageToken, nil
 	}
 
 	dlqResponse, err := remoteAdminClient.GetDLQReplicationMessages(
@@ -330,10 +330,10 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 		},
 	)
 	if err != nil {
-		return nil, ackLevel, nil, err
+		return nil, nil, ackLevel, nil, err
 	}
 
-	return dlqResponse.ReplicationTasks, ackLevel, pageToken, nil
+	return dlqResponse.ReplicationTasks, taskInfo, ackLevel, pageToken, nil
 }
 
 func (r *dlqHandlerImpl) getOrCreateTaskExecutor(ctx context.Context, clusterName string) (TaskExecutor, error) {

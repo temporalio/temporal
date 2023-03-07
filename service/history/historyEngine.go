@@ -79,7 +79,7 @@ import (
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
@@ -296,6 +296,9 @@ func (e *historyEngineImpl) Stop() {
 		queueProcessor.Stop()
 	}
 	e.replicationProcessorMgr.Stop()
+	if e.replicationAckMgr != nil {
+		e.replicationAckMgr.Close()
+	}
 	// unset the failover callback
 	e.shard.GetNamespaceRegistry().UnregisterStateChangeCallback(e)
 }
