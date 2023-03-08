@@ -210,6 +210,7 @@ type (
 	InternalUpdateShardRequest struct {
 		ShardID         int32
 		RangeID         int64
+		Owner           string
 		ShardInfo       *commonpb.DataBlob
 		PreviousRangeID int64
 	}

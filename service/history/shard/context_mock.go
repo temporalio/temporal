@@ -420,6 +420,20 @@ func (mr *MockContextMockRecorder) GetNamespaceRegistry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceRegistry", reflect.TypeOf((*MockContext)(nil).GetNamespaceRegistry))
 }
 
+// GetOwner mocks base method.
+func (m *MockContext) GetOwner() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOwner")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetOwner indicates an expected call of GetOwner.
+func (mr *MockContextMockRecorder) GetOwner() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwner", reflect.TypeOf((*MockContext)(nil).GetOwner))
+}
+
 // GetPayloadSerializer mocks base method.
 func (m *MockContext) GetPayloadSerializer() serialization.Serializer {
 	m.ctrl.T.Helper()

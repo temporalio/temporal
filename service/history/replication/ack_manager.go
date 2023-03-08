@@ -287,6 +287,7 @@ func (p *ackMgrImpl) Close() {
 	for readerID := range p.registeredQueueReaders {
 		p.executionMgr.UnregisterHistoryTaskReader(closeCtx, &persistence.UnregisterHistoryTaskReaderRequest{
 			ShardID:      p.shard.GetShardID(),
+			ShardOwner:   p.shard.GetOwner(),
 			TaskCategory: tasks.CategoryReplication,
 			ReaderID:     readerID,
 		})
@@ -807,6 +808,7 @@ func (p *ackMgrImpl) clusterToReaderID(
 	if _, ok := p.registeredQueueReaders[readerID]; !ok {
 		err := p.executionMgr.RegisterHistoryTaskReader(ctx, &persistence.RegisterHistoryTaskReaderRequest{
 			ShardID:      p.shard.GetShardID(),
+			ShardOwner:   p.shard.GetOwner(),
 			TaskCategory: tasks.CategoryReplication,
 			ReaderID:     readerID,
 		})

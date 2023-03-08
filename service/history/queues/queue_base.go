@@ -206,7 +206,7 @@ func newQueueBase(
 	}
 
 	exclusiveDeletionHighWatermark := exclusiveReaderHighWatermark
-	readerGroup := NewReaderGroup(shard.GetShardID(), category, readerInitializer, shard.GetExecutionManager())
+	readerGroup := NewReaderGroup(shard.GetShardID(), shard.GetOwner(), category, readerInitializer, shard.GetExecutionManager())
 	for readerID, scopes := range readerScopes {
 		if len(scopes) == 0 {
 			continue
@@ -418,6 +418,7 @@ func (p *queueBase) updateReaderProgress(
 		progress = tasks.MinKey(progress, minKey)
 		p.shard.GetExecutionManager().UpdateHistoryTaskReaderProgress(ctx, &persistence.UpdateHistoryTaskReaderProgressRequest{
 			ShardID:                    p.shard.GetShardID(),
+			ShardOwner:                 p.shard.GetOwner(),
 			TaskCategory:               p.category,
 			ReaderID:                   readerID,
 			InclusiveMinPendingTaskKey: progress,

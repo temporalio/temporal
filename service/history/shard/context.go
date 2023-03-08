@@ -55,6 +55,7 @@ type (
 	// Context represents a history engine shard
 	Context interface {
 		GetShardID() int32
+		GetOwner() string
 		GetExecutionManager() persistence.ExecutionManager
 		GetNamespaceRegistry() namespace.Registry
 		GetClusterMetadata() cluster.Metadata
