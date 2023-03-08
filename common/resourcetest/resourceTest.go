@@ -443,7 +443,3 @@ func (t *Test) GetSearchAttributesManager() searchattribute.Manager {
 func (t *Test) GetSearchAttributesMapperProvider() searchattribute.MapperProvider {
 	return t.SearchAttributesMapperProvider
 }
-
-func (t *Test) RefreshNamespaceCache() {
-	t.NamespaceCache.Refresh()
-}
