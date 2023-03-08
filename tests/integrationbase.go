@@ -114,6 +114,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
 
+	// For tests using SQL visibility, we need to wait for search attributes to be available as part of the ns config
 	time.Sleep(2 * NamespaceCacheRefreshInterval)
 }
 
@@ -190,6 +191,7 @@ func (s *IntegrationBase) registerNamespace(
 		return err
 	}
 
+	// Set up default alias for custom search attributes.
 	_, err = s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		Config: &namespacepb.NamespaceConfig{

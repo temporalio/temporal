@@ -81,7 +81,7 @@ var (
 		InitialCapacity: cacheInitialSize,
 		TTL:             cacheTTL,
 	}
-	readthroughErrorsCacheOpts = cache.Options{
+	readthroughNotFoundCacheOpts = cache.Options{
 		InitialCapacity: cacheInitialSize,
 		TTL:             readthroughCacheTTL,
 	}
@@ -195,7 +195,7 @@ func NewRegistry(
 		cacheByID:                cache.New(cacheMaxSize, &cacheOpts),
 		refreshInterval:          refreshInterval,
 		stateChangeCallbacks:     make(map[any]StateChangeCallbackFn),
-		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughErrorsCacheOpts),
+		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughNotFoundCacheOpts),
 	}
 	return reg
 }
@@ -299,7 +299,7 @@ func (r *registry) GetNamespace(name Name) (*Namespace, error) {
 	if name == "" {
 		return nil, serviceerror.NewInvalidArgument("Namespace is empty.")
 	}
-	return r.getOrPutNamespace(name)
+	return r.getOrReadthroughNamespace(name)
 }
 
 // GetNamespaceByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -308,7 +308,7 @@ func (r *registry) GetNamespaceByID(id ID) (*Namespace, error) {
 	if id == "" {
 		return nil, serviceerror.NewInvalidArgument("NamespaceID is empty.")
 	}
-	return r.getOrPutNamespaceByID(id)
+	return r.getOrReadthroughNamespaceByID(id)
 }
 
 // GetNamespaceID retrieves namespaceID by using GetNamespace
@@ -328,7 +328,7 @@ func (r *registry) GetNamespaceName(
 	id ID,
 ) (Name, error) {
 
-	ns, err := r.getOrPutNamespaceByID(id)
+	ns, err := r.getOrReadthroughNamespaceByID(id)
 	if err != nil {
 		return "", err
 	}
@@ -485,9 +485,9 @@ func (r *registry) getNamespaceByIDLocked(id ID) (*Namespace, error) {
 	return nil, serviceerror.NewNamespaceNotFound(id.String())
 }
 
-// getOrPutNamespace retrieves the information from the cache if it exists or reads through
+// getOrReadthroughNamespace retrieves the information from the cache if it exists or reads through
 // to the persistence layer and updates caches if it doesn't
-func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
+func (r *registry) getOrReadthroughNamespace(name Name) (*Namespace, error) {
 	// check main caches
 	cacheHit, cacheErr := r.getNamespace(name)
 	if cacheErr == nil {
@@ -504,7 +504,7 @@ func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 	}
 
 	// check readthrough cache
-	if cachedNotFound := r.readthroughNotFoundCache.Get(name.String()); cachedNotFound != nil {
+	if r.readthroughNotFoundCache.Get(name.String()) != nil {
 		return nil, serviceerror.NewNamespaceNotFound(name.String())
 	}
 
@@ -520,9 +520,9 @@ func (r *registry) getOrPutNamespace(name Name) (*Namespace, error) {
 	return ns, nil
 }
 
-// getOrPutNamespaceByID retrieves the information from the cache if it exists or reads through
+// getOrReadthroughNamespaceByID retrieves the information from the cache if it exists or reads through
 // to the persistence layer and updates caches if it doesn't
-func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
+func (r *registry) getOrReadthroughNamespaceByID(id ID) (*Namespace, error) {
 	// check main caches
 	cacheHit, cacheErr := r.getNamespaceByID(id)
 	if cacheErr == nil {
@@ -539,7 +539,7 @@ func (r *registry) getOrPutNamespaceByID(id ID) (*Namespace, error) {
 	}
 
 	// check readthrough cache
-	if cachedNotFound := r.readthroughNotFoundCache.Get(id.String()); cachedNotFound != nil {
+	if r.readthroughNotFoundCache.Get(id.String()) != nil {
 		return nil, serviceerror.NewNamespaceNotFound(id.String())
 	}
 
@@ -608,8 +608,8 @@ func (r *registry) getNamespaceByIDPersistence(id ID) (*Namespace, error) {
 func (r *registry) getNamespacePersistence(request *persistence.GetNamespaceRequest) (*Namespace, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), readthroughTimeout)
 	defer cancel()
-	headers.SetCallerType(ctx, headers.CallerTypeAPI)
-	headers.SetCallerName(ctx, headers.CallerNameSystem)
+	ctx = headers.SetCallerType(ctx, headers.CallerTypeAPI)
+	ctx = headers.SetCallerName(ctx, headers.CallerNameSystem)
 
 	response, err := r.persistence.GetNamespace(ctx, request)
 	if err != nil {
@@ -632,6 +632,7 @@ func namespaceStateChanged(old *Namespace, new *Namespace) bool {
 
 // This is https://pkg.go.dev/golang.org/x/exp/maps#Values except that it works
 // for map[any]T (see https://github.com/golang/go/issues/51257 and many more)
+// TODO: this can be removed after upgrade to Go 1.20
 func mapAnyValues[T any](m map[any]T) []T {
 	r := make([]T, 0, len(m))
 	for _, v := range m {
