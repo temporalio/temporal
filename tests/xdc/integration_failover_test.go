@@ -1692,7 +1692,7 @@ func (s *integrationClustersTestSuite) TestForceWorkflowTaskClose_WithClusterRec
 	})
 	s.NoError(err)
 
-	// Update the namespace in cluster 2 to be a single cluster namespace
+	// Update the namespace in cluster 2 to be a multi cluster namespace
 	upReq2 := &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
