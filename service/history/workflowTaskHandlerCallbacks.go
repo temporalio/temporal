@@ -548,6 +548,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newMutableState = nil
 
 		if wtFailedCause.workflowFailure != nil {
+			// Flush buffer event before failing the workflow
+			ms.FlushBufferedEvents()
+
 			attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
 				Failure: wtFailedCause.workflowFailure,
 			}
@@ -934,8 +937,6 @@ func failWorkflowTask(
 		0); err != nil {
 		return nil, nextEventBatchId, err
 	}
-
-	mutableState.FlushBufferedEvents()
 
 	// Return new mutable state back to the caller for further updates
 	return mutableState, nextEventBatchId, nil
