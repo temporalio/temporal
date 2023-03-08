@@ -115,6 +115,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	}
 
 	// For tests using SQL visibility, we need to wait for search attributes to be available as part of the ns config
+	// TODO: remove after https://github.com/temporalio/temporal/issues/4017 is resolved
 	time.Sleep(2 * NamespaceCacheRefreshInterval)
 }
 
