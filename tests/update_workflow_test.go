@@ -1489,7 +1489,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_FailWT() {
 		updateResultCh <- struct{}{}
 	}
 	go updateWorkflowFn()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
+	time.Sleep(time.Second) // This is to make sure that update gets to the server.
 
 	// Try to accept update in workflow: get malformed response.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
