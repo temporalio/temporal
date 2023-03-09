@@ -1126,7 +1126,8 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 			*serviceerror.InvalidArgument,
 			*serviceerror.NamespaceAlreadyExists,
 			*serviceerror.NotFound,
-			*serviceerror.NamespaceNotFound:
+			*serviceerror.NamespaceNotFound,
+			*serviceerror.Canceled:
 			// no-op
 
 		case *serviceerror.ResourceExhausted:
