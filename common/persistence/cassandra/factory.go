@@ -27,11 +27,13 @@ package cassandra
 import (
 	"sync"
 
+	"github.com/gocql/gocql"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -42,7 +44,7 @@ type (
 		cfg         config.Cassandra
 		clusterName string
 		logger      log.Logger
-		session     gocql.Session
+		session     commongocql.Session
 	}
 )
 
@@ -54,7 +56,12 @@ func NewFactory(
 	clusterName string,
 	logger log.Logger,
 ) *Factory {
-	session, err := gocql.NewSession(cfg, r, logger)
+	session, err := commongocql.NewSession(
+		func() (*gocql.ClusterConfig, error) {
+			return commongocql.NewCassandraCluster(cfg, r)
+		},
+		logger,
+	)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}
@@ -66,7 +73,7 @@ func NewFactoryFromSession(
 	cfg config.Cassandra,
 	clusterName string,
 	logger log.Logger,
-	session gocql.Session,
+	session commongocql.Session,
 ) *Factory {
 	return &Factory{
 		cfg:         cfg,
