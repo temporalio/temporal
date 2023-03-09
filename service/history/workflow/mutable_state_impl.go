@@ -4388,8 +4388,7 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 
 func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, error) {
 
-	if !ms.IsWorkflowExecutionRunning() ||
-		!ms.canReplicateEvents() {
+	if !ms.IsWorkflowExecutionRunning() {
 		return false, nil
 	}
 
