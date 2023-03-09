@@ -1329,7 +1329,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_1stAccept_2ndRej
  17 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_FailWT() {
+func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 	id := "integration-update-workflow-test-7"
 	wt := "integration-update-workflow-test-7-type"
 	tq := "integration-update-workflow-test-7-task-queue"
@@ -1489,7 +1489,6 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_FailWT() {
 		updateResultCh <- struct{}{}
 	}
 	go updateWorkflowFn()
-	time.Sleep(time.Second) // This is to make sure that update gets to the server.
 
 	// Try to accept update in workflow: get malformed response.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
