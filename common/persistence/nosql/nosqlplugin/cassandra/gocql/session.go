@@ -33,10 +33,8 @@ import (
 	"github.com/gocql/gocql"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/resolver"
 )
 
 var _ Session = (*session)(nil)
@@ -47,11 +45,10 @@ const (
 
 type (
 	session struct {
-		status       int32
-		config       config.Cassandra
-		resolver     resolver.ServiceResolver
-		atomic.Value // *gocql.Session
-		logger       log.Logger
+		status               int32
+		newClusterConfigFunc func() (*gocql.ClusterConfig, error)
+		atomic.Value         // *gocql.Session
+		logger               log.Logger
 
 		sync.Mutex
 		sessionInitTime time.Time
@@ -59,21 +56,19 @@ type (
 )
 
 func NewSession(
-	config config.Cassandra,
-	resolver resolver.ServiceResolver,
+	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
 	logger log.Logger,
 ) (*session, error) {
 
-	gocqlSession, err := initSession(config, resolver)
+	gocqlSession, err := initSession(newClusterConfigFunc)
 	if err != nil {
 		return nil, err
 	}
 
 	session := &session{
-		status:   common.DaemonStatusStarted,
-		config:   config,
-		resolver: resolver,
-		logger:   logger,
+		status:               common.DaemonStatusStarted,
+		newClusterConfigFunc: newClusterConfigFunc,
+		logger:               logger,
 
 		sessionInitTime: time.Now().UTC(),
 	}
@@ -94,7 +89,7 @@ func (s *session) refresh() {
 		return
 	}
 
-	newSession, err := initSession(s.config, s.resolver)
+	newSession, err := initSession(s.newClusterConfigFunc)
 	if err != nil {
 		s.logger.Error("gocql wrapper: unable to refresh gocql session", tag.Error(err))
 		return
@@ -108,10 +103,9 @@ func (s *session) refresh() {
 }
 
 func initSession(
-	config config.Cassandra,
-	resolver resolver.ServiceResolver,
+	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
 ) (*gocql.Session, error) {
-	cluster, err := NewCassandraCluster(config, resolver)
+	cluster, err := newClusterConfigFunc()
 	if err != nil {
 		return nil, err
 	}
