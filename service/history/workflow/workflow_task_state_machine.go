@@ -578,7 +578,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
 		)
-		// TODO (alex-update): Do we need to call next line here same as in AddWorkflowTaskCompletedEvent?
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
 	}
@@ -638,9 +637,11 @@ func (m *workflowTaskStateMachine) FailWorkflowTask(
 	incrementAttempt bool,
 ) {
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
-	// If it was stick task queue, clear stickiness first and try again before creating transient workflow tas.
-	incrementAttempt = incrementAttempt && !m.ms.IsStickyTaskQueueEnabled()
-	m.ms.ClearStickyness()
+	// If it was stick task queue, clear stickiness first and try again before creating transient workflow task.
+	if m.ms.IsStickyTaskQueueEnabled() {
+		incrementAttempt = false
+		m.ms.ClearStickyness()
+	}
 
 	failWorkflowTaskInfo := &WorkflowTaskInfo{
 		Version:               common.EmptyVersion,

@@ -53,7 +53,6 @@ type (
 	// ChangedEvent describes a change in membership
 	ChangedEvent struct {
 		HostsAdded   []HostInfo
-		HostsUpdated []HostInfo
 		HostsRemoved []HostInfo
 	}
 

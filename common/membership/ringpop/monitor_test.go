@@ -80,7 +80,6 @@ func (s *RpoSuite) TestMonitor() {
 		s.Equal(1, len(e.HostsRemoved), "ringpop monitor event does not report the removed host")
 		s.Equal(testService.hostAddrs[1], e.HostsRemoved[0].GetAddress(), "ringpop monitor reported that a wrong host was removed")
 		s.Nil(e.HostsAdded, "Unexpected host reported to be added by ringpop monitor")
-		s.Nil(e.HostsUpdated, "Unexpected host reported to be updated by ringpop monitor")
 	case <-time.After(time.Minute):
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
@@ -122,9 +121,6 @@ func (s *RpoSuite) verifyMemberDiff(curr []string, new []string, expectedDiff []
 		var diff []string
 		for _, a := range event.HostsAdded {
 			diff = append(diff, "+"+a.GetAddress())
-		}
-		for _, a := range event.HostsUpdated {
-			diff = append(diff, "~"+a.GetAddress())
 		}
 		for _, a := range event.HostsRemoved {
 			diff = append(diff, "-"+a.GetAddress())

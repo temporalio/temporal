@@ -70,7 +70,6 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow/update"
 )
 
 const (
@@ -171,7 +170,6 @@ type (
 		taskGenerator       TaskGenerator
 		workflowTaskManager *workflowTaskStateMachine
 		QueryRegistry       QueryRegistry
-		updateRegistry      update.Registry
 
 		shard           shard.Context
 		clusterMetadata cluster.Metadata
@@ -230,8 +228,7 @@ func NewMutableState(
 		appliedEvents:    make(map[string]struct{}),
 		InsertTasks:      make(map[tasks.Category][]tasks.Task),
 
-		QueryRegistry:  NewQueryRegistry(),
-		updateRegistry: update.NewRegistry(),
+		QueryRegistry: NewQueryRegistry(),
 
 		shard:           shard,
 		clusterMetadata: shard.GetClusterMetadata(),
@@ -634,10 +631,6 @@ func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
 
 func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
-}
-
-func (ms *MutableStateImpl) UpdateRegistry() update.Registry {
-	return ms.updateRegistry
 }
 
 func (ms *MutableStateImpl) GetActivityScheduledEvent(
@@ -4387,8 +4380,7 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 
 func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, error) {
 
-	if !ms.IsWorkflowExecutionRunning() ||
-		!ms.canReplicateEvents() {
+	if !ms.IsWorkflowExecutionRunning() {
 		return false, nil
 	}
 

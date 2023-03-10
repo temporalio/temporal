@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -62,6 +63,10 @@ func GetNamespaceName(
 	req interface{},
 ) (namespace.Name, error) {
 	switch request := req.(type) {
+	case *workflowservice.RegisterNamespaceRequest:
+		// For namespace registration requests, we don't expect to find namespace so skip checking caches
+		// to avoid caching a NotFound error from persistence readthrough
+		return namespace.Name(request.GetNamespace()), nil
 	case NamespaceNameGetter:
 		namespaceName := namespace.Name(request.GetNamespace())
 		_, err := namespaceRegistry.GetNamespace(namespaceName)
