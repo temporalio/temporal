@@ -194,6 +194,10 @@ func (p *executionRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
+func (p *executionRateLimitedPersistenceClient) GetHistoryBranchUtil() HistoryBranchUtil {
+	return p.persistence.GetHistoryBranchUtil()
+}
+
 func (p *executionRateLimitedPersistenceClient) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
@@ -302,6 +306,30 @@ func (p *executionRateLimitedPersistenceClient) ListConcreteExecutions(
 	return response, err
 }
 
+func (p *executionRateLimitedPersistenceClient) RegisterHistoryTaskReader(
+	ctx context.Context,
+	request *RegisterHistoryTaskReaderRequest,
+) error {
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	return p.persistence.RegisterHistoryTaskReader(ctx, request)
+}
+
+func (p *executionRateLimitedPersistenceClient) UnregisterHistoryTaskReader(
+	ctx context.Context,
+	request *UnregisterHistoryTaskReaderRequest,
+) {
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	p.persistence.UnregisterHistoryTaskReader(ctx, request)
+}
+
+func (p *executionRateLimitedPersistenceClient) UpdateHistoryTaskReaderProgress(
+	ctx context.Context,
+	request *UpdateHistoryTaskReaderProgressRequest,
+) {
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
+}
+
 func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 	ctx context.Context,
 	request *AddHistoryTasksRequest,
@@ -312,22 +340,6 @@ func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 
 	err := p.persistence.AddHistoryTasks(ctx, request)
 	return err
-}
-
-func (p *executionRateLimitedPersistenceClient) GetHistoryTask(
-	ctx context.Context,
-	request *GetHistoryTaskRequest,
-) (*GetHistoryTaskResponse, error) {
-	if ok := allow(
-		ctx,
-		ConstructHistoryTaskAPI("GetHistoryTask", request.TaskCategory),
-		p.rateLimiter,
-	); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetHistoryTask(ctx, request)
-	return response, err
 }
 
 func (p *executionRateLimitedPersistenceClient) GetHistoryTasks(
@@ -674,45 +686,6 @@ func (p *executionRateLimitedPersistenceClient) AppendRawHistoryNodes(
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
-}
-
-// ParseHistoryBranchInfo parses the history branch for branch information
-func (p *executionRateLimitedPersistenceClient) ParseHistoryBranchInfo(
-	ctx context.Context,
-	request *ParseHistoryBranchInfoRequest,
-) (*ParseHistoryBranchInfoResponse, error) {
-	// ParseHistoryBranchInfo implementation currently doesn't actually query DB
-	// TODO: uncomment if necessary
-	// if ok := allow(ctx, "ParseHistoryBranchInfo", p.rateLimiter); !ok {
-	// 	return nil, ErrPersistenceLimitExceeded
-	// }
-	return p.persistence.ParseHistoryBranchInfo(ctx, request)
-}
-
-// UpdateHistoryBranchInfo updates the history branch with branch information
-func (p *executionRateLimitedPersistenceClient) UpdateHistoryBranchInfo(
-	ctx context.Context,
-	request *UpdateHistoryBranchInfoRequest,
-) (*UpdateHistoryBranchInfoResponse, error) {
-	// UpdateHistoryBranchInfo implementation currently doesn't actually query DB
-	// TODO: uncomment if necessary
-	// if ok := allow(ctx, "UpdateHistoryBranchInfo", p.rateLimiter); !ok {
-	// 	return nil, ErrPersistenceLimitExceeded
-	// }
-	return p.persistence.UpdateHistoryBranchInfo(ctx, request)
-}
-
-// NewHistoryBranch initializes a new history branch
-func (p *executionRateLimitedPersistenceClient) NewHistoryBranch(
-	ctx context.Context,
-	request *NewHistoryBranchRequest,
-) (*NewHistoryBranchResponse, error) {
-	// NewHistoryBranch implementation currently doesn't actually query DB
-	// TODO: uncomment if necessary
-	// if ok := allow(ctx, "NewHistoryBranch", p.rateLimiter); !ok {
-	// 	return nil, ErrPersistenceLimitExceeded
-	// }
-	return p.persistence.NewHistoryBranch(ctx, request)
 }
 
 // ReadHistoryBranch returns history node data for a branch

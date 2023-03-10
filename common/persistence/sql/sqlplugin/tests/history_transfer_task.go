@@ -152,11 +152,13 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := sqlplugin.TransferTasksFilter{
-		ShardID: shardID,
-		TaskID:  taskID,
+	rangeFilter := sqlplugin.TransferTasksRangeFilter{
+		ShardID:            shardID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
+		PageSize:           1,
 	}
-	rows, err := s.store.SelectFromTransferTasks(newExecutionContext(), filter)
+	rows, err := s.store.RangeSelectFromTransferTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -216,7 +218,13 @@ func (s *historyHistoryTransferTaskSuite) TestDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTransferTasks(newExecutionContext(), filter)
+	rangeFilter := sqlplugin.TransferTasksRangeFilter{
+		ShardID:            shardID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
+		PageSize:           1,
+	}
+	rows, err := s.store.RangeSelectFromTransferTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -270,7 +278,13 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromTransferTasks(newExecutionContext(), filter)
+	rangeFilter := sqlplugin.TransferTasksRangeFilter{
+		ShardID:            shardID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
+		PageSize:           1,
+	}
+	rows, err := s.store.RangeSelectFromTransferTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

@@ -28,13 +28,14 @@ import (
 	"context"
 	"time"
 
+	"github.com/gocql/gocql"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/resolver"
@@ -138,8 +139,8 @@ const (
 
 type (
 	visibilityStore struct {
-		session      gocql.Session
-		lowConslevel gocql.Consistency
+		session      commongocql.Session
+		lowConslevel commongocql.Consistency
 	}
 )
 
@@ -150,14 +151,19 @@ func NewVisibilityStore(
 	r resolver.ServiceResolver,
 	logger log.Logger,
 ) (*visibilityStore, error) {
-	session, err := gocql.NewSession(cfg, r, logger)
+	session, err := commongocql.NewSession(
+		func() (*gocql.ClusterConfig, error) {
+			return commongocql.NewCassandraCluster(cfg, r)
+		},
+		logger,
+	)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}
 
 	return &visibilityStore{
 		session:      session,
-		lowConslevel: gocql.One,
+		lowConslevel: commongocql.One,
 	}, nil
 }
 
@@ -198,14 +204,14 @@ func (v *visibilityStore) RecordWorkflowExecutionStarted(
 	// default timestamp, default one will always win because they are 1000 times bigger.
 	query = query.WithTimestamp(persistence.UnixMilliseconds(request.StartTime))
 	err := query.Exec()
-	return gocql.ConvertError("RecordWorkflowExecutionStarted", err)
+	return commongocql.ConvertError("RecordWorkflowExecutionStarted", err)
 }
 
 func (v *visibilityStore) RecordWorkflowExecutionClosed(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionClosedRequest,
 ) error {
-	batch := v.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := v.session.NewBatch(commongocql.LoggedBatch).WithContext(ctx)
 
 	// First, remove execution from the open table
 	batch.Query(templateDeleteWorkflowExecutionStarted,
@@ -248,7 +254,7 @@ func (v *visibilityStore) RecordWorkflowExecutionClosed(
 
 	batch = batch.WithTimestamp(persistence.UnixMilliseconds(batchTimestamp))
 	err := v.session.ExecuteBatch(batch)
-	return gocql.ConvertError("RecordWorkflowExecutionClosed", err)
+	return commongocql.ConvertError("RecordWorkflowExecutionClosed", err)
 }
 
 func (v *visibilityStore) UpsertWorkflowExecution(
@@ -284,7 +290,7 @@ func (v *visibilityStore) ListOpenWorkflowExecutions(
 		response.NextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("ListOpenWorkflowExecutions", err)
+		return nil, commongocql.ConvertError("ListOpenWorkflowExecutions", err)
 	}
 	return response, nil
 }
@@ -315,7 +321,7 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByType(
 		response.NextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("ListOpenWorkflowExecutionsByType", err)
+		return nil, commongocql.ConvertError("ListOpenWorkflowExecutionsByType", err)
 	}
 	return response, nil
 }
@@ -346,7 +352,7 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 		response.NextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("ListOpenWorkflowExecutionsByWorkflowID", err)
+		return nil, commongocql.ConvertError("ListOpenWorkflowExecutionsByWorkflowID", err)
 	}
 	return response, nil
 }
@@ -375,7 +381,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutions(
 		response.NextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("ListClosedWorkflowExecutions", err)
+		return nil, commongocql.ConvertError("ListClosedWorkflowExecutions", err)
 	}
 	return response, nil
 }
@@ -406,7 +412,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByType(
 		response.NextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByType", err)
+		return nil, commongocql.ConvertError("ListClosedWorkflowExecutionsByType", err)
 	}
 	return response, nil
 }
@@ -436,7 +442,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		response.NextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByWorkflowID", err)
+		return nil, commongocql.ConvertError("ListClosedWorkflowExecutionsByWorkflowID", err)
 	}
 	return response, nil
 }
@@ -466,7 +472,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 		response.NextPageToken = iter.PageState()
 	}
 	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByStatus", err)
+		return nil, commongocql.ConvertError("ListClosedWorkflowExecutionsByStatus", err)
 	}
 	return response, nil
 }
@@ -475,7 +481,7 @@ func (v *visibilityStore) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
-	var query gocql.Query
+	var query commongocql.Query
 	if request.StartTime != nil {
 		query = v.session.Query(templateDeleteWorkflowExecutionStarted,
 			request.NamespaceID.String(),
@@ -495,7 +501,7 @@ func (v *visibilityStore) DeleteWorkflowExecution(
 	}
 
 	if err := query.Exec(); err != nil {
-		return gocql.ConvertError("DeleteWorkflowExecution", err)
+		return commongocql.ConvertError("DeleteWorkflowExecution", err)
 	}
 	return nil
 }
@@ -581,7 +587,7 @@ func (v *visibilityStore) getClosedWorkflowExecution(
 	return wfexecution, nil
 }
 
-func readOpenWorkflowExecutionRecord(iter gocql.Iter) (*store.InternalWorkflowExecutionInfo, bool) {
+func readOpenWorkflowExecutionRecord(iter commongocql.Iter) (*store.InternalWorkflowExecutionInfo, bool) {
 	var workflowID string
 	var runID string
 	var typeName string
@@ -606,7 +612,7 @@ func readOpenWorkflowExecutionRecord(iter gocql.Iter) (*store.InternalWorkflowEx
 	return nil, false
 }
 
-func readClosedWorkflowExecutionRecord(iter gocql.Iter) (*store.InternalWorkflowExecutionInfo, bool) {
+func readClosedWorkflowExecutionRecord(iter commongocql.Iter) (*store.InternalWorkflowExecutionInfo, bool) {
 	var workflowID string
 	var runID string
 	var typeName string

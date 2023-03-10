@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -123,7 +124,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 
 	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		req.Clock,
+		req.ChildClock,
 		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
@@ -146,7 +147,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 			if err != nil {
 				return nil, err
 			}
-			if _, err := mutableState.AddFirstWorkflowTaskScheduled(startEvent, false); err != nil {
+			if _, err := mutableState.AddFirstWorkflowTaskScheduled(req.ParentClock, startEvent, false); err != nil {
 				return nil, err
 			}
 
@@ -212,7 +213,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowTask, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetContext().UpdateRegistry(), workflowTask, req.PollRequest.GetIdentity())
 					if err != nil {
 						return nil, err
 					}
@@ -249,7 +250,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowTask, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetContext().UpdateRegistry(), workflowTask, req.PollRequest.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -450,7 +451,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newMutableState             workflow.MutableState
 	)
 	// hasPendingUpdates indicates if there are more pending updates (excluding those which are accepted/rejected by this workflow task).
-	hasPendingUpdates := ms.UpdateRegistry().HasPending(request.GetMessages())
+	hasPendingUpdates := weContext.UpdateRegistry().HasPending(request.GetMessages())
 	hasBufferedEvents := ms.HasBufferedEvents()
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
@@ -671,7 +672,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	// Send update results to gRPC API callers.
-	err = ms.UpdateRegistry().ProcessIncomingMessages(req.GetCompleteRequest().GetMessages())
+	err = weContext.UpdateRegistry().ProcessIncomingMessages(req.GetCompleteRequest().GetMessages())
 	if err != nil {
 		return nil, err
 	}
@@ -690,7 +691,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
 		workflowTask, _ := ms.GetWorkflowTaskInfo(newWorkflowTaskScheduledEventID)
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, workflowTask, request.GetIdentity())
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(), workflowTask, request.GetIdentity())
 		if err != nil {
 			return nil, err
 		}
@@ -754,6 +755,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
 	ms workflow.MutableState,
+	updateRegistry update.Registry,
 	workflowTask *workflow.WorkflowTaskInfo,
 	identity string,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
@@ -801,7 +803,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		}
 	}
 
-	response.Messages, err = ms.UpdateRegistry().CreateOutgoingMessages(workflowTask.StartedEventID)
+	response.Messages, err = updateRegistry.CreateOutgoingMessages(workflowTask.StartedEventID)
 	if err != nil {
 		return nil, err
 	}

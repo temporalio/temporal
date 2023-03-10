@@ -303,12 +303,21 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 	defer cancel()
 
+	inclusiveMinPendingTaskKey := tasks.NewImmediateKey(*minAckedTaskID + 1)
+	r.shard.GetExecutionManager().UpdateHistoryTaskReaderProgress(ctx, &persistence.UpdateHistoryTaskReaderProgressRequest{
+		ShardID:                    r.shard.GetShardID(),
+		ShardOwner:                 r.shard.GetOwner(),
+		TaskCategory:               tasks.CategoryReplication,
+		ReaderID:                   common.DefaultQueueReaderID,
+		InclusiveMinPendingTaskKey: inclusiveMinPendingTaskKey,
+	})
+
 	err := r.shard.GetExecutionManager().RangeCompleteHistoryTasks(
 		ctx,
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(*minAckedTaskID + 1),
+			ExclusiveMaxTaskKey: inclusiveMinPendingTaskKey,
 		},
 	)
 	if err == nil {

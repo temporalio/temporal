@@ -440,10 +440,6 @@ func (tc *TestCluster) GetExecutionManager() persistence.ExecutionManager {
 	return tc.host.GetExecutionManager()
 }
 
-func (tc *TestCluster) RefreshNamespaceCache() {
-	tc.host.RefreshNamespaceCache()
-}
-
 func (tc *TestCluster) GetHost() *temporalImpl {
 	return tc.host
 }

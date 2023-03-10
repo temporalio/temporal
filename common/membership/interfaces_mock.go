@@ -133,10 +133,10 @@ func (mr *MockMonitorMockRecorder) GetResolver(service interface{}) *gomock.Call
 }
 
 // Lookup mocks base method.
-func (m *MockMonitor) Lookup(service primitives.ServiceName, key string) (*HostInfo, error) {
+func (m *MockMonitor) Lookup(service primitives.ServiceName, key string) (HostInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Lookup", service, key)
-	ret0, _ := ret[0].(*HostInfo)
+	ret0, _ := ret[0].(HostInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -200,10 +200,10 @@ func (mr *MockMonitorMockRecorder) WaitUntilInitialized(arg0 interface{}) *gomoc
 }
 
 // WhoAmI mocks base method.
-func (m *MockMonitor) WhoAmI() (*HostInfo, error) {
+func (m *MockMonitor) WhoAmI() (HostInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WhoAmI")
-	ret0, _ := ret[0].(*HostInfo)
+	ret0, _ := ret[0].(HostInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -252,10 +252,10 @@ func (mr *MockServiceResolverMockRecorder) AddListener(name, notifyChannel inter
 }
 
 // Lookup mocks base method.
-func (m *MockServiceResolver) Lookup(key string) (*HostInfo, error) {
+func (m *MockServiceResolver) Lookup(key string) (HostInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Lookup", key)
-	ret0, _ := ret[0].(*HostInfo)
+	ret0, _ := ret[0].(HostInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -281,10 +281,10 @@ func (mr *MockServiceResolverMockRecorder) MemberCount() *gomock.Call {
 }
 
 // Members mocks base method.
-func (m *MockServiceResolver) Members() []*HostInfo {
+func (m *MockServiceResolver) Members() []HostInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Members")
-	ret0, _ := ret[0].([]*HostInfo)
+	ret0, _ := ret[0].([]HostInfo)
 	return ret0
 }
 
@@ -344,10 +344,10 @@ func (m *MockHostInfoProvider) EXPECT() *MockHostInfoProviderMockRecorder {
 }
 
 // HostInfo mocks base method.
-func (m *MockHostInfoProvider) HostInfo() *HostInfo {
+func (m *MockHostInfoProvider) HostInfo() HostInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HostInfo")
-	ret0, _ := ret[0].(*HostInfo)
+	ret0, _ := ret[0].(HostInfo)
 	return ret0
 }
 

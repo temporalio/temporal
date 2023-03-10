@@ -70,7 +70,6 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow/update"
 )
 
 const (
@@ -171,7 +170,6 @@ type (
 		taskGenerator       TaskGenerator
 		workflowTaskManager *workflowTaskStateMachine
 		QueryRegistry       QueryRegistry
-		updateRegistry      update.Registry
 
 		shard           shard.Context
 		clusterMetadata cluster.Metadata
@@ -230,8 +228,7 @@ func NewMutableState(
 		appliedEvents:    make(map[string]struct{}),
 		InsertTasks:      make(map[tasks.Category][]tasks.Task),
 
-		QueryRegistry:  NewQueryRegistry(),
-		updateRegistry: update.NewRegistry(),
+		QueryRegistry: NewQueryRegistry(),
 
 		shard:           shard,
 		clusterMetadata: shard.GetClusterMetadata(),
@@ -444,19 +441,18 @@ func (ms *MutableStateImpl) SetHistoryTree(
 	if duration := ms.namespaceEntry.Retention(); duration > 0 {
 		retentionDuration = &duration
 	}
-	initialBranch, err := ms.shard.GetExecutionManager().NewHistoryBranch(
-		ctx,
-		&persistence.NewHistoryBranchRequest{
-			TreeID:            treeID,
-			RunTimeout:        runTimeout,
-			ExecutionTimeout:  executionTimeout,
-			RetentionDuration: retentionDuration,
-		},
+	initialBranchToken, err := ms.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+		treeID,
+		nil,
+		[]*persistencespb.HistoryBranchRange{},
+		runTimeout,
+		executionTimeout,
+		retentionDuration,
 	)
 	if err != nil {
 		return err
 	}
-	return ms.SetCurrentBranchToken(initialBranch.BranchToken)
+	return ms.SetCurrentBranchToken(initialBranchToken)
 }
 
 func (ms *MutableStateImpl) SetCurrentBranchToken(
@@ -635,10 +631,6 @@ func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
 
 func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
-}
-
-func (ms *MutableStateImpl) UpdateRegistry() update.Registry {
-	return ms.updateRegistry
 }
 
 func (ms *MutableStateImpl) GetActivityScheduledEvent(
@@ -1521,7 +1513,11 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	if err != nil {
 		return nil, err
 	}
-	if _, err = ms.AddFirstWorkflowTaskScheduled(event, false); err != nil {
+	var parentClock *clockspb.VectorClock
+	if parentExecutionInfo != nil {
+		parentClock = parentExecutionInfo.Clock
+	}
+	if _, err = ms.AddFirstWorkflowTaskScheduled(parentClock, event, false); err != nil {
 		return nil, err
 	}
 
@@ -1727,6 +1723,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 // by the startEvent's FirstWorkflowTaskBackoff.
 // Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
 func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
+	parentClock *clockspb.VectorClock,
 	startEvent *historypb.HistoryEvent,
 	bypassTaskGeneration bool,
 ) (int64, error) {
@@ -1734,7 +1731,14 @@ func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
 	if err := ms.checkMutability(opTag); err != nil {
 		return common.EmptyEventID, err
 	}
-	return ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
+	scheduleEventID, err := ms.workflowTaskManager.AddFirstWorkflowTaskScheduled(startEvent, bypassTaskGeneration)
+	if err != nil {
+		return 0, err
+	}
+	if parentClock != nil {
+		ms.executionInfo.ParentClock = parentClock
+	}
+	return scheduleEventID, nil
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduledEvent(
@@ -4376,8 +4380,7 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 
 func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, error) {
 
-	if !ms.IsWorkflowExecutionRunning() ||
-		!ms.canReplicateEvents() {
+	if !ms.IsWorkflowExecutionRunning() {
 		return false, nil
 	}
 
