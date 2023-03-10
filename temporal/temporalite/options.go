@@ -34,29 +34,6 @@ func WithPersistenceDisabled() ServerOption {
 	})
 }
 
-// UIServer abstracts the github.com/temporalio/ui-server project to
-// make it an optional import for programs that need web UI support.
-//
-// A working implementation of this interface is available here:
-// https://pkg.go.dev/github.com/temporalio/ui-server/server#Server
-type UIServer interface {
-	Start() error
-	Stop()
-}
-
-// WithUI enables the Temporal web interface.
-//
-// When unspecified, Temporal will run in headless mode.
-//
-// This option accepts a UIServer implementation in order to avoid bloating
-// programs that do not need to embed the UI.
-// See ./cmd/temporalite/main.go for an example of usage.
-func WithUI(server UIServer) ServerOption {
-	return newApplyFuncContainer(func(cfg *liteConfig) {
-		cfg.UIServer = server
-	})
-}
-
 // WithFrontendPort sets the listening port for the temporal-frontend GRPC service.
 //
 // When unspecified, the default port number of 7233 is used.

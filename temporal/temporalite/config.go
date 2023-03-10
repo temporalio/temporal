@@ -27,14 +27,6 @@ const (
 	defaultFrontendPort = 7233
 )
 
-type noopUIServer struct{}
-
-func (noopUIServer) Start() error {
-	return nil
-}
-
-func (noopUIServer) Stop() {}
-
 type liteConfig struct {
 	Ephemeral        bool
 	DatabaseFilePath string
@@ -47,7 +39,6 @@ type liteConfig struct {
 	ServerOptions    []temporal.ServerOption
 	portProvider     *portProvider
 	FrontendIP       string
-	UIServer         UIServer
 	BaseConfig       *config.Config
 	DynamicConfig    dynamicconfig.StaticClient
 }
@@ -77,7 +68,6 @@ func newDefaultConfig() (*liteConfig, error) {
 		DatabaseFilePath: filepath.Join(userConfigDir, "temporalite", "db", "default.db"),
 		FrontendPort:     0,
 		MetricsPort:      0,
-		UIServer:         noopUIServer{},
 		DynamicPorts:     false,
 		Namespaces:       nil,
 		SQLitePragmas:    nil,

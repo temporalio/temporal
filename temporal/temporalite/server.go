@@ -25,7 +25,6 @@ import (
 // TemporaliteServer is a high level wrapper for temporal.Server that automatically configures a sqlite backend.
 type TemporaliteServer struct {
 	internal         temporal.Server
-	ui               UIServer
 	frontendHostPort string
 	config           *liteConfig
 }
@@ -116,7 +115,6 @@ func NewServer(opts ...ServerOption) (*TemporaliteServer, error) {
 
 	s := &TemporaliteServer{
 		internal:         srv,
-		ui:               c.UIServer,
 		frontendHostPort: cfg.PublicClient.HostPort,
 		config:           c,
 	}
@@ -126,11 +124,6 @@ func NewServer(opts ...ServerOption) (*TemporaliteServer, error) {
 
 // Start temporal server.
 func (s *TemporaliteServer) Start() error {
-	go func() {
-		if err := s.ui.Start(); err != nil {
-			panic(err)
-		}
-	}()
 	return s.internal.Start()
 }
 
@@ -138,9 +131,6 @@ func (s *TemporaliteServer) Start() error {
 func (s *TemporaliteServer) Stop() {
 	if s == nil {
 		return
-	}
-	if s.ui != nil {
-		s.ui.Stop()
 	}
 	s.internal.Stop()
 }
