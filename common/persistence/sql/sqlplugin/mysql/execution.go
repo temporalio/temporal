@@ -141,11 +141,6 @@ shard_id = ? AND
 task_id >= ? AND
 task_id < ?
 ORDER BY task_id LIMIT ?`
-	getOneReplicationTaskDLQQuery = `SELECT task_id FROM replication_tasks_dlq WHERE 
-source_cluster_name = ? AND
-shard_id = ? AND
-task_id >= ? 
-LIMIT 1`
 
 	createVisibilityTasksQuery = `INSERT INTO visibility_tasks(shard_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :task_id, :data, :data_encoding)`
@@ -733,23 +728,6 @@ func (mdb *db) InsertIntoReplicationDLQTasks(
 		insertReplicationTaskDLQQuery,
 		rows,
 	)
-}
-
-// SelectOneFromReplicationDLQTasks reads one row from replication_tasks_dlq table
-func (mdb *db) SelectOneFromReplicationDLQTasks(
-	ctx context.Context,
-	filter sqlplugin.ReplicationDLQTasksFilter,
-) ([]sqlplugin.ReplicationDLQTasksRow, error) {
-
-	var rows []sqlplugin.ReplicationDLQTasksRow
-	err := mdb.conn.SelectContext(ctx,
-		&rows,
-		getOneReplicationTaskDLQQuery,
-		filter.SourceClusterName,
-		filter.ShardID,
-		filter.TaskID,
-	)
-	return rows, err
 }
 
 // RangeSelectFromReplicationDLQTasks reads one or more rows from replication_tasks_dlq table
