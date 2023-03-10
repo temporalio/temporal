@@ -1,7 +1,7 @@
 [submodule "proto/api"]
 	path = proto/api
-	url = git@github.com:temporalio/api.git
-	branch = workflow-delayed-start
+	url = https://github.com/temporalio/api.git
+	branch = master
 [submodule "develop/docker-compose/grafana/provisioning/temporalio-dashboards"]
 	path = develop/docker-compose/grafana/provisioning/temporalio-dashboards
 	url = https://github.com/temporalio/dashboards
