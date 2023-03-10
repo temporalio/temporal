@@ -23,11 +23,14 @@ type serverConfig struct {
 	// WithMetricsPort sets the listening port for metrics.
 	//
 	// When unspecified, the port will be system-chosen.
-	MetricsPort   int
-	Namespaces    []string
+	MetricsPort int
+	// Namespaces specified here will be automatically registered on Temporal start.
+	Namespaces []string
+	// SQLitePragmas specified here will be applied as pragma statements to SQLite on Temporal start.
 	SQLitePragmas map[string]string
 	// Logger overrides the default logger.
-	Logger        log.Logger
+	Logger log.Logger
+	// ServerOptions to be applied on Temporal start.
 	ServerOptions []temporal.ServerOption
 	portProvider  *portProvider
 	FrontendIP    string
@@ -35,7 +38,8 @@ type serverConfig struct {
 	//
 	// Storage and client configuration will always be overridden, however base config can be
 	// used to enable settings like TLS or authentication.
-	BaseConfig    *config.Config
+	BaseConfig *config.Config
+	// DynamicConfig sets dynamic config values used by the server.
 	DynamicConfig dynamicconfig.StaticClient
 }
 
