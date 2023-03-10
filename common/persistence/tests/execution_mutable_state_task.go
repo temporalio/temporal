@@ -58,6 +58,7 @@ type (
 
 		ShardID     int32
 		RangeID     int64
+		Owner       string
 		WorkflowKey definition.WorkflowKey
 
 		ShardManager     p.ShardManager
@@ -121,6 +122,7 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 		InitialShardInfo: &persistencespb.ShardInfo{
 			ShardId: s.ShardID,
 			RangeId: 1,
+			Owner:   "test-shard-owner",
 		},
 	})
 	s.NoError(err)
@@ -132,6 +134,7 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 	})
 	s.NoError(err)
 	s.RangeID = resp.ShardInfo.RangeId
+	s.Owner = resp.ShardInfo.Owner
 
 	s.WorkflowKey = definition.NewWorkflowKey(
 		uuid.New().String(),
@@ -142,6 +145,7 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 	for _, category := range taskCategories {
 		err := s.ExecutionManager.RegisterHistoryTaskReader(s.Ctx, &p.RegisterHistoryTaskReaderRequest{
 			ShardID:      s.ShardID,
+			ShardOwner:   s.Owner,
 			TaskCategory: category,
 			ReaderID:     common.DefaultQueueReaderID,
 		})
@@ -170,6 +174,7 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 	for _, category := range taskCategories {
 		s.ExecutionManager.UnregisterHistoryTaskReader(s.Ctx, &p.UnregisterHistoryTaskReaderRequest{
 			ShardID:      s.ShardID,
+			ShardOwner:   s.Owner,
 			TaskCategory: category,
 			ReaderID:     common.DefaultQueueReaderID,
 		})

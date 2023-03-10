@@ -46,8 +46,9 @@ type (
 		controller           *gomock.Controller
 		mockExecutionManager *persistence.MockExecutionManager
 
-		shardID  int32
-		category tasks.Category
+		shardID    int32
+		shardOwner string
+		category   tasks.Category
 
 		readerGroup *ReaderGroup
 	}
@@ -69,10 +70,12 @@ func (s *readerGroupSuite) SetupTest() {
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 
 	s.shardID = rand.Int31()
+	s.shardOwner = "test-shard-owner"
 	s.category = tasks.CategoryTransfer
 
 	s.readerGroup = NewReaderGroup(
 		s.shardID,
+		s.shardOwner,
 		s.category,
 		func(_ int32, _ []Slice) Reader {
 			return newTestReader()
@@ -177,6 +180,7 @@ func (s *readerGroupSuite) setupRegisterReaderMock(
 ) {
 	request := &persistence.RegisterHistoryTaskReaderRequest{
 		ShardID:      s.shardID,
+		ShardOwner:   s.shardOwner,
 		TaskCategory: s.category,
 		ReaderID:     readerID,
 	}
@@ -189,6 +193,7 @@ func (s *readerGroupSuite) setupUnRegisterReaderMock(
 ) {
 	request := &persistence.UnregisterHistoryTaskReaderRequest{
 		ShardID:      s.shardID,
+		ShardOwner:   s.shardOwner,
 		TaskCategory: s.category,
 		ReaderID:     readerID,
 	}

@@ -293,6 +293,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	inclusiveMinPendingTaskKey := tasks.NewImmediateKey(*minAckedTaskID + 1)
 	r.shard.GetExecutionManager().UpdateHistoryTaskReaderProgress(ctx, &persistence.UpdateHistoryTaskReaderProgressRequest{
 		ShardID:                    r.shard.GetShardID(),
+		ShardOwner:                 r.shard.GetOwner(),
 		TaskCategory:               tasks.CategoryReplication,
 		ReaderID:                   common.DefaultQueueReaderID,
 		InclusiveMinPendingTaskKey: inclusiveMinPendingTaskKey,

@@ -65,6 +65,7 @@ type (
 		mockExecutionManager *persistence.MockExecutionManager
 
 		shardID     int32
+		shardOwner  string
 		config      *configs.Config
 		requestChan chan *replicationTaskRequest
 
@@ -93,6 +94,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 	s.requestChan = make(chan *replicationTaskRequest, 10)
 
 	s.shardID = rand.Int31()
+	s.shardOwner = "test-shard-owner"
 	s.mockShard = shard.NewMockContext(s.controller)
 	s.mockEngine = shard.NewMockEngine(s.controller)
 	s.mockClientBean = client.NewMockBean(s.controller)
@@ -115,6 +117,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.mockShard.EXPECT().GetExecutionManager().Return(s.mockExecutionManager).AnyTimes()
 	s.mockShard.EXPECT().GetShardID().Return(s.shardID).AnyTimes()
+	s.mockShard.EXPECT().GetOwner().Return(s.shardOwner).AnyTimes()
 	s.taskProcessorManager = NewTaskProcessorManager(
 		s.config,
 		s.mockShard,
@@ -153,6 +156,7 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 		gomock.Any(),
 		&persistence.UpdateHistoryTaskReaderProgressRequest{
 			ShardID:                    s.shardID,
+			ShardOwner:                 s.shardOwner,
 			TaskCategory:               tasks.CategoryReplication,
 			ReaderID:                   common.DefaultQueueReaderID,
 			InclusiveMinPendingTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),

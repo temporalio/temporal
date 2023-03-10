@@ -76,6 +76,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		&persistencespb.ShardInfo{
 			ShardId: 0,
 			RangeId: 1,
+			Owner:   "test-shard-owner",
 		},
 		tests.NewDynamicConfig(),
 	)
@@ -236,6 +237,7 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 
 	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
 		ShardID:      s.mockShard.GetShardID(),
+		ShardOwner:   s.mockShard.GetOwner(),
 		TaskCategory: tasks.CategoryTimer,
 		ReaderID:     lookAheadReaderID,
 	}).Times(1)
@@ -270,6 +272,7 @@ func (s *scheduledQueueSuite) setupLookAheadMock(
 
 	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
 		ShardID:      s.mockShard.GetShardID(),
+		ShardOwner:   s.mockShard.GetOwner(),
 		TaskCategory: tasks.CategoryTimer,
 		ReaderID:     lookAheadReaderID,
 	}).Times(1)

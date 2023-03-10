@@ -101,6 +101,7 @@ func (s *ackManagerSuite) SetupTest() {
 		&persistencespb.ShardInfo{
 			ShardId: 0,
 			RangeId: 1,
+			Owner:   "test-shard-owner",
 		},
 		tests.NewDynamicConfig(),
 	)
@@ -111,6 +112,7 @@ func (s *ackManagerSuite) SetupTest() {
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
 		ShardID:      s.mockShard.GetShardID(),
+		ShardOwner:   s.mockShard.GetOwner(),
 		TaskCategory: tasks.CategoryReplication,
 		ReaderID:     common.DefaultQueueReaderID,
 	}).MaxTimes(1)
@@ -866,6 +868,7 @@ func (s *ackManagerSuite) TestClose() {
 		s.replicationAckManager.registeredQueueReaders[readerID] = struct{}{}
 		s.mockExecutionMgr.EXPECT().UnregisterHistoryTaskReader(gomock.Any(), &persistence.UnregisterHistoryTaskReaderRequest{
 			ShardID:      s.mockShard.GetShardID(),
+			ShardOwner:   s.mockShard.GetOwner(),
 			TaskCategory: tasks.CategoryReplication,
 			ReaderID:     readerID,
 		}).Times(1)

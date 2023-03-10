@@ -44,6 +44,7 @@ type (
 		sync.Mutex
 
 		shardID          int32
+		shardOwner       string
 		category         tasks.Category
 		initializer      ReaderInitializer
 		executionManager persistence.ExecutionManager
@@ -55,12 +56,14 @@ type (
 
 func NewReaderGroup(
 	shardID int32,
+	shardOwner string,
 	category tasks.Category,
 	initializer ReaderInitializer,
 	executionManager persistence.ExecutionManager,
 ) *ReaderGroup {
 	return &ReaderGroup{
 		shardID:          shardID,
+		shardOwner:       shardOwner,
 		category:         category,
 		initializer:      initializer,
 		executionManager: executionManager,
@@ -140,6 +143,7 @@ func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
 	g.readerMap[readerID] = reader
 	err := g.executionManager.RegisterHistoryTaskReader(context.Background(), &persistence.RegisterHistoryTaskReaderRequest{
 		ShardID:      g.shardID,
+		ShardOwner:   g.shardOwner,
 		TaskCategory: g.category,
 		ReaderID:     readerID,
 	})
@@ -173,6 +177,7 @@ func (g *ReaderGroup) removeReaderLocked(readerID int32) {
 	reader.Stop()
 	g.executionManager.UnregisterHistoryTaskReader(context.Background(), &persistence.UnregisterHistoryTaskReaderRequest{
 		ShardID:      g.shardID,
+		ShardOwner:   g.shardOwner,
 		TaskCategory: g.category,
 		ReaderID:     readerID,
 	})

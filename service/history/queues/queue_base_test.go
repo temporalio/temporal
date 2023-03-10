@@ -612,6 +612,7 @@ func (s *queueBaseSuite) TestUpdateReaderProgress() {
 		&persistencespb.ShardInfo{
 			ShardId: 0,
 			RangeId: 10,
+			Owner:   "test-shard-owner",
 			QueueStates: map[int32]*persistencespb.QueueState{
 				tasks.CategoryIDTransfer: persistenceState,
 			},
@@ -641,6 +642,7 @@ func (s *queueBaseSuite) TestUpdateReaderProgress() {
 	mockShard.Resource.ExecutionMgr.EXPECT().UpdateHistoryTaskReaderProgress(gomock.Any(), gomock.Any()).Do(
 		func(_ context.Context, request *persistence.UpdateHistoryTaskReaderProgressRequest) {
 			s.Equal(mockShard.GetShardID(), request.ShardID)
+			s.Equal(mockShard.GetOwner(), request.ShardOwner)
 			s.Equal(tasks.CategoryTransfer, request.TaskCategory)
 			readerProgress[request.ReaderID] = request.InclusiveMinPendingTaskKey
 		},
