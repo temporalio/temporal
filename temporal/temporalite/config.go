@@ -15,33 +15,15 @@ import (
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/temporal"
 )
 
 const (
 	broadcastAddress    = "127.0.0.1"
 	defaultFrontendPort = 7233
 )
-
-type liteConfig struct {
-	Ephemeral        bool
-	DatabaseFilePath string
-	FrontendPort     int
-	MetricsPort      int
-	DynamicPorts     bool
-	Namespaces       []string
-	SQLitePragmas    map[string]string
-	Logger           log.Logger
-	ServerOptions    []temporal.ServerOption
-	portProvider     *portProvider
-	FrontendIP       string
-	BaseConfig       *config.Config
-	DynamicConfig    dynamicconfig.StaticClient
-}
 
 var supportedPragmas = map[string]struct{}{
 	"journal_mode": {},
@@ -57,13 +39,13 @@ func getAllowedPragmas() []string {
 	return allowedPragmaList
 }
 
-func newDefaultConfig() (*liteConfig, error) {
+func newDefaultConfig() (*serverConfig, error) {
 	userConfigDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("cannot determine user config directory: %w", err)
 	}
 
-	return &liteConfig{
+	return &serverConfig{
 		Ephemeral:        false,
 		DatabaseFilePath: filepath.Join(userConfigDir, "temporalite", "db", "default.db"),
 		FrontendPort:     0,
@@ -82,7 +64,7 @@ func newDefaultConfig() (*liteConfig, error) {
 	}, nil
 }
 
-func convertLiteConfig(cfg *liteConfig) *config.Config {
+func convertLiteConfig(cfg *serverConfig) *config.Config {
 	defer func() {
 		if err := cfg.portProvider.Close(); err != nil {
 			panic(err)
@@ -196,7 +178,7 @@ func convertLiteConfig(cfg *liteConfig) *config.Config {
 	return baseConfig
 }
 
-func (cfg *liteConfig) mustGetService(frontendPortOffset int) config.Service {
+func (cfg *serverConfig) mustGetService(frontendPortOffset int) config.Service {
 	svc := config.Service{
 		RPC: config.RPC{
 			GRPCPort:        cfg.FrontendPort + frontendPortOffset,

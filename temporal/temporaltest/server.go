@@ -24,7 +24,7 @@ import (
 // A TestServer is a Temporal server listening on a system-chosen port on the
 // local loopback interface, for use in end-to-end tests.
 type TestServer struct {
-	server               *temporalite.TemporaliteServer
+	server               *temporalite.Server
 	defaultTestNamespace string
 	defaultClient        client.Client
 	clients              []client.Client

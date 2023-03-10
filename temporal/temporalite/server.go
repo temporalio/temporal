@@ -21,19 +21,19 @@ import (
 	"go.temporal.io/server/temporal"
 )
 
-// TemporaliteServer is a high level wrapper for temporal.Server that automatically configures a sqlite backend.
-type TemporaliteServer struct {
+// Server is a high level wrapper for temporal.Server that automatically configures a sqlite backend.
+type Server struct {
 	internal         temporal.Server
 	frontendHostPort string
-	config           *liteConfig
+	config           *serverConfig
 }
 
 type ServerOption interface {
-	apply(*liteConfig)
+	apply(*serverConfig)
 }
 
-// NewServer returns a TemporaliteServer with a sqlite backend.
-func NewServer(opts ...ServerOption) (*TemporaliteServer, error) {
+// NewServer returns a Server with a sqlite backend.
+func NewServer(opts ...ServerOption) (*Server, error) {
 	c, err := newDefaultConfig()
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func NewServer(opts ...ServerOption) (*TemporaliteServer, error) {
 		return nil, fmt.Errorf("unable to instantiate server: %w", err)
 	}
 
-	s := &TemporaliteServer{
+	s := &Server{
 		internal:         srv,
 		frontendHostPort: cfg.PublicClient.HostPort,
 		config:           c,
@@ -122,12 +122,12 @@ func NewServer(opts ...ServerOption) (*TemporaliteServer, error) {
 }
 
 // Start temporal server.
-func (s *TemporaliteServer) Start() error {
+func (s *Server) Start() error {
 	return s.internal.Start()
 }
 
 // Stop the server.
-func (s *TemporaliteServer) Stop() {
+func (s *Server) Stop() {
 	if s == nil {
 		return
 	}
@@ -136,7 +136,7 @@ func (s *TemporaliteServer) Stop() {
 
 // NewClient initializes a client ready to communicate with the Temporal
 // server in the target namespace.
-func (s *TemporaliteServer) NewClient(ctx context.Context, namespace string) (client.Client, error) {
+func (s *Server) NewClient(ctx context.Context, namespace string) (client.Client, error) {
 	return s.NewClientWithOptions(ctx, client.Options{Namespace: namespace})
 }
 
@@ -145,7 +145,7 @@ func (s *TemporaliteServer) NewClient(ctx context.Context, namespace string) (cl
 // To set the client's namespace, use the corresponding field in client.Options.
 //
 // Note that the HostPort and ConnectionOptions fields of client.Options will always be overridden.
-func (s *TemporaliteServer) NewClientWithOptions(ctx context.Context, options client.Options) (client.Client, error) {
+func (s *Server) NewClientWithOptions(ctx context.Context, options client.Options) (client.Client, error) {
 	options.HostPort = s.frontendHostPort
 	return client.NewClient(options)
 }
@@ -154,6 +154,6 @@ func (s *TemporaliteServer) NewClientWithOptions(ctx context.Context, options cl
 //
 // When constructing a Temporalite client from within the same process,
 // NewClient or NewClientWithOptions should be used instead.
-func (s *TemporaliteServer) FrontendHostPort() string {
+func (s *Server) FrontendHostPort() string {
 	return s.frontendHostPort
 }
