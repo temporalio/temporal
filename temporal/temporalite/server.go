@@ -6,7 +6,6 @@ package temporalite
 
 import (
 	"os"
-	"time"
 
 	"context"
 	"fmt"
@@ -157,11 +156,4 @@ func (s *TemporaliteServer) NewClientWithOptions(ctx context.Context, options cl
 // NewClient or NewClientWithOptions should be used instead.
 func (s *TemporaliteServer) FrontendHostPort() string {
 	return s.frontendHostPort
-}
-
-func timeoutFromContext(ctx context.Context, defaultTimeout time.Duration) time.Duration {
-	if deadline, ok := ctx.Deadline(); ok {
-		return deadline.Sub(time.Now())
-	}
-	return defaultTimeout
 }
