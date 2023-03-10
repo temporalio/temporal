@@ -75,7 +75,7 @@ func Invoke(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
-	upd, duplicate, removeFn := ms.UpdateRegistry().Add(req.GetRequest().GetRequest())
+	upd, duplicate, removeFn := weCtx.GetContext().UpdateRegistry().Add(req.GetRequest().GetRequest())
 	if removeFn != nil {
 		defer removeFn()
 	}

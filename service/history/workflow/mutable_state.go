@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type TransactionPolicy int
@@ -198,8 +197,6 @@ type (
 		GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus)
 		GetQueryRegistry() QueryRegistry
 		IsTransientWorkflowTask() bool
-		// TODO (alex-update): move this out from mutable state.
-		UpdateRegistry() update.Registry
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
 		HasInFlightWorkflowTask() bool

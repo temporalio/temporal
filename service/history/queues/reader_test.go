@@ -94,7 +94,7 @@ func (s *readerSuite) TestStartLoadStop() {
 	r := NewRandomRange()
 	scopes := []Scope{NewScope(r, predicates.Universal[tasks.Task]())}
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		s.Equal(r, paginationRange)
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
@@ -111,7 +111,7 @@ func (s *readerSuite) TestStartLoadStop() {
 	}).Times(1)
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
-	reader := s.newTestReader(scopes, paginationFnProvider)
+	reader := s.newTestReader(scopes, paginationFnProvider, NoopReaderCompletionFn)
 	mockTimeSource := clock.NewEventTimeSource()
 	mockTimeSource.Update(scopes[0].Range.ExclusiveMax.FireTime)
 	reader.timeSource = mockTimeSource
@@ -124,7 +124,7 @@ func (s *readerSuite) TestStartLoadStop() {
 func (s *readerSuite) TestScopes() {
 	scopes := NewRandomScopes(10)
 
-	reader := s.newTestReader(scopes, nil)
+	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
 	actualScopes := reader.Scopes()
 	for idx, expectedScope := range scopes {
 		s.True(expectedScope.Equals(actualScopes[idx]))
@@ -133,7 +133,7 @@ func (s *readerSuite) TestScopes() {
 
 func (s *readerSuite) TestSplitSlices() {
 	scopes := NewRandomScopes(3)
-	reader := s.newTestReader(scopes, nil)
+	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
 
 	splitter := func(s Slice) ([]Slice, bool) {
 		// split head
@@ -174,7 +174,7 @@ func (s *readerSuite) TestSplitSlices() {
 
 func (s *readerSuite) TestMergeSlices() {
 	scopes := NewRandomScopes(rand.Intn(10))
-	reader := s.newTestReader(scopes, nil)
+	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
 
 	incomingScopes := NewRandomScopes(rand.Intn(10))
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
@@ -201,7 +201,7 @@ func (s *readerSuite) TestAppendSlices() {
 	totalScopes := 10
 	scopes := NewRandomScopes(totalScopes)
 	currentScopes := scopes[:totalScopes/2]
-	reader := s.newTestReader(currentScopes, nil)
+	reader := s.newTestReader(currentScopes, nil, NoopReaderCompletionFn)
 
 	incomingScopes := scopes[totalScopes/2:]
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
@@ -235,7 +235,7 @@ func (s *readerSuite) TestShrinkSlices() {
 		scopes[idx].Range.InclusiveMin = scopes[idx].Range.ExclusiveMax
 	}
 
-	reader := s.newTestReader(scopes, nil)
+	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
 	reader.ShrinkSlices()
 
 	actualScopes := reader.Scopes()
@@ -253,10 +253,28 @@ func (s *readerSuite) TestShrinkSlices() {
 	}
 }
 
-func (s *readerSuite) TestThrottle() {
+func (s *readerSuite) TestNotify() {
+	reader := s.newTestReader([]Scope{}, nil, NoopReaderCompletionFn)
+
+	// pause will set the throttle timer, which notify is supposed to stop
+	reader.Pause(time.Hour)
+
+	reader.Lock()
+	s.NotNil(reader.throttleTimer)
+	reader.Unlock()
+
+	reader.Notify()
+	<-reader.notifyCh
+
+	reader.Lock()
+	s.Nil(reader.throttleTimer)
+	reader.Unlock()
+}
+
+func (s *readerSuite) TestPause() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -265,7 +283,7 @@ func (s *readerSuite) TestThrottle() {
 		}
 	}
 
-	reader := s.newTestReader(scopes, paginationFnProvider)
+	reader := s.newTestReader(scopes, paginationFnProvider, NoopReaderCompletionFn)
 	mockTimeSource := clock.NewEventTimeSource()
 	mockTimeSource.Update(scopes[0].Range.ExclusiveMax.FireTime)
 	reader.timeSource = mockTimeSource
@@ -293,19 +311,22 @@ func (s *readerSuite) TestThrottle() {
 func (s *readerSuite) TestLoadAndSubmitTasks_Throttled() {
 	scopes := NewRandomScopes(1)
 
-	reader := s.newTestReader(scopes, nil)
+	completionFnCalled := false
+	reader := s.newTestReader(scopes, nil, func(_ int32) { completionFnCalled = true })
 	reader.Pause(100 * time.Millisecond)
 
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
 	// should be no-op
 	reader.loadAndSubmitTasks()
+	s.False(completionFnCalled)
 }
 
 func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 	scopes := NewRandomScopes(1)
 
-	reader := s.newTestReader(scopes, nil)
+	completionFnCalled := false
+	reader := s.newTestReader(scopes, nil, func(_ int32) { completionFnCalled = true })
 
 	s.monitor.SetSlicePendingTaskCount(
 		reader.slices.Front().Value.(Slice),
@@ -314,12 +335,13 @@ func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 
 	// should be no-op
 	reader.loadAndSubmitTasks()
+	s.False(completionFnCalled)
 }
 
 func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			result := make([]tasks.Task, 0, 100)
 			for i := 0; i != 100; i++ {
@@ -333,7 +355,8 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 		}
 	}
 
-	reader := s.newTestReader(scopes, paginationFnProvider)
+	completionFnCalled := false
+	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int32) { completionFnCalled = true })
 	mockTimeSource := clock.NewEventTimeSource()
 	mockTimeSource.Update(scopes[0].Range.ExclusiveMax.FireTime)
 	reader.timeSource = mockTimeSource
@@ -349,12 +372,13 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	<-reader.notifyCh // should trigger next round of load
 	s.Equal(reader.options.BatchSize(), taskSubmitted)
 	s.True(scopes[0].Equals(reader.nextReadSlice.Value.(Slice).Scope()))
+	s.False(completionFnCalled)
 }
 
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 	scopes := NewRandomScopes(2)
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -363,7 +387,8 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 		}
 	}
 
-	reader := s.newTestReader(scopes, paginationFnProvider)
+	completionFnCalled := false
+	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int32) { completionFnCalled = true })
 	mockTimeSource := clock.NewEventTimeSource()
 	mockTimeSource.Update(scopes[0].Range.ExclusiveMax.FireTime)
 	reader.timeSource = mockTimeSource
@@ -379,12 +404,13 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 	<-reader.notifyCh // should trigger next round of load
 	s.Equal(1, taskSubmitted)
 	s.True(scopes[1].Equals(reader.nextReadSlice.Value.(Slice).Scope()))
+	s.False(completionFnCalled)
 }
 
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -393,7 +419,8 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 		}
 	}
 
-	reader := s.newTestReader(scopes, paginationFnProvider)
+	completionFnCalled := false
+	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int32) { completionFnCalled = true })
 	mockTimeSource := clock.NewEventTimeSource()
 	mockTimeSource.Update(scopes[0].Range.ExclusiveMax.FireTime)
 	reader.timeSource = mockTimeSource
@@ -414,12 +441,13 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 	}
 	s.Equal(1, taskSubmitted)
 	s.Nil(reader.nextReadSlice)
+	s.True(completionFnCalled)
 }
 
 func (s *readerSuite) TestSubmitTask() {
 	r := NewRandomRange()
 	scopes := []Scope{NewScope(r, predicates.Universal[tasks.Task]())}
-	reader := s.newTestReader(scopes, nil)
+	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
 
 	mockExecutable := NewMockExecutable(s.controller)
 
@@ -457,6 +485,7 @@ func (s *readerSuite) validateSlicesOrdered(
 func (s *readerSuite) newTestReader(
 	scopes []Scope,
 	paginationFnProvider PaginationFnProvider,
+	completionFn ReaderCompletionFn,
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
@@ -477,6 +506,7 @@ func (s *readerSuite) newTestReader(
 		clock.NewRealTimeSource(),
 		NewReaderPriorityRateLimiter(func() float64 { return 20 }, 1),
 		s.monitor,
+		completionFn,
 		s.logger,
 		s.metricsHandler,
 	)

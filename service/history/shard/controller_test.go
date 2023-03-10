@@ -29,7 +29,9 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	reflect "reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -37,6 +39,7 @@ import (
 
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"golang.org/x/exp/maps"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -69,7 +72,7 @@ type (
 		mockClusterMetadata *cluster.MockMetadata
 		mockServiceResolver *membership.MockServiceResolver
 
-		hostInfo          *membership.HostInfo
+		hostInfo          membership.HostInfo
 		mockShardManager  *persistence.MockShardManager
 		mockEngineFactory *MockEngineFactory
 
@@ -178,7 +181,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 						QueueStates:            queueStates,
 					},
 				}, nil)
-			s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
+			s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:                shardID,
 					Owner:                  s.hostInfo.Identity(),
@@ -189,14 +192,14 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 					QueueStates:            queueStates,
 				},
 				PreviousRangeID: 5,
-			}).Return(nil)
+			})).Return(nil)
 			s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
 				ShardID: shardID,
 				RangeID: 6,
 			}).Return(nil).AnyTimes()
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
-			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil)
+			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfoFromAddress(ownerHost), nil)
 		}
 	}
 
@@ -248,7 +251,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 						QueueStates:            queueStates,
 					},
 				}, nil)
-			s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
+			s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:                shardID,
 					Owner:                  s.hostInfo.Identity(),
@@ -259,14 +262,16 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 					QueueStates:            queueStates,
 				},
 				PreviousRangeID: 5,
-			}).Return(nil)
+			})).Return(nil)
 			s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
 				ShardID: shardID,
 				RangeID: 6,
 			}).Return(nil).AnyTimes()
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
-			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil)
+			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(
+				membership.NewHostInfoFromAddress(ownerHost), nil,
+			)
 		}
 	}
 
@@ -327,7 +332,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 					QueueStates:            queueStates,
 				},
 			}, nil)
-		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
+		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:                shardID,
 				Owner:                  s.hostInfo.Identity(),
@@ -338,7 +343,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 				QueueStates:            queueStates,
 			},
 			PreviousRangeID: 5,
-		}).Return(nil)
+		})).Return(nil)
 		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
 			ShardID: shardID,
 			RangeID: 6,
@@ -391,7 +396,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 					QueueStates:            queueStates,
 				},
 			}, nil)
-		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
+		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:                shardID,
 				Owner:                  s.hostInfo.Identity(),
@@ -402,7 +407,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 				QueueStates:            queueStates,
 			},
 			PreviousRangeID: 5,
-		}).Return(nil)
+		})).Return(nil)
 		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
 			ShardID: shardID,
 			RangeID: 6,
@@ -476,7 +481,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 
 	workerWG.Wait()
 
-	differentHostInfo := membership.NewHostInfo("another-host", nil)
+	differentHostInfo := membership.NewHostInfoFromAddress("another-host")
 	for shardID := int32(1); shardID <= 2; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return()
@@ -875,7 +880,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 				QueueStates:            queueStates,
 			},
 		}, nil).MinTimes(minTimes)
-	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
 		ShardInfo: &persistencespb.ShardInfo{
 			ShardId:                shardID,
 			Owner:                  s.hostInfo.Identity(),
@@ -886,7 +891,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 			QueueStates:            queueStates,
 		},
 		PreviousRangeID: currentRangeID,
-	}).Return(nil).MinTimes(minTimes)
+	})).Return(nil).MinTimes(minTimes)
 	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
 		ShardID: shardID,
 		RangeID: newRangeID,
@@ -996,4 +1001,26 @@ func (s getOrCreateShardRequestMatcher) Matches(x interface{}) bool {
 
 func (s getOrCreateShardRequestMatcher) String() string {
 	return strconv.Itoa(int(s))
+}
+
+type updateShardRequestMatcher persistence.UpdateShardRequest
+
+func (m updateShardRequestMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*persistence.UpdateShardRequest)
+	if !ok {
+		return false
+	}
+
+	return m.PreviousRangeID == req.PreviousRangeID &&
+		m.ShardInfo.ShardId == req.ShardInfo.ShardId &&
+		strings.Contains(req.ShardInfo.Owner, m.ShardInfo.Owner) &&
+		m.ShardInfo.RangeId == req.ShardInfo.RangeId &&
+		m.ShardInfo.StolenSinceRenew == req.ShardInfo.StolenSinceRenew &&
+		maps.Equal(m.ShardInfo.ReplicationDlqAckLevel, req.ShardInfo.ReplicationDlqAckLevel) &&
+		reflect.DeepEqual(m.ShardInfo.QueueAckLevels, req.ShardInfo.QueueAckLevels) &&
+		reflect.DeepEqual(m.ShardInfo.QueueStates, req.ShardInfo.QueueStates)
+}
+
+func (m updateShardRequestMatcher) String() string {
+	return fmt.Sprintf("%+v", (persistence.UpdateShardRequest)(m))
 }

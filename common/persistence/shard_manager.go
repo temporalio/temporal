@@ -107,6 +107,7 @@ func (m *shardManagerImpl) UpdateShard(
 	internalRequest := &InternalUpdateShardRequest{
 		ShardID:         request.ShardInfo.GetShardId(),
 		RangeID:         request.ShardInfo.GetRangeId(),
+		Owner:           request.ShardInfo.GetOwner(),
 		ShardInfo:       shardInfoBlob,
 		PreviousRangeID: request.PreviousRangeID,
 	}

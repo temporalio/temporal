@@ -368,7 +368,7 @@ func (c *ControllerImpl) shardManagementPump() {
 			c.contextTaggedLogger.Info("", tag.ValueRingMembershipChangedEvent,
 				tag.NumberProcessed(len(changedEvent.HostsAdded)),
 				tag.NumberDeleted(len(changedEvent.HostsRemoved)),
-				tag.Number(int64(len(changedEvent.HostsUpdated))))
+			)
 			c.acquireShards()
 		}
 	}

@@ -250,31 +250,6 @@ func (s *TestBase) fatalOnError(msg string, err error) {
 	}
 }
 
-// GetOrCreateShard is a utility method to get/create the shard using persistence layer
-func (s *TestBase) GetOrCreateShard(ctx context.Context, shardID int32, owner string, rangeID int64) (*persistencespb.ShardInfo, error) {
-	info := &persistencespb.ShardInfo{
-		ShardId: shardID,
-		Owner:   owner,
-		RangeId: rangeID,
-	}
-	resp, err := s.ShardMgr.GetOrCreateShard(ctx, &persistence.GetOrCreateShardRequest{
-		ShardID:          shardID,
-		InitialShardInfo: info,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return resp.ShardInfo, nil
-}
-
-// UpdateShard is a utility method to update the shard using persistence layer
-func (s *TestBase) UpdateShard(ctx context.Context, updatedInfo *persistencespb.ShardInfo, previousRangeID int64) error {
-	return s.ShardMgr.UpdateShard(ctx, &persistence.UpdateShardRequest{
-		ShardInfo:       updatedInfo,
-		PreviousRangeID: previousRangeID,
-	})
-}
-
 // TearDownWorkflowStore to cleanup
 func (s *TestBase) TearDownWorkflowStore() {
 	s.TaskMgr.Close()

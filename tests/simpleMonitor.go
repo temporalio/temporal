@@ -33,7 +33,7 @@ import (
 )
 
 type simpleMonitor struct {
-	hostInfo  *membership.HostInfo
+	hostInfo  membership.HostInfo
 	resolvers map[primitives.ServiceName]membership.ServiceResolver
 }
 
@@ -44,7 +44,7 @@ func newSimpleMonitor(serviceName primitives.ServiceName, hosts map[primitives.S
 		resolvers[service] = newSimpleResolver(service, hostList)
 	}
 
-	hostInfo := membership.NewHostInfo(hosts[serviceName][0], map[string]string{membership.RoleKey: string(serviceName)})
+	hostInfo := membership.NewHostInfoFromAddress(hosts[serviceName][0])
 	return &simpleMonitor{hostInfo, resolvers}
 }
 
@@ -58,7 +58,7 @@ func (s *simpleMonitor) EvictSelf() error {
 	return nil
 }
 
-func (s *simpleMonitor) WhoAmI() (*membership.HostInfo, error) {
+func (s *simpleMonitor) WhoAmI() (membership.HostInfo, error) {
 	return s.hostInfo, nil
 }
 
@@ -70,7 +70,7 @@ func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.
 	return resolver, nil
 }
 
-func (s *simpleMonitor) Lookup(service primitives.ServiceName, key string) (*membership.HostInfo, error) {
+func (s *simpleMonitor) Lookup(service primitives.ServiceName, key string) (membership.HostInfo, error) {
 	resolver, ok := s.resolvers[service]
 	if !ok {
 		return nil, fmt.Errorf("cannot lookup host for service %v", service)

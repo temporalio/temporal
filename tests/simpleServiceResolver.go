@@ -32,21 +32,21 @@ import (
 )
 
 type simpleResolver struct {
-	hosts    []*membership.HostInfo
+	hosts    []membership.HostInfo
 	hashfunc func([]byte) uint32
 }
 
 // newSimpleResolver returns a service resolver that maintains static mapping
 // between services and host info
 func newSimpleResolver(service primitives.ServiceName, hosts []string) membership.ServiceResolver {
-	hostInfos := make([]*membership.HostInfo, 0, len(hosts))
+	hostInfos := make([]membership.HostInfo, 0, len(hosts))
 	for _, host := range hosts {
-		hostInfos = append(hostInfos, membership.NewHostInfo(host, map[string]string{membership.RoleKey: string(service)}))
+		hostInfos = append(hostInfos, membership.NewHostInfoFromAddress(host))
 	}
 	return &simpleResolver{hostInfos, farm.Fingerprint32}
 }
 
-func (s *simpleResolver) Lookup(key string) (*membership.HostInfo, error) {
+func (s *simpleResolver) Lookup(key string) (membership.HostInfo, error) {
 	hash := int(s.hashfunc([]byte(key)))
 	idx := hash % len(s.hosts)
 	return s.hosts[idx], nil
@@ -64,7 +64,7 @@ func (s *simpleResolver) MemberCount() int {
 	return len(s.hosts)
 }
 
-func (s *simpleResolver) Members() []*membership.HostInfo {
+func (s *simpleResolver) Members() []membership.HostInfo {
 	return s.hosts
 }
 
