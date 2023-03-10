@@ -20,7 +20,6 @@ import (
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/temporal"
-	"go.temporal.io/server/temporal/internal/liteconfig"
 )
 
 // TemporaliteServer is a high level wrapper for temporal.Server that automatically configures a sqlite backend.
@@ -28,16 +27,16 @@ type TemporaliteServer struct {
 	internal         temporal.Server
 	ui               UIServer
 	frontendHostPort string
-	config           *liteconfig.Config
+	config           *liteConfig
 }
 
 type ServerOption interface {
-	apply(*liteconfig.Config)
+	apply(*liteConfig)
 }
 
 // NewServer returns a TemporaliteServer with a sqlite backend.
 func NewServer(opts ...ServerOption) (*TemporaliteServer, error) {
-	c, err := liteconfig.NewDefaultConfig()
+	c, err := newDefaultConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -46,12 +45,12 @@ func NewServer(opts ...ServerOption) (*TemporaliteServer, error) {
 	}
 
 	for pragma := range c.SQLitePragmas {
-		if _, ok := liteconfig.SupportedPragmas[strings.ToLower(pragma)]; !ok {
-			return nil, fmt.Errorf("ERROR: unsupported pragma %q, %v allowed", pragma, liteconfig.GetAllowedPragmas())
+		if _, ok := supportedPragmas[strings.ToLower(pragma)]; !ok {
+			return nil, fmt.Errorf("ERROR: unsupported pragma %q, %v allowed", pragma, getAllowedPragmas())
 		}
 	}
 
-	cfg := liteconfig.Convert(c)
+	cfg := convertLiteConfig(c)
 	sqlConfig := cfg.Persistence.DataStores[sqliteplugin.PluginName].SQL
 
 	if !c.Ephemeral {

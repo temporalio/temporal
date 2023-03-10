@@ -2,7 +2,7 @@
 //
 // This product includes software developed at Datadog (https://www.datadoghq.com/). Copyright 2021 Datadog, Inc.
 
-package liteconfig
+package temporalite
 
 import (
 	"math/rand"
@@ -27,16 +27,6 @@ const (
 	defaultFrontendPort = 7233
 )
 
-// UIServer abstracts the github.com/temporalio/ui-server project to
-// make it an optional import for programs that need web UI support.
-//
-// A working implementation of this interface is available here:
-// https://pkg.go.dev/github.com/temporalio/ui-server/server#Server
-type UIServer interface {
-	Start() error
-	Stop()
-}
-
 type noopUIServer struct{}
 
 func (noopUIServer) Start() error {
@@ -45,7 +35,7 @@ func (noopUIServer) Start() error {
 
 func (noopUIServer) Stop() {}
 
-type Config struct {
+type liteConfig struct {
 	Ephemeral        bool
 	DatabaseFilePath string
 	FrontendPort     int
@@ -55,34 +45,34 @@ type Config struct {
 	SQLitePragmas    map[string]string
 	Logger           log.Logger
 	ServerOptions    []temporal.ServerOption
-	portProvider     *PortProvider
+	portProvider     *portProvider
 	FrontendIP       string
 	UIServer         UIServer
 	BaseConfig       *config.Config
 	DynamicConfig    dynamicconfig.StaticClient
 }
 
-var SupportedPragmas = map[string]struct{}{
+var supportedPragmas = map[string]struct{}{
 	"journal_mode": {},
 	"synchronous":  {},
 }
 
-func GetAllowedPragmas() []string {
+func getAllowedPragmas() []string {
 	var allowedPragmaList []string
-	for k := range SupportedPragmas {
+	for k := range supportedPragmas {
 		allowedPragmaList = append(allowedPragmaList, k)
 	}
 	sort.Strings(allowedPragmaList)
 	return allowedPragmaList
 }
 
-func NewDefaultConfig() (*Config, error) {
+func newDefaultConfig() (*liteConfig, error) {
 	userConfigDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("cannot determine user config directory: %w", err)
 	}
 
-	return &Config{
+	return &liteConfig{
 		Ephemeral:        false,
 		DatabaseFilePath: filepath.Join(userConfigDir, "temporalite", "db", "default.db"),
 		FrontendPort:     0,
@@ -96,13 +86,13 @@ func NewDefaultConfig() (*Config, error) {
 			Level:      "info",
 			OutputFile: "",
 		})),
-		portProvider: NewPortProvider(),
+		portProvider: newPortProvider(),
 		FrontendIP:   "",
 		BaseConfig:   &config.Config{},
 	}, nil
 }
 
-func Convert(cfg *Config) *config.Config {
+func convertLiteConfig(cfg *liteConfig) *config.Config {
 	defer func() {
 		if err := cfg.portProvider.Close(); err != nil {
 			panic(err)
@@ -216,7 +206,7 @@ func Convert(cfg *Config) *config.Config {
 	return baseConfig
 }
 
-func (cfg *Config) mustGetService(frontendPortOffset int) config.Service {
+func (cfg *liteConfig) mustGetService(frontendPortOffset int) config.Service {
 	svc := config.Service{
 		RPC: config.RPC{
 			GRPCPort:        cfg.FrontendPort + frontendPortOffset,
