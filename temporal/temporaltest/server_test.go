@@ -13,10 +13,12 @@ import (
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/server/temporal/internal/examples/helloworld"
 	"go.temporal.io/server/temporal/temporaltest"
 )
 
@@ -30,14 +32,14 @@ func ExampleNewServer() {
 
 	// Register a new worker on the `hello_world` task queue
 	ts.NewWorker("hello_world", func(registry worker.Registry) {
-		helloworld.RegisterWorkflowsAndActivities(registry)
+		RegisterWorkflowsAndActivities(registry)
 	})
 
 	// Start test workflow
 	wfr, err := c.ExecuteWorkflow(
 		context.Background(),
 		client.StartWorkflowOptions{TaskQueue: "hello_world"},
-		helloworld.Greet,
+		Greet,
 		"world",
 	)
 	if err != nil {
@@ -59,7 +61,7 @@ func TestNewServer(t *testing.T) {
 	ts := temporaltest.NewServer(temporaltest.WithT(t))
 
 	ts.NewWorker("hello_world", func(registry worker.Registry) {
-		helloworld.RegisterWorkflowsAndActivities(registry)
+		RegisterWorkflowsAndActivities(registry)
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -68,7 +70,7 @@ func TestNewServer(t *testing.T) {
 	wfr, err := ts.GetDefaultClient().ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{TaskQueue: "hello_world"},
-		helloworld.Greet,
+		Greet,
 		"world",
 	)
 	if err != nil {
@@ -91,7 +93,7 @@ func TestNewWorkerWithOptions(t *testing.T) {
 	ts.NewWorkerWithOptions(
 		"hello_world",
 		func(registry worker.Registry) {
-			helloworld.RegisterWorkflowsAndActivities(registry)
+			RegisterWorkflowsAndActivities(registry)
 		},
 		worker.Options{
 			MaxConcurrentActivityExecutionSize:      1,
@@ -105,7 +107,7 @@ func TestNewWorkerWithOptions(t *testing.T) {
 	wfr, err := ts.GetDefaultClient().ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{TaskQueue: "hello_world"},
-		helloworld.Greet,
+		Greet,
 		"world",
 	)
 	if err != nil {
@@ -135,7 +137,7 @@ func TestDefaultWorkerOptions(t *testing.T) {
 	)
 
 	ts.NewWorker("hello_world", func(registry worker.Registry) {
-		helloworld.RegisterWorkflowsAndActivities(registry)
+		RegisterWorkflowsAndActivities(registry)
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -143,7 +145,7 @@ func TestDefaultWorkerOptions(t *testing.T) {
 	wfr, err := ts.GetDefaultClient().ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{TaskQueue: "hello_world"},
-		helloworld.Greet,
+		Greet,
 		"world",
 	)
 	if err != nil {
@@ -162,7 +164,7 @@ func TestDefaultWorkerOptions(t *testing.T) {
 
 func TestClientWithCustomInterceptor(t *testing.T) {
 	var opts client.Options
-	opts.Interceptors = append(opts.Interceptors, helloworld.NewTestInterceptor())
+	opts.Interceptors = append(opts.Interceptors, NewTestInterceptor())
 	ts := temporaltest.NewServer(
 		temporaltest.WithT(t),
 		temporaltest.WithBaseClientOptions(opts),
@@ -171,7 +173,7 @@ func TestClientWithCustomInterceptor(t *testing.T) {
 	ts.NewWorker(
 		"hello_world",
 		func(registry worker.Registry) {
-			helloworld.RegisterWorkflowsAndActivities(registry)
+			RegisterWorkflowsAndActivities(registry)
 		},
 	)
 
@@ -181,7 +183,7 @@ func TestClientWithCustomInterceptor(t *testing.T) {
 	wfr, err := ts.GetDefaultClient().ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{TaskQueue: "hello_world"},
-		helloworld.Greet,
+		Greet,
 		"world",
 	)
 	if err != nil {
@@ -238,7 +240,7 @@ func BenchmarkRunWorkflow(b *testing.B) {
 	defer ts.Stop()
 
 	ts.NewWorker("hello_world", func(registry worker.Registry) {
-		helloworld.RegisterWorkflowsAndActivities(registry)
+		RegisterWorkflowsAndActivities(registry)
 	})
 	c := ts.GetDefaultClient()
 
@@ -250,7 +252,7 @@ func BenchmarkRunWorkflow(b *testing.B) {
 			wfr, err := c.ExecuteWorkflow(
 				ctx,
 				client.StartWorkflowOptions{TaskQueue: "hello_world"},
-				helloworld.Greet,
+				Greet,
 				"world",
 			)
 			if err != nil {
@@ -262,4 +264,85 @@ func BenchmarkRunWorkflow(b *testing.B) {
 			}
 		}(b)
 	}
+}
+
+// Example workflow/activity
+
+// Greet implements a Temporal workflow that returns a salutation for a given subject.
+func Greet(ctx workflow.Context, subject string) (string, error) {
+	var greeting string
+	if err := workflow.ExecuteActivity(
+		workflow.WithActivityOptions(ctx, workflow.ActivityOptions{ScheduleToCloseTimeout: time.Second}),
+		PickGreeting,
+	).Get(ctx, &greeting); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%s %s", greeting, subject), nil
+}
+
+// PickGreeting is a Temporal activity that returns some greeting text.
+func PickGreeting(ctx context.Context) (string, error) {
+	return "Hello", nil
+}
+
+func HandleIntercept(ctx context.Context) (string, error) {
+	return "Ok", nil
+}
+
+func RegisterWorkflowsAndActivities(r worker.Registry) {
+	r.RegisterWorkflow(Greet)
+	r.RegisterActivity(PickGreeting)
+	r.RegisterActivityWithOptions(HandleIntercept, activity.RegisterOptions{Name: "HandleIntercept"})
+}
+
+// Example interceptor
+
+var _ interceptor.Interceptor = &Interceptor{}
+
+type Interceptor struct {
+	interceptor.InterceptorBase
+}
+
+type WorkflowInterceptor struct {
+	interceptor.WorkflowInboundInterceptorBase
+}
+
+func NewTestInterceptor() *Interceptor {
+	return &Interceptor{}
+}
+
+func (i *Interceptor) InterceptClient(next interceptor.ClientOutboundInterceptor) interceptor.ClientOutboundInterceptor {
+	return i.InterceptorBase.InterceptClient(next)
+}
+
+func (i *Interceptor) InterceptWorkflow(ctx workflow.Context, next interceptor.WorkflowInboundInterceptor) interceptor.WorkflowInboundInterceptor {
+	return &WorkflowInterceptor{
+		WorkflowInboundInterceptorBase: interceptor.WorkflowInboundInterceptorBase{
+			Next: next,
+		},
+	}
+}
+
+func (i *WorkflowInterceptor) Init(outbound interceptor.WorkflowOutboundInterceptor) error {
+	return i.Next.Init(outbound)
+}
+
+func (i *WorkflowInterceptor) ExecuteWorkflow(ctx workflow.Context, in *interceptor.ExecuteWorkflowInput) (interface{}, error) {
+	version := workflow.GetVersion(ctx, "version", workflow.DefaultVersion, 1)
+	var err error
+
+	if version != workflow.DefaultVersion {
+		var vpt string
+		err = workflow.ExecuteLocalActivity(
+			workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{ScheduleToCloseTimeout: time.Second}),
+			"HandleIntercept",
+		).Get(ctx, &vpt)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return i.Next.ExecuteWorkflow(ctx, in)
 }
