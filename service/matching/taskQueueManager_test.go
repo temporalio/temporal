@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/api/taskqueue/v1"
 	"math"
 	"sync/atomic"
 	"testing"
@@ -42,6 +41,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -513,7 +513,7 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *tes
 	tqCfg.tqId = subTqId
 
 	data := &persistencespb.VersioningData{
-		VersionSets: []*taskqueue.CompatibleVersionSet{mkNewSet("0")},
+		VersionSets: []*taskqueuepb.CompatibleVersionSet{mkNewSet("0")},
 	}
 	asResp := &matchingservice.GetTaskQueueMetadataResponse{
 		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
@@ -552,7 +552,7 @@ func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *tes
 	tqCfg.tqId = subTqId
 
 	data := &persistencespb.VersioningData{
-		VersionSets: []*taskqueue.CompatibleVersionSet{mkNewSet("0")},
+		VersionSets: []*taskqueuepb.CompatibleVersionSet{mkNewSet("0")},
 	}
 	asResp := &matchingservice.GetTaskQueueMetadataResponse{
 		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
@@ -618,7 +618,7 @@ func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 	// Make a change, mock verifies children are invalidated
 	require.NoError(t, rootTq.MutateVersioningData(ctx, func(vd *persistencespb.VersioningData) error {
 		*vd = persistencespb.VersioningData{
-			VersionSets: []*taskqueue.CompatibleVersionSet{mkNewSet("0")},
+			VersionSets: []*taskqueuepb.CompatibleVersionSet{mkNewSet("0")},
 		}
 		return nil
 	}))
@@ -640,7 +640,7 @@ func TestTaskQueueSubPartitionPollsPeriodically(t *testing.T) {
 	asResp := &matchingservice.GetTaskQueueMetadataResponse{
 		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
 			VersioningData: &persistencespb.VersioningData{
-				VersionSets: []*taskqueue.CompatibleVersionSet{mkNewSet("0")},
+				VersionSets: []*taskqueuepb.CompatibleVersionSet{mkNewSet("0")},
 			},
 		},
 	}
@@ -678,7 +678,7 @@ func TestTaskQueueSubPartitionDoesNotPollIfNoDataThenPollsWhenInvalidated(t *tes
 		},
 	}
 	verDat := &persistencespb.VersioningData{
-		VersionSets: []*taskqueue.CompatibleVersionSet{mkNewSet("0")},
+		VersionSets: []*taskqueuepb.CompatibleVersionSet{mkNewSet("0")},
 	}
 	hasDatResp := &matchingservice.GetTaskQueueMetadataResponse{
 		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
@@ -725,7 +725,7 @@ func TestTaskQueueManagerWaitInitFailThenPass(t *testing.T) {
 	}
 
 	data := &persistencespb.VersioningData{
-		VersionSets: []*taskqueue.CompatibleVersionSet{mkNewSet("0")},
+		VersionSets: []*taskqueuepb.CompatibleVersionSet{mkNewSet("0")},
 	}
 	asResp := &matchingservice.GetTaskQueueMetadataResponse{
 		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
@@ -792,7 +792,7 @@ func TestActivityQueueGetsVersioningDataFromWorkflowQueue(t *testing.T) {
 	ctx := context.Background()
 
 	data := &persistencespb.VersioningData{
-		VersionSets: []*taskqueue.CompatibleVersionSet{mkNewSet("0")},
+		VersionSets: []*taskqueuepb.CompatibleVersionSet{mkNewSet("0")},
 	}
 	asResp := &matchingservice.GetTaskQueueMetadataResponse{
 		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{

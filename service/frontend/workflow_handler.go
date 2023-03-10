@@ -4354,64 +4354,54 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
 	req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
 ) error {
-	errstr := "request to update worker build id compatability requires:"
-	hadErr := false
+	errDeets := []string{"request to update worker build id compatability requires:"}
 
 	checkIdLen := func(id string) {
 		if len(id) > wh.config.WorkerBuildIdSizeLimit() {
-			errstr += fmt.Sprintf(" Worker build IDs to be no larger than %v characters",
-				wh.config.WorkerBuildIdSizeLimit())
-			hadErr = true
+			errDeets = append(errDeets, fmt.Sprintf(" Worker build IDs to be no larger than %v characters",
+				wh.config.WorkerBuildIdSizeLimit()))
 		}
 	}
 
 	if req.GetNamespace() == "" {
-		errstr += " `namespace` to be set."
-		hadErr = true
+		errDeets = append(errDeets, " `namespace` to be set.")
 	}
 	if req.GetTaskQueue() == "" {
-		errstr += " `task_queue` to be set."
-		hadErr = true
+		errDeets = append(errDeets, " `task_queue` to be set.")
 	}
 	if req.GetOperation() == nil {
-		errstr += " an operation to be specified."
-		hadErr = true
+		errDeets = append(errDeets, " an operation to be specified.")
 	}
 	if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion_); ok {
 		if x.AddNewCompatibleVersion.GetNewVersionId() == "" {
-			errstr += " `add_new_compatible_version` to be set."
-			hadErr = true
+			errDeets = append(errDeets, " `add_new_compatible_version` to be set.")
 		} else {
 			checkIdLen(x.AddNewCompatibleVersion.GetNewVersionId())
 		}
 		if x.AddNewCompatibleVersion.GetExistingCompatibleVersion() == "" {
-			errstr += " `existing_compatible_version` to be set."
-			hadErr = true
+			errDeets = append(errDeets, " `existing_compatible_version` to be set.")
 		}
 	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewVersionIdInNewDefaultSet); ok {
 		if x.AddNewVersionIdInNewDefaultSet == "" {
-			errstr += " `add_new_version_id_in_new_default_set` to be set."
-			hadErr = true
+			errDeets = append(errDeets, " `add_new_version_id_in_new_default_set` to be set.")
 		} else {
 			checkIdLen(x.AddNewVersionIdInNewDefaultSet)
 		}
 	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByVersionId); ok {
 		if x.PromoteSetByVersionId == "" {
-			errstr += " `promote_set_by_version_id` to be set."
-			hadErr = true
+			errDeets = append(errDeets, " `promote_set_by_version_id` to be set.")
 		} else {
 			checkIdLen(x.PromoteSetByVersionId)
 		}
 	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteVersionIdWithinSet); ok {
 		if x.PromoteVersionIdWithinSet == "" {
-			errstr += " `promote_version_id_within_set` to be set."
-			hadErr = true
+			errDeets = append(errDeets, " `promote_version_id_within_set` to be set.")
 		} else {
 			checkIdLen(x.PromoteVersionIdWithinSet)
 		}
 	}
-	if hadErr {
-		return serviceerror.NewInvalidArgument(errstr)
+	if len(errDeets) > 1 {
+		return serviceerror.NewInvalidArgument(strings.Join(errDeets, " "))
 	}
 	return nil
 }

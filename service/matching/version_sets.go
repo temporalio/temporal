@@ -28,10 +28,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/dgryski/go-farm"
+	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/util"
 )
 
 func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
@@ -57,9 +59,7 @@ func depthLimiter(g *persistence.VersioningData, maxDepth int, mutate bool) *wor
 	if maxDepth <= 0 || maxDepth >= len(g.GetVersionSets()) {
 		return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: g.GetVersionSets()}
 	}
-	sets := g.GetVersionSets()
-	startIndex := len(sets) - maxDepth
-	shortened := g.GetVersionSets()[startIndex:]
+	shortened := util.SliceTail(g.GetVersionSets(), maxDepth)
 	if mutate {
 		g.VersionSets = shortened
 	}
@@ -108,17 +108,18 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 	targetedVersion := extractTargetedVersion(req)
 	targetSetIx, versionInSetIx := findVersion(existingData, targetedVersion)
 
-	if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewVersionIdInNewDefaultSet); ok {
+	if req.GetAddNewVersionIdInNewDefaultSet() != "" {
 		// If it's not already in the sets, add it as the new default set
 		if targetSetIx != -1 {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
 		}
 
 		existingData.VersionSets = append(existingData.GetVersionSets(), &taskqueuepb.CompatibleVersionSet{
+			Id:       uuid.New(),
 			Versions: []string{targetedVersion},
 		})
-	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion_); ok {
-		compatVer := op.AddNewCompatibleVersion.GetExistingCompatibleVersion()
+	} else if addNew := req.GetAddNewCompatibleVersion(); addNew != nil {
+		compatVer := addNew.GetExistingCompatibleVersion()
 		compatSetIx, _ := findVersion(existingData, compatVer)
 		if compatSetIx == -1 {
 			return serviceerror.NewNotFound(
@@ -133,15 +134,15 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 		// If the version doesn't exist, add it to the compatible set
 		existingData.VersionSets[compatSetIx].Versions =
 			append(existingData.VersionSets[compatSetIx].Versions, targetedVersion)
-		if op.AddNewCompatibleVersion.GetMakeSetDefault() {
+		if addNew.GetMakeSetDefault() {
 			makeDefaultSet(existingData, compatSetIx)
 		}
-	} else if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByVersionId); ok {
+	} else if req.GetPromoteSetByVersionId() != "" {
 		if targetSetIx == -1 {
 			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
 		makeDefaultSet(existingData, targetSetIx)
-	} else if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteVersionIdWithinSet); ok {
+	} else if req.GetPromoteVersionIdWithinSet() != "" {
 		if targetSetIx == -1 {
 			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
@@ -164,10 +165,10 @@ func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatabilit
 
 // Finds the version in the version sets, returning (set index, index within that set)
 // Returns -1, -1 if not found.
-func findVersion(data *persistence.VersioningData, id string) (int, int) {
+func findVersion(data *persistence.VersioningData, buildID string) (int, int) {
 	for setIx, set := range data.GetVersionSets() {
 		for versionIx, version := range set.GetVersions() {
-			if version == id {
+			if version == buildID {
 				return setIx, versionIx
 			}
 		}
