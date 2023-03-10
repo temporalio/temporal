@@ -152,6 +152,44 @@ func (s *integrationSuite) TestStartWorkflowExecution_TerminateIfRunning() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 }
 
+func (s *integrationSuite) TestStartWorkflowExecutionWithDelay() {
+	id := "integration-start-workflow-with-delay-test"
+	wt := "integration-start-workflow-with-delay-test-type"
+	tl := "integration-start-workflow-with-delay-test-taskqueue"
+	identity := "worker1"
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.New(),
+		Namespace:          s.namespace,
+		WorkflowId:         id,
+		WorkflowType:       &commonpb.WorkflowType{Name: wt},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl},
+		Input:              nil,
+		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
+		Identity:           identity,
+		WorkflowStartDelay: timestamp.DurationPtr(5 * time.Second),
+	}
+
+	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we0.RunId,
+		},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
+
+	request.RequestId = uuid.New()
+	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NotNil(err1)
+	s.IsType(&serviceerror.WorkflowExecutionAlreadyStarted{}, err1)
+	s.Nil(we1)
+}
+
 func (s *integrationSuite) TestTerminateWorkflow() {
 	id := "integration-terminate-workflow-test"
 	wt := "integration-terminate-workflow-test-type"

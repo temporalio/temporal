@@ -593,6 +593,7 @@ func CreateHistoryStartWorkflowRequest(
 	}
 
 	if timestamp.DurationValue(startRequest.GetWorkflowStartDelay()) > 0 {
+		histRequest.ContinueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_DELAY_START
 		histRequest.FirstWorkflowTaskBackoff = startRequest.GetWorkflowStartDelay()
 	}
 
