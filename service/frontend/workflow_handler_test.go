@@ -658,6 +658,67 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 	s.Equal(errInvalidWorkflowTaskTimeoutSeconds, err)
 }
 
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_CronAndStartDelaySet() {
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
+		},
+		RequestId:          uuid.New(),
+		CronSchedule:       "dummy-cron-schedule",
+		WorkflowStartDelay: timestamp.DurationPtr(10 * time.Second),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.ErrorIs(err, errCronAndStartDelaySet)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDelay() {
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
+		},
+		RequestId:          uuid.New(),
+		WorkflowStartDelay: timestamp.DurationPtr(-10 * time.Second),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.ErrorIs(err, errInvalidWorkflowStartDelaySeconds)
+}
+
 func (s *workflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
