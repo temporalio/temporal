@@ -24,7 +24,6 @@ type serverConfig struct {
 	//
 	// When unspecified, the port will be system-chosen.
 	MetricsPort   int
-	DynamicPorts  bool
 	Namespaces    []string
 	SQLitePragmas map[string]string
 	// Logger overrides the default logger.
@@ -88,13 +87,6 @@ func WithMetricsPort(port int) ServerOption {
 func WithFrontendIP(address string) ServerOption {
 	return newApplyFuncContainer(func(cfg *serverConfig) {
 		cfg.FrontendIP = address
-	})
-}
-
-// WithDynamicPorts starts Temporal on system-chosen ports.
-func WithDynamicPorts() Option {
-	return newApplyFuncContainer(func(cfg *temporaliteConfig) {
-		cfg.DynamicPorts = true
 	})
 }
 

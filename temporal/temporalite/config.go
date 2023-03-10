@@ -50,7 +50,6 @@ func newDefaultConfig() (*serverConfig, error) {
 		DatabaseFilePath: filepath.Join(userConfigDir, "temporalite", "db", "default.db"),
 		FrontendPort:     0,
 		MetricsPort:      0,
-		DynamicPorts:     false,
 		Namespaces:       nil,
 		SQLitePragmas:    nil,
 		Logger: log.NewZapLogger(log.BuildZapLogger(log.Config{
@@ -88,24 +87,13 @@ func convertLiteConfig(cfg *serverConfig) *config.Config {
 		sqliteConfig.ConnectAttributes["_"+k] = v
 	}
 
-	var pprofPort int
-	if cfg.DynamicPorts {
-		if cfg.FrontendPort == 0 {
-			cfg.FrontendPort = cfg.portProvider.MustGetFreePort()
-		}
-		if cfg.MetricsPort == 0 {
-			cfg.MetricsPort = cfg.portProvider.MustGetFreePort()
-		}
-		pprofPort = cfg.portProvider.MustGetFreePort()
-	} else {
-		if cfg.FrontendPort == 0 {
-			cfg.FrontendPort = defaultFrontendPort
-		}
-		if cfg.MetricsPort == 0 {
-			cfg.MetricsPort = cfg.FrontendPort + 200
-		}
-		pprofPort = cfg.FrontendPort + 201
+	if cfg.FrontendPort == 0 {
+		cfg.FrontendPort = cfg.portProvider.MustGetFreePort()
 	}
+	if cfg.MetricsPort == 0 {
+		cfg.MetricsPort = cfg.portProvider.MustGetFreePort()
+	}
+	pprofPort := cfg.portProvider.MustGetFreePort()
 
 	baseConfig := cfg.BaseConfig
 	baseConfig.Global.Membership = config.Membership{
@@ -189,12 +177,10 @@ func (cfg *serverConfig) mustGetService(frontendPortOffset int) config.Service {
 	}
 
 	// Assign any open port when configured to use dynamic ports
-	if cfg.DynamicPorts {
-		if frontendPortOffset != 0 {
-			svc.RPC.GRPCPort = cfg.portProvider.MustGetFreePort()
-		}
-		svc.RPC.MembershipPort = cfg.portProvider.MustGetFreePort()
+	if frontendPortOffset != 0 {
+		svc.RPC.GRPCPort = cfg.portProvider.MustGetFreePort()
 	}
+	svc.RPC.MembershipPort = cfg.portProvider.MustGetFreePort()
 
 	// Optionally bind frontend to IPv4 address
 	if frontendPortOffset == 0 && cfg.FrontendIP != "" {

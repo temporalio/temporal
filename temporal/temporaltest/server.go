@@ -152,7 +152,6 @@ func NewServer(opts ...TestServerOption) *TestServer {
 	ts.serverOptions = append(ts.serverOptions,
 		temporalite.WithNamespaces(ts.defaultTestNamespace),
 		temporalite.WithPersistenceDisabled(),
-		temporalite.WithDynamicPorts(),
 		temporalite.WithLogger(log.NewNoopLogger()),
 		temporalite.WithSearchAttributeCacheDisabled(),
 		// Disable "accept incoming network connections?" prompt on macOS
