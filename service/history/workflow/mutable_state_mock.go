@@ -52,7 +52,6 @@ import (
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 	tasks "go.temporal.io/server/service/history/tasks"
-	update "go.temporal.io/server/service/history/workflow/update"
 )
 
 // MockMutableState is a mock of MutableState interface.
@@ -2547,20 +2546,6 @@ func (m *MockMutableState) UpdateDuplicatedResource(resourceDedupKey definition.
 func (mr *MockMutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockMutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
-}
-
-// UpdateRegistry mocks base method.
-func (m *MockMutableState) UpdateRegistry() update.Registry {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateRegistry")
-	ret0, _ := ret[0].(update.Registry)
-	return ret0
-}
-
-// UpdateRegistry indicates an expected call of UpdateRegistry.
-func (mr *MockMutableStateMockRecorder) UpdateRegistry() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRegistry", reflect.TypeOf((*MockMutableState)(nil).UpdateRegistry))
 }
 
 // UpdateUserTimer mocks base method.
