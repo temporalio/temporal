@@ -100,7 +100,7 @@ func (s *clientIntegrationSuite) TestMaxBufferedEventsLimit() {
 		s.NoError(err)
 	}
 
-	// send 101 signal, this will fail the inflight workflow task
+	// send 101 signal, this will fail the started workflow task
 	err := s.sdkClient.SignalWorkflow(testCtx, wid, "", "test-signal", 100)
 	s.NoError(err)
 

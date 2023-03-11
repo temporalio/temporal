@@ -137,7 +137,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			if req.IsFirstWorkflowTask && mutableState.HasProcessedOrPendingWorkflowTask() {
+			if req.IsFirstWorkflowTask && mutableState.HadOrHasWorkflowTask() {
 				return &api.UpdateWorkflowAction{
 					Noop: true,
 				}, nil
@@ -188,12 +188,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduledEventID)
+			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
 			metricsScope := handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
+			if workflowTask == nil && scheduledEventID >= mutableState.GetNextEventID() {
 				metricsScope.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(1)
 				// Reload workflow execution history
 				// ErrStaleState will trigger updateWorkflow function to reload the mutable state
@@ -202,7 +202,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 
 			// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 			// task is not outstanding than it is most probably a duplicate and complete the task.
-			if !isRunning {
+			if workflowTask == nil {
 				// Looks like WorkflowTask already completed as a result of another call.
 				// It is OK to drop the task at this point.
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
@@ -299,10 +299,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			}
 
 			scheduledEventID := token.GetScheduledEventId()
-			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduledEventID)
+			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
 			// TODO (alex-update): call mutableState.SetSpeculativeWorkflowTaskStartedEventID(mutableState) here to set StartEventID.
 
-			if !isRunning || workflowTask.Attempt != token.Attempt || workflowTask.StartedEventID == common.EmptyEventID {
+			if workflowTask == nil || workflowTask.Attempt != token.Attempt || workflowTask.StartedEventID == common.EmptyEventID {
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
@@ -351,8 +351,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		ctx,
 		token.Clock,
 		func(mutableState workflow.MutableState) bool {
-			_, ok := mutableState.GetWorkflowTaskInfo(token.GetScheduledEventId())
-			if !ok && token.GetScheduledEventId() >= mutableState.GetNextEventID() {
+			workflowTask := mutableState.GetWorkflowTaskByID(token.GetScheduledEventId())
+			if workflowTask == nil && token.GetScheduledEventId() >= mutableState.GetNextEventID() {
 				handler.metricsHandler.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(
 					1,
 					metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
@@ -373,8 +373,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	weContext := workflowContext.GetContext()
 	ms := workflowContext.GetMutableState()
-	currentWorkflowTask, currentWorkflowTaskRunning := ms.GetWorkflowTaskInfo(token.GetScheduledEventId())
-	// TODO (alex-update): call mutableState.SetSpeculativeWorkflowTaskStartedEventID(mutableState) here to set StartEventID.
 
 	executionInfo := ms.GetExecutionInfo()
 	executionStats, err := weContext.LoadExecutionStats(ctx)
@@ -382,7 +380,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, err
 	}
 
-	if !ms.IsWorkflowExecutionRunning() || !currentWorkflowTaskRunning || currentWorkflowTask.Attempt != token.Attempt ||
+	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
+	// TODO (alex-update): call mutableState.SetSpeculativeWorkflowTaskStartedEventID(mutableState) here to set StartEventID.
+	if !ms.IsWorkflowExecutionRunning() || currentWorkflowTask == nil || currentWorkflowTask.Attempt != token.Attempt ||
 		currentWorkflowTask.StartedEventID == common.EmptyEventID {
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
@@ -690,7 +690,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
-		workflowTask, _ := ms.GetWorkflowTaskInfo(newWorkflowTaskScheduledEventID)
+		workflowTask := ms.GetWorkflowTaskByID(newWorkflowTaskScheduledEventID)
 		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(), workflowTask, request.GetIdentity())
 		if err != nil {
 			return nil, err
@@ -746,7 +746,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 		return nil
 	}
 
-	if !mutableState.HasProcessedOrPendingWorkflowTask() {
+	if !mutableState.HadOrHasWorkflowTask() {
 		return consts.ErrWorkflowNotReady
 	}
 

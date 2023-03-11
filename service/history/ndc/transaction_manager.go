@@ -34,6 +34,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -319,7 +320,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.New()
-		baseRebuildLastEventID := baseMutableState.GetPreviousStartedEventID()
+		baseRebuildLastEventID := baseMutableState.GetLastWorkflowTaskStartedEventID()
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 		if err != nil {

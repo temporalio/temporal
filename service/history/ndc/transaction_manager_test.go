@@ -220,7 +220,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		RunId: runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastWorkflowTaskStartedEventID)
+	mutableState.EXPECT().GetLastWorkflowTaskStartedEventID().Return(lastWorkflowTaskStartedEventID)
 
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		ctx,
@@ -298,7 +298,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		RunId: runID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastWorkflowTaskStartedEventID)
+	mutableState.EXPECT().GetLastWorkflowTaskStartedEventID().Return(lastWorkflowTaskStartedEventID)
 
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		ctx,

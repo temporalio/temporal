@@ -170,9 +170,8 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 	// When this function is called from ApplyEvents, workflowTask is nil.
 	// It is safe to look up the workflow task as it does not have to deal with transient workflow task case.
 	if workflowTask == nil {
-		var ok bool
-		workflowTask, ok = m.GetWorkflowTaskInfo(scheduledEventID)
-		if !ok {
+		workflowTask = m.GetWorkflowTaskByID(scheduledEventID)
+		if workflowTask == nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find workflow task: %v", scheduledEventID))
 		}
 		// Transient workflow task events are not replicated but attempt count in mutable state
@@ -409,8 +408,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	identity string,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
-	workflowTask, ok := m.GetWorkflowTaskInfo(scheduledEventID)
-	if !ok || workflowTask.StartedEventID != common.EmptyEventID {
+	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
+	if workflowTask == nil || workflowTask.StartedEventID != common.EmptyEventID {
 		m.ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -719,48 +718,46 @@ func (m *workflowTaskStateMachine) HasPendingWorkflowTask() bool {
 	return m.ms.executionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID
 }
 
-func (m *workflowTaskStateMachine) GetPendingWorkflowTask() (*WorkflowTaskInfo, bool) {
-	if m.ms.executionInfo.WorkflowTaskScheduledEventId == common.EmptyEventID {
-		return nil, false
+func (m *workflowTaskStateMachine) GetPendingWorkflowTask() *WorkflowTaskInfo {
+	if !m.HasPendingWorkflowTask() {
+		return nil
 	}
 
 	workflowTask := m.getWorkflowTaskInfo()
-	return workflowTask, true
+	return workflowTask
 }
 
-func (m *workflowTaskStateMachine) HasInFlightWorkflowTask() bool {
-	return m.ms.executionInfo.WorkflowTaskStartedEventId != common.EmptyEventID
+func (m *workflowTaskStateMachine) HasStartedWorkflowTask() bool {
+	return m.ms.executionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID &&
+		m.ms.executionInfo.WorkflowTaskStartedEventId != common.EmptyEventID
 }
 
-func (m *workflowTaskStateMachine) GetInFlightWorkflowTask() (*WorkflowTaskInfo, bool) {
-	if m.ms.executionInfo.WorkflowTaskScheduledEventId == common.EmptyEventID ||
-		m.ms.executionInfo.WorkflowTaskStartedEventId == common.EmptyEventID {
-		return nil, false
+func (m *workflowTaskStateMachine) GetStartedWorkflowTask() *WorkflowTaskInfo {
+	if !m.HasStartedWorkflowTask() {
+		return nil
 	}
 
 	workflowTask := m.getWorkflowTaskInfo()
-	return workflowTask, true
+	return workflowTask
 }
 
-func (m *workflowTaskStateMachine) HasProcessedOrPendingWorkflowTask() bool {
-	return m.HasPendingWorkflowTask() || m.ms.GetPreviousStartedEventID() != common.EmptyEventID
+func (m *workflowTaskStateMachine) HadOrHasWorkflowTask() bool {
+	return m.HasPendingWorkflowTask() || m.ms.GetLastWorkflowTaskStartedEventID() != common.EmptyEventID
 }
 
-// GetWorkflowTaskInfo returns details about the in-progress workflow task
-func (m *workflowTaskStateMachine) GetWorkflowTaskInfo(
-	scheduledEventID int64,
-) (*WorkflowTaskInfo, bool) {
+// GetWorkflowTaskByID returns details about the current workflow task by scheduled event ID.
+func (m *workflowTaskStateMachine) GetWorkflowTaskByID(scheduledEventID int64) *WorkflowTaskInfo {
 	workflowTask := m.getWorkflowTaskInfo()
 	if scheduledEventID == workflowTask.ScheduledEventID {
-		return workflowTask, true
+		return workflowTask
 	}
 
 	workflowTask = m.tryRestoreSpeculativeWorkflowTask(scheduledEventID)
 	if workflowTask != nil {
-		return workflowTask, true
+		return workflowTask
 	}
 
-	return nil, false
+	return nil
 }
 
 func (m *workflowTaskStateMachine) tryRestoreSpeculativeWorkflowTask(

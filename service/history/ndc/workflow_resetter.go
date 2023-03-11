@@ -475,9 +475,9 @@ func (r *workflowResetterImpl) failWorkflowTask(
 	resetReason string,
 ) error {
 
-	workflowTask, ok := resetMutableState.GetPendingWorkflowTask()
-	if !ok {
-		// TODO if resetMutableState.HasProcessedOrPendingWorkflowTask() == true
+	workflowTask := resetMutableState.GetPendingWorkflowTask()
+	if workflowTask == nil {
+		// TODO if resetMutableState.HadOrHasWorkflowTask() == true
 		//  meaning workflow history has NO workflow task ever
 		//  should also allow workflow reset, the only remaining issues are
 		//  * what if workflow is a cron workflow, e.g. should add a workflow task directly or still respect the cron job

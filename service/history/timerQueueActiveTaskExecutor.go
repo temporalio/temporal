@@ -310,8 +310,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		return nil
 	}
 
-	workflowTask, ok := mutableState.GetWorkflowTaskInfo(task.EventID)
-	if !ok {
+	workflowTask := mutableState.GetWorkflowTaskByID(task.EventID)
+	if workflowTask == nil {
 		return nil
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
@@ -392,7 +392,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 		)
 	}
 
-	if mutableState.HasProcessedOrPendingWorkflowTask() {
+	if mutableState.HadOrHasWorkflowTask() {
 		// already has workflow task
 		return nil
 	}

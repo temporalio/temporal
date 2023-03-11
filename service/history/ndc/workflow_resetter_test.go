@@ -348,7 +348,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_NoWorkflowTask() {
 	resetReason := "some random reset reason"
 
 	mutableState := workflow.NewMockMutableState(s.controller)
-	mutableState.EXPECT().GetPendingWorkflowTask().Return(nil, false).AnyTimes()
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(nil).AnyTimes()
 
 	err := s.workflowResetter.failWorkflowTask(
 		mutableState,
@@ -384,7 +384,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		RequestID:        workflowTaskSchedule.RequestID,
 		TaskQueue:        workflowTaskSchedule.TaskQueue,
 	}
-	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule, true).AnyTimes()
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule).AnyTimes()
 	mutableState.EXPECT().AddWorkflowTaskStartedEvent(
 		workflowTaskSchedule.ScheduledEventID,
 		workflowTaskSchedule.RequestID,
@@ -430,7 +430,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 	}
-	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTask, true).AnyTimes()
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTask).AnyTimes()
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
@@ -530,7 +530,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState := workflow.NewMockMutableState(s.controller)
 
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true)
+	mutableState.EXPECT().GetStartedWorkflowTask().Return(workflowTask)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,

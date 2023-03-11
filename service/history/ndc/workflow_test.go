@@ -279,14 +279,14 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastEventVersion, true).Return(nil).AnyTimes()
-	inFlightWorkflowTask := &workflow.WorkflowTaskInfo{
+	startedWorkflowTask := &workflow.WorkflowTaskInfo{
 		Version:          1234,
 		ScheduledEventID: 5678,
 		StartedEventID:   9012,
 	}
-	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(inFlightWorkflowTask, true)
+	s.mockMutableState.EXPECT().GetStartedWorkflowTask().Return(startedWorkflowTask)
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		inFlightWorkflowTask,
+		startedWorkflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

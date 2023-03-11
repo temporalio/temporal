@@ -146,7 +146,7 @@ func (r *WorkflowImpl) Revive() error {
 
 	// workflow is in zombie state, need to set the state correctly accordingly
 	state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
-	if r.mutableState.HasProcessedOrPendingWorkflowTask() {
+	if r.mutableState.HadOrHasWorkflowTask() {
 		state = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
@@ -232,8 +232,8 @@ func (r *WorkflowImpl) failWorkflowTask(
 		return err
 	}
 
-	workflowTask, ok := r.mutableState.GetInFlightWorkflowTask()
-	if !ok {
+	workflowTask := r.mutableState.GetStartedWorkflowTask()
+	if workflowTask == nil {
 		return nil
 	}
 
