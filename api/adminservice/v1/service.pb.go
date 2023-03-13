@@ -113,7 +113,7 @@ var fileDescriptor_cf5ca5e0c737570d = []byte{
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
-var _ grpc.ClientConn
+var _ grpc.ClientConnInterface
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
@@ -185,10 +185,10 @@ type AdminServiceClient interface {
 }
 
 type adminServiceClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewAdminServiceClient(cc *grpc.ClientConn) AdminServiceClient {
+func NewAdminServiceClient(cc grpc.ClientConnInterface) AdminServiceClient {
 	return &adminServiceClient{cc}
 }
 

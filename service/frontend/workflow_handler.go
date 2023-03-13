@@ -4351,6 +4351,7 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	return nil
 }
 
+//nolint:revive // cyclomatic complexity
 func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
 	req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
 ) error {

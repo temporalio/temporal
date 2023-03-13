@@ -27,6 +27,7 @@ package matching
 import (
 	"encoding/binary"
 	"fmt"
+
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
@@ -37,7 +38,7 @@ import (
 )
 
 func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
-	return depthLimiter(g, maxDepth, false)
+	return depthLimiter(g, maxDepth)
 }
 
 // HashVersioningData returns a farm.Fingerprint64 hash of the versioning data as bytes. If the data is nonexistent or
@@ -55,14 +56,11 @@ func HashVersioningData(data *persistence.VersioningData) []byte {
 	return b
 }
 
-func depthLimiter(g *persistence.VersioningData, maxDepth int, mutate bool) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
+func depthLimiter(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
 	if maxDepth <= 0 || maxDepth >= len(g.GetVersionSets()) {
 		return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: g.GetVersionSets()}
 	}
 	shortened := util.SliceTail(g.GetVersionSets(), maxDepth)
-	if mutate {
-		g.VersionSets = shortened
-	}
 	return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: shortened}
 }
 
@@ -99,14 +97,17 @@ func UpdateVersionSets(existingData *persistence.VersioningData, req *workflowse
 		return err
 	}
 	// Limit graph size if it's grown too large
-	depthLimiter(existingData, maxSize, true)
+	newResp := depthLimiter(existingData, maxSize)
+	existingData.VersionSets = newResp.GetMajorVersionSets()
 	return nil
 }
 
+//nolint:revive // cyclomatic complexity
 func updateImpl(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) error {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
-	targetSetIx, versionInSetIx := findVersion(existingData, targetedVersion)
+	findRes := findVersion(existingData, targetedVersion)
+	targetSetIx, versionInSetIx := findRes.setIx, findRes.indexInSet
 
 	if req.GetAddNewBuildIdInNewDefaultSet() != "" {
 		// If it's not already in the sets, add it as the new default set
@@ -120,7 +121,7 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 		})
 	} else if addNew := req.GetAddNewCompatibleBuildId(); addNew != nil {
 		compatVer := addNew.GetExistingCompatibleBuildId()
-		compatSetIx, _ := findVersion(existingData, compatVer)
+		compatSetIx := findVersion(existingData, compatVer).setIx
 		if compatSetIx == -1 {
 			return serviceerror.NewNotFound(
 				fmt.Sprintf("targeted compatible_version %v not found", compatVer))
@@ -163,17 +164,28 @@ func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatabilit
 	return req.GetAddNewBuildIdInNewDefaultSet()
 }
 
+type findVersionRes struct {
+	setIx      int
+	indexInSet int
+}
+
 // Finds the version in the version sets, returning (set index, index within that set)
 // Returns -1, -1 if not found.
-func findVersion(data *persistence.VersioningData, buildID string) (int, int) {
+func findVersion(data *persistence.VersioningData, buildID string) findVersionRes {
 	for setIx, set := range data.GetVersionSets() {
 		for versionIx, version := range set.GetBuildIds() {
 			if version == buildID {
-				return setIx, versionIx
+				return findVersionRes{
+					setIx:      setIx,
+					indexInSet: versionIx,
+				}
 			}
 		}
 	}
-	return -1, -1
+	return findVersionRes{
+		setIx:      -1,
+		indexInSet: -1,
+	}
 }
 
 func makeDefaultSet(data *persistence.VersioningData, setIx int) {

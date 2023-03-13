@@ -138,7 +138,7 @@ var fileDescriptor_655983da427ae822 = []byte{
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
-var _ grpc.ClientConn
+var _ grpc.ClientConnInterface
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
@@ -314,10 +314,10 @@ type HistoryServiceClient interface {
 }
 
 type historyServiceClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewHistoryServiceClient(cc *grpc.ClientConn) HistoryServiceClient {
+func NewHistoryServiceClient(cc grpc.ClientConnInterface) HistoryServiceClient {
 	return &historyServiceClient{cc}
 }
 
