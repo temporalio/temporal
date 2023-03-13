@@ -108,18 +108,18 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 	targetedVersion := extractTargetedVersion(req)
 	targetSetIx, versionInSetIx := findVersion(existingData, targetedVersion)
 
-	if req.GetAddNewVersionIdInNewDefaultSet() != "" {
+	if req.GetAddNewBuildIdInNewDefaultSet() != "" {
 		// If it's not already in the sets, add it as the new default set
 		if targetSetIx != -1 {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
 		}
 
 		existingData.VersionSets = append(existingData.GetVersionSets(), &taskqueuepb.CompatibleVersionSet{
-			Id:       uuid.New(),
-			Versions: []string{targetedVersion},
+			VersionSetId: uuid.New(),
+			BuildIds:     []string{targetedVersion},
 		})
-	} else if addNew := req.GetAddNewCompatibleVersion(); addNew != nil {
-		compatVer := addNew.GetExistingCompatibleVersion()
+	} else if addNew := req.GetAddNewCompatibleBuildId(); addNew != nil {
+		compatVer := addNew.GetExistingCompatibleBuildId()
 		compatSetIx, _ := findVersion(existingData, compatVer)
 		if compatSetIx == -1 {
 			return serviceerror.NewNotFound(
@@ -132,17 +132,17 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 		}
 
 		// If the version doesn't exist, add it to the compatible set
-		existingData.VersionSets[compatSetIx].Versions =
-			append(existingData.VersionSets[compatSetIx].Versions, targetedVersion)
+		existingData.VersionSets[compatSetIx].BuildIds =
+			append(existingData.VersionSets[compatSetIx].BuildIds, targetedVersion)
 		if addNew.GetMakeSetDefault() {
 			makeDefaultSet(existingData, compatSetIx)
 		}
-	} else if req.GetPromoteSetByVersionId() != "" {
+	} else if req.GetPromoteSetByBuildId() != "" {
 		if targetSetIx == -1 {
 			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
 		makeDefaultSet(existingData, targetSetIx)
-	} else if req.GetPromoteVersionIdWithinSet() != "" {
+	} else if req.GetPromoteBuildIdWithinSet() != "" {
 		if targetSetIx == -1 {
 			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
@@ -153,21 +153,21 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 }
 
 func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) string {
-	if req.GetAddNewCompatibleVersion() != nil {
-		return req.GetAddNewCompatibleVersion().GetNewVersionId()
-	} else if req.GetPromoteSetByVersionId() != "" {
-		return req.GetPromoteSetByVersionId()
-	} else if req.GetPromoteVersionIdWithinSet() != "" {
-		return req.GetPromoteVersionIdWithinSet()
+	if req.GetAddNewCompatibleBuildId() != nil {
+		return req.GetAddNewCompatibleBuildId().GetNewBuildId()
+	} else if req.GetPromoteSetByBuildId() != "" {
+		return req.GetPromoteSetByBuildId()
+	} else if req.GetPromoteBuildIdWithinSet() != "" {
+		return req.GetPromoteBuildIdWithinSet()
 	}
-	return req.GetAddNewVersionIdInNewDefaultSet()
+	return req.GetAddNewBuildIdInNewDefaultSet()
 }
 
 // Finds the version in the version sets, returning (set index, index within that set)
 // Returns -1, -1 if not found.
 func findVersion(data *persistence.VersioningData, buildID string) (int, int) {
 	for setIx, set := range data.GetVersionSets() {
-		for versionIx, version := range set.GetVersions() {
+		for versionIx, version := range set.GetBuildIds() {
 			if version == buildID {
 				return setIx, versionIx
 			}
@@ -187,7 +187,7 @@ func makeDefaultSet(data *persistence.VersioningData, setIx int) {
 }
 
 func makeVersionInSetDefault(data *persistence.VersioningData, setIx, versionIx int) {
-	setVersions := data.VersionSets[setIx].Versions
+	setVersions := data.VersionSets[setIx].BuildIds
 	if len(setVersions) <= 1 {
 		return
 	}

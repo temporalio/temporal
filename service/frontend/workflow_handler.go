@@ -4372,32 +4372,32 @@ func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
 	if req.GetOperation() == nil {
 		errDeets = append(errDeets, " an operation to be specified.")
 	}
-	if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion_); ok {
-		if x.AddNewCompatibleVersion.GetNewVersionId() == "" {
+	if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId); ok {
+		if x.AddNewCompatibleBuildId.GetNewBuildId() == "" {
 			errDeets = append(errDeets, " `add_new_compatible_version` to be set.")
 		} else {
-			checkIdLen(x.AddNewCompatibleVersion.GetNewVersionId())
+			checkIdLen(x.AddNewCompatibleBuildId.GetNewBuildId())
 		}
-		if x.AddNewCompatibleVersion.GetExistingCompatibleVersion() == "" {
+		if x.AddNewCompatibleBuildId.GetExistingCompatibleBuildId() == "" {
 			errDeets = append(errDeets, " `existing_compatible_version` to be set.")
 		}
-	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewVersionIdInNewDefaultSet); ok {
-		if x.AddNewVersionIdInNewDefaultSet == "" {
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet); ok {
+		if x.AddNewBuildIdInNewDefaultSet == "" {
 			errDeets = append(errDeets, " `add_new_version_id_in_new_default_set` to be set.")
 		} else {
-			checkIdLen(x.AddNewVersionIdInNewDefaultSet)
+			checkIdLen(x.AddNewBuildIdInNewDefaultSet)
 		}
-	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByVersionId); ok {
-		if x.PromoteSetByVersionId == "" {
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByBuildId); ok {
+		if x.PromoteSetByBuildId == "" {
 			errDeets = append(errDeets, " `promote_set_by_version_id` to be set.")
 		} else {
-			checkIdLen(x.PromoteSetByVersionId)
+			checkIdLen(x.PromoteSetByBuildId)
 		}
-	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteVersionIdWithinSet); ok {
-		if x.PromoteVersionIdWithinSet == "" {
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteBuildIdWithinSet); ok {
+		if x.PromoteBuildIdWithinSet == "" {
 			errDeets = append(errDeets, " `promote_version_id_within_set` to be set.")
 		} else {
-			checkIdLen(x.PromoteVersionIdWithinSet)
+			checkIdLen(x.PromoteBuildIdWithinSet)
 		}
 	}
 	if len(errDeets) > 1 {

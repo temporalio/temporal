@@ -1935,8 +1935,8 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 			Request: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
 				Namespace: namespaceID.String(),
 				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewVersionIdInNewDefaultSet{
-					AddNewVersionIdInNewDefaultSet: id,
+				Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+					AddNewBuildIdInNewDefaultSet: id,
 				},
 			},
 		})
@@ -1955,10 +1955,10 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 			Request: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
 				Namespace: namespaceID.String(),
 				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion_{
-					AddNewCompatibleVersion: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
-						NewVersionId:              id,
-						ExistingCompatibleVersion: prevCompat,
+				Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId{
+					AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
+						NewBuildId:                id,
+						ExistingCompatibleBuildId: prevCompat,
 						MakeSetDefault:            false,
 					},
 				},
@@ -1981,10 +1981,10 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	majorSets := res.GetResponse().GetMajorVersionSets()
 	curDefault := majorSets[len(majorSets)-1]
 	s.NotNil(curDefault)
-	s.Equal("99", curDefault.GetVersions()[0])
-	lastNode := curDefault.GetVersions()[len(curDefault.GetVersions())-1]
+	s.Equal("99", curDefault.GetBuildIds()[0])
+	lastNode := curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
 	s.Equal("99.9", lastNode)
-	s.Equal("0", majorSets[0].GetVersions()[0])
+	s.Equal("0", majorSets[0].GetBuildIds()[0])
 
 	// Ensure depth limiting works
 	res, err = s.matchingEngine.GetWorkerBuildIdCompatability(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
@@ -1998,8 +1998,8 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NoError(err)
 	majorSets = res.GetResponse().GetMajorVersionSets()
 	curDefault = majorSets[len(majorSets)-1]
-	s.Equal("99", curDefault.GetVersions()[0])
-	lastNode = curDefault.GetVersions()[len(curDefault.GetVersions())-1]
+	s.Equal("99", curDefault.GetBuildIds()[0])
+	lastNode = curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
 	s.Equal("99.9", lastNode)
 	s.Equal(1, len(majorSets))
 
@@ -2013,7 +2013,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	})
 	s.NoError(err)
 	majorSets = res.GetResponse().GetMajorVersionSets()
-	s.Equal("95", majorSets[0].GetVersions()[0])
+	s.Equal("95", majorSets[0].GetBuildIds()[0])
 }
 
 func (s *matchingEngineSuite) TestActivityQueueMetadataInvalidate() {

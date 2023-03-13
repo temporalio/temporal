@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -96,11 +95,11 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	tq := "integration-versioning-basic"
 
 	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Namespace:          s.namespace,
-		TaskQueue:          tq,
-		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo"},
-		PreviousCompatible: nil,
-		BecomeDefault:      true,
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: "foo",
+		},
 	})
 	s.NoError(err)
 	s.NotNil(res)
@@ -111,7 +110,7 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
+	s.Equal("foo", getCurrentDefault(res2))
 }
 
 func (s *versioningIntegSuite) TestSeriesOfUpdates() {
@@ -120,21 +119,25 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 
 	for i := 0; i < 10; i++ {
 		res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-			Namespace:          s.namespace,
-			TaskQueue:          tq,
-			VersionId:          &taskqueuepb.VersionId{WorkerBuildId: fmt.Sprintf("foo-%d", i)},
-			PreviousCompatible: nil,
-			BecomeDefault:      true,
+			Namespace: s.namespace,
+			TaskQueue: tq,
+			Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+				AddNewBuildIdInNewDefaultSet: fmt.Sprintf("foo-%d", i),
+			},
 		})
 		s.NoError(err)
 		s.NotNil(res)
 	}
 	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Namespace:          s.namespace,
-		TaskQueue:          tq,
-		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo-2.1"},
-		PreviousCompatible: &taskqueuepb.VersionId{WorkerBuildId: "foo-2"},
-		BecomeDefault:      false,
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
+				NewBuildId:                "foo-2.1",
+				ExistingCompatibleBuildId: "foo-2",
+				MakeSetDefault:            false,
+			},
+		},
 	})
 	s.NoError(err)
 	s.NotNil(res)
@@ -145,10 +148,9 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal("foo-9", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
-	s.Equal(1, len(res2.CompatibleLeaves))
-	s.Equal("foo-2.1", res2.CompatibleLeaves[0].GetVersion().GetWorkerBuildId())
-	s.Equal("foo-2", res2.CompatibleLeaves[0].GetPreviousCompatible().GetVersion().GetWorkerBuildId())
+	s.Equal("foo-9", getCurrentDefault(res2))
+	s.Equal("foo-2.1", res2.GetMajorVersionSets()[2].GetBuildIds()[1])
+	s.Equal("foo-2", res2.GetMajorVersionSets()[2].GetBuildIds()[0])
 }
 
 func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
@@ -156,10 +158,14 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 	tq := "integration-versioning-compat-not-found"
 
 	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Namespace:          s.namespace,
-		TaskQueue:          tq,
-		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo"},
-		PreviousCompatible: &taskqueuepb.VersionId{WorkerBuildId: "i don't exist yo"},
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
+				NewBuildId:                "foo",
+				ExistingCompatibleBuildId: "i don't exist yo",
+			},
+		},
 	})
 	s.Error(err)
 	s.Nil(res)
@@ -173,11 +179,11 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	tq := "integration-versioning-not-destroyed"
 
 	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Namespace:          s.namespace,
-		TaskQueue:          tq,
-		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo"},
-		PreviousCompatible: nil,
-		BecomeDefault:      true,
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: "foo",
+		},
 	})
 	s.NoError(err)
 	s.NotNil(res)
@@ -210,7 +216,7 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
+	s.Equal("foo", getCurrentDefault(res2))
 }
 
 func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() {
@@ -218,10 +224,11 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	tq := "integration-versioning-sub-partitions"
 
 	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Namespace:     s.namespace,
-		TaskQueue:     tq,
-		VersionId:     &taskqueuepb.VersionId{WorkerBuildId: "foo"},
-		BecomeDefault: true,
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: "foo",
+		},
 	})
 	s.NoError(err)
 	s.NotNil(res)
@@ -232,7 +239,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
+	s.Equal("foo", getCurrentDefault(res2))
 
 	// Verify partitions have data
 	dcCol := dynamicconfig.NewCollection(s.testCluster.GetHost().dcClient, s.Logger)
@@ -251,15 +258,16 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 		})
 		s.NoError(err)
 		s.NotNil(res)
-		s.Equal("foo", res.CurrentDefault.GetVersion().GetWorkerBuildId())
+		s.Equal("foo", getCurrentDefault(res2))
 	}
 
 	// Make a modification, verify it propagates to partitions
 	res, err = s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Namespace:     s.namespace,
-		TaskQueue:     tq,
-		VersionId:     &taskqueuepb.VersionId{WorkerBuildId: "foo-2"},
-		BecomeDefault: true,
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: "foo-2",
+		},
 	})
 	s.NoError(err)
 	s.NotNil(res)
@@ -274,6 +282,14 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 		})
 		s.NoError(err)
 		s.NotNil(res)
-		s.Equal("foo-2", res.CurrentDefault.GetVersion().GetWorkerBuildId())
+		s.Equal("foo-2", getCurrentDefault(res))
 	}
+}
+
+func getCurrentDefault(resp *workflowservice.GetWorkerBuildIdCompatabilityResponse) string {
+	if resp == nil {
+		return ""
+	}
+	curMajorSet := resp.GetMajorVersionSets()[len(resp.GetMajorVersionSets())-1]
+	return curMajorSet.GetBuildIds()[len(curMajorSet.GetBuildIds())-1]
 }

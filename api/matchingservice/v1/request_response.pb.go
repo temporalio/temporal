@@ -1346,11 +1346,11 @@ func (m *ListTaskQueuePartitionsResponse) GetWorkflowTaskQueuePartitions() []*v1
 
 // (-- api-linter: core::0134::request-mask-required=disabled
 //
-//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatabilityRequest doesn't follow Google API format --)
+//	aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest doesn't follow Google API format --)
 //
 // (-- api-linter: core::0134::request-resource-required=disabled
 //
-//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatabilityRequest RPC doesn't follow Google API format. --)
+//	aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest RPC doesn't follow Google API format. --)
 type UpdateWorkerBuildIdCompatabilityRequest struct {
 	NamespaceId string                                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	Request     *v1.UpdateWorkerBuildIdCompatabilityRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`

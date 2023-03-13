@@ -135,9 +135,9 @@ type MatchingServiceClient interface {
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(ctx context.Context, in *ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatability RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatability RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
 	UpdateWorkerBuildIdCompatability(ctx context.Context, in *UpdateWorkerBuildIdCompatabilityRequest, opts ...grpc.CallOption) (*UpdateWorkerBuildIdCompatabilityResponse, error)
 	GetWorkerBuildIdCompatability(ctx context.Context, in *GetWorkerBuildIdCompatabilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatabilityResponse, error)
 	// Tell a task queue that some metadata has changed.
@@ -303,9 +303,9 @@ type MatchingServiceServer interface {
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatability RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatability RPC doesn't follow Google API format. --)
+	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
 	UpdateWorkerBuildIdCompatability(context.Context, *UpdateWorkerBuildIdCompatabilityRequest) (*UpdateWorkerBuildIdCompatabilityResponse, error)
 	GetWorkerBuildIdCompatability(context.Context, *GetWorkerBuildIdCompatabilityRequest) (*GetWorkerBuildIdCompatabilityResponse, error)
 	// Tell a task queue that some metadata has changed.

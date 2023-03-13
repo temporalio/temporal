@@ -38,7 +38,7 @@ import (
 
 func mkNewSet(id string) *taskqueuepb.CompatibleVersionSet {
 	return &taskqueuepb.CompatibleVersionSet{
-		Versions: []string{id},
+		BuildIds: []string{id},
 	}
 }
 
@@ -54,17 +54,17 @@ func mkInitialData(numSets int) *persistencepb.VersioningData {
 
 func mkNewDefReq(id string) *workflowservice.UpdateWorkerBuildIdCompatabilityRequest {
 	return &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewVersionIdInNewDefaultSet{
-			AddNewVersionIdInNewDefaultSet: id,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: id,
 		},
 	}
 }
 func mkNewCompatReq(id, compat string, becomeDefault bool) *workflowservice.UpdateWorkerBuildIdCompatabilityRequest {
 	return &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion_{
-			AddNewCompatibleVersion: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
-				NewVersionId:              id,
-				ExistingCompatibleVersion: compat,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
+				NewBuildId:                id,
+				ExistingCompatibleBuildId: compat,
 				MakeSetDefault:            becomeDefault,
 			},
 		},
@@ -72,15 +72,15 @@ func mkNewCompatReq(id, compat string, becomeDefault bool) *workflowservice.Upda
 }
 func mkExistingDefault(id string) *workflowservice.UpdateWorkerBuildIdCompatabilityRequest {
 	return &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByVersionId{
-			PromoteSetByVersionId: id,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByBuildId{
+			PromoteSetByBuildId: id,
 		},
 	}
 }
 func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdCompatabilityRequest {
 	return &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteVersionIdWithinSet{
-			PromoteVersionIdWithinSet: id,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteBuildIdWithinSet{
+			PromoteBuildIdWithinSet: id,
 		},
 	}
 }
@@ -93,12 +93,12 @@ func TestNewDefaultUpdate(t *testing.T) {
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "2", curd.Versions[0])
-	assert.Equal(t, "1", data.VersionSets[1].Versions[0])
-	assert.Equal(t, "0", data.VersionSets[0].Versions[0])
+	assert.Equal(t, "2", curd.BuildIds[0])
+	assert.Equal(t, "1", data.VersionSets[1].BuildIds[0])
+	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
 
 	asResp := ToBuildIdOrderingResponse(data, 0)
-	assert.Equal(t, "2", asResp.MajorVersionSets[2].Versions[0])
+	assert.Equal(t, "2", asResp.MajorVersionSets[2].BuildIds[0])
 }
 
 func TestNewDefaultGraphUpdateOfEmptyGraph(t *testing.T) {
@@ -109,7 +109,7 @@ func TestNewDefaultGraphUpdateOfEmptyGraph(t *testing.T) {
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "1", curd.Versions[0])
+	assert.Equal(t, "1", curd.BuildIds[0])
 	assert.Equal(t, 1, len(data.VersionSets))
 }
 
@@ -121,9 +121,9 @@ func TestNewDefaultGraphUpdateCompatWithCurDefault(t *testing.T) {
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "1.1", curd.Versions[1])
-	assert.Equal(t, "1", curd.Versions[0])
-	assert.Equal(t, "0", data.VersionSets[0].Versions[0])
+	assert.Equal(t, "1.1", curd.BuildIds[1])
+	assert.Equal(t, "1", curd.BuildIds[0])
+	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
 }
 
 func TestNewDefaultGraphUpdateCompatWithNonDefaultSet(t *testing.T) {
@@ -134,9 +134,9 @@ func TestNewDefaultGraphUpdateCompatWithNonDefaultSet(t *testing.T) {
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "0.1", curd.Versions[1])
-	assert.Equal(t, "0", curd.Versions[0])
-	assert.Equal(t, "1", data.VersionSets[0].Versions[0])
+	assert.Equal(t, "0.1", curd.BuildIds[1])
+	assert.Equal(t, "0", curd.BuildIds[0])
+	assert.Equal(t, "1", data.VersionSets[0].BuildIds[0])
 }
 
 func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
@@ -147,12 +147,12 @@ func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "2", curd.Versions[0])
-	assert.Equal(t, "0.1", data.VersionSets[0].Versions[1])
-	assert.Equal(t, "0", data.VersionSets[0].Versions[0])
+	assert.Equal(t, "2", curd.BuildIds[0])
+	assert.Equal(t, "0.1", data.VersionSets[0].BuildIds[1])
+	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
 
 	asResp := ToBuildIdOrderingResponse(data, 0)
-	assert.Equal(t, "0.1", asResp.MajorVersionSets[0].Versions[1])
+	assert.Equal(t, "0.1", asResp.MajorVersionSets[0].BuildIds[1])
 }
 
 func TestNewCompatibleWithNonDefaultGraphUpdate(t *testing.T) {
@@ -167,21 +167,21 @@ func TestNewCompatibleWithNonDefaultGraphUpdate(t *testing.T) {
 	assert.NoError(t, err)
 
 	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "1", curd.Versions[0])
-	assert.Equal(t, "0", data.VersionSets[0].Versions[0])
-	assert.Equal(t, "0.1", data.VersionSets[0].Versions[1])
-	assert.Equal(t, "0.2", data.VersionSets[0].Versions[2])
+	assert.Equal(t, "1", curd.BuildIds[0])
+	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
+	assert.Equal(t, "0.1", data.VersionSets[0].BuildIds[1])
+	assert.Equal(t, "0.2", data.VersionSets[0].BuildIds[2])
 
 	// Ensure setting a compatible version which targets a non-leaf compat version ends up without a branch
 	req = mkNewCompatReq("0.3", "0.1", false)
 	err = UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
-	assert.Equal(t, "1", curd.Versions[0])
-	assert.Equal(t, "0", data.VersionSets[0].Versions[0])
-	assert.Equal(t, "0.1", data.VersionSets[0].Versions[1])
-	assert.Equal(t, "0.2", data.VersionSets[0].Versions[2])
-	assert.Equal(t, "0.3", data.VersionSets[0].Versions[3])
+	assert.Equal(t, "1", curd.BuildIds[0])
+	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
+	assert.Equal(t, "0.1", data.VersionSets[0].BuildIds[1])
+	assert.Equal(t, "0.2", data.VersionSets[0].BuildIds[2])
+	assert.Equal(t, "0.3", data.VersionSets[0].BuildIds[3])
 }
 
 func TestCompatibleTargetsNotFound(t *testing.T) {
@@ -200,20 +200,20 @@ func TestMakeExistingSetDefault(t *testing.T) {
 	err := UpdateVersionSets(data, req, 0)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "0", data.VersionSets[0].Versions[0])
-	assert.Equal(t, "1", data.VersionSets[1].Versions[0])
-	assert.Equal(t, "3", data.VersionSets[2].Versions[0])
-	assert.Equal(t, "2", data.VersionSets[3].Versions[0])
+	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
+	assert.Equal(t, "1", data.VersionSets[1].BuildIds[0])
+	assert.Equal(t, "3", data.VersionSets[2].BuildIds[0])
+	assert.Equal(t, "2", data.VersionSets[3].BuildIds[0])
 
 	// Add a compatible version to a set and then make that set the default via the compatible version
 	req = mkNewCompatReq("1.1", "1", true)
 
 	err = UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
-	assert.Equal(t, "0", data.VersionSets[0].Versions[0])
-	assert.Equal(t, "3", data.VersionSets[1].Versions[0])
-	assert.Equal(t, "2", data.VersionSets[2].Versions[0])
-	assert.Equal(t, "1", data.VersionSets[3].Versions[0])
+	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
+	assert.Equal(t, "3", data.VersionSets[1].BuildIds[0])
+	assert.Equal(t, "2", data.VersionSets[2].BuildIds[0])
+	assert.Equal(t, "1", data.VersionSets[3].BuildIds[0])
 }
 
 func TestSayVersionIsCompatWithDifferentSetThanItsAlreadyCompatWithNotAllowed(t *testing.T) {
@@ -241,7 +241,7 @@ func TestLimitsMaxSize(t *testing.T) {
 	}
 
 	for i := 0; i < len(data.VersionSets); i++ {
-		assert.Equal(t, fmt.Sprintf("%d", i+10), data.VersionSets[i].Versions[0])
+		assert.Equal(t, fmt.Sprintf("%d", i+10), data.VersionSets[i].BuildIds[0])
 	}
 }
 
@@ -258,7 +258,7 @@ func TestPromoteWithinVersion(t *testing.T) {
 	err := UpdateVersionSets(data, req, 0)
 	assert.NoError(t, err)
 
-	curd := data.VersionSets[0].Versions[len(data.VersionSets[0].Versions)-1]
+	curd := data.VersionSets[0].BuildIds[len(data.VersionSets[0].BuildIds)-1]
 	assert.Equal(t, "0.1", curd)
 }
 
