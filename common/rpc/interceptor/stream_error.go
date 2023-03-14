@@ -71,9 +71,8 @@ func StreamErrorInterceptor(
 	opts ...grpc.CallOption,
 ) (grpc.ClientStream, error) {
 	clientStream, err := streamer(ctx, desc, cc, method, opts...)
-	err = errorConvert(err)
 	if err != nil {
-		return clientStream, err
+		return nil, errorConvert(err)
 	}
 	return NewClientStreamErrorInterceptor(clientStream), nil
 }
