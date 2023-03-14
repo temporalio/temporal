@@ -25,6 +25,10 @@
 package interceptor
 
 import (
+	"fmt"
+
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -40,28 +44,46 @@ type (
 	}
 )
 
-func GetNamespace(
+// MustGetNamespaceName returns request namespace name
+// or EmptyName if there's error when retriving namespace name,
+// e.g. unable to find namespace
+func MustGetNamespaceName(
 	namespaceRegistry namespace.Registry,
 	req interface{},
 ) namespace.Name {
+	namespaceName, err := GetNamespaceName(namespaceRegistry, req)
+	if err != nil {
+		return namespace.EmptyName
+	}
+	return namespaceName
+}
+
+func GetNamespaceName(
+	namespaceRegistry namespace.Registry,
+	req interface{},
+) (namespace.Name, error) {
 	switch request := req.(type) {
+	case *workflowservice.RegisterNamespaceRequest:
+		// For namespace registration requests, we don't expect to find namespace so skip checking caches
+		// to avoid caching a NotFound error from persistence readthrough
+		return namespace.Name(request.GetNamespace()), nil
 	case NamespaceNameGetter:
 		namespaceName := namespace.Name(request.GetNamespace())
 		_, err := namespaceRegistry.GetNamespace(namespaceName)
 		if err != nil {
-			return namespace.EmptyName
+			return namespace.EmptyName, err
 		}
-		return namespaceName
+		return namespaceName, nil
 
 	case NamespaceIDGetter:
 		namespaceID := namespace.ID(request.GetNamespaceId())
 		namespaceName, err := namespaceRegistry.GetNamespaceName(namespaceID)
 		if err != nil {
-			return namespace.EmptyName
+			return namespace.EmptyName, err
 		}
-		return namespaceName
+		return namespaceName, nil
 
 	default:
-		return namespace.EmptyName
+		return namespace.EmptyName, serviceerror.NewInternal(fmt.Sprintf("unable to extract namespace info from request: %+v", req))
 	}
 }

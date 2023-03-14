@@ -153,7 +153,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 		})
 		s.Nil(err)
 		for _, br := range resp.Branches {
-			branch, err := p.ParseHistoryBranchToken(br.BranchToken)
+			branch, err := serialization.HistoryBranchFromBlob(br.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 			s.NoError(err)
 			uuidTreeId := branch.TreeId
 			if trees[uuidTreeId] {
@@ -749,13 +749,14 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 
 // persistence helper
 func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
-	resp, err := s.ExecutionManager.NewHistoryBranch(s.ctx, &p.NewHistoryBranchRequest{
-		TreeID: treeID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return resp.BranchToken, nil
+	return s.ExecutionManager.GetHistoryBranchUtil().NewHistoryBranch(
+		treeID,
+		nil,
+		[]*persistencespb.HistoryBranchRange{},
+		nil,
+		nil,
+		nil,
+	)
 }
 
 // persistence helper
@@ -797,7 +798,7 @@ func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.Hi
 func (s *HistoryV2PersistenceSuite) toHistoryBranches(branchTokens [][]byte) ([]*persistencespb.HistoryBranch, error) {
 	branches := make([]*persistencespb.HistoryBranch, len(branchTokens))
 	for i, b := range branchTokens {
-		branch, err := p.ParseHistoryBranchToken(b)
+		branch, err := serialization.HistoryBranchFromBlob(b, enumspb.ENCODING_TYPE_PROTO3.String())
 		if err != nil {
 			return nil, err
 		}

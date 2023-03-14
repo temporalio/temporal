@@ -97,3 +97,8 @@ const (
 	// Limit for schedule notes field
 	ScheduleNotesSizeLimit = 1000
 )
+
+const (
+	// DefaultQueueReaderID is the default readerID when loading history tasks
+	DefaultQueueReaderID = 0
+)

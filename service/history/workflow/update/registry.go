@@ -28,7 +28,6 @@ import (
 	"sync"
 
 	"github.com/gogo/protobuf/types"
-	failurepb "go.temporal.io/api/failure/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	updatepb "go.temporal.io/api/update/v1"
 )
@@ -41,8 +40,6 @@ type (
 
 		HasPending(filterMessages []*protocolpb.Message) bool
 		ProcessIncomingMessages(messages []*protocolpb.Message) error
-
-		Clear()
 	}
 
 	Duplicate bool
@@ -170,15 +167,6 @@ func (r *RegistryImpl) ProcessIncomingMessages(messages []*protocolpb.Message) e
 	return nil
 }
 
-func (r *RegistryImpl) Clear() {
-	r.Lock()
-	defer r.Unlock()
-	for _, upd := range r.updates {
-		upd.sendReject(r.clearFailure())
-	}
-	r.updates = make(map[string]*Update)
-}
-
 func (r *RegistryImpl) getPendingUpdateNoLock(protocolInstanceID string) *Update {
 	if upd, ok := r.updates[protocolInstanceID]; ok && upd.state == statePending {
 		return upd
@@ -191,17 +179,6 @@ func (r *RegistryImpl) getAcceptedUpdateNoLock(protocolInstanceID string) *Updat
 		return upd
 	}
 	return nil
-}
-
-func (r *RegistryImpl) clearFailure() *failurepb.Failure {
-	return &failurepb.Failure{
-		Message: "update cleared, please retry",
-		FailureInfo: &failurepb.Failure_ServerFailureInfo{
-			ServerFailureInfo: &failurepb.ServerFailureInfo{
-				NonRetryable: false,
-			},
-		},
-	}
 }
 
 func (r *RegistryImpl) remove(id string) {

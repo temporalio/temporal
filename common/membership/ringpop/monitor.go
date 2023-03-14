@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+package ringpop
 
 import (
 	"context"
@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 
 	"github.com/pborman/uuid"
@@ -56,7 +57,7 @@ const (
 	healthyHostLastHeartbeatCutoff = time.Second * 20
 )
 
-type ringpopMonitor struct {
+type monitor struct {
 	status int32
 
 	lifecycleCtx    context.Context
@@ -64,8 +65,8 @@ type ringpopMonitor struct {
 
 	serviceName               primitives.ServiceName
 	services                  map[primitives.ServiceName]int
-	rp                        *RingPop
-	rings                     map[primitives.ServiceName]*ringpopServiceResolver
+	rp                        *service
+	rings                     map[primitives.ServiceName]*serviceResolver
 	logger                    log.Logger
 	metadataManager           persistence.ClusterMetadataManager
 	broadcastHostPortResolver func() (string, error)
@@ -73,25 +74,24 @@ type ringpopMonitor struct {
 	initialized               *future.FutureImpl[struct{}]
 }
 
-var _ Monitor = (*ringpopMonitor)(nil)
+var _ membership.Monitor = (*monitor)(nil)
 
-// NewRingpopMonitor returns a ringpop-based membership monitor
-func NewRingpopMonitor(
+// newMonitor returns a ringpop-based membership monitor
+func newMonitor(
 	serviceName primitives.ServiceName,
 	services map[primitives.ServiceName]int,
-	rp *RingPop,
+	rp *service,
 	logger log.Logger,
 	metadataManager persistence.ClusterMetadataManager,
 	broadcastHostPortResolver func() (string, error),
-) Monitor {
-
+) membership.Monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
 		lifecycleCtx,
 		headers.SystemBackgroundCallerInfo,
 	)
 
-	rpo := &ringpopMonitor{
+	rpo := &monitor{
 		status: common.DaemonStatusInitialized,
 
 		lifecycleCtx:    lifecycleCtx,
@@ -100,7 +100,7 @@ func NewRingpopMonitor(
 		serviceName:               serviceName,
 		services:                  services,
 		rp:                        rp,
-		rings:                     make(map[primitives.ServiceName]*ringpopServiceResolver),
+		rings:                     make(map[primitives.ServiceName]*serviceResolver),
 		logger:                    logger,
 		metadataManager:           metadataManager,
 		broadcastHostPortResolver: broadcastHostPortResolver,
@@ -108,12 +108,12 @@ func NewRingpopMonitor(
 		initialized:               future.NewFuture[struct{}](),
 	}
 	for service, port := range services {
-		rpo.rings[service] = newRingpopServiceResolver(service, port, rp, logger)
+		rpo.rings[service] = newServiceResolver(service, port, rp, logger)
 	}
 	return rpo
 }
 
-func (rpo *ringpopMonitor) Start() {
+func (rpo *monitor) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&rpo.status,
 		common.DaemonStatusInitialized,
@@ -135,7 +135,7 @@ func (rpo *ringpopMonitor) Start() {
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
 	}
 
-	rpo.rp.Start(
+	rpo.rp.start(
 		func() ([]string, error) { return rpo.fetchCurrentBootstrapHostports() },
 		healthyHostLastHeartbeatCutoff/2)
 
@@ -144,11 +144,11 @@ func (rpo *ringpopMonitor) Start() {
 		rpo.logger.Fatal("unable to get ring pop labels", tag.Error(err))
 	}
 
-	if err = labels.Set(RolePort, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
+	if err = labels.Set(rolePort, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
 		rpo.logger.Fatal("unable to set ring pop ServicePort label", tag.Error(err))
 	}
 
-	if err = labels.Set(RoleKey, string(rpo.serviceName)); err != nil {
+	if err = labels.Set(roleKey, string(rpo.serviceName)); err != nil {
 		rpo.logger.Fatal("unable to set ring pop ServiceRole label", tag.Error(err))
 	}
 
@@ -159,12 +159,12 @@ func (rpo *ringpopMonitor) Start() {
 	rpo.initialized.Set(struct{}{}, nil)
 }
 
-func (rpo *ringpopMonitor) WaitUntilInitialized(ctx context.Context) error {
+func (rpo *monitor) WaitUntilInitialized(ctx context.Context) error {
 	_, err := rpo.initialized.Get(ctx)
 	return err
 }
 
-func ServiceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.ServiceType, error) {
+func serviceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.ServiceType, error) {
 	switch name {
 	case primitives.AllServices:
 		return persistence.All, nil
@@ -183,7 +183,7 @@ func ServiceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.Serv
 	}
 }
 
-func (rpo *ringpopMonitor) upsertMyMembership(
+func (rpo *monitor) upsertMyMembership(
 	ctx context.Context,
 	request *persistence.UpsertClusterMembershipRequest,
 ) error {
@@ -199,8 +199,8 @@ func (rpo *ringpopMonitor) upsertMyMembership(
 	return err
 }
 
-// SplitHostPortTyped expands upon net.SplitHostPort by providing type parsing.
-func SplitHostPortTyped(hostPort string) (net.IP, uint16, error) {
+// splitHostPortTyped expands upon net.SplitHostPort by providing type parsing.
+func splitHostPortTyped(hostPort string) (net.IP, uint16, error) {
 	ipstr, portstr, err := net.SplitHostPort(hostPort)
 	if err != nil {
 		return nil, 0, err
@@ -215,7 +215,7 @@ func SplitHostPortTyped(hostPort string) (net.IP, uint16, error) {
 	return broadcastAddress, uint16(broadcastPort), nil
 }
 
-func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
+func (rpo *monitor) startHeartbeat(broadcastHostport string) error {
 	// Start by cleaning up expired records to avoid growth
 	err := rpo.metadataManager.PruneClusterMembership(rpo.lifecycleCtx, &persistence.PruneClusterMembershipRequest{MaxRecordsPruned: 10})
 	if err != nil {
@@ -225,13 +225,13 @@ func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	sessionStarted := time.Now().UTC()
 
 	// Parse and validate broadcast hostport
-	broadcastAddress, broadcastPort, err := SplitHostPortTyped(broadcastHostport)
+	broadcastAddress, broadcastPort, err := splitHostPortTyped(broadcastHostport)
 	if err != nil {
 		return err
 	}
 
 	// Parse and validate existing service name
-	role, err := ServiceNameToServiceTypeEnum(rpo.serviceName)
+	role, err := serviceNameToServiceTypeEnum(rpo.serviceName)
 	if err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	return err
 }
 
-func (rpo *ringpopMonitor) fetchCurrentBootstrapHostports() ([]string, error) {
+func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 	pageSize := 1000
 	set := make(map[string]struct{})
 
@@ -297,11 +297,10 @@ func (rpo *ringpopMonitor) fetchCurrentBootstrapHostports() ([]string, error) {
 			rpo.logger.Info("bootstrap hosts fetched", tag.BootstrapHostPorts(strings.Join(bootstrapHostPorts, ",")))
 			return bootstrapHostPorts, nil
 		}
-
 	}
 }
 
-func (rpo *ringpopMonitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterMembershipRequest) {
+func (rpo *monitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterMembershipRequest) {
 	loopUpsertMembership := func() {
 		for {
 			err := rpo.upsertMyMembership(rpo.lifecycleCtx, request)
@@ -318,7 +317,7 @@ func (rpo *ringpopMonitor) startHeartbeatUpsertLoop(request *persistence.UpsertC
 	go loopUpsertMembership()
 }
 
-func (rpo *ringpopMonitor) Stop() {
+func (rpo *monitor) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&rpo.status,
 		common.DaemonStatusStarted,
@@ -333,7 +332,7 @@ func (rpo *ringpopMonitor) Stop() {
 		ring.Stop()
 	}
 
-	rpo.rp.Stop()
+	rpo.rp.stop()
 }
 
 // WhoAmI returns the address (host:port) and labels for a service
@@ -341,7 +340,7 @@ func (rpo *ringpopMonitor) Stop() {
 // This is different from service address as we register ringpop handlers on a separate port.
 // For this reason we need to lookup the port for the service and replace ringpop port with service port before
 // returning HostInfo back.
-func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {
+func (rpo *monitor) WhoAmI() (membership.HostInfo, error) {
 	address, err := rpo.rp.WhoAmI()
 	if err != nil {
 		return nil, err
@@ -353,29 +352,29 @@ func (rpo *ringpopMonitor) WhoAmI() (*HostInfo, error) {
 
 	servicePort, ok := rpo.services[rpo.serviceName]
 	if !ok {
-		return nil, ErrUnknownService
+		return nil, membership.ErrUnknownService
 	}
 
 	serviceAddress, err := replaceServicePort(address, servicePort)
 	if err != nil {
 		return nil, err
 	}
-	return NewHostInfo(serviceAddress, labels.AsMap()), nil
+	return newHostInfo(serviceAddress, labels.AsMap()), nil
 }
 
-func (rpo *ringpopMonitor) EvictSelf() error {
+func (rpo *monitor) EvictSelf() error {
 	return rpo.rp.SelfEvict()
 }
 
-func (rpo *ringpopMonitor) GetResolver(service primitives.ServiceName) (ServiceResolver, error) {
+func (rpo *monitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {
 	ring, found := rpo.rings[service]
 	if !found {
-		return nil, ErrUnknownService
+		return nil, membership.ErrUnknownService
 	}
 	return ring, nil
 }
 
-func (rpo *ringpopMonitor) Lookup(service primitives.ServiceName, key string) (*HostInfo, error) {
+func (rpo *monitor) Lookup(service primitives.ServiceName, key string) (membership.HostInfo, error) {
 	ring, err := rpo.GetResolver(service)
 	if err != nil {
 		return nil, err
@@ -383,7 +382,7 @@ func (rpo *ringpopMonitor) Lookup(service primitives.ServiceName, key string) (*
 	return ring.Lookup(key)
 }
 
-func (rpo *ringpopMonitor) AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *ChangedEvent) error {
+func (rpo *monitor) AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *membership.ChangedEvent) error {
 	ring, err := rpo.GetResolver(service)
 	if err != nil {
 		return err
@@ -391,7 +390,7 @@ func (rpo *ringpopMonitor) AddListener(service primitives.ServiceName, name stri
 	return ring.AddListener(name, notifyChannel)
 }
 
-func (rpo *ringpopMonitor) RemoveListener(service primitives.ServiceName, name string) error {
+func (rpo *monitor) RemoveListener(service primitives.ServiceName, name string) error {
 	ring, err := rpo.GetResolver(service)
 	if err != nil {
 		return err
@@ -399,11 +398,11 @@ func (rpo *ringpopMonitor) RemoveListener(service primitives.ServiceName, name s
 	return ring.RemoveListener(name)
 }
 
-func (rpo *ringpopMonitor) GetReachableMembers() ([]string, error) {
+func (rpo *monitor) GetReachableMembers() ([]string, error) {
 	return rpo.rp.GetReachableMembers()
 }
 
-func (rpo *ringpopMonitor) GetMemberCount(service primitives.ServiceName) (int, error) {
+func (rpo *monitor) GetMemberCount(service primitives.ServiceName) (int, error) {
 	ring, err := rpo.GetResolver(service)
 	if err != nil {
 		return 0, err
@@ -414,7 +413,7 @@ func (rpo *ringpopMonitor) GetMemberCount(service primitives.ServiceName) (int, 
 func replaceServicePort(address string, servicePort int) (string, error) {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
-		return "", ErrIncorrectAddressFormat
+		return "", membership.ErrIncorrectAddressFormat
 	}
 	return net.JoinHostPort(host, convert.IntToString(servicePort)), nil
 }

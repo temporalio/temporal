@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
@@ -63,8 +64,16 @@ func (m *visibilityManagerRateLimited) Close() {
 	m.delegate.Close()
 }
 
-func (m *visibilityManagerRateLimited) GetName() string {
-	return m.delegate.GetName()
+func (m *visibilityManagerRateLimited) GetReadStoreName(nsName namespace.Name) string {
+	return m.delegate.GetReadStoreName(nsName)
+}
+
+func (m *visibilityManagerRateLimited) GetStoreNames() []string {
+	return m.delegate.GetStoreNames()
+}
+
+func (m *visibilityManagerRateLimited) HasStoreName(stName string) bool {
+	return m.delegate.HasStoreName(stName)
 }
 
 func (m *visibilityManagerRateLimited) GetIndexName() string {

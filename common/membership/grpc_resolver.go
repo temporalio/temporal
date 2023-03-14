@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-const GRPCResolverScheme = "membership"
+const grpcResolverScheme = "membership"
 
 // Empty type used to enforce a dependency using fx so that we're guaranteed to have
 // initialized the global builder before we use it.
@@ -62,7 +62,7 @@ func initializeBuilder(monitor Monitor) GRPCResolver {
 }
 
 func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
-	return fmt.Sprintf("%s://%s", GRPCResolverScheme, string(service))
+	return fmt.Sprintf("%s://%s", grpcResolverScheme, string(service))
 }
 
 type grpcBuilder struct {
@@ -70,7 +70,7 @@ type grpcBuilder struct {
 }
 
 func (m *grpcBuilder) Scheme() string {
-	return GRPCResolverScheme
+	return grpcResolverScheme
 }
 
 func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {

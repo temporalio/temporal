@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -248,6 +249,8 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	startedEventID int64,
 	identity string,
 	checksum string,
+	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
+	meteringMetadata *commonpb.MeteringMetadata,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
@@ -256,6 +259,8 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 			StartedEventId:   startedEventID,
 			Identity:         identity,
 			BinaryChecksum:   checksum,
+			SdkMetadata:      sdkMetadata,
+			MeteringMetadata: meteringMetadata,
 		},
 	}
 

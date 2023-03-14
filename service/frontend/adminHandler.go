@@ -275,7 +275,7 @@ func (adh *AdminHandler) AddSearchAttributes(
 	// register the search attributes in the cluster metadata if ES is up or if
 	// `skip-schema-update` is set. This is for backward compatibility using
 	// standard visibility.
-	if adh.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
+	if adh.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
 		err = adh.addSearchAttributesElasticsearch(ctx, request, indexName)
 	} else {
 		err = adh.addSearchAttributesSQL(ctx, request, currentSearchAttributes)
@@ -414,7 +414,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(
 	// register the search attributes in the cluster metadata if ES is up or if
 	// `skip-schema-update` is set. This is for backward compatibility using
 	// standard visibility.
-	if adh.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
+	if adh.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
 		err = adh.removeSearchAttributesElasticsearch(ctx, request, indexName)
 	} else {
 		err = adh.removeSearchAttributesSQL(ctx, request)
@@ -520,7 +520,7 @@ func (adh *AdminHandler) GetSearchAttributes(
 	// register the search attributes in the cluster metadata if ES is up or if
 	// `skip-schema-update` is set. This is for backward compatibility using
 	// standard visibility.
-	if adh.visibilityMgr.GetName() == elasticsearch.PersistenceName || indexName == "" {
+	if adh.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
 		return adh.getSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
 	}
 	return adh.getSearchAttributesSQL(request, searchAttributes)
@@ -744,9 +744,15 @@ func (adh *AdminHandler) ListHistoryTasks(
 			}
 		}
 	}
+
+	// Queue reader registration is only meaning for history service
+	// we are on frontend service, so no need to do registration
+	// TODO: move the logic to history service
+
 	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             request.ShardId,
 		TaskCategory:        taskCategory,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: minTaskKey,
 		ExclusiveMaxTaskKey: maxTaskKey,
 		BatchSize:           int(request.BatchSize),
@@ -1038,7 +1044,7 @@ func (adh *AdminHandler) DescribeCluster(
 		ClusterName:              metadata.ClusterName,
 		HistoryShardCount:        metadata.HistoryShardCount,
 		PersistenceStore:         adh.persistenceExecutionManager.GetName(),
-		VisibilityStore:          adh.visibilityMgr.GetName(),
+		VisibilityStore:          strings.Join(adh.visibilityMgr.GetStoreNames(), ","),
 		VersionInfo:              metadata.VersionInfo,
 		FailoverVersionIncrement: metadata.FailoverVersionIncrement,
 		InitialFailoverVersion:   metadata.InitialFailoverVersion,
@@ -1369,9 +1375,10 @@ func (adh *AdminHandler) GetDLQMessages(
 		}
 
 		return &adminservice.GetDLQMessagesResponse{
-			Type:             resp.GetType(),
-			ReplicationTasks: resp.GetReplicationTasks(),
-			NextPageToken:    resp.GetNextPageToken(),
+			Type:                 resp.GetType(),
+			ReplicationTasks:     resp.GetReplicationTasks(),
+			ReplicationTasksInfo: resp.GetReplicationTasksInfo(),
+			NextPageToken:        resp.GetNextPageToken(),
 		}, err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		tasks, token, err := adh.namespaceDLQHandler.Read(
@@ -1628,7 +1635,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 	var warnings []string
 	var branchTokens [][]byte
 	var startTime, closeTime *time.Time
-	cassVisBackend := strings.Contains(adh.visibilityMgr.GetName(), cassandra.CassandraPersistenceName)
+	cassVisBackend := adh.visibilityMgr.HasStoreName(cassandra.CassandraPersistenceName)
 
 	resp, err := adh.persistenceExecutionManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,

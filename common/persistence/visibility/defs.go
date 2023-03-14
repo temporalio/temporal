@@ -47,8 +47,18 @@ func DefaultAdvancedVisibilityWritingMode(advancedVisibilityConfigExist bool) st
 	return AdvancedVisibilityWritingModeOff
 }
 
-func AllowListForValidation(pluginName string) bool {
-	switch pluginName {
+func AllowListForValidation(storeNames []string) bool {
+	if len(storeNames) == 0 {
+		return false
+	}
+
+	if len(storeNames) > 1 {
+		// If more than one store is configured then it means that dual visibility is enabled.
+		// Dual visibility is used for migration to advanced, don't allow list of values because it will be removed soon.
+		return false
+	}
+
+	switch storeNames[0] {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 		// Advanced visibility with SQL DB don't support list of values
 		return false

@@ -705,17 +705,6 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	client.OverrideValue(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
 }
 
-func (c *temporalImpl) RefreshNamespaceCache() {
-	c.frontendNamespaceRegistry.Refresh()
-	c.matchingNamespaceRegistry.Refresh()
-	for _, r := range c.historyNamespaceRegistries {
-		r.Refresh()
-	}
-	if c.workerNamespaceRegistry != nil {
-		c.workerNamespaceRegistry.Refresh()
-	}
-}
-
 // copyPersistenceConfig makes a deepcopy of persistence config.
 // This is just a temp fix for the race condition of persistence config.
 // The race condition happens because all the services are using the same datastore map in the config.
