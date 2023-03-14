@@ -901,8 +901,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 	_, _, err = s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(err)
 
-	workflowTask, ok := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
-	s.True(ok)
+	workflowTask := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
+	s.NotNil(workflowTask)
 	s.True(workflowTask.ScheduledEventID != common.EmptyEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedEventID)
 	s.Equal(int32(2), workflowTask.Attempt)
@@ -999,8 +999,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 	_, _, err = s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(err)
 
-	workflowTask, ok := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
-	s.True(ok)
+	workflowTask := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
+	s.NotNil(workflowTask)
 	s.True(workflowTask.ScheduledEventID != common.EmptyEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedEventID)
 	s.Equal(int32(1), workflowTask.Attempt)
