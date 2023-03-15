@@ -114,6 +114,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_First() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -139,6 +140,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -175,6 +177,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -223,6 +226,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -273,6 +277,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -340,6 +345,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -397,6 +403,7 @@ func (s *HistoryEventsSuite) TestAppendSelectTrim() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -439,6 +446,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -506,6 +514,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -555,6 +564,7 @@ func (s *HistoryEventsSuite) TestAppendBatches() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -594,6 +604,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	br1Token, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -660,6 +671,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 	treeID := uuid.New()
 	branchID := uuid.New()
 	br1Token, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},

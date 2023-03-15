@@ -445,6 +445,7 @@ func (ms *MutableStateImpl) SetHistoryTree(
 		retentionDuration = &duration
 	}
 	initialBranchToken, err := ms.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+		ms.namespaceEntry.ID().String(),
 		treeID,
 		nil,
 		[]*persistencespb.HistoryBranchRange{},

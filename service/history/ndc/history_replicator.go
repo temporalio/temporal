@@ -279,6 +279,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 	newHistoryBranchToken, err := r.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+		request.NamespaceId,
 		branchInfo.GetTreeId(),
 		&branchInfo.BranchId,
 		branchInfo.Ancestors,
