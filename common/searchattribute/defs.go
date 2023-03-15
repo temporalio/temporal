@@ -25,6 +25,7 @@
 package searchattribute
 
 import (
+	"fmt"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -68,6 +69,10 @@ const (
 	TemporalSchedulePaused = "TemporalSchedulePaused"
 
 	ReservedPrefix = "Temporal"
+
+	// Query clause that mentions TemporalNamespaceDivision to disable special handling of that
+	// search attribute in visibility.
+	matchAnyNamespaceDivision = TemporalNamespaceDivision + ` != "__never_used__"`
 )
 
 var (
@@ -201,4 +206,15 @@ func GetSqlDbIndexSearchAttributes() *persistencespb.IndexSearchAttributes {
 	return &persistencespb.IndexSearchAttributes{
 		CustomSearchAttributes: sqlDbCustomSearchAttributes,
 	}
+}
+
+// QueryWithAnyNamespaceDivision returns a modified workflow visibility query that disables
+// special handling of namespace division and so matches workflows in all namespace divisions.
+// Normally a query that didn't explicitly mention TemporalNamespaceDivision would be limited
+// to the default (empty string) namespace division.
+func QueryWithAnyNamespaceDivision(query string) string {
+	if strings.TrimSpace(query) == "" {
+		return matchAnyNamespaceDivision
+	}
+	return fmt.Sprintf(`(%s) AND (%s)`, query, matchAnyNamespaceDivision)
 }
