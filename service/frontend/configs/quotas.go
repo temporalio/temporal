@@ -67,8 +67,8 @@ var (
 		"PollWorkflowTaskQueue":              2,
 		"PollActivityTaskQueue":              2,
 		"GetWorkflowExecutionHistoryReverse": 2,
-		"GetWorkerBuildIdOrdering":           2,
-		"UpdateWorkerBuildIdOrdering":        2,
+		"GetWorkerBuildIdCompatability":      2,
+		"UpdateWorkerBuildIdCompatability":   2,
 		"DeleteWorkflowExecution":            2,
 
 		// priority 3
