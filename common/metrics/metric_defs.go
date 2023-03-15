@@ -46,7 +46,7 @@ const (
 	TaskTypeTagName            = "task_type"
 	TaskPriorityTagName        = "task_priority"
 	QueueReaderIDTagName       = "queue_reader_id"
-	QueueAlertTypeTagName      = "queue_alert_type"
+	QueueActionTagName         = "queue_action"
 	QueueTypeTagName           = "queue_type"
 	visibilityTypeTagName      = "visibility_type"
 	ErrorTypeTagName           = "error_type"
@@ -1331,6 +1331,7 @@ var (
 	QueueReaderCountHistogram                         = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram                          = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueActionCounter                                = NewCounterDef("queue_actions")
+	QueueActionFailures                               = NewCounterDef("queue_action_errors")
 	ActivityE2ELatency                                = NewTimerDef("activity_end_to_end_latency")
 	AckLevelUpdateCounter                             = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                       = NewCounterDef("ack_level_update_failed")

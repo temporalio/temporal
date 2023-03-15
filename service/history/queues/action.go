@@ -24,17 +24,11 @@
 
 package queues
 
-var (
-	_ Action = (*actionReaderStuck)(nil)
-)
-
 type (
-	// Action is operations that can be run on a ReaderGroup.
-	// It is created by Mitigator upon receiving an Alert and
-	// run by a Queue to resolve the alert.
+	// Action is a set of operations that can be run on a ReaderGroup.
+	// It is created and run by Mitigator upon receiving an Alert.
 	Action interface {
-		Run(*ReaderGroup)
+		Name() string
+		Run(*ReaderGroup) error
 	}
-
-	actionCompletionFn func()
 )

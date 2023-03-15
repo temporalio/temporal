@@ -115,7 +115,7 @@ func (s *ackManagerSuite) SetupTest() {
 		ShardOwner:   s.mockShard.GetOwner(),
 		TaskCategory: tasks.CategoryReplication,
 		ReaderID:     common.DefaultQueueReaderID,
-	}).MaxTimes(1)
+	}).Return(nil).MaxTimes(1)
 
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()

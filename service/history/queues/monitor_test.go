@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -40,6 +41,8 @@ type (
 	monitorSuite struct {
 		suite.Suite
 		*require.Assertions
+
+		mockTimeSource *clock.EventTimeSource
 
 		monitor *monitorImpl
 		alertCh <-chan *Alert
@@ -54,7 +57,10 @@ func TestMonitorSuite(t *testing.T) {
 func (s *monitorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.monitor = newMonitor(tasks.CategoryTypeScheduled,
+	s.mockTimeSource = clock.NewEventTimeSource()
+	s.monitor = newMonitor(
+		tasks.CategoryTypeScheduled,
+		s.mockTimeSource,
 		&MonitorOptions{
 			PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
@@ -204,4 +210,67 @@ func (s *monitorSuite) TestSliceCount() {
 			CriticalSliceCount: threshold,
 		},
 	}, *alert)
+}
+
+func (s *monitorSuite) TestResolveAlert() {
+	sliceCount := s.monitor.options.SliceCountCriticalThreshold() * 2
+
+	s.monitor.SetSliceCount(DefaultReaderId, sliceCount) // trigger an alert
+
+	alert := <-s.alertCh
+	s.NotNil(alert)
+	s.monitor.ResolveAlert(alert.AlertType)
+
+	// alert should be resolved,
+	// which means we can trigger the same alert type again
+	s.monitor.SetSliceCount(DefaultReaderId, sliceCount)
+	select {
+	case alert := <-s.alertCh:
+		s.NotNil(alert)
+	default:
+		s.FailNow("Can't trigger new alert, previous alert likely not resolved")
+	}
+}
+
+func (s *monitorSuite) TestSilenceAlert() {
+	now := time.Now()
+	s.mockTimeSource.Update(now)
+
+	sliceCount := s.monitor.options.SliceCountCriticalThreshold() * 2
+	s.monitor.SetSliceCount(DefaultReaderId, sliceCount) // trigger an alert
+
+	alert := <-s.alertCh
+	s.NotNil(alert)
+	s.monitor.SilenceAlert(alert.AlertType)
+
+	// alert should be silenced,
+	// which means we can't trigger the same alert type again
+	s.monitor.SetSliceCount(DefaultReaderId, sliceCount)
+	select {
+	case <-s.alertCh:
+		s.FailNow("Alert not silenced")
+	default:
+	}
+
+	// other alert types should still be able to fire
+	pendingTaskCount := s.monitor.options.PendingTasksCriticalCount() * 2
+	s.monitor.SetSlicePendingTaskCount(&SliceImpl{}, pendingTaskCount)
+	select {
+	case alert := <-s.alertCh:
+		s.NotNil(alert)
+	default:
+		s.FailNow("Alerts with a different type should still be able to fire")
+	}
+
+	now = now.Add(defaultAlertSilenceDuration * 2)
+	s.mockTimeSource.Update(now)
+
+	// same alert should be able to fire after the silence duration
+	s.monitor.SetSliceCount(DefaultReaderId, sliceCount)
+	select {
+	case alert := <-s.alertCh:
+		s.NotNil(alert)
+	default:
+		s.FailNow("Same alert type should fire after silence duration")
+	}
 }

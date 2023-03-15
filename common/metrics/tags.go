@@ -214,11 +214,11 @@ func QueueReaderIDTag(readerID int32) Tag {
 	return &tagImpl{key: QueueReaderIDTagName, value: strconv.Itoa(int(readerID))}
 }
 
-func QueueAlertTypeTag(value string) Tag {
+func QueueActionTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: QueueAlertTypeTagName, value: value}
+	return &tagImpl{key: QueueActionTagName, value: value}
 }
 
 func QueueTypeTag(value string) Tag {
