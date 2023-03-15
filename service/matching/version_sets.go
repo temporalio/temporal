@@ -57,11 +57,11 @@ func HashVersioningData(data *persistence.VersioningData) []byte {
 }
 
 func depthLimiter(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
-	if maxDepth <= 0 || maxDepth >= len(g.GetVersionSets()) {
-		return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: g.GetVersionSets()}
+	sets := g.GetVersionSets()
+	if maxDepth > 0 {
+		sets = util.SliceTail(sets, maxDepth)
 	}
-	shortened := util.SliceTail(g.GetVersionSets(), maxDepth)
-	return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: shortened}
+	return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: sets}
 }
 
 // Given existing versioning data and an update request, update the version sets appropriately. The request is expected
@@ -107,11 +107,11 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
 	findRes := findVersion(existingData, targetedVersion)
-	targetSetIx, versionInSetIx := findRes.setIx, findRes.indexInSet
+	targetSetIdx, versionInSetIdx := findRes.setIdx, findRes.indexInSet
 
 	if req.GetAddNewBuildIdInNewDefaultSet() != "" {
 		// If it's not already in the sets, add it as the new default set
-		if targetSetIx != -1 {
+		if targetSetIdx != -1 {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
 		}
 
@@ -121,33 +121,33 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 		})
 	} else if addNew := req.GetAddNewCompatibleBuildId(); addNew != nil {
 		compatVer := addNew.GetExistingCompatibleBuildId()
-		compatSetIx := findVersion(existingData, compatVer).setIx
-		if compatSetIx == -1 {
+		compatSetIdx := findVersion(existingData, compatVer).setIdx
+		if compatSetIdx == -1 {
 			return serviceerror.NewNotFound(
 				fmt.Sprintf("targeted compatible_version %v not found", compatVer))
 		}
-		if targetSetIx != -1 {
+		if targetSetIdx != -1 {
 			// If the version does exist, this operation can't do anything meaningful, but we can fail if the user
 			// says the version is now compatible with some different set.
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
 		}
 
 		// If the version doesn't exist, add it to the compatible set
-		existingData.VersionSets[compatSetIx].BuildIds =
-			append(existingData.VersionSets[compatSetIx].BuildIds, targetedVersion)
+		existingData.VersionSets[compatSetIdx].BuildIds =
+			append(existingData.VersionSets[compatSetIdx].BuildIds, targetedVersion)
 		if addNew.GetMakeSetDefault() {
-			makeDefaultSet(existingData, compatSetIx)
+			makeDefaultSet(existingData, compatSetIdx)
 		}
 	} else if req.GetPromoteSetByBuildId() != "" {
-		if targetSetIx == -1 {
+		if targetSetIdx == -1 {
 			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
-		makeDefaultSet(existingData, targetSetIx)
+		makeDefaultSet(existingData, targetSetIdx)
 	} else if req.GetPromoteBuildIdWithinSet() != "" {
-		if targetSetIx == -1 {
+		if targetSetIdx == -1 {
 			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
-		makeVersionInSetDefault(existingData, targetSetIx, versionInSetIx)
+		makeVersionInSetDefault(existingData, targetSetIdx, versionInSetIdx)
 	}
 
 	return nil
@@ -165,7 +165,7 @@ func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatabilit
 }
 
 type findVersionRes struct {
-	setIx      int
+	setIdx     int
 	indexInSet int
 }
 
@@ -176,14 +176,14 @@ func findVersion(data *persistence.VersioningData, buildID string) findVersionRe
 		for versionIx, version := range set.GetBuildIds() {
 			if version == buildID {
 				return findVersionRes{
-					setIx:      setIx,
+					setIdx:     setIx,
 					indexInSet: versionIx,
 				}
 			}
 		}
 	}
 	return findVersionRes{
-		setIx:      -1,
+		setIdx:     -1,
 		indexInSet: -1,
 	}
 }
