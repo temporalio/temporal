@@ -137,6 +137,11 @@ const (
 	FailureReasonTransactionSizeExceedsLimit = "Transaction size exceeds limit."
 )
 
+const (
+	// ContinueAsNewInitiatorDelayStart is used by task_generator to map to workflow backoff type (used internally only)
+	ContinueAsNewInitiatorDelayStart = enumspb.ContinueAsNewInitiator(10)
+)
+
 var (
 	// ErrBlobSizeExceedsLimit is error for event blob size exceeds limit
 	ErrBlobSizeExceedsLimit = serviceerror.NewInvalidArgument("Blob data size exceeds limit.")
@@ -593,7 +598,7 @@ func CreateHistoryStartWorkflowRequest(
 	}
 
 	if timestamp.DurationValue(startRequest.GetWorkflowStartDelay()) > 0 {
-		histRequest.ContinueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_DELAY_START
+		histRequest.ContinueAsNewInitiator = ContinueAsNewInitiatorDelayStart
 		histRequest.FirstWorkflowTaskBackoff = startRequest.GetWorkflowStartDelay()
 	}
 

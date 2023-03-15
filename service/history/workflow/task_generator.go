@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	utils "go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -301,7 +302,7 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_RETRY
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
-	case enumspb.CONTINUE_AS_NEW_INITIATOR_DELAY_START:
+	case utils.ContinueAsNewInitiatorDelayStart:
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
