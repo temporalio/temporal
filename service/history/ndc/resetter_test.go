@@ -192,6 +192,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		ForkNodeID:      baseEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.newRunID),
 		ShardID:         shardID,
+		NamespaceID:     s.namespaceID.String(),
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
 
 	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(
