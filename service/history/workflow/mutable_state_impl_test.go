@@ -161,7 +161,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 
 	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
 
-	newWorkflowTask, _ := s.mutableState.GetWorkflowTaskInfo(newWorkflowTaskScheduleEvent.GetEventId())
+	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
 	s.NotNil(newWorkflowTask)
 
 	_, err := s.mutableState.AddWorkflowTaskTimedOutEvent(
@@ -184,7 +184,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 
 	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
 
-	newWorkflowTask, _ := s.mutableState.GetWorkflowTaskInfo(newWorkflowTaskScheduleEvent.GetEventId())
+	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
 	s.NotNil(newWorkflowTask)
 
 	_, err := s.mutableState.AddWorkflowTaskFailedEvent(

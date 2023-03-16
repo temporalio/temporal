@@ -87,7 +87,7 @@ func RetryWorkflow(
 	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (MutableState, error) {
 
-	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
 		if err := failWorkflowTask(
 			mutableState,
 			workflowTask,
@@ -117,7 +117,7 @@ func TimeoutWorkflow(
 	continuedRunID string,
 ) error {
 
-	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
 		if err := failWorkflowTask(
 			mutableState,
 			workflowTask,
@@ -144,7 +144,7 @@ func TerminateWorkflow(
 	deleteAfterTerminate bool,
 ) error {
 
-	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
 		if err := failWorkflowTask(
 			mutableState,
 			workflowTask,

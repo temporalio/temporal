@@ -223,8 +223,8 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		return nil
 	}
 
-	workflowTask, found := mutableState.GetWorkflowTaskInfo(task.ScheduledEventID)
-	if !found {
+	workflowTask := mutableState.GetWorkflowTaskByID(task.ScheduledEventID)
+	if workflowTask == nil {
 		return nil
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)

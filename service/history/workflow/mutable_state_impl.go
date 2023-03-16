@@ -70,7 +70,6 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow/update"
 )
 
 const (
@@ -171,7 +170,6 @@ type (
 		taskGenerator       TaskGenerator
 		workflowTaskManager *workflowTaskStateMachine
 		QueryRegistry       QueryRegistry
-		updateRegistry      update.Registry
 
 		shard           shard.Context
 		clusterMetadata cluster.Metadata
@@ -230,8 +228,7 @@ func NewMutableState(
 		appliedEvents:    make(map[string]struct{}),
 		InsertTasks:      make(map[tasks.Category][]tasks.Task),
 
-		QueryRegistry:  NewQueryRegistry(),
-		updateRegistry: update.NewRegistry(),
+		QueryRegistry: NewQueryRegistry(),
 
 		shard:           shard,
 		clusterMetadata: shard.GetClusterMetadata(),
@@ -484,7 +481,7 @@ func (ms *MutableStateImpl) GetExecutionState() *persistencespb.WorkflowExecutio
 }
 
 func (ms *MutableStateImpl) FlushBufferedEvents() {
-	if ms.HasInFlightWorkflowTask() {
+	if ms.HasStartedWorkflowTask() {
 		return
 	}
 	ms.updatePendingEventIDs(ms.hBuilder.FlushBufferToCurrentBatch())
@@ -635,10 +632,6 @@ func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
 
 func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
-}
-
-func (ms *MutableStateImpl) UpdateRegistry() update.Registry {
-	return ms.updateRegistry
 }
 
 func (ms *MutableStateImpl) GetActivityScheduledEvent(
@@ -1257,11 +1250,9 @@ func (ms *MutableStateImpl) DeleteUserTimer(
 	return nil
 }
 
-// GetWorkflowTaskInfo returns details about the in-progress workflow task
-func (ms *MutableStateImpl) GetWorkflowTaskInfo(
-	scheduledEventID int64,
-) (*WorkflowTaskInfo, bool) {
-	return ms.workflowTaskManager.GetWorkflowTaskInfo(scheduledEventID)
+// GetWorkflowTaskByID returns details about the current workflow task by scheduled event ID.
+func (ms *MutableStateImpl) GetWorkflowTaskByID(scheduledEventID int64) *WorkflowTaskInfo {
+	return ms.workflowTaskManager.GetWorkflowTaskByID(scheduledEventID)
 }
 
 func (ms *MutableStateImpl) GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo {
@@ -1284,24 +1275,24 @@ func (ms *MutableStateImpl) GetPendingSignalExternalInfos() map[int64]*persisten
 	return ms.pendingSignalInfoIDs
 }
 
-func (ms *MutableStateImpl) HasProcessedOrPendingWorkflowTask() bool {
-	return ms.workflowTaskManager.HasProcessedOrPendingWorkflowTask()
+func (ms *MutableStateImpl) HadOrHasWorkflowTask() bool {
+	return ms.workflowTaskManager.HadOrHasWorkflowTask()
 }
 
 func (ms *MutableStateImpl) HasPendingWorkflowTask() bool {
 	return ms.workflowTaskManager.HasPendingWorkflowTask()
 }
 
-func (ms *MutableStateImpl) GetPendingWorkflowTask() (*WorkflowTaskInfo, bool) {
+func (ms *MutableStateImpl) GetPendingWorkflowTask() *WorkflowTaskInfo {
 	return ms.workflowTaskManager.GetPendingWorkflowTask()
 }
 
-func (ms *MutableStateImpl) HasInFlightWorkflowTask() bool {
-	return ms.workflowTaskManager.HasInFlightWorkflowTask()
+func (ms *MutableStateImpl) HasStartedWorkflowTask() bool {
+	return ms.workflowTaskManager.HasStartedWorkflowTask()
 }
 
-func (ms *MutableStateImpl) GetInFlightWorkflowTask() (*WorkflowTaskInfo, bool) {
-	return ms.workflowTaskManager.GetInFlightWorkflowTask()
+func (ms *MutableStateImpl) GetStartedWorkflowTask() *WorkflowTaskInfo {
+	return ms.workflowTaskManager.GetStartedWorkflowTask()
 }
 
 func (ms *MutableStateImpl) IsTransientWorkflowTask() bool {
@@ -1309,7 +1300,7 @@ func (ms *MutableStateImpl) IsTransientWorkflowTask() bool {
 }
 
 func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
-	if !ms.HasInFlightWorkflowTask() {
+	if !ms.HasStartedWorkflowTask() {
 		return serviceerror.NewInternal("cannot clear transient workflow task when task is missing")
 	}
 	if !ms.IsTransientWorkflowTask() {
@@ -1366,8 +1357,8 @@ func (ms *MutableStateImpl) GetNextEventID() int64 {
 	return ms.hBuilder.NextEventID()
 }
 
-// GetPreviousStartedEventID returns last started workflow task event ID
-func (ms *MutableStateImpl) GetPreviousStartedEventID() int64 {
+// GetLastWorkflowTaskStartedEventID returns last started workflow task event ID
+func (ms *MutableStateImpl) GetLastWorkflowTaskStartedEventID() int64 {
 	return ms.executionInfo.LastWorkflowTaskStartedEventId
 }
 
@@ -1405,7 +1396,7 @@ func (ms *MutableStateImpl) IsSignalRequested(
 func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 
 	workflowTaskBackoff := timestamp.TimeValue(ms.executionInfo.GetExecutionTime()).After(timestamp.TimeValue(ms.executionInfo.GetStartTime()))
-	if workflowTaskBackoff && !ms.HasProcessedOrPendingWorkflowTask() {
+	if workflowTaskBackoff && !ms.HadOrHasWorkflowTask() {
 		return true
 	}
 	return false
@@ -4173,7 +4164,7 @@ func (ms *MutableStateImpl) prepareEventsAndReplicationTasks(
 		return nil, nil, false, err
 	}
 
-	historyMutation, err := ms.hBuilder.Finish(!ms.HasInFlightWorkflowTask())
+	historyMutation, err := ms.hBuilder.Finish(!ms.HasStartedWorkflowTask())
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -4376,8 +4367,8 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 		return nil, err
 	}
 
-	// local namespace -> global namespace && with inflight workflow task
-	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && ms.HasInFlightWorkflowTask() {
+	// local namespace -> global namespace && with started workflow task
+	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && ms.HasStartedWorkflowTask() {
 		localNamespaceMutation := namespace.NewPretendAsLocalNamespace(
 			ms.clusterMetadata.GetCurrentClusterName(),
 		)
@@ -4388,8 +4379,7 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 
 func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, error) {
 
-	if !ms.IsWorkflowExecutionRunning() ||
-		!ms.canReplicateEvents() {
+	if !ms.IsWorkflowExecutionRunning() {
 		return false, nil
 	}
 
@@ -4398,8 +4388,8 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	// all events ending in the buffer should have the same version
 
 	// Handling mutable state turn from standby to active, while having a workflow task on the fly
-	workflowTask, ok := ms.GetInFlightWorkflowTask()
-	if !ok || workflowTask.Version >= ms.GetCurrentVersion() {
+	workflowTask := ms.GetStartedWorkflowTask()
+	if workflowTask == nil || workflowTask.Version >= ms.GetCurrentVersion() {
 		// no pending workflow tasks, no buffered events
 		// or workflow task has higher / equal version
 		return false, nil
@@ -4507,7 +4497,7 @@ func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 	}
 
 	// Handling buffered events size issue
-	if workflowTask, ok := ms.GetInFlightWorkflowTask(); ok {
+	if workflowTask := ms.GetStartedWorkflowTask(); workflowTask != nil {
 		// we have a workflow task on the fly with a lower version, fail it
 		if err := failWorkflowTask(
 			ms,

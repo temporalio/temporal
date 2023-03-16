@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 const (
@@ -144,6 +145,8 @@ type (
 			ctx context.Context,
 			now time.Time,
 		) error
+		// TODO (alex-update): move this from workflow context.
+		UpdateRegistry() update.Registry
 	}
 )
 
@@ -158,9 +161,10 @@ type (
 		config          *configs.Config
 		transaction     Transaction
 
-		mutex        locks.PriorityMutex
-		MutableState MutableState
-		stats        *persistencespb.ExecutionStats
+		mutex          locks.PriorityMutex
+		MutableState   MutableState
+		updateRegistry update.Registry
+		stats          *persistencespb.ExecutionStats
 	}
 )
 
@@ -180,6 +184,7 @@ func NewContext(
 		timeSource:      shard.GetTimeSource(),
 		config:          shard.GetConfig(),
 		mutex:           locks.NewPriorityMutex(),
+		updateRegistry:  update.NewRegistry(),
 		transaction:     NewTransaction(shard),
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
@@ -218,10 +223,6 @@ func (c *ContextImpl) Clear() {
 	c.metricsHandler.Counter(metrics.WorkflowContextCleared.GetMetricName()).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
-		// Updates are stored in-memory in mutable state. When mutable state is unload due to the error,
-		// all pending updates must be cleared to notify UpdateWorkflowExecution API callers immediately
-		// without waiting for timeout.
-		c.MutableState.UpdateRegistry().Clear()
 	}
 	c.MutableState = nil
 	c.stats = &persistencespb.ExecutionStats{
@@ -870,6 +871,10 @@ func (c *ContextImpl) ReapplyEvents(
 	)
 
 	return err
+}
+
+func (c *ContextImpl) UpdateRegistry() update.Registry {
+	return c.updateRegistry
 }
 
 // Returns true if execution is forced terminated

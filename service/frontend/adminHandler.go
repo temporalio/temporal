@@ -744,9 +744,15 @@ func (adh *AdminHandler) ListHistoryTasks(
 			}
 		}
 	}
+
+	// Queue reader registration is only meaning for history service
+	// we are on frontend service, so no need to do registration
+	// TODO: move the logic to history service
+
 	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             request.ShardId,
 		TaskCategory:        taskCategory,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: minTaskKey,
 		ExclusiveMaxTaskKey: maxTaskKey,
 		BatchSize:           int(request.BatchSize),
@@ -1369,9 +1375,10 @@ func (adh *AdminHandler) GetDLQMessages(
 		}
 
 		return &adminservice.GetDLQMessagesResponse{
-			Type:             resp.GetType(),
-			ReplicationTasks: resp.GetReplicationTasks(),
-			NextPageToken:    resp.GetNextPageToken(),
+			Type:                 resp.GetType(),
+			ReplicationTasks:     resp.GetReplicationTasks(),
+			ReplicationTasksInfo: resp.GetReplicationTasksInfo(),
+			NextPageToken:        resp.GetNextPageToken(),
 		}, err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		tasks, token, err := adh.namespaceDLQHandler.Read(

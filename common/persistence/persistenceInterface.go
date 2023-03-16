@@ -124,8 +124,13 @@ type (
 		ListConcreteExecutions(ctx context.Context, request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
 
 		// Tasks related APIs
+
+		// Hints for persistence implementaion regarding hisotry task readers
+		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
+		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
+		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
+
 		AddHistoryTasks(ctx context.Context, request *InternalAddHistoryTasksRequest) error
-		GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*InternalGetHistoryTaskResponse, error)
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*InternalGetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
 		RangeCompleteHistoryTasks(ctx context.Context, request *RangeCompleteHistoryTasksRequest) error
@@ -205,6 +210,7 @@ type (
 	InternalUpdateShardRequest struct {
 		ShardID         int32
 		RangeID         int64
+		Owner           string
 		ShardInfo       *commonpb.DataBlob
 		PreviousRangeID int64
 	}

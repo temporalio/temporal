@@ -160,24 +160,24 @@ func (mr *MockMatchingServiceClientMockRecorder) GetTaskQueueMetadata(ctx, in in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetTaskQueueMetadata), varargs...)
 }
 
-// GetWorkerBuildIdOrdering mocks base method.
-func (m *MockMatchingServiceClient) GetWorkerBuildIdOrdering(ctx context.Context, in *matchingservice.GetWorkerBuildIdOrderingRequest, opts ...grpc.CallOption) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+// GetWorkerBuildIdCompatability mocks base method.
+func (m *MockMatchingServiceClient) GetWorkerBuildIdCompatability(ctx context.Context, in *matchingservice.GetWorkerBuildIdCompatabilityRequest, opts ...grpc.CallOption) (*matchingservice.GetWorkerBuildIdCompatabilityResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "GetWorkerBuildIdOrdering", varargs...)
-	ret0, _ := ret[0].(*matchingservice.GetWorkerBuildIdOrderingResponse)
+	ret := m.ctrl.Call(m, "GetWorkerBuildIdCompatability", varargs...)
+	ret0, _ := ret[0].(*matchingservice.GetWorkerBuildIdCompatabilityResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetWorkerBuildIdOrdering indicates an expected call of GetWorkerBuildIdOrdering.
-func (mr *MockMatchingServiceClientMockRecorder) GetWorkerBuildIdOrdering(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// GetWorkerBuildIdCompatability indicates an expected call of GetWorkerBuildIdCompatability.
+func (mr *MockMatchingServiceClientMockRecorder) GetWorkerBuildIdCompatability(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerBuildIdOrdering), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatability", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerBuildIdCompatability), varargs...)
 }
 
 // InvalidateTaskQueueMetadata mocks base method.
@@ -300,24 +300,24 @@ func (mr *MockMatchingServiceClientMockRecorder) RespondQueryTaskCompleted(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceClient)(nil).RespondQueryTaskCompleted), varargs...)
 }
 
-// UpdateWorkerBuildIdOrdering mocks base method.
-func (m *MockMatchingServiceClient) UpdateWorkerBuildIdOrdering(ctx context.Context, in *matchingservice.UpdateWorkerBuildIdOrderingRequest, opts ...grpc.CallOption) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+// UpdateWorkerBuildIdCompatability mocks base method.
+func (m *MockMatchingServiceClient) UpdateWorkerBuildIdCompatability(ctx context.Context, in *matchingservice.UpdateWorkerBuildIdCompatabilityRequest, opts ...grpc.CallOption) (*matchingservice.UpdateWorkerBuildIdCompatabilityResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdOrdering", varargs...)
-	ret0, _ := ret[0].(*matchingservice.UpdateWorkerBuildIdOrderingResponse)
+	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdCompatability", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateWorkerBuildIdCompatabilityResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateWorkerBuildIdOrdering indicates an expected call of UpdateWorkerBuildIdOrdering.
-func (mr *MockMatchingServiceClientMockRecorder) UpdateWorkerBuildIdOrdering(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// UpdateWorkerBuildIdCompatability indicates an expected call of UpdateWorkerBuildIdCompatability.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateWorkerBuildIdCompatability(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateWorkerBuildIdOrdering), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatability", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateWorkerBuildIdCompatability), varargs...)
 }
 
 // MockMatchingServiceServer is a mock of MatchingServiceServer interface.
@@ -418,19 +418,19 @@ func (mr *MockMatchingServiceServerMockRecorder) GetTaskQueueMetadata(arg0, arg1
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetTaskQueueMetadata), arg0, arg1)
 }
 
-// GetWorkerBuildIdOrdering mocks base method.
-func (m *MockMatchingServiceServer) GetWorkerBuildIdOrdering(arg0 context.Context, arg1 *matchingservice.GetWorkerBuildIdOrderingRequest) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+// GetWorkerBuildIdCompatability mocks base method.
+func (m *MockMatchingServiceServer) GetWorkerBuildIdCompatability(arg0 context.Context, arg1 *matchingservice.GetWorkerBuildIdCompatabilityRequest) (*matchingservice.GetWorkerBuildIdCompatabilityResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkerBuildIdOrdering", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.GetWorkerBuildIdOrderingResponse)
+	ret := m.ctrl.Call(m, "GetWorkerBuildIdCompatability", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.GetWorkerBuildIdCompatabilityResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetWorkerBuildIdOrdering indicates an expected call of GetWorkerBuildIdOrdering.
-func (mr *MockMatchingServiceServerMockRecorder) GetWorkerBuildIdOrdering(arg0, arg1 interface{}) *gomock.Call {
+// GetWorkerBuildIdCompatability indicates an expected call of GetWorkerBuildIdCompatability.
+func (mr *MockMatchingServiceServerMockRecorder) GetWorkerBuildIdCompatability(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerBuildIdOrdering), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatability", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerBuildIdCompatability), arg0, arg1)
 }
 
 // InvalidateTaskQueueMetadata mocks base method.
@@ -523,17 +523,17 @@ func (mr *MockMatchingServiceServerMockRecorder) RespondQueryTaskCompleted(arg0,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceServer)(nil).RespondQueryTaskCompleted), arg0, arg1)
 }
 
-// UpdateWorkerBuildIdOrdering mocks base method.
-func (m *MockMatchingServiceServer) UpdateWorkerBuildIdOrdering(arg0 context.Context, arg1 *matchingservice.UpdateWorkerBuildIdOrderingRequest) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+// UpdateWorkerBuildIdCompatability mocks base method.
+func (m *MockMatchingServiceServer) UpdateWorkerBuildIdCompatability(arg0 context.Context, arg1 *matchingservice.UpdateWorkerBuildIdCompatabilityRequest) (*matchingservice.UpdateWorkerBuildIdCompatabilityResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdOrdering", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.UpdateWorkerBuildIdOrderingResponse)
+	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdCompatability", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateWorkerBuildIdCompatabilityResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateWorkerBuildIdOrdering indicates an expected call of UpdateWorkerBuildIdOrdering.
-func (mr *MockMatchingServiceServerMockRecorder) UpdateWorkerBuildIdOrdering(arg0, arg1 interface{}) *gomock.Call {
+// UpdateWorkerBuildIdCompatability indicates an expected call of UpdateWorkerBuildIdCompatability.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateWorkerBuildIdCompatability(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateWorkerBuildIdOrdering), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatability", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateWorkerBuildIdCompatability), arg0, arg1)
 }

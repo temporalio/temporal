@@ -26,6 +26,7 @@ package sql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -374,6 +376,11 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	)
 	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
 	if err != nil {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
 		return nil, err
 	}
 
@@ -447,6 +454,11 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	)
 	selectFilter, err := converter.BuildCountStmt()
 	if err != nil {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
 		return nil, err
 	}
 

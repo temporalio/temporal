@@ -189,18 +189,18 @@ message ListTaskQueuePartitionsResponse {
 //     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest doesn't follow Google API format --)
 // (-- api-linter: core::0134::request-resource-required=disabled
 //     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest RPC doesn't follow Google API format. --)
-message UpdateWorkerBuildIdOrderingRequest {
+message UpdateWorkerBuildIdCompatabilityRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.UpdateWorkerBuildIdOrderingRequest request = 2;
+    temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatabilityRequest request = 2;
 }
-message UpdateWorkerBuildIdOrderingResponse {}
+message UpdateWorkerBuildIdCompatabilityResponse {}
 
-message GetWorkerBuildIdOrderingRequest {
+message GetWorkerBuildIdCompatabilityRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.GetWorkerBuildIdOrderingRequest request = 2;
+    temporal.api.workflowservice.v1.GetWorkerBuildIdCompatabilityRequest request = 2;
 }
-message GetWorkerBuildIdOrderingResponse {
-    temporal.api.workflowservice.v1.GetWorkerBuildIdOrderingResponse response = 1;
+message GetWorkerBuildIdCompatabilityResponse {
+    temporal.api.workflowservice.v1.GetWorkerBuildIdCompatabilityResponse response = 1;
 }
 
 message InvalidateTaskQueueMetadataRequest {

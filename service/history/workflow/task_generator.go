@@ -334,10 +334,10 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
 ) error {
 
-	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
+	workflowTask := r.mutableState.GetWorkflowTaskByID(
 		workflowTaskScheduledEventID,
 	)
-	if !ok {
+	if workflowTask == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
@@ -371,11 +371,11 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
 ) error {
 
-	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
+	workflowTask := r.mutableState.GetWorkflowTaskByID(
 		workflowTaskScheduledEventID,
 	)
-	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduledEventID))
+	if workflowTask == nil {
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
 	startedTime := timestamp.TimeValue(workflowTask.StartedTime)

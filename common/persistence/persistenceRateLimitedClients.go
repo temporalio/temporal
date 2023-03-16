@@ -306,6 +306,30 @@ func (p *executionRateLimitedPersistenceClient) ListConcreteExecutions(
 	return response, err
 }
 
+func (p *executionRateLimitedPersistenceClient) RegisterHistoryTaskReader(
+	ctx context.Context,
+	request *RegisterHistoryTaskReaderRequest,
+) error {
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	return p.persistence.RegisterHistoryTaskReader(ctx, request)
+}
+
+func (p *executionRateLimitedPersistenceClient) UnregisterHistoryTaskReader(
+	ctx context.Context,
+	request *UnregisterHistoryTaskReaderRequest,
+) {
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	p.persistence.UnregisterHistoryTaskReader(ctx, request)
+}
+
+func (p *executionRateLimitedPersistenceClient) UpdateHistoryTaskReaderProgress(
+	ctx context.Context,
+	request *UpdateHistoryTaskReaderProgressRequest,
+) {
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
+}
+
 func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 	ctx context.Context,
 	request *AddHistoryTasksRequest,
@@ -316,22 +340,6 @@ func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 
 	err := p.persistence.AddHistoryTasks(ctx, request)
 	return err
-}
-
-func (p *executionRateLimitedPersistenceClient) GetHistoryTask(
-	ctx context.Context,
-	request *GetHistoryTaskRequest,
-) (*GetHistoryTaskResponse, error) {
-	if ok := allow(
-		ctx,
-		ConstructHistoryTaskAPI("GetHistoryTask", request.TaskCategory),
-		p.rateLimiter,
-	); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetHistoryTask(ctx, request)
-	return response, err
 }
 
 func (p *executionRateLimitedPersistenceClient) GetHistoryTasks(

@@ -114,7 +114,9 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
 
-	s.refreshNamespaceCache()
+	// For tests using SQL visibility, we need to wait for search attributes to be available as part of the ns config
+	// TODO: remove after https://github.com/temporalio/temporal/issues/4017 is resolved
+	time.Sleep(2 * NamespaceCacheRefreshInterval)
 }
 
 // setupLogger sets the Logger for the test suite.
@@ -166,18 +168,6 @@ func (s *IntegrationBase) tearDownSuite() {
 	s.adminClient = nil
 }
 
-func (s *IntegrationBase) refreshNamespaceCache() {
-	if s.testClusterConfig.FrontendAddress == "" {
-		// Poke all the in-process namespace caches to refresh without waiting for the usual refresh interval.
-		s.testCluster.RefreshNamespaceCache()
-	} else {
-		// Wait for one whole cycle of the namespace cache v2 refresh interval to be sure that our namespaces are loaded.
-		// We are using real server so we don't know what cache refresh interval it uses. Fall back to the 10s old value.
-		serverCacheRefreshInterval := 10 * time.Second
-		time.Sleep(serverCacheRefreshInterval + time.Second)
-	}
-}
-
 func (s *IntegrationBase) registerNamespace(
 	namespace string,
 	retention time.Duration,
@@ -201,9 +191,8 @@ func (s *IntegrationBase) registerNamespace(
 	if err != nil {
 		return err
 	}
+
 	// Set up default alias for custom search attributes.
-	// Need to refresh namespace cache first to find the namespace.
-	s.refreshNamespaceCache()
 	_, err = s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		Config: &namespacepb.NamespaceConfig{

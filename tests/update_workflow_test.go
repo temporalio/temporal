@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"testing"
@@ -41,7 +42,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -1328,7 +1329,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_1stAccept_2ndRej
  17 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_BadAcceptMessage() {
+func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 	id := "integration-update-workflow-test-7"
 	wt := "integration-update-workflow-test-7-type"
 	tq := "integration-update-workflow-test-7-task-queue"
@@ -1342,8 +1343,6 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_BadAcceptMessage
 		WorkflowId:   id,
 		WorkflowType: workflowType,
 		TaskQueue:    taskQueue,
-		// Some short but reasonable timeout because there is a wait for it in the test.
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second * debug.TimeoutMultiplier),
 	}
 
 	startResp, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1382,6 +1381,9 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_BadAcceptMessage
 			s.Fail("should not be called because messageHandler returns error")
 			return nil, nil
 		case 4:
+			s.Fail("should not be called because messageHandler returns error")
+			return nil, nil
+		case 5:
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -1429,13 +1431,21 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_BadAcceptMessage
 				},
 			}, nil
 		case 3:
-			// 2nd attempt doesn't have any updates attached to it.
-			s.Empty(task.Messages)
+			// 2nd attempt has same updates attached to it.
+			updRequestMsg := task.Messages[0]
+			s.EqualValues(9, updRequestMsg.GetEventId())
 			wtHandlerCalls++ // because it won't be called for case 3 but counter should be in sync.
 			// Fail WT one more time. Although 2nd attempt is normal WT, it is also transient and shouldn't appear in the history.
 			// Returning error will cause the poller to fail WT.
 			return nil, errors.New("malformed request")
 		case 4:
+			// 3rd attempt doesn't have any updates attached to it because UpdateWorkflowExecution call has timed out.
+			s.Empty(task.Messages)
+			wtHandlerCalls++ // because it won't be called for case 4 but counter should be in sync.
+			// Fail WT one more time. This is transient WT and shouldn't appear in the history.
+			// Returning error will cause the poller to fail WT.
+			return nil, errors.New("malformed request")
+		case 5:
 			return nil, nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
@@ -1457,13 +1467,11 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_BadAcceptMessage
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
-	type UpdateResult struct {
-		Response *workflowservice.UpdateWorkflowExecutionResponse
-		Err      error
-	}
-	updateResultCh := make(chan UpdateResult)
+	updateResultCh := make(chan struct{})
 	updateWorkflowFn := func() {
-		updateResponse, err1 := s.engine.UpdateWorkflowExecution(NewContext(), &workflowservice.UpdateWorkflowExecutionRequest{
+		ctx1, cancel := context.WithTimeout(NewContext(), 2*time.Second)
+		defer cancel()
+		updateResponse, err1 := s.engine.UpdateWorkflowExecution(ctx1, &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         s.namespace,
 			WorkflowExecution: we,
 			Request: &updatepb.Request{
@@ -1474,11 +1482,13 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_BadAcceptMessage
 				},
 			},
 		})
-		s.NoError(err1)
-		updateResultCh <- UpdateResult{Response: updateResponse, Err: err1}
+		s.Error(err1)
+		// UpdateWorkflowExecution is timed out after 2 seconds.
+		s.True(common.IsContextDeadlineExceededErr(err1))
+		s.Nil(updateResponse)
+		updateResultCh <- struct{}{}
 	}
 	go updateWorkflowFn()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
 
 	// Try to accept update in workflow: get malformed response.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
@@ -1486,12 +1496,16 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_BadAcceptMessage
 	s.Equal(err.Error(), "BadUpdateWorkflowExecutionMessage: accepted_request is not set on update.Acceptance message body.")
 	// New normal (but transient) WT will be created but not returned.
 
-	updateResult := <-updateResultCh
-	s.NoError(updateResult.Err)
-	// TODO (alex-update): this is wrong. Caller shouldn't get this error if WT failed.
-	s.Equal("update cleared, please retry", updateResult.Response.GetOutcome().GetFailure().GetMessage())
-
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
+	s.NoError(err)
+
+	// Wait for UpdateWorkflowExecution to timeout.
+	// This will also remove update from registry and next WT won't have any updates attached to it.
+	<-updateResultCh
+
+	// Try to accept update in workflow 3rd time: get error. Poller will fail WT.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
 	s.NoError(err)
@@ -1500,8 +1514,8 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_BadAcceptMessage
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 
-	s.Equal(4, wtHandlerCalls)
-	s.Equal(4, msgHandlerCalls)
+	s.Equal(5, wtHandlerCalls)
+	s.Equal(5, msgHandlerCalls)
 
 	events := s.getHistory(s.namespace, we)
 	s.EqualHistoryEvents(`

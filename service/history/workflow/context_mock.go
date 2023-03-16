@@ -37,6 +37,7 @@ import (
 	v1 "go.temporal.io/server/api/persistence/v1"
 	definition "go.temporal.io/server/common/definition"
 	persistence "go.temporal.io/server/common/persistence"
+	update "go.temporal.io/server/service/history/workflow/update"
 )
 
 // MockContext is a mock of Context interface.
@@ -239,6 +240,20 @@ func (m *MockContext) Unlock(caller CallerType) {
 func (mr *MockContextMockRecorder) Unlock(caller interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockContext)(nil).Unlock), caller)
+}
+
+// UpdateRegistry mocks base method.
+func (m *MockContext) UpdateRegistry() update.Registry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRegistry")
+	ret0, _ := ret[0].(update.Registry)
+	return ret0
+}
+
+// UpdateRegistry indicates an expected call of UpdateRegistry.
+func (mr *MockContextMockRecorder) UpdateRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRegistry", reflect.TypeOf((*MockContext)(nil).UpdateRegistry))
 }
 
 // UpdateWorkflowExecutionAsActive mocks base method.

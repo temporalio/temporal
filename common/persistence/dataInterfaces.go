@@ -404,16 +404,28 @@ type (
 		RunID       string
 	}
 
-	// GetHistoryTaskRequest is used to get a workflow task
-	GetHistoryTaskRequest struct {
+	// RegisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
+	// that a new queue reader is created by queue processing logic
+	RegisterHistoryTaskReaderRequest struct {
 		ShardID      int32
+		ShardOwner   string
 		TaskCategory tasks.Category
-		TaskKey      tasks.Key
+		ReaderID     int32
 	}
 
-	// GetHistoryTaskResponse is the response for GetHistoryTask
-	GetHistoryTaskResponse struct {
-		Task tasks.Task
+	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
+	// that queue processing logic is done using an existing queue reader
+	UnregisterHistoryTaskReaderRequest RegisterHistoryTaskReaderRequest
+
+	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying persistence implementation
+	// that a certain queue reader's process and the fact that it won't try to load tasks with
+	// key less than InclusiveMinPendingTaskKey
+	UpdateHistoryTaskReaderProgressRequest struct {
+		ShardID                    int32
+		ShardOwner                 string
+		TaskCategory               tasks.Category
+		ReaderID                   int32
+		InclusiveMinPendingTaskKey tasks.Key
 	}
 
 	// GetHistoryTasksRequest is used to get a range of history tasks
@@ -422,6 +434,7 @@ type (
 	GetHistoryTasksRequest struct {
 		ShardID             int32
 		TaskCategory        tasks.Category
+		ReaderID            int32
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
 		BatchSize           int
@@ -1025,8 +1038,12 @@ type (
 
 		// Tasks related APIs
 
+		// Hints for persistence implementaion regarding hisotry task readers
+		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
+		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
+		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
+
 		AddHistoryTasks(ctx context.Context, request *AddHistoryTasksRequest) error
-		GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error)
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
 		RangeCompleteHistoryTasks(ctx context.Context, request *RangeCompleteHistoryTasksRequest) error

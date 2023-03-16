@@ -58,8 +58,6 @@ type (
 	HistoryVisibilityTask interface {
 		// InsertIntoVisibilityTasks inserts rows that into visibility_tasks table.
 		InsertIntoVisibilityTasks(ctx context.Context, rows []VisibilityTasksRow) (sql.Result, error)
-		// SelectFromVisibilityTasks returns rows that match filter criteria from visibility_tasks table.
-		SelectFromVisibilityTasks(ctx context.Context, filter VisibilityTasksFilter) ([]VisibilityTasksRow, error)
 		// RangeSelectFromVisibilityTasks returns rows that match filter criteria from visibility_tasks table.
 		RangeSelectFromVisibilityTasks(ctx context.Context, filter VisibilityTasksRangeFilter) ([]VisibilityTasksRow, error)
 		// DeleteFromVisibilityTasks deletes one rows from visibility_tasks table.
