@@ -820,6 +820,8 @@ type (
 	ForkHistoryBranchRequest struct {
 		// The shard to get history branch data
 		ShardID int32
+		// The namespace performing the fork
+		NamespaceID string
 		// The base branch to fork from
 		ForkBranchToken []byte
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)

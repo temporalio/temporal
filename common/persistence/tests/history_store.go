@@ -775,6 +775,7 @@ func (s *HistoryEventsSuite) forkHistoryBranch(
 ) []byte {
 	resp, err := s.store.ForkHistoryBranch(s.Ctx, &p.ForkHistoryBranchRequest{
 		ShardID:         shardID,
+		NamespaceID:     uuid.New(),
 		ForkBranchToken: branchToken,
 		ForkNodeID:      newNodeID,
 		Info:            "",

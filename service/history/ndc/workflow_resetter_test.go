@@ -302,6 +302,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		ShardID:         shardID,
+		NamespaceID:     s.namespaceID.String(),
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	s.mockStateRebuilder.EXPECT().Rebuild(
@@ -509,6 +510,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		ShardID:         shardID,
+		NamespaceID:     s.namespaceID.String(),
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	newBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(

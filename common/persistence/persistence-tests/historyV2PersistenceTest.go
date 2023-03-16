@@ -903,6 +903,7 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 			ForkNodeID:      forkNodeID,
 			Info:            testForkRunID,
 			ShardID:         s.ShardInfo.GetShardId(),
+			NamespaceID:     uuid.New(),
 		})
 		if resp != nil {
 			bi = resp.NewBranchToken

@@ -151,6 +151,7 @@ func (s *branchMgrSuite) TestCreateNewBranch() {
 				ForkNodeID:      baseBranchLCAEventID + 1,
 				Info:            "",
 				ShardID:         shardID,
+				NamespaceID:     s.namespaceID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,
@@ -378,6 +379,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissing
 				ForkNodeID:      baseBranchLCAEventID + 1,
 				Info:            "",
 				ShardID:         shardID,
+				NamespaceID:     s.namespaceID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,
