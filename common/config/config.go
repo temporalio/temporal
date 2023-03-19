@@ -550,7 +550,7 @@ type (
 		Authorizer string `yaml:"authorizer"`
 		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper
 		ClaimMapper string `yaml:"claimMapper"`
-		// Empty string unless using "opa" Authorizer. The HTTP(s) endpoint which temporal will invoke for authorization decisions.
+		// Empty string unless using "http" Authorizer. The HTTP(s) endpoint which temporal will invoke for authorization decisions.
 		HttpAuthEndpoint string `yaml:"httpAuthEndpoint"`
 	}
 
