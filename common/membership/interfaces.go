@@ -27,6 +27,7 @@
 package membership
 
 import (
+	"context"
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
@@ -51,9 +52,8 @@ type (
 
 	// ChangedEvent describes a change in membership
 	ChangedEvent struct {
-		HostsAdded   []*HostInfo
-		HostsUpdated []*HostInfo
-		HostsRemoved []*HostInfo
+		HostsAdded   []HostInfo
+		HostsRemoved []HostInfo
 	}
 
 	// Monitor provides membership information for all temporal services.
@@ -61,12 +61,12 @@ type (
 	Monitor interface {
 		common.Daemon
 
-		WhoAmI() (*HostInfo, error)
+		WhoAmI() (HostInfo, error)
 		// EvictSelf evicts this member from the membership ring. After this method is
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
 		EvictSelf() error
-		Lookup(service primitives.ServiceName, key string) (*HostInfo, error)
+		Lookup(service primitives.ServiceName, key string) (HostInfo, error)
 		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
 		// AddListener adds a listener for this service.
 		// The listener will get notified on the given
@@ -82,12 +82,17 @@ type (
 		// GetMemberCount returns the number of reachable members
 		// currently in this node's membership list for the given service
 		GetMemberCount(service primitives.ServiceName) (int, error)
+		// WaitUntilInitialized blocks until initialization is completed and returns the result
+		// of initialization. The current implementation does log.Fatal if it can't initialize,
+		// so currently this will never return non-nil, except for context cancel/timeout. A
+		// future implementation might return more errors.
+		WaitUntilInitialized(context.Context) error
 	}
 
 	// ServiceResolver provides membership information for a specific temporal service.
 	// It can be used to resolve which member host is responsible for serving a given key.
 	ServiceResolver interface {
-		Lookup(key string) (*HostInfo, error)
+		Lookup(key string) (HostInfo, error)
 		// AddListener adds a listener which will get notified on the given
 		// channel, whenever membership changes.
 		// @name: The name for identifying the listener
@@ -98,13 +103,13 @@ type (
 		// MemberCount returns host count in hashring for any particular role
 		MemberCount() int
 		// Members returns all host addresses in hashring for any particular role
-		Members() []*HostInfo
+		Members() []HostInfo
 		// Requests to rebuild the hash ring
 		RequestRefresh()
 	}
 
 	HostInfoProvider interface {
 		Start() error
-		HostInfo() *HostInfo
+		HostInfo() HostInfo
 	}
 )

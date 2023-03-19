@@ -44,6 +44,7 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc/health"
@@ -66,12 +67,14 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -103,7 +106,7 @@ type (
 		tokenSerializer                 common.TaskTokenSerializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
-		namespaceHandler                namespace.Handler
+		namespaceHandler                NamespaceHandler
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 		visibilityMrg                   manager.VisibilityManager
 		logger                          log.Logger
@@ -115,12 +118,13 @@ type (
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry
-		saMapper                        searchattribute.Mapper
+		saMapperProvider                searchattribute.MapperProvider
 		saProvider                      searchattribute.Provider
 		saValidator                     *searchattribute.Validator
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
 		overrides                       *Overrides
+		membershipMonitor               membership.Monitor
 	}
 )
 
@@ -139,12 +143,13 @@ func NewWorkflowHandler(
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
-	saMapper searchattribute.Mapper,
+	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	timeSource clock.TimeSource,
+	membershipMonitor membership.Monitor,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -152,7 +157,7 @@ func NewWorkflowHandler(
 		config:          config,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
-		namespaceHandler: namespace.NewHandler(
+		namespaceHandler: newNamespaceHandler(
 			config.MaxBadBinaries,
 			logger,
 			persistenceMetadataManager,
@@ -175,16 +180,20 @@ func NewWorkflowHandler(
 		payloadSerializer:               payloadSerializer,
 		namespaceRegistry:               namespaceRegistry,
 		saProvider:                      saProvider,
-		saMapper:                        saMapper,
+		saMapperProvider:                saMapperProvider,
 		saValidator: searchattribute.NewValidator(
 			saProvider,
-			saMapper,
+			saMapperProvider,
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
-			config.SearchAttributesTotalSizeLimit),
-		archivalMetadata: archivalMetadata,
-		healthServer:     healthServer,
-		overrides:        NewOverrides(),
+			config.SearchAttributesTotalSizeLimit,
+			visibilityMrg.GetIndexName(),
+			visibility.AllowListForValidation(visibilityMrg.GetStoreNames()),
+		),
+		archivalMetadata:  archivalMetadata,
+		healthServer:      healthServer,
+		overrides:         NewOverrides(),
+		membershipMonitor: membershipMonitor,
 	}
 
 	return handler
@@ -197,7 +206,13 @@ func (wh *WorkflowHandler) Start() {
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+		// Start in NOT_SERVING state and switch to SERVING after membership is ready
+		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
+		go func() {
+			_ = wh.membershipMonitor.WaitUntilInitialized(context.Background())
+			wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+			wh.logger.Info("Frontend is now healthy")
+		}()
 	}
 }
 
@@ -404,7 +419,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	if err != nil {
 		return nil, err
 	}
-	return &workflowservice.StartWorkflowExecutionResponse{RunId: resp.GetRunId()}, nil
+	return &workflowservice.StartWorkflowExecutionResponse{RunId: resp.GetRunId(), EagerWorkflowTask: resp.GetEagerWorkflowTask()}, nil
 }
 
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if specified workflow
@@ -957,7 +972,8 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	}
 
 	completedResp := &workflowservice.RespondWorkflowTaskCompletedResponse{
-		ActivityTasks: histResp.ActivityTasks,
+		ActivityTasks:       histResp.ActivityTasks,
+		ResetHistoryEventId: histResp.ResetHistoryEventId,
 	}
 	if request.GetReturnNewWorkflowTask() && histResp != nil && histResp.StartedResponse != nil {
 		taskToken := &tokenspb.Task{
@@ -2437,7 +2453,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		Query:         request.GetQuery(),
 	}
 
-	searchAttributes, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
+	searchAttributes, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
@@ -2551,7 +2567,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 		return nil, errShuttingDown
 	}
 
-	searchAttributes, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
+	searchAttributes, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
@@ -2758,12 +2774,12 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	}
 
 	if response.GetWorkflowExecutionInfo().GetSearchAttributes() != nil {
-		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
+		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
 		searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
-		aliasedSas, err := searchattribute.AliasFields(wh.saMapper, response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
+		aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
 		if err != nil {
 			return nil, err
 		}
@@ -2834,7 +2850,7 @@ func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservic
 		ClusterName:       metadata.ClusterName,
 		HistoryShardCount: metadata.HistoryShardCount,
 		PersistenceStore:  wh.persistenceExecutionManager.GetName(),
-		VisibilityStore:   wh.visibilityMrg.GetName(),
+		VisibilityStore:   strings.Join(wh.visibilityMrg.GetStoreNames(), ","),
 	}, nil
 }
 
@@ -2862,6 +2878,8 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			SupportsSchedules:               true,
 			EncodedFailureAttributes:        true,
 			UpsertMemo:                      true,
+			EagerWorkflowStart:              true,
+			SdkMetadata:                     true,
 		},
 	}, nil
 }
@@ -2949,6 +2967,9 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// Add namespace division before unaliasing search attributes.
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+
 	request, err = wh.unaliasCreateScheduleRequestSearchAttributes(request, namespaceName)
 	if err != nil {
 		return nil, err
@@ -2982,8 +3003,8 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	if err != nil {
 		return nil, err
 	}
-	// Add namespace division
-	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	// Add initial memo for list schedules
+	wh.addInitialScheduleMemo(request, input)
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
@@ -3051,7 +3072,14 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errIDReusePolicyNotAllowed
 	}
 
-	if err := wh.validateSearchAttributes(startWorkflow.GetSearchAttributes(), namespaceName); err != nil {
+	// Unalias startWorkflow search attributes only for validation.
+	// Keep aliases in the request, because the request will be
+	// sent back to frontend to start workflows, which will unalias at that point.
+	unaliasedStartWorkflowSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, startWorkflow.GetSearchAttributes(), namespaceName.String())
+	if err != nil {
+		return err
+	}
+	if err := wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName); err != nil {
 		return err
 	}
 
@@ -3103,12 +3131,12 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 
 	// map search attributes
 	if sas := executionInfo.GetSearchAttributes(); sas != nil {
-		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
+		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
 		searchattribute.ApplyTypeMap(sas, saTypeMap)
-		aliasedSas, err := searchattribute.AliasFields(wh.saMapper, sas, request.GetNamespace())
+		aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, sas, request.GetNamespace())
 		if err != nil {
 			return nil, err
 		}
@@ -3145,21 +3173,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 			return err
 		}
 
-		// map action search attributes
-		if sa := queryResponse.Schedule.Action.GetStartWorkflow().SearchAttributes; sa != nil {
-			saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
-			if err != nil {
-				return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-			}
-			searchattribute.ApplyTypeMap(sa, saTypeMap)
-			aliasedSas, err := searchattribute.AliasFields(wh.saMapper, sa, request.Namespace)
-			if err != nil {
-				return err
-			}
-			if aliasedSas != nil {
-				queryResponse.Schedule.Action.GetStartWorkflow().SearchAttributes = aliasedSas
-			}
-		}
+		// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
 
 		// for all running workflows started by the schedule, we should check that they're
 		// still running, and if not, poke the schedule to refresh
@@ -3291,11 +3305,6 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 	}
 
 	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
-		return nil, err
-	}
-
-	request, err = wh.unaliasUpdateScheduleRequestStartWorkflowSearchAttributes(request, namespaceName)
-	if err != nil {
 		return nil, err
 	}
 
@@ -3593,7 +3602,7 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 	}, nil
 }
 
-func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdOrderingRequest) (_ *workflowservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatabilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if wh.isStopped() {
@@ -3604,7 +3613,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateBuildIdOrderingUpdate(request); err != nil {
+	if err := wh.validateBuildIdCompatabilityUpdate(request); err != nil {
 		return nil, err
 	}
 
@@ -3617,7 +3626,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdOrdering(ctx, &matchingservice.UpdateWorkerBuildIdOrderingRequest{
+	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdCompatability(ctx, &matchingservice.UpdateWorkerBuildIdCompatabilityRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
@@ -3626,13 +3635,13 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 		return nil, err
 	}
 
-	return &workflowservice.UpdateWorkerBuildIdOrderingResponse{}, err
+	return &workflowservice.UpdateWorkerBuildIdCompatabilityResponse{}, err
 }
 
-func (wh *WorkflowHandler) UpdateWorkflow(
+func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkflowRequest,
-) (_ *workflowservice.UpdateWorkflowResponse, retError error) {
+	request *workflowservice.UpdateWorkflowExecutionRequest,
+) (_ *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if wh.isStopped() {
@@ -3643,12 +3652,45 @@ func (wh *WorkflowHandler) UpdateWorkflow(
 		return nil, errRequestNotSet
 	}
 
+	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
+		return nil, err
+	}
+
+	if request.GetRequest().GetMeta() == nil {
+		return nil, errUpdateMetaNotSet
+	}
+
+	if len(request.GetRequest().GetMeta().GetUpdateId()) > wh.config.MaxIDLengthLimit() {
+		return nil, errUpdateIDTooLong
+	}
+
+	if request.GetRequest().GetMeta().GetUpdateId() == "" {
+		request.GetRequest().GetMeta().UpdateId = uuid.New()
+	}
+
+	if request.GetRequest().GetInput() == nil {
+		return nil, errUpdateInputNotSet
+	}
+
+	if request.GetRequest().GetInput().GetName() == "" {
+		return nil, errUpdateNameNotSet
+	}
+
+	if request.GetWaitPolicy() == nil {
+		request.WaitPolicy = &updatepb.WaitPolicy{}
+	}
+	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
+
 	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	histResp, err := wh.historyClient.UpdateWorkflow(ctx, &historyservice.UpdateWorkflowRequest{
+	if !wh.config.EnableUpdateWorkflowExecution(request.Namespace) {
+		return nil, errUpdateWorkflowExecutionAPINotAllowed
+	}
+
+	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{
 		NamespaceId: nsID.String(),
 		Request:     request,
 	})
@@ -3656,7 +3698,7 @@ func (wh *WorkflowHandler) UpdateWorkflow(
 	return histResp.GetResponse(), err
 }
 
-func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.GetWorkerBuildIdOrderingRequest) (_ *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
+func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.GetWorkerBuildIdCompatabilityRequest) (_ *workflowservice.GetWorkerBuildIdCompatabilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if wh.isStopped() {
@@ -3676,7 +3718,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdOrdering(ctx, &matchingservice.GetWorkerBuildIdOrderingRequest{
+	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdCompatability(ctx, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
@@ -3712,8 +3754,14 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if len(request.Namespace) == 0 {
 		return nil, errNamespaceNotSet
 	}
-	if len(request.VisibilityQuery) == 0 {
-		return nil, errQueryNotSet
+	if len(request.VisibilityQuery) == 0 && len(request.Executions) == 0 {
+		return nil, errBatchOpsWorkflowFilterNotSet
+	}
+	if len(request.VisibilityQuery) != 0 && len(request.Executions) != 0 {
+		return nil, errBatchOpsWorkflowFiltersNotAllowed
+	}
+	if len(request.Executions) > wh.config.MaxExecutionCountBatchOperation(request.Namespace) {
+		return nil, errBatchOpsMaxWorkflowExecutionCount
 	}
 	if len(request.Reason) == 0 {
 		return nil, errReasonNotSet
@@ -3767,6 +3815,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	input := &batcher.BatchParams{
 		Namespace:       request.GetNamespace(),
 		Query:           request.GetVisibilityQuery(),
+		Executions:      request.GetExecutions(),
 		Reason:          request.GetReason(),
 		BatchType:       operationType,
 		TerminateParams: batcher.TerminateParams{},
@@ -4230,7 +4279,7 @@ func (wh *WorkflowHandler) getHistoryReverse(
 }
 
 func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.HistoryEvent, namespace namespace.Name) error {
-	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
+	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
@@ -4248,7 +4297,7 @@ func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.H
 		}
 		if searchAttributes != nil {
 			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-			aliasedSas, err := searchattribute.AliasFields(wh.saMapper, searchAttributes, namespace.String())
+			aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, searchAttributes, namespace.String())
 			if err != nil {
 				return err
 			}
@@ -4262,7 +4311,7 @@ func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.H
 }
 
 func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {
-	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String(), wh.config.ESIndexName); err != nil {
+	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String()); err != nil {
 		return err
 	}
 	if err := wh.saValidator.ValidateSize(searchAttributes, namespaceName.String()); err != nil {
@@ -4302,29 +4351,58 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	return nil
 }
 
-func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
-	req *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+//nolint:revive // cyclomatic complexity
+func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
+	req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
 ) error {
-	errstr := "request to update worker build id ordering requires:"
-	hadErr := false
+	errDeets := []string{"request to update worker build id compatability requires: "}
+
+	checkIdLen := func(id string) {
+		if len(id) > wh.config.WorkerBuildIdSizeLimit() {
+			errDeets = append(errDeets, fmt.Sprintf(" Worker build IDs to be no larger than %v characters",
+				wh.config.WorkerBuildIdSizeLimit()))
+		}
+	}
+
 	if req.GetNamespace() == "" {
-		errstr += " `namespace` to be set"
-		hadErr = true
+		errDeets = append(errDeets, "`namespace` to be set")
 	}
 	if req.GetTaskQueue() == "" {
-		errstr += " `task_queue` to be set"
-		hadErr = true
+		errDeets = append(errDeets, "`task_queue` to be set")
 	}
-	if req.GetVersionId().GetWorkerBuildId() == "" {
-		errstr += " targeting a valid version identifier"
-		hadErr = true
+	if req.GetOperation() == nil {
+		errDeets = append(errDeets, "an operation to be specified")
 	}
-	if len(req.GetVersionId().GetWorkerBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		errstr += fmt.Sprintf(" Worker build IDs to be no larger than %v characters", wh.config.WorkerBuildIdSizeLimit())
-		hadErr = true
+	if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId); ok {
+		if op.AddNewCompatibleBuildId.GetNewBuildId() == "" {
+			errDeets = append(errDeets, "`add_new_compatible_version` to be set")
+		} else {
+			checkIdLen(op.AddNewCompatibleBuildId.GetNewBuildId())
+		}
+		if op.AddNewCompatibleBuildId.GetExistingCompatibleBuildId() == "" {
+			errDeets = append(errDeets, "`existing_compatible_version` to be set")
+		}
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet); ok {
+		if op.AddNewBuildIdInNewDefaultSet == "" {
+			errDeets = append(errDeets, "`add_new_version_id_in_new_default_set` to be set")
+		} else {
+			checkIdLen(op.AddNewBuildIdInNewDefaultSet)
+		}
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByBuildId); ok {
+		if op.PromoteSetByBuildId == "" {
+			errDeets = append(errDeets, "`promote_set_by_version_id` to be set")
+		} else {
+			checkIdLen(op.PromoteSetByBuildId)
+		}
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteBuildIdWithinSet); ok {
+		if op.PromoteBuildIdWithinSet == "" {
+			errDeets = append(errDeets, "`promote_version_id_within_set` to be set")
+		} else {
+			checkIdLen(op.PromoteBuildIdWithinSet)
+		}
 	}
-	if hadErr {
-		return serviceerror.NewInvalidArgument(errstr)
+	if len(errDeets) > 1 {
+		return serviceerror.NewInvalidArgument(strings.Join(errDeets, ", "))
 	}
 	return nil
 }
@@ -4426,6 +4504,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 		ScheduledTime:              matchingResp.ScheduledTime,
 		StartedTime:                matchingResp.StartedTime,
 		Queries:                    matchingResp.Queries,
+		Messages:                   matchingResp.Messages,
 	}
 
 	return resp, nil
@@ -4829,6 +4908,28 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 	return memo
 }
 
+// This mutates request (but idempotent so safe for retries)
+func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedspb.StartScheduleArgs) {
+	info := scheduler.GetListInfoFromStartArgs(args)
+	infoBytes, err := info.Marshal()
+	if err != nil {
+		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))
+		return
+	}
+	p, err := sdk.PreferProtoDataConverter.ToPayload(infoBytes)
+	if err != nil {
+		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))
+		return
+	}
+	if request.Memo == nil {
+		request.Memo = &commonpb.Memo{}
+	}
+	if request.Memo.Fields == nil {
+		request.Memo.Fields = make(map[string]*commonpb.Payload)
+	}
+	request.Memo.Fields[scheduler.MemoFieldInfo] = p
+}
+
 func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enumspb.BatchOperationState {
 	var operationState enumspb.BatchOperationState
 	switch workflowState {
@@ -4843,7 +4944,7 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 }
 
 func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.StartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.StartWorkflowExecutionRequest, error) {
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapper, request.GetSearchAttributes(), namespaceName.String())
+	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, request.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
@@ -4858,7 +4959,7 @@ func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(
 }
 
 func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.SignalWithStartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.SignalWithStartWorkflowExecutionRequest, error) {
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapper, request.GetSearchAttributes(), namespaceName.String())
+	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, request.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
@@ -4873,18 +4974,12 @@ func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchA
 }
 
 func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request *workflowservice.CreateScheduleRequest, namespaceName namespace.Name) (*workflowservice.CreateScheduleRequest, error) {
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapper, request.GetSearchAttributes(), namespaceName.String())
+	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapperProvider, request.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
 
-	startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow()
-	unaliasedStartWorkflowSas, err := searchattribute.UnaliasFields(wh.saMapper, startWorkflow.GetSearchAttributes(), namespaceName.String())
-	if err != nil {
-		return nil, err
-	}
-
-	if unaliasedSas == nil && unaliasedStartWorkflowSas == nil {
+	if unaliasedSas == nil {
 		return request, nil
 	}
 
@@ -4895,41 +4990,5 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 		newRequest.SearchAttributes = unaliasedSas
 	}
 
-	if unaliasedStartWorkflowSas != nil && startWorkflow != nil {
-		newStartWorkflow := *startWorkflow
-		newStartWorkflow.SearchAttributes = unaliasedStartWorkflowSas
-		newSchedule := *request.GetSchedule()
-		newSchedule.Action = &schedpb.ScheduleAction{
-			Action: &schedpb.ScheduleAction_StartWorkflow{
-				StartWorkflow: &newStartWorkflow,
-			}}
-		newRequest.Schedule = &newSchedule
-	}
-
-	return &newRequest, nil
-}
-
-func (wh *WorkflowHandler) unaliasUpdateScheduleRequestStartWorkflowSearchAttributes(request *workflowservice.UpdateScheduleRequest, namespaceName namespace.Name) (*workflowservice.UpdateScheduleRequest, error) {
-	startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow()
-	if startWorkflow == nil {
-		return request, nil
-	}
-
-	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapper, startWorkflow.GetSearchAttributes(), namespaceName.String())
-	if err != nil {
-		return nil, err
-	}
-	if unaliasedSas == nil {
-		return request, nil
-	}
-	newStartWorkflow := *startWorkflow
-	newStartWorkflow.SearchAttributes = unaliasedSas
-	newSchedule := *request.GetSchedule()
-	newSchedule.Action = &schedpb.ScheduleAction{
-		Action: &schedpb.ScheduleAction_StartWorkflow{
-			StartWorkflow: &newStartWorkflow,
-		}}
-	newRequest := *request
-	newRequest.Schedule = &newSchedule
 	return &newRequest, nil
 }

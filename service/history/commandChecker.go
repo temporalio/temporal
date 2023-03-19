@@ -29,12 +29,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -546,10 +550,87 @@ func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 
+// TODO (alex-update): Move this to messageValidator
+func (v *commandAttrValidator) validateWorkflowExecutionUpdateAcceptanceMessage(
+	_ namespace.ID,
+	protocolInstanceID string,
+	updAcceptance *updatepb.Acceptance,
+) (enumspb.WorkflowTaskFailedCause, error) {
+	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
+
+	if updAcceptance == nil {
+		return failedCause, serviceerror.NewInvalidArgument("Message body of type update.Acceptance is not set.")
+	}
+	if updAcceptance.GetAcceptedRequest() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("accepted_request is not set on update.Acceptance message body.")
+	}
+	if updAcceptance.GetAcceptedRequest().GetMeta() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("meta is not set on accepted_request of message body.")
+	}
+	if updAcceptance.GetAcceptedRequest().GetMeta().GetUpdateId() == "" {
+		return failedCause, serviceerror.NewInvalidArgument("update_id is not set on accepted_request of message body.")
+	}
+	if updAcceptance.GetAcceptedRequest().GetMeta().GetUpdateId() != protocolInstanceID {
+		return failedCause, serviceerror.NewInvalidArgument("update_id of accepted_request of message body is not equal to protocol_instance_id of the message.")
+	}
+
+	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
+}
+
+// TODO (alex-update): Move this to messageValidator.
+func (v *commandAttrValidator) validateWorkflowExecutionUpdateResponseMessage(
+	_ namespace.ID,
+	protocolInstanceID string,
+	updResponse *updatepb.Response,
+) (enumspb.WorkflowTaskFailedCause, error) {
+
+	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
+
+	if updResponse == nil {
+		return failedCause, serviceerror.NewInvalidArgument("Message body of type update.Response is not set.")
+	}
+	if updResponse.GetMeta() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("meta is not set on message body of update.Response type.")
+	}
+	if updResponse.GetMeta().GetUpdateId() == "" {
+		return failedCause, serviceerror.NewInvalidArgument("update_id is not set on message body of update.Response type.")
+	}
+	if updResponse.GetMeta().GetUpdateId() != protocolInstanceID {
+		return failedCause, serviceerror.NewInvalidArgument("update_id of message body of update.Response type is not equal to protocol_instance_id of the message.")
+	}
+
+	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
+}
+
+// TODO (alex-update): Move this to messageValidator.
+func (v *commandAttrValidator) validateWorkflowExecutionUpdateRejectionMessage(
+	_ namespace.ID,
+	protocolInstanceID string,
+	updRejection *updatepb.Rejection,
+) (enumspb.WorkflowTaskFailedCause, error) {
+	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
+
+	if updRejection == nil {
+		return failedCause, serviceerror.NewInvalidArgument("Message body of type update.Rejection is not set.")
+	}
+	if updRejection.GetRejectedRequest() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("rejected_request is not set on update.Rejection message body.")
+	}
+	if updRejection.GetRejectedRequest().GetMeta() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("meta is not set on rejected_request of message body.")
+	}
+	if updRejection.GetRejectedRequest().GetMeta().GetUpdateId() == "" {
+		return failedCause, serviceerror.NewInvalidArgument("update_id is not set on rejected_request of message body.")
+	}
+	if updRejection.GetRejectedRequest().GetMeta().GetUpdateId() != protocolInstanceID {
+		return failedCause, serviceerror.NewInvalidArgument("update_id of rejected_request of message body is not equal to protocol_instance_id of the message.")
+	}
+	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
+}
+
 func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 	namespace namespace.Name,
 	attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
-	visibilityIndexName string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES
@@ -562,7 +643,7 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 	if len(attributes.GetSearchAttributes().GetIndexedFields()) == 0 {
 		return failedCause, serviceerror.NewInvalidArgument("IndexedFields is empty on command.")
 	}
-	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String(), visibilityIndexName); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
 		return failedCause, err
 	}
 
@@ -599,7 +680,6 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	namespace namespace.Name,
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
-	visibilityIndexName string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES
@@ -643,9 +723,30 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.DefaultWorkflowTaskTimeout))
 	}
 
-	if err = v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String(), visibilityIndexName); err != nil {
+	attributes.WorkflowRunTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowRunTimeout(
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			timestamp.DurationValue(executionInfo.GetWorkflowExecutionTimeout()),
+		),
+	)
+
+	attributes.WorkflowTaskTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowTaskTimeout(
+			namespace.String(),
+			timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()),
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			v.config.DefaultWorkflowTaskTimeout,
+		),
+	)
+
+	if err := v.validateWorkflowRetryPolicy(namespace, attributes.RetryPolicy); err != nil {
+		return failedCause, err
+	}
+
+	if err = v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
 		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err
 	}
+
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 
@@ -656,7 +757,6 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	parentInfo *persistencespb.WorkflowExecutionInfo,
 	defaultWorkflowTaskTimeoutFn dynamicconfig.DurationPropertyFnWithNamespaceFilter,
-	visibilityIndexName string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES
@@ -703,7 +803,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
 	}
 
-	if err := v.validateWorkflowRetryPolicy(attributes); err != nil {
+	if err := v.validateWorkflowRetryPolicy(namespace.Name(attributes.GetNamespace()), attributes.RetryPolicy); err != nil {
 		return failedCause, err
 	}
 
@@ -711,7 +811,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, err
 	}
 
-	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String(), visibilityIndexName); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String()); err != nil {
 		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err
 	}
 
@@ -789,17 +889,18 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(
 }
 
 func (v *commandAttrValidator) validateWorkflowRetryPolicy(
-	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
+	namespaceName namespace.Name,
+	retryPolicy *commonpb.RetryPolicy,
 ) error {
-	if attributes.RetryPolicy == nil {
+	if retryPolicy == nil {
 		// By default, if the user does not explicitly set a retry policy for a Child Workflow, do not perform any retries.
 		return nil
 	}
 
 	// Otherwise, for any unset fields on the retry policy, set with defaults
-	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(attributes.GetNamespace()))
-	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultWorkflowRetrySettings)
-	return common.ValidateRetryPolicy(attributes.RetryPolicy)
+	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	return common.ValidateRetryPolicy(retryPolicy)
 }
 
 func (v *commandAttrValidator) validateCrossNamespaceCall(
@@ -875,7 +976,8 @@ func (v *commandAttrValidator) validateCommandSequence(
 			enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:
+			enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES,
+			enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE:
 			// noop
 		case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -897,4 +999,48 @@ func (v *commandAttrValidator) commandTypes(
 		result[index] = command.GetCommandType().String()
 	}
 	return result
+}
+
+// TODO (alex-update): move to messageValidator and dedicated package.
+func (v *commandAttrValidator) validateMessages(
+	messages []*protocolpb.Message,
+) error {
+	// Validates messages:
+	// 1. Sequence: Response message for the same protocol_instance_id must go after Acceptance.
+	// 2. Rejection can't be paired with Response or Acceptance.
+	// 3. Only Acceptance, Response,and Rejection messages are allowed.
+
+	seenAcceptance := make(map[string]struct{})
+	seenRejection := make(map[string]struct{})
+	seenResponse := make(map[string]struct{})
+	const messageSequence = "invalid message sequence for %s: %s message must be before %s message"
+	const messagePairing = "invalid message pairing for %s: %s message is not allowed because %s message was already received"
+	for _, message := range messages {
+		//nolint:revive // early-return
+		if types.Is(message.GetBody(), (*updatepb.Acceptance)(nil)) {
+			if _, ok := seenResponse[message.GetProtocolInstanceId()]; ok {
+				return serviceerror.NewInvalidArgument(fmt.Sprintf(messageSequence, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Acceptance)(nil)), proto.MessageName((*updatepb.Response)(nil))))
+			}
+			if _, ok := seenRejection[message.GetProtocolInstanceId()]; ok {
+				return serviceerror.NewInvalidArgument(fmt.Sprintf(messagePairing, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Acceptance)(nil)), proto.MessageName((*updatepb.Rejection)(nil))))
+			}
+			seenAcceptance[message.GetProtocolInstanceId()] = struct{}{}
+		} else if types.Is(message.GetBody(), (*updatepb.Response)(nil)) {
+			if _, ok := seenRejection[message.GetProtocolInstanceId()]; ok {
+				return serviceerror.NewInvalidArgument(fmt.Sprintf(messagePairing, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Response)(nil)), proto.MessageName((*updatepb.Rejection)(nil))))
+			}
+			seenResponse[message.GetProtocolInstanceId()] = struct{}{}
+		} else if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
+			if _, ok := seenAcceptance[message.GetProtocolInstanceId()]; ok {
+				return serviceerror.NewInvalidArgument(fmt.Sprintf(messagePairing, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Rejection)(nil)), proto.MessageName((*updatepb.Acceptance)(nil))))
+			}
+			if _, ok := seenResponse[message.GetProtocolInstanceId()]; ok {
+				return serviceerror.NewInvalidArgument(fmt.Sprintf(messagePairing, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Rejection)(nil)), proto.MessageName((*updatepb.Response)(nil))))
+			}
+			seenRejection[message.GetProtocolInstanceId()] = struct{}{}
+		} else {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown message type: %v", message.GetBody().GetTypeUrl()))
+		}
+	}
+	return nil
 }

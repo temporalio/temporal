@@ -42,6 +42,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -135,7 +138,6 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		timeSource:                    args.TimeSource,
 		namespaceRegistry:             args.NamespaceRegistry,
 		saProvider:                    args.SaProvider,
-		saMapper:                      args.SaMapper,
 		clusterMetadata:               args.ClusterMetadata,
 		archivalMetadata:              args.ArchivalMetadata,
 		hostInfoProvider:              args.HostInfoProvider,
@@ -163,10 +165,23 @@ func ConfigProvider(
 	persistenceConfig config.Persistence,
 	esConfig *esclient.Config,
 ) *configs.Config {
+	indexName := ""
+	if persistenceConfig.StandardVisibilityConfigExist() {
+		storeConfig := persistenceConfig.DataStores[persistenceConfig.VisibilityStore]
+		if storeConfig.SQL != nil {
+			switch storeConfig.SQL.PluginName {
+			case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+				indexName = storeConfig.SQL.DatabaseName
+			}
+		}
+	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
+		indexName = esConfig.GetVisibilityIndex()
+	}
 	return configs.NewConfig(dc,
 		persistenceConfig.NumHistoryShards,
 		persistenceConfig.AdvancedVisibilityConfigExist(),
-		esConfig.GetVisibilityIndex())
+		indexName,
+	)
 }
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.ThrottledLoggerRpsFn {
@@ -234,7 +249,7 @@ func VisibilityManagerProvider(
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
@@ -245,7 +260,7 @@ func VisibilityManagerProvider(
 		esClient,
 		esProcessorConfig,
 		saProvider,
-		searchAttributesMapper,
+		searchAttributesMapperProvider,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,

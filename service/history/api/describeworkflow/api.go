@@ -102,6 +102,7 @@ func Invoke(
 			AutoResetPoints:      executionInfo.AutoResetPoints,
 			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,
+			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
 		},
 	}
 
@@ -182,7 +183,7 @@ func Invoke(
 		}
 	}
 
-	if pendingWorkflowTask, ok := mutableState.GetPendingWorkflowTask(); ok {
+	if pendingWorkflowTask := mutableState.GetPendingWorkflowTask(); pendingWorkflowTask != nil {
 		result.PendingWorkflowTask = &workflowpb.PendingWorkflowTaskInfo{
 			State:                 enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
 			ScheduledTime:         pendingWorkflowTask.ScheduledTime,

@@ -25,14 +25,18 @@
 package scanner
 
 import (
+	"context"
+	"sync"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -153,7 +157,6 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 	} {
 		s.Run(c.Name, func() {
 			ctrl := gomock.NewController(s.T())
-			mockWorkerFactory := sdk.NewMockWorkerFactory(ctrl)
 			mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
 			mockSdkClient := mocksdk.NewMockClient(ctrl)
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
@@ -161,27 +164,13 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			scanner := New(
 				log.NewNoopLogger(),
 				&Config{
-					MaxConcurrentActivityExecutionSize: func() int {
-						return 1
-					},
-					MaxConcurrentWorkflowTaskExecutionSize: func() int {
-						return 1
-					},
-					MaxConcurrentActivityTaskPollers: func() int {
-						return 1
-					},
-					MaxConcurrentWorkflowTaskPollers: func() int {
-						return 1
-					},
-					ExecutionsScannerEnabled: func() bool {
-						return c.ExecutionsScannerEnabled
-					},
-					HistoryScannerEnabled: func() bool {
-						return c.HistoryScannerEnabled
-					},
-					TaskQueueScannerEnabled: func() bool {
-						return c.TaskQueueScannerEnabled
-					},
+					MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+					MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+					HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(c.HistoryScannerEnabled),
+					ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(c.ExecutionsScannerEnabled),
+					TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(c.TaskQueueScannerEnabled),
 					Persistence: &config.Persistence{
 						DefaultStore: c.DefaultStore,
 						DataStores: map[string]config.DataStore{
@@ -199,20 +188,95 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				historyservicemock.NewMockHistoryServiceClient(ctrl),
 				mockAdminClient,
 				mockNamespaceRegistry,
-				mockWorkerFactory,
 			)
+			var wg sync.WaitGroup
 			for _, sc := range c.ExpectedScanners {
+				wg.Add(1)
 				worker := mocksdk.NewMockWorker(ctrl)
 				worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().Start()
-				mockWorkerFactory.EXPECT().New(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
+				mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
 				mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
-				mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), sc.WFTypeName, gomock.Any())
+				mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), sc.WFTypeName,
+					gomock.Any()).Do(func(
+					_ context.Context,
+					_ client.StartWorkflowOptions,
+					_ string,
+					_ ...interface{},
+				) {
+					wg.Done()
+				})
 			}
 			err := scanner.Start()
 			s.NoError(err)
+			wg.Wait()
 			scanner.Stop()
 		})
 	}
+}
+
+// TestScannerWorkflow tests that the scanner can be shut down even when it hasn't finished starting.
+// This fixes a rare issue that can occur when Stop() is called quickly after Start(). When Start() is called, the
+// scanner starts a new goroutine for each scanner type. In that goroutine, an sdk client is created which dials the
+// frontend service. If the test driver calls Stop() on the server, then the server stops the frontend service and the
+// history service. In some cases, the frontend services stops before the sdk client has finished connecting to it.
+// This causes the startWorkflow() call to fail with an error.  However, startWorkflowWithRetry retries the call for
+// a whole minute, which causes the test to take a long time to fail. So, instead we immediately cancel all async
+// requests when Stop() is called.
+func (s *scannerTestSuite) TestScannerShutdown() {
+	ctrl := gomock.NewController(s.T())
+
+	logger := log.NewTestLogger()
+	mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
+	mockSdkClient := mocksdk.NewMockClient(ctrl)
+	mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
+	mockAdminClient := adminservicemock.NewMockAdminServiceClient(ctrl)
+	worker := mocksdk.NewMockWorker(ctrl)
+	scanner := New(
+		logger,
+		&Config{
+			MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+			HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(true),
+			ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(false),
+			TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
+			Persistence: &config.Persistence{
+				DefaultStore: config.StoreTypeNoSQL,
+				DataStores: map[string]config.DataStore{
+					config.StoreTypeNoSQL: {},
+				},
+			},
+		},
+		mockSdkClientFactory,
+		metrics.NoopMetricsHandler,
+		p.NewMockExecutionManager(ctrl),
+		p.NewMockTaskManager(ctrl),
+		historyservicemock.NewMockHistoryServiceClient(ctrl),
+		mockAdminClient,
+		mockNamespaceRegistry,
+	)
+	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
+	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	worker.EXPECT().Start()
+	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(
+		ctx context.Context,
+		_ client.StartWorkflowOptions,
+		_ string,
+		_ ...interface{},
+	) (client.WorkflowRun, error) {
+		wg.Done()
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	err := scanner.Start()
+	s.NoError(err)
+	wg.Wait()
+	scanner.Stop()
 }

@@ -1220,6 +1220,46 @@ func (s *clientIntegrationSuite) Test_UnhandledCommandAndNewTask() {
 	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
 }
 
+func (s *clientIntegrationSuite) Test_CancelActivityAndTimerBeforeComplete() {
+	workflowFn := func(ctx workflow.Context) error {
+		ctx, cancelFunc := workflow.WithCancel(ctx)
+
+		activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ScheduleToStartTimeout: 10 * time.Second,
+			ScheduleToCloseTimeout: 10 * time.Second,
+			StartToCloseTimeout:    1 * time.Second,
+			TaskQueue:              "bad_tq",
+		})
+		_ = workflow.ExecuteActivity(activityCtx, "Prefix_ToUpper", "hello")
+
+		_ = workflow.NewTimer(ctx, 15*time.Second)
+
+		err := workflow.NewTimer(ctx, time.Second).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
+		cancelFunc()
+		return nil
+	}
+
+	s.worker.RegisterWorkflow(workflowFn)
+
+	id := s.T().Name()
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 5 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+	err = workflowRun.Get(ctx, nil)
+	s.NoError(err)
+}
+
 // This test simulates workflow generate command with invalid attributes.
 // Server is expected to fail the workflow task and schedule a retry immediately for first attempt,
 // but if workflow task keeps failing, server will drop the task and wait for timeout to schedule additional retries.

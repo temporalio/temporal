@@ -163,14 +163,14 @@ func (c *clientImpl) GetSystemInfo(
 	return c.client.GetSystemInfo(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetWorkerBuildIdOrdering(
+func (c *clientImpl) GetWorkerBuildIdCompatability(
 	ctx context.Context,
-	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+	request *workflowservice.GetWorkerBuildIdCompatabilityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetWorkerBuildIdOrderingResponse, error) {
+) (*workflowservice.GetWorkerBuildIdCompatabilityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.GetWorkerBuildIdCompatability(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetWorkflowExecutionHistory(
@@ -563,22 +563,22 @@ func (c *clientImpl) UpdateSchedule(
 	return c.client.UpdateSchedule(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateWorkerBuildIdOrdering(
+func (c *clientImpl) UpdateWorkerBuildIdCompatability(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	request *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateWorkerBuildIdOrderingResponse, error) {
+) (*workflowservice.UpdateWorkerBuildIdCompatabilityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.UpdateWorkerBuildIdCompatability(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateWorkflow(
+func (c *clientImpl) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkflowRequest,
+	request *workflowservice.UpdateWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateWorkflowResponse, error) {
+) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UpdateWorkflow(ctx, request, opts...)
+	return c.client.UpdateWorkflowExecution(ctx, request, opts...)
 }

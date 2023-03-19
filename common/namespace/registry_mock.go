@@ -255,18 +255,6 @@ func (mr *MockRegistryMockRecorder) GetPingChecks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPingChecks", reflect.TypeOf((*MockRegistry)(nil).GetPingChecks))
 }
 
-// Refresh mocks base method.
-func (m *MockRegistry) Refresh() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Refresh")
-}
-
-// Refresh indicates an expected call of Refresh.
-func (mr *MockRegistryMockRecorder) Refresh() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Refresh", reflect.TypeOf((*MockRegistry)(nil).Refresh))
-}
-
 // RegisterStateChangeCallback mocks base method.
 func (m *MockRegistry) RegisterStateChangeCallback(key any, cb StateChangeCallbackFn) {
 	m.ctrl.T.Helper()

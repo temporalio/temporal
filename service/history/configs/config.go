@@ -57,7 +57,7 @@ type Config struct {
 	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFn
 
-	EmitShardDiffLog      dynamicconfig.BoolPropertyFn
+	EmitShardLagLog       dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ThrottledLogRPS       dynamicconfig.IntPropertyFn
 	EnableStickyQuery     dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -91,9 +91,11 @@ type Config struct {
 	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
 	QueueMaxReaderCount              dynamicconfig.IntPropertyFn
 
-	TaskSchedulerEnableRateLimiter dynamicconfig.BoolPropertyFn
-	TaskSchedulerMaxQPS            dynamicconfig.IntPropertyFn
-	TaskSchedulerNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
+	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
+	TaskSchedulerThrottleDuration            dynamicconfig.DurationPropertyFn
+	TaskSchedulerMaxQPS                      dynamicconfig.IntPropertyFn
+	TaskSchedulerNamespaceMaxQPS             dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// TimerQueueProcessor settings
 	TimerTaskHighPriorityRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -179,18 +181,20 @@ type Config struct {
 	DurableArchivalEnabled    dynamicconfig.BoolPropertyFn
 
 	// Size limit related settings
-	BlobSizeLimitError             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	BlobSizeLimitWarn              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitError             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitWarn              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitError          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitWarn           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitError         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitWarn          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingChildExecutionsLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingActivitiesLimit      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingSignalsLimit         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingCancelsRequestLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitError               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitError            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitWarn             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeSuggestContinueAsNew  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitError           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitWarn            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountSuggestContinueAsNew dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingChildExecutionsLimit   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingActivitiesLimit        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingSignalsLimit           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingCancelsRequestLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
@@ -273,6 +277,7 @@ type Config struct {
 
 	EnableCrossNamespaceCommands  dynamicconfig.BoolPropertyFn
 	EnableActivityEagerExecution  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableEagerWorkflowStart      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 
 	// ArchivalQueueProcessor settings
@@ -320,7 +325,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
 		VisibilityDisableOrderByClause:            dc.GetBoolProperty(dynamicconfig.VisibilityDisableOrderByClause, false),
 
-		EmitShardDiffLog:                     dc.GetBoolProperty(dynamicconfig.EmitShardDiffLog, false),
+		EmitShardLagLog:                      dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
 		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryCacheMaxSize:                  dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
 		HistoryCacheTTL:                      dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
@@ -340,9 +345,11 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		QueuePendingTaskMaxCount:         dc.GetIntProperty(dynamicconfig.QueuePendingTaskMaxCount, 10000),
 		QueueMaxReaderCount:              dc.GetIntProperty(dynamicconfig.QueueMaxReaderCount, 2),
 
-		TaskSchedulerEnableRateLimiter: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
-		TaskSchedulerMaxQPS:            dc.GetIntProperty(dynamicconfig.TaskSchedulerMaxQPS, 0),
-		TaskSchedulerNamespaceMaxQPS:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerNamespaceMaxQPS, 0),
+		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
+		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),
+		TaskSchedulerThrottleDuration:            dc.GetDurationProperty(dynamicconfig.TaskSchedulerThrottleDuration, time.Second),
+		TaskSchedulerMaxQPS:                      dc.GetIntProperty(dynamicconfig.TaskSchedulerMaxQPS, 0),
+		TaskSchedulerNamespaceMaxQPS:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerNamespaceMaxQPS, 0),
 
 		TimerTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerProcessorSchedulerWorkerCount:               dc.GetIntProperty(dynamicconfig.TimerProcessorSchedulerWorkerCount, 512),
@@ -410,20 +417,22 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		NumArchiveSystemWorkflows: dc.GetIntProperty(dynamicconfig.NumArchiveSystemWorkflows, 1000),
 		ArchiveRequestRPS:         dc.GetIntProperty(dynamicconfig.ArchiveRequestRPS, 300), // should be much smaller than frontend RPS
 		ArchiveSignalTimeout:      dc.GetDurationProperty(dynamicconfig.ArchiveSignalTimeout, 300*time.Millisecond),
-		DurableArchivalEnabled:    dc.GetBoolProperty(dynamicconfig.DurableArchivalEnabled, false),
+		DurableArchivalEnabled:    dc.GetBoolProperty(dynamicconfig.DurableArchivalEnabled, true),
 
-		BlobSizeLimitError:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
-		BlobSizeLimitWarn:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
-		MemoSizeLimitError:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitError, 2*1024*1024),
-		MemoSizeLimitWarn:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitWarn, 2*1024),
-		NumPendingChildExecutionsLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingChildExecutionsLimitError, 50000),
-		NumPendingActivitiesLimit:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingActivitiesLimitError, 50000),
-		NumPendingSignalsLimit:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingSignalsLimitError, 50000),
-		NumPendingCancelsRequestLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingCancelRequestsLimitError, 50000),
-		HistorySizeLimitError:          dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
-		HistorySizeLimitWarn:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
-		HistoryCountLimitError:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitError, 50*1024),
-		HistoryCountLimitWarn:          dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitWarn, 10*1024),
+		BlobSizeLimitError:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
+		BlobSizeLimitWarn:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
+		MemoSizeLimitError:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitError, 2*1024*1024),
+		MemoSizeLimitWarn:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitWarn, 2*1024),
+		NumPendingChildExecutionsLimit:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingChildExecutionsLimitError, 50000),
+		NumPendingActivitiesLimit:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingActivitiesLimitError, 50000),
+		NumPendingSignalsLimit:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingSignalsLimitError, 50000),
+		NumPendingCancelsRequestLimit:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingCancelRequestsLimitError, 50000),
+		HistorySizeLimitError:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
+		HistorySizeLimitWarn:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
+		HistorySizeSuggestContinueAsNew:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeSuggestContinueAsNew, 4*1024*1024),
+		HistoryCountLimitError:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitError, 50*1024),
+		HistoryCountLimitWarn:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitWarn, 10*1024),
+		HistoryCountSuggestContinueAsNew: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountSuggestContinueAsNew, 4*1024),
 
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
@@ -490,6 +499,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 
 		EnableCrossNamespaceCommands:  dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
 		EnableActivityEagerExecution:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableActivityEagerExecution, false),
+		EnableEagerWorkflowStart:      dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableEagerWorkflowStart, false),
 		NamespaceCacheRefreshInterval: dc.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
 
 		// Archival related

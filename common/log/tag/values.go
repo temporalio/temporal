@@ -42,6 +42,10 @@ var (
 	WorkflowActionUpsertWorkflowSearchAttributes = workflowAction("add-workflow-upsert-search-attributes-event")
 	WorkflowActionWorkflowPropertiesModified     = workflowAction("add-workflow-properties-modified-event")
 
+	// workflow update
+	WorkflowActionUpdateAccepted  = workflowAction("add-workflow-update-accepted-event")
+	WorkflowActionUpdateCompleted = workflowAction("add-workflow-update-completed-event")
+
 	// workflow task
 	WorkflowActionWorkflowTaskScheduled = workflowAction("add-workflowtask-scheduled-event")
 	WorkflowActionWorkflowTaskStarted   = workflowAction("add-workflowtask-started-event")

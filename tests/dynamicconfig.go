@@ -40,7 +40,7 @@ var (
 	// Override values for dynamic configs
 	staticOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendRPS:                                    3000,
-		dynamicconfig.FrontendESIndexMaxResultWindow:                 defaultTestValueOfESIndexMaxResultWindow,
+		dynamicconfig.FrontendESIndexMaxResultWindow:                 defaultPageSize,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance:   50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance: 50,
 		dynamicconfig.TimerProcessorHistoryArchivalSizeLimit:         5 * 1024,
@@ -52,6 +52,7 @@ var (
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait:         time.Millisecond,
 		dynamicconfig.ClusterMetadataRefreshInterval:                 100 * time.Millisecond,
 		dynamicconfig.NamespaceCacheRefreshInterval:                  NamespaceCacheRefreshInterval,
+		dynamicconfig.FrontendEnableUpdateWorkflowExecution:          true,
 	}
 )
 
@@ -79,6 +80,12 @@ func (d *dcClient) OverrideValue(name dynamicconfig.Key, value any) {
 	d.Lock()
 	defer d.Unlock()
 	d.overrides[name] = value
+}
+
+func (d *dcClient) RemoveOverride(name dynamicconfig.Key) {
+	d.Lock()
+	defer d.Unlock()
+	delete(d.overrides, name)
 }
 
 // newTestDCClient - returns a dynamic config client for integration testing

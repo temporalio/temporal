@@ -35,14 +35,14 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"gopkg.in/yaml.v3"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/environment"
@@ -115,15 +114,9 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
 
-	if clusterConfig.FrontendAddress == "" {
-		// Poke all the in-process namespace caches to refresh without waiting for the usual refresh interval.
-		s.testCluster.RefreshNamespaceCache()
-	} else {
-		// Wait for one whole cycle of the namespace cache v2 refresh interval to be sure that our namespaces are loaded.
-		// We are using real server so we don't know what cache refresh interval it uses. Fall back to the 10s old value.
-		serverCacheRefreshInterval := 10 * time.Second
-		time.Sleep(serverCacheRefreshInterval + time.Second)
-	}
+	// For tests using SQL visibility, we need to wait for search attributes to be available as part of the ns config
+	// TODO: remove after https://github.com/temporalio/temporal/issues/4017 is resolved
+	time.Sleep(2 * NamespaceCacheRefreshInterval)
 }
 
 // setupLogger sets the Logger for the test suite.
@@ -156,9 +149,6 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	}
 
 	options.FrontendAddress = TestFlags.FrontendAddr
-	if options.ESConfig != nil {
-		options.ESConfig.Indices[client.VisibilityAppName] += uuid.New()
-	}
 	return &options, nil
 }
 
@@ -198,6 +188,25 @@ func (s *IntegrationBase) registerNamespace(
 		VisibilityArchivalUri:            visibilityArchivalURI,
 	})
 
+	if err != nil {
+		return err
+	}
+
+	// Set up default alias for custom search attributes.
+	_, err = s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		Config: &namespacepb.NamespaceConfig{
+			CustomSearchAttributeAliases: map[string]string{
+				"Bool01":     "CustomBoolField",
+				"Datetime01": "CustomDatetimeField",
+				"Double01":   "CustomDoubleField",
+				"Int01":      "CustomIntField",
+				"Keyword01":  "CustomKeywordField",
+				"Text01":     "CustomTextField",
+			},
+		},
+	})
+
 	return err
 }
 
@@ -222,10 +231,10 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 
 func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
-	common.PrettyPrintHistory(&historypb.History{Events: events})
+	common.PrettyPrint(events)
 }
 
-//lint:ignore U1000 will use it later
+//lint:ignore U1000 used for debugging.
 func (s *IntegrationBase) printWorkflowHistoryCompact(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
 	fmt.Println(s.formatHistoryCompact(&historypb.History{Events: events}))
@@ -328,6 +337,7 @@ func (s *IntegrationBase) registerArchivalNamespace(archivalNamespace string) er
 }
 
 func (s *IntegrationBase) formatHistoryCompact(history *historypb.History) string {
+	s.T().Helper()
 	var sb strings.Builder
 	for _, event := range history.Events {
 		sb.WriteString(fmt.Sprintf("%3d %s\n", event.GetEventId(), event.GetEventType()))
@@ -339,11 +349,13 @@ func (s *IntegrationBase) formatHistoryCompact(history *historypb.History) strin
 }
 
 func (s *IntegrationBase) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
+	s.T().Helper()
 	expectedHistoryTrimmed := strings.Trim(expectedHistory, "\n")
 	actualHistoryStr := s.formatHistoryCompact(actualHistory)
 	s.Equal(expectedHistoryTrimmed, actualHistoryStr)
 }
 
 func (s *IntegrationBase) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
+	s.T().Helper()
 	s.EqualHistory(expectedHistory, &historypb.History{Events: actualHistoryEvents})
 }

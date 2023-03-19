@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
@@ -62,11 +63,11 @@ import (
 type (
 	// Test is the test implementation used for testing
 	Test struct {
-		MetricsScope             tally.Scope
-		ClusterMetadata          *cluster.MockMetadata
-		SearchAttributesProvider *searchattribute.MockProvider
-		SearchAttributesManager  *searchattribute.MockManager
-		SearchAttributesMapper   *searchattribute.MockMapper
+		MetricsScope                   tally.Scope
+		ClusterMetadata                *cluster.MockMetadata
+		SearchAttributesProvider       *searchattribute.MockProvider
+		SearchAttributesManager        *searchattribute.MockManager
+		SearchAttributesMapperProvider *searchattribute.MockMapperProvider
 
 		// other common resources
 
@@ -74,7 +75,7 @@ type (
 		TimeSource        clock.TimeSource
 		PayloadSerializer serialization.Serializer
 		MetricsHandler    metrics.Handler
-		ArchivalMetadata  *archiver.MockArchivalMetadata
+		ArchivalMetadata  archiver.MetadataMock
 		ArchiverProvider  *provider.MockArchiverProvider
 
 		// membership infos
@@ -96,6 +97,7 @@ type (
 		ClientBean           *client.MockBean
 		ClientFactory        *client.MockFactory
 		ESClient             *esclient.MockClient
+		VisibilityManager    *manager.MockVisibilityManager
 
 		// persistence clients
 
@@ -115,7 +117,7 @@ const (
 	testHostName = "test_host"
 )
 
-var testHostInfo = membership.NewHostInfo(testHostName, nil)
+var testHostInfo = membership.NewHostInfoFromAddress(testHostName)
 
 // NewTest returns a new test resource instance
 func NewTest(
@@ -135,14 +137,14 @@ func NewTest(
 	clientBean.EXPECT().GetMatchingClient(gomock.Any()).Return(matchingClient, nil).AnyTimes()
 	clientBean.EXPECT().GetHistoryClient().Return(historyClient).AnyTimes()
 	clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(remoteAdminClient, nil).AnyTimes()
-	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(remoteFrontendClient, nil).AnyTimes()
+	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(nil, remoteFrontendClient, nil).AnyTimes()
 	clientFactory := client.NewMockFactory(controller)
 
 	metadataMgr := persistence.NewMockMetadataManager(controller)
 	taskMgr := persistence.NewMockTaskManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
-	executionMgr.EXPECT().NewHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.NewHistoryBranchResponse{BranchToken: []byte{1, 2, 3}}, nil).AnyTimes()
+	executionMgr.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
 	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
 	namespaceReplicationQueue.EXPECT().Stop().AnyTimes()
@@ -164,6 +166,7 @@ func NewTest(
 	membershipMonitor.EXPECT().GetResolver(primitives.MatchingService).Return(matchingServiceResolver, nil).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(primitives.HistoryService).Return(historyServiceResolver, nil).AnyTimes()
 	membershipMonitor.EXPECT().GetResolver(primitives.WorkerService).Return(workerServiceResolver, nil).AnyTimes()
+	membershipMonitor.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
 	serviceName, _ := metrics.MetricsServiceIdxToServiceName(serviceMetricsIndex)
@@ -172,11 +175,11 @@ func NewTest(
 	)
 
 	return &Test{
-		MetricsScope:             scope,
-		ClusterMetadata:          cluster.NewMockMetadata(controller),
-		SearchAttributesProvider: searchattribute.NewMockProvider(controller),
-		SearchAttributesManager:  searchattribute.NewMockManager(controller),
-		SearchAttributesMapper:   searchattribute.NewMockMapper(controller),
+		MetricsScope:                   scope,
+		ClusterMetadata:                cluster.NewMockMetadata(controller),
+		SearchAttributesProvider:       searchattribute.NewMockProvider(controller),
+		SearchAttributesManager:        searchattribute.NewMockManager(controller),
+		SearchAttributesMapperProvider: searchattribute.NewMockMapperProvider(controller),
 
 		// other common resources
 
@@ -184,7 +187,7 @@ func NewTest(
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: serialization.NewSerializer(),
 		MetricsHandler:    metricsHandler,
-		ArchivalMetadata:  archiver.NewMockArchivalMetadata(controller),
+		ArchivalMetadata:  archiver.NewMetadataMock(controller),
 		ArchiverProvider:  provider.NewMockArchiverProvider(controller),
 
 		// membership infos
@@ -206,6 +209,7 @@ func NewTest(
 		ClientBean:           clientBean,
 		ClientFactory:        clientFactory,
 		ESClient:             esclient.NewMockClient(controller),
+		VisibilityManager:    manager.NewMockVisibilityManager(controller),
 
 		// persistence clients
 
@@ -244,7 +248,7 @@ func (t *Test) GetHostName() string {
 }
 
 // GetHostInfo for testing
-func (t *Test) GetHostInfo() *membership.HostInfo {
+func (t *Test) GetHostInfo() membership.HostInfo {
 	return testHostInfo
 }
 
@@ -373,6 +377,11 @@ func (t *Test) GetClientFactory() client.Factory {
 	return t.ClientFactory
 }
 
+// GetVisibilityManager for testing
+func (t *Test) GetVisibilityManager() manager.VisibilityManager {
+	return t.VisibilityManager
+}
+
 // persistence clients
 
 // GetMetadataManager for testing
@@ -431,10 +440,6 @@ func (t *Test) GetSearchAttributesManager() searchattribute.Manager {
 	return t.SearchAttributesManager
 }
 
-func (t *Test) GetSearchAttributesMapper() searchattribute.Mapper {
-	return t.SearchAttributesMapper
-}
-
-func (t *Test) RefreshNamespaceCache() {
-	t.NamespaceCache.Refresh()
+func (t *Test) GetSearchAttributesMapperProvider() searchattribute.MapperProvider {
+	return t.SearchAttributesMapperProvider
 }

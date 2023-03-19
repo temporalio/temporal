@@ -89,7 +89,7 @@ type (
 		timeSource                  clock.TimeSource
 		namespaceRegistry           namespace.Registry
 		saProvider                  searchattribute.Provider
-		saMapper                    searchattribute.Mapper
+		saMapperProvider            searchattribute.MapperProvider
 		clusterMetadata             cluster.Metadata
 		archivalMetadata            archiver.ArchivalMetadata
 		hostInfoProvider            membership.HostInfoProvider
@@ -305,7 +305,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 		c.timeSource,
 		c.namespaceRegistry,
 		c.saProvider,
-		c.saMapper,
+		c.saMapperProvider,
 		c.clusterMetadata,
 		c.archivalMetadata,
 		c.hostInfoProvider,
@@ -368,7 +368,7 @@ func (c *ControllerImpl) shardManagementPump() {
 			c.contextTaggedLogger.Info("", tag.ValueRingMembershipChangedEvent,
 				tag.NumberProcessed(len(changedEvent.HostsAdded)),
 				tag.NumberDeleted(len(changedEvent.HostsRemoved)),
-				tag.Number(int64(len(changedEvent.HostsUpdated))))
+			)
 			c.acquireShards()
 		}
 	}

@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -364,8 +365,10 @@ func (r *workflowResetterImpl) persistToDB(
 		if currentWorkflowSizeDiff, resetWorkflowSizeDiff, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
+			currentWorkflow.GetMutableState().GetCurrentVersion(),
 			currentWorkflowMutation,
 			currentWorkflowEventsSeq,
+			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
 		); err != nil {
@@ -472,9 +475,9 @@ func (r *workflowResetterImpl) failWorkflowTask(
 	resetReason string,
 ) error {
 
-	workflowTask, ok := resetMutableState.GetPendingWorkflowTask()
-	if !ok {
-		// TODO if resetMutableState.HasProcessedOrPendingWorkflowTask() == true
+	workflowTask := resetMutableState.GetPendingWorkflowTask()
+	if workflowTask == nil {
+		// TODO if resetMutableState.HadOrHasWorkflowTask() == true
 		//  meaning workflow history has NO workflow task ever
 		//  should also allow workflow reset, the only remaining issues are
 		//  * what if workflow is a cron workflow, e.g. should add a workflow task directly or still respect the cron job
@@ -498,8 +501,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 	}
 
 	_, err = resetMutableState.AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
@@ -562,6 +564,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		ForkNodeID:      forkNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID.String(), workflowID, resetRunID),
 		ShardID:         shardID,
+		NamespaceID:     namespaceID.String(),
 	})
 	if err != nil {
 		return nil, err

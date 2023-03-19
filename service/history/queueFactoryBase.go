@@ -26,11 +26,11 @@ package history
 
 import (
 	"context"
-	"time"
 
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -41,15 +41,11 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-const (
-	QueueFactoryFxGroup = "queueFactory"
-
-	HostSchedulerMaxDispatchThrottleDuration  = 3 * time.Second
-	ShardSchedulerMaxDispatchThrottleDuration = 5 * time.Second
-)
+const QueueFactoryFxGroup = "queueFactory"
 
 type (
 	QueueFactory interface {
@@ -106,13 +102,51 @@ var QueueModule = fx.Options(
 			Group:  QueueFactoryFxGroup,
 			Target: NewVisibilityQueueFactory,
 		},
-		fx.Annotated{
-			Group:  QueueFactoryFxGroup,
-			Target: NewArchivalQueueFactory,
-		},
+		getOptionalQueueFactories,
 	),
 	fx.Invoke(QueueFactoryLifetimeHooks),
 )
+
+// additionalQueueFactories is a container for a list of queue factories that are only added to the group if
+// they are enabled. This exists because there is no way to conditionally add to a group with a provider that returns
+// a single object. For example, this doesn't work because it will always add the factory to the group, which can
+// cause NPEs:
+//
+//	fx.Annotated{
+//	  Group: "queueFactory",
+//	  Target: func() QueueFactory { return isEnabled ? NewQueueFactory() : nil },
+//	},
+type additionalQueueFactories struct {
+	// This is what tells fx to add the factories to the group whenever this object is provided.
+	fx.Out
+
+	// Factories is a list of queue factories that will be added to the `group:"queueFactory"` group.
+	Factories []QueueFactory `group:"queueFactory,flatten"`
+}
+
+// getOptionalQueueFactories returns an additionalQueueFactories which contains a list of queue factories that will be
+// added to the `group:"queueFactory"` group. The factories are added to the group only if they are enabled, which
+// is why we must return a list here.
+func getOptionalQueueFactories(
+	archivalMetadata archiver.ArchivalMetadata,
+	params ArchivalQueueFactoryParams,
+) additionalQueueFactories {
+
+	c := tasks.CategoryArchival
+	// Removing this category will only affect tests because this method is only called once in production,
+	// but it may be called many times across test runs, which would leave the archival queue as a dangling category
+	tasks.RemoveCategory(c.ID())
+	if archivalMetadata.GetHistoryConfig().StaticClusterState() != archiver.ArchivalEnabled &&
+		archivalMetadata.GetVisibilityConfig().StaticClusterState() != archiver.ArchivalEnabled {
+		return additionalQueueFactories{}
+	}
+	tasks.NewCategory(c.ID(), c.Type(), c.Name())
+	return additionalQueueFactories{
+		Factories: []QueueFactory{
+			NewArchivalQueueFactory(params),
+		},
+	}
+}
 
 func QueueSchedulerRateLimiterProvider(
 	config *configs.Config,

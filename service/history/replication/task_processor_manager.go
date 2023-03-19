@@ -26,7 +26,6 @@ package replication
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,7 +71,7 @@ type (
 		logger                        log.Logger
 
 		taskProcessorLock sync.RWMutex
-		taskProcessors    map[string]TaskProcessor
+		taskProcessors    map[string][]TaskProcessor // cluster name - processor
 		minTxAckedTaskID  int64
 		shutdownChan      chan struct{}
 	}
@@ -114,7 +113,7 @@ func NewTaskProcessorManager(
 		),
 		logger:               shard.GetLogger(),
 		metricsHandler:       shard.GetMetricsHandler(),
-		taskProcessors:       make(map[string]TaskProcessor),
+		taskProcessors:       make(map[string][]TaskProcessor),
 		taskExecutorProvider: taskExecutorProvider,
 		taskPollerManager:    newPollerManager(shard.GetShardID(), shard.GetClusterMetadata()),
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
@@ -149,8 +148,10 @@ func (r *taskProcessorManagerImpl) Stop() {
 
 	r.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(r)
 	r.taskProcessorLock.Lock()
-	for _, replicationTaskProcessor := range r.taskProcessors {
-		replicationTaskProcessor.Stop()
+	for _, taskProcessors := range r.taskProcessors {
+		for _, processor := range taskProcessors {
+			processor.Stop()
+		}
 	}
 	r.taskProcessorLock.Unlock()
 }
@@ -170,50 +171,63 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 	r.taskProcessorLock.Lock()
 	defer r.taskProcessorLock.Unlock()
 	currentClusterName := r.shard.GetClusterMetadata().GetCurrentClusterName()
+	// The metadata triggers an update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
+	// The callback covers three cases:
+	// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata(1 + 2).
+
+	// Case 1 and Case 3
 	for clusterName := range oldClusterMetadata {
 		if clusterName == currentClusterName {
 			continue
 		}
-		sourceShardIds := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
-		for _, sourceShardId := range sourceShardIds {
-			perShardTaskProcessorKey := fmt.Sprintf(clusterCallbackKey, clusterName, sourceShardId)
-			// The metadata triggers an update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
-			// The callback covers three cases:
-			// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
-			if processor, ok := r.taskProcessors[perShardTaskProcessorKey]; ok {
-				// Case 1 and Case 3
-				processor.Stop()
-				delete(r.taskProcessors, perShardTaskProcessorKey)
-			}
-			if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-				// Case 2 and Case 3
-				fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
-				replicationTaskProcessor := NewTaskProcessor(
-					sourceShardId,
-					r.shard,
-					r.engine,
-					r.config,
-					r.shard.GetMetricsHandler(),
-					fetcher,
-					r.taskExecutorProvider(TaskExecutorParams{
-						RemoteCluster:   clusterName,
-						Shard:           r.shard,
-						HistoryResender: r.resender,
-						DeleteManager:   r.deleteMgr,
-						WorkflowCache:   r.workflowCache,
-					}),
-					r.eventSerializer,
-				)
-				replicationTaskProcessor.Start()
-				r.taskProcessors[perShardTaskProcessorKey] = replicationTaskProcessor
-			}
+		for _, processor := range r.taskProcessors[clusterName] {
+			processor.Stop()
 		}
+		delete(r.taskProcessors, clusterName)
+	}
+
+	// Case 2 and Case 3
+	for clusterName := range newClusterMetadata {
+		if clusterName == currentClusterName {
+			continue
+		}
+		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo == nil || !clusterInfo.Enabled {
+			continue
+		}
+		sourceShardIds, err := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
+		if err != nil {
+			r.logger.Error("Failed to get source shard id list", tag.Error(err), tag.ClusterName(clusterName))
+			continue
+		}
+		var processors []TaskProcessor
+		for _, sourceShardId := range sourceShardIds {
+			fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
+			replicationTaskProcessor := NewTaskProcessor(
+				sourceShardId,
+				r.shard,
+				r.engine,
+				r.config,
+				r.shard.GetMetricsHandler(),
+				fetcher,
+				r.taskExecutorProvider(TaskExecutorParams{
+					RemoteCluster:   clusterName,
+					Shard:           r.shard,
+					HistoryResender: r.resender,
+					DeleteManager:   r.deleteMgr,
+					WorkflowCache:   r.workflowCache,
+				}),
+				r.eventSerializer,
+			)
+			replicationTaskProcessor.Start()
+			processors = append(processors, replicationTaskProcessor)
+		}
+		r.taskProcessors[clusterName] = processors
 	}
 }
 
 func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 	shardID := r.shard.GetShardID()
-	cleanupTimer := time.NewTimer(backoff.JitDuration(
+	cleanupTimer := time.NewTimer(backoff.Jitter(
 		r.config.ReplicationTaskProcessorCleanupInterval(shardID),
 		r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 	))
@@ -228,7 +242,7 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 					metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 				)
 			}
-			cleanupTimer.Reset(backoff.JitDuration(
+			cleanupTimer.Reset(backoff.Jitter(
 				r.config.ReplicationTaskProcessorCleanupInterval(shardID),
 				r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 			))
@@ -273,15 +287,24 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 	defer cancel()
+
+	inclusiveMinPendingTaskKey := tasks.NewImmediateKey(*minAckedTaskID + 1)
+	r.shard.GetExecutionManager().UpdateHistoryTaskReaderProgress(ctx, &persistence.UpdateHistoryTaskReaderProgressRequest{
+		ShardID:                    r.shard.GetShardID(),
+		ShardOwner:                 r.shard.GetOwner(),
+		TaskCategory:               tasks.CategoryReplication,
+		ReaderID:                   common.DefaultQueueReaderID,
+		InclusiveMinPendingTaskKey: inclusiveMinPendingTaskKey,
+	})
 
 	err := r.shard.GetExecutionManager().RangeCompleteHistoryTasks(
 		ctx,
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(*minAckedTaskID + 1),
+			ExclusiveMaxTaskKey: inclusiveMinPendingTaskKey,
 		},
 	)
 	if err == nil {

@@ -69,7 +69,7 @@ type (
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
 		metadataManager        persistence.MetadataManager
-		hostInfo               *membership.HostInfo
+		hostInfo               membership.HostInfo
 		executionManager       persistence.ExecutionManager
 		taskManager            persistence.TaskManager
 		historyClient          historyservice.HistoryServiceClient
@@ -96,7 +96,6 @@ type (
 		workerManager             *workerManager
 		perNamespaceWorkerManager *perNamespaceWorkerManager
 		scanner                   *scanner.Scanner
-		workerFactory             sdk.WorkerFactory
 	}
 
 	// Config contains all the service config for worker
@@ -114,6 +113,7 @@ type (
 		BatcherConcurrency                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PerNamespaceWorkerOptions             dynamicconfig.MapPropertyFnWithNamespaceFilter
 
 		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -147,7 +147,6 @@ func NewService(
 	workerManager *workerManager,
 	perNamespaceWorkerManager *perNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,
-	workerFactory sdk.WorkerFactory,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(primitives.WorkerService)
 	if err != nil {
@@ -180,7 +179,6 @@ func NewService(
 
 		workerManager:             workerManager,
 		perNamespaceWorkerManager: perNamespaceWorkerManager,
-		workerFactory:             workerFactory,
 	}
 	if err := s.initScanner(); err != nil {
 		return nil, err
@@ -315,6 +313,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 		PerNamespaceWorkerCount: dc.GetIntPropertyFilteredByNamespace(
 			dynamicconfig.WorkerPerNamespaceWorkerCount,
 			1,
+		),
+		PerNamespaceWorkerOptions: dc.GetMapPropertyFnWithNamespaceFilter(
+			dynamicconfig.WorkerPerNamespaceWorkerOptions,
+			map[string]any{},
 		),
 		ThrottledLogRPS: dc.GetIntProperty(
 			dynamicconfig.WorkerThrottledLogRPS,
@@ -490,7 +492,6 @@ func (s *Service) initScanner() error {
 		s.historyClient,
 		adminClient,
 		s.namespaceRegistry,
-		s.workerFactory,
 	)
 	return nil
 }
@@ -563,4 +564,9 @@ func (s *Service) ensureSystemNamespaceExists(
 			tag.Error(err),
 		)
 	}
+}
+
+// This is intended for use by integration tests only.
+func (s *Service) RefreshPerNSWorkerManager() {
+	s.perNamespaceWorkerManager.refreshAll()
 }

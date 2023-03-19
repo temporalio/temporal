@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -120,6 +121,7 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 	_, err := s.transaction.CreateWorkflowExecution(
 		context.Background(),
 		persistence.CreateWorkflowModeBrandNew,
+		0,
 		&persistence.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId: tests.NamespaceID.String(),
@@ -145,6 +147,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 	_, _, err := s.transaction.UpdateWorkflowExecution(
 		context.Background(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
+		0,
 		&persistence.WorkflowMutation{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId: tests.NamespaceID.String(),
@@ -155,6 +158,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 			},
 		},
 		[]*persistence.WorkflowEvents{},
+		convert.Int64Ptr(0),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
 	)
@@ -173,6 +177,7 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 	_, _, _, err := s.transaction.ConflictResolveWorkflowExecution(
 		context.Background(),
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
+		0,
 		&persistence.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId: tests.NamespaceID.String(),
@@ -183,8 +188,10 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 			},
 		},
 		[]*persistence.WorkflowEvents{},
+		convert.Int64Ptr(0),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
+		convert.Int64Ptr(0),
 		&persistence.WorkflowMutation{},
 		[]*persistence.WorkflowEvents{},
 	)

@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -73,19 +74,19 @@ type (
 	}
 
 	workflowTaskHandlerCallbacksImpl struct {
-		currentClusterName         string
-		config                     *configs.Config
-		shard                      shard.Context
-		workflowConsistencyChecker api.WorkflowConsistencyChecker
-		timeSource                 clock.TimeSource
-		namespaceRegistry          namespace.Registry
-		tokenSerializer            common.TaskTokenSerializer
-		metricsHandler             metrics.Handler
-		logger                     log.Logger
-		throttledLogger            log.Logger
-		commandAttrValidator       *commandAttrValidator
-		searchAttributesMapper     searchattribute.Mapper
-		searchAttributesValidator  *searchattribute.Validator
+		currentClusterName             string
+		config                         *configs.Config
+		shard                          shard.Context
+		workflowConsistencyChecker     api.WorkflowConsistencyChecker
+		timeSource                     clock.TimeSource
+		namespaceRegistry              namespace.Registry
+		tokenSerializer                common.TaskTokenSerializer
+		metricsHandler                 metrics.Handler
+		logger                         log.Logger
+		throttledLogger                log.Logger
+		commandAttrValidator           *commandAttrValidator
+		searchAttributesMapperProvider searchattribute.MapperProvider
+		searchAttributesValidator      *searchattribute.Validator
 	}
 )
 
@@ -106,8 +107,8 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 			historyEngine.config,
 			historyEngine.searchAttributesValidator,
 		),
-		searchAttributesMapper:    historyEngine.shard.GetSearchAttributesMapper(),
-		searchAttributesValidator: historyEngine.searchAttributesValidator,
+		searchAttributesMapperProvider: historyEngine.shard.GetSearchAttributesMapperProvider(),
+		searchAttributesValidator:      historyEngine.searchAttributesValidator,
 	}
 }
 
@@ -123,7 +124,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 
 	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
-		req.Clock,
+		req.ChildClock,
 		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
@@ -136,7 +137,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			if req.IsFirstWorkflowTask && mutableState.HasProcessedOrPendingWorkflowTask() {
+			if req.IsFirstWorkflowTask && mutableState.HadOrHasWorkflowTask() {
 				return &api.UpdateWorkflowAction{
 					Noop: true,
 				}, nil
@@ -146,9 +147,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 			if err != nil {
 				return nil, err
 			}
-			if err := mutableState.AddFirstWorkflowTaskScheduled(
-				startEvent,
-			); err != nil {
+			if _, err := mutableState.AddFirstWorkflowTaskScheduled(req.ParentClock, startEvent, false); err != nil {
 				return nil, err
 			}
 
@@ -189,12 +188,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduledEventID)
+			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
 			metricsScope := handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
+			if workflowTask == nil && scheduledEventID >= mutableState.GetNextEventID() {
 				metricsScope.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(1)
 				// Reload workflow execution history
 				// ErrStaleState will trigger updateWorkflow function to reload the mutable state
@@ -203,7 +202,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 
 			// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
 			// task is not outstanding than it is most probably a duplicate and complete the task.
-			if !isRunning {
+			if workflowTask == nil {
 				// Looks like WorkflowTask already completed as a result of another call.
 				// It is OK to drop the task at this point.
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
@@ -214,7 +213,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowTask, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetContext().UpdateRegistry(), workflowTask, req.PollRequest.GetIdentity())
 					if err != nil {
 						return nil, err
 					}
@@ -251,7 +250,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowTask, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetContext().UpdateRegistry(), workflowTask, req.PollRequest.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -300,16 +299,27 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			}
 
 			scheduledEventID := token.GetScheduledEventId()
-			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduledEventID)
-			if !isRunning || workflowTask.Attempt != token.Attempt || workflowTask.StartedEventID == common.EmptyEventID {
+			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
+			// TODO (alex-update): call mutableState.SetSpeculativeWorkflowTaskStartedEventID(mutableState) here to set StartEventID.
+
+			if workflowTask == nil || workflowTask.Attempt != token.Attempt || workflowTask.StartedEventID == common.EmptyEventID {
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
-			_, err := mutableState.AddWorkflowTaskFailedEvent(workflowTask.ScheduledEventID, workflowTask.StartedEventID, request.GetCause(), request.GetFailure(),
-				request.GetIdentity(), request.GetBinaryChecksum(), "", "", 0)
-			if err != nil {
+			if _, err := mutableState.AddWorkflowTaskFailedEvent(
+				workflowTask,
+				request.GetCause(),
+				request.GetFailure(),
+				request.GetIdentity(),
+				request.GetBinaryChecksum(),
+				"",
+				"",
+				0); err != nil {
 				return nil, err
 			}
+
+			// TODO (alex-update): if it was speculative WT that failed, and there is nothing but pending updates,
+			//  new WT also should be create as speculative (or not?). Currently, it will be recreated as normal WT.
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: true,
@@ -324,27 +334,25 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
-) (resp *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
+) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
 
 	namespaceEntry, err := api.GetActiveNamespace(handler.shard, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.ID()
 
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
-	scheduledEventID := token.GetScheduledEventId()
 
 	workflowContext, err := handler.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		token.Clock,
 		func(mutableState workflow.MutableState) bool {
-			_, ok := mutableState.GetWorkflowTaskInfo(scheduledEventID)
-			if !ok && scheduledEventID >= mutableState.GetNextEventID() {
+			workflowTask := mutableState.GetWorkflowTaskByID(token.GetScheduledEventId())
+			if workflowTask == nil && token.GetScheduledEventId() >= mutableState.GetNextEventID() {
 				handler.metricsHandler.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(
 					1,
 					metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
@@ -353,7 +361,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			return true
 		},
 		definition.NewWorkflowKey(
-			namespaceID.String(),
+			namespaceEntry.ID().String(),
 			token.WorkflowId,
 			token.RunId,
 		),
@@ -365,7 +373,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	weContext := workflowContext.GetContext()
 	ms := workflowContext.GetMutableState()
-	currentWorkflowTask, currentWorkflowTaskRunning := ms.GetWorkflowTaskInfo(scheduledEventID)
 
 	executionInfo := ms.GetExecutionInfo()
 	executionStats, err := weContext.LoadExecutionStats(ctx)
@@ -373,12 +380,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, err
 	}
 
-	if !ms.IsWorkflowExecutionRunning() || !currentWorkflowTaskRunning || currentWorkflowTask.Attempt != token.Attempt ||
+	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
+	// TODO (alex-update): call mutableState.SetSpeculativeWorkflowTaskStartedEventID(mutableState) here to set StartEventID.
+	if !ms.IsWorkflowExecutionRunning() || currentWorkflowTask == nil || currentWorkflowTask.Attempt != token.Attempt ||
 		currentWorkflowTask.StartedEventID == common.EmptyEventID {
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	startedEventID := currentWorkflowTask.StartedEventID
 	maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name().String())
 	if ms.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {
 		handler.metricsHandler.Counter(metrics.AutoResetPointsLimitExceededCounter.GetMetricName()).Record(
@@ -386,9 +394,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
 	}
 
-	workflowTaskHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0
+	workflowTaskHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0 && len(request.Messages) == 0
 	var workflowTaskHeartbeatTimeout bool
 	var completedEvent *historypb.HistoryEvent
+	var responseMutations []workflowTaskResponseMutation
+
 	if workflowTaskHeartbeating {
 		namespace := namespaceEntry.Name()
 		timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace.String())
@@ -401,33 +411,25 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				metrics.NamespaceTag(namespace.String()),
 			)
 			scope.Counter(metrics.WorkflowTaskHeartbeatTimeoutCounter.GetMetricName()).Record(1)
-			completedEvent, err = ms.AddWorkflowTaskTimedOutEvent(currentWorkflowTask.ScheduledEventID, currentWorkflowTask.StartedEventID)
+			completedEvent, err = ms.AddWorkflowTaskTimedOutEvent(currentWorkflowTask)
 			if err != nil {
 				return nil, err
 			}
 			ms.ClearStickyness()
 		} else {
-			completedEvent, err = ms.AddWorkflowTaskCompletedEvent(scheduledEventID, startedEventID, request, maxResetPoints)
+			completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, maxResetPoints)
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		completedEvent, err = ms.AddWorkflowTaskCompletedEvent(scheduledEventID, startedEventID, request, maxResetPoints)
+		completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, maxResetPoints)
 		if err != nil {
 			return nil, err
 		}
 	}
-
-	var (
-		wtFailedCause               *workflowTaskFailedCause
-		activityNotStartedCancelled bool
-		newMutableState             workflow.MutableState
-
-		hasUnhandledEvents bool
-		responseMutations  []workflowTaskResponseMutation
-	)
-	hasUnhandledEvents = ms.HasBufferedEvents()
+	// NOTE: completedEvent might be nil if WT was speculative and request has only `update.Rejection` messages.
+	// See workflowTaskStateMachine.skipWorkflowTaskCompletedEvent for more details.
 
 	if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
 		handler.metricsHandler.Counter(metrics.CompleteWorkflowTaskWithStickyDisabledCounter.GetMetricName()).Record(
@@ -443,9 +445,22 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeout()
 	}
 
-	binChecksum := request.GetBinaryChecksum()
-	if err := namespaceEntry.VerifyBinaryChecksum(binChecksum); err != nil {
-		wtFailedCause = NewWorkflowTaskFailedCause(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY, serviceerror.NewInvalidArgument(fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)))
+	var (
+		wtFailedCause               *workflowTaskFailedCause
+		activityNotStartedCancelled bool
+		newMutableState             workflow.MutableState
+	)
+	// hasPendingUpdates indicates if there are more pending updates (excluding those which are accepted/rejected by this workflow task).
+	hasPendingUpdates := weContext.UpdateRegistry().HasPending(request.GetMessages())
+	hasBufferedEvents := ms.HasBufferedEvents()
+	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
+		wtFailedCause = newWorkflowTaskFailedCause(
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
+			serviceerror.NewInvalidArgument(
+				fmt.Sprintf(
+					"binary %v is marked as bad deployment",
+					request.GetBinaryChecksum())),
+			nil)
 	} else {
 		namespace := namespaceEntry.Name()
 		workflowSizeChecker := newWorkflowSizeChecker(
@@ -471,7 +486,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		workflowTaskHandler := newWorkflowTaskHandler(
 			request.GetIdentity(),
-			completedEvent.GetEventId(),
+			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
 			handler.commandAttrValidator,
 			workflowSizeChecker,
@@ -480,13 +495,21 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.metricsHandler,
 			handler.config,
 			handler.shard,
-			handler.searchAttributesMapper,
-			hasUnhandledEvents,
+			handler.searchAttributesMapperProvider,
+			hasBufferedEvents,
+			hasPendingUpdates,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
 			ctx,
 			request.Commands,
+		); err != nil {
+			return nil, err
+		}
+
+		if err = workflowTaskHandler.handleMessages(
+			ctx,
+			request.Messages,
 		); err != nil {
 			return nil, err
 		}
@@ -501,7 +524,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		newMutableState = workflowTaskHandler.newMutableState
 
-		hasUnhandledEvents = workflowTaskHandler.hasBufferedEvents
+		hasBufferedEvents = workflowTaskHandler.hasBufferedEvents
 	}
 
 	if wtFailedCause != nil {
@@ -512,17 +535,17 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			tag.Value(wtFailedCause.Message()),
 			tag.WorkflowID(token.GetWorkflowId()),
 			tag.WorkflowRunID(token.GetRunId()),
-			tag.WorkflowNamespaceID(namespaceID.String()))
+			tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
 		if currentWorkflowTask.Attempt > 1 && wtFailedCause.failedCause != enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND {
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
 		var nextEventBatchId int64
-		ms, nextEventBatchId, err = failWorkflowTask(ctx, weContext, scheduledEventID, startedEventID, wtFailedCause, request)
+		ms, nextEventBatchId, err = failWorkflowTask(ctx, weContext, currentWorkflowTask, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
-		hasUnhandledEvents = true
+		hasBufferedEvents = true
 		newMutableState = nil
 
 		if wtFailedCause.workflowFailure != nil {
@@ -532,24 +555,39 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			if _, err := ms.AddFailWorkflowEvent(nextEventBatchId, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
 				return nil, err
 			}
-			hasUnhandledEvents = false
+			hasBufferedEvents = false
 		}
 	}
 
-	createNewWorkflowTask := ms.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
+	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
+	if ms.IsWorkflowExecutionRunning() && (hasBufferedEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled) {
+		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+	} else if ms.IsWorkflowExecutionRunning() && hasPendingUpdates {
+		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+	}
+	createNewWorkflowTask := newWorkflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
+
 	var newWorkflowTaskScheduledEventID int64
 	if createNewWorkflowTask {
+		// TODO (alex-update): Need to support case when ReturnNewWorkflowTask=false and WT.Type=Speculative.
+		// In this case WT needs to be added directly to matching.
+		// Current implementation will create normal WT.
 		bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
+		if !bypassTaskGeneration {
+			// If task generation can't be bypassed workflow task must be of Normal type because Speculative workflow task always skip task generation.
+			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+		}
+
 		var newWorkflowTask *workflow.WorkflowTaskInfo
 		var err error
 		if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
 			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
 				bypassTaskGeneration,
 				currentWorkflowTask.OriginalScheduledTime,
-				enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+				enumsspb.WORKFLOW_TASK_TYPE_NORMAL, // Heartbeat workflow task is always of Normal type.
 			)
 		} else {
-			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, newWorkflowTaskType)
 		}
 		if err != nil {
 			return nil, err
@@ -633,6 +671,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, updateErr
 	}
 
+	// Send update results to gRPC API callers.
+	err = weContext.UpdateRegistry().ProcessIncomingMessages(req.GetCompleteRequest().GetMessages())
+	if err != nil {
+		return nil, err
+	}
+
 	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), createNewWorkflowTask, namespaceEntry, workflowTaskHeartbeating)
 
 	if workflowTaskHeartbeatTimeout {
@@ -644,16 +688,25 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 	}
 
-	resp = &historyservice.RespondWorkflowTaskCompletedResponse{}
+	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
-		workflowTask, _ := ms.GetWorkflowTaskInfo(newWorkflowTaskScheduledEventID)
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, workflowTask, request.GetIdentity())
+		workflowTask := ms.GetWorkflowTaskByID(newWorkflowTaskScheduledEventID)
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(), workflowTask, request.GetIdentity())
 		if err != nil {
 			return nil, err
 		}
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
 	}
+
+	// If completedEvent is nil then it means that WT was speculative and
+	// WT events (scheduled/started/completed) were not written to the history and were dropped.
+	// SDK needs to know where to roll back its history event pointer, i.e. after what event all other events needs to be dropped.
+	// SDK uses WorkflowTaskStartedEventID to do that.
+	if completedEvent == nil {
+		resp.ResetHistoryEventId = ms.GetExecutionInfo().LastWorkflowTaskStartedEventId
+	}
+
 	for _, mutation := range responseMutations {
 		if err := mutation(resp); err != nil {
 			return nil, err
@@ -661,7 +714,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	return resp, nil
-
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskScheduled(
@@ -694,7 +746,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 		return nil
 	}
 
-	if !mutableState.HasProcessedOrPendingWorkflowTask() {
+	if !mutableState.HadOrHasWorkflowTask() {
 		return consts.ErrWorkflowNotReady
 	}
 
@@ -703,6 +755,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
 	ms workflow.MutableState,
+	updateRegistry update.Registry,
 	workflowTask *workflow.WorkflowTaskInfo,
 	identity string,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
@@ -728,6 +781,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	response.ScheduledTime = workflowTask.ScheduledTime
 	response.StartedTime = workflowTask.StartedTime
 
+	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
 	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
@@ -747,6 +801,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 			}
 			response.Queries[bufferedQueryID] = input
 		}
+	}
+
+	response.Messages, err = updateRegistry.CreateOutgoingMessages(workflowTask.StartedEventID)
+	if err != nil {
+		return nil, err
 	}
 
 	return response, nil
@@ -852,8 +911,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workfl
 func failWorkflowTask(
 	ctx context.Context,
 	wfContext workflow.Context,
-	scheduledEventID int64,
-	startedEventID int64,
+	workflowTask *workflow.WorkflowTaskInfo,
 	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (workflow.MutableState, int64, error) {
@@ -868,8 +926,7 @@ func failWorkflowTask(
 	}
 	nextEventBatchId := mutableState.GetNextEventID()
 	if _, err = mutableState.AddWorkflowTaskFailedEvent(
-		scheduledEventID,
-		startedEventID,
+		workflowTask,
 		wtFailedCause.failedCause,
 		failure.NewServerFailure(wtFailedCause.Message(), true),
 		request.GetIdentity(),

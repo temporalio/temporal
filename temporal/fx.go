@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -62,7 +63,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
@@ -169,7 +169,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
-	err = ringpop.ValidateRingpopConfig(&so.config.Global.Membership)
+	err = membership.ValidateConfig(&so.config.Global.Membership)
 	if err != nil {
 		return serverOptionsProvider{}, fmt.Errorf("ringpop config validation error: %w", err)
 	}
@@ -644,6 +644,15 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
+	var indexName string
+	var initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes
+	if config.Persistence.IsSQLVisibilityStore() {
+		indexName = config.Persistence.DataStores[config.Persistence.VisibilityStore].SQL.DatabaseName
+		initialIndexSearchAttributes = map[string]*persistencespb.IndexSearchAttributes{
+			indexName: searchattribute.GetSqlDbIndexSearchAttributes(),
+		}
+	}
+
 	clusterData := config.ClusterMetadata
 	for clusterName, clusterInfo := range clusterData.ClusterInformation {
 		if clusterName != clusterData.CurrentClusterName {
@@ -653,11 +662,21 @@ func ApplyClusterMetadataConfigProvider(
 				tag.Key("clusterInformation"),
 				tag.ClusterName(clusterName),
 				tag.IgnoredValue(clusterInfo))
+
+			// Only configure current cluster metadata from static config file
 			continue
 		}
 
-		// Only configure current cluster metadata from static config file
-		clusterId := uuid.New()
+		var clusterId string
+		if uuid.Parse(clusterInfo.ClusterID) == nil {
+			if clusterInfo.ClusterID != "" {
+				logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id")
+			}
+			clusterId = uuid.New()
+		} else {
+			clusterId = clusterInfo.ClusterID
+		}
+
 		applied, err := clusterMetadataManager.SaveClusterMetadata(
 			ctx,
 			&persistence.SaveClusterMetadataRequest{
@@ -671,6 +690,7 @@ func ApplyClusterMetadataConfigProvider(
 					IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
 					IsConnectionEnabled:      clusterInfo.Enabled,
 					UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
+					IndexSearchAttributes:    initialIndexSearchAttributes,
 				},
 			})
 		if err != nil {
@@ -681,21 +701,51 @@ func ApplyClusterMetadataConfigProvider(
 			continue
 		}
 
-		resp, err := clusterMetadataManager.GetClusterMetadata(ctx, &persistence.GetClusterMetadataRequest{
-			ClusterName: clusterName,
-		})
+		resp, err := clusterMetadataManager.GetClusterMetadata(
+			ctx,
+			&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+		)
 		if err != nil {
 			return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 		}
 
+		currentMetadata := resp.ClusterMetadata
+
+		// TODO (rodrigozhou): Remove this block for v1.21.
+		// Handle registering custom search attributes when upgrading to v1.20.
+		if config.Persistence.IsSQLVisibilityStore() {
+			needSave := false
+			if currentMetadata.IndexSearchAttributes == nil {
+				currentMetadata.IndexSearchAttributes = initialIndexSearchAttributes
+				needSave = true
+			} else if _, ok := currentMetadata.IndexSearchAttributes[indexName]; !ok {
+				currentMetadata.IndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
+				needSave = true
+			}
+
+			if needSave {
+				_, err := clusterMetadataManager.SaveClusterMetadata(
+					ctx,
+					&persistence.SaveClusterMetadataRequest{ClusterMetadata: currentMetadata},
+				)
+				if err != nil {
+					logger.Warn(
+						"Failed to register search attributes.",
+						tag.Error(err),
+						tag.ClusterName(clusterName),
+					)
+				}
+				logger.Info("Successfully registered search attributes.", tag.ClusterName(clusterName))
+			}
+		}
+
 		// Allow updating cluster metadata if global namespace is disabled
 		if !resp.IsGlobalNamespaceEnabled && clusterData.EnableGlobalNamespace {
-			currentMetadata := resp.ClusterMetadata
 			currentMetadata.IsGlobalNamespaceEnabled = clusterData.EnableGlobalNamespace
 			currentMetadata.InitialFailoverVersion = clusterInfo.InitialFailoverVersion
 			currentMetadata.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
 
-			applied, err = clusterMetadataManager.SaveClusterMetadata(
+			applied, err := clusterMetadataManager.SaveClusterMetadata(
 				ctx,
 				&persistence.SaveClusterMetadataRequest{
 					ClusterMetadata: currentMetadata,

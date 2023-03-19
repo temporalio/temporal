@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -91,7 +90,6 @@ type (
 		timeSource                    clock.TimeSource
 		namespaceRegistry             namespace.Registry
 		saProvider                    searchattribute.Provider
-		saMapper                      searchattribute.Mapper
 		clusterMetadata               cluster.Metadata
 		archivalMetadata              archiver.ArchivalMetadata
 		hostInfoProvider              membership.HostInfoProvider
@@ -114,7 +112,6 @@ type (
 		TimeSource                    clock.TimeSource
 		NamespaceRegistry             namespace.Registry
 		SaProvider                    searchattribute.Provider
-		SaMapper                      searchattribute.Mapper
 		ClusterMetadata               cluster.Metadata
 		ArchivalMetadata              archiver.ArchivalMetadata
 		HostInfoProvider              membership.HostInfoProvider
@@ -530,9 +527,11 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
-	if err != nil {
-		return nil, h.convertError(err)
+	if response.Clock == nil {
+		response.Clock, err = shardContext.NewVectorClock()
+		if err != nil {
+			return nil, h.convertError(err)
+		}
 	}
 	return response, nil
 }
@@ -1787,16 +1786,15 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
-		return nil, h.convertError(errNamespaceNotSet)
+		return nil, errNamespaceNotSet
 	}
 
 	if request.Execution == nil {
-		return nil, h.convertError(errWorkflowExecutionNotSet)
+		return nil, errWorkflowExecutionNotSet
 	}
 
-	// if using cass visibility, then either start or close time should be non-nilv
-	cassVisBackend := strings.Contains(h.persistenceVisibilityManager.GetName(), cassandra.CassandraPersistenceName)
-	if cassVisBackend && request.WorkflowStartTime == nil && request.WorkflowCloseTime == nil {
+	// If at least one visibility store is Cassandra, then either start or close time should be non-nil.
+	if h.persistenceVisibilityManager.HasStoreName(cassandra.CassandraPersistenceName) && request.WorkflowStartTime == nil && request.WorkflowCloseTime == nil {
 		return nil, &serviceerror.InvalidArgument{Message: "workflow start and close time not specified when deleting cassandra based visibility record"}
 	}
 
@@ -1806,8 +1804,6 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	// delete) again to delete again if this happens.
 	// For ES implementation, we used max int64 as the TaskID (version) to make sure deletion is
 	// the last operation applied for this workflow
-	fmt.Println("history DeleteWorkflowVisibilityRecord ")
-
 	err := h.persistenceVisibilityManager.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  request.Execution.GetWorkflowId(),
@@ -1817,16 +1813,16 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		CloseTime:   request.GetWorkflowCloseTime(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, h.convertError(err)
 	}
 
 	return &historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil
 }
 
-func (h *Handler) UpdateWorkflow(
+func (h *Handler) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *historyservice.UpdateWorkflowRequest,
-) (_ *historyservice.UpdateWorkflowResponse, retError error) {
+	request *historyservice.UpdateWorkflowExecutionRequest,
+) (_ *historyservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
@@ -1847,7 +1843,7 @@ func (h *Handler) UpdateWorkflow(
 		return nil, h.convertError(err)
 	}
 
-	return engine.UpdateWorkflow(ctx, request)
+	return engine.UpdateWorkflowExecution(ctx, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

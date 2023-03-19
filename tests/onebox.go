@@ -642,7 +642,6 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(sdkClientFactoryProvider),
-		fx.Provide(func() sdk.WorkerFactory { return sdk.NewWorkerFactory() }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
@@ -706,17 +705,6 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	client.OverrideValue(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
 }
 
-func (c *temporalImpl) RefreshNamespaceCache() {
-	c.frontendNamespaceRegistry.Refresh()
-	c.matchingNamespaceRegistry.Refresh()
-	for _, r := range c.historyNamespaceRegistries {
-		r.Refresh()
-	}
-	if c.workerNamespaceRegistry != nil {
-		c.workerNamespaceRegistry.Refresh()
-	}
-}
-
 // copyPersistenceConfig makes a deepcopy of persistence config.
 // This is just a temp fix for the race condition of persistence config.
 // The race condition happens because all the services are using the same datastore map in the config.
@@ -743,12 +731,14 @@ func sdkClientFactoryProvider(
 	resolver membership.GRPCResolver,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	dc *dynamicconfig.Collection,
 ) sdk.ClientFactory {
 	return sdk.NewClientFactory(
 		resolver.MakeURL(primitives.FrontendService),
 		nil,
 		metricsHandler,
 		logger,
+		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
 	)
 }
 

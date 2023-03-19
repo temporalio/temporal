@@ -27,7 +27,6 @@ package shard
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/golang/mock/gomock"
 
@@ -38,7 +37,6 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -57,7 +55,7 @@ var _ Context = (*ContextTest)(nil)
 
 func NewTestContextWithTimeSource(
 	ctrl *gomock.Controller,
-	shardInfo *persistence.ShardInfoWithFailover,
+	shardInfo *persistencespb.ShardInfo,
 	config *configs.Config,
 	timeSource clock.TimeSource,
 ) *ContextTest {
@@ -69,7 +67,7 @@ func NewTestContextWithTimeSource(
 
 func NewTestContext(
 	ctrl *gomock.Controller,
-	shardInfo *persistence.ShardInfoWithFailover,
+	shardInfo *persistencespb.ShardInfo,
 	config *configs.Config,
 ) *ContextTest {
 	resourceTest := resourcetest.NewTest(ctrl, metrics.History)
@@ -84,6 +82,7 @@ func NewTestContext(
 	}
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
+		owner:               shardInfo.GetOwner(),
 		stringRepr:          fmt.Sprintf("Shard(%d)", shardInfo.GetShardId()),
 		executionManager:    resourceTest.ExecutionMgr,
 		metricsHandler:      resourceTest.MetricsHandler,
@@ -100,7 +99,6 @@ func NewTestContext(
 		taskSequenceNumber:                 shardInfo.RangeId << int64(config.RangeSizeBits),
 		immediateTaskExclusiveMaxReadLevel: shardInfo.RangeId << int64(config.RangeSizeBits),
 		maxTaskSequenceNumber:              (shardInfo.RangeId + 1) << int64(config.RangeSizeBits),
-		scheduledTaskMaxReadLevelMap:       make(map[string]time.Time),
 		remoteClusterInfos:                 make(map[string]*remoteClusterInfo),
 		handoverNamespaces:                 make(map[namespace.Name]*namespaceHandOverInfo),
 
@@ -110,7 +108,7 @@ func NewTestContext(
 		persistenceShardManager: resourceTest.GetShardManager(),
 		clientBean:              resourceTest.GetClientBean(),
 		saProvider:              resourceTest.GetSearchAttributesProvider(),
-		saMapper:                resourceTest.GetSearchAttributesMapper(),
+		saMapperProvider:        resourceTest.GetSearchAttributesMapperProvider(),
 		historyClient:           resourceTest.GetHistoryClient(),
 		archivalMetadata:        resourceTest.GetArchivalMetadata(),
 		hostInfoProvider:        hostInfoProvider,

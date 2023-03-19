@@ -35,10 +35,8 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -145,7 +143,7 @@ var (
 	// ErrMemoSizeExceedsLimit is error for memo size exceeds limit
 	ErrMemoSizeExceedsLimit = serviceerror.NewInvalidArgument("Memo size exceeds limit.")
 	// ErrContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
-	ErrContextTimeoutTooShort = serviceerror.NewInvalidArgument("Context timeout is too short.")
+	ErrContextTimeoutTooShort = serviceerror.NewFailedPrecondition("Context timeout is too short.")
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = serviceerror.NewInvalidArgument("Context timeout is not set.")
 )
@@ -388,31 +386,16 @@ func WorkflowIDToHistoryShard(
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
-// PrettyPrintHistory prints history in human-readable format
-func PrettyPrintHistory(history *historypb.History, header ...string) {
+func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	var sb strings.Builder
-	sb.WriteString("==========================================================================\n")
+	_, _ = sb.WriteString("==========================================================================\n")
 	for _, h := range header {
-		sb.WriteString(h)
-		sb.WriteString("\n")
+		_, _ = sb.WriteString(h)
+		_, _ = sb.WriteString("\n")
 	}
-	sb.WriteString("--------------------------------------------------------------------------\n")
-	_ = proto.MarshalText(&sb, history)
-	sb.WriteString("\n")
-	fmt.Print(sb.String())
-}
-
-// PrettyPrintCommands prints commands in human-readable format
-func PrettyPrintCommands(commands []*commandpb.Command, header ...string) {
-	var sb strings.Builder
-	sb.WriteString("==========================================================================\n")
-	for _, h := range header {
-		sb.WriteString(h)
-		sb.WriteString("\n")
-	}
-	sb.WriteString("--------------------------------------------------------------------------\n")
-	for _, command := range commands {
-		_ = proto.MarshalText(&sb, command)
+	_, _ = sb.WriteString("--------------------------------------------------------------------------\n")
+	for _, m := range msgs {
+		_ = proto.MarshalText(&sb, m)
 	}
 	fmt.Print(sb.String())
 }
@@ -465,6 +448,7 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		ScheduledTime:              historyResponse.ScheduledTime,
 		StartedTime:                historyResponse.StartedTime,
 		Queries:                    historyResponse.Queries,
+		Messages:                   historyResponse.Messages,
 	}
 
 	return matchingResp
@@ -576,7 +560,10 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 	return defaultSettings
 }
 
-// CreateHistoryStartWorkflowRequest create a start workflow request for history
+// CreateHistoryStartWorkflowRequest create a start workflow request for history.
+// Note: this mutates startRequest by unsetting the fields ContinuedFailure and
+// LastCompletionResult (these should only be set on workflows created by the scheduler
+// worker).
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
@@ -590,7 +577,11 @@ func CreateHistoryStartWorkflowRequest(
 		Attempt:                  1,
 		ParentExecutionInfo:      parentExecutionInfo,
 		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now),
+		ContinuedFailure:         startRequest.ContinuedFailure,
+		LastCompletionResult:     startRequest.LastCompletionResult,
 	}
+	startRequest.ContinuedFailure = nil
+	startRequest.LastCompletionResult = nil
 
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
 		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))

@@ -86,11 +86,10 @@ func (s *branchMgrSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 10,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 10,
+			RangeId: 1,
+		},
 		tests.NewDynamicConfig(),
 	)
 
@@ -152,6 +151,7 @@ func (s *branchMgrSuite) TestCreateNewBranch() {
 				ForkNodeID:      baseBranchLCAEventID + 1,
 				Info:            "",
 				ShardID:         shardID,
+				NamespaceID:     s.namespaceID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,
@@ -193,7 +193,7 @@ func (s *branchMgrSuite) TestClearTransientWorkflowTask() {
 
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().ClearTransientWorkflowTask().Return(nil).AnyTimes()
 
@@ -240,13 +240,12 @@ func (s *branchMgrSuite) TestFlushBufferedEvents() {
 		ScheduledEventID: 1234,
 		StartedEventID:   2345,
 	}
-	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true)
+	s.mockMutableState.EXPECT().GetStartedWorkflowTask().Return(workflowTask)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,
@@ -286,7 +285,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissingEve
 
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
@@ -318,7 +317,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEvent
 	s.NoError(err)
 
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
@@ -360,7 +359,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissing
 	newBranchToken := []byte("some random new branch token")
 
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
@@ -380,6 +379,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissing
 				ForkNodeID:      baseBranchLCAEventID + 1,
 				Info:            "",
 				ShardID:         shardID,
+				NamespaceID:     s.namespaceID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,
@@ -420,7 +420,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_MissingEv
 	})
 
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasInFlightWorkflowTask().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,

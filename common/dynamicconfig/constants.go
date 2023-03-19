@@ -87,8 +87,11 @@ const (
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery = "system.enableStickyQuery"
-	// EnableActivityEagerExecution indicates if acitivty eager execution is enabled per namespace
+	// EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace
 	EnableActivityEagerExecution = "system.enableActivityEagerExecution"
+	// EnableEagerWorkflowStart toggles "eager workflow start" - returning the first workflow task inline in the
+	// response to a StartWorkflowExecution request and skipping the trip through matching.
+	EnableEagerWorkflowStart = "system.enableEagerWorkflowStart"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
@@ -129,10 +132,16 @@ const (
 	HistorySizeLimitError = "limit.historySize.error"
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning
 	HistorySizeLimitWarn = "limit.historySize.warn"
+	// HistorySizeSuggestContinueAsNew is the workflow execution history size limit to suggest
+	// continue-as-new (in workflow task started event)
+	HistorySizeSuggestContinueAsNew = "limit.historySize.suggestContinueAsNew"
 	// HistoryCountLimitError is the per workflow execution history event count limit
 	HistoryCountLimitError = "limit.historyCount.error"
 	// HistoryCountLimitWarn is the per workflow execution history event count limit for warning
 	HistoryCountLimitWarn = "limit.historyCount.warn"
+	// HistoryCountSuggestContinueAsNew is the workflow execution history event count limit to
+	// suggest continue-as-new (in workflow task started event)
+	HistoryCountSuggestContinueAsNew = "limit.historyCount.suggestContinueAsNew"
 	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit = "limit.maxIDLength"
@@ -193,6 +202,8 @@ const (
 	FrontendThrottledLogRPS = "frontend.throttledLogRPS"
 	// FrontendShutdownDrainDuration is the duration of traffic drain during shutdown
 	FrontendShutdownDrainDuration = "frontend.shutdownDrainDuration"
+	// FrontendShutdownFailHealthCheckDuration is the duration of shutdown failure detection
+	FrontendShutdownFailHealthCheckDuration = "frontend.shutdownFailHealthCheckDuration"
 	// FrontendMaxBadBinaries is the max number of bad binaries in namespace config
 	FrontendMaxBadBinaries = "frontend.maxBadBinaries"
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
@@ -245,8 +256,15 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
+	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
+	FrontendMaxExecutionCountBatchOperationPerNamespace = "frontend.MaxExecutionCountBatchOperationPerNamespace"
 	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
 	FrontendEnableBatcher = "frontend.enableBatcher"
+
+	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
+	//  UpdateWorkflowExecution API is under active development and is not ready for production use.
+	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
+	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
 	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
@@ -317,8 +335,6 @@ const (
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
 	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
 	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
-	// MatchingUseOldRouting is whether to use old task queue routing (name only) instead of namespace+name+type.
-	MatchingUseOldRouting = "matching.useOldRouting"
 
 	// keys for history
 
@@ -385,6 +401,11 @@ const (
 
 	// TaskSchedulerEnableRateLimiter indicates if rate limiter should be enabled in task scheduler
 	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
+	// TaskSchedulerEnableRateLimiterShadowMode indicates if task scheduler rate limiter should run in shadow mode
+	// i.e. through rate limiter and emit metrics but do not actually block/throttle task scheduling
+	TaskSchedulerEnableRateLimiterShadowMode = "history.taskSchedulerEnableRateLimiterShadowMode"
+	// TaskSchedulerThrottleDuration is the throttle duration when task scheduled exceeds max qps
+	TaskSchedulerThrottleDuration = "history.taskSchedulerThrottleDuration"
 	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"
@@ -546,8 +567,8 @@ const (
 	ShardUpdateMinInterval = "history.shardUpdateMinInterval"
 	// ShardSyncMinInterval is the minimal time interval which the shard info should be sync to remote
 	ShardSyncMinInterval = "history.shardSyncMinInterval"
-	// EmitShardDiffLog whether emit the shard diff log
-	EmitShardDiffLog = "history.emitShardDiffLog"
+	// EmitShardLagLog whether emit the shard lag log
+	EmitShardLagLog = "history.emitShardLagLog"
 	// DefaultEventEncoding is the encoding type for history events
 	DefaultEventEncoding = "history.defaultEventEncoding"
 	// NumArchiveSystemWorkflows is key for number of archive system workflows running in total
@@ -713,6 +734,13 @@ const (
 	WorkerParentCloseMaxConcurrentWorkflowTaskPollers = "worker.ParentCloseMaxConcurrentWorkflowTaskPollers"
 	// WorkerPerNamespaceWorkerCount controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace
 	WorkerPerNamespaceWorkerCount = "worker.perNamespaceWorkerCount"
+	// WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace worker
+	WorkerPerNamespaceWorkerOptions = "worker.perNamespaceWorkerOptions"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
+	// WorkerStickyCacheSize controls the sticky cache size for SDK workers on worker nodes
+	// (shared between all workers in the process, cannot be changed after startup)
+	WorkerStickyCacheSize = "worker.stickyCacheSize"
+	// SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules
+	SchedulerNamespaceStartWorkflowRPS = "worker.schedulerNamespaceStartWorkflowRPS"
 )

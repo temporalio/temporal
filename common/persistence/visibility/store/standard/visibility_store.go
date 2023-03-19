@@ -73,6 +73,12 @@ func (s *standardStore) GetName() string {
 	return s.store.GetName()
 }
 
+func (s *standardStore) GetIndexName() string {
+	// GetIndexName is used to get cluster metadata, which in verstions < v1.20
+	// were stored in an empty string key.
+	return ""
+}
+
 func (s *standardStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,

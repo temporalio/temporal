@@ -75,6 +75,7 @@ var Module = fx.Options(
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
+	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
@@ -137,6 +138,7 @@ func GrpcServerOptionsProvider(
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.NamespaceCountLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
+	redirectionInterceptor *RedirectionInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
@@ -176,10 +178,11 @@ func GrpcServerOptionsProvider(
 	interceptors := []grpc.UnaryServerInterceptor{
 		// Service Error Interceptor should be the most outer interceptor on error handling
 		rpc.ServiceErrorInterceptor,
-		namespaceValidatorInterceptor.LengthValidationIntercept,
+		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
+		redirectionInterceptor.Intercept,
 		telemetryInterceptor.Intercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
@@ -213,12 +216,10 @@ func GrpcServerOptionsProvider(
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
-	esConfig *esclient.Config,
 ) *Config {
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		esConfig.GetVisibilityIndex(),
 		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
@@ -240,6 +241,28 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 	return interceptor.NewRetryableInterceptor(
 		common.CreateFrontendHandlerRetryPolicy(),
 		common.IsServiceHandlerRetryableError,
+	)
+}
+
+func RedirectionInterceptorProvider(
+	configuration *Config,
+	namespaceCache namespace.Registry,
+	policy config.DCRedirectionPolicy,
+	logger log.Logger,
+	clientBean client.Bean,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
+	clusterMetadata cluster.Metadata,
+) *RedirectionInterceptor {
+	return NewRedirectionInterceptor(
+		configuration,
+		namespaceCache,
+		policy,
+		logger,
+		clientBean,
+		metricsHandler,
+		timeSource,
+		clusterMetadata,
 	)
 }
 
@@ -370,7 +393,7 @@ func VisibilityManagerProvider(
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
@@ -381,7 +404,7 @@ func VisibilityManagerProvider(
 		esClient,
 		nil, // frontend visibility never write
 		saProvider,
-		searchAttributesMapper,
+		searchAttributesMapperProvider,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
@@ -416,9 +439,8 @@ func ServiceResolverProvider(
 
 func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
-	config *Config,
+	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
-	esConfig *esclient.Config,
 	esClient esclient.Client,
 	visibilityMrg manager.VisibilityManager,
 	logger log.SnTaggedLogger,
@@ -445,10 +467,9 @@ func AdminHandlerProvider(
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
-		config,
+		configuration,
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
-		esConfig,
 		esClient,
 		visibilityMrg,
 		logger,
@@ -476,12 +497,12 @@ func AdminHandlerProvider(
 }
 
 func OperatorHandlerProvider(
-	config *Config,
-	esConfig *esclient.Config,
+	configuration *Config,
 	esClient esclient.Client,
 	logger log.SnTaggedLogger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
+	visibilityMgr manager.VisibilityManager,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
@@ -492,12 +513,12 @@ func OperatorHandlerProvider(
 	clientFactory client.Factory,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
-		config,
-		esConfig,
+		configuration,
 		esClient,
 		logger,
 		sdkClientFactory,
 		metricsHandler,
+		visibilityMgr,
 		saProvider,
 		saManager,
 		healthServer,
@@ -529,11 +550,12 @@ func HandlerProvider(
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
-	saMapper searchattribute.Mapper,
+	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
+	membershipMonitor membership.Monitor,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -549,15 +571,15 @@ func HandlerProvider(
 		archiverProvider,
 		payloadSerializer,
 		namespaceRegistry,
-		saMapper,
+		saMapperProvider,
 		saProvider,
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
 		timeSource,
+		membershipMonitor,
 	)
-	handler := NewDCRedirectionHandler(wfHandler, dcRedirectionPolicy, logger, clientBean, metricsHandler, timeSource, namespaceRegistry, clusterMetadata)
-	return handler
+	return wfHandler
 }
 
 func ServiceLifetimeHooks(

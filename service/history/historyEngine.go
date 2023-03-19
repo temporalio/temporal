@@ -32,7 +32,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
@@ -75,10 +75,11 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
@@ -225,10 +226,12 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
 		shard.GetSearchAttributesProvider(),
-		shard.GetSearchAttributesMapper(),
+		shard.GetSearchAttributesMapperProvider(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
+		config.DefaultVisibilityIndexName,
+		visibility.AllowListForValidation(persistenceVisibilityMgr.GetStoreNames()),
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
@@ -293,6 +296,9 @@ func (e *historyEngineImpl) Stop() {
 		queueProcessor.Stop()
 	}
 	e.replicationProcessorMgr.Stop()
+	if e.replicationAckMgr != nil {
+		e.replicationAckMgr.Close()
+	}
 	// unset the failover callback
 	e.shard.GetNamespaceRegistry().UnregisterStateChangeCallback(e)
 }
@@ -301,7 +307,7 @@ func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 
 	e.shard.GetNamespaceRegistry().RegisterStateChangeCallback(e, func(ns *namespace.Namespace, deletedFromDb bool) {
 		if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-			e.shard.UpdateHandoverNamespaces(ns, deletedFromDb)
+			e.shard.UpdateHandoverNamespace(ns, deletedFromDb)
 		}
 
 		if deletedFromDb {
@@ -328,7 +334,16 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-	return startworkflow.Invoke(ctx, startRequest, e.shard, e.workflowConsistencyChecker)
+	starter, err := startworkflow.NewStarter(
+		e.shard,
+		e.workflowConsistencyChecker,
+		e.tokenSerializer,
+		startRequest,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return starter.Invoke(ctx)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
@@ -523,11 +538,12 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	return signalwithstartworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
-func (h *historyEngineImpl) UpdateWorkflow(
+func (e *historyEngineImpl) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *historyservice.UpdateWorkflowRequest,
-) (*historyservice.UpdateWorkflowResponse, error) {
-	return nil, serviceerror.NewUnimplemented("UpdateWorkflow is not supported on this server")
+	req *historyservice.UpdateWorkflowExecutionRequest,
+) (*historyservice.UpdateWorkflowExecutionResponse, error) {
+
+	return updateworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker, e.matchingClient)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate

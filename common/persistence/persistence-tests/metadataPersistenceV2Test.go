@@ -42,6 +42,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -67,7 +68,7 @@ func (m *MetadataPersistenceSuiteV2) SetupSuite() {
 func (m *MetadataPersistenceSuiteV2) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	m.Assertions = require.New(m.T())
-	m.ctx, m.cancel = context.WithTimeout(context.Background(), time.Second*30)
+	m.ctx, m.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	// cleanup the namespace created
 	var token []byte

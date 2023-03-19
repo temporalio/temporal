@@ -26,9 +26,12 @@ package tests
 
 import (
 	"flag"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -49,6 +52,7 @@ type (
 func (s *integrationSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.RetentionTimerJitterDuration: time.Second,
+		dynamicconfig.EnableEagerWorkflowStart:     true,
 	}
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
@@ -78,4 +82,22 @@ func (s *integrationSuite) sendSignal(namespace string, execution *commonpb.Work
 	})
 
 	return err
+}
+
+func unmarshalAny[T proto.Message](s *integrationSuite, a *types.Any) T {
+	s.T().Helper()
+	pb := new(T)
+	ppb := reflect.ValueOf(pb).Elem()
+	pbNew := reflect.New(reflect.TypeOf(pb).Elem().Elem())
+	ppb.Set(pbNew)
+	err := types.UnmarshalAny(a, *pb)
+	s.NoError(err)
+	return *pb
+}
+
+func marshalAny(s *integrationSuite, pb proto.Message) *types.Any {
+	s.T().Helper()
+	a, err := types.MarshalAny(pb)
+	s.NoError(err)
+	return a
 }

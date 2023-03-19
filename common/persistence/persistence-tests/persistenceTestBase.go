@@ -136,9 +136,9 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 
 	if options.DBPort == 0 {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName:
+		case mysql.PluginName, mysql.PluginNameV8:
 			options.DBPort = environment.GetMySQLPort()
-		case postgresql.PluginName:
+		case postgresql.PluginName, postgresql.PluginNameV12:
 			options.DBPort = environment.GetPostgreSQLPort()
 		case sqlite.PluginName:
 			options.DBPort = 0
@@ -148,7 +148,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	}
 	if options.DBHost == "" {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName:
+		case mysql.PluginName, mysql.PluginNameV8:
 			options.DBHost = environment.GetMySQLAddress()
 		case postgresql.PluginName:
 			options.DBHost = environment.GetPostgreSQLAddress()
@@ -248,31 +248,6 @@ func (s *TestBase) fatalOnError(msg string, err error) {
 	if err != nil {
 		s.Logger.Fatal(msg, tag.Error(err))
 	}
-}
-
-// GetOrCreateShard is a utility method to get/create the shard using persistence layer
-func (s *TestBase) GetOrCreateShard(ctx context.Context, shardID int32, owner string, rangeID int64) (*persistencespb.ShardInfo, error) {
-	info := &persistencespb.ShardInfo{
-		ShardId: shardID,
-		Owner:   owner,
-		RangeId: rangeID,
-	}
-	resp, err := s.ShardMgr.GetOrCreateShard(ctx, &persistence.GetOrCreateShardRequest{
-		ShardID:          shardID,
-		InitialShardInfo: info,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return resp.ShardInfo, nil
-}
-
-// UpdateShard is a utility method to update the shard using persistence layer
-func (s *TestBase) UpdateShard(ctx context.Context, updatedInfo *persistencespb.ShardInfo, previousRangeID int64) error {
-	return s.ShardMgr.UpdateShard(ctx, &persistence.UpdateShardRequest{
-		ShardInfo:       updatedInfo,
-		PreviousRangeID: previousRangeID,
-	})
 }
 
 // TearDownWorkflowStore to cleanup

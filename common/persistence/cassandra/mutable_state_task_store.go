@@ -59,16 +59,6 @@ const (
 		`shard_id, type, namespace_id, workflow_id, run_id, task_data, task_encoding, visibility_ts, task_id) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	templateGetHistoryTaskQuery = `SELECT task_data, task_encoding ` +
-		`FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? `
-
 	templateGetHistoryImmediateTasksQuery = `SELECT task_id, task_data, task_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -90,16 +80,6 @@ const (
 		`and visibility_ts >= ? ` +
 		`and visibility_ts < ?`
 
-	templateGetTransferTaskQuery = `SELECT transfer, transfer_encoding ` +
-		`FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? `
-
 	templateGetTransferTasksQuery = `SELECT task_id, transfer, transfer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -111,16 +91,6 @@ const (
 		`and task_id >= ? ` +
 		`and task_id < ?`
 
-	templateGetVisibilityTaskQuery = `SELECT visibility_task_data, visibility_task_encoding ` +
-		`FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? `
-
 	templateGetVisibilityTasksQuery = `SELECT task_id, visibility_task_data, visibility_task_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -131,16 +101,6 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id >= ? ` +
 		`and task_id < ?`
-
-	templateGetReplicationTaskQuery = `SELECT replication, replication_encoding ` +
-		`FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? `
 
 	templateGetReplicationTasksQuery = `SELECT task_id, replication, replication_encoding ` +
 		`FROM executions ` +
@@ -186,16 +146,6 @@ const (
 
 	templateRangeCompleteHistoryScheduledTasksQuery = templateRangeCompleteTimerTaskQuery
 
-	templateGetTimerTaskQuery = `SELECT timer, timer_encoding ` +
-		`FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? `
-
 	templateGetTimerTasksQuery = `SELECT visibility_ts, task_id, timer, timer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -240,6 +190,28 @@ func NewMutableStateTaskStore(
 		Session: session,
 		Logger:  logger,
 	}
+}
+
+func (d *MutableStateTaskStore) RegisterHistoryTaskReader(
+	_ context.Context,
+	_ *p.RegisterHistoryTaskReaderRequest,
+) error {
+	// no-op
+	return nil
+}
+
+func (d *MutableStateTaskStore) UnregisterHistoryTaskReader(
+	_ context.Context,
+	_ *p.UnregisterHistoryTaskReaderRequest,
+) {
+	// no-op
+}
+
+func (d *MutableStateTaskStore) UpdateHistoryTaskReaderProgress(
+	_ context.Context,
+	_ *p.UpdateHistoryTaskReaderProgressRequest,
+) {
+	// no-op
 }
 
 func (d *MutableStateTaskStore) AddHistoryTasks(
@@ -289,24 +261,6 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 		}
 	}
 	return nil
-}
-
-func (d *MutableStateTaskStore) GetHistoryTask(
-	ctx context.Context,
-	request *p.GetHistoryTaskRequest,
-) (*p.InternalGetHistoryTaskResponse, error) {
-	switch request.TaskCategory.ID() {
-	case tasks.CategoryIDTransfer:
-		return d.getTransferTask(ctx, request)
-	case tasks.CategoryIDTimer:
-		return d.getTimerTask(ctx, request)
-	case tasks.CategoryIDVisibility:
-		return d.getVisibilityTask(ctx, request)
-	case tasks.CategoryIDReplication:
-		return d.getReplicationTask(ctx, request)
-	default:
-		return d.getHistoryTask(ctx, request)
-	}
 }
 
 func (d *MutableStateTaskStore) GetHistoryTasks(
@@ -361,35 +315,6 @@ func (d *MutableStateTaskStore) RangeCompleteHistoryTasks(
 	default:
 		return d.rangeCompleteHistoryTasks(ctx, request)
 	}
-}
-
-func (d *MutableStateTaskStore) getTransferTask(
-	ctx context.Context,
-	request *p.GetHistoryTaskRequest,
-) (*p.InternalGetHistoryTaskResponse, error) {
-	shardID := request.ShardID
-	taskID := request.TaskKey.TaskID
-	query := d.Session.Query(templateGetTransferTaskQuery,
-		shardID,
-		rowTypeTransferTask,
-		rowTypeTransferNamespaceID,
-		rowTypeTransferWorkflowID,
-		rowTypeTransferRunID,
-		defaultVisibilityTimestamp,
-		taskID,
-	).WithContext(ctx)
-
-	var data []byte
-	var encoding string
-	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, gocql.ConvertError("GetTransferTask", err)
-	}
-	return &p.InternalGetHistoryTaskResponse{
-		InternalHistoryTask: p.InternalHistoryTask{
-			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
-		},
-	}, nil
 }
 
 func (d *MutableStateTaskStore) getTransferTasks(
@@ -471,37 +396,6 @@ func (d *MutableStateTaskStore) rangeCompleteTransferTasks(
 
 	err := query.Exec()
 	return gocql.ConvertError("RangeCompleteTransferTask", err)
-}
-
-func (d *MutableStateTaskStore) getTimerTask(
-	ctx context.Context,
-	request *p.GetHistoryTaskRequest,
-) (*p.InternalGetHistoryTaskResponse, error) {
-	shardID := request.ShardID
-	taskID := request.TaskKey.TaskID
-	visibilityTs := p.UnixMilliseconds(request.TaskKey.FireTime)
-	query := d.Session.Query(templateGetTimerTaskQuery,
-		shardID,
-		rowTypeTimerTask,
-		rowTypeTimerNamespaceID,
-		rowTypeTimerWorkflowID,
-		rowTypeTimerRunID,
-		visibilityTs,
-		taskID,
-	).WithContext(ctx)
-
-	var data []byte
-	var encoding string
-	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, gocql.ConvertError("GetTimerTask", err)
-	}
-
-	return &p.InternalGetHistoryTaskResponse{
-		InternalHistoryTask: p.InternalHistoryTask{
-			Key:  tasks.NewKey(time.UnixMilli(visibilityTs).UTC(), taskID),
-			Blob: *p.NewDataBlob(data, encoding),
-		},
-	}, nil
 }
 
 func (d *MutableStateTaskStore) getTimerTasks(
@@ -587,36 +481,6 @@ func (d *MutableStateTaskStore) rangeCompleteTimerTasks(
 
 	err := query.Exec()
 	return gocql.ConvertError("RangeCompleteTimerTask", err)
-}
-
-func (d *MutableStateTaskStore) getReplicationTask(
-	ctx context.Context,
-	request *p.GetHistoryTaskRequest,
-) (*p.InternalGetHistoryTaskResponse, error) {
-	shardID := request.ShardID
-	taskID := request.TaskKey.TaskID
-	query := d.Session.Query(templateGetReplicationTaskQuery,
-		shardID,
-		rowTypeReplicationTask,
-		rowTypeReplicationNamespaceID,
-		rowTypeReplicationWorkflowID,
-		rowTypeReplicationRunID,
-		defaultVisibilityTimestamp,
-		taskID,
-	).WithContext(ctx)
-
-	var data []byte
-	var encoding string
-	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, gocql.ConvertError("GetReplicationTask", err)
-	}
-
-	return &p.InternalGetHistoryTaskResponse{
-		InternalHistoryTask: p.InternalHistoryTask{
-			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
-		},
-	}, nil
 }
 
 func (d *MutableStateTaskStore) getReplicationTasks(
@@ -765,35 +629,6 @@ func (d *MutableStateTaskStore) RangeDeleteReplicationTaskFromDLQ(
 	return gocql.ConvertError("RangeDeleteReplicationTaskFromDLQ", err)
 }
 
-func (d *MutableStateTaskStore) getVisibilityTask(
-	ctx context.Context,
-	request *p.GetHistoryTaskRequest,
-) (*p.InternalGetHistoryTaskResponse, error) {
-	shardID := request.ShardID
-	taskID := request.TaskKey.TaskID
-	query := d.Session.Query(templateGetVisibilityTaskQuery,
-		shardID,
-		rowTypeVisibilityTask,
-		rowTypeVisibilityTaskNamespaceID,
-		rowTypeVisibilityTaskWorkflowID,
-		rowTypeVisibilityTaskRunID,
-		defaultVisibilityTimestamp,
-		taskID,
-	).WithContext(ctx)
-
-	var data []byte
-	var encoding string
-	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, gocql.ConvertError("GetVisibilityTask", err)
-	}
-	return &p.InternalGetHistoryTaskResponse{
-		InternalHistoryTask: p.InternalHistoryTask{
-			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
-		},
-	}, nil
-}
-
 func (d *MutableStateTaskStore) getVisibilityTasks(
 	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
@@ -905,44 +740,6 @@ func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(
 	}
 
 	return response, nil
-}
-
-func (d *MutableStateTaskStore) getHistoryTask(
-	ctx context.Context,
-	request *p.GetHistoryTaskRequest,
-) (*p.InternalGetHistoryTaskResponse, error) {
-	shardID := request.ShardID
-	ts := defaultVisibilityTimestamp
-	if request.TaskCategory.Type() == tasks.CategoryTypeScheduled {
-		ts = p.UnixMilliseconds(request.TaskKey.FireTime)
-	}
-	taskID := request.TaskKey.TaskID
-	query := d.Session.Query(templateGetHistoryTaskQuery,
-		shardID,
-		request.TaskCategory.ID(),
-		rowTypeHistoryTaskNamespaceID,
-		rowTypeHistoryTaskWorkflowID,
-		rowTypeHistoryTaskRunID,
-		ts,
-		taskID,
-	).WithContext(ctx)
-
-	var data []byte
-	var encoding string
-	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, gocql.ConvertError("GetHistoryTask", err)
-	}
-
-	task := p.InternalHistoryTask{
-		Key:  tasks.NewImmediateKey(taskID),
-		Blob: *p.NewDataBlob(data, encoding),
-	}
-	if request.TaskCategory.Type() == tasks.CategoryTypeScheduled {
-		task.Key.FireTime = time.UnixMilli(ts).UTC()
-	}
-	return &p.InternalGetHistoryTaskResponse{
-		InternalHistoryTask: task,
-	}, nil
 }
 
 func (d *MutableStateTaskStore) getHistoryTasks(

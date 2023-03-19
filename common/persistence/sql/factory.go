@@ -187,9 +187,7 @@ func (c *DbConn) Close() error {
 	defer c.Unlock()
 	c.refCnt--
 	if c.refCnt == 0 {
-		err := c.DB.Close()
-		c.DB = nil
-		return err
+		return c.DB.Close()
 	}
 	return nil
 }

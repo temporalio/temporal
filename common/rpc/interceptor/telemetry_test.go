@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -72,4 +73,41 @@ func TestEmitActionMetric(t *testing.T) {
 			telemetry.emitActionMetric(tt.methodName, tt.fullName, nil, metricsHandler, nil)
 		})
 	}
+}
+
+func TestOperationOverwrite(t *testing.T) {
+	controller := gomock.NewController(t)
+	register := namespace.NewMockRegistry(controller)
+	metricsHandler := metrics.NewMockHandler(controller)
+	telemetry := NewTelemetryInterceptor(register, metricsHandler, log.NewNoopLogger())
+
+	testCases := []struct {
+		methodName        string
+		fullName          string
+		expectedOperation string
+	}{
+		{
+			"DeleteWorkflowExecution",
+			adminServicePrefix + "DeleteWorkflowExecution",
+			"AdminDeleteWorkflowExecution",
+		},
+		{
+			"DeleteNamespace",
+			operatorServicePrefix + "DeleteNamespace",
+			"OperatorDeleteNamespace",
+		},
+		{
+			metrics.FrontendStartWorkflowExecutionScope,
+			frontendPackagePrefix + metrics.FrontendStartWorkflowExecutionScope,
+			metrics.FrontendStartWorkflowExecutionScope,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.methodName, func(t *testing.T) {
+			operation := telemetry.overrideOperationTag(tt.fullName, tt.methodName, nil)
+			assert.Equal(t, tt.expectedOperation, operation)
+		})
+	}
+
 }

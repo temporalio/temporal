@@ -41,6 +41,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
@@ -94,12 +95,11 @@ func (s *dlqHandlerSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:                0,
-				RangeId:                1,
-				ReplicationDlqAckLevel: map[string]int64{cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID},
-			}},
+		&persistencespb.ShardInfo{
+			ShardId:                0,
+			RangeId:                1,
+			ReplicationDlqAckLevel: map[string]int64{cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID},
+		},
 		tests.NewDynamicConfig(),
 	)
 	s.mockResource = s.mockShard.Resource
@@ -189,6 +189,7 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
+			ReaderID:            common.DefaultQueueReaderID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			BatchSize:           pageSize,
@@ -202,10 +203,16 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
-	tasks, token, err := s.replicationMessageHandler.GetMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
+	taskList, tasksInfo, token, err := s.replicationMessageHandler.GetMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Equal(pageToken, token)
-	s.Equal([]*replicationspb.ReplicationTask{remoteTask}, tasks)
+	s.Equal([]*replicationspb.ReplicationTask{remoteTask}, taskList)
+	s.Equal(namespaceID, tasksInfo[0].GetNamespaceId())
+	s.Equal(workflowID, tasksInfo[0].GetWorkflowId())
+	s.Equal(taskID, tasksInfo[0].GetTaskId())
+	s.Equal(version, tasksInfo[0].GetVersion())
+	s.Equal(firstEventID, tasksInfo[0].GetFirstEventId())
+	s.Equal(nextEventID, tasksInfo[0].GetNextEventId())
 }
 
 func (s *dlqHandlerSuite) TestPurgeMessages() {
@@ -278,6 +285,7 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
+			ReaderID:            common.DefaultQueueReaderID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			BatchSize:           pageSize,

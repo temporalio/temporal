@@ -65,8 +65,6 @@ type (
 	HistoryScheduledTask interface {
 		// InsertIntoHistoryScheduledTasks inserts rows that into history_scheduled_tasks table.
 		InsertIntoHistoryScheduledTasks(ctx context.Context, rows []HistoryScheduledTasksRow) (sql.Result, error)
-		// SelectFromScheduledTasks returns one or more rows from history_scheduled_tasks table
-		SelectFromHistoryScheduledTasks(ctx context.Context, filter HistoryScheduledTasksFilter) ([]HistoryScheduledTasksRow, error)
 		// RangeSelectFromScheduledTasks returns one or more rows from history_scheduled_tasks table
 		RangeSelectFromHistoryScheduledTasks(ctx context.Context, filter HistoryScheduledTasksRangeFilter) ([]HistoryScheduledTasksRow, error)
 		// DeleteFromScheduledTasks deletes one or more rows from history_scheduled_tasks table

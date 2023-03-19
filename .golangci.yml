@@ -63,17 +63,29 @@ linters-settings:
         disabled: true
       - name: var-naming
         disabled: true
+      - name: unused-parameter
+        disabled: true
 
       # Rule tuning
       - name: argument-limit
         arguments:
-          - 4
+          - 10
       - name: cognitive-complexity
         arguments:
-          - 15
+          - 25
       - name: cyclomatic
         arguments:
-          - 10
+          - 15
       - name: function-result-limit
         arguments:
           - 3
+      - name: unhandled-error
+        arguments:
+          - "fmt.Printf"
+issues:
+  # Exclude cyclomatic and cognitive complexity rules for functional tests in the `tests` root directory.
+  exclude-rules:
+    - path: ^tests\/.+\.go
+      text: "(cyclomatic|cognitive)"
+      linters:
+        - revive

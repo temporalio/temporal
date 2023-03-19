@@ -85,11 +85,10 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	config := tests.NewDynamicConfig()
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 1,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 1,
+			RangeId: 1,
+		},
 		config,
 	)
 	mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
@@ -121,10 +120,12 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		searchAttributesValidator: searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
-			mockShard.Resource.SearchAttributesMapper,
+			mockShard.Resource.SearchAttributesMapperProvider,
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
+			config.DefaultVisibilityIndexName,
+			false,
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, workflowCache),
 	}
@@ -250,7 +251,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
-	addWorkflowTaskCompletedEvent(ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}

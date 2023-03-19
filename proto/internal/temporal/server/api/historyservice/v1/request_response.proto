@@ -34,6 +34,7 @@ import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
+import "temporal/api/protocol/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
@@ -57,6 +58,8 @@ message StartWorkflowExecutionRequest {
     int32 attempt = 4;
     google.protobuf.Timestamp workflow_execution_expiration_time = 5 [(gogoproto.stdtime) = true];
     temporal.api.enums.v1.ContinueAsNewInitiator continue_as_new_initiator = 6;
+    // History service should use the values of continued_failure and last_completion_result
+    // here, not the ones in start_request (those are moved into here in the frontend).
     temporal.api.failure.v1.Failure continued_failure = 7;
     temporal.api.common.v1.Payloads last_completion_result = 8;
     google.protobuf.Duration first_workflow_task_backoff = 9 [(gogoproto.stdduration) = true];
@@ -65,6 +68,8 @@ message StartWorkflowExecutionRequest {
 message StartWorkflowExecutionResponse {
     string run_id = 1;
     temporal.server.api.clock.v1.VectorClock clock = 2;
+    // Set if request_eager_execution is set on the start request 
+    temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse eager_workflow_task = 3;
 }
 
 message GetMutableStateRequest {
@@ -164,6 +169,7 @@ message RecordWorkflowTaskStartedResponse {
     google.protobuf.Timestamp started_time = 13 [(gogoproto.stdtime) = true];
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 14;
     temporal.server.api.clock.v1.VectorClock clock = 15;
+    repeated temporal.api.protocol.v1.Message messages = 16;
 }
 
 message RecordActivityTaskStartedRequest {
@@ -196,6 +202,7 @@ message RespondWorkflowTaskCompletedRequest {
 message RespondWorkflowTaskCompletedResponse {
     RecordWorkflowTaskStartedResponse started_response = 1;
     repeated temporal.api.workflowservice.v1.PollActivityTaskQueueResponse activity_tasks = 2;
+    int64 reset_history_event_id = 3;
 }
 
 message RespondWorkflowTaskFailedRequest {
@@ -313,7 +320,8 @@ message ScheduleWorkflowTaskRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     bool is_first_workflow_task = 3;
-    temporal.server.api.clock.v1.VectorClock clock = 4;
+    temporal.server.api.clock.v1.VectorClock child_clock = 4;
+    temporal.server.api.clock.v1.VectorClock parent_clock = 5;
 }
 
 message ScheduleWorkflowTaskResponse {
@@ -523,6 +531,7 @@ message GetDLQMessagesResponse {
     temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
     repeated temporal.server.api.replication.v1.ReplicationTask replication_tasks = 2;
     bytes next_page_token = 3;
+    repeated temporal.server.api.replication.v1.ReplicationTaskInfo replication_tasks_info = 4;
 }
 
 message PurgeDLQMessagesRequest {
@@ -617,11 +626,11 @@ message DeleteWorkflowVisibilityRecordResponse {
 
 // (-- api-linter: core::0134=disabled
 //     aip.dev/not-precedent: This service does not follow the update method AIP --)
-message UpdateWorkflowRequest {
+message UpdateWorkflowExecutionRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.UpdateWorkflowRequest request = 2;
+    temporal.api.workflowservice.v1.UpdateWorkflowExecutionRequest request = 2;
 }
 
-message UpdateWorkflowResponse {
-    temporal.api.workflowservice.v1.UpdateWorkflowResponse response = 1;
+message UpdateWorkflowExecutionResponse {
+    temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse response = 1;
 }

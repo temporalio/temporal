@@ -73,11 +73,10 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+			Owner:   "test-shard-owner",
 		},
 		tests.NewDynamicConfig(),
 	)
@@ -86,8 +85,9 @@ func (s *scheduledQueueSuite) SetupTest() {
 
 	scheduler := NewPriorityScheduler(
 		PrioritySchedulerOptions{
-			WorkerCount:       dynamicconfig.GetIntPropertyFn(10),
-			EnableRateLimiter: dynamicconfig.GetBoolPropertyFn(true),
+			WorkerCount:                 dynamicconfig.GetIntPropertyFn(10),
+			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
+			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(true),
 		},
 		NewSchedulerRateLimiter(
 			s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
@@ -97,6 +97,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		),
 		s.mockShard.GetTimeSource(),
 		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
 	)
 	rescheduler := NewRescheduler(
 		scheduler,
@@ -168,6 +169,7 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryTimer,
+		ReaderID:            DefaultReaderId,
 		InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0),
 		BatchSize:           testQueueOptions.BatchSize(),
@@ -177,7 +179,7 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 		NextPageToken: nextPageToken,
 	}, nil).Times(1)
 
-	paginationFn := paginationFnProvider(r)
+	paginationFn := paginationFnProvider(DefaultReaderId, r)
 	loadedTasks, actualNextPageToken, err := paginationFn(currentPageToken)
 	s.NoError(err)
 	for _, task := range loadedTasks {
@@ -233,6 +235,12 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 		predicates.Universal[tasks.Task](),
 	)
 
+	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
+		ShardID:      s.mockShard.GetShardID(),
+		ShardOwner:   s.mockShard.GetOwner(),
+		TaskCategory: tasks.CategoryTimer,
+		ReaderID:     lookAheadReaderID,
+	}).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("some random error")).Times(1)
 	s.scheduledQueue.lookAheadTask()
@@ -243,19 +251,6 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 	default:
 		s.Fail("timer gate should fire when time reaches look ahead range")
 	}
-}
-
-func (s *scheduledQueueSuite) TestProcessNewRange_LookAheadPerformed() {
-	timerGate := timer.NewRemoteGate()
-	s.scheduledQueue.timerGate = timerGate
-
-	// test if look ahead if performed after processing new range
-	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetHistoryTasksResponse{
-		Tasks:         []tasks.Task{},
-		NextPageToken: nil,
-	}, nil).Times(1)
-
-	s.scheduledQueue.processNewRange()
 }
 
 func (s *scheduledQueueSuite) setupLookAheadMock(
@@ -275,9 +270,16 @@ func (s *scheduledQueueSuite) setupLookAheadMock(
 		loadedTasks = append(loadedTasks, lookAheadTask)
 	}
 
+	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
+		ShardID:      s.mockShard.GetShardID(),
+		ShardOwner:   s.mockShard.GetOwner(),
+		TaskCategory: tasks.CategoryTimer,
+		ReaderID:     lookAheadReaderID,
+	}).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
 		s.Equal(s.mockShard.GetShardID(), request.ShardID)
 		s.Equal(tasks.CategoryTimer, request.TaskCategory)
+		s.Equal(int32(DefaultReaderId), request.ReaderID)
 		s.Equal(lookAheadRange.InclusiveMin, request.InclusiveMinTaskKey)
 		s.Equal(1, request.BatchSize)
 		s.Nil(request.NextPageToken)

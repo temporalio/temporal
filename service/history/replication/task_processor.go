@@ -191,7 +191,7 @@ func (p *taskProcessorImpl) Stop() {
 }
 
 func (p *taskProcessorImpl) eventLoop() {
-	syncShardTimer := time.NewTimer(backoff.JitDuration(
+	syncShardTimer := time.NewTimer(backoff.Jitter(
 		p.config.ShardSyncMinInterval(),
 		p.config.ShardSyncTimerJitterCoefficient(),
 	))
@@ -212,7 +212,7 @@ func (p *taskProcessorImpl) eventLoop() {
 					1,
 					metrics.OperationTag(metrics.HistorySyncShardStatusScope))
 			}
-			syncShardTimer.Reset(backoff.JitDuration(
+			syncShardTimer.Reset(backoff.Jitter(
 				p.config.ShardSyncMinInterval(),
 				p.config.ShardSyncTimerJitterCoefficient(),
 			))
@@ -274,7 +274,7 @@ func (p *taskProcessorImpl) applyReplicationTask(
 ) error {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
-		headers.SystemBackgroundCallerInfo,
+		headers.SystemPreemptableCallerInfo,
 	)
 
 	err := p.handleReplicationTask(ctx, replicationTask)
@@ -314,7 +314,7 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 		metrics.OperationTag(metrics.HistorySyncShardStatusScope))
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 
 	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
 		SourceCluster: p.sourceCluster,

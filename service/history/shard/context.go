@@ -55,6 +55,7 @@ type (
 	// Context represents a history engine shard
 	Context interface {
 		GetShardID() int32
+		GetOwner() string
 		GetExecutionManager() persistence.ExecutionManager
 		GetNamespaceRegistry() namespace.Registry
 		GetClusterMetadata() cluster.Metadata
@@ -75,9 +76,7 @@ type (
 		GenerateTaskIDs(number int) ([]int64, error)
 
 		GetImmediateQueueExclusiveHighReadWatermark() tasks.Key
-		// TODO: remove cluster and singleProcessorMode parameter after deprecating old task procesing logic
-		// In multi-cursor world, there's only one maxReadLevel for scheduled queue for all clusters.
-		UpdateScheduledQueueExclusiveHighReadWatermark(cluster string, singleProcessorMode bool) (tasks.Key, error)
+		UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error)
 		GetQueueAckLevel(category tasks.Category) tasks.Key
 		UpdateQueueAckLevel(category tasks.Category, ackLevel tasks.Key) error
 		GetQueueClusterAckLevel(category tasks.Category, cluster string) tasks.Key
@@ -87,10 +86,6 @@ type (
 
 		GetReplicatorDLQAckLevel(sourceCluster string) int64
 		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
-
-		UpdateFailoverLevel(category tasks.Category, failoverID string, level persistence.FailoverLevel) error
-		DeleteFailoverLevel(category tasks.Category, failoverID string) error
-		GetAllFailoverLevels(category tasks.Category) map[string]persistence.FailoverLevel
 
 		UpdateRemoteClusterInfo(cluster string, ackTaskID int64, ackTimestamp time.Time)
 
@@ -105,7 +100,7 @@ type (
 		// TODO: deprecate UpdateNamespaceNotificationVersion in v1.21 and remove
 		// NamespaceNotificationVersion from shardInfo proto blob
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
-		UpdateHandoverNamespaces(ns *namespace.Namespace, deletedFromDb bool)
+		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
 
@@ -125,7 +120,7 @@ type (
 		GetPayloadSerializer() serialization.Serializer
 
 		GetSearchAttributesProvider() searchattribute.Provider
-		GetSearchAttributesMapper() searchattribute.Mapper
+		GetSearchAttributesMapperProvider() searchattribute.MapperProvider
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
 		Unload()

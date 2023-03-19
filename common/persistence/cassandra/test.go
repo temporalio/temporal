@@ -29,13 +29,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gocql/gocql"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests/testutils"
@@ -49,7 +51,7 @@ const (
 type TestCluster struct {
 	keyspace       string
 	schemaDir      string
-	session        gocql.Session
+	session        commongocql.Session
 	cfg            config.Cassandra
 	faultInjection *config.FaultInjection
 	logger         log.Logger
@@ -76,7 +78,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 		Hosts:          host,
 		Port:           port,
 		MaxConns:       2,
-		ConnectTimeout: 30 * time.Second,
+		ConnectTimeout: 30 * time.Second * debug.TimeoutMultiplier,
 		Keyspace:       keyspace,
 	}
 	result.faultInjection = faultInjection
@@ -132,21 +134,25 @@ func (s *TestCluster) CreateSession(
 	}
 
 	var err error
-	s.session, err = gocql.NewSession(
-		config.Cassandra{
-			Hosts:    s.cfg.Hosts,
-			Port:     s.cfg.Port,
-			User:     s.cfg.User,
-			Password: s.cfg.Password,
-			Keyspace: keyspace,
-			Consistency: &config.CassandraStoreConsistency{
-				Default: &config.CassandraConsistencySettings{
-					Consistency: "ONE",
+	s.session, err = commongocql.NewSession(
+		func() (*gocql.ClusterConfig, error) {
+			return commongocql.NewCassandraCluster(
+				config.Cassandra{
+					Hosts:    s.cfg.Hosts,
+					Port:     s.cfg.Port,
+					User:     s.cfg.User,
+					Password: s.cfg.Password,
+					Keyspace: keyspace,
+					Consistency: &config.CassandraStoreConsistency{
+						Default: &config.CassandraConsistencySettings{
+							Consistency: "ONE",
+						},
+					},
+					ConnectTimeout: s.cfg.ConnectTimeout,
 				},
-			},
-			ConnectTimeout: s.cfg.ConnectTimeout,
+				resolver.NewNoopResolver(),
+			)
 		},
-		resolver.NewNoopResolver(),
 		log.NewNoopLogger(),
 	)
 	if err != nil {

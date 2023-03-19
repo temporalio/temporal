@@ -61,7 +61,7 @@ func newNamespaceReplicationMessageProcessor(
 	remotePeer adminservice.AdminServiceClient,
 	metricsHandler metrics.Handler,
 	taskExecutor namespace.ReplicationTaskExecutor,
-	hostInfo *membership.HostInfo,
+	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 ) *namespaceReplicationMessageProcessor {
@@ -89,7 +89,7 @@ func newNamespaceReplicationMessageProcessor(
 
 type (
 	namespaceReplicationMessageProcessor struct {
-		hostInfo                  *membership.HostInfo
+		hostInfo                  membership.HostInfo
 		serviceResolver           membership.ServiceResolver
 		status                    int32
 		currentCluster            string
@@ -147,7 +147,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 	}
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(fetchTaskRequestTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 	request := &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            p.currentCluster,
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
@@ -164,7 +164,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 	p.logger.Debug("Successfully fetched namespace replication tasks", tag.Counter(len(response.Messages.ReplicationTasks)))
 
 	// TODO: specify a timeout for processing namespace replication tasks
-	taskCtx := headers.SetCallerInfo(context.TODO(), headers.SystemBackgroundCallerInfo)
+	taskCtx := headers.SetCallerInfo(context.TODO(), headers.SystemPreemptableCallerInfo)
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
 		err := backoff.ThrottleRetry(func() error {
@@ -225,7 +225,7 @@ func (p *namespaceReplicationMessageProcessor) Stop() {
 }
 
 func getWaitDuration() time.Duration {
-	return backoff.JitDuration(time.Duration(pollIntervalSecs)*time.Second, pollTimerJitterCoefficient)
+	return backoff.Jitter(time.Duration(pollIntervalSecs)*time.Second, pollTimerJitterCoefficient)
 }
 
 func isTransientRetryableError(err error) bool {

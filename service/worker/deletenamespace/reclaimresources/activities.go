@@ -26,7 +26,6 @@ package reclaimresources
 
 import (
 	"context"
-	"strings"
 
 	"go.temporal.io/sdk/activity"
 
@@ -36,6 +35,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
@@ -63,8 +65,14 @@ func NewActivities(
 		logger:            logger,
 	}
 }
-func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, error) {
-	return strings.Contains(a.visibilityManager.GetName(), elasticsearch.PersistenceName), nil
+
+func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context, nsName namespace.Name) (bool, error) {
+	switch a.visibilityManager.GetReadStoreName(nsName) {
+	case elasticsearch.PersistenceName, mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func (a *Activities) CountExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (int64, error) {

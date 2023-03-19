@@ -87,6 +87,7 @@ type (
 		mockTxProcessor         *queues.MockQueue
 		mockTimerProcessor      *queues.MockQueue
 		mockVisibilityProcessor *queues.MockQueue
+		mockArchivalProcessor   *queues.MockQueue
 		mockEventsCache         *events.MockCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
@@ -121,21 +122,23 @@ func (s *engine2Suite) SetupTest() {
 	s.mockTxProcessor = queues.NewMockQueue(s.controller)
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
+	s.mockArchivalProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
+	s.mockArchivalProcessor.EXPECT().Category().Return(tasks.CategoryArchival).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
 	mockShard := shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 1,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 1,
+			RangeId: 1,
+		},
 		s.config,
 	)
 	s.mockShard = mockShard
@@ -150,6 +153,8 @@ func (s *engine2Suite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.ParentNamespaceID).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ChildNamespace).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(tests.Version, tests.Version).Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -177,16 +182,19 @@ func (s *engine2Suite) SetupTest() {
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Queue{
+			s.mockArchivalProcessor.Category():   s.mockArchivalProcessor,
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
 		},
 		searchAttributesValidator: searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
-			s.mockShard.Resource.SearchAttributesMapper,
+			s.mockShard.Resource.SearchAttributesMapperProvider,
 			s.config.SearchAttributesNumberOfKeysLimit,
 			s.config.SearchAttributesSizeOfValueLimit,
 			s.config.SearchAttributesTotalSizeLimit,
+			s.config.DefaultVisibilityIndexName,
+			false,
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
 	}
@@ -374,7 +382,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 	tl := "testTaskQueue"
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	addWorkflowTaskCompletedEvent(ms, int64(2), int64(3), identity)
+	addWorkflowTaskCompletedEvent(&s.Suite, ms, int64(2), int64(3), identity)
 
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -548,7 +556,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(ms, int64(2), int64(3), identity)
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, int64(2), int64(3), identity)
 	scheduledEvent, _ := addActivityTaskScheduledEvent(ms, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
 
 	ms1 := workflow.TestCloneToProto(ms)
@@ -910,9 +918,9 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		return tests.UpdateWorkflowExecutionResponse, nil
 	})
 
-	s.mockShard.Resource.SearchAttributesMapper.EXPECT().
-		GetFieldName("AliasForCustomTextField", tests.Namespace.String()).Return("CustomTextField", nil).
-		Times(1) // one for mapper
+	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().
+		GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil)
 
 	_, err := s.historyEngine.RespondWorkflowTaskCompleted(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -991,6 +999,11 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 	taskTokenBytes, _ := taskToken.Marshal()
 	response := &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(response, nil).AnyTimes()
+	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().
+		GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).
+		AnyTimes()
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	s.historyEngine.shard.GetConfig().NumPendingChildExecutionsLimit = func(namespace string) int {
 		return 5
@@ -1005,8 +1018,9 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 	})
 
 	s.Error(err)
-	s.Assert().Equal([]string{"the number of pending child workflow executions, 5, has reached the per-workflow" +
-		" limit of 5"}, s.errorMessages)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Len(s.errorMessages, 1)
+	s.Equal("the number of pending child workflow executions, 5, has reached the per-workflow limit of 5", s.errorMessages[0])
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
@@ -1640,7 +1654,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
@@ -1820,7 +1834,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 	initiatedEvent, ci := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 

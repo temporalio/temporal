@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	namespace "go.temporal.io/server/common/namespace"
 )
 
 // MockMapper is a mock of Mapper interface.
@@ -85,4 +86,42 @@ func (m *MockMapper) GetFieldName(alias, namespace string) (string, error) {
 func (mr *MockMapperMockRecorder) GetFieldName(alias, namespace interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFieldName", reflect.TypeOf((*MockMapper)(nil).GetFieldName), alias, namespace)
+}
+
+// MockMapperProvider is a mock of MapperProvider interface.
+type MockMapperProvider struct {
+	ctrl     *gomock.Controller
+	recorder *MockMapperProviderMockRecorder
+}
+
+// MockMapperProviderMockRecorder is the mock recorder for MockMapperProvider.
+type MockMapperProviderMockRecorder struct {
+	mock *MockMapperProvider
+}
+
+// NewMockMapperProvider creates a new mock instance.
+func NewMockMapperProvider(ctrl *gomock.Controller) *MockMapperProvider {
+	mock := &MockMapperProvider{ctrl: ctrl}
+	mock.recorder = &MockMapperProviderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMapperProvider) EXPECT() *MockMapperProviderMockRecorder {
+	return m.recorder
+}
+
+// GetMapper mocks base method.
+func (m *MockMapperProvider) GetMapper(nsName namespace.Name) (Mapper, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMapper", nsName)
+	ret0, _ := ret[0].(Mapper)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMapper indicates an expected call of GetMapper.
+func (mr *MockMapperProviderMockRecorder) GetMapper(nsName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMapper", reflect.TypeOf((*MockMapperProvider)(nil).GetMapper), nsName)
 }

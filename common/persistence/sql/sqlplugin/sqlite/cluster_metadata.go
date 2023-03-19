@@ -251,6 +251,11 @@ func (mdb *db) GetClusterMembers(
 	); err != nil {
 		return nil, err
 	}
+	for i := range rows {
+		rows[i].SessionStart = mdb.converter.FromSQLiteDateTime(rows[i].SessionStart)
+		rows[i].LastHeartbeat = mdb.converter.FromSQLiteDateTime(rows[i].LastHeartbeat)
+		rows[i].RecordExpiry = mdb.converter.FromSQLiteDateTime(rows[i].RecordExpiry)
+	}
 	return rows, nil
 }
 

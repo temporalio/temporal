@@ -27,6 +27,7 @@ package history
 import (
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -95,14 +96,14 @@ func newScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 		queues.PrioritySchedulerOptions{
 			WorkerCount:                 params.Config.ArchivalProcessorSchedulerWorkerCount,
 			EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
-			MaxDispatchThrottleDuration: HostSchedulerMaxDispatchThrottleDuration,
-			Weight: func() map[string]any {
-				return ArchivalTaskPriorities
-			},
+			EnableRateLimiterShadowMode: params.Config.TaskSchedulerEnableRateLimiterShadowMode,
+			DispatchThrottleDuration:    params.Config.TaskSchedulerThrottleDuration,
+			Weight:                      dynamicconfig.GetMapPropertyFn(ArchivalTaskPriorities),
 		},
 		params.SchedulerRateLimiter,
 		params.TimeSource,
 		params.Logger,
+		params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope)),
 	)
 }
 
@@ -140,7 +141,7 @@ func (f *archivalQueueFactory) newArchivalTaskExecutor(shard shard.Context, work
 		workflowCache,
 		f.RelocatableAttributesFetcher,
 		f.MetricsHandler,
-		f.Logger,
+		log.With(shard.GetLogger(), tag.ComponentArchivalQueue),
 	)
 }
 

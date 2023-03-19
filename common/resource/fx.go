@@ -25,7 +25,6 @@
 package resource
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -55,6 +54,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/membership/ringpop"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -62,7 +62,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
@@ -97,6 +96,7 @@ var Module = fx.Options(
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
+	fx.Provide(SearchAttributeMapperProviderProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
@@ -126,13 +126,12 @@ var Module = fx.Options(
 )
 
 var DefaultOptions = fx.Options(
-	fx.Provide(MembershipMonitorProvider),
+	ringpop.Module,
 	fx.Provide(RPCFactoryProvider),
 	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(SdkClientFactoryProvider),
-	fx.Provide(SdkWorkerFactoryProvider),
 	fx.Provide(DCRedirectionPolicyProvider),
 )
 
@@ -161,6 +160,20 @@ func HostNameProvider() (HostName, error) {
 
 func TimeSourceProvider() clock.TimeSource {
 	return clock.NewRealTimeSource()
+}
+
+func SearchAttributeMapperProviderProvider(
+	saMapper searchattribute.Mapper,
+	namespaceRegistry namespace.Registry,
+	searchAttributeProvider searchattribute.Provider,
+	persistenceConfig *config.Persistence,
+) searchattribute.MapperProvider {
+	return searchattribute.NewMapperProvider(
+		saMapper,
+		namespaceRegistry,
+		searchAttributeProvider,
+		persistenceConfig.IsSQLVisibilityStore(),
+	)
 }
 
 func SearchAttributeProviderProvider(
@@ -230,58 +243,6 @@ func ClientBeanProvider(
 		clientFactory,
 		clusterMetadata,
 	)
-}
-
-func MembershipMonitorProvider(
-	lc fx.Lifecycle,
-	clusterMetadataManager persistence.ClusterMetadataManager,
-	logger log.SnTaggedLogger,
-	cfg *config.Config,
-	svcName primitives.ServiceName,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	dc *dynamicconfig.Collection,
-) (membership.Monitor, error) {
-	servicePortMap := make(map[primitives.ServiceName]int)
-	for sn, sc := range cfg.Services {
-		servicePortMap[primitives.ServiceName(sn)] = sc.RPC.GRPCPort
-	}
-
-	rpcConfig := cfg.Services[string(svcName)].RPC
-
-	factory, err := ringpop.NewRingpopFactory(
-		&cfg.Global.Membership,
-		svcName,
-		servicePortMap,
-		logger,
-		clusterMetadataManager,
-		&rpcConfig,
-		tlsConfigProvider,
-		dc,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	monitor, err := factory.GetMembershipMonitor()
-	if err != nil {
-		return nil, err
-	}
-
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				monitor.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				monitor.Stop()
-				factory.CloseTChannel()
-				return nil
-			},
-		},
-	)
-
-	return monitor, nil
 }
 
 func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
@@ -394,6 +355,7 @@ func SdkClientFactoryProvider(
 	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
 	resolver membership.GRPCResolver,
+	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
 	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -404,11 +366,8 @@ func SdkClientFactoryProvider(
 		frontendTLSConfig,
 		metricsHandler,
 		logger,
+		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
 	), nil
-}
-
-func SdkWorkerFactoryProvider() sdk.WorkerFactory {
-	return sdk.NewWorkerFactory()
 }
 
 func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {

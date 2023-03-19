@@ -33,8 +33,9 @@ import (
 
 var (
 	CallerTypeDefaultPriority = map[string]int{
-		headers.CallerTypeAPI:        1,
-		headers.CallerTypeBackground: 3,
+		headers.CallerTypeAPI:         1,
+		headers.CallerTypeBackground:  3,
+		headers.CallerTypePreemptable: 4,
 	}
 
 	APITypeCallOriginPriorityOverride = map[string]int{
@@ -44,7 +45,7 @@ var (
 		"RequestCancelWorkflowExecution":   0,
 		"TerminateWorkflowExecution":       0,
 		"GetWorkflowExecutionHistory":      0,
-		"UpdateWorkflow":                   0,
+		"UpdateWorkflowExecution":          0,
 	}
 
 	BackgroundTypeAPIPriorityOverride = map[string]int{
@@ -69,7 +70,7 @@ var (
 		p.ConstructHistoryTaskAPI("GetHistoryTasks", tasks.CategoryVisibility): 2,
 	}
 
-	RequestPrioritiesOrdered = []int{0, 1, 2, 3}
+	RequestPrioritiesOrdered = []int{0, 1, 2, 3, 4}
 )
 
 func NewPriorityRateLimiter(
@@ -149,6 +150,8 @@ func RequestPriorityFn(req quotas.Request) int {
 		if priority, ok := BackgroundTypeAPIPriorityOverride[req.API]; ok {
 			return priority
 		}
+		return CallerTypeDefaultPriority[req.CallerType]
+	case headers.CallerTypePreemptable:
 		return CallerTypeDefaultPriority[req.CallerType]
 	default:
 		// default requests to high priority to be consistent with existing behavior

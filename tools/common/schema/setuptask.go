@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 )
 
 // SetupTask represents a task
@@ -75,7 +76,7 @@ func (task *SetupTask) Run() error {
 		if err != nil {
 			return err
 		}
-		stmts, err := ParseFile(filePath)
+		stmts, err := persistence.LoadAndSplitQuery([]string{filePath})
 		if err != nil {
 			return err
 		}

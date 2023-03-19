@@ -145,7 +145,7 @@ func (f *FIFOScheduler[T]) TrySubmit(task T) bool {
 func (f *FIFOScheduler[T]) workerMonitor() {
 	defer f.shutdownWG.Done()
 
-	timer := time.NewTimer(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
+	timer := time.NewTimer(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
 	defer timer.Stop()
 
 	for {
@@ -154,7 +154,7 @@ func (f *FIFOScheduler[T]) workerMonitor() {
 			f.stopWorkers(len(f.workerShutdownCh))
 			return
 		case <-timer.C:
-			timer.Reset(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
+			timer.Reset(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
 
 			targetWorkerNum := f.options.WorkerCount()
 			currentWorkerNum := len(f.workerShutdownCh)
