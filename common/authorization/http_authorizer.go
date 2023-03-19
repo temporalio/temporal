@@ -33,51 +33,51 @@ import (
 )
 
 type (
-	opaAuthorizer struct {
-		opaEndpoint string
+	httpAuthorizer struct {
+		httpEndpoint string
 	}
 )
 
-var _ Authorizer = (*opaAuthorizer)(nil)
+var _ Authorizer = (*httpAuthorizer)(nil)
 
 // NewDefaultAuthorizer creates a default authorizer
-func NewOpaAuthorizer(opaEndpoint string) Authorizer {
-	return &opaAuthorizer{
-		opaEndpoint: opaEndpoint,
+func NewHttpAuthorizer(httpEndpoint string) Authorizer {
+	return &httpAuthorizer{
+		httpEndpoint: httpEndpoint,
 	}
 }
 
 type (
-	opaInput struct {
+	httpInput struct {
 		Claims Claims
 		Target CallTarget
 	}
 
-	opaRequest struct {
-		Input opaInput `json:"input"`
+	httpRequest struct {
+		Input httpInput `json:"input"`
 	}
 
-	opaResult struct {
+	httpResult struct {
 		Result struct {
 			Allow bool `json:"allow"`
 		} `json:"result"`
 	}
 )
 
-func (a *opaAuthorizer) Authorize(ctx context.Context, claims *Claims, target *CallTarget) (Result, error) {
-	opaRequest := opaRequest{
-		Input: opaInput{
+func (a *httpAuthorizer) Authorize(ctx context.Context, claims *Claims, target *CallTarget) (Result, error) {
+	httpRequest := httpRequest{
+		Input: httpInput{
 			Claims: *claims,
 			Target: *target,
 		},
 	}
 
-	jsonData, err := json.Marshal(opaRequest)
+	jsonData, err := json.Marshal(httpRequest)
 	if err != nil {
 		return resultDeny, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, "POST", a.opaEndpoint, bytes.NewReader(jsonData))
+	request, err := http.NewRequestWithContext(ctx, "POST", a.httpEndpoint, bytes.NewReader(jsonData))
 	if err != nil {
 		return resultDeny, err
 	}
@@ -92,13 +92,13 @@ func (a *opaAuthorizer) Authorize(ctx context.Context, claims *Claims, target *C
 		return resultDeny, fmt.Errorf("OPA returned a status code %d", response.StatusCode)
 	}
 
-	var opaResult opaResult
-	err = json.NewDecoder(response.Body).Decode(&opaResult)
+	var httpResult httpResult
+	err = json.NewDecoder(response.Body).Decode(&httpResult)
 	if err != nil {
 		return resultDeny, err
 	}
 
-	if opaResult.Result.Allow {
+	if httpResult.Result.Allow {
 		return resultAllow, nil
 	}
 

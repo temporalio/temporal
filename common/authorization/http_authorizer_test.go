@@ -39,7 +39,7 @@ import (
 var ()
 
 type (
-	opaAuthorizerSuite struct {
+	httpAuthorizerSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -47,81 +47,81 @@ type (
 	}
 )
 
-func TestOpaAuthorizerSuite(t *testing.T) {
-	s := new(opaAuthorizerSuite)
+func TestHttpAuthorizerSuite(t *testing.T) {
+	s := new(httpAuthorizerSuite)
 	suite.Run(t, s)
 }
 
-func (s *opaAuthorizerSuite) SetupTest() {
+func (s *httpAuthorizerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 }
 
-func (s *opaAuthorizerSuite) TearDownTest() {
+func (s *httpAuthorizerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *opaAuthorizerSuite) TestDeniesWhenOpaDoesNotReturnAllowFalse() {
+func (s *httpAuthorizerSuite) TestDeniesWhenHttpDoesNotReturnAllowFalse() {
 	srv, _ := createTestServer(200, []byte(`{"result": { "allow": false }}`))
 	defer srv.Close()
 
-	authorizer := NewOpaAuthorizer(srv.URL)
+	authorizer := NewHttpAuthorizer(srv.URL)
 
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
-func (s *opaAuthorizerSuite) TestAllowsWhenOpaReturnsAllowTrue() {
+func (s *httpAuthorizerSuite) TestAllowsWhenHttpReturnsAllowTrue() {
 	srv, _ := createTestServer(200, []byte(`{"result": { "allow": true }}`))
 	defer srv.Close()
 
-	authorizer := NewOpaAuthorizer(srv.URL)
+	authorizer := NewHttpAuthorizer(srv.URL)
 
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
 
-func (s *opaAuthorizerSuite) TestDeniesWhenOpaReturnsNothing() {
+func (s *httpAuthorizerSuite) TestDeniesWhenHttpReturnsNothing() {
 	srv, _ := createTestServer(200, []byte(`{"result": {}}`))
 	defer srv.Close()
 
-	authorizer := NewOpaAuthorizer(srv.URL)
+	authorizer := NewHttpAuthorizer(srv.URL)
 
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
-func (s *opaAuthorizerSuite) TestDeniesWhenOpaPolicyIsNotFound() {
+func (s *httpAuthorizerSuite) TestDeniesWhenHttpPolicyIsNotFound() {
 	srv, _ := createTestServer(404, []byte(""))
 	defer srv.Close()
 
-	authorizer := NewOpaAuthorizer(srv.URL)
+	authorizer := NewHttpAuthorizer(srv.URL)
 
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.Error(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
-func (s *opaAuthorizerSuite) TestDeniesWhenOpaIsUnreachable() {
+func (s *httpAuthorizerSuite) TestDeniesWhenHttpIsUnreachable() {
 	srv, _ := createTestServer(500, []byte(""))
 	// Stop the server now to simulate it being unavailable
 	srv.Close()
 
-	authorizer := NewOpaAuthorizer(srv.URL)
+	authorizer := NewHttpAuthorizer(srv.URL)
 
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.Error(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
-func (s *opaAuthorizerSuite) TestClaimsAndTargetAreSentToOpa() {
+func (s *httpAuthorizerSuite) TestClaimsAndTargetAreSentToHttp() {
 	srv, requestChannel := createTestServer(200, []byte(`{"result": { "allow": false }}`))
 	defer srv.Close()
 
-	authorizer := NewOpaAuthorizer(srv.URL)
+	authorizer := NewHttpAuthorizer(srv.URL)
 
 	claims := Claims{
 		Subject: "test-user",
@@ -139,15 +139,15 @@ func (s *opaAuthorizerSuite) TestClaimsAndTargetAreSentToOpa() {
 	s.Equal(claims.Subject, request.Input.Claims.Subject)
 }
 
-func createTestServer(statusCode int, content []byte) (*httptest.Server, chan opaRequest) {
+func createTestServer(statusCode int, content []byte) (*httptest.Server, chan httpRequest) {
 
-	requestChannel := make(chan opaRequest, 1)
+	requestChannel := make(chan httpRequest, 1)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(statusCode)
 		w.Write(content)
 
-		var request opaRequest
+		var request httpRequest
 		json.NewDecoder(r.Body).Decode(&request)
 
 		requestChannel <- request

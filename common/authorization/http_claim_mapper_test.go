@@ -24,28 +24,46 @@
 
 package authorization
 
-type (
-	opaClaimMapper struct {
-	}
+import (
+	"crypto/x509/pkix"
+	"testing"
 
-	opaClaimExtensions struct {
-		AuthInfo AuthInfo `json:"authInfo"`
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+)
+
+type (
+	httpClaimMapperSuite struct {
+		suite.Suite
+		*require.Assertions
+
+		claimMapper ClaimMapper
 	}
 )
 
-func NewOpaClaimMapper() ClaimMapper {
-	return &opaClaimMapper{}
+var testAuthInfo = AuthInfo{
+	AuthToken: "test-token",
+	TLSSubject: &pkix.Name{
+		CommonName: "test.example.com",
+	},
+	ExtraData: "test-extra",
+	Audience:  "test-aud",
 }
 
-var _ ClaimMapper = (*opaClaimMapper)(nil)
+func TestHttpClaimMapperSuite(t *testing.T) {
+	s := new(httpClaimMapperSuite)
+	suite.Run(t, s)
+}
+func (s *httpClaimMapperSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+	s.claimMapper = NewHttpClaimMapper()
+}
 
-func (a *opaClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
+func (s *httpClaimMapperSuite) TestProvidesAuthInfoInExtension() {
+	claims, err := s.claimMapper.GetClaims(&testAuthInfo)
+	s.Assert().NoError(err)
 
-	opaExtensions := opaClaimExtensions{
-		AuthInfo: *authInfo,
-	}
-
-	return &Claims{
-		Extensions: opaExtensions,
-	}, nil
+	extensions, ok := claims.Extensions.(httpClaimExtensions)
+	s.Assert().True(ok)
+	s.Assert().Equal(extensions.AuthInfo, testAuthInfo)
 }

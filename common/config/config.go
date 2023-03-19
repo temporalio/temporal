@@ -551,7 +551,7 @@ type (
 		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper
 		ClaimMapper string `yaml:"claimMapper"`
 		// Empty string unless using "opa" Authorizer. The HTTP(s) endpoint which temporal will invoke for authorization decisions.
-		OpaEndpoint string `yaml:"opaEndpoint"`
+		HttpAuthEndpoint string `yaml:"httpAuthEndpoint"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider
