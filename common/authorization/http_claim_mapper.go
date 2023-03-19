@@ -28,8 +28,19 @@ type (
 	httpClaimMapper struct {
 	}
 
+	httpAuthTlsInfo struct {
+		CommonName string
+	}
+
+	httpAuthInfo struct {
+		AuthToken  string
+		ExtraData  string
+		Audience   string
+		TLSSubject httpAuthTlsInfo
+	}
+
 	httpClaimExtensions struct {
-		AuthInfo AuthInfo `json:"authInfo"`
+		AuthInfo httpAuthInfo `json:"authInfo"`
 	}
 )
 
@@ -40,9 +51,19 @@ func NewHttpClaimMapper() ClaimMapper {
 var _ ClaimMapper = (*httpClaimMapper)(nil)
 
 func (a *httpClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
+	tlsSubject := httpAuthTlsInfo{
+		CommonName: authInfo.TLSSubject.CommonName,
+	}
+
+	httpAuthInfo := httpAuthInfo{
+		Audience:   authInfo.Audience,
+		AuthToken:  authInfo.AuthToken,
+		ExtraData:  authInfo.ExtraData,
+		TLSSubject: tlsSubject,
+	}
 
 	httpExtensions := httpClaimExtensions{
-		AuthInfo: *authInfo,
+		AuthInfo: httpAuthInfo,
 	}
 
 	return &Claims{

@@ -65,5 +65,15 @@ func (s *httpClaimMapperSuite) TestProvidesAuthInfoInExtension() {
 
 	extensions, ok := claims.Extensions.(httpClaimExtensions)
 	s.Assert().True(ok)
-	s.Assert().Equal(extensions.AuthInfo, testAuthInfo)
+
+	expectedAuthInfo := httpAuthInfo{
+		AuthToken: "test-token",
+		TLSSubject: httpAuthTlsInfo{
+			CommonName: "test.example.com",
+		},
+		ExtraData: "test-extra",
+		Audience:  "test-aud",
+	}
+
+	s.Assert().Equal(extensions.AuthInfo, expectedAuthInfo)
 }
