@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
-	"go.temporal.io/api/command/v1"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -851,7 +851,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	workflowTaskCompletedEventID := int64(4)
 	_, _, err := mutableState.AddActivityTaskScheduledEvent(
 		workflowTaskCompletedEventID,
-		&command.ScheduleActivityTaskCommandAttributes{},
+		&commandpb.ScheduleActivityTaskCommandAttributes{},
 		false,
 	)
 	s.NoError(err)
@@ -859,21 +859,21 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		uuid.New(),
-		&command.StartChildWorkflowExecutionCommandAttributes{},
+		&commandpb.StartChildWorkflowExecutionCommandAttributes{},
 		namespace.ID(uuid.New()),
 	)
 	s.NoError(err)
 
 	_, _, err = mutableState.AddTimerStartedEvent(
 		workflowTaskCompletedEventID,
-		&command.StartTimerCommandAttributes{},
+		&commandpb.StartTimerCommandAttributes{},
 	)
 	s.NoError(err)
 
 	_, _, err = mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		uuid.New(),
-		&command.RequestCancelExternalWorkflowExecutionCommandAttributes{},
+		&commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{},
 		namespace.ID(uuid.New()),
 	)
 	s.NoError(err)
@@ -881,7 +881,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	_, _, err = mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		uuid.New(),
-		&command.SignalExternalWorkflowExecutionCommandAttributes{
+		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: tests.WorkflowID,
 				RunId:      tests.RunID,
