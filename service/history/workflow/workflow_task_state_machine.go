@@ -42,7 +42,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
@@ -345,6 +344,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	if !bypassTaskGeneration && workflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
 			scheduledEventID,
+			false,
 		); err != nil {
 			return nil, err
 		}
@@ -362,7 +362,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEvent(
 	return m.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, timestamp.TimePtr(m.ms.timeSource.Now()), workflowTaskType)
 }
 
-// AddFirstWorkflowTaskScheduled adds the first workflow task scehduled event unless it should be delayed as indicated
+// AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
 // by the startEvent's FirstWorkflowTaskBackoff.
 // If bypassTaskGeneration is specified, a transfer task will not be created.
 // Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
@@ -935,4 +935,77 @@ func (m *workflowTaskStateMachine) getHistorySizeInfo() (bool, int64) {
 	countLimit := int64(config.HistoryCountSuggestContinueAsNew(namespaceName))
 	suggestContinueAsNew := historySize >= sizeLimit || historyCount >= countLimit
 	return suggestContinueAsNew, historySize
+}
+
+func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() error {
+	if m.ms.executionInfo.WorkflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		return nil
+	}
+
+	// Workflow task can't be persisted as Speculative, because when it is completed,
+	// it gets deleted from memory only but not from the database.
+	// If execution info in mutable state has speculative workflow task, then
+	// convert it to normal workflow task and persist.
+
+	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+
+	wt := m.getWorkflowTaskInfo()
+
+	// TODO (alex-update): cancel in-memory timer for this speculative WT.
+
+	scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
+		wt.TaskQueue,
+		wt.WorkflowTaskTimeout,
+		wt.Attempt,
+		timestamp.TimeValue(wt.ScheduledTime),
+	)
+
+	if scheduledEvent.EventId != wt.ScheduledEventID {
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, scheduled event Id: %d for normal workflow task doesn't match the one from speculative workflow task: %d", scheduledEvent.EventId, wt.ScheduledEventID))
+	}
+
+	if wt.StartedEventID != common.EmptyEventID {
+		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
+			scheduledEvent.EventId,
+			wt.RequestID,
+			"", // identity is not stored in the mutable state.
+			timestamp.TimeValue(wt.StartedTime),
+			wt.SuggestContinueAsNew,
+			wt.HistorySizeBytes,
+		)
+		m.ms.hBuilder.FlushAndCreateNewBatch()
+
+		m.ms.executionInfo.WorkflowTaskTimeout = m.remainingTimeout(
+			m.ms.executionInfo.StartTime,
+			m.ms.executionInfo.WorkflowTaskTimeout,
+		)
+
+		if err := m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
+			scheduledEvent.EventId,
+		); err != nil {
+			return err
+		}
+	} else {
+		if m.ms.IsStickyTaskQueueEnabled() {
+			m.ms.executionInfo.StickyScheduleToStartTimeout = m.remainingTimeout(
+				m.ms.executionInfo.WorkflowTaskScheduledTime,
+				m.ms.executionInfo.StickyScheduleToStartTimeout,
+			)
+
+			if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
+				scheduledEvent.EventId,
+				true, // Only workflow task timeout task needs to be created.
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (m *workflowTaskStateMachine) remainingTimeout(initialTime *time.Time, originalTimeout *time.Duration) *time.Duration {
+	age := m.ms.timeSource.Now().Sub(timestamp.TimeValue(initialTime))
+	remainingTimeout := timestamp.DurationValue(originalTimeout) - age
+	return &remainingTimeout
 }

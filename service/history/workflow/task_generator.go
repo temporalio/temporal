@@ -71,6 +71,7 @@ type (
 		) error
 		GenerateScheduleWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
+			timeoutOnly bool,
 		) error
 		GenerateStartWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
@@ -332,6 +333,7 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
+	timeoutOnly bool,
 ) error {
 
 	workflowTask := r.mutableState.GetWorkflowTaskByID(
@@ -341,13 +343,15 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
-	r.mutableState.AddTasks(&tasks.WorkflowTask{
-		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:      r.mutableState.GetWorkflowKey(),
-		TaskQueue:        workflowTask.TaskQueue.GetName(),
-		ScheduledEventID: workflowTask.ScheduledEventID,
-		Version:          workflowTask.Version,
-	})
+	if !timeoutOnly {
+		r.mutableState.AddTasks(&tasks.WorkflowTask{
+			// TaskID, VisibilityTimestamp is set by shard
+			WorkflowKey:      r.mutableState.GetWorkflowKey(),
+			TaskQueue:        workflowTask.TaskQueue.GetName(),
+			ScheduledEventID: workflowTask.ScheduledEventID,
+			Version:          workflowTask.Version,
+		})
+	}
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
 		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)

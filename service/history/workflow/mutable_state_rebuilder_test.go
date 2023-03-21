@@ -519,6 +519,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	).Return(nil)
 	s.mockTaskGeneratorForNew.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		newRunWorkflowTaskEvent.GetEventId(),
+		false,
 	).Return(nil)
 	s.mockTaskGeneratorForNew.EXPECT().GenerateActivityTimerTasks().Return(nil)
 	s.mockTaskGeneratorForNew.EXPECT().GenerateUserTimerTasks().Return(nil)
@@ -764,6 +765,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		wt.ScheduledEventID,
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -858,6 +860,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskTimedOut() {
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		newScheduledEventID,
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -902,6 +905,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		newScheduledEventID,
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
