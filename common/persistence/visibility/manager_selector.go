@@ -88,11 +88,11 @@ func NewESManagerSelector(
 
 func (v *sqlToESManagerSelector) writeManagers() ([]manager.VisibilityManager, error) {
 	switch v.advancedVisibilityWritingMode() {
-	case AdvancedVisibilityWritingModeOff:
+	case SecondaryVisibilityWritingModeOff:
 		return []manager.VisibilityManager{v.stdVisibilityManager}, nil
-	case AdvancedVisibilityWritingModeOn:
+	case SecondaryVisibilityWritingModeOn:
 		return []manager.VisibilityManager{v.advVisibilityManager}, nil
-	case AdvancedVisibilityWritingModeDual:
+	case SecondaryVisibilityWritingModeDual:
 		return []manager.VisibilityManager{v.stdVisibilityManager, v.advVisibilityManager}, nil
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisibilityWritingMode()))

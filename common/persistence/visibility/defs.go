@@ -31,20 +31,20 @@ import (
 )
 
 const (
-	// AdvancedVisibilityWritingModeOff means do not write to advanced visibility store
-	AdvancedVisibilityWritingModeOff = "off"
-	// AdvancedVisibilityWritingModeOn means only write to advanced visibility store
-	AdvancedVisibilityWritingModeOn = "on"
-	// AdvancedVisibilityWritingModeDual means write to both normal visibility and advanced visibility store
-	AdvancedVisibilityWritingModeDual = "dual"
+	// SecondaryVisibilityWritingModeOff means do not write to advanced visibility store
+	SecondaryVisibilityWritingModeOff = "off"
+	// SecondaryVisibilityWritingModeOn means only write to advanced visibility store
+	SecondaryVisibilityWritingModeOn = "on"
+	// SecondaryVisibilityWritingModeDual means write to both normal visibility and advanced visibility store
+	SecondaryVisibilityWritingModeDual = "dual"
 )
 
 // DefaultAdvancedVisibilityWritingMode returns default advancedVisibilityWritingMode based on whether related config exists in static config file.
 func DefaultAdvancedVisibilityWritingMode(advancedVisibilityConfigExist bool) string {
 	if advancedVisibilityConfigExist {
-		return AdvancedVisibilityWritingModeOn
+		return SecondaryVisibilityWritingModeOn
 	}
-	return AdvancedVisibilityWritingModeOff
+	return SecondaryVisibilityWritingModeOff
 }
 
 func AllowListForValidation(storeNames []string) bool {
