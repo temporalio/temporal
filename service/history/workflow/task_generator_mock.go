@@ -34,6 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	history "go.temporal.io/api/history/v1"
+
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -160,17 +161,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteHistoryEventTask(closeTim
 }
 
 // GenerateHistoryReplicationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(branchToken []byte, events []*history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(events []*history.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", branchToken, events)
+	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", events)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateHistoryReplicationTasks indicates an expected call of GenerateHistoryReplicationTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(branchToken, events interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(events interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateHistoryReplicationTasks), branchToken, events)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateHistoryReplicationTasks), events)
 }
 
 // GenerateMigrationTasks mocks base method.
