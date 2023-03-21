@@ -66,7 +66,6 @@ type (
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
 		EvictSelf() error
-		Lookup(service primitives.ServiceName, key string) (HostInfo, error)
 		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
 		// GetReachableMembers returns addresses of all members of the ring
 		GetReachableMembers() ([]string, error)

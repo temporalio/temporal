@@ -103,21 +103,6 @@ func (mr *MockMonitorMockRecorder) GetResolver(service interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResolver", reflect.TypeOf((*MockMonitor)(nil).GetResolver), service)
 }
 
-// Lookup mocks base method.
-func (m *MockMonitor) Lookup(service primitives.ServiceName, key string) (HostInfo, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Lookup", service, key)
-	ret0, _ := ret[0].(HostInfo)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Lookup indicates an expected call of Lookup.
-func (mr *MockMonitorMockRecorder) Lookup(service, key interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lookup", reflect.TypeOf((*MockMonitor)(nil).Lookup), service, key)
-}
-
 // Start mocks base method.
 func (m *MockMonitor) Start() {
 	m.ctrl.T.Helper()

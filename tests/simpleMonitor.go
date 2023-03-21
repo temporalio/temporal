@@ -26,7 +26,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
@@ -68,14 +67,6 @@ func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.
 		return nil, membership.ErrUnknownService
 	}
 	return resolver, nil
-}
-
-func (s *simpleMonitor) Lookup(service primitives.ServiceName, key string) (membership.HostInfo, error) {
-	resolver, ok := s.resolvers[service]
-	if !ok {
-		return nil, fmt.Errorf("cannot lookup host for service %v", service)
-	}
-	return resolver.Lookup(key)
 }
 
 func (s *simpleMonitor) GetReachableMembers() ([]string, error) {
