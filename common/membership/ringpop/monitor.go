@@ -382,32 +382,8 @@ func (rpo *monitor) Lookup(service primitives.ServiceName, key string) (membersh
 	return ring.Lookup(key)
 }
 
-func (rpo *monitor) AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *membership.ChangedEvent) error {
-	ring, err := rpo.GetResolver(service)
-	if err != nil {
-		return err
-	}
-	return ring.AddListener(name, notifyChannel)
-}
-
-func (rpo *monitor) RemoveListener(service primitives.ServiceName, name string) error {
-	ring, err := rpo.GetResolver(service)
-	if err != nil {
-		return err
-	}
-	return ring.RemoveListener(name)
-}
-
 func (rpo *monitor) GetReachableMembers() ([]string, error) {
 	return rpo.rp.GetReachableMembers()
-}
-
-func (rpo *monitor) GetMemberCount(service primitives.ServiceName) (int, error) {
-	ring, err := rpo.GetResolver(service)
-	if err != nil {
-		return 0, err
-	}
-	return ring.MemberCount(), nil
 }
 
 func replaceServicePort(address string, servicePort int) (string, error) {
