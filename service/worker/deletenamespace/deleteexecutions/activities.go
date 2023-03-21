@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -92,6 +93,7 @@ func (a *Activities) GetNextPageTokenActivity(ctx context.Context, params GetNex
 		Namespace:     params.Namespace,
 		PageSize:      params.PageSize,
 		NextPageToken: params.NextPageToken,
+		Query:         searchattribute.QueryWithAllNamespaceDivisions(""),
 	}
 
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
@@ -116,6 +118,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		Namespace:     params.Namespace,
 		PageSize:      params.ListPageSize,
 		NextPageToken: params.NextPageToken,
+		Query:         searchattribute.QueryWithAllNamespaceDivisions(""),
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {

@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
@@ -128,6 +129,7 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_NoExecutions(t *testing.T) {
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 		PageSize:    1,
+		Query:       searchattribute.QueryWithAllNamespaceDivisions(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{},
 	}, nil)
@@ -151,6 +153,7 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_ExecutionsExist(t *testing.T) 
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 		PageSize:    1,
+		Query:       searchattribute.QueryWithAllNamespaceDivisions(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{{}},
 	}, nil)
