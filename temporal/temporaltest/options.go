@@ -31,8 +31,7 @@ import (
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
-
-	"go.temporal.io/server/temporal/temporalite"
+	"go.temporal.io/server/temporal"
 )
 
 type TestServerOption interface {
@@ -67,8 +66,8 @@ func WithBaseWorkerOptions(o worker.Options) TestServerOption {
 	})
 }
 
-// WithTemporaliteOptions provides the ability to use additional Temporalite options, including temporalite.WithUpstreamOptions.
-func WithTemporaliteOptions(options ...temporalite.ServerOption) TestServerOption {
+// WithBaseServerOptions enables configuring additional server options not directly exposed via temporaltest.
+func WithBaseServerOptions(options ...temporal.ServerOption) TestServerOption {
 	return newApplyFuncContainer(func(server *TestServer) {
 		server.serverOptions = append(server.serverOptions, options...)
 	})

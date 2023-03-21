@@ -38,15 +38,15 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-
-	"go.temporal.io/server/temporal/temporalite"
+	"go.temporal.io/server/temporal"
 )
 
 // A TestServer is a Temporal server listening on a system-chosen port on the
 // local loopback interface, for use in end-to-end tests.
 type TestServer struct {
-	server               *temporalite.Server
+	server               *temporal.LiteServer
 	defaultTestNamespace string
 	defaultClient        client.Client
 	clients              []client.Client
@@ -54,7 +54,7 @@ type TestServer struct {
 	t                    *testing.T
 	defaultClientOptions client.Options
 	defaultWorkerOptions worker.Options
-	serverOptions        []temporalite.ServerOption
+	serverOptions        []temporal.ServerOption
 }
 
 func (ts *TestServer) fatal(err error) {
@@ -169,18 +169,16 @@ func NewServer(opts ...TestServerOption) *TestServer {
 		})
 	}
 
-	// Order of these options matters. When there are conflicts, options later in the list take precedence.
-	// Always specify options that are required for temporaltest last to avoid accidental overrides.
-	ts.serverOptions = append(ts.serverOptions,
-		temporalite.WithNamespaces(ts.defaultTestNamespace),
-		temporalite.WithPersistenceDisabled(),
-		temporalite.WithLogger(log.NewNoopLogger()),
-		temporalite.WithSearchAttributeCacheDisabled(),
+	s, err := temporal.NewLiteServer(&temporal.LiteServerConfig{
+		Namespaces: []string{ts.defaultTestNamespace},
+		Ephemeral:  true,
+		Logger:     log.NewNoopLogger(),
+		DynamicConfig: dynamicconfig.StaticClient{
+			dynamicconfig.ForceSearchAttributesCacheRefreshOnRead: []dynamicconfig.ConstrainedValue{{Value: true}},
+		},
 		// Disable "accept incoming network connections?" prompt on macOS
-		temporalite.WithFrontendIP("127.0.0.1"),
-	)
-
-	s, err := temporalite.NewServer(ts.serverOptions...)
+		FrontendIP: "127.0.0.1",
+	}, ts.serverOptions...)
 	if err != nil {
 		ts.fatal(fmt.Errorf("error creating server: %w", err))
 	}
