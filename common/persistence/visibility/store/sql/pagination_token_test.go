@@ -25,28 +25,50 @@
 package sql
 
 import (
-	"encoding/json"
+	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
-type (
-	pageToken struct {
-		CloseTime time.Time
-		StartTime time.Time
-		RunID     string
-	}
-)
+func TestSerializePageToken(t *testing.T) {
+	s := assert.New(t)
 
-func deserializePageToken(data []byte) (*pageToken, error) {
-	if len(data) == 0 {
-		return nil, nil
+	token := pageToken{
+		CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
+		StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
+		RunID:     "test-run-id",
 	}
-	var token *pageToken
-	err := json.Unmarshal(data, &token)
-	return token, err
+	data, err := serializePageToken(&token)
+	s.NoError(err)
+	s.Equal(
+		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`),
+		data,
+	)
 }
 
-func serializePageToken(token *pageToken) ([]byte, error) {
-	data, err := json.Marshal(token)
-	return data, err
+func TestDeserializePageToken(t *testing.T) {
+	s := assert.New(t)
+
+	token, err := deserializePageToken(nil)
+	s.NoError(err)
+	s.Nil(token)
+
+	token, err = deserializePageToken([]byte{})
+	s.NoError(err)
+	s.Nil(token)
+
+	token, err = deserializePageToken(
+		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`),
+	)
+	s.NoError(err)
+	s.NotNil(token)
+	s.Equal(
+		pageToken{
+			CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
+			StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
+			RunID:     "test-run-id",
+		},
+		*token,
+	)
 }
