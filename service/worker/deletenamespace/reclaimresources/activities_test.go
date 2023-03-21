@@ -129,7 +129,7 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_NoExecutions(t *testing.T) {
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 		PageSize:    1,
-		Query:       searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{},
 	}, nil)
@@ -153,7 +153,7 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_ExecutionsExist(t *testing.T) 
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 		PageSize:    1,
-		Query:       searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{{}},
 	}, nil)

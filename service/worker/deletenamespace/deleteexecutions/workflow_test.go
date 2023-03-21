@@ -97,7 +97,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 		Namespace:     "namespace",
 		PageSize:      1000,
 		NextPageToken: nil,
-		Query:         searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions:    nil,
 		NextPageToken: nil,
@@ -260,7 +260,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: nil,
-		Query:         searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -287,7 +287,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: []byte{22, 8, 78},
-		Query:         searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -356,7 +356,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: nil,
-		Query:         searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
@@ -383,7 +383,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		Namespace:     "namespace",
 		PageSize:      2,
 		NextPageToken: []byte{22, 8, 78},
-		Query:         searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{

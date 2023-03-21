@@ -301,7 +301,7 @@ func (a *activities) UpdateActiveCluster(ctx context.Context, req updateActiveCl
 
 func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 	// modify query to include all namespace divisions
-	request.Query = searchattribute.QueryWithAllNamespaceDivisions(request.Query)
+	request.Query = searchattribute.QueryWithAnyNamespaceDivision(request.Query)
 
 	resp, err := a.frontendClient.ListWorkflowExecutions(ctx, request)
 	if err != nil {

@@ -67,9 +67,9 @@ const (
 
 	ReservedPrefix = "Temporal"
 
-	// Query clause that mentions TemporalNamespaceDivision (to disable special handling) and
-	// matches everything.
-	matchAllNamespaceDivisions = TemporalNamespaceDivision + ` != "__never_used__"`
+	// Query clause that mentions TemporalNamespaceDivision to disable special handling of that
+	// search attribute in visibility.
+	matchAnyNamespaceDivision = TemporalNamespaceDivision + ` != "__never_used__"`
 )
 
 var (
@@ -196,13 +196,13 @@ func GetSqlDbIndexSearchAttributes() *persistencespb.IndexSearchAttributes {
 	}
 }
 
-// QueryWithAllNamespaceDivisions returns a modified workflow visibility query that disables
+// QueryWithAnyNamespaceDivision returns a modified workflow visibility query that disables
 // special handling of namespace division and so matches workflows in all namespace divisions.
 // Normally a query that didn't explicitly mention TemporalNamespaceDivision would be limited
 // to the default (empty string) namespace division.
-func QueryWithAllNamespaceDivisions(query string) string {
+func QueryWithAnyNamespaceDivision(query string) string {
 	if strings.TrimSpace(query) == "" {
-		return matchAllNamespaceDivisions
+		return matchAnyNamespaceDivision
 	}
-	return fmt.Sprintf(`(%s) AND (%s)`, query, matchAllNamespaceDivisions)
+	return fmt.Sprintf(`(%s) AND (%s)`, query, matchAnyNamespaceDivision)
 }

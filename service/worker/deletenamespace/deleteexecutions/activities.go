@@ -93,7 +93,7 @@ func (a *Activities) GetNextPageTokenActivity(ctx context.Context, params GetNex
 		Namespace:     params.Namespace,
 		PageSize:      params.PageSize,
 		NextPageToken: params.NextPageToken,
-		Query:         searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}
 
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
@@ -118,7 +118,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		Namespace:     params.Namespace,
 		PageSize:      params.ListPageSize,
 		NextPageToken: params.NextPageToken,
-		Query:         searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:         searchattribute.QueryWithAnyNamespaceDivision(""),
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {

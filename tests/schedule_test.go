@@ -287,12 +287,12 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.WithinRange(ex0StartTime, createTime, time.Now())
 	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
 
-	// list with QueryWithAllNamespaceDivisions, we should see the scheduler workflow
+	// list with QueryWithAnyNamespaceDivision, we should see the scheduler workflow
 
 	wfResp, err = s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  5,
-		Query:     searchattribute.QueryWithAllNamespaceDivisions(`ExecutionStatus = "Running"`),
+		Query:     searchattribute.QueryWithAnyNamespaceDivision(`ExecutionStatus = "Running"`),
 	})
 	s.NoError(err)
 	count := 0

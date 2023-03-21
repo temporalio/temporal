@@ -157,7 +157,7 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 		NamespaceID: nsID,
 		Namespace:   nsName,
 		PageSize:    1,
-		Query:       searchattribute.QueryWithAllNamespaceDivisions(""),
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
