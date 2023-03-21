@@ -708,7 +708,6 @@ func ApplyClusterMetadataConfigProvider(
 		if err != nil {
 			return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 		}
-
 		currentMetadata := resp.ClusterMetadata
 
 		// TODO (rodrigozhou): Remove this block for v1.21.
@@ -726,7 +725,10 @@ func ApplyClusterMetadataConfigProvider(
 			if needSave {
 				_, err := clusterMetadataManager.SaveClusterMetadata(
 					ctx,
-					&persistence.SaveClusterMetadataRequest{ClusterMetadata: currentMetadata},
+					&persistence.SaveClusterMetadataRequest{
+						ClusterMetadata: currentMetadata,
+						Version:         resp.Version,
+					},
 				)
 				if err != nil {
 					logger.Warn(
@@ -736,6 +738,16 @@ func ApplyClusterMetadataConfigProvider(
 					)
 				}
 				logger.Info("Successfully registered search attributes.", tag.ClusterName(clusterName))
+
+				// need to re-fetch cluster metadata since it might need to be updated again below
+				resp, err = clusterMetadataManager.GetClusterMetadata(
+					ctx,
+					&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+				)
+				if err != nil {
+					return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
+				}
+				currentMetadata = resp.ClusterMetadata
 			}
 		}
 
