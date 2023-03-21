@@ -209,7 +209,7 @@ func (r *reschedulerImpl) rescheduleLoop() {
 		case <-r.shutdownCh:
 			r.drain()
 			return
-		case <-r.timerGate.FireChan():
+		case <-r.timerGate.FireCh():
 			r.reschedule()
 		case <-cleanupTimer.C:
 			r.cleanupPQ()
