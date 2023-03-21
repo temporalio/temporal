@@ -203,7 +203,7 @@ func (s *scheduledQueueSuite) TestLookAheadTask_HasLookAheadTask() {
 
 	timerGate.SetCurrentTime(lookAheadTask.GetKey().FireTime)
 	select {
-	case <-s.scheduledQueue.timerGate.FireChan():
+	case <-s.scheduledQueue.timerGate.FireCh():
 	default:
 		s.Fail("timer gate should fire when look ahead task is due")
 	}
@@ -220,7 +220,7 @@ func (s *scheduledQueueSuite) TestLookAheadTask_NoLookAheadTask() {
 		(1 + testQueueOptions.MaxPollIntervalJitterCoefficient()) * float64(testQueueOptions.MaxPollInterval()),
 	)))
 	select {
-	case <-s.scheduledQueue.timerGate.FireChan():
+	case <-s.scheduledQueue.timerGate.FireCh():
 	default:
 		s.Fail("timer gate should fire at the end of look ahead window")
 	}
@@ -247,7 +247,7 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 
 	timerGate.SetCurrentTime(s.scheduledQueue.nonReadableScope.Range.InclusiveMin.FireTime)
 	select {
-	case <-s.scheduledQueue.timerGate.FireChan():
+	case <-s.scheduledQueue.timerGate.FireCh():
 	default:
 		s.Fail("timer gate should fire when time reaches look ahead range")
 	}

@@ -153,7 +153,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 		return err
 	}
 
-	if r.config.AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
+	if r.config.AdvancedVisibilityWritingMode() != visibility.SecondaryVisibilityWritingModeOff {
 		if err := r.refreshTasksForWorkflowSearchAttr(
 			taskGenerator,
 		); err != nil {
