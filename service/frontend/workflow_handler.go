@@ -3259,6 +3259,8 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	memo := describeResponse.GetWorkflowExecutionInfo().GetMemo()
 	memo = wh.cleanScheduleMemo(memo)
 
+	scheduler.CleanSpec(queryResponse.Schedule.Spec)
+
 	return &workflowservice.DescribeScheduleResponse{
 		Schedule:         queryResponse.Schedule,
 		Info:             queryResponse.Info,
@@ -4873,6 +4875,7 @@ func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedpb.
 		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
 		return nil
 	}
+	scheduler.CleanSpec(listInfo.Spec)
 	return &listInfo
 }
 
