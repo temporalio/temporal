@@ -319,8 +319,8 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 	}
 
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		workflowTask, isPending := mutableState.GetWorkflowTaskInfo(timerTask.EventID)
-		if !isPending {
+		workflowTask := mutableState.GetWorkflowTaskByID(timerTask.EventID)
+		if workflowTask == nil {
 			return nil, nil
 		}
 
@@ -352,7 +352,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	timerTask *tasks.WorkflowBackoffTimerTask,
 ) error {
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		if mutableState.HasProcessedOrPendingWorkflowTask() {
+		if mutableState.HadOrHasWorkflowTask() {
 			// if there is one workflow task already been processed
 			// or has pending workflow task, meaning workflow has already running
 			return nil, nil

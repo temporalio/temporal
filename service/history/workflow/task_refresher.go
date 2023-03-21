@@ -182,7 +182,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	if !mutableState.HasProcessedOrPendingWorkflowTask() && timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff()) > 0 {
+	if !mutableState.HadOrHasWorkflowTask() && timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff()) > 0 {
 		if err := taskGenerator.GenerateDelayedWorkflowTasks(
 			startEvent,
 		); err != nil {
@@ -248,8 +248,8 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 		return nil
 	}
 
-	workflowTask, ok := mutableState.GetPendingWorkflowTask()
-	if !ok {
+	workflowTask := mutableState.GetPendingWorkflowTask()
+	if workflowTask == nil {
 		return serviceerror.NewInternal("it could be a bug, cannot get pending workflow task")
 	}
 

@@ -2830,8 +2830,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
-	wt, ok := ms2.GetWorkflowTaskInfo(int64(8))
-	s.True(ok)
+	wt = ms2.GetWorkflowTaskByID(int64(8))
+	s.NotNil(wt)
 	s.EqualValues(int64(100), wt.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(8), wt.ScheduledEventID)
 	s.Equal(common.EmptyEventID, wt.StartedEventID)
@@ -2891,8 +2891,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
-	wt, ok := ms2.GetWorkflowTaskInfo(int64(8))
-	s.True(ok)
+	wt := ms2.GetWorkflowTaskByID(int64(8))
+	s.NotNil(wt)
 	s.EqualValues(int64(100), wt.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(8), wt.ScheduledEventID)
 	s.Equal(common.EmptyEventID, wt.StartedEventID)
@@ -3301,8 +3301,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
-	wt, ok := ms2.GetWorkflowTaskInfo(int64(8))
-	s.True(ok)
+	wt = ms2.GetWorkflowTaskByID(int64(8))
+	s.NotNil(wt)
 	s.EqualValues(int64(100), wt.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(8), wt.ScheduledEventID)
 	s.Equal(common.EmptyEventID, wt.StartedEventID)
@@ -3365,8 +3365,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedWithHeartbeatSuccess() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
-	wt, ok := ms2.GetWorkflowTaskInfo(int64(8))
-	s.True(ok)
+	wt = ms2.GetWorkflowTaskByID(int64(8))
+	s.NotNil(wt)
 	s.EqualValues(int64(100), wt.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(8), wt.ScheduledEventID)
 	s.Equal(common.EmptyEventID, wt.StartedEventID)
@@ -3428,8 +3428,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
-	wt, ok := ms2.GetWorkflowTaskInfo(int64(8))
-	s.True(ok)
+	wt := ms2.GetWorkflowTaskByID(int64(8))
+	s.NotNil(wt)
 	s.EqualValues(int64(100), wt.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(8), wt.ScheduledEventID)
 	s.Equal(common.EmptyEventID, wt.StartedEventID)
@@ -3683,8 +3683,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
-	wt, ok := ms2.GetWorkflowTaskInfo(int64(9))
-	s.True(ok)
+	wt = ms2.GetWorkflowTaskByID(int64(9))
+	s.NotNil(wt)
 	s.EqualValues(int64(100), wt.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(9), wt.ScheduledEventID)
 	s.Equal(common.EmptyEventID, wt.StartedEventID)
@@ -3744,8 +3744,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
-	wt, ok := ms2.GetWorkflowTaskInfo(int64(9))
-	s.True(ok)
+	wt := ms2.GetWorkflowTaskByID(int64(9))
+	s.NotNil(wt)
 	s.EqualValues(int64(100), wt.WorkflowTaskTimeout.Seconds())
 	s.Equal(int64(9), wt.ScheduledEventID)
 	s.Equal(common.EmptyEventID, wt.StartedEventID)
@@ -3972,8 +3972,8 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	s.Equal(int64(7), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.True(ms2.HasPendingWorkflowTask())
-	wt2, ok := ms2.GetWorkflowTaskInfo(ms2.GetNextEventID() - 1)
-	s.True(ok)
+	wt2 = ms2.GetWorkflowTaskByID(ms2.GetNextEventID() - 1)
+	s.NotNil(wt2)
 	s.Equal(ms2.GetNextEventID()-1, wt2.ScheduledEventID)
 	s.Equal(int32(1), wt2.Attempt)
 }
@@ -5306,7 +5306,7 @@ func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, schedule
 }
 
 func addWorkflowTaskCompletedEvent(s *suite.Suite, ms workflow.MutableState, scheduledEventID, startedEventID int64, identity string) *historypb.HistoryEvent {
-	workflowTask, _ := ms.GetWorkflowTaskInfo(scheduledEventID)
+	workflowTask := ms.GetWorkflowTaskByID(scheduledEventID)
 	s.NotNil(workflowTask)
 	s.Equal(startedEventID, workflowTask.StartedEventID)
 

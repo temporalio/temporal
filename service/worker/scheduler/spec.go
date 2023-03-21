@@ -86,6 +86,35 @@ func NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
 	return cspec, nil
 }
 
+// CleanSpec sets default values in ranges.
+func CleanSpec(spec *schedpb.ScheduleSpec) {
+	cleanRanges := func(ranges []*schedpb.Range) {
+		for _, r := range ranges {
+			if r.End < r.Start {
+				r.End = r.Start
+			}
+			if r.Step == 0 {
+				r.Step = 1
+			}
+		}
+	}
+	cleanCal := func(structured *schedpb.StructuredCalendarSpec) {
+		cleanRanges(structured.Second)
+		cleanRanges(structured.Minute)
+		cleanRanges(structured.Hour)
+		cleanRanges(structured.DayOfMonth)
+		cleanRanges(structured.Month)
+		cleanRanges(structured.Year)
+		cleanRanges(structured.DayOfWeek)
+	}
+	for _, structured := range spec.StructuredCalendar {
+		cleanCal(structured)
+	}
+	for _, structured := range spec.ExcludeStructuredCalendar {
+		cleanCal(structured)
+	}
+}
+
 func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error) {
 	// make shallow copy so we can change some fields
 	specCopy := *spec

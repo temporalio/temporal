@@ -170,7 +170,7 @@ func (r *BranchMgrImpl) flushBufferedEvents(
 	// check whether there are buffered events, if so, flush it
 	// NOTE: buffered events does not show in version history or next event id
 	if !r.mutableState.HasBufferedEvents() {
-		if r.mutableState.HasInFlightWorkflowTask() && r.mutableState.IsTransientWorkflowTask() {
+		if r.mutableState.HasStartedWorkflowTask() && r.mutableState.IsTransientWorkflowTask() {
 			if err := r.mutableState.ClearTransientWorkflowTask(); err != nil {
 				return nil, 0, err
 			}
@@ -256,6 +256,7 @@ func (r *BranchMgrImpl) createNewBranch(
 		ForkNodeID:      baseBranchLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),
 		ShardID:         shardID,
+		NamespaceID:     namespaceID,
 	})
 	if err != nil {
 		return 0, err

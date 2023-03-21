@@ -109,7 +109,7 @@ func Invoke(
 	}
 
 	mutableState := weCtx.GetMutableState()
-	if !mutableState.HasProcessedOrPendingWorkflowTask() {
+	if !mutableState.HadOrHasWorkflowTask() {
 		// workflow has no workflow task ever scheduled, this usually is due to firstWorkflowTaskBackoff (cron / retry)
 		// in this case, don't buffer the query, because it is almost certain the query will time out.
 		return nil, consts.ErrWorkflowTaskNotScheduled
@@ -122,14 +122,14 @@ func Invoke(
 	// is used to determine if a query can be safely dispatched directly through matching or must be dispatched on a workflow task.
 	//
 	// Precondition to dispatch query directly to matching is workflow has at least one WorkflowTaskStarted event. Otherwise, sdk would panic.
-	if mutableState.GetPreviousStartedEventID() != common.EmptyEventID {
+	if mutableState.GetLastWorkflowTaskStartedEventID() != common.EmptyEventID {
 		// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:
 		// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 		// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
 		// 3. if there is no pending or started workflow tasks it means no events came before query arrived, so its safe to dispatch directly
 		safeToDispatchDirectly := !nsEntry.ActiveInCluster(shard.GetClusterMetadata().GetCurrentClusterName()) ||
 			!mutableState.IsWorkflowExecutionRunning() ||
-			(!mutableState.HasPendingWorkflowTask() && !mutableState.HasInFlightWorkflowTask())
+			(!mutableState.HasPendingWorkflowTask() && !mutableState.HasStartedWorkflowTask())
 		if safeToDispatchDirectly {
 			msResp, err := api.MutableStateToGetResponse(mutableState)
 			if err != nil {

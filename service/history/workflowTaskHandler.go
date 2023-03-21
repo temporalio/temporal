@@ -679,11 +679,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES, err)
 	}
 
-	// timer deletion is a success, we may have deleted a fired timer in
-	// which case we should reset hasBufferedEvents
-	// TODO deletion of timer fired event refreshing hasBufferedEvents
-	//  is not entirely correct, since during these commands processing, new event may appear
-	handler.hasBufferedEvents = handler.mutableState.HasBufferedEvents()
+	// In case the timer was cancelled and its TimerFired event was deleted from buffered events, attempt
+	// to unset hasBufferedEvents to allow the workflow to complete.
+	handler.hasBufferedEvents = handler.hasBufferedEvents && handler.mutableState.HasBufferedEvents()
 	return nil
 }
 
