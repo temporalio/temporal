@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -833,4 +834,81 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 	s.Assert().Equal(now, *ai.StartedTime)
 	s.Assert().Equal(requestID, ai.RequestId)
 	s.Assert().Nil(ai.LastHeartbeatDetails)
+}
+
+func (s *mutableStateSuite) TestTotalEntitiesCount() {
+	mutableState := TestLocalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.newNamespaceCacheEntry(),
+		s.logger,
+		uuid.New(),
+	)
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// scheduling, starting & completing workflow task is omitted here
+
+	workflowTaskCompletedEventID := int64(4)
+	_, _, err := mutableState.AddActivityTaskScheduledEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{},
+		false,
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		uuid.New(),
+		&commandpb.StartChildWorkflowExecutionCommandAttributes{},
+		namespace.ID(uuid.New()),
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddTimerStartedEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.StartTimerCommandAttributes{},
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		uuid.New(),
+		&commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{},
+		namespace.ID(uuid.New()),
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		uuid.New(),
+		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			},
+		},
+		namespace.ID(uuid.New()),
+	)
+	s.NoError(err)
+
+	_, err = mutableState.AddWorkflowExecutionSignaled(
+		"signalName",
+		&commonpb.Payloads{},
+		"identity",
+		&commonpb.Header{},
+	)
+	s.NoError(err)
+
+	mutation, _, err := mutableState.CloseTransactionAsMutation(
+		s.mockShard.GetTimeSource().Now(),
+		TransactionPolicyActive,
+	)
+	s.NoError(err)
+
+	s.Equal(int64(1), mutation.ExecutionInfo.ActivityCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.ChildExecutionCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.UserTimerCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.RequestCancelExternalCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.SignalExternalCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.SignalCount)
 }

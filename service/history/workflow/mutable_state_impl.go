@@ -2056,6 +2056,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.executionInfo.ActivityCount++
 
 	ms.writeEventToCache(event)
 	return ai, nil
@@ -2688,6 +2689,7 @@ func (ms *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionIniti
 
 	ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
 	ms.updateRequestCancelInfos[rci.InitiatedEventId] = rci
+	ms.executionInfo.RequestCancelExternalCount++
 
 	ms.writeEventToCache(event)
 	return rci, nil
@@ -2827,6 +2829,7 @@ func (ms *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEve
 
 	ms.pendingSignalInfoIDs[si.InitiatedEventId] = si
 	ms.updateSignalInfos[si.InitiatedEventId] = si
+	ms.executionInfo.SignalExternalCount++
 
 	ms.writeEventToCache(event)
 	return si, nil
@@ -3031,6 +3034,7 @@ func (ms *MutableStateImpl) ReplicateTimerStartedEvent(
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
 	ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
 	ms.updateTimerInfos[ti.TimerId] = ti
+	ms.executionInfo.UserTimerCount++
 
 	return ti, nil
 }
@@ -3421,6 +3425,7 @@ func (ms *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 
 	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
+	ms.executionInfo.ChildExecutionCount++
 
 	ms.writeEventToCache(event)
 	return ci, nil
