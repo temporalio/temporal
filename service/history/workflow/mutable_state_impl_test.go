@@ -44,6 +44,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -837,10 +838,11 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 }
 
 func (s *mutableStateSuite) TestTotalEntitiesCount() {
+	namespaceEntry := s.newNamespaceCacheEntry()
 	mutableState := TestLocalMutableState(
 		s.mockShard,
 		s.mockEventsCache,
-		s.newNamespaceCacheEntry(),
+		namespaceEntry,
 		s.logger,
 		uuid.New(),
 	)
@@ -898,6 +900,12 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 		&commonpb.Header{},
 	)
 	s.NoError(err)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
+		namespaceEntry.IsGlobalNamespace(),
+		mutableState.GetCurrentVersion(),
+	).Return(cluster.TestCurrentClusterName)
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 
 	mutation, _, err := mutableState.CloseTransactionAsMutation(
 		s.mockShard.GetTimeSource().Now(),
