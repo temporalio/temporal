@@ -121,6 +121,11 @@ message WorkflowExecutionInfo {
     reserved 44;
     reserved 45;
     int64 signal_count = 46;
+    int64 activity_count = 71;
+    int64 child_execution_count = 72;
+    int64 user_timer_count = 73;
+    int64 request_cancel_external_count = 74;
+    int64 signal_external_count = 75;
     reserved 47;
     reserved 48;
     reserved 49;
