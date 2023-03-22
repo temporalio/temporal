@@ -55,7 +55,7 @@ type Config struct {
 	EnableWriteToSecondaryAdvancedVisibility  dynamicconfig.BoolPropertyFn
 	EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFn
+	VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog       dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -323,7 +323,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		EnableWriteToSecondaryAdvancedVisibility:  dc.GetBoolProperty(dynamicconfig.EnableWriteToSecondaryAdvancedVisibility, false),
 		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, isAdvancedVisibilityConfigExist),
 		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
-		VisibilityDisableOrderByClause:            dc.GetBoolProperty(dynamicconfig.VisibilityDisableOrderByClause, false),
+		VisibilityDisableOrderByClause:            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, false),
 
 		EmitShardLagLog:                      dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
 		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),

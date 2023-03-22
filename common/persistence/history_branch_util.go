@@ -38,6 +38,7 @@ import (
 type (
 	HistoryBranchUtil interface {
 		NewHistoryBranch(
+			namespaceID string,
 			treeID string,
 			branchID *string,
 			ancestors []*persistencespb.HistoryBranchRange,
@@ -79,6 +80,7 @@ func NewHistoryBranch(
 }
 
 func (u *HistoryBranchUtilImpl) NewHistoryBranch(
+	namespaceID string,
 	treeID string,
 	branchID *string,
 	ancestors []*persistencespb.HistoryBranchRange,

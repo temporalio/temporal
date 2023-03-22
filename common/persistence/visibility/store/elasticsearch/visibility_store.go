@@ -74,7 +74,7 @@ type (
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		processor                      Processor
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
-		disableOrderByClause           dynamicconfig.BoolPropertyFn
+		disableOrderByClause           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		metricsHandler                 metrics.Handler
 	}
 
@@ -103,7 +103,7 @@ func NewVisibilityStore(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	processor Processor,
 	processorAckTimeout dynamicconfig.DurationPropertyFn,
-	disableOrderByClause dynamicconfig.BoolPropertyFn,
+	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
 ) *visibilityStore {
 
@@ -679,7 +679,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 	// using a field that was not indexed by ES. Since slow queries can block
 	// writes for unreasonably long, this option forbids the usage of ORDER BY
 	// clause to prevent slow down issues.
-	if s.disableOrderByClause() && len(fieldSorts) > 0 {
+	if s.disableOrderByClause(request.Namespace.String()) && len(fieldSorts) > 0 {
 		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
@@ -735,6 +735,7 @@ func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) [
 		return defaultSorter
 	}
 
+	s.metricsHandler.Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
 	for i, fs := range fieldSorts {
 		res[i] = fs

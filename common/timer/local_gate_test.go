@@ -44,14 +44,14 @@ type (
 )
 
 func BenchmarkLocalTimer(b *testing.B) {
-	timer := NewLocalGate(clock.NewRealTimeSource())
+	lg := NewLocalGate(clock.NewRealTimeSource())
 
 	for i := 0; i < b.N; i++ {
-		timer.Update(time.Now().UTC())
+		lg.Update(time.Now().UTC())
 	}
 }
 
-func TestLocalTimerGeteSuite(t *testing.T) {
+func TestLocalTimerGateSuite(t *testing.T) {
 	s := new(localGateSuite)
 	suite.Run(t, s)
 }
@@ -81,7 +81,7 @@ func (s *localGateSuite) TestTimerFire() {
 	s.localTimerGate.Update(newTimer)
 
 	select {
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(deadline.Sub(now)).C:
 		s.Fail("timer should fire before test deadline")
 	}
@@ -95,14 +95,14 @@ func (s *localGateSuite) TestTimerFireAfterUpdate_Active_Updated_BeforeNow() {
 
 	s.localTimerGate.Update(newTimer)
 	select {
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 		s.Fail("timer should not fire when current time not updated")
 	case <-time.NewTimer(deadline.Sub(now)).C:
 	}
 
 	s.True(s.localTimerGate.Update(updatedNewTimer))
 	select {
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(deadline.Sub(now)).C:
 		s.Fail("timer should fire before test deadline")
 	}
@@ -117,7 +117,7 @@ func (s *localGateSuite) TestTimerFireAfterUpdate_Active_Updated() {
 	s.True(s.localTimerGate.Update(updatedNewTimer))
 
 	select {
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(deadline.Sub(now)).C:
 		s.Fail("timer should fire before test deadline")
 	}
@@ -132,7 +132,7 @@ func (s *localGateSuite) TestTimerFireAfterUpdate_Active_NotUpdated() {
 	s.False(s.localTimerGate.Update(updatedNewTimer))
 
 	select {
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(deadline.Sub(now)).C:
 		s.Fail("timer should fire before test deadline")
 	}
@@ -146,12 +146,12 @@ func (s *localGateSuite) TestTimerFireAfterUpdate_NotActive_Updated() {
 
 	s.localTimerGate.Update(newTimer)
 	// this is to drain existing signal
-	<-s.localTimerGate.FireChan()
+	<-s.localTimerGate.FireCh()
 	// test setup up complete
 
 	s.True(s.localTimerGate.Update(updatedNewTimer))
 	select {
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(deadline.Sub(now)).C:
 		s.Fail("timer should fire before test deadline")
 	}
@@ -165,12 +165,12 @@ func (s *localGateSuite) TestTimerFireAfterUpdate_NotActive_NotUpdated() {
 
 	s.localTimerGate.Update(newTimer)
 	// this is to drain existing signal
-	<-s.localTimerGate.FireChan()
+	<-s.localTimerGate.FireCh()
 	// test setup up complete
 
 	s.True(s.localTimerGate.Update(updatedNewTimer))
 	select {
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(deadline.Sub(now)).C:
 		s.Fail("timer should fire before test deadline")
 	}
@@ -182,7 +182,7 @@ func (s *localGateSuite) TestTimerWillFire_Zero() {
 	s.False(s.localTimerGate.FireAfter(time.Now().UTC()))
 
 	select { // this is to drain existing signal
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(time.Second).C:
 	}
 
@@ -191,13 +191,13 @@ func (s *localGateSuite) TestTimerWillFire_Zero() {
 	deadline := now.Add(2 * time.Second)
 	s.localTimerGate.Update(newTimer)
 	select {
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(deadline.Sub(now)).C:
 		s.Fail("timer should fire")
 	}
 	s.localTimerGate.Update(time.Time{})
 	select { // this is to drain existing signal
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(time.Second).C:
 		s.Fail("timer should fire")
 	}
@@ -207,7 +207,7 @@ func (s *localGateSuite) TestTimerWillFire_Zero() {
 	s.localTimerGate.Update(newTimer)
 	s.localTimerGate.Update(time.Time{})
 	select { // this is to drain existing signal
-	case <-s.localTimerGate.FireChan():
+	case <-s.localTimerGate.FireCh():
 	case <-time.NewTimer(time.Second).C:
 		s.Fail("timer should fire")
 	}

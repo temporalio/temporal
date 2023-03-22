@@ -3259,6 +3259,8 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	memo := describeResponse.GetWorkflowExecutionInfo().GetMemo()
 	memo = wh.cleanScheduleMemo(memo)
 
+	scheduler.CleanSpec(queryResponse.Schedule.Spec)
+
 	return &workflowservice.DescribeScheduleResponse{
 		Schedule:         queryResponse.Schedule,
 		Info:             queryResponse.Info,
@@ -3602,7 +3604,7 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 	}, nil
 }
 
-func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdOrderingRequest) (_ *workflowservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatabilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if wh.isStopped() {
@@ -3613,7 +3615,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateBuildIdOrderingUpdate(request); err != nil {
+	if err := wh.validateBuildIdCompatabilityUpdate(request); err != nil {
 		return nil, err
 	}
 
@@ -3626,7 +3628,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdOrdering(ctx, &matchingservice.UpdateWorkerBuildIdOrderingRequest{
+	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdCompatability(ctx, &matchingservice.UpdateWorkerBuildIdCompatabilityRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
@@ -3635,7 +3637,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 		return nil, err
 	}
 
-	return &workflowservice.UpdateWorkerBuildIdOrderingResponse{}, err
+	return &workflowservice.UpdateWorkerBuildIdCompatabilityResponse{}, err
 }
 
 func (wh *WorkflowHandler) UpdateWorkflowExecution(
@@ -3698,7 +3700,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	return histResp.GetResponse(), err
 }
 
-func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.GetWorkerBuildIdOrderingRequest) (_ *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
+func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.GetWorkerBuildIdCompatabilityRequest) (_ *workflowservice.GetWorkerBuildIdCompatabilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if wh.isStopped() {
@@ -3718,7 +3720,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdOrdering(ctx, &matchingservice.GetWorkerBuildIdOrderingRequest{
+	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdCompatability(ctx, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
@@ -4351,29 +4353,58 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	return nil
 }
 
-func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
-	req *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+//nolint:revive // cyclomatic complexity
+func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
+	req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
 ) error {
-	errstr := "request to update worker build id ordering requires:"
-	hadErr := false
+	errDeets := []string{"request to update worker build id compatability requires: "}
+
+	checkIdLen := func(id string) {
+		if len(id) > wh.config.WorkerBuildIdSizeLimit() {
+			errDeets = append(errDeets, fmt.Sprintf(" Worker build IDs to be no larger than %v characters",
+				wh.config.WorkerBuildIdSizeLimit()))
+		}
+	}
+
 	if req.GetNamespace() == "" {
-		errstr += " `namespace` to be set"
-		hadErr = true
+		errDeets = append(errDeets, "`namespace` to be set")
 	}
 	if req.GetTaskQueue() == "" {
-		errstr += " `task_queue` to be set"
-		hadErr = true
+		errDeets = append(errDeets, "`task_queue` to be set")
 	}
-	if req.GetVersionId().GetWorkerBuildId() == "" {
-		errstr += " targeting a valid version identifier"
-		hadErr = true
+	if req.GetOperation() == nil {
+		errDeets = append(errDeets, "an operation to be specified")
 	}
-	if len(req.GetVersionId().GetWorkerBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		errstr += fmt.Sprintf(" Worker build IDs to be no larger than %v characters", wh.config.WorkerBuildIdSizeLimit())
-		hadErr = true
+	if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId); ok {
+		if op.AddNewCompatibleBuildId.GetNewBuildId() == "" {
+			errDeets = append(errDeets, "`add_new_compatible_version` to be set")
+		} else {
+			checkIdLen(op.AddNewCompatibleBuildId.GetNewBuildId())
+		}
+		if op.AddNewCompatibleBuildId.GetExistingCompatibleBuildId() == "" {
+			errDeets = append(errDeets, "`existing_compatible_version` to be set")
+		}
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet); ok {
+		if op.AddNewBuildIdInNewDefaultSet == "" {
+			errDeets = append(errDeets, "`add_new_version_id_in_new_default_set` to be set")
+		} else {
+			checkIdLen(op.AddNewBuildIdInNewDefaultSet)
+		}
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByBuildId); ok {
+		if op.PromoteSetByBuildId == "" {
+			errDeets = append(errDeets, "`promote_set_by_version_id` to be set")
+		} else {
+			checkIdLen(op.PromoteSetByBuildId)
+		}
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteBuildIdWithinSet); ok {
+		if op.PromoteBuildIdWithinSet == "" {
+			errDeets = append(errDeets, "`promote_version_id_within_set` to be set")
+		} else {
+			checkIdLen(op.PromoteBuildIdWithinSet)
+		}
 	}
-	if hadErr {
-		return serviceerror.NewInvalidArgument(errstr)
+	if len(errDeets) > 1 {
+		return serviceerror.NewInvalidArgument(strings.Join(errDeets, ", "))
 	}
 	return nil
 }
@@ -4844,6 +4875,7 @@ func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedpb.
 		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
 		return nil
 	}
+	scheduler.CleanSpec(listInfo.Spec)
 	return &listInfo
 }
 

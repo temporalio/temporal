@@ -319,12 +319,12 @@ const (
 	FrontendClientDeleteScheduleScope = "FrontendClientDeleteSchedule"
 	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
 	FrontendClientListSchedulesScope = "FrontendClientListSchedules"
-	// FrontendClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to frontend service
-	FrontendClientUpdateWorkerBuildIdOrderingScope = "FrontendClientUpdateWorkerBuildIdOrdering"
+	// FrontendClientUpdateWorkerBuildIdCompatabilityScope tracks RPC calls to frontend service
+	FrontendClientUpdateWorkerBuildIdCompatabilityScope = "FrontendClientUpdateWorkerBuildIdCompatability"
 	// FrontendClientUpdateWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientUpdateWorkflowExecutionScope = "FrontendClientUpdateWorkflowExecution"
-	// FrontendClientGetWorkerBuildIdOrderingScope tracks RPC calls to frontend service
-	FrontendClientGetWorkerBuildIdOrderingScope = "FrontendClientGetWorkerBuildIdOrdering"
+	// FrontendClientGetWorkerBuildIdCompatabilityScope tracks RPC calls to frontend service
+	FrontendClientGetWorkerBuildIdCompatabilityScope = "FrontendClientGetWorkerBuildIdCompatability"
 	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
 	FrontendClientDescribeBatchOperationScope = "FrontendClientDescribeBatchOperation"
 	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
@@ -459,10 +459,10 @@ const (
 	MatchingClientDescribeTaskQueueScope = "MatchingClientDescribeTaskQueue"
 	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskQueuePartitionsScope = "MatchingClientListTaskQueuePartitions"
-	// MatchingClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to matching service
-	MatchingClientUpdateWorkerBuildIdOrderingScope = "MatchingClientUpdateWorkerBuildIdOrdering"
-	// MatchingClientGetWorkerBuildIdOrderingScope tracks RPC calls to matching service
-	MatchingClientGetWorkerBuildIdOrderingScope = "MatchingClientGetWorkerBuildIdOrdering"
+	// MatchingClientUpdateWorkerBuildIdCompatabilityScope tracks RPC calls to matching service
+	MatchingClientUpdateWorkerBuildIdCompatabilityScope = "MatchingClientUpdateWorkerBuildIdCompatability"
+	// MatchingClientGetWorkerBuildIdCompatabilityScope tracks RPC calls to matching service
+	MatchingClientGetWorkerBuildIdCompatabilityScope = "MatchingClientGetWorkerBuildIdCompatability"
 	// MatchingClientInvalidateTaskQueueMetadataScope tracks RPC calls to matching service
 	MatchingClientInvalidateTaskQueueMetadataScope = "MatchingClientInvalidateTaskQueueMetadata"
 	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
@@ -796,10 +796,10 @@ const (
 	FrontendDeleteScheduleScope = "DeleteSchedule"
 	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope = "ListSchedulesScope is the metric scope for frontend.ListSchedules"
 	FrontendListSchedulesScope = "ListSchedules"
-	// FrontendUpdateWorkerBuildIdOrderingScope is the metric scope for frontend.UpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrderingScope is the metric scope for frontend.UpdateWorkerBuildIdOrdering"
-	FrontendUpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrdering"
-	// FrontendGetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrdering"
-	FrontendGetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrdering"
+	// FrontendUpdateWorkerBuildIdCompatabilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatabilityScope = "UpdateWorkerBuildIdCompatabilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatability"
+	FrontendUpdateWorkerBuildIdCompatabilityScope = "UpdateWorkerBuildIdCompatability"
+	// FrontendGetWorkerBuildIdCompatabilityScope is the metric scope for frontend.GetWorkerBuildIdCompatabilityScope = "GetWorkerBuildIdCompatabilityScope is the metric scope for frontend.GetWorkerBuildIdCompatability"
+	FrontendGetWorkerBuildIdCompatabilityScope = "GetWorkerBuildIdCompatability"
 	// FrontendUpdateWorkflowExecutionScope is the metric scope for frontend.UpdateWorkflowExecution
 	FrontendUpdateWorkflowExecutionScope = "UpdateWorkflowExecution"
 	// FrontendDescribeBatchOperationScope is the metric scope for frontend.DescribeBatchOperation
@@ -1090,13 +1090,13 @@ const (
 	MatchingDescribeTaskQueueScope = "DescribeTaskQueue"
 	// MatchingListTaskQueuePartitionsScope tracks ListTaskQueuePartitions API calls received by service
 	MatchingListTaskQueuePartitionsScope = "ListTaskQueuePartitions"
-	// MatchingUpdateWorkerBuildIdOrderingScope tracks UpdateWorkerBuildIdOrdering API calls received by service
-	MatchingUpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrdering"
-	// MatchingGetWorkerBuildIdOrderingScope tracks GetWorkerBuildIdOrdering API calls received by service
-	MatchingGetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrdering"
-	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	// MatchingUpdateWorkerBuildIdCompatabilityScope tracks UpdateWorkerBuildIdCompatability API calls received by service
+	MatchingUpdateWorkerBuildIdCompatabilityScope = "UpdateWorkerBuildIdCompatability"
+	// MatchingGetWorkerBuildIdCompatabilityScope tracks GetWorkerBuildIdCompatability API calls received by service
+	MatchingGetWorkerBuildIdCompatabilityScope = "GetWorkerBuildIdCompatability"
+	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdCompatability API calls received by service
 	MatchingInvalidateTaskQueueMetadataScope = "InvalidateTaskQueueMetadata"
-	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdCompatability API calls received by service
 	MatchingGetTaskQueueMetadataScope = "GetTaskQueueMetadata"
 )
 
@@ -1594,6 +1594,7 @@ var (
 	ElasticsearchBulkProcessorBulkSize                        = NewDimensionlessHistogramDef("elasticsearch_bulk_processor_bulk_size")
 	ElasticsearchDocumentParseFailuresCount                   = NewCounterDef("elasticsearch_document_parse_failures_counter")
 	ElasticsearchDocumentGenerateFailuresCount                = NewCounterDef("elasticsearch_document_generate_failures_counter")
+	ElasticsearchCustomOrderByClauseCount                     = NewCounterDef("elasticsearch_custom_order_by_clause_counter")
 	CatchUpReadyShardCountGauge                               = NewGaugeDef("catchup_ready_shard_count")
 	HandoverReadyShardCountGauge                              = NewGaugeDef("handover_ready_shard_count")
 	ReplicatorMessages                                        = NewCounterDef("replicator_messages")

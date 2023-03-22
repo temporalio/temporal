@@ -221,6 +221,7 @@ func (r *resetterImpl) getResetBranchToken(
 		ForkNodeID:      baseLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID.String(), r.workflowID, r.newRunID),
 		ShardID:         shardID,
+		NamespaceID:     r.namespaceID.String(),
 	})
 	if err != nil {
 		return nil, err

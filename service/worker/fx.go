@@ -117,7 +117,7 @@ func VisibilityManagerProvider(
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.EnableReadVisibilityFromES,
-		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // worker visibility never write
+		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // worker visibility never write
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // worker visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,

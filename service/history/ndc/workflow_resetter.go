@@ -564,6 +564,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		ForkNodeID:      forkNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID.String(), workflowID, resetRunID),
 		ShardID:         shardID,
+		NamespaceID:     namespaceID.String(),
 	})
 	if err != nil {
 		return nil, err

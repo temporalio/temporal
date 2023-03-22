@@ -159,9 +159,6 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
 
-	mockMonitor := s.mockResource.MembershipMonitor
-	mockMonitor.EXPECT().GetMemberCount(primitives.FrontendService).Return(5, nil).AnyTimes()
-
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 }
 

@@ -256,6 +256,7 @@ func (r *BranchMgrImpl) createNewBranch(
 		ForkNodeID:      baseBranchLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),
 		ShardID:         shardID,
+		NamespaceID:     namespaceID,
 	})
 	if err != nil {
 		return 0, err

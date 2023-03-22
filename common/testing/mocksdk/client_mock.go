@@ -212,6 +212,21 @@ func (mr *MockClientMockRecorder) GetSearchAttributes(arg0 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockClient)(nil).GetSearchAttributes), arg0)
 }
 
+// GetWorkerBuildIDCompatability mocks base method.
+func (m *MockClient) GetWorkerBuildIDCompatability(arg0 context.Context, arg1 *client.GetWorkerBuildIDCompatabilityOptions) (*client.WorkerBuildIDVersionSets, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkerBuildIDCompatability", arg0, arg1)
+	ret0, _ := ret[0].(*client.WorkerBuildIDVersionSets)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkerBuildIDCompatability indicates an expected call of GetWorkerBuildIDCompatability.
+func (mr *MockClientMockRecorder) GetWorkerBuildIDCompatability(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIDCompatability", reflect.TypeOf((*MockClient)(nil).GetWorkerBuildIDCompatability), arg0, arg1)
+}
+
 // GetWorkflow mocks base method.
 func (m *MockClient) GetWorkflow(arg0 context.Context, arg1, arg2 string) client.WorkflowRun {
 	m.ctrl.T.Helper()
@@ -482,6 +497,20 @@ func (mr *MockClientMockRecorder) TerminateWorkflow(arg0, arg1, arg2, arg3 inter
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflow", reflect.TypeOf((*MockClient)(nil).TerminateWorkflow), varargs...)
+}
+
+// UpdateWorkerBuildIDCompatability mocks base method.
+func (m *MockClient) UpdateWorkerBuildIDCompatability(arg0 context.Context, arg1 *client.UpdateWorkerBuildIDCompatabilityOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkerBuildIDCompatability", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateWorkerBuildIDCompatability indicates an expected call of UpdateWorkerBuildIDCompatability.
+func (mr *MockClientMockRecorder) UpdateWorkerBuildIDCompatability(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIDCompatability", reflect.TypeOf((*MockClient)(nil).UpdateWorkerBuildIDCompatability), arg0, arg1)
 }
 
 // UpdateWorkflow mocks base method.
