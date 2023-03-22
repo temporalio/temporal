@@ -124,10 +124,10 @@ type (
 
 var (
 	defaultLocalActivityOptions = workflow.LocalActivityOptions{
-		// This applies to poll, cancel, and terminate. Start workflow overrides this.
+		// This applies to watch, cancel, and terminate. Start workflow overrides this.
 		ScheduleToCloseTimeout: 1 * time.Hour,
-		// We're using the default workflow task timeout of 10s, so limit local activities to 5s.
-		// We might do up to two per workflow task (cancel previous and start new workflow).
+		// Each local activity is one or a few local RPCs.
+		// Currently this is applied manually, see https://github.com/temporalio/sdk-go/issues/1066
 		StartToCloseTimeout: 5 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
