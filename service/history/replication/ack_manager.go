@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -51,7 +50,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -445,58 +443,10 @@ func (p *ackMgrImpl) generateSyncActivityTask(
 	ctx context.Context,
 	taskInfo *tasks.SyncActivityTask,
 ) (*replicationspb.ReplicationTask, error) {
-	namespaceID := namespace.ID(taskInfo.NamespaceID)
-	workflowID := taskInfo.WorkflowID
-	runID := taskInfo.RunID
-	taskID := taskInfo.TaskID
-	return p.processReplication(
+	return convertActivityStateReplicationTask(
 		ctx,
-		false, // not necessary to send out sync activity task if workflow closed
-		namespaceID,
-		workflowID,
-		runID,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.ScheduledEventID)
-			if !ok {
-				return nil, nil
-			}
-
-			// The activity may be in a scheduled state
-			var startedTime *time.Time
-			if activityInfo.StartedEventId != common.EmptyEventID {
-				startedTime = activityInfo.StartedTime
-			}
-
-			// Version history uses when replicate the sync activity task
-			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
-			if err != nil {
-				return nil, err
-			}
-			return &replicationspb.ReplicationTask{
-				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
-				SourceTaskId: taskID,
-				Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
-					SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-						NamespaceId:        namespaceID.String(),
-						WorkflowId:         workflowID,
-						RunId:              runID,
-						Version:            activityInfo.Version,
-						ScheduledEventId:   activityInfo.ScheduledEventId,
-						ScheduledTime:      activityInfo.ScheduledTime,
-						StartedEventId:     activityInfo.StartedEventId,
-						StartedTime:        startedTime,
-						LastHeartbeatTime:  activityInfo.LastHeartbeatUpdateTime,
-						Details:            activityInfo.LastHeartbeatDetails,
-						Attempt:            activityInfo.Attempt,
-						LastFailure:        activityInfo.RetryLastFailure,
-						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
-						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
-					},
-				},
-				VisibilityTime: &taskInfo.VisibilityTimestamp,
-			}, nil
-		},
+		taskInfo,
+		p.workflowCache,
 	)
 }
 
@@ -504,65 +454,13 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 	ctx context.Context,
 	taskInfo *tasks.HistoryReplicationTask,
 ) (*replicationspb.ReplicationTask, error) {
-	namespaceID := namespace.ID(taskInfo.NamespaceID)
-	workflowID := taskInfo.WorkflowID
-	runID := taskInfo.RunID
-	taskID := taskInfo.TaskID
-	replicationTask, err := p.processReplication(
+	return convertHistoryReplicationTask(
 		ctx,
-		true, // still necessary to send out history replication message if workflow closed
-		namespaceID,
-		workflowID,
-		runID,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			versionHistoryItems, branchToken, err := getVersionHistoryItems(
-				mutableState,
-				taskInfo.FirstEventID,
-				taskInfo.Version,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			eventsBlob, err := p.getEventsBlob(
-				ctx,
-				branchToken,
-				taskInfo.FirstEventID,
-				taskInfo.NextEventID,
-			)
-			if err != nil {
-				return nil, p.handleReadHistoryError(namespaceID, workflowID, runID, err)
-			}
-
-			replicationTask := &replicationspb.ReplicationTask{
-				TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-				SourceTaskId: taskID,
-				Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-					HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-						NamespaceId:         namespaceID.String(),
-						WorkflowId:          workflowID,
-						RunId:               runID,
-						VersionHistoryItems: versionHistoryItems,
-						Events:              eventsBlob,
-						// NewRunEvents will be set in processNewRunReplication
-					},
-				},
-				VisibilityTime: &taskInfo.VisibilityTimestamp,
-			}
-			return replicationTask, nil
-		},
-	)
-	if err != nil {
-		return replicationTask, err
-	}
-	return p.processNewRunReplication(
-		ctx,
-		namespaceID,
-		workflowID,
-		taskInfo.NewRunID,
-		taskInfo.NewRunBranchToken,
-		taskInfo.Version,
-		replicationTask,
+		taskInfo,
+		p.shard.GetShardID(),
+		p.workflowCache,
+		p.executionMgr,
+		p.logger,
 	)
 }
 
@@ -570,28 +468,10 @@ func (p *ackMgrImpl) generateSyncWorkflowStateTask(
 	ctx context.Context,
 	taskInfo *tasks.SyncWorkflowStateTask,
 ) (*replicationspb.ReplicationTask, error) {
-	namespaceID := namespace.ID(taskInfo.NamespaceID)
-	workflowID := taskInfo.WorkflowID
-	runID := taskInfo.RunID
-	taskID := taskInfo.TaskID
-	return p.processReplication(
+	return convertWorkflowStateReplicationTask(
 		ctx,
-		true,
-		namespaceID,
-		workflowID,
-		runID,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			return &replicationspb.ReplicationTask{
-				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
-				SourceTaskId: taskID,
-				Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
-					SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-						WorkflowState: mutableState.CloneToProto(),
-					},
-				},
-				VisibilityTime: &taskInfo.VisibilityTimestamp,
-			}, nil
-		},
+		taskInfo,
+		p.workflowCache,
 	)
 }
 
@@ -740,31 +620,6 @@ func (p *ackMgrImpl) processNewRunReplication(
 	}
 	attr.HistoryTaskAttributes.NewRunEvents = newRunEventsBlob
 	return task, nil
-}
-
-func getVersionHistoryItems(
-	mutableState workflow.MutableState,
-	eventID int64,
-	version int64,
-) ([]*historyspb.VersionHistoryItem, []byte, error) {
-
-	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		versionHistories,
-		versionhistory.NewVersionHistoryItem(
-			eventID,
-			version,
-		),
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	versionHistoryBranch, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
-	if err != nil {
-		return nil, nil, err
-	}
-	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
 }
 
 func (p *ackMgrImpl) handleReadHistoryError(
