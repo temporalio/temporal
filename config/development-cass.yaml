@@ -1,6 +1,7 @@
 log:
   stdout: true
   level: info
+  format: console
 
 persistence:
   defaultStore: cass-default
