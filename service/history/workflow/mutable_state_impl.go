@@ -162,6 +162,8 @@ type (
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
+		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
+
 		// do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
@@ -1999,13 +2001,13 @@ func (ms *MutableStateImpl) ReplicateWorkflowTaskTimedOutEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduleToStartTimeoutEvent(
-	scheduledEventID int64,
+	workflowTask *WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskScheduleToStartTimeoutEvent(scheduledEventID)
+	return ms.workflowTaskManager.AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
@@ -3990,6 +3992,27 @@ func (ms *MutableStateImpl) SetUpdateCondition(
 
 func (ms *MutableStateImpl) GetUpdateCondition() (int64, int64) {
 	return ms.nextEventIDInDB, ms.dbRecordVersion
+}
+
+func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
+	task *tasks.WorkflowTaskTimeoutTask,
+) error {
+	ms.speculativeWorkflowTaskTimeoutTask = task
+	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
+}
+
+func (ms *MutableStateImpl) CheckSpeculativeWorkflowTaskTimeoutTask(
+	task *tasks.WorkflowTaskTimeoutTask,
+) bool {
+	return ms.speculativeWorkflowTaskTimeoutTask == task
+}
+
+func (ms *MutableStateImpl) RemoveSpeculativeWorkflowTaskTimeoutTask() {
+	if ms.speculativeWorkflowTaskTimeoutTask != nil {
+		// Cancelling task prevents it from being submitted to scheduler in memoryScheduledQueue.
+		ms.speculativeWorkflowTaskTimeoutTask.Cancel()
+		ms.speculativeWorkflowTaskTimeoutTask = nil
+	}
 }
 
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {

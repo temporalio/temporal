@@ -462,6 +462,9 @@ const (
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 
+	// MemoryTimerProcessorSchedulerWorkerCount is the number of workers in the task scheduler for in memory timer processor.
+	MemoryTimerProcessorSchedulerWorkerCount = "history.memoryTimerProcessorSchedulerWorkerCount"
+
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor

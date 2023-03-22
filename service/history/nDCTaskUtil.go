@@ -194,7 +194,8 @@ func getTimerTaskEventIDAndRetryable(
 	retryable := true
 
 	if task, ok := timerTask.(*tasks.WorkflowTaskTimeoutTask); ok {
-		retryable = !(executionInfo.WorkflowTaskScheduledEventId == task.EventID && executionInfo.WorkflowTaskAttempt > 1)
+		retryable = !(executionInfo.WorkflowTaskScheduledEventId == task.EventID && executionInfo.WorkflowTaskAttempt > 1) &&
+			executionInfo.WorkflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 	}
 
 	return eventID, retryable
