@@ -61,9 +61,11 @@ type LiteServerConfig struct {
 	FrontendIP string
 	// Port on which frontend service should listen.
 	FrontendPort int
-	// WithMetricsPort sets the listening port for metrics.
+	// WithMetricsPort sets the listening port for the default Prometheus metrics handler.
 	//
 	// When unspecified, the port will be system-chosen.
+	//
+	// This field is ignored when the WithCustomMetricsHandler server option is enabled.
 	MetricsPort int
 	// Namespaces specified here will be automatically registered on Temporal start.
 	Namespaces []string
@@ -75,6 +77,8 @@ type LiteServerConfig struct {
 	//
 	// Storage and client configuration will always be overridden, however base config can be
 	// used to enable settings like TLS or authentication.
+	//
+	// Note that server options can also be passed to the NewLiteServer function.
 	BaseConfig *config.Config
 	// DynamicConfig sets dynamic config values used by the server.
 	DynamicConfig dynamicconfig.StaticClient
@@ -190,7 +194,7 @@ func (cfg *LiteServerConfig) applyDefaults() {
 func (cfg *LiteServerConfig) validate() error {
 	for pragma := range cfg.SQLitePragmas {
 		if _, ok := supportedPragmas[strings.ToLower(pragma)]; !ok {
-			return fmt.Errorf("unsupported sqlite pragma %q. allowed pragmas: %v", pragma, getAllowedPragmas())
+			return fmt.Errorf("unsupported SQLite pragma %q. allowed pragmas: %v", pragma, getAllowedPragmas())
 		}
 	}
 
@@ -204,13 +208,15 @@ func (cfg *LiteServerConfig) validate() error {
 	return nil
 }
 
-// LiteServer is a high level wrapper for temporal.LiteServer that automatically configures a sqlite backend.
+// LiteServer is a high level wrapper for temporal.LiteServer that automatically configures a SQLite backend.
 type LiteServer struct {
 	internal         Server
 	frontendHostPort string
 }
 
-// NewLiteServer returns a Server with a sqlite backend.
+// NewLiteServer initializes a Server with a SQLite backend.
+//
+// If the db file does not already exist, schema migrations are automatically run.
 func NewLiteServer(liteConfig *LiteServerConfig, opts ...ServerOption) (*LiteServer, error) {
 	liteConfig.applyDefaults()
 	if err := liteConfig.validate(); err != nil {
@@ -239,6 +245,7 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...ServerOption) (*LiteSer
 			}
 		}
 	}
+
 	// Pre-create namespaces
 	var namespaces []*sqlite.NamespaceConfig
 	for _, ns := range liteConfig.Namespaces {
