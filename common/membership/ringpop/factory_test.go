@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -138,8 +137,6 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Nil(err)
 	s.Equal("1.2.3.4", cfg.BroadcastAddress)
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
-	err = membership.ValidateConfig(&cfg)
-	s.Nil(err)
 	f, err := newFactory(&cfg, "test", nil, log.NewNoopLogger(), nil, nil, nil, nil)
 	s.Nil(err)
 	s.NotNil(f)
@@ -149,6 +146,25 @@ func getHostsConfig() string {
 	return `name: "test"
 broadcastAddress: "1.2.3.4"
 maxJoinDuration: 30s`
+}
+
+func (s *RingpopSuite) TestInvalidBroadcastAddress() {
+	cfg := config.Membership{
+		MaxJoinDuration:  time.Minute,
+		BroadcastAddress: "oopsie",
+	}
+	_, err := newFactory(
+		&cfg,
+		"test",
+		nil,
+		log.NewNoopLogger(),
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	s.ErrorIs(err, errMalformedBroadcastAddress)
+	s.ErrorContains(err, "oopsie")
 }
 
 func newTestRingpopFactory(

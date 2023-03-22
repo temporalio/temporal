@@ -70,6 +70,8 @@ type factory struct {
 	monOnce sync.Once
 }
 
+var errMalformedBroadcastAddress = fmt.Errorf("ringpop config malformed `broadcastAddress` param")
+
 // newFactory builds a ringpop factory conforming
 // to the underlying configuration
 func newFactory(
@@ -82,8 +84,10 @@ func newFactory(
 	tlsProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
 ) (*factory, error) {
-	if err := membership.ValidateConfig(rpConfig); err != nil {
-		return nil, err
+	if rpConfig.BroadcastAddress != "" {
+		if addr := net.ParseIP(rpConfig.BroadcastAddress); addr == nil {
+			return nil, fmt.Errorf("%w: %s", errMalformedBroadcastAddress, rpConfig.BroadcastAddress)
+		}
 	}
 	if rpConfig.MaxJoinDuration == 0 {
 		rpConfig.MaxJoinDuration = defaultMaxJoinDuration
