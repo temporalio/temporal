@@ -77,18 +77,18 @@ func (c *metricClient) GetTaskQueueMetadata(
 	return c.client.GetTaskQueueMetadata(ctx, request, opts...)
 }
 
-func (c *metricClient) GetWorkerBuildIdCompatability(
+func (c *metricClient) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.GetWorkerBuildIdCompatabilityRequest,
+	request *matchingservice.GetWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (_ *matchingservice.GetWorkerBuildIdCompatabilityResponse, retError error) {
+) (_ *matchingservice.GetWorkerBuildIdCompatibilityResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientGetWorkerBuildIdCompatabilityScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientGetWorkerBuildIdCompatibilityScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.GetWorkerBuildIdCompatability(ctx, request, opts...)
+	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
 func (c *metricClient) InvalidateTaskQueueMetadata(
@@ -133,16 +133,16 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
-func (c *metricClient) UpdateWorkerBuildIdCompatability(
+func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.UpdateWorkerBuildIdCompatabilityRequest,
+	request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (_ *matchingservice.UpdateWorkerBuildIdCompatabilityResponse, retError error) {
+) (_ *matchingservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientUpdateWorkerBuildIdCompatabilityScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientUpdateWorkerBuildIdCompatibilityScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.UpdateWorkerBuildIdCompatability(ctx, request, opts...)
+	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 }

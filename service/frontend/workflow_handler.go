@@ -3604,42 +3604,6 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 	}, nil
 }
 
-func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatabilityResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if err := wh.validateBuildIdCompatabilityUpdate(request); err != nil {
-		return nil, err
-	}
-
-	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
-		return nil, err
-	}
-
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdCompatability(ctx, &matchingservice.UpdateWorkerBuildIdCompatabilityRequest{
-		NamespaceId: namespaceID.String(),
-		Request:     request,
-	})
-
-	if matchingResponse == nil {
-		return nil, err
-	}
-
-	return &workflowservice.UpdateWorkerBuildIdCompatabilityResponse{}, err
-}
-
 func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionRequest,
@@ -3733,7 +3697,43 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 	return nil, serviceerror.NewUnimplemented("PollWorkflowExecutionUpdate is not implemented")
 }
 
-func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.GetWorkerBuildIdCompatabilityRequest) (_ *workflowservice.GetWorkerBuildIdCompatabilityResponse, retError error) {
+func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := wh.validateBuildIdCompatibilityUpdate(request); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		NamespaceId: namespaceID.String(),
+		Request:     request,
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerBuildIdCompatibilityResponse{}, err
+}
+
+func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, request *workflowservice.GetWorkerBuildIdCompatibilityRequest) (_ *workflowservice.GetWorkerBuildIdCompatibilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if wh.isStopped() {
@@ -3753,7 +3753,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, re
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdCompatability(ctx, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
+	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdCompatibility(ctx, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
@@ -4387,8 +4387,8 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 }
 
 //nolint:revive // cyclomatic complexity
-func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
-	req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
+func (wh *WorkflowHandler) validateBuildIdCompatibilityUpdate(
+	req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
 ) error {
 	errDeets := []string{"request to update worker build id compatability requires: "}
 
@@ -4408,7 +4408,7 @@ func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
 	if req.GetOperation() == nil {
 		errDeets = append(errDeets, "an operation to be specified")
 	}
-	if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId); ok {
+	if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId); ok {
 		if op.AddNewCompatibleBuildId.GetNewBuildId() == "" {
 			errDeets = append(errDeets, "`add_new_compatible_version` to be set")
 		} else {
@@ -4417,19 +4417,19 @@ func (wh *WorkflowHandler) validateBuildIdCompatabilityUpdate(
 		if op.AddNewCompatibleBuildId.GetExistingCompatibleBuildId() == "" {
 			errDeets = append(errDeets, "`existing_compatible_version` to be set")
 		}
-	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet); ok {
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet); ok {
 		if op.AddNewBuildIdInNewDefaultSet == "" {
 			errDeets = append(errDeets, "`add_new_version_id_in_new_default_set` to be set")
 		} else {
 			checkIdLen(op.AddNewBuildIdInNewDefaultSet)
 		}
-	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteSetByBuildId); ok {
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatibilityRequest_PromoteSetByBuildId); ok {
 		if op.PromoteSetByBuildId == "" {
 			errDeets = append(errDeets, "`promote_set_by_version_id` to be set")
 		} else {
 			checkIdLen(op.PromoteSetByBuildId)
 		}
-	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatabilityRequest_PromoteBuildIdWithinSet); ok {
+	} else if op, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdCompatibilityRequest_PromoteBuildIdWithinSet); ok {
 		if op.PromoteBuildIdWithinSet == "" {
 			errDeets = append(errDeets, "`promote_version_id_within_set` to be set")
 		} else {
