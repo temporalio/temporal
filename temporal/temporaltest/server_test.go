@@ -27,6 +27,7 @@
 package temporaltest_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,9 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/temporaltest"
 )
 
@@ -181,6 +185,39 @@ func TestDefaultWorkerOptions(t *testing.T) {
 
 	if result != "Hello world" {
 		t.Fatalf("unexpected result: %q", result)
+	}
+}
+
+type denyAllClaimMapper struct{}
+
+func (denyAllClaimMapper) GetClaims(*authorization.AuthInfo) (*authorization.Claims, error) {
+	return nil, fmt.Errorf("no claims for you!")
+}
+
+func TestBaseServerOptions(t *testing.T) {
+	// This test verifies that we can set custom claim mappers and authorizers
+	// with BaseServerOptions.
+	ts := temporaltest.NewServer(
+		temporaltest.WithT(t),
+		temporaltest.WithBaseServerOptions(
+			temporal.WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {
+				return denyAllClaimMapper{}
+			}),
+			temporal.WithAuthorizer(authorization.NewDefaultAuthorizer()),
+		),
+	)
+
+	_, err := ts.GetDefaultClient().ExecuteWorkflow(
+		context.Background(),
+		client.StartWorkflowOptions{},
+		"test-workflow",
+	)
+	if err == nil {
+		t.Fatal("err must be non-nil")
+	}
+
+	if !strings.Contains(err.Error(), authorization.RequestUnauthorized) {
+		t.Errorf("expected error %q, got %q", authorization.RequestUnauthorized, err)
 	}
 }
 
