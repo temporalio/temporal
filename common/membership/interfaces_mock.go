@@ -59,20 +59,6 @@ func (m *MockMonitor) EXPECT() *MockMonitorMockRecorder {
 	return m.recorder
 }
 
-// AddListener mocks base method.
-func (m *MockMonitor) AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *ChangedEvent) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddListener", service, name, notifyChannel)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddListener indicates an expected call of AddListener.
-func (mr *MockMonitorMockRecorder) AddListener(service, name, notifyChannel interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddListener", reflect.TypeOf((*MockMonitor)(nil).AddListener), service, name, notifyChannel)
-}
-
 // EvictSelf mocks base method.
 func (m *MockMonitor) EvictSelf() error {
 	m.ctrl.T.Helper()
@@ -85,21 +71,6 @@ func (m *MockMonitor) EvictSelf() error {
 func (mr *MockMonitorMockRecorder) EvictSelf() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvictSelf", reflect.TypeOf((*MockMonitor)(nil).EvictSelf))
-}
-
-// GetMemberCount mocks base method.
-func (m *MockMonitor) GetMemberCount(service primitives.ServiceName) (int, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMemberCount", service)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetMemberCount indicates an expected call of GetMemberCount.
-func (mr *MockMonitorMockRecorder) GetMemberCount(service interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMemberCount", reflect.TypeOf((*MockMonitor)(nil).GetMemberCount), service)
 }
 
 // GetReachableMembers mocks base method.
@@ -145,20 +116,6 @@ func (m *MockMonitor) Lookup(service primitives.ServiceName, key string) (HostIn
 func (mr *MockMonitorMockRecorder) Lookup(service, key interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lookup", reflect.TypeOf((*MockMonitor)(nil).Lookup), service, key)
-}
-
-// RemoveListener mocks base method.
-func (m *MockMonitor) RemoveListener(service primitives.ServiceName, name string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveListener", service, name)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RemoveListener indicates an expected call of RemoveListener.
-func (mr *MockMonitorMockRecorder) RemoveListener(service, name interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveListener", reflect.TypeOf((*MockMonitor)(nil).RemoveListener), service, name)
 }
 
 // Start mocks base method.

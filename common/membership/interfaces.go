@@ -68,20 +68,8 @@ type (
 		EvictSelf() error
 		Lookup(service primitives.ServiceName, key string) (HostInfo, error)
 		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
-		// AddListener adds a listener for this service.
-		// The listener will get notified on the given
-		// channel, whenever there is a membership change.
-		// @service: The service to be listened on
-		// @name: The name for identifying the listener
-		// @notifyChannel: The channel on which the caller receives notifications
-		AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *ChangedEvent) error
-		// RemoveListener removes a listener for this service.
-		RemoveListener(service primitives.ServiceName, name string) error
 		// GetReachableMembers returns addresses of all members of the ring
 		GetReachableMembers() ([]string, error)
-		// GetMemberCount returns the number of reachable members
-		// currently in this node's membership list for the given service
-		GetMemberCount(service primitives.ServiceName) (int, error)
 		// WaitUntilInitialized blocks until initialization is completed and returns the result
 		// of initialization. The current implementation does log.Fatal if it can't initialize,
 		// so currently this will never return non-nil, except for context cancel/timeout. A
