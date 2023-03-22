@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/temporal"
-	"go.temporal.io/server/temporal/temporaltest"
+	"go.temporal.io/server/temporaltest"
 )
 
 // to be used in example code
