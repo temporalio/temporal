@@ -60,10 +60,12 @@ func (s *RpoSuite) TestMonitor() {
 	time.Sleep(time.Second)
 
 	listenCh := make(chan *membership.ChangedEvent, 5)
-	err := rpm.AddListener(serviceName, "test-listener", listenCh)
+	r, err := rpm.GetResolver(serviceName)
+	s.NoError(err)
+	err = r.AddListener("test-listener", listenCh)
 	s.Nil(err, "AddListener failed")
 
-	host, err := rpm.Lookup(serviceName, "key")
+	host, err := r.Lookup("key")
 	s.Nil(err, "Ringpop monitor failed to find host for key")
 	s.NotNil(host, "Ringpop monitor returned a nil host")
 
@@ -84,11 +86,11 @@ func (s *RpoSuite) TestMonitor() {
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
 
-	host, err = rpm.Lookup(serviceName, "key")
+	host, err = r.Lookup("key")
 	s.Nil(err, "Ringpop monitor failed to find host for key")
 	s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
 
-	err = rpm.RemoveListener(serviceName, "test-listener")
+	err = r.RemoveListener("test-listener")
 	s.Nil(err, "RemoveListener() failed")
 
 	rpm.Stop()
