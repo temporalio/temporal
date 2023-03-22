@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/cache"
 )
 
 type eagerStartDeniedReason metrics.ReasonString
@@ -166,6 +167,14 @@ func (s *Starter) Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	// grab current workflow context as a lock so that user latency can be computed
+	currentRelease, err := s.lockCurrentWorkflowExecution(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { currentRelease(retError) }()
+
 	err = s.createBrandNew(ctx, creationParams)
 	if err == nil {
 		return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
@@ -176,6 +185,21 @@ func (s *Starter) Invoke(
 	}
 	// The history and mutable state we generated above should be deleted by a background process.
 	return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
+}
+
+func (s *Starter) lockCurrentWorkflowExecution(
+	ctx context.Context,
+) (cache.ReleaseCacheFunc, error) {
+	_, currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		s.namespace.ID(),
+		s.request.StartRequest.WorkflowId,
+		workflow.CallerTypeAPI,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return currentRelease, nil
 }
 
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.

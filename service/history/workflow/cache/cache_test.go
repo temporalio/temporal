@@ -41,6 +41,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -364,4 +365,39 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 		go testFn(i, runIDs[i%runIDCount], &runIDRefCounter[i%runIDCount])
 	}
 	stopGroup.Wait()
+}
+
+func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
+	s.cache = NewCache(s.mockShard)
+
+	ctx := metrics.AddMetricsContext(context.Background())
+	_, currentRelease, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		tests.NamespaceID,
+		tests.WorkflowID,
+		workflow.CallerTypeAPI,
+	)
+	s.NoError(err)
+	defer currentRelease(nil)
+
+	latency1, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName())
+	s.True(ok)
+	s.NotZero(latency1)
+
+	_, release, err := s.cache.GetOrCreateWorkflowExecution(
+		ctx,
+		tests.NamespaceID,
+		commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		workflow.CallerTypeAPI,
+	)
+	s.Nil(err)
+	defer release(nil)
+
+	latency2, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName())
+	s.True(ok)
+	s.Greater(latency2, latency1)
+
 }

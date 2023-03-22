@@ -55,6 +55,13 @@ type (
 	ReleaseCacheFunc func(err error)
 
 	Cache interface {
+		GetOrCreateCurrentWorkflowExecution(
+			ctx context.Context,
+			namespaceID namespace.ID,
+			workflowID string,
+			caller workflow.CallerType,
+		) (workflow.Context, ReleaseCacheFunc, error)
+
 		GetOrCreateWorkflowExecution(
 			ctx context.Context,
 			namespaceID namespace.ID,
@@ -95,6 +102,42 @@ func NewCache(shard shard.Context) Cache {
 		metricsHandler: shard.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
 		config:         config,
 	}
+}
+
+func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+	caller workflow.CallerType,
+) (workflow.Context, ReleaseCacheFunc, error) {
+
+	if err := c.validateWorkflowID(workflowID); err != nil {
+		return nil, nil, err
+	}
+
+	handler := c.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryCacheGetOrCreateCurrentScope))
+	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	start := time.Now()
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(start)) }()
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		// using empty run ID as current workflow run ID
+		RunId: "",
+	}
+
+	weCtx, weReleaseFn, err := c.getOrCreateWorkflowExecutionInternal(
+		ctx,
+		namespaceID,
+		execution,
+		handler,
+		true,
+		caller,
+	)
+
+	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(), time.Since(start).Nanoseconds())
+
+	return weCtx, weReleaseFn, err
 }
 
 func (c *CacheImpl) GetOrCreateWorkflowExecution(
@@ -197,13 +240,8 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	execution *commonpb.WorkflowExecution,
 ) error {
 
-	if execution.GetWorkflowId() == "" {
-		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
-	}
-
-	if !utf8.ValidString(execution.GetWorkflowId()) {
-		// We know workflow cannot exist with invalid utf8 string as WorkflowID.
-		return serviceerror.NewNotFound("Workflow not exists.")
+	if err := c.validateWorkflowID(execution.GetWorkflowId()); err != nil {
+		return err
 	}
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
@@ -222,5 +260,20 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
 		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}
+	return nil
+}
+
+func (c *CacheImpl) validateWorkflowID(
+	workflowID string,
+) error {
+	if workflowID == "" {
+		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
+	}
+
+	if !utf8.ValidString(workflowID) {
+		// We know workflow cannot exist with invalid utf8 string as WorkflowID.
+		return serviceerror.NewNotFound("Workflow not exists.")
+	}
+
 	return nil
 }
