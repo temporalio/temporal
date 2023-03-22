@@ -1849,8 +1849,8 @@ func (h *Handler) UpdateWorkflowExecution(
 	return engine.UpdateWorkflowExecution(ctx, request)
 }
 
-func (h *Handler) StreamReplicationMessages(
-	server historyservice.HistoryService_StreamReplicationMessagesServer,
+func (h *Handler) StreamWorkflowReplicationMessages(
+	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 ) (retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()

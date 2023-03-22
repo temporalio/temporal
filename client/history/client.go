@@ -228,10 +228,10 @@ func (c *clientImpl) GetReplicationStatus(
 	return response, nil
 }
 
-func (c *clientImpl) StreamReplicationMessages(
+func (c *clientImpl) StreamWorkflowReplicationMessages(
 	ctx context.Context,
 	opts ...grpc.CallOption,
-) (historyservice.HistoryService_StreamReplicationMessagesClient, error) {
+) (historyservice.HistoryService_StreamWorkflowReplicationMessagesClient, error) {
 	ctxMetadata, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
@@ -244,7 +244,7 @@ func (c *clientImpl) StreamReplicationMessages(
 	if err != nil {
 		return nil, err
 	}
-	return client.StreamReplicationMessages(ctx, opts...)
+	return client.StreamWorkflowReplicationMessages(ctx, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

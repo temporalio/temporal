@@ -140,7 +140,7 @@ service AdminService {
     rpc DeleteWorkflowExecution(DeleteWorkflowExecutionRequest) returns (DeleteWorkflowExecutionResponse) {
     }
 
-    rpc StreamReplicationMessages(stream StreamReplicationMessagesRequest) returns (stream StreamReplicationMessagesResponse) {
+    rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
     }
 }
 

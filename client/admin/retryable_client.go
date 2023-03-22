@@ -50,14 +50,14 @@ func NewRetryableClient(client adminservice.AdminServiceClient, policy backoff.R
 	}
 }
 
-func (c *retryableClient) StreamReplicationMessages(
+func (c *retryableClient) StreamWorkflowReplicationMessages(
 	ctx context.Context,
 	opts ...grpc.CallOption,
-) (adminservice.AdminService_StreamReplicationMessagesClient, error) {
-	var resp adminservice.AdminService_StreamReplicationMessagesClient
+) (adminservice.AdminService_StreamWorkflowReplicationMessagesClient, error) {
+	var resp adminservice.AdminService_StreamWorkflowReplicationMessagesClient
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.StreamReplicationMessages(ctx, opts...)
+		resp, err = c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

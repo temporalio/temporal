@@ -92,15 +92,15 @@ func (c *metricClient) finishMetricsRecording(
 	metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
 }
 
-func (c *metricClient) StreamReplicationMessages(
+func (c *metricClient) StreamWorkflowReplicationMessages(
 	ctx context.Context,
 	opts ...grpc.CallOption,
-) (_ adminservice.AdminService_StreamReplicationMessagesClient, retError error) {
+) (_ adminservice.AdminService_StreamWorkflowReplicationMessagesClient, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.AdminStreamReplicationMessagesScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.AdminStreamWorkflowReplicationMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.StreamReplicationMessages(ctx, opts...)
+	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 }

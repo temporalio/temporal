@@ -76,11 +76,11 @@ func (c *clientImpl) createContextWithLargeTimeout(parent context.Context) (cont
 	return context.WithTimeout(parent, c.largeTimeout)
 }
 
-func (c *clientImpl) StreamReplicationMessages(
+func (c *clientImpl) StreamWorkflowReplicationMessages(
 	ctx context.Context,
 	opts ...grpc.CallOption,
-) (adminservice.AdminService_StreamReplicationMessagesClient, error) {
+) (adminservice.AdminService_StreamWorkflowReplicationMessagesClient, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.StreamReplicationMessages(ctx, opts...)
+	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 }

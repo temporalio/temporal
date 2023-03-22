@@ -1922,13 +1922,13 @@ func (adh *AdminHandler) getWorkflowCompletionEvent(
 	return nil, serviceerror.NewInternal("Unable to find closed event for workflow")
 }
 
-func (adh *AdminHandler) StreamReplicationMessages(
-	targetCluster adminservice.AdminService_StreamReplicationMessagesServer,
+func (adh *AdminHandler) StreamWorkflowReplicationMessages(
+	targetCluster adminservice.AdminService_StreamWorkflowReplicationMessagesServer,
 ) (retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
 	ctx := targetCluster.Context()
-	sourceCluster, err := adh.historyClient.StreamReplicationMessages(ctx)
+	sourceCluster, err := adh.historyClient.StreamWorkflowReplicationMessages(ctx)
 	if err != nil {
 		return err
 	}
@@ -1941,10 +1941,10 @@ func (adh *AdminHandler) StreamReplicationMessages(
 				return err
 			}
 			switch attr := req.GetAttributes().(type) {
-			case *adminservice.StreamReplicationMessagesRequest_SyncReplicationState:
-				if err = sourceCluster.Send(&historyservice.StreamReplicationMessagesRequest{
+			case *adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
+				if err = sourceCluster.Send(&historyservice.StreamWorkflowReplicationMessagesRequest{
 					ShardId: req.ShardId,
-					Attributes: &historyservice.StreamReplicationMessagesRequest_SyncReplicationState{
+					Attributes: &historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 						SyncReplicationState: attr.SyncReplicationState,
 					},
 				}); err != nil {
@@ -1952,7 +1952,7 @@ func (adh *AdminHandler) StreamReplicationMessages(
 				}
 			default:
 				return serviceerror.NewInternal(fmt.Sprintf(
-					"StreamReplicationMessages encountered unknown type: %T %v", attr, attr,
+					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
 				))
 			}
 		}
@@ -1965,10 +1965,10 @@ func (adh *AdminHandler) StreamReplicationMessages(
 				return err
 			}
 			switch attr := resp.GetAttributes().(type) {
-			case *historyservice.StreamReplicationMessagesResponse_ReplicationMessages:
-				if err = targetCluster.Send(&adminservice.StreamReplicationMessagesResponse{
+			case *historyservice.StreamWorkflowReplicationMessagesResponse_ReplicationMessages:
+				if err = targetCluster.Send(&adminservice.StreamWorkflowReplicationMessagesResponse{
 					ShardId: resp.ShardId,
-					Attributes: &adminservice.StreamReplicationMessagesResponse_ReplicationMessages{
+					Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_ReplicationMessages{
 						ReplicationMessages: attr.ReplicationMessages,
 					},
 				}); err != nil {
@@ -1976,7 +1976,7 @@ func (adh *AdminHandler) StreamReplicationMessages(
 				}
 			default:
 				return serviceerror.NewInternal(fmt.Sprintf(
-					"StreamReplicationMessages encountered unknown type: %T %v", attr, attr,
+					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
 				))
 			}
 		}

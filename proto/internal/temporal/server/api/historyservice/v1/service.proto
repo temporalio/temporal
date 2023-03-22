@@ -284,6 +284,6 @@ service HistoryService {
     rpc UpdateWorkflowExecution(UpdateWorkflowExecutionRequest) returns (UpdateWorkflowExecutionResponse) {
     }
 
-    rpc StreamReplicationMessages(stream StreamReplicationMessagesRequest) returns (stream StreamReplicationMessagesResponse) {
+    rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
     }
 }

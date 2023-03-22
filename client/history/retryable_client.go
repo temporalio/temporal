@@ -50,14 +50,14 @@ func NewRetryableClient(client historyservice.HistoryServiceClient, policy backo
 	}
 }
 
-func (c *retryableClient) StreamReplicationMessages(
+func (c *retryableClient) StreamWorkflowReplicationMessages(
 	ctx context.Context,
 	opts ...grpc.CallOption,
-) (historyservice.HistoryService_StreamReplicationMessagesClient, error) {
-	var resp historyservice.HistoryService_StreamReplicationMessagesClient
+) (historyservice.HistoryService_StreamWorkflowReplicationMessagesClient, error) {
+	var resp historyservice.HistoryService_StreamWorkflowReplicationMessagesClient
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.StreamReplicationMessages(ctx, opts...)
+		resp, err = c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

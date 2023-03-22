@@ -62,17 +62,17 @@ func NewMetricClient(
 	}
 }
 
-func (c *metricClient) StreamReplicationMessages(
+func (c *metricClient) StreamWorkflowReplicationMessages(
 	ctx context.Context,
 	opts ...grpc.CallOption,
-) (_ historyservice.HistoryService_StreamReplicationMessagesClient, retError error) {
+) (_ historyservice.HistoryService_StreamWorkflowReplicationMessagesClient, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientStreamReplicationMessagesScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientStreamWorkflowReplicationMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.StreamReplicationMessages(ctx, opts...)
+	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 }
 
 func (c *metricClient) startMetricsRecording(

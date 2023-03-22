@@ -25,6 +25,7 @@
 package ndc
 
 import (
+	"context"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
@@ -39,54 +40,72 @@ import (
 )
 
 func StreamReplicationTasks(
-	server historyservice.HistoryService_StreamReplicationMessagesServer,
+	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
 	sourceClusterShardID historyclient.ClusterShardID,
 	targetClusterShardID historyclient.ClusterShardID,
 ) error {
 	errGroup, ctx := errgroup.WithContext(server.Context())
 	errGroup.Go(func() error {
-		for ctx.Err() == nil {
-			req, err := server.Recv()
-			if err != nil {
-				return err
-			}
-			switch attr := req.GetAttributes().(type) {
-			case *historyservice.StreamReplicationMessagesRequest_SyncReplicationState:
-				lastProcessedMessageID := attr.SyncReplicationState.GetLastProcessedMessageId()
-				lastProcessedMessageIDTime := attr.SyncReplicationState.GetLastProcessedMessageTime()
-				if lastProcessedMessageID != persistence.EmptyQueueMessageID {
-					if err := shardContext.UpdateQueueClusterAckLevel(
-						tasks.CategoryReplication,
-						sourceClusterShardID.ClusterName,
-						tasks.NewImmediateKey(lastProcessedMessageID),
-					); err != nil {
-						shardContext.GetLogger().Error(
-							"error updating replication level for shard",
-							tag.Error(err),
-							tag.OperationFailed,
-						)
-					}
-					shardContext.UpdateRemoteClusterInfo(
-						sourceClusterShardID.ClusterName,
-						lastProcessedMessageID,
-						*lastProcessedMessageIDTime,
-					)
-				}
-			default:
-				return serviceerror.NewInternal(fmt.Sprintf(
-					"StreamReplicationMessages encountered unknown type: %T %v", attr, attr,
-				))
-			}
-		}
-		return ctx.Err()
+		return recvLoop(ctx, server, shardContext, sourceClusterShardID)
 	})
 	errGroup.Go(func() error {
-		for ctx.Err() == nil {
-			// TODO push replication tasks to target
-			panic(targetClusterShardID)
-		}
-		return ctx.Err()
+		return sendLoop(ctx, server, shardContext, targetClusterShardID)
 	})
 	return errGroup.Wait()
+}
+
+func recvLoop(
+	ctx context.Context,
+	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
+	shardContext shard.Context,
+	sourceClusterShardID historyclient.ClusterShardID,
+) error {
+	for ctx.Err() == nil {
+		req, err := server.Recv()
+		if err != nil {
+			return err
+		}
+		switch attr := req.GetAttributes().(type) {
+		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
+			lastProcessedMessageID := attr.SyncReplicationState.GetLastProcessedMessageId()
+			lastProcessedMessageIDTime := attr.SyncReplicationState.GetLastProcessedMessageTime()
+			if lastProcessedMessageID != persistence.EmptyQueueMessageID {
+				if err := shardContext.UpdateQueueClusterAckLevel(
+					tasks.CategoryReplication,
+					sourceClusterShardID.ClusterName,
+					tasks.NewImmediateKey(lastProcessedMessageID),
+				); err != nil {
+					shardContext.GetLogger().Error(
+						"error updating replication level for shard",
+						tag.Error(err),
+						tag.OperationFailed,
+					)
+				}
+				shardContext.UpdateRemoteClusterInfo(
+					sourceClusterShardID.ClusterName,
+					lastProcessedMessageID,
+					*lastProcessedMessageIDTime,
+				)
+			}
+		default:
+			return serviceerror.NewInternal(fmt.Sprintf(
+				"StreamReplicationMessages encountered unknown type: %T %v", attr, attr,
+			))
+		}
+	}
+	return ctx.Err()
+}
+
+func sendLoop(
+	ctx context.Context,
+	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
+	shardContext shard.Context,
+	targetClusterShardID historyclient.ClusterShardID,
+) error {
+	for ctx.Err() == nil {
+		// TODO push replication tasks to target
+		panic(targetClusterShardID)
+	}
+	return ctx.Err()
 }
