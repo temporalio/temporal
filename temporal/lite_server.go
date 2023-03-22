@@ -133,6 +133,9 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *portPr
 			Provider:   nil,
 		},
 	}
+	serverConfig.PublicClient = config.PublicClient{
+		HostPort: fmt.Sprintf("%s:%d", localBroadcastAddress, cfg.FrontendPort),
+	}
 	serverConfig.NamespaceDefaults = config.NamespaceDefaults{
 		Archival: config.ArchivalNamespaceDefaults{
 			History: config.HistoryArchivalNamespaceDefaults{
@@ -259,7 +262,7 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...ServerOption) (*LiteSer
 
 	s := &LiteServer{
 		internal:         srv,
-		frontendHostPort: fmt.Sprintf("%s:%d", liteConfig.FrontendIP, liteConfig.FrontendPort),
+		frontendHostPort: liteConfig.BaseConfig.PublicClient.HostPort,
 	}
 
 	return s, nil
