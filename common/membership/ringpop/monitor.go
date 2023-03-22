@@ -374,14 +374,6 @@ func (rpo *monitor) GetResolver(service primitives.ServiceName) (membership.Serv
 	return ring, nil
 }
 
-func (rpo *monitor) Lookup(service primitives.ServiceName, key string) (membership.HostInfo, error) {
-	ring, err := rpo.GetResolver(service)
-	if err != nil {
-		return nil, err
-	}
-	return ring.Lookup(key)
-}
-
 func (rpo *monitor) GetReachableMembers() ([]string, error) {
 	return rpo.rp.GetReachableMembers()
 }
