@@ -203,7 +203,7 @@ func generateStateReplicationTask(
 	workflowCache wcache.Cache,
 	action func(workflow.MutableState) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
-	context, release, err := workflowCache.GetOrCreateWorkflowExecution(
+	wfContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespace.ID(workflowKey.NamespaceID),
 		commonpb.WorkflowExecution{
@@ -217,7 +217,7 @@ func generateStateReplicationTask(
 	}
 	defer func() { release(retError) }()
 
-	ms, err := context.LoadMutableState(ctx)
+	ms, err := wfContext.LoadMutableState(ctx)
 	switch err.(type) {
 	case nil:
 		if !processTaskIfClosed && !ms.IsWorkflowExecutionRunning() {
@@ -270,7 +270,7 @@ func getBranchToken(
 	eventID int64,
 	eventVersion int64,
 ) (_ []*historyspb.VersionHistoryItem, _ []byte, retError error) {
-	context, release, err := workflowCache.GetOrCreateWorkflowExecution(
+	wfContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespace.ID(workflowKey.NamespaceID),
 		commonpb.WorkflowExecution{
@@ -284,7 +284,7 @@ func getBranchToken(
 	}
 	defer func() { release(retError) }()
 
-	ms, err := context.LoadMutableState(ctx)
+	ms, err := wfContext.LoadMutableState(ctx)
 	switch err.(type) {
 	case nil:
 		return getVersionHistoryItems(ms, eventID, eventVersion)
