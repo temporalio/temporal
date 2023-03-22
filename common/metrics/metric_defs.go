@@ -247,6 +247,8 @@ const (
 	FrontendClientListOpenWorkflowExecutionsScope = "FrontendClientListOpenWorkflowExecutions"
 	// FrontendClientPollActivityTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollActivityTaskQueueScope = "FrontendClientPollActivityTaskQueue"
+	//FrontendClientPollWorkflowExecutionUpdateScope tracks RPC calls to frontend service
+	FrontendClientPollWorkflowExecutionUpdateScope = "FrontendClientPollWorkflowExecutionUpdate"
 	// FrontendClientPollWorkflowTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollWorkflowTaskQueueScope = "FrontendClientPollWorkflowTaskQueue"
 	// FrontendClientQueryWorkflowScope tracks RPC calls to frontend service

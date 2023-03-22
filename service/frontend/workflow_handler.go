@@ -34,6 +34,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gogo/status"
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -47,6 +48,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -3698,6 +3700,39 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	})
 
 	return histResp.GetResponse(), err
+}
+
+func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionUpdateRequest,
+) (_ *workflowservice.PollWorkflowExecutionUpdateResponse, retError error) {
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.GetUpdateRef() == nil {
+		return nil, errUpdateRefNotSet
+	}
+
+	if request.GetWaitPolicy() == nil {
+		request.WaitPolicy = &updatepb.WaitPolicy{}
+	}
+	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
+
+	_, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if !wh.config.EnableUpdateWorkflowExecution(request.Namespace) {
+		return nil, errUpdateWorkflowExecutionAPINotAllowed
+	}
+
+	return nil, status.Error(codes.Unimplemented, "PollWorkflowExecutionUpdate is not implemented")
 }
 
 func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.GetWorkerBuildIdCompatabilityRequest) (_ *workflowservice.GetWorkerBuildIdCompatabilityResponse, retError error) {

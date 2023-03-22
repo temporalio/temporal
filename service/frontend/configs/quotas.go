@@ -46,6 +46,7 @@ var (
 		"TerminateWorkflowExecution":       0,
 		"GetWorkflowExecutionHistory":      0,
 		"UpdateWorkflowExecution":          0,
+		"PollWorkflowExecutionUpdate":      0,
 
 		// priority 1
 		"RecordActivityTaskHeartbeat":      1,
