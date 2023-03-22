@@ -564,6 +564,7 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 // Note: this mutates startRequest by unsetting the fields ContinuedFailure and
 // LastCompletionResult (these should only be set on workflows created by the scheduler
 // worker).
+// Assumes startRequest is valid. See frontend workflow_handler for detailed validation logic.
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
@@ -588,10 +589,11 @@ func CreateHistoryStartWorkflowRequest(
 		histRequest.WorkflowExecutionExpirationTime = timestamp.TimePtr(deadline.Round(time.Millisecond))
 	}
 
+	// CronSchedule and WorkflowStartDelay should not both be set on the same request
 	if len(startRequest.CronSchedule) != 0 {
 		histRequest.ContinueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
-
+	
 	if timestamp.DurationValue(startRequest.GetWorkflowStartDelay()) > 0 {
 		histRequest.FirstWorkflowTaskBackoff = startRequest.GetWorkflowStartDelay()
 	}
