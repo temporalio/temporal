@@ -34,7 +34,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	history "go.temporal.io/api/history/v1"
-
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
