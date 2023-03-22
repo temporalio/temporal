@@ -680,6 +680,14 @@ type (
 		SignalRequestIDCount   int
 		BufferedEventsCount    int
 		TaskCountByCategory    map[string]int
+
+		// Total item count for various information captured within mutable state
+		TotalActivityCount              int64
+		TotalUserTimerCount             int64
+		TotalChildExecutionCount        int64
+		TotalRequestCancelExternalCount int64
+		TotalSignalExternalCount        int64
+		TotalSignalCount                int64
 	}
 
 	HistoryStatistics struct {
