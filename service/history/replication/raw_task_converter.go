@@ -53,10 +53,12 @@ func convertActivityStateReplicationTask(
 ) (*replicationspb.ReplicationTask, error) {
 	return generateStateReplicationTask(
 		ctx,
-		false, // not necessary to send out sync activity task if workflow closed
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
+			if !mutableState.IsWorkflowExecutionRunning() {
+				return nil, nil
+			}
 			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.ScheduledEventID)
 			if !ok {
 				return nil, nil
@@ -111,7 +113,6 @@ func convertWorkflowStateReplicationTask(
 ) (*replicationspb.ReplicationTask, error) {
 	return generateStateReplicationTask(
 		ctx,
-		true,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
@@ -198,7 +199,6 @@ func convertHistoryReplicationTask(
 
 func generateStateReplicationTask(
 	ctx context.Context,
-	processTaskIfClosed bool,
 	workflowKey definition.WorkflowKey,
 	workflowCache wcache.Cache,
 	action func(workflow.MutableState) (*replicationspb.ReplicationTask, error),
@@ -220,10 +220,6 @@ func generateStateReplicationTask(
 	ms, err := wfContext.LoadMutableState(ctx)
 	switch err.(type) {
 	case nil:
-		if !processTaskIfClosed && !ms.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the replication task
-			return nil, nil
-		}
 		return action(ms)
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil

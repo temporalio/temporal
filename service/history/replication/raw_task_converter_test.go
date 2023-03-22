@@ -53,7 +53,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/history/workflow/cache"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -74,13 +73,13 @@ type (
 		runID           string
 		workflowContext *workflow.MockContext
 		mutableState    *workflow.MockMutableState
-		releaseFn       cache.ReleaseCacheFunc
+		releaseFn       wcache.ReleaseCacheFunc
 		lockReleased    bool
 
 		newRunID           string
 		newWorkflowContext *workflow.MockContext
 		newMutableState    *workflow.MockMutableState
-		newReleaseFn       cache.ReleaseCacheFunc
+		newReleaseFn       wcache.ReleaseCacheFunc
 		newLockReleased    bool
 	}
 )
