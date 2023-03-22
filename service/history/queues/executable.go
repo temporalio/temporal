@@ -129,9 +129,6 @@ type (
 	}
 )
 
-// TODO: CriticalRetryAttempt probably should be removed as it's only
-// used for emiting logs and metrics when # of attempts is high, and
-// doesn't have to be a dynamic config.
 func NewExecutable(
 	readerID int32,
 	task tasks.Task,
@@ -172,15 +169,26 @@ func NewExecutable(
 }
 
 func (e *executableImpl) Execute() (retErr error) {
-	if e.State() == ctasks.TaskStateCancelled {
+	e.Lock()
+	if e.state == ctasks.TaskStateCancelled {
+		e.Unlock()
 		return nil
 	}
 
 	ns, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+	var callerInfo headers.CallerInfo
+	switch e.priority {
+	case ctasks.PriorityHigh:
+		callerInfo = headers.NewBackgroundCallerInfo(ns.String())
+	default:
+		// priority low or unknown
+		callerInfo = headers.NewPreemptableCallerInfo(ns.String())
+	}
 	ctx := headers.SetCallerInfo(
 		metrics.AddMetricsContext(context.Background()),
-		headers.NewBackgroundCallerInfo(ns.String()),
+		callerInfo,
 	)
+	e.Unlock()
 
 	defer func() {
 		if panicObj := recover(); panicObj != nil {

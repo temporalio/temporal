@@ -91,7 +91,19 @@ func NewBackgroundCallerInfo(
 	}
 }
 
-// SetCallerInfo sets callerName, callerType and CcllOrigin in the context.
+// NewPreemptableCallerInfo creates a new CallerInfo with Preemptable callerType
+// and empty callOrigin.
+// This is equivalent to NewCallerInfo(callerName, CallerTypePreemptable, "")
+func NewPreemptableCallerInfo(
+	callerName string,
+) CallerInfo {
+	return CallerInfo{
+		CallerName: callerName,
+		CallerType: CallerTypePreemptable,
+	}
+}
+
+// SetCallerInfo sets callerName, callerType and CallOrigin in the context.
 // Existing values will be overwritten if new value is not empty.
 // TODO: consider only set the caller info to golang context instead of grpc metadata
 // and propagate to grpc outgoing context upon making an rpc call
