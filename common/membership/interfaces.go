@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -59,8 +58,6 @@ type (
 	// Monitor provides membership information for all temporal services.
 	// It can be used to query which member host of a service is responsible for serving a given key.
 	Monitor interface {
-		common.Daemon
-
 		WhoAmI() (HostInfo, error)
 		// EvictSelf evicts this member from the membership ring. After this method is
 		// called, other members will discover that this node is no longer part of the

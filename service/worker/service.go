@@ -368,7 +368,6 @@ func (s *Service) Start() {
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 
 	s.clusterMetadata.Start()
-	s.membershipMonitor.Start()
 	s.namespaceRegistry.Start()
 
 	hostInfo, err := s.membershipMonitor.WhoAmI()
@@ -431,7 +430,6 @@ func (s *Service) Stop() {
 	s.perNamespaceWorkerManager.Stop()
 	s.workerManager.Stop()
 	s.namespaceRegistry.Stop()
-	s.membershipMonitor.Stop()
 	s.clusterMetadata.Stop()
 	s.persistenceBean.Close()
 	s.visibilityManager.Close()
