@@ -76,7 +76,7 @@ var (
 		"GetReplicationStatus":                   0,
 		"DeleteWorkflowVisibilityRecord":         0,
 		"UpdateWorkflowExecution":                0,
-		"StreamReplicationMessages":              0,
+		"StreamWorkflowReplicationMessages":      0,
 	}
 
 	APIPrioritiesOrdered = []int{0}
