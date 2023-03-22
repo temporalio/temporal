@@ -183,8 +183,8 @@ proto-mocks: $(PROTO_OUT)
 	$(NEWLINE))
 
 update-go-api:
-	@printf $(COLOR) "Update go.temporal.io/api@master..."
-	@go get -u go.temporal.io/api@master
+	@printf $(COLOR) "Update go.temporal.io/api@f2c7ab685b44970d22c2a8cee3d91799dd1ccd17..."
+	@go get -u go.temporal.io/api@f2c7ab685b44970d22c2a8cee3d91799dd1ccd17
 
 goimports-proto:
 	@printf $(COLOR) "Run goimports for proto files..."
