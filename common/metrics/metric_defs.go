@@ -197,8 +197,8 @@ const (
 	AdminRemoveRemoteClusterScope = "AdminRemoveRemoteCluster"
 	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecution
 	AdminDeleteWorkflowExecutionScope = "AdminDeleteWorkflowExecution"
-	// AdminStreamReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
-	AdminStreamReplicationMessagesScope = "AdminStreamReplicationMessages"
+	// AdminStreamWorkflowReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
+	AdminStreamWorkflowReplicationMessagesScope = "AdminStreamWorkflowReplicationMessages"
 
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope
@@ -435,8 +435,8 @@ const (
 	HistoryClientDescribeHistoryHostScope = "HistoryClientDescribeHistoryHost"
 	// HistoryClientGetReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
-	// HistoryClientStreamReplicationMessagesScope tracks RPC calls to history service
-	HistoryClientStreamReplicationMessagesScope = "HistoryClientStreamReplicationMessages"
+	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientStreamWorkflowReplicationMessagesScope = "HistoryClientStreamWorkflowReplicationMessages"
 )
 
 // Matching Client Operations

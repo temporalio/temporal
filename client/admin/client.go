@@ -31,6 +31,8 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/debug"
 )
@@ -72,4 +74,13 @@ func (c *clientImpl) createContextWithLargeTimeout(parent context.Context) (cont
 		return context.WithTimeout(context.Background(), c.largeTimeout)
 	}
 	return context.WithTimeout(parent, c.largeTimeout)
+}
+
+func (c *clientImpl) StreamWorkflowReplicationMessages(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (adminservice.AdminService_StreamWorkflowReplicationMessagesClient, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 }

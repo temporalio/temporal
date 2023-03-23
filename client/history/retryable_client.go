@@ -25,6 +25,10 @@
 package history
 
 import (
+	"context"
+
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/backoff"
 )
@@ -44,4 +48,18 @@ func NewRetryableClient(client historyservice.HistoryServiceClient, policy backo
 		policy:      policy,
 		isRetryable: isRetryable,
 	}
+}
+
+func (c *retryableClient) StreamWorkflowReplicationMessages(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (historyservice.HistoryService_StreamWorkflowReplicationMessagesClient, error) {
+	var resp historyservice.HistoryService_StreamWorkflowReplicationMessagesClient
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.StreamWorkflowReplicationMessages(ctx, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
 }
