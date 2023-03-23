@@ -62,8 +62,8 @@ func (s *RpoSuite) TestMonitor() {
 	listenCh := make(chan *membership.ChangedEvent, 5)
 	r, err := rpm.GetResolver(serviceName)
 	s.NoError(err)
-	err = r.AddListener("test-listener", listenCh)
-	s.Nil(err, "AddListener failed")
+	err = r.AddMembershipListener("test-listener", listenCh)
+	s.Nil(err, "AddMembershipListener failed")
 
 	host, err := r.Lookup("key")
 	s.Nil(err, "Ringpop monitor failed to find host for key")
@@ -90,8 +90,8 @@ func (s *RpoSuite) TestMonitor() {
 	s.Nil(err, "Ringpop monitor failed to find host for key")
 	s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
 
-	err = r.RemoveListener("test-listener")
-	s.Nil(err, "RemoveListener() failed")
+	err = r.RemoveMembershipListener("test-listener")
+	s.Nil(err, "RemoveMembershipListener() failed")
 
 	rpm.Stop()
 	testService.Stop()

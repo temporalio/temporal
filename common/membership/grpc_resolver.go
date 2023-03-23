@@ -103,7 +103,7 @@ type grpcResolver struct {
 }
 
 func (m *grpcResolver) start() error {
-	if err := m.r.AddListener(fmt.Sprintf("%p", m), m.notifyCh); err != nil {
+	if err := m.r.AddMembershipListener(fmt.Sprintf("%p", m), m.notifyCh); err != nil {
 		return err
 	}
 	m.wg.Add(1)
@@ -149,7 +149,7 @@ func (m *grpcResolver) ResolveNow(_ resolver.ResolveNowOptions) {
 }
 
 func (m *grpcResolver) Close() {
-	if err := m.r.RemoveListener(fmt.Sprintf("%p", m)); err != nil {
+	if err := m.r.RemoveMembershipListener(fmt.Sprintf("%p", m)); err != nil {
 		fmt.Printf("error removing listener from gRPC resolver: %v", err)
 	}
 	close(m.notifyCh)

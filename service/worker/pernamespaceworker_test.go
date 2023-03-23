@@ -110,14 +110,14 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 	s.manager.initialRetry = 1 * time.Millisecond
 
 	s.registry.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any())
-	s.serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any())
+	s.serviceResolver.EXPECT().AddMembershipListener(gomock.Any(), gomock.Any())
 
 	s.manager.Start(s.hostInfo, s.serviceResolver)
 }
 
 func (s *perNsWorkerManagerSuite) TearDownTest() {
 	s.registry.EXPECT().UnregisterStateChangeCallback(gomock.Any())
-	s.serviceResolver.EXPECT().RemoveListener(gomock.Any())
+	s.serviceResolver.EXPECT().RemoveMembershipListener(gomock.Any())
 	s.manager.Stop()
 	s.controller.Finish()
 }

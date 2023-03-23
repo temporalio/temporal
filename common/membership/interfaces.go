@@ -42,7 +42,7 @@ var ErrUnknownService = errors.New("service not tracked by Monitor")
 // ErrInsufficientHosts is thrown when there are not enough hosts to serve the request
 var ErrInsufficientHosts = serviceerror.NewUnavailable("Not enough hosts to serve the request")
 
-// ErrListenerAlreadyExist is thrown on a duplicate AddListener call from the same listener
+// ErrListenerAlreadyExist is thrown on a duplicate AddMembershipListener call from the same listener
 var ErrListenerAlreadyExist = errors.New("listener already exist for the service")
 
 // ErrIncorrectAddressFormat is thrown on incorrect address format
@@ -80,13 +80,12 @@ type (
 	// It can be used to resolve which member host is responsible for serving a given key.
 	ServiceResolver interface {
 		Lookup(key string) (HostInfo, error)
-		// AddListener adds a listener which will get notified on the given
-		// channel, whenever membership changes.
-		// @name: The name for identifying the listener
-		// @notifyChannel: The channel on which the caller receives notifications
-		AddListener(name string, notifyChannel chan<- *ChangedEvent) error
-		// RemoveListener removes a listener for this service.
-		RemoveListener(name string) error
+		// AddMembershipListener adds a listener which will get notified on the given channel whenever membership
+		// changes. It returns an error if a listener with the same name already exists.
+		AddMembershipListener(name string, notifyChannel chan<- *ChangedEvent) error
+		// RemoveMembershipListener removes a membership listener for this service. It returns an error if a membership
+		// listener with the given name does not exist.
+		RemoveMembershipListener(name string) error
 		// MemberCount returns host count in hashring for any particular role
 		MemberCount() int
 		// Members returns all host addresses in hashring for any particular role

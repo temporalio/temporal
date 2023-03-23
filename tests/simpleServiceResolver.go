@@ -52,11 +52,11 @@ func (s *simpleResolver) Lookup(key string) (membership.HostInfo, error) {
 	return s.hosts[idx], nil
 }
 
-func (s *simpleResolver) AddListener(name string, notifyChannel chan<- *membership.ChangedEvent) error {
+func (s *simpleResolver) AddMembershipListener(name string, notifyChannel chan<- *membership.ChangedEvent) error {
 	return nil
 }
 
-func (s *simpleResolver) RemoveListener(name string) error {
+func (s *simpleResolver) RemoveMembershipListener(name string) error {
 	return nil
 }
 

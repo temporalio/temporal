@@ -164,7 +164,7 @@ func (wm *perNamespaceWorkerManager) Start(
 	// this will call namespaceCallback with current namespaces
 	wm.namespaceRegistry.RegisterStateChangeCallback(wm, wm.namespaceCallback)
 
-	err := wm.serviceResolver.AddListener(perNamespaceWorkerManagerListenerKey, wm.membershipChangedCh)
+	err := wm.serviceResolver.AddMembershipListener(perNamespaceWorkerManagerListenerKey, wm.membershipChangedCh)
 	if err != nil {
 		wm.logger.Fatal("Unable to register membership listener", tag.Error(err))
 	}
@@ -185,7 +185,7 @@ func (wm *perNamespaceWorkerManager) Stop() {
 	wm.logger.Info("", tag.LifeCycleStopping)
 
 	wm.namespaceRegistry.UnregisterStateChangeCallback(wm)
-	err := wm.serviceResolver.RemoveListener(perNamespaceWorkerManagerListenerKey)
+	err := wm.serviceResolver.RemoveMembershipListener(perNamespaceWorkerManagerListenerKey)
 	if err != nil {
 		wm.logger.Error("Unable to unregister membership listener", tag.Error(err))
 	}

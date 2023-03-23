@@ -78,8 +78,8 @@ type serviceResolver struct {
 	lastRefreshTime time.Time
 	membersMap      map[string]struct{} // for de-duping change notifications
 
-	listenerLock sync.RWMutex
-	listeners    map[string]chan<- *membership.ChangedEvent
+	membershipListenersLock sync.RWMutex
+	membershipListeners     map[string]chan<- *membership.ChangedEvent
 }
 
 var _ membership.ServiceResolver = (*serviceResolver)(nil)
@@ -91,15 +91,15 @@ func newServiceResolver(
 	logger log.Logger,
 ) *serviceResolver {
 	resolver := &serviceResolver{
-		status:      common.DaemonStatusInitialized,
-		service:     service,
-		port:        port,
-		rp:          rp,
-		refreshChan: make(chan struct{}),
-		shutdownCh:  make(chan struct{}),
-		logger:      log.With(logger, tag.ComponentServiceResolver, tag.Service(service)),
-		membersMap:  make(map[string]struct{}),
-		listeners:   make(map[string]chan<- *membership.ChangedEvent),
+		status:              common.DaemonStatusInitialized,
+		service:             service,
+		port:                port,
+		rp:                  rp,
+		refreshChan:         make(chan struct{}),
+		shutdownCh:          make(chan struct{}),
+		logger:              log.With(logger, tag.ComponentServiceResolver, tag.Service(service)),
+		membersMap:          make(map[string]struct{}),
+		membershipListeners: make(map[string]chan<- *membership.ChangedEvent),
 	}
 	resolver.ringValue.Store(newHashRing())
 	return resolver
@@ -138,11 +138,11 @@ func (r *serviceResolver) Stop() {
 		return
 	}
 
-	r.listenerLock.Lock()
-	defer r.listenerLock.Unlock()
+	r.membershipListenersLock.Lock()
+	defer r.membershipListenersLock.Unlock()
 	r.rp.RemoveListener(r)
 	r.ringValue.Store(newHashRing())
-	r.listeners = make(map[string]chan<- *membership.ChangedEvent)
+	r.membershipListeners = make(map[string]chan<- *membership.ChangedEvent)
 	close(r.shutdownCh)
 
 	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
@@ -168,30 +168,30 @@ func (r *serviceResolver) Lookup(key string) (membership.HostInfo, error) {
 	return newHostInfo(addr, r.getLabelsMap()), nil
 }
 
-func (r *serviceResolver) AddListener(
+func (r *serviceResolver) AddMembershipListener(
 	name string,
 	notifyChannel chan<- *membership.ChangedEvent,
 ) error {
-	r.listenerLock.Lock()
-	defer r.listenerLock.Unlock()
-	_, ok := r.listeners[name]
+	r.membershipListenersLock.Lock()
+	defer r.membershipListenersLock.Unlock()
+	_, ok := r.membershipListeners[name]
 	if ok {
 		return membership.ErrListenerAlreadyExist
 	}
-	r.listeners[name] = notifyChannel
+	r.membershipListeners[name] = notifyChannel
 	return nil
 }
 
-func (r *serviceResolver) RemoveListener(
+func (r *serviceResolver) RemoveMembershipListener(
 	name string,
 ) error {
-	r.listenerLock.Lock()
-	defer r.listenerLock.Unlock()
-	_, ok := r.listeners[name]
+	r.membershipListenersLock.Lock()
+	defer r.membershipListenersLock.Unlock()
+	_, ok := r.membershipListeners[name]
 	if !ok {
 		return nil
 	}
-	delete(r.listeners, name)
+	delete(r.membershipListeners, name)
 	return nil
 }
 
@@ -316,11 +316,11 @@ func (r *serviceResolver) getReachableMembers() ([]string, error) {
 }
 
 func (r *serviceResolver) emitEvent(event *membership.ChangedEvent) {
-	// Notify listeners
-	r.listenerLock.RLock()
-	defer r.listenerLock.RUnlock()
+	// Notify membershipListeners
+	r.membershipListenersLock.RLock()
+	defer r.membershipListenersLock.RUnlock()
 
-	for name, ch := range r.listeners {
+	for name, ch := range r.membershipListeners {
 		select {
 		case ch <- event:
 		default:

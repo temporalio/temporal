@@ -179,18 +179,18 @@ func (m *MockServiceResolver) EXPECT() *MockServiceResolverMockRecorder {
 	return m.recorder
 }
 
-// AddListener mocks base method.
-func (m *MockServiceResolver) AddListener(name string, notifyChannel chan<- *ChangedEvent) error {
+// AddMembershipListener mocks base method.
+func (m *MockServiceResolver) AddMembershipListener(name string, notifyChannel chan<- *ChangedEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddListener", name, notifyChannel)
+	ret := m.ctrl.Call(m, "AddMembershipListener", name, notifyChannel)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// AddListener indicates an expected call of AddListener.
-func (mr *MockServiceResolverMockRecorder) AddListener(name, notifyChannel interface{}) *gomock.Call {
+// AddMembershipListener indicates an expected call of AddMembershipListener.
+func (mr *MockServiceResolverMockRecorder) AddMembershipListener(name, notifyChannel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddListener", reflect.TypeOf((*MockServiceResolver)(nil).AddListener), name, notifyChannel)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMembershipListener", reflect.TypeOf((*MockServiceResolver)(nil).AddMembershipListener), name, notifyChannel)
 }
 
 // Lookup mocks base method.
@@ -236,18 +236,18 @@ func (mr *MockServiceResolverMockRecorder) Members() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Members", reflect.TypeOf((*MockServiceResolver)(nil).Members))
 }
 
-// RemoveListener mocks base method.
-func (m *MockServiceResolver) RemoveListener(name string) error {
+// RemoveMembershipListener mocks base method.
+func (m *MockServiceResolver) RemoveMembershipListener(name string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveListener", name)
+	ret := m.ctrl.Call(m, "RemoveMembershipListener", name)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// RemoveListener indicates an expected call of RemoveListener.
-func (mr *MockServiceResolverMockRecorder) RemoveListener(name interface{}) *gomock.Call {
+// RemoveMembershipListener indicates an expected call of RemoveMembershipListener.
+func (mr *MockServiceResolverMockRecorder) RemoveMembershipListener(name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveListener", reflect.TypeOf((*MockServiceResolver)(nil).RemoveListener), name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveMembershipListener", reflect.TypeOf((*MockServiceResolver)(nil).RemoveMembershipListener), name)
 }
 
 // RequestRefresh mocks base method.

@@ -120,7 +120,7 @@ func (c *ControllerImpl) Start() {
 	c.shutdownWG.Add(1)
 	go c.shardManagementPump()
 
-	if err := c.historyServiceResolver.AddListener(
+	if err := c.historyServiceResolver.AddMembershipListener(
 		shardControllerMembershipUpdateListenerName,
 		c.membershipUpdateCh,
 	); err != nil {
@@ -141,7 +141,7 @@ func (c *ControllerImpl) Stop() {
 
 	close(c.shutdownCh)
 
-	if err := c.historyServiceResolver.RemoveListener(
+	if err := c.historyServiceResolver.RemoveMembershipListener(
 		shardControllerMembershipUpdateListenerName,
 	); err != nil {
 		c.contextTaggedLogger.Error("Error removing membership update listener", tag.Error(err), tag.OperationFailed)

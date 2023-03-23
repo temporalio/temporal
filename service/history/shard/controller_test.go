@@ -37,9 +37,10 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"golang.org/x/exp/maps"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -455,7 +456,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName,
+	s.mockServiceResolver.EXPECT().AddMembershipListener(shardControllerMembershipUpdateListenerName,
 		gomock.Any()).Return(nil).AnyTimes()
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -529,7 +530,8 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 
 	workerWG.Wait()
 
-	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveMembershipListener(shardControllerMembershipUpdateListenerName).Return(nil).
+		AnyTimes()
 	for shardID := int32(3); shardID <= numShards; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return()
@@ -555,7 +557,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
 
-	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().AddMembershipListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
@@ -582,7 +584,8 @@ func (s *controllerSuite) TestShardControllerClosed() {
 		}()
 	}
 
-	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveMembershipListener(shardControllerMembershipUpdateListenerName).Return(nil).
+		AnyTimes()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop()
@@ -714,8 +717,9 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 func (s *controllerSuite) TestShardControllerFuzz() {
 	s.config.NumberOfShards = 10
 
-	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
-	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().AddMembershipListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveMembershipListener(shardControllerMembershipUpdateListenerName).Return(nil).
+		AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 
