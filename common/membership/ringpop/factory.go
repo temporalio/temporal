@@ -70,7 +70,7 @@ type factory struct {
 	monOnce sync.Once
 }
 
-var errMalformedBroadcastAddress = fmt.Errorf("ringpop config malformed `broadcastAddress` param")
+var errMalformedBroadcastAddress = errors.New("ringpop config malformed `broadcastAddress` param")
 
 // newFactory builds a ringpop factory conforming
 // to the underlying configuration
