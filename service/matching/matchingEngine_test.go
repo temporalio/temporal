@@ -1916,9 +1916,9 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	tq := "tupac"
 
 	// Ensure we can fetch without first needing to set anything
-	res, err := s.matchingEngine.GetWorkerBuildIdCompatability(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
+	res, err := s.matchingEngine.GetWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
 			MaxSets:   0,
@@ -1930,12 +1930,12 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	// Set a long list of versions
 	for i := 0; i < 100; i++ {
 		id := fmt.Sprintf("%d", i)
-		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatability(s.handlerContext, &matchingservice.UpdateWorkerBuildIdCompatabilityRequest{
+		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 				Namespace: namespaceID.String(),
 				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 					AddNewBuildIdInNewDefaultSet: id,
 				},
 			},
@@ -1950,13 +1950,13 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		if i == 0 {
 			prevCompat = "99"
 		}
-		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatability(s.handlerContext, &matchingservice.UpdateWorkerBuildIdCompatabilityRequest{
+		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 				Namespace: namespaceID.String(),
 				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId{
-					AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
+				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+					AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
 						NewBuildId:                id,
 						ExistingCompatibleBuildId: prevCompat,
 						MakeSetDefault:            false,
@@ -1969,9 +1969,9 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	}
 
 	// Ensure they all exist
-	res, err = s.matchingEngine.GetWorkerBuildIdCompatability(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
+	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
 			MaxSets:   0,
@@ -1987,9 +1987,9 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.Equal("0", majorSets[0].GetBuildIds()[0])
 
 	// Ensure depth limiting works
-	res, err = s.matchingEngine.GetWorkerBuildIdCompatability(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
+	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
 			MaxSets:   1,
@@ -2003,9 +2003,9 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.Equal("99.9", lastNode)
 	s.Equal(1, len(majorSets))
 
-	res, err = s.matchingEngine.GetWorkerBuildIdCompatability(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
+	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
 			MaxSets:   5,
@@ -2027,9 +2027,9 @@ func (s *matchingEngineSuite) TestActivityQueueMetadataInvalidate() {
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
 
-	res, err := s.matchingEngine.GetWorkerBuildIdCompatability(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatabilityRequest{
+	res, err := s.matchingEngine.GetWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
 		},

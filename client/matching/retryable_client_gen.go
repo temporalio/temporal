@@ -110,15 +110,15 @@ func (c *retryableClient) GetTaskQueueMetadata(
 	return resp, err
 }
 
-func (c *retryableClient) GetWorkerBuildIdCompatability(
+func (c *retryableClient) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.GetWorkerBuildIdCompatabilityRequest,
+	request *matchingservice.GetWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.GetWorkerBuildIdCompatabilityResponse, error) {
-	var resp *matchingservice.GetWorkerBuildIdCompatabilityResponse
+) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
+	var resp *matchingservice.GetWorkerBuildIdCompatibilityResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.GetWorkerBuildIdCompatability(ctx, request, opts...)
+		resp, err = c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -215,15 +215,15 @@ func (c *retryableClient) RespondQueryTaskCompleted(
 	return resp, err
 }
 
-func (c *retryableClient) UpdateWorkerBuildIdCompatability(
+func (c *retryableClient) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.UpdateWorkerBuildIdCompatabilityRequest,
+	request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.UpdateWorkerBuildIdCompatabilityResponse, error) {
-	var resp *matchingservice.UpdateWorkerBuildIdCompatabilityResponse
+) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
+	var resp *matchingservice.UpdateWorkerBuildIdCompatibilityResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.UpdateWorkerBuildIdCompatability(ctx, request, opts...)
+		resp, err = c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

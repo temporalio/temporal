@@ -83,8 +83,8 @@ service MatchingService {
     //     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
     // (-- api-linter: core::0134::method-signature=disabled
     //     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
-    rpc UpdateWorkerBuildIdCompatability (UpdateWorkerBuildIdCompatabilityRequest) returns (UpdateWorkerBuildIdCompatabilityResponse) {}
-    rpc GetWorkerBuildIdCompatability (GetWorkerBuildIdCompatabilityRequest) returns (GetWorkerBuildIdCompatabilityResponse) {}
+    rpc UpdateWorkerBuildIdCompatibility (UpdateWorkerBuildIdCompatibilityRequest) returns (UpdateWorkerBuildIdCompatibilityResponse) {}
+    rpc GetWorkerBuildIdCompatibility (GetWorkerBuildIdCompatibilityRequest) returns (GetWorkerBuildIdCompatibilityResponse) {}
     // Tell a task queue that some metadata has changed.
     rpc InvalidateTaskQueueMetadata (InvalidateTaskQueueMetadataRequest) returns (InvalidateTaskQueueMetadataResponse) {}
     // Fetch some metadata about a task queue.
