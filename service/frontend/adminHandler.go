@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
@@ -1922,4 +1924,67 @@ func (adh *AdminHandler) getWorkflowCompletionEvent(
 	}
 
 	return nil, serviceerror.NewInternal("Unable to find closed event for workflow")
+}
+
+func (adh *AdminHandler) StreamWorkflowReplicationMessages(
+	targetCluster adminservice.AdminService_StreamWorkflowReplicationMessagesServer,
+) (retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	ctx := targetCluster.Context()
+	sourceCluster, err := adh.historyClient.StreamWorkflowReplicationMessages(ctx)
+	if err != nil {
+		return err
+	}
+
+	errGroup, ctx := errgroup.WithContext(ctx)
+	errGroup.Go(func() error {
+		for ctx.Err() == nil {
+			req, err := targetCluster.Recv()
+			if err != nil {
+				return err
+			}
+			switch attr := req.GetAttributes().(type) {
+			case *adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
+				if err = sourceCluster.Send(&historyservice.StreamWorkflowReplicationMessagesRequest{
+					ShardId: req.ShardId,
+					Attributes: &historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
+						SyncReplicationState: attr.SyncReplicationState,
+					},
+				}); err != nil {
+					return err
+				}
+			default:
+				return serviceerror.NewInternal(fmt.Sprintf(
+					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
+				))
+			}
+		}
+		return ctx.Err()
+	})
+	errGroup.Go(func() error {
+		for ctx.Err() == nil {
+			resp, err := sourceCluster.Recv()
+			if err != nil {
+				return err
+			}
+			switch attr := resp.GetAttributes().(type) {
+			case *historyservice.StreamWorkflowReplicationMessagesResponse_ReplicationMessages:
+				if err = targetCluster.Send(&adminservice.StreamWorkflowReplicationMessagesResponse{
+					ShardId: resp.ShardId,
+					Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_ReplicationMessages{
+						ReplicationMessages: attr.ReplicationMessages,
+					},
+				}); err != nil {
+					return err
+				}
+			default:
+				return serviceerror.NewInternal(fmt.Sprintf(
+					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
+				))
+			}
+		}
+		return ctx.Err()
+	})
+	return errGroup.Wait()
 }

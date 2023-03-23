@@ -197,8 +197,8 @@ const (
 	AdminRemoveRemoteClusterScope = "AdminRemoveRemoteCluster"
 	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecution
 	AdminDeleteWorkflowExecutionScope = "AdminDeleteWorkflowExecution"
-	// AdminStreamReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
-	AdminStreamReplicationMessagesScope = "AdminStreamReplicationMessages"
+	// AdminStreamWorkflowReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
+	AdminStreamWorkflowReplicationMessagesScope = "AdminStreamWorkflowReplicationMessages"
 
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope
@@ -435,8 +435,8 @@ const (
 	HistoryClientDescribeHistoryHostScope = "HistoryClientDescribeHistoryHost"
 	// HistoryClientGetReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
-	// HistoryClientStreamReplicationMessagesScope tracks RPC calls to history service
-	HistoryClientStreamReplicationMessagesScope = "HistoryClientStreamReplicationMessages"
+	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientStreamWorkflowReplicationMessagesScope = "HistoryClientStreamWorkflowReplicationMessages"
 )
 
 // Matching Client Operations
@@ -1403,14 +1403,22 @@ var (
 	ChildInfoSize                                  = NewBytesHistogramDef("child_info_size")
 	RequestCancelInfoSize                          = NewBytesHistogramDef("request_cancel_info_size")
 	SignalInfoSize                                 = NewBytesHistogramDef("signal_info_size")
+	SignalRequestIDSize                            = NewBytesHistogramDef("signal_request_id_size")
 	BufferedEventsSize                             = NewBytesHistogramDef("buffered_events_size")
 	ActivityInfoCount                              = NewDimensionlessHistogramDef("activity_info_count")
 	TimerInfoCount                                 = NewDimensionlessHistogramDef("timer_info_count")
 	ChildInfoCount                                 = NewDimensionlessHistogramDef("child_info_count")
 	SignalInfoCount                                = NewDimensionlessHistogramDef("signal_info_count")
 	RequestCancelInfoCount                         = NewDimensionlessHistogramDef("request_cancel_info_count")
+	SignalRequestIDCount                           = NewDimensionlessHistogramDef("signal_request_id_count")
 	BufferedEventsCount                            = NewDimensionlessHistogramDef("buffered_events_count")
 	TaskCount                                      = NewDimensionlessHistogramDef("task_count")
+	TotalActivityCount                             = NewDimensionlessHistogramDef("total_activity_count")
+	TotalUserTimerCount                            = NewDimensionlessHistogramDef("total_user_timer_count")
+	TotalChildExecutionCount                       = NewDimensionlessHistogramDef("total_child_execution_count")
+	TotalRequestCancelExternalCount                = NewDimensionlessHistogramDef("total_request_cancel_external_count")
+	TotalSignalExternalCount                       = NewDimensionlessHistogramDef("total_signal_external_count")
+	TotalSignalCount                               = NewDimensionlessHistogramDef("total_signal_count")
 	WorkflowRetryBackoffTimerCount                 = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount                  = NewCounterDef("workflow_cron_backoff_timer")
 	WorkflowCleanupDeleteCount                     = NewCounterDef("workflow_cleanup_delete")

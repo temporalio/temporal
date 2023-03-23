@@ -634,3 +634,17 @@ message UpdateWorkflowExecutionRequest {
 message UpdateWorkflowExecutionResponse {
     temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse response = 1;
 }
+
+message StreamWorkflowReplicationMessagesRequest {
+    int32 shard_id = 1;
+    oneof attributes {
+        temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 2;
+    }
+}
+
+message StreamWorkflowReplicationMessagesResponse {
+    int32 shard_id = 1;
+    oneof attributes {
+        temporal.server.api.replication.v1.ReplicationMessages replication_messages = 2;
+    }
+}

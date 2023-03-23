@@ -27,6 +27,7 @@ package ringpop
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -85,8 +86,7 @@ func newFactory(
 	dc *dynamicconfig.Collection,
 ) (*factory, error) {
 	if rpConfig.BroadcastAddress != "" && net.ParseIP(rpConfig.BroadcastAddress) == nil {
-			return nil, fmt.Errorf("%w: %s", errMalformedBroadcastAddress, rpConfig.BroadcastAddress)
-		}
+		return nil, fmt.Errorf("%w: %s", errMalformedBroadcastAddress, rpConfig.BroadcastAddress)
 	}
 	if rpConfig.MaxJoinDuration == 0 {
 		rpConfig.MaxJoinDuration = defaultMaxJoinDuration
