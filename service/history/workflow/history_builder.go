@@ -862,14 +862,16 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
+	skipGenerateWorkflowTask bool,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
 		WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
-			SignalName: signalName,
-			Input:      input,
-			Identity:   identity,
-			Header:     header,
+			SignalName:               signalName,
+			Input:                    input,
+			Identity:                 identity,
+			Header:                   header,
+			SkipGenerateWorkflowTask: skipGenerateWorkflowTask,
 		},
 	}
 
@@ -1097,6 +1099,11 @@ func (b *HistoryBuilder) appendEvents(
 
 func (b *HistoryBuilder) HasBufferEvents() bool {
 	return len(b.dbBufferBatch) > 0 || len(b.memBufferBatch) > 0
+}
+
+func (b *HistoryBuilder) GetBufferEvents() []*historypb.HistoryEvent {
+	cpy := b.dbBufferBatch
+	return append(cpy, b.memBufferBatch...)
 }
 
 func (b *HistoryBuilder) BufferEventSize() int {

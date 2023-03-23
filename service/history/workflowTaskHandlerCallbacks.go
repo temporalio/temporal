@@ -559,6 +559,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 	}
 
+	// Check whether buffered events should actually generate a new task
+	if hasBufferedEvents {
+		hasBufferedEvents = handler.bufferedEventShouldGenerateWFT(ms.GetBufferedEvents())
+	}
+
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
 	if ms.IsWorkflowExecutionRunning() && (hasBufferedEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled) {
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
@@ -714,6 +719,20 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	return resp, nil
+}
+
+// bufferedEventShouldGenerateWFT returns true if at least one event in the list should generate a new workflow task
+func (handler *workflowTaskHandlerCallbacksImpl) bufferedEventShouldGenerateWFT(
+	bufferedEvents []*historypb.HistoryEvent,
+) bool {
+	for _, event := range bufferedEvents {
+		if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+			return true
+		} else if !event.GetWorkflowExecutionSignaledEventAttributes().GetSkipGenerateWorkflowTask() {
+			return true
+		}
+	}
+	return false
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskScheduled(

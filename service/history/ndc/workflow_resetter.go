@@ -738,6 +738,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
+				attr.GetSkipGenerateWorkflowTask(),
 			); err != nil {
 				return err
 			}

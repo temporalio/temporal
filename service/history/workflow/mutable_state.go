@@ -141,7 +141,7 @@ type (
 		AddWorkflowPropertiesModifiedEvent(int64, *commandpb.ModifyWorkflowPropertiesCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(*historyservice.RequestCancelWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *commandpb.CancelWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header, skipGenerateWorkflowTask bool) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
@@ -199,6 +199,7 @@ type (
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
+		GetBufferedEvents() []*historypb.HistoryEvent
 		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool
