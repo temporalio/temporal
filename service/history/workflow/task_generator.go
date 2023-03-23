@@ -99,7 +99,6 @@ type (
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
-			branchToken []byte,
 			events []*historypb.HistoryEvent,
 		) error
 		GenerateMigrationTasks() (tasks.Task, error)
@@ -569,9 +568,12 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 }
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
-	branchToken []byte,
 	events []*historypb.HistoryEvent,
 ) error {
+	if len(events) == 0 {
+		return nil
+	}
+
 	firstEvent := events[0]
 	lastEvent := events[len(events)-1]
 	if firstEvent.GetVersion() != lastEvent.GetVersion() {

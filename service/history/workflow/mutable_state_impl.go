@@ -442,6 +442,7 @@ func (ms *MutableStateImpl) SetHistoryTree(
 		retentionDuration = &duration
 	}
 	initialBranchToken, err := ms.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+		ms.namespaceEntry.ID().String(),
 		treeID,
 		nil,
 		[]*persistencespb.HistoryBranchRange{},
@@ -1878,7 +1879,7 @@ func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
-	if ms.shard.GetConfig().AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
+	if ms.shard.GetConfig().AdvancedVisibilityWritingMode() != visibility.SecondaryVisibilityWritingModeOff {
 		return ms.taskGenerator.GenerateUpsertVisibilityTask()
 	}
 	return nil
@@ -2055,6 +2056,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.executionInfo.ActivityCount++
 
 	ms.writeEventToCache(event)
 	return ai, nil
@@ -2687,6 +2689,7 @@ func (ms *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionIniti
 
 	ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
 	ms.updateRequestCancelInfos[rci.InitiatedEventId] = rci
+	ms.executionInfo.RequestCancelExternalCount++
 
 	ms.writeEventToCache(event)
 	return rci, nil
@@ -2826,6 +2829,7 @@ func (ms *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEve
 
 	ms.pendingSignalInfoIDs[si.InitiatedEventId] = si
 	ms.updateSignalInfos[si.InitiatedEventId] = si
+	ms.executionInfo.SignalExternalCount++
 
 	ms.writeEventToCache(event)
 	return si, nil
@@ -3030,6 +3034,7 @@ func (ms *MutableStateImpl) ReplicateTimerStartedEvent(
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
 	ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
 	ms.updateTimerInfos[ti.TimerId] = ti
+	ms.executionInfo.UserTimerCount++
 
 	return ti, nil
 }
@@ -3420,6 +3425,7 @@ func (ms *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 
 	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
+	ms.executionInfo.ChildExecutionCount++
 
 	ms.writeEventToCache(event)
 	return ci, nil
@@ -4224,21 +4230,17 @@ func (ms *MutableStateImpl) eventsToReplicationTask(
 	transactionPolicy TransactionPolicy,
 	events []*historypb.HistoryEvent,
 ) error {
-
-	if transactionPolicy == TransactionPolicyPassive ||
-		!ms.canReplicateEvents() ||
-		len(events) == 0 {
+	switch transactionPolicy {
+	case TransactionPolicyActive:
+		if ms.generateReplicationTask() {
+			return ms.taskGenerator.GenerateHistoryReplicationTasks(events)
+		}
 		return nil
+	case TransactionPolicyPassive:
+		return nil
+	default:
+		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 	}
-
-	currentBranchToken, err := ms.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
-	return ms.taskGenerator.GenerateHistoryReplicationTasks(
-		currentBranchToken,
-		events,
-	)
 }
 
 func (ms *MutableStateImpl) syncActivityToReplicationTask(
@@ -4246,21 +4248,26 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 	transactionPolicy TransactionPolicy,
 ) []tasks.Task {
 
-	if transactionPolicy == TransactionPolicyPassive ||
-		!ms.canReplicateEvents() {
+	switch transactionPolicy {
+	case TransactionPolicyActive:
+		if ms.generateReplicationTask() {
+			return convertSyncActivityInfos(
+				now,
+				definition.NewWorkflowKey(
+					ms.executionInfo.NamespaceId,
+					ms.executionInfo.WorkflowId,
+					ms.executionState.RunId,
+				),
+				ms.pendingActivityInfoIDs,
+				ms.syncActivityTasks,
+			)
+		}
+		return nil
+	case TransactionPolicyPassive:
 		return emptyTasks
+	default:
+		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 	}
-
-	return convertSyncActivityInfos(
-		now,
-		definition.NewWorkflowKey(
-			ms.executionInfo.NamespaceId,
-			ms.executionInfo.WorkflowId,
-			ms.executionState.RunId,
-		),
-		ms.pendingActivityInfoIDs,
-		ms.syncActivityTasks,
-	)
 }
 
 func (ms *MutableStateImpl) updatePendingEventIDs(
@@ -4302,10 +4309,6 @@ func (ms *MutableStateImpl) updateWithLastWriteEvent(
 	ms.executionInfo.LastEventTaskId = lastEvent.GetTaskId()
 
 	return nil
-}
-
-func (ms *MutableStateImpl) canReplicateEvents() bool {
-	return ms.namespaceEntry.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster
 }
 
 // validateNoEventsAfterWorkflowFinish perform check on history event batch
@@ -4463,23 +4466,24 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 func (ms *MutableStateImpl) closeTransactionWithPolicyCheck(
 	transactionPolicy TransactionPolicy,
 ) error {
+	switch transactionPolicy {
+	case TransactionPolicyActive:
+		// Cannot use ms.namespaceEntry.ActiveClusterName() because currentVersion may be updated during this transaction in
+		// passive cluster. For example: if passive cluster sees conflict and decided to terminate this workflow. The
+		// currentVersion on mutable state would be updated to point to last write version which is current (passive) cluster.
+		activeCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), ms.GetCurrentVersion())
+		currentCluster := ms.clusterMetadata.GetCurrentClusterName()
 
-	if transactionPolicy == TransactionPolicyPassive ||
-		!ms.canReplicateEvents() {
+		if activeCluster != currentCluster {
+			namespaceID := ms.GetExecutionInfo().NamespaceId
+			return serviceerror.NewNamespaceNotActive(namespaceID, currentCluster, activeCluster)
+		}
 		return nil
+	case TransactionPolicyPassive:
+		return nil
+	default:
+		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 	}
-
-	// Cannot use ms.namespaceEntry.ActiveClusterName() because currentVersion may be updated during this transaction in
-	// passive cluster. For example: if passive cluster sees conflict and decided to terminate this workflow. The
-	// currentVersion on mutable state would be updated to point to last write version which is current (passive) cluster.
-	activeCluster := ms.clusterMetadata.ClusterNameForFailoverVersion(ms.namespaceEntry.IsGlobalNamespace(), ms.GetCurrentVersion())
-	currentCluster := ms.clusterMetadata.GetCurrentClusterName()
-
-	if activeCluster != currentCluster {
-		namespaceID := ms.GetExecutionInfo().NamespaceId
-		return serviceerror.NewNamespaceNotActive(namespaceID, currentCluster, activeCluster)
-	}
-	return nil
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
@@ -4558,17 +4562,24 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowReset(
 func (ms *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 	transactionPolicy TransactionPolicy,
 ) error {
-
-	if transactionPolicy == TransactionPolicyPassive ||
-		!ms.IsWorkflowExecutionRunning() {
+	switch transactionPolicy {
+	case TransactionPolicyActive:
+		if !ms.IsWorkflowExecutionRunning() {
+			return nil
+		}
+		if err := ms.taskGenerator.GenerateActivityTimerTasks(); err != nil {
+			return err
+		}
+		return ms.taskGenerator.GenerateUserTimerTasks()
+	case TransactionPolicyPassive:
 		return nil
+	default:
+		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 	}
+}
 
-	if err := ms.taskGenerator.GenerateActivityTimerTasks(); err != nil {
-		return err
-	}
-
-	return ms.taskGenerator.GenerateUserTimerTasks()
+func (ms *MutableStateImpl) generateReplicationTask() bool {
+	return len(ms.namespaceEntry.ClusterNames()) > 1
 }
 
 func (ms *MutableStateImpl) checkMutability(

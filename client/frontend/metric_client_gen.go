@@ -217,18 +217,18 @@ func (c *metricClient) GetSystemInfo(
 	return c.client.GetSystemInfo(ctx, request, opts...)
 }
 
-func (c *metricClient) GetWorkerBuildIdOrdering(
+func (c *metricClient) GetWorkerBuildIdCompatability(
 	ctx context.Context,
-	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+	request *workflowservice.GetWorkerBuildIdCompatabilityRequest,
 	opts ...grpc.CallOption,
-) (_ *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
+) (_ *workflowservice.GetWorkerBuildIdCompatabilityResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientGetWorkerBuildIdOrderingScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientGetWorkerBuildIdCompatabilityScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.GetWorkerBuildIdCompatability(ctx, request, opts...)
 }
 
 func (c *metricClient) GetWorkflowExecutionHistory(
@@ -777,18 +777,18 @@ func (c *metricClient) UpdateSchedule(
 	return c.client.UpdateSchedule(ctx, request, opts...)
 }
 
-func (c *metricClient) UpdateWorkerBuildIdOrdering(
+func (c *metricClient) UpdateWorkerBuildIdCompatability(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	request *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
 	opts ...grpc.CallOption,
-) (_ *workflowservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+) (_ *workflowservice.UpdateWorkerBuildIdCompatabilityResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateWorkerBuildIdOrderingScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateWorkerBuildIdCompatabilityScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.UpdateWorkerBuildIdCompatability(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateWorkflowExecution(

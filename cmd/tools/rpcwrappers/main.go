@@ -184,8 +184,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 
 	var tqtPath string
 	switch t.Name() {
-	case "GetWorkerBuildIdOrderingRequest",
-		"UpdateWorkerBuildIdOrderingRequest",
+	case "GetWorkerBuildIdCompatabilityRequest",
+		"UpdateWorkerBuildIdCompatabilityRequest",
 		"RespondQueryTaskCompletedRequest",
 		"ListTaskQueuePartitionsRequest",
 		"GetTaskQueueMetadataRequest":

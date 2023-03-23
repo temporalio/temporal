@@ -640,7 +640,11 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDStr := convert.Int32ToString(shardID)
 
-	historyHost, err := adh.membershipMonitor.Lookup(primitives.HistoryService, shardIDStr)
+	resolver, err := adh.membershipMonitor.GetResolver(primitives.HistoryService)
+	if err != nil {
+		return nil, err
+	}
+	historyHost, err := resolver.Lookup(shardIDStr)
 	if err != nil {
 		return nil, err
 	}

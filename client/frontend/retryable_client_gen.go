@@ -230,15 +230,15 @@ func (c *retryableClient) GetSystemInfo(
 	return resp, err
 }
 
-func (c *retryableClient) GetWorkerBuildIdOrdering(
+func (c *retryableClient) GetWorkerBuildIdCompatability(
 	ctx context.Context,
-	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+	request *workflowservice.GetWorkerBuildIdCompatabilityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetWorkerBuildIdOrderingResponse, error) {
-	var resp *workflowservice.GetWorkerBuildIdOrderingResponse
+) (*workflowservice.GetWorkerBuildIdCompatabilityResponse, error) {
+	var resp *workflowservice.GetWorkerBuildIdCompatabilityResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+		resp, err = c.client.GetWorkerBuildIdCompatability(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -830,15 +830,15 @@ func (c *retryableClient) UpdateSchedule(
 	return resp, err
 }
 
-func (c *retryableClient) UpdateWorkerBuildIdOrdering(
+func (c *retryableClient) UpdateWorkerBuildIdCompatability(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	request *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateWorkerBuildIdOrderingResponse, error) {
-	var resp *workflowservice.UpdateWorkerBuildIdOrderingResponse
+) (*workflowservice.UpdateWorkerBuildIdCompatabilityResponse, error) {
+	var resp *workflowservice.UpdateWorkerBuildIdCompatabilityResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+		resp, err = c.client.UpdateWorkerBuildIdCompatability(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

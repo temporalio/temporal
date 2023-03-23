@@ -692,6 +692,14 @@ type (
 		SignalRequestIDCount   int
 		BufferedEventsCount    int
 		TaskCountByCategory    map[string]int
+
+		// Total item count for various information captured within mutable state
+		TotalActivityCount              int64
+		TotalUserTimerCount             int64
+		TotalChildExecutionCount        int64
+		TotalRequestCancelExternalCount int64
+		TotalSignalExternalCount        int64
+		TotalSignalCount                int64
 	}
 
 	HistoryStatistics struct {
@@ -833,6 +841,8 @@ type (
 	ForkHistoryBranchRequest struct {
 		// The shard to get history branch data
 		ShardID int32
+		// The namespace performing the fork
+		NamespaceID string
 		// The base branch to fork from
 		ForkBranchToken []byte
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
