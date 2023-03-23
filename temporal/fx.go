@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -167,11 +166,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	err = verifyPersistenceCompatibleVersion(so.config.Persistence, so.persistenceServiceResolver)
 	if err != nil {
 		return serverOptionsProvider{}, err
-	}
-
-	err = membership.ValidateConfig(&so.config.Global.Membership)
-	if err != nil {
-		return serverOptionsProvider{}, fmt.Errorf("ringpop config validation error: %w", err)
 	}
 
 	stopChan := make(chan interface{})

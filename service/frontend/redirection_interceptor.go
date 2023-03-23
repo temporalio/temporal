@@ -103,8 +103,8 @@ var (
 		"DeleteSchedule":                   func() any { return &workflowservice.DeleteScheduleResponse{} },
 		"ListSchedules":                    func() any { return &workflowservice.ListSchedulesResponse{} },
 		"ListScheduleMatchingTimes":        func() any { return &workflowservice.ListScheduleMatchingTimesResponse{} },
-		"UpdateWorkerBuildIdCompatability": func() any { return &workflowservice.UpdateWorkerBuildIdCompatabilityResponse{} },
-		"GetWorkerBuildIdCompatability":    func() any { return &workflowservice.GetWorkerBuildIdCompatabilityResponse{} },
+		"UpdateWorkerBuildIdCompatibility": func() any { return &workflowservice.UpdateWorkerBuildIdCompatibilityResponse{} },
+		"GetWorkerBuildIdCompatibility":    func() any { return &workflowservice.GetWorkerBuildIdCompatibilityResponse{} },
 
 		"StartBatchOperation":    func() any { return &workflowservice.StartBatchOperationResponse{} },
 		"StopBatchOperation":     func() any { return &workflowservice.StopBatchOperationResponse{} },
