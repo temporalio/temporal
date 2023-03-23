@@ -91,6 +91,7 @@ var (
 		"SignalWorkflowExecution":            func() any { return &workflowservice.SignalWorkflowExecutionResponse{} },
 		"StartWorkflowExecution":             func() any { return &workflowservice.StartWorkflowExecutionResponse{} },
 		"UpdateWorkflowExecution":            func() any { return &workflowservice.UpdateWorkflowExecutionResponse{} },
+		"PollWorkflowExecutionUpdate":        func() any { return &workflowservice.PollWorkflowExecutionUpdateResponse{} },
 		"TerminateWorkflowExecution":         func() any { return &workflowservice.TerminateWorkflowExecutionResponse{} },
 		"DeleteWorkflowExecution":            func() any { return &workflowservice.DeleteWorkflowExecutionResponse{} },
 		"ListTaskQueuePartitions":            func() any { return &workflowservice.ListTaskQueuePartitionsResponse{} },
