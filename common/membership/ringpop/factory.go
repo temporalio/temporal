@@ -84,8 +84,7 @@ func newFactory(
 	tlsProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
 ) (*factory, error) {
-	if rpConfig.BroadcastAddress != "" {
-		if addr := net.ParseIP(rpConfig.BroadcastAddress); addr == nil {
+	if rpConfig.BroadcastAddress != "" && net.ParseIP(rpConfig.BroadcastAddress) == nil {
 			return nil, fmt.Errorf("%w: %s", errMalformedBroadcastAddress, rpConfig.BroadcastAddress)
 		}
 	}
