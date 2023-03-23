@@ -413,6 +413,20 @@ func (c *metricClient) PollActivityTaskQueue(
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionUpdateRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PollWorkflowExecutionUpdateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientPollWorkflowExecutionUpdateScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollWorkflowExecutionUpdate(ctx, request, opts...)
+}
+
 func (c *metricClient) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowTaskQueueRequest,

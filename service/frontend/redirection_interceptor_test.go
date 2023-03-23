@@ -160,6 +160,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"SignalWorkflowExecution":            {},
 		"StartWorkflowExecution":             {},
 		"UpdateWorkflowExecution":            {},
+		"PollWorkflowExecutionUpdate":        {},
 		"TerminateWorkflowExecution":         {},
 		"DeleteWorkflowExecution":            {},
 		"ListTaskQueuePartitions":            {},

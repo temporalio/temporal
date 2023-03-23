@@ -3700,6 +3700,39 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	return histResp.GetResponse(), err
 }
 
+func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionUpdateRequest,
+) (_ *workflowservice.PollWorkflowExecutionUpdateResponse, retError error) {
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.GetUpdateRef() == nil {
+		return nil, errUpdateRefNotSet
+	}
+
+	if request.GetWaitPolicy() == nil {
+		request.WaitPolicy = &updatepb.WaitPolicy{}
+	}
+	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
+
+	_, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if !wh.config.EnableUpdateWorkflowExecution(request.Namespace) {
+		return nil, errUpdateWorkflowExecutionAPINotAllowed
+	}
+
+	return nil, serviceerror.NewUnimplemented("PollWorkflowExecutionUpdate is not implemented")
+}
+
 func (wh *WorkflowHandler) GetWorkerBuildIdCompatability(ctx context.Context, request *workflowservice.GetWorkerBuildIdCompatabilityRequest) (_ *workflowservice.GetWorkerBuildIdCompatabilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 

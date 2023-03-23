@@ -440,6 +440,21 @@ func (c *retryableClient) PollActivityTaskQueue(
 	return resp, err
 }
 
+func (c *retryableClient) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionUpdateRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
+	var resp *workflowservice.PollWorkflowExecutionUpdateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollWorkflowExecutionUpdate(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowTaskQueueRequest,
