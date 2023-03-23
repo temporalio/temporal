@@ -303,6 +303,16 @@ func (c *clientImpl) PollActivityTaskQueue(
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionUpdateRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PollWorkflowExecutionUpdate(ctx, request, opts...)
+}
+
 func (c *clientImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowTaskQueueRequest,

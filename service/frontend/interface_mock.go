@@ -479,6 +479,21 @@ func (mr *MockHandlerMockRecorder) PollActivityTaskQueue(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollActivityTaskQueue", reflect.TypeOf((*MockHandler)(nil).PollActivityTaskQueue), arg0, arg1)
 }
 
+// PollWorkflowExecutionUpdate mocks base method.
+func (m *MockHandler) PollWorkflowExecutionUpdate(arg0 context.Context, arg1 *v10.PollWorkflowExecutionUpdateRequest) (*v10.PollWorkflowExecutionUpdateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollWorkflowExecutionUpdate", arg0, arg1)
+	ret0, _ := ret[0].(*v10.PollWorkflowExecutionUpdateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollWorkflowExecutionUpdate indicates an expected call of PollWorkflowExecutionUpdate.
+func (mr *MockHandlerMockRecorder) PollWorkflowExecutionUpdate(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowExecutionUpdate", reflect.TypeOf((*MockHandler)(nil).PollWorkflowExecutionUpdate), arg0, arg1)
+}
+
 // PollWorkflowTaskQueue mocks base method.
 func (m *MockHandler) PollWorkflowTaskQueue(arg0 context.Context, arg1 *v10.PollWorkflowTaskQueueRequest) (*v10.PollWorkflowTaskQueueResponse, error) {
 	m.ctrl.T.Helper()

@@ -44,7 +44,7 @@ require (
 	go.opentelemetry.io/otel/metric v0.36.0
 	go.opentelemetry.io/otel/sdk v1.13.0
 	go.opentelemetry.io/otel/sdk/metric v0.36.0
-	go.temporal.io/api v1.19.1-0.20230321175928-34293b5611df
+	go.temporal.io/api v1.19.1-0.20230322145424-ac0471afa6aa
 	go.temporal.io/sdk v1.21.2-0.20230313212213-3d009e0d1f24
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.10.0
@@ -56,7 +56,7 @@ require (
 	golang.org/x/sync v0.1.0
 	golang.org/x/time v0.3.0
 	google.golang.org/api v0.110.0
-	google.golang.org/grpc v1.53.0
+	google.golang.org/grpc v1.54.0
 	google.golang.org/grpc/examples v0.0.0-20230216223317-abff344ead8f
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/validator.v2 v2.0.1
