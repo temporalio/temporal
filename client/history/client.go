@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -225,6 +226,25 @@ func (c *clientImpl) GetReplicationStatus(
 	}
 
 	return response, nil
+}
+
+func (c *clientImpl) StreamWorkflowReplicationMessages(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (historyservice.HistoryService_StreamWorkflowReplicationMessagesClient, error) {
+	ctxMetadata, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
+	}
+	_, targetClusterShardID, err := DecodeClusterShardMD(ctxMetadata)
+	if err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForShardID(targetClusterShardID.ShardID)
+	if err != nil {
+		return nil, err
+	}
+	return client.StreamWorkflowReplicationMessages(ctx, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
