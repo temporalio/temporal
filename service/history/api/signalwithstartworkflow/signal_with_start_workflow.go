@@ -282,6 +282,7 @@ func signalWorkflow(
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
+		request.GetSkipGenerateWorkflowTask(),
 	); err != nil {
 		return err
 	}

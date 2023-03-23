@@ -106,7 +106,8 @@ func Invoke(
 				request.GetSignalName(),
 				request.GetInput(),
 				request.GetIdentity(),
-				request.GetHeader()); err != nil {
+				request.GetHeader(),
+				request.GetSkipGenerateWorkflowTask()); err != nil {
 				return nil, err
 			}
 

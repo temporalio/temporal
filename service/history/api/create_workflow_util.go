@@ -95,6 +95,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetSignalInput(),
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
+			signalWithStartRequest.GetSkipGenerateWorkflowTask(),
 		); err != nil {
 			return nil, err
 		}
