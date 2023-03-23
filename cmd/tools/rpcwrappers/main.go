@@ -83,7 +83,7 @@ var (
 		"client.admin.GetReplicationMessages": true,
 	}
 	ignoreMethod = map[string]bool{
-		// stream APIs are not supported. do not generate.
+		// TODO stream APIs are not supported. do not generate.
 		"client.admin.StreamWorkflowReplicationMessages":            true,
 		"metricsClient.admin.StreamWorkflowReplicationMessages":     true,
 		"retryableClient.admin.StreamWorkflowReplicationMessages":   true,
