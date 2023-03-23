@@ -127,6 +127,7 @@ type (
 		NumHistoryHosts        int
 		HistoryCountLimitError int
 		HistoryCountLimitWarn  int
+		BlobSizeError          int
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -698,6 +699,9 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
+	}
+	if c.historyConfig.BlobSizeError != 0 {
+		client.OverrideValue(dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeError)
 	}
 
 	// For DeleteWorkflowExecution tests
