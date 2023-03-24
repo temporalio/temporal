@@ -82,15 +82,18 @@ func NewQueryParser() QueryParser {
 }
 
 func (p *queryParser) Parse(query string) (*parsedQuery, error) {
+	parsedQuery := &parsedQuery{
+		earliestCloseTime: time.Time{},
+		latestCloseTime:   time.Now().UTC(),
+	}
+	if strings.TrimSpace(query) == "" {
+		return parsedQuery, nil
+	}
 	stmt, err := sqlparser.Parse(fmt.Sprintf(queryTemplate, query))
 	if err != nil {
 		return nil, err
 	}
 	whereExpr := stmt.(*sqlparser.Select).Where.Expr
-	parsedQuery := &parsedQuery{
-		earliestCloseTime: time.Time{},
-		latestCloseTime:   time.Now().UTC(),
-	}
 	if err := p.convertWhereExpr(whereExpr, parsedQuery); err != nil {
 		return nil, err
 	}
