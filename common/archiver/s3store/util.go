@@ -166,15 +166,40 @@ func constructTimeBasedSearchKey(path, namespaceID, primaryIndexKey, primaryInde
 		timeFormat = "2006-01-02T" + timeFormat
 	}
 
-	return fmt.Sprintf("%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), t.Format(timeFormat))
+	return fmt.Sprintf(
+		"%s/%s",
+		constructIndexedVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey),
+		t.Format(timeFormat),
+	)
 }
 
 func constructTimestampIndex(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey string, secondaryIndexValue time.Time, runID string) string {
-	return fmt.Sprintf("%s/%s/%s", constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey), secondaryIndexValue.Format(time.RFC3339), runID)
+	return fmt.Sprintf(
+		"%s/%s/%s",
+		constructIndexedVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexKey),
+		secondaryIndexValue.Format(time.RFC3339),
+		runID,
+	)
 }
 
-func constructVisibilitySearchPrefix(path, namespaceID, primaryIndexKey, primaryIndexValue, secondaryIndexType string) string {
-	return strings.TrimLeft(strings.Join([]string{path, namespaceID, "visibility", primaryIndexKey, primaryIndexValue, secondaryIndexType}, "/"), "/")
+func constructIndexedVisibilitySearchPrefix(
+	path string,
+	namespaceID string,
+	primaryIndexKey string,
+	primaryIndexValue string,
+	secondaryIndexType string,
+) string {
+	return strings.TrimLeft(
+		strings.Join(
+			[]string{path, namespaceID, "visibility", primaryIndexKey, primaryIndexValue, secondaryIndexType},
+			"/",
+		),
+		"/",
+	)
+}
+
+func constructVisibilitySearchPrefix(path, namespaceID string) string {
+	return strings.TrimLeft(strings.Join([]string{path, namespaceID, "visibility"}, "/"), "/")
 }
 
 func ensureContextTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
