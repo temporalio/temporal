@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/service/history/consts"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log/tag"
 )
 
@@ -256,4 +257,39 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryBeforeStart() {
 
 	// wait query
 	wg.Wait()
+}
+
+func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
+
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+			return "", nil
+		})
+
+		// force workflow task to fail
+		panic("Workflow failed")
+	}
+
+	s.worker.RegisterWorkflow(workflowFn)
+
+	id := "test-query-failed-workflow-task"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 20 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
+
+	// wait for workflow to fail
+	time.Sleep(time.Second * 5)
+	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
+	s.IsType(&serviceerror.FailedPrecondition{}, err)
 }
