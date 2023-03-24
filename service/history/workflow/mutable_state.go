@@ -199,7 +199,7 @@ type (
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
-		GetBufferedEvents() []*historypb.HistoryEvent
+		HasAnyBufferedEvent(func(*historypb.HistoryEvent) bool) bool
 		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool

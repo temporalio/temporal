@@ -1101,9 +1101,24 @@ func (b *HistoryBuilder) HasBufferEvents() bool {
 	return len(b.dbBufferBatch) > 0 || len(b.memBufferBatch) > 0
 }
 
-func (b *HistoryBuilder) GetBufferEvents() []*historypb.HistoryEvent {
-	cpy := b.dbBufferBatch
-	return append(cpy, b.memBufferBatch...)
+// HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
+func (b *HistoryBuilder) HasAnyBufferedEvent(filter func(event *historypb.HistoryEvent) bool) bool {
+	for _, event := range b.memLatestBatch {
+		if filter(event) {
+			return true
+		}
+	}
+	for _, event := range b.memBufferBatch {
+		if filter(event) {
+			return true
+		}
+	}
+	for _, event := range b.dbBufferBatch {
+		if filter(event) {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *HistoryBuilder) BufferEventSize() int {

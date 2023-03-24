@@ -1336,8 +1336,9 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 	return ms.hBuilder.HasBufferEvents()
 }
 
-func (ms *MutableStateImpl) GetBufferedEvents() []*historypb.HistoryEvent {
-	return ms.hBuilder.GetBufferEvents()
+// HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
+func (ms *MutableStateImpl) HasAnyBufferedEvent(filter func(event *historypb.HistoryEvent) bool) bool {
+	return ms.hBuilder.HasAnyBufferedEvent(filter)
 }
 
 // DeleteWorkflowTask deletes a workflow task.

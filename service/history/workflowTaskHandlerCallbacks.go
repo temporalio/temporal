@@ -561,7 +561,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	// Check whether buffered events should actually generate a new task
 	if hasBufferedEvents {
-		hasBufferedEvents = handler.bufferedEventShouldGenerateWFT(ms.GetBufferedEvents())
+		hasBufferedEvents = ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
 	}
 
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
@@ -719,20 +719,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	return resp, nil
-}
-
-// bufferedEventShouldGenerateWFT returns true if at least one event in the list should generate a new workflow task
-func (handler *workflowTaskHandlerCallbacksImpl) bufferedEventShouldGenerateWFT(
-	bufferedEvents []*historypb.HistoryEvent,
-) bool {
-	for _, event := range bufferedEvents {
-		if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
-			return true
-		} else if !event.GetWorkflowExecutionSignaledEventAttributes().GetSkipGenerateWorkflowTask() {
-			return true
-		}
-	}
-	return false
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskScheduled(
@@ -958,4 +944,16 @@ func failWorkflowTask(
 
 	// Return new mutable state back to the caller for further updates
 	return mutableState, nextEventBatchId, nil
+}
+
+// Filter function to be passed to mutable_state.HasAnyBufferedEvent
+// Returns true if the event should generate a new workflow task
+// Currently only signal events with SkipGenerateWorkflowTask=true flag set do not generate tasks
+func eventShouldGenerateNewTaskFilter(event *historypb.HistoryEvent) bool {
+	if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+		return true
+	} else if !event.GetWorkflowExecutionSignaledEventAttributes().GetSkipGenerateWorkflowTask() {
+		return true
+	}
+	return false
 }

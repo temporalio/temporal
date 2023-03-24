@@ -824,6 +824,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
+				attr.GetSkipGenerateWorkflowTask(),
 			).Return(&historypb.HistoryEvent{}, nil)
 		}
 	}
