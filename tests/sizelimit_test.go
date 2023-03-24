@@ -244,7 +244,7 @@ SignalLoop:
 	s.True(isCloseCorrect)
 }
 
-func (s *integrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
+func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
 	id := "integration-workflow-failed-large-payload"
 	wt := "integration-workflow-failed-large-payload-type"
@@ -315,7 +315,13 @@ func (s *integrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	case <-sigReadyToSendChan:
 	}
 
-	err = s.sendSignal(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()}, "signal-name", nil, identity)
+	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()},
+		SignalName:        "signal-name",
+		Identity:          identity,
+		RequestId:         uuid.New(),
+	})
 	s.NoError(err)
 	close(sigSendDoneChan)
 
