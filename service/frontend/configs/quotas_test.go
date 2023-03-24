@@ -108,6 +108,7 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"GetWorkflowExecutionHistory":        {},
 		"GetWorkflowExecutionHistoryReverse": {},
 		"UpdateWorkflowExecution":            {},
+		"PollWorkflowExecutionUpdate":        {},
 
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},
@@ -126,8 +127,8 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"RespondQueryTaskCompleted":        {},
 		"PollWorkflowTaskQueue":            {},
 		"PollActivityTaskQueue":            {},
-		"GetWorkerBuildIdCompatability":    {},
-		"UpdateWorkerBuildIdCompatability": {},
+		"GetWorkerBuildIdCompatibility":    {},
+		"UpdateWorkerBuildIdCompatibility": {},
 		"DeleteWorkflowExecution":          {},
 
 		"ResetStickyTaskQueue":    {},

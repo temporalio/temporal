@@ -139,5 +139,8 @@ service AdminService {
     // DeleteWorkflowExecution force deletes a workflow's visibility record, current & concrete execution record and history if possible
     rpc DeleteWorkflowExecution(DeleteWorkflowExecutionRequest) returns (DeleteWorkflowExecutionResponse) {
     }
+
+    rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
+    }
 }
 

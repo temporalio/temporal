@@ -94,17 +94,17 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	ctx := NewContext()
 	tq := "integration-versioning-basic"
 
-	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: "foo",
 		},
 	})
 	s.NoError(err)
 	s.NotNil(res)
 
-	res2, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+	res2, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
@@ -118,21 +118,21 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	tq := "integration-versioning-series"
 
 	for i := 0; i < 10; i++ {
-		res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+		res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 			Namespace: s.namespace,
 			TaskQueue: tq,
-			Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 				AddNewBuildIdInNewDefaultSet: fmt.Sprintf("foo-%d", i),
 			},
 		})
 		s.NoError(err)
 		s.NotNil(res)
 	}
-	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId{
-			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
 				NewBuildId:                "foo-2.1",
 				ExistingCompatibleBuildId: "foo-2",
 				MakeSetDefault:            false,
@@ -142,7 +142,7 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	s.NoError(err)
 	s.NotNil(res)
 
-	res2, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+	res2, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
@@ -157,11 +157,11 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 	ctx := NewContext()
 	tq := "integration-versioning-compat-not-found"
 
-	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleBuildId{
-			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewCompatibleVersion{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
 				NewBuildId:                "foo",
 				ExistingCompatibleBuildId: "i don't exist yo",
 			},
@@ -178,10 +178,10 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
 
-	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: "foo",
 		},
 	})
@@ -210,7 +210,7 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	s.NoError(err)
 	sdkWorker.Stop()
 
-	res2, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+	res2, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
@@ -223,17 +223,17 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	ctx := NewContext()
 	tq := "integration-versioning-sub-partitions"
 
-	res, err := s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: "foo",
 		},
 	})
 	s.NoError(err)
 	s.NotNil(res)
 
-	res2, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+	res2, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
@@ -252,7 +252,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 		subPartName, err := tqname.FromBaseName(tq)
 		s.NoError(err)
 		subPartName = subPartName.WithPartition(i)
-		res, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+		res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: s.namespace,
 			TaskQueue: subPartName.FullName(),
 		})
@@ -262,10 +262,10 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	}
 
 	// Make a modification, verify it propagates to partitions
-	res, err = s.engine.UpdateWorkerBuildIdCompatability(ctx, &workflowservice.UpdateWorkerBuildIdCompatabilityRequest{
+	res, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatabilityRequest_AddNewBuildIdInNewDefaultSet{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: "foo-2",
 		},
 	})
@@ -276,7 +276,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 		subPartName, err := tqname.FromBaseName(tq)
 		s.NoError(err)
 		subPartName = subPartName.WithPartition(i)
-		res, err := s.engine.GetWorkerBuildIdCompatability(ctx, &workflowservice.GetWorkerBuildIdCompatabilityRequest{
+		res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: s.namespace,
 			TaskQueue: subPartName.FullName(),
 		})
@@ -286,7 +286,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	}
 }
 
-func getCurrentDefault(resp *workflowservice.GetWorkerBuildIdCompatabilityResponse) string {
+func getCurrentDefault(resp *workflowservice.GetWorkerBuildIdCompatibilityResponse) string {
 	if resp == nil {
 		return ""
 	}

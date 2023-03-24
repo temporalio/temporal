@@ -197,8 +197,8 @@ const (
 	AdminRemoveRemoteClusterScope = "AdminRemoveRemoteCluster"
 	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecution
 	AdminDeleteWorkflowExecutionScope = "AdminDeleteWorkflowExecution"
-	// AdminStreamReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
-	AdminStreamReplicationMessagesScope = "AdminStreamReplicationMessages"
+	// AdminStreamWorkflowReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
+	AdminStreamWorkflowReplicationMessagesScope = "AdminStreamWorkflowReplicationMessages"
 
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope
@@ -247,6 +247,8 @@ const (
 	FrontendClientListOpenWorkflowExecutionsScope = "FrontendClientListOpenWorkflowExecutions"
 	// FrontendClientPollActivityTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollActivityTaskQueueScope = "FrontendClientPollActivityTaskQueue"
+	//FrontendClientPollWorkflowExecutionUpdateScope tracks RPC calls to frontend service
+	FrontendClientPollWorkflowExecutionUpdateScope = "FrontendClientPollWorkflowExecutionUpdate"
 	// FrontendClientPollWorkflowTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollWorkflowTaskQueueScope = "FrontendClientPollWorkflowTaskQueue"
 	// FrontendClientQueryWorkflowScope tracks RPC calls to frontend service
@@ -319,12 +321,12 @@ const (
 	FrontendClientDeleteScheduleScope = "FrontendClientDeleteSchedule"
 	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
 	FrontendClientListSchedulesScope = "FrontendClientListSchedules"
-	// FrontendClientUpdateWorkerBuildIdCompatabilityScope tracks RPC calls to frontend service
-	FrontendClientUpdateWorkerBuildIdCompatabilityScope = "FrontendClientUpdateWorkerBuildIdCompatability"
+	// FrontendClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
+	FrontendClientUpdateWorkerBuildIdCompatibilityScope = "FrontendClientUpdateWorkerBuildIdCompatibility"
 	// FrontendClientUpdateWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientUpdateWorkflowExecutionScope = "FrontendClientUpdateWorkflowExecution"
-	// FrontendClientGetWorkerBuildIdCompatabilityScope tracks RPC calls to frontend service
-	FrontendClientGetWorkerBuildIdCompatabilityScope = "FrontendClientGetWorkerBuildIdCompatability"
+	// FrontendClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
+	FrontendClientGetWorkerBuildIdCompatibilityScope = "FrontendClientGetWorkerBuildIdCompatibility"
 	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
 	FrontendClientDescribeBatchOperationScope = "FrontendClientDescribeBatchOperation"
 	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
@@ -435,8 +437,8 @@ const (
 	HistoryClientDescribeHistoryHostScope = "HistoryClientDescribeHistoryHost"
 	// HistoryClientGetReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
-	// HistoryClientStreamReplicationMessagesScope tracks RPC calls to history service
-	HistoryClientStreamReplicationMessagesScope = "HistoryClientStreamReplicationMessages"
+	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientStreamWorkflowReplicationMessagesScope = "HistoryClientStreamWorkflowReplicationMessages"
 )
 
 // Matching Client Operations
@@ -459,10 +461,10 @@ const (
 	MatchingClientDescribeTaskQueueScope = "MatchingClientDescribeTaskQueue"
 	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskQueuePartitionsScope = "MatchingClientListTaskQueuePartitions"
-	// MatchingClientUpdateWorkerBuildIdCompatabilityScope tracks RPC calls to matching service
-	MatchingClientUpdateWorkerBuildIdCompatabilityScope = "MatchingClientUpdateWorkerBuildIdCompatability"
-	// MatchingClientGetWorkerBuildIdCompatabilityScope tracks RPC calls to matching service
-	MatchingClientGetWorkerBuildIdCompatabilityScope = "MatchingClientGetWorkerBuildIdCompatability"
+	// MatchingClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
+	MatchingClientUpdateWorkerBuildIdCompatibilityScope = "MatchingClientUpdateWorkerBuildIdCompatibility"
+	// MatchingClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
+	MatchingClientGetWorkerBuildIdCompatibilityScope = "MatchingClientGetWorkerBuildIdCompatibility"
 	// MatchingClientInvalidateTaskQueueMetadataScope tracks RPC calls to matching service
 	MatchingClientInvalidateTaskQueueMetadataScope = "MatchingClientInvalidateTaskQueueMetadata"
 	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
@@ -796,10 +798,10 @@ const (
 	FrontendDeleteScheduleScope = "DeleteSchedule"
 	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope = "ListSchedulesScope is the metric scope for frontend.ListSchedules"
 	FrontendListSchedulesScope = "ListSchedules"
-	// FrontendUpdateWorkerBuildIdCompatabilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatabilityScope = "UpdateWorkerBuildIdCompatabilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatability"
-	FrontendUpdateWorkerBuildIdCompatabilityScope = "UpdateWorkerBuildIdCompatability"
-	// FrontendGetWorkerBuildIdCompatabilityScope is the metric scope for frontend.GetWorkerBuildIdCompatabilityScope = "GetWorkerBuildIdCompatabilityScope is the metric scope for frontend.GetWorkerBuildIdCompatability"
-	FrontendGetWorkerBuildIdCompatabilityScope = "GetWorkerBuildIdCompatability"
+	// FrontendUpdateWorkerBuildIdCompatibilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatibility"
+	FrontendUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
+	// FrontendGetWorkerBuildIdCompatibilityScope is the metric scope for frontend.GetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibilityScope is the metric scope for frontend.GetWorkerBuildIdCompatibility"
+	FrontendGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
 	// FrontendUpdateWorkflowExecutionScope is the metric scope for frontend.UpdateWorkflowExecution
 	FrontendUpdateWorkflowExecutionScope = "UpdateWorkflowExecution"
 	// FrontendDescribeBatchOperationScope is the metric scope for frontend.DescribeBatchOperation
@@ -1090,13 +1092,13 @@ const (
 	MatchingDescribeTaskQueueScope = "DescribeTaskQueue"
 	// MatchingListTaskQueuePartitionsScope tracks ListTaskQueuePartitions API calls received by service
 	MatchingListTaskQueuePartitionsScope = "ListTaskQueuePartitions"
-	// MatchingUpdateWorkerBuildIdCompatabilityScope tracks UpdateWorkerBuildIdCompatability API calls received by service
-	MatchingUpdateWorkerBuildIdCompatabilityScope = "UpdateWorkerBuildIdCompatability"
-	// MatchingGetWorkerBuildIdCompatabilityScope tracks GetWorkerBuildIdCompatability API calls received by service
-	MatchingGetWorkerBuildIdCompatabilityScope = "GetWorkerBuildIdCompatability"
-	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdCompatability API calls received by service
+	// MatchingUpdateWorkerBuildIdCompatibilityScope tracks UpdateWorkerBuildIdCompatibility API calls received by service
+	MatchingUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
+	// MatchingGetWorkerBuildIdCompatibilityScope tracks GetWorkerBuildIdCompatibility API calls received by service
+	MatchingGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
+	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
 	MatchingInvalidateTaskQueueMetadataScope = "InvalidateTaskQueueMetadata"
-	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdCompatability API calls received by service
+	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
 	MatchingGetTaskQueueMetadataScope = "GetTaskQueueMetadata"
 )
 

@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
+func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatibilityResponse {
 	return depthLimiter(g, maxDepth)
 }
 
@@ -56,12 +56,12 @@ func HashVersioningData(data *persistence.VersioningData) []byte {
 	return b
 }
 
-func depthLimiter(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatabilityResponse {
+func depthLimiter(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatibilityResponse {
 	sets := g.GetVersionSets()
 	if maxDepth > 0 {
 		sets = util.SliceTail(sets, maxDepth)
 	}
-	return &workflowservice.GetWorkerBuildIdCompatabilityResponse{MajorVersionSets: sets}
+	return &workflowservice.GetWorkerBuildIdCompatibilityResponse{MajorVersionSets: sets}
 }
 
 // Given existing versioning data and an update request, update the version sets appropriately. The request is expected
@@ -91,7 +91,7 @@ func depthLimiter(g *persistence.VersioningData, maxDepth int) *workflowservice.
 // Deletions are not permitted, as inserting new versions can accomplish the same goals with less complexity. However,
 // sets may be dropped when the number of sets limit is reached. They are dropped oldest first - the current default set
 // is never dropped, instead dropping the next oldest set.
-func UpdateVersionSets(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest, maxSize int) error {
+func UpdateVersionSets(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSize int) error {
 	err := updateImpl(existingData, req)
 	if err != nil {
 		return err
@@ -103,7 +103,7 @@ func UpdateVersionSets(existingData *persistence.VersioningData, req *workflowse
 }
 
 //nolint:revive // cyclomatic complexity
-func updateImpl(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) error {
+func updateImpl(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) error {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
 	findRes := findVersion(existingData, targetedVersion)
@@ -153,7 +153,7 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 	return nil
 }
 
-func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatabilityRequest) string {
+func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) string {
 	if req.GetAddNewCompatibleBuildId() != nil {
 		return req.GetAddNewCompatibleBuildId().GetNewBuildId()
 	} else if req.GetPromoteSetByBuildId() != "" {
