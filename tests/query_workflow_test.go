@@ -262,10 +262,13 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryBeforeStart() {
 func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
-		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+		err := workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 			return "", nil
 		})
 
+		if err != nil {
+			s.Logger.Fatal("SetQueryHandler failed: " + err.Error())
+		}
 		// force workflow task to fail
 		panic("Workflow failed")
 	}
