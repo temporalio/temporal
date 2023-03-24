@@ -158,7 +158,7 @@ func (s *integrationSuite) TestStartWorkflowExecutionWithDelay() {
 	tl := "integration-start-workflow-with-delay-test-taskqueue"
 	identity := "worker1"
 
-	startDelay := 5 * time.Second
+	startDelay := 3 * time.Second
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.New(),
