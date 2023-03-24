@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"flag"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -250,11 +251,11 @@ func (s *integrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	tl := "integration-workflow-failed-large-payload-taskqueue"
 	identity := "worker1"
 
-	var v string
+	var largePayload []byte
 	for i := 0; i < 101; i++ {
-		v += "v"
+		largePayload = append(largePayload, byte(rand.Int()))
 	}
-	pl, err := payloads.Encode(v)
+	pl, err := payloads.Encode(largePayload)
 	s.NoError(err)
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})
@@ -308,7 +309,6 @@ func (s *integrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	go func() {
 		_, err = poller.PollAndProcessWorkflowTask(false, false)
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-		s.NoError(err)
 	}()
 
 	select {
@@ -319,6 +319,17 @@ func (s *integrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	s.NoError(err)
 	close(sigSendDoneChan)
 
+	verifyWorkflowFailed := false
+	for i := 0; i < 10; i++ {
+		lastEvent := s.getLastEvent(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
+		if enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED == lastEvent.GetEventType() {
+			verifyWorkflowFailed = true
+		}
+		time.Sleep(time.Second)
+	}
+	if !verifyWorkflowFailed {
+		s.Fail("The workflow is expected to fail but it is not.")
+	}
 	histories := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
 	for _, event := range histories {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
