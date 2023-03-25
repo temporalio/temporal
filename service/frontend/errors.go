@@ -78,6 +78,7 @@ var (
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
 	errBatchOperationNotSet                               = serviceerror.NewInvalidArgument("Batch operation is not set on request.")
+	errRaceConditionAddingSearchAttributes                = serviceerror.NewUnavailable("Generated search attributes mapping unavailble.")
 
 	errUpdateMetaNotSet  = serviceerror.NewInvalidArgument("Update meta is not set on request.")
 	errUpdateInputNotSet = serviceerror.NewInvalidArgument("Update input is not set on request.")
