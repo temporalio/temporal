@@ -59,6 +59,10 @@ import (
 
 const (
 	perNamespaceWorkerManagerListenerKey = "perNamespaceWorkerManager"
+
+	// Always refresh workers after this time even if there were no membership or namespace
+	// state changes. This is to pick up dynamic config changes (which we can't subscribe to).
+	refreshInterval = 10 * time.Minute
 )
 
 type (
@@ -216,7 +220,15 @@ func (wm *perNamespaceWorkerManager) refreshAll() {
 }
 
 func (wm *perNamespaceWorkerManager) membershipChangedListener() {
-	for range wm.membershipChangedCh {
+loop:
+	for {
+		select {
+		case _, ok := <-wm.membershipChangedCh:
+			if !ok {
+				break loop
+			}
+		case <-time.After(refreshInterval):
+		}
 		wm.refreshAll()
 	}
 }
