@@ -118,7 +118,7 @@ func Invoke(
 	if mutableState.GetExecutionInfo().WorkflowTaskAttempt > 1 {
 		// while workflow task is failing, the query to that workflow will also fail. Failing fast here to prevent wasting
 		// resources to load history for a query that will fail.
-		return nil, serviceerror.NewFailedPrecondition("Query has failed due to a failing workflow task")
+		return nil, serviceerror.NewFailedPrecondition("Cannot query workflow due to Workflow Task in failed state.")
 	}
 
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
