@@ -163,7 +163,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 	ctx context.Context,
 	req *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-
 	namespaceEntry, err := api.GetActiveNamespace(handler.shard, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -224,6 +223,18 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				// Looks like WorkflowTask already started as a result of another call.
 				// It is OK to drop the task at this point.
 				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
+			}
+
+			// Assuming a workflow is running on a sticky task queue by a workerA.
+			// After workerA is dead for more than 10s, matching will return StickyWorkerUnavailable error when history
+			// trying to push a new workflow task. When history sees that error, it will fall back to push the task to
+			// its original normal task queue without clear its stickiness to avoid an extra persistence write.
+			// We will clear the stickiness here when that task is delivered to another worker polling from normal queue.
+			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
+			// Sending down partial history will cost the worker an extra fetch to server for the full history.
+			if mutableState.IsStickyTaskQueueEnabled() &&
+				mutableState.TaskQueue().GetName() != req.PollRequest.TaskQueue.GetName() {
+				mutableState.ClearStickyness()
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
@@ -772,7 +783,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	// before it was started.
 	response.ScheduledEventId = workflowTask.ScheduledEventID
 	response.StartedEventId = workflowTask.StartedEventID
-	response.StickyExecutionEnabled = ms.IsStickyTaskQueueEnabled()
+	if ms.IsStickyTaskQueueEnabled() {
+		response.StickyExecutionEnabled = true
+	}
 	response.NextEventId = ms.GetNextEventID()
 	response.Attempt = workflowTask.Attempt
 	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{

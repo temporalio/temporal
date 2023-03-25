@@ -399,10 +399,7 @@ pollLoop:
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
-			isStickyEnabled := false
-			if len(mutableStateResp.StickyTaskQueue.GetName()) != 0 {
-				isStickyEnabled = true
-			}
+			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 			resp := &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId:     mutableStateResp.PreviousStartedEventId,
 				NextEventId:                mutableStateResp.NextEventId,
