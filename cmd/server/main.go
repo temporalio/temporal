@@ -152,6 +152,8 @@ func buildCLI() *cli.App {
 					tag.NewBoolTag("debug-mode", debug.Enabled),
 				)
 
+				logger.Info("This proves we're working! 123e4567-e89b-12d3-a456-426614174000")
+
 				var dynamicConfigClient dynamicconfig.Client
 				if cfg.DynamicConfigClient != nil {
 					dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(cfg.DynamicConfigClient, logger, temporal.InterruptCh())
