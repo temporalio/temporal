@@ -301,7 +301,7 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
+		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
 	}
 
 	r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{

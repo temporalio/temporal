@@ -152,6 +152,68 @@ func (s *integrationSuite) TestStartWorkflowExecution_TerminateIfRunning() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 }
 
+func (s *integrationSuite) TestStartWorkflowExecutionWithDelay() {
+	id := "integration-start-workflow-with-delay-test"
+	wt := "integration-start-workflow-with-delay-test-type"
+	tl := "integration-start-workflow-with-delay-test-taskqueue"
+	identity := "worker1"
+
+	startDelay := 3 * time.Second
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.New(),
+		Namespace:          s.namespace,
+		WorkflowId:         id,
+		WorkflowType:       &commonpb.WorkflowType{Name: wt},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl},
+		Input:              nil,
+		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
+		Identity:           identity,
+		WorkflowStartDelay: &startDelay,
+	}
+
+	reqStartTime := time.Now()
+	we0, startErr := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(startErr)
+
+	delayEndTime := time.Now()
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		delayEndTime = time.Now()
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	_, pollErr := poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(pollErr)
+	s.GreaterOrEqual(delayEndTime.Sub(reqStartTime), startDelay)
+
+	descResp, descErr := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we0.RunId,
+		},
+	})
+	s.NoError(descErr)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
+}
+
 func (s *integrationSuite) TestTerminateWorkflow() {
 	id := "integration-terminate-workflow-test"
 	wt := "integration-terminate-workflow-test-type"

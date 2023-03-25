@@ -366,6 +366,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
+	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.GetWorkflowStartDelay()); err != nil {
+		return nil, err
+	}
+
 	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
 		return nil, err
 	}
@@ -2016,6 +2020,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 
 	namespaceName := namespace.Name(request.GetNamespace())
 	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.GetWorkflowStartDelay()); err != nil {
 		return nil, err
 	}
 
@@ -4750,6 +4758,21 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 
 	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
 		return errInvalidWorkflowTaskTimeoutSeconds
+	}
+
+	return nil
+}
+
+func (wh *WorkflowHandler) validateWorkflowStartDelay(
+	cronSchedule string,
+	startDelay *time.Duration,
+) error {
+	if len(cronSchedule) > 0 && startDelay != nil {
+		return errCronAndStartDelaySet
+	}
+
+	if timestamp.DurationValue(startDelay) < 0 {
+		return errInvalidWorkflowStartDelaySeconds
 	}
 
 	return nil

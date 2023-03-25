@@ -1423,6 +1423,7 @@ var (
 	TotalSignalCount                               = NewDimensionlessHistogramDef("total_signal_count")
 	WorkflowRetryBackoffTimerCount                 = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount                  = NewCounterDef("workflow_cron_backoff_timer")
+	WorkflowDelayedStartBackoffTimerCount          = NewCounterDef("workflow_delayed_start_backoff_timer")
 	WorkflowCleanupDeleteCount                     = NewCounterDef("workflow_cleanup_delete")
 	WorkflowCleanupArchiveCount                    = NewCounterDef("workflow_cleanup_archive")
 	WorkflowCleanupNopCount                        = NewCounterDef("workflow_cleanup_nop")

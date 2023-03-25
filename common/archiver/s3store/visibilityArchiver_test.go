@@ -39,6 +39,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/searchattribute"
 
@@ -117,12 +118,11 @@ func (s *visibilityArchiverSuite) TestValidateURI() {
 }
 
 func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchiver {
-	archiver := &visibilityArchiver{
+	return &visibilityArchiver{
 		container:   s.container,
 		s3cli:       s.s3cli,
 		queryParser: NewQueryParser(),
 	}
-	return archiver
 }
 
 const (
@@ -353,6 +353,85 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	ei, err = convertToExecutionInfo(s.visibilityRecords[2], searchattribute.TestNameTypeMap)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[0])
+}
+
+func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_InvalidNamespace() {
+	arc := archiver.VisibilityArchiver(s.newTestVisibilityArchiver())
+	uri, err := archiver.NewURI(testBucketURI)
+	s.NoError(err)
+	req := &archiver.QueryVisibilityRequest{
+		NamespaceID:   "",
+		PageSize:      1,
+		NextPageToken: nil,
+		Query:         "",
+	}
+	_, err = arc.Query(context.Background(), uri, req, searchattribute.TestNameTypeMap)
+
+	var svcErr *serviceerror.InvalidArgument
+
+	s.ErrorAs(err, &svcErr)
+}
+
+func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_ZeroPageSize() {
+	arc := archiver.VisibilityArchiver(s.newTestVisibilityArchiver())
+
+	uri, err := archiver.NewURI(testBucketURI)
+	s.NoError(err)
+
+	req := &archiver.QueryVisibilityRequest{
+		NamespaceID:   testNamespaceID,
+		PageSize:      0,
+		NextPageToken: nil,
+		Query:         "",
+	}
+	_, err = arc.Query(context.Background(), uri, req, searchattribute.TestNameTypeMap)
+
+	var svcErr *serviceerror.InvalidArgument
+
+	s.ErrorAs(err, &svcErr)
+}
+
+func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
+	arc := archiver.VisibilityArchiver(s.newTestVisibilityArchiver())
+	uri, err := archiver.NewURI(testBucketURI)
+	s.NoError(err)
+
+	response := &archiver.QueryVisibilityResponse{
+		Executions:    nil,
+		NextPageToken: nil,
+	}
+
+	limit := 10
+	executions := make(map[string]*workflowpb.WorkflowExecutionInfo, limit)
+
+	for i := 0; i < limit; i++ {
+		req := &archiver.QueryVisibilityRequest{
+			NamespaceID:   testNamespaceID,
+			PageSize:      1,
+			NextPageToken: response.NextPageToken,
+			Query:         "",
+		}
+		response, err = arc.Query(context.Background(), uri, req, searchattribute.TestNameTypeMap)
+		s.NoError(err)
+		s.NotNil(response)
+		s.Len(response.Executions, 1)
+
+		if response.NextPageToken == nil {
+			break
+		}
+
+		for _, execution := range response.Executions {
+			key := execution.Execution.GetWorkflowId() +
+				"/" + execution.Execution.GetRunId() +
+				"/" + execution.CloseTime.String()
+			executions[key] = execution
+		}
+
+		if len(executions) > 1 {
+			return
+		}
+	}
+	s.Fail("there should be at least 2 unique executions across all pages")
 }
 
 type precisionTest struct {

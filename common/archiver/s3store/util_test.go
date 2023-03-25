@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Temporal Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,25 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package s3store
 
-package temporal.server.api.enums.v1;
+import (
+	"testing"
 
-option go_package = "go.temporal.io/server/api/enums/v1;enums";
+	"github.com/stretchr/testify/assert"
+)
 
-enum WorkflowExecutionState {
-    WORKFLOW_EXECUTION_STATE_UNSPECIFIED = 0;
-    WORKFLOW_EXECUTION_STATE_CREATED = 1;
-    WORKFLOW_EXECUTION_STATE_RUNNING = 2;
-    WORKFLOW_EXECUTION_STATE_COMPLETED = 3;
-    WORKFLOW_EXECUTION_STATE_ZOMBIE = 4;
-    WORKFLOW_EXECUTION_STATE_VOID = 5;
-    WORKFLOW_EXECUTION_STATE_CORRUPTED = 6;
+func TestConstructVisibilitySearchPrefix(t *testing.T) {
+	t.Parallel()
+	assert.Equal(
+		t,
+		constructVisibilitySearchPrefix(
+			"path",
+			"namespaceID",
+		),
+		"path/namespaceID/visibility",
+	)
 }
 
-enum WorkflowBackoffType {
-    WORKFLOW_BACKOFF_TYPE_UNSPECIFIED = 0;
-    WORKFLOW_BACKOFF_TYPE_RETRY = 1;
-    WORKFLOW_BACKOFF_TYPE_CRON = 2;
-    WORKFLOW_BACKOFF_TYPE_DELAY_START = 3;
+func TestConstructIndexedVisibilitySearchPrefix(t *testing.T) {
+	t.Parallel()
+	assert.Equal(
+		t,
+		constructIndexedVisibilitySearchPrefix(
+			"/path",
+			"namespaceID",
+			"primaryIndexKey",
+			"primaryIndexValue",
+			"secondaryIndexType",
+		),
+		"path/namespaceID/visibility/primaryIndexKey/primaryIndexValue/secondaryIndexType",
+	)
 }

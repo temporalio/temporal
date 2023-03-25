@@ -78,6 +78,8 @@ var (
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
 	errBatchOperationNotSet                               = serviceerror.NewInvalidArgument("Batch operation is not set on request.")
+	errCronAndStartDelaySet                               = serviceerror.NewInvalidArgument("CronSchedule and WorkflowStartDelay may not be used together.")
+	errInvalidWorkflowStartDelaySeconds                   = serviceerror.NewInvalidArgument("An invalid WorkflowStartDelaySeconds is set on request.")
 
 	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
 	errUpdateInputNotSet      = serviceerror.NewInvalidArgument("Update input is not set on request.")
