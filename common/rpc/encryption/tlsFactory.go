@@ -97,7 +97,9 @@ func NewTLSConfigProviderFromConfig(
 	if certProviderFactory == nil {
 		certProviderFactory = NewLocalStoreCertProvider
 	}
-	return NewLocalStoreTlsProvider(&encryptionSettings, metricsHandler.WithTags(metrics.OperationTag(metrics.ServerTlsScope)), logger, certProviderFactory)
+	logger.Info("123e4567-e89b-12d3-a456-426614174000 inside new TLS config! CalumsNewLocalStoreTlsProvider")
+
+	return CalumsNewLocalStoreTlsProvider(&encryptionSettings, metricsHandler.WithTags(metrics.OperationTag(metrics.ServerTlsScope)), logger, certProviderFactory)
 }
 
 func validateRootTLS(cfg *config.RootTLS) error {

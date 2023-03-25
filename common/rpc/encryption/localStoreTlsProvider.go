@@ -70,8 +70,51 @@ type localStoreTlsProvider struct {
 	metricsHandler metrics.MetricsHandler
 }
 
+
+type calumsLocalStoreTlsProvider struct {
+	localStoreTlsProvider
+}
+
+
 var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
 var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
+
+func CalumsNewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.MetricsHandler, logger log.Logger, certProviderFactory CertProviderFactory,
+	) (TLSConfigProvider, error) {
+		
+	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil, tlsConfig.RefreshInterval, logger)
+	var workerProvider CertProvider
+	if isSystemWorker(tlsConfig) { // explicit system worker config
+		workerProvider = certProviderFactory(nil, &tlsConfig.SystemWorker, nil, tlsConfig.RefreshInterval, logger)
+	} else { // legacy implicit system worker config case
+		internodeWorkerProvider := certProviderFactory(&tlsConfig.Internode, nil, &tlsConfig.Frontend.Client, tlsConfig.RefreshInterval, logger)
+		workerProvider = internodeWorkerProvider
+	}
+
+	remoteClusterClientCertProvider := make(map[string]CertProvider)
+	for hostname, groupTLS := range tlsConfig.RemoteClusters {
+		remoteClusterClientCertProvider[hostname] = certProviderFactory(&groupTLS, nil, nil, tlsConfig.RefreshInterval, logger)
+	}
+
+	provider := &calumsLocalStoreTlsProvider{
+		localStoreTlsProvider{
+			internodeCertProvider:       internodeProvider,
+			internodeClientCertProvider: internodeProvider,
+			frontendCertProvider:        certProviderFactory(&tlsConfig.Frontend, nil, nil, tlsConfig.RefreshInterval, logger),
+			workerCertProvider:          workerProvider,
+			frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(
+				tlsConfig.Frontend.PerHostOverrides, certProviderFactory, tlsConfig.RefreshInterval, logger),
+			remoteClusterClientCertProvider: remoteClusterClientCertProvider,
+			RWMutex:                         sync.RWMutex{},
+			settings:                        tlsConfig,
+			metricsHandler:                  metricsHandler,
+			logger:                          logger,
+			cachedRemoteClusterClientConfig: make(map[string]*tls.Config),
+		},
+	}
+	provider.initialize()
+	return provider, nil
+}
 
 func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.MetricsHandler, logger log.Logger, certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
@@ -199,6 +242,13 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 			return newServerTLSConfig(s.internodeCertProvider, nil, &s.settings.Internode, s.logger)
 		},
 		s.settings.Internode.IsServerEnabled())
+}
+
+func (s *calumsLocalStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) {
+	// hack to not enable TLS on internode server !!
+	s.logger.Info("123e4567-e89b-12d3-a456-426614174000 getting internode server config but returning nil!")
+
+	return nil, nil
 }
 
 func (s *localStoreTlsProvider) GetExpiringCerts(timeWindow time.Duration,
