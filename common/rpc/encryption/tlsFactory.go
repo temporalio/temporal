@@ -97,7 +97,7 @@ func NewTLSConfigProviderFromConfig(
 	if certProviderFactory == nil {
 		certProviderFactory = NewLocalStoreCertProvider
 	}
-	logger.Info("123e4567-e89b-12d3-a456-426614174000 inside new TLS config! CalumsNewLocalStoreTlsProvider")
+	logger.Info("CALUM: 123e4567-e89b-12d3-a456-426614174000 inside new TLS config! CalumsNewLocalStoreTlsProvider")
 
 	return CalumsNewLocalStoreTlsProvider(&encryptionSettings, metricsHandler.WithTags(metrics.OperationTag(metrics.ServerTlsScope)), logger, certProviderFactory)
 }

@@ -79,6 +79,7 @@ type calumsLocalStoreTlsProvider struct {
 var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
 var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
+// copy of NewLocalStoreTlsProvider but wraps everything in &calumsLocalStoreT
 func CalumsNewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.MetricsHandler, logger log.Logger, certProviderFactory CertProviderFactory,
 	) (TLSConfigProvider, error) {
 		
@@ -246,7 +247,7 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 
 func (s *calumsLocalStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) {
 	// hack to not enable TLS on internode server !!
-	s.logger.Info("123e4567-e89b-12d3-a456-426614174000 getting internode server config but returning nil!")
+	s.logger.Info("CALUM: 123e4567-e89b-12d3-a456-426614174000 getting internode server config but returning nil!")
 
 	return nil, nil
 }

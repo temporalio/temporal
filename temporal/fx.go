@@ -210,12 +210,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	// TLSConfigProvider
-	tlsConfigProvider := so.tlsConfigProvider
-	if tlsConfigProvider == nil {
-		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricHandler, logger, nil)
-		if err != nil {
-			return serverOptionsProvider{}, err
-		}
+	logger.Info("CALUM: 123e4567-e89b-12d3-a456-426614174000")
+	tlsConfigProvider, err := encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricHandler, logger, nil)
+	if err != nil {
+		return serverOptionsProvider{}, err
 	}
 
 	// EsConfig / EsClient
