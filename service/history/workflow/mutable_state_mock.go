@@ -48,6 +48,7 @@ import (
 	v110 "go.temporal.io/server/api/history/v1"
 	v111 "go.temporal.io/server/api/historyservice/v1"
 	v112 "go.temporal.io/server/api/persistence/v1"
+	v113 "go.temporal.io/server/api/workflow/v1"
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
@@ -1028,6 +1029,20 @@ func (m *MockMutableState) GetActivityScheduledEvent(arg0 context.Context, arg1 
 func (mr *MockMutableStateMockRecorder) GetActivityScheduledEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityScheduledEvent", reflect.TypeOf((*MockMutableState)(nil).GetActivityScheduledEvent), arg0, arg1)
+}
+
+// GetBaseWorkflow mocks base method.
+func (m *MockMutableState) GetBaseWorkflow() *v113.BaseExecutionInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaseWorkflow")
+	ret0, _ := ret[0].(*v113.BaseExecutionInfo)
+	return ret0
+}
+
+// GetBaseWorkflow indicates an expected call of GetBaseWorkflow.
+func (mr *MockMutableStateMockRecorder) GetBaseWorkflow() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaseWorkflow", reflect.TypeOf((*MockMutableState)(nil).GetBaseWorkflow))
 }
 
 // GetChildExecutionInfo mocks base method.
@@ -2396,6 +2411,18 @@ func (m *MockMutableState) RetryActivity(ai *v112.ActivityInfo, failure *v12.Fai
 func (mr *MockMutableStateMockRecorder) RetryActivity(ai, failure interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, failure)
+}
+
+// SetBaseWorkflow mocks base method.
+func (m *MockMutableState) SetBaseWorkflow(baseRunID string, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetBaseWorkflow", baseRunID, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion)
+}
+
+// SetBaseWorkflow indicates an expected call of SetBaseWorkflow.
+func (mr *MockMutableStateMockRecorder) SetBaseWorkflow(baseRunID, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetBaseWorkflow", reflect.TypeOf((*MockMutableState)(nil).SetBaseWorkflow), baseRunID, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion)
 }
 
 // SetCurrentBranchToken mocks base method.

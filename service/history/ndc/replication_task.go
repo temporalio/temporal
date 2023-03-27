@@ -27,6 +27,7 @@ package ndc
 import (
 	"time"
 
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/util"
@@ -60,6 +61,7 @@ type (
 		getEvents() []*historypb.HistoryEvent
 		getNewEvents() []*historypb.HistoryEvent
 		getLogger() log.Logger
+		getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
 		getVersionHistory() *historyspb.VersionHistory
 		isWorkflowReset() bool
 
@@ -67,16 +69,17 @@ type (
 	}
 
 	replicationTaskImpl struct {
-		sourceCluster  string
-		namespaceID    namespace.ID
-		execution      *commonpb.WorkflowExecution
-		version        int64
-		firstEvent     *historypb.HistoryEvent
-		lastEvent      *historypb.HistoryEvent
-		eventTime      time.Time
-		events         []*historypb.HistoryEvent
-		newEvents      []*historypb.HistoryEvent
-		versionHistory *historyspb.VersionHistory
+		sourceCluster    string
+		namespaceID      namespace.ID
+		execution        *commonpb.WorkflowExecution
+		version          int64
+		firstEvent       *historypb.HistoryEvent
+		lastEvent        *historypb.HistoryEvent
+		eventTime        time.Time
+		baseWorkflowInfo *workflowspb.BaseExecutionInfo
+		versionHistory   *historyspb.VersionHistory
+		events           []*historypb.HistoryEvent
+		newEvents        []*historypb.HistoryEvent
 
 		startTime time.Time
 		logger    log.Logger
@@ -118,6 +121,7 @@ func newReplicationTask(
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	execution := request.WorkflowExecution
+	baseExecutionInfo := request.BaseExecutionInfo
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: nil,
 		Items:       request.VersionHistoryItems,
@@ -148,16 +152,17 @@ func newReplicationTask(
 	)
 
 	return &replicationTaskImpl{
-		sourceCluster:  sourceCluster,
-		namespaceID:    namespaceID,
-		execution:      execution,
-		version:        version,
-		firstEvent:     firstEvent,
-		lastEvent:      lastEvent,
-		eventTime:      eventTime,
-		events:         events,
-		newEvents:      newEvents,
-		versionHistory: versionHistory,
+		sourceCluster:    sourceCluster,
+		namespaceID:      namespaceID,
+		execution:        execution,
+		version:          version,
+		firstEvent:       firstEvent,
+		lastEvent:        lastEvent,
+		eventTime:        eventTime,
+		baseWorkflowInfo: baseExecutionInfo,
+		versionHistory:   versionHistory,
+		events:           events,
+		newEvents:        newEvents,
 
 		startTime: taskStartTime,
 		logger:    logger,
@@ -212,11 +217,39 @@ func (t *replicationTaskImpl) getLogger() log.Logger {
 	return t.logger
 }
 
+func (t *replicationTaskImpl) getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
+	if t.baseWorkflowInfo != nil {
+		return t.baseWorkflowInfo
+	}
+
+	// TODO deprecate
+	switch t.getFirstEvent().GetEventType() {
+	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
+		workflowTaskFailedEvent := t.getFirstEvent()
+		attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
+		baseRunID := attr.GetBaseRunId()
+		baseEventID := t.getFirstEvent().EventId - 1
+		baseEventVersion := attr.GetForkEventVersion()
+		return &workflowspb.BaseExecutionInfo{
+			RunId:                            baseRunID,
+			LowestCommonAncestorEventId:      baseEventID,
+			LowestCommonAncestorEventVersion: baseEventVersion,
+		}
+	default:
+		return nil
+	}
+}
+
 func (t *replicationTaskImpl) getVersionHistory() *historyspb.VersionHistory {
 	return t.versionHistory
 }
 
 func (t *replicationTaskImpl) isWorkflowReset() bool {
+	if t.baseWorkflowInfo != nil && t.baseWorkflowInfo.LowestCommonAncestorEventId+1 == t.firstEvent.EventId {
+		return true
+	}
+
+	// TODO deprecate
 	switch t.getFirstEvent().GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
 		workflowTaskFailedEvent := t.getFirstEvent()
@@ -280,13 +313,14 @@ func (t *replicationTaskImpl) splitTask(
 			WorkflowId: t.execution.WorkflowId,
 			RunId:      newRunID,
 		},
-		version:        t.version,
-		firstEvent:     newFirstEvent,
-		lastEvent:      newLastEvent,
-		eventTime:      newEventTime,
-		events:         newHistoryEvents,
-		newEvents:      []*historypb.HistoryEvent{},
-		versionHistory: newVersionHistory,
+		version:          t.version,
+		firstEvent:       newFirstEvent,
+		lastEvent:        newLastEvent,
+		eventTime:        newEventTime,
+		baseWorkflowInfo: nil,
+		versionHistory:   newVersionHistory,
+		events:           newHistoryEvents,
+		newEvents:        []*historypb.HistoryEvent{},
 
 		startTime: taskStartTime,
 		logger:    logger,

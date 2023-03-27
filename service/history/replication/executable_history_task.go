@@ -79,6 +79,7 @@ func NewExecutableHistoryTask(
 				WorkflowId: task.WorkflowId,
 				RunId:      task.RunId,
 			},
+			BaseExecutionInfo:   task.BaseExecutionInfo,
 			VersionHistoryItems: task.VersionHistoryItems,
 			Events:              task.Events,
 			// new run events does not need version history since there is no prior events

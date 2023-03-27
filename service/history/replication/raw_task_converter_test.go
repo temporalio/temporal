@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -41,6 +42,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
@@ -269,6 +271,11 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
+	baseWorkflowInfo := &workflowspb.BaseExecutionInfo{
+		RunId:                            uuid.New(),
+		LowestCommonAncestorEventId:      rand.Int63(),
+		LowestCommonAncestorEventVersion: rand.Int63(),
+	}
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
@@ -301,6 +308,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
+	s.mutableState.EXPECT().GetBaseWorkflow().Return(baseWorkflowInfo).AnyTimes()
 
 	result, err := convertActivityStateReplicationTask(ctx, task, s.workflowCache)
 	s.NoError(err)
@@ -322,6 +330,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,
 				LastWorkerIdentity: activityLastWorkerIdentity,
+				BaseExecutionInfo:  baseWorkflowInfo,
 				VersionHistory:     versionHistory,
 			},
 		},
@@ -366,6 +375,11 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
+	baseWorkflowInfo := &workflowspb.BaseExecutionInfo{
+		RunId:                            uuid.New(),
+		LowestCommonAncestorEventId:      rand.Int63(),
+		LowestCommonAncestorEventVersion: rand.Int63(),
+	}
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
@@ -398,6 +412,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
+	s.mutableState.EXPECT().GetBaseWorkflow().Return(baseWorkflowInfo).AnyTimes()
 
 	result, err := convertActivityStateReplicationTask(ctx, task, s.workflowCache)
 	s.NoError(err)
@@ -419,6 +434,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,
 				LastWorkerIdentity: activityLastWorkerIdentity,
+				BaseExecutionInfo:  baseWorkflowInfo,
 				VersionHistory:     versionHistory,
 			},
 		},
@@ -575,6 +591,11 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		NextEventID:         nextEventID,
 		NewRunID:            s.newRunID,
 	}
+	baseWorkflowInfo := &workflowspb.BaseExecutionInfo{
+		RunId:                            uuid.New(),
+		LowestCommonAncestorEventId:      rand.Int63(),
+		LowestCommonAncestorEventVersion: rand.Int63(),
+	}
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte("branch token"),
 		Items: []*historyspb.VersionHistoryItem{
@@ -607,6 +628,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
+	s.mutableState.EXPECT().GetBaseWorkflow().Return(baseWorkflowInfo).AnyTimes()
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   versionHistory.BranchToken,
 		MinEventID:    firstEventID,
@@ -651,6 +673,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 	s.newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: newVersionHistories,
 	}).AnyTimes()
+	s.newMutableState.EXPECT().GetBaseWorkflow().Return(nil).AnyTimes()
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   newVersionHistory.BranchToken,
 		MinEventID:    common.FirstEventID,
@@ -673,6 +696,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 				NamespaceId:         task.NamespaceID,
 				WorkflowId:          task.WorkflowID,
 				RunId:               task.RunID,
+				BaseExecutionInfo:   baseWorkflowInfo,
 				VersionHistoryItems: versionHistory.Items,
 				Events:              events,
 				NewRunEvents:        newEvents,
@@ -712,6 +736,11 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 			},
 		},
 	}
+	baseWorkflowInfo := &workflowspb.BaseExecutionInfo{
+		RunId:                            uuid.New(),
+		LowestCommonAncestorEventId:      rand.Int63(),
+		LowestCommonAncestorEventVersion: rand.Int63(),
+	}
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
@@ -735,6 +764,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
+	s.mutableState.EXPECT().GetBaseWorkflow().Return(baseWorkflowInfo).AnyTimes()
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   versionHistory.BranchToken,
 		MinEventID:    firstEventID,
@@ -757,6 +787,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 				NamespaceId:         task.NamespaceID,
 				WorkflowId:          task.WorkflowID,
 				RunId:               task.RunID,
+				BaseExecutionInfo:   baseWorkflowInfo,
 				VersionHistoryItems: versionHistory.Items,
 				Events:              events,
 				NewRunEvents:        nil,

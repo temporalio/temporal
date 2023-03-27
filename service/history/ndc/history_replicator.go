@@ -35,6 +35,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -55,7 +57,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -762,12 +763,11 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 		)
 	}
 
-	workflowTaskFailedEvent := task.getFirstEvent()
-	attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
-	baseRunID := attr.GetBaseRunId()
-	baseEventID := workflowTaskFailedEvent.GetEventId() - 1
-	baseEventVersion := attr.GetForkEventVersion()
-	newRunID := attr.GetNewRunId()
+	baseWorkflowInfo := task.getBaseWorkflowInfo()
+	baseRunID := baseWorkflowInfo.RunId
+	baseEventID := baseWorkflowInfo.LowestCommonAncestorEventId
+	baseEventVersion := baseWorkflowInfo.LowestCommonAncestorEventVersion
+	newRunID := newContext.GetWorkflowKey().RunID
 
 	workflowResetter := r.newResetter(
 		task.getNamespaceID(),
