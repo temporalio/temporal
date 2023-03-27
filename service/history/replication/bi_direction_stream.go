@@ -37,9 +37,9 @@ import (
 )
 
 const (
-	sreamStatusInitialized int32 = 0
-	sreamStatusOpen        int32 = 1
-	sreamStatusClosed      int32 = 2
+	streamStatusInitialized int32 = 0
+	streamStatusOpen        int32 = 1
+	streamStatusClosed      int32 = 2
 )
 
 const (
@@ -95,7 +95,7 @@ func NewBiDirectionStream[Req any, Resp any](
 		metricsHandler: metricsHandler,
 		logger:         logger,
 
-		status:          sreamStatusInitialized,
+		status:          streamStatusInitialized,
 		channel:         make(chan StreamResp[Resp], defaultChanSize),
 		streamingClient: nil,
 	}
@@ -136,27 +136,27 @@ func (s *BiDirectionStreamImpl[Req, Resp]) Close() {
 }
 
 func (s *BiDirectionStreamImpl[Req, Resp]) closeLocked() {
-	if s.status == sreamStatusClosed {
+	if s.status == streamStatusClosed {
 		return
 	}
-	s.status = sreamStatusClosed
+	s.status = streamStatusClosed
 	s.cancel()
 }
 
 func (s *BiDirectionStreamImpl[Req, Resp]) lazyInit() error {
 	switch s.status {
-	case sreamStatusInitialized:
+	case streamStatusInitialized:
 		streamingClient, err := s.clientProvider.Get(s.ctx)
 		if err != nil {
 			return err
 		}
 		s.streamingClient = streamingClient
-		s.status = sreamStatusOpen
+		s.status = streamStatusOpen
 		go s.recvLoop()
 		return nil
-	case sreamStatusOpen:
+	case streamStatusOpen:
 		return nil
-	case sreamStatusClosed:
+	case streamStatusClosed:
 		return ErrClosed
 	default:
 		panic(fmt.Sprintf("upload stream unknown status: %v", s.status))
