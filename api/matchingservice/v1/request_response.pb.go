@@ -1346,29 +1346,29 @@ func (m *ListTaskQueuePartitionsResponse) GetWorkflowTaskQueuePartitions() []*v1
 
 // (-- api-linter: core::0134::request-mask-required=disabled
 //
-//	aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest doesn't follow Google API format --)
+//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibilityRequest doesn't follow Google API format --)
 //
 // (-- api-linter: core::0134::request-resource-required=disabled
 //
-//	aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest RPC doesn't follow Google API format. --)
-type UpdateWorkerBuildIdCompatabilityRequest struct {
+//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibilityRequest RPC doesn't follow Google API format. --)
+type UpdateWorkerBuildIdCompatibilityRequest struct {
 	NamespaceId string                                      `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request     *v1.UpdateWorkerBuildIdCompatabilityRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	Request     *v1.UpdateWorkerBuildIdCompatibilityRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityRequest) Reset() {
-	*m = UpdateWorkerBuildIdCompatabilityRequest{}
+func (m *UpdateWorkerBuildIdCompatibilityRequest) Reset() {
+	*m = UpdateWorkerBuildIdCompatibilityRequest{}
 }
-func (*UpdateWorkerBuildIdCompatabilityRequest) ProtoMessage() {}
-func (*UpdateWorkerBuildIdCompatabilityRequest) Descriptor() ([]byte, []int) {
+func (*UpdateWorkerBuildIdCompatibilityRequest) ProtoMessage() {}
+func (*UpdateWorkerBuildIdCompatibilityRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a429a3813476c583, []int{18}
 }
-func (m *UpdateWorkerBuildIdCompatabilityRequest) XXX_Unmarshal(b []byte) error {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *UpdateWorkerBuildIdCompatabilityRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_UpdateWorkerBuildIdCompatabilityRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_UpdateWorkerBuildIdCompatibilityRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1378,48 +1378,48 @@ func (m *UpdateWorkerBuildIdCompatabilityRequest) XXX_Marshal(b []byte, determin
 		return b[:n], nil
 	}
 }
-func (m *UpdateWorkerBuildIdCompatabilityRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_UpdateWorkerBuildIdCompatabilityRequest.Merge(m, src)
+func (m *UpdateWorkerBuildIdCompatibilityRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UpdateWorkerBuildIdCompatibilityRequest.Merge(m, src)
 }
-func (m *UpdateWorkerBuildIdCompatabilityRequest) XXX_Size() int {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *UpdateWorkerBuildIdCompatabilityRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_UpdateWorkerBuildIdCompatabilityRequest.DiscardUnknown(m)
+func (m *UpdateWorkerBuildIdCompatibilityRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_UpdateWorkerBuildIdCompatibilityRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_UpdateWorkerBuildIdCompatabilityRequest proto.InternalMessageInfo
+var xxx_messageInfo_UpdateWorkerBuildIdCompatibilityRequest proto.InternalMessageInfo
 
-func (m *UpdateWorkerBuildIdCompatabilityRequest) GetNamespaceId() string {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) GetNamespaceId() string {
 	if m != nil {
 		return m.NamespaceId
 	}
 	return ""
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityRequest) GetRequest() *v1.UpdateWorkerBuildIdCompatabilityRequest {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) GetRequest() *v1.UpdateWorkerBuildIdCompatibilityRequest {
 	if m != nil {
 		return m.Request
 	}
 	return nil
 }
 
-type UpdateWorkerBuildIdCompatabilityResponse struct {
+type UpdateWorkerBuildIdCompatibilityResponse struct {
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityResponse) Reset() {
-	*m = UpdateWorkerBuildIdCompatabilityResponse{}
+func (m *UpdateWorkerBuildIdCompatibilityResponse) Reset() {
+	*m = UpdateWorkerBuildIdCompatibilityResponse{}
 }
-func (*UpdateWorkerBuildIdCompatabilityResponse) ProtoMessage() {}
-func (*UpdateWorkerBuildIdCompatabilityResponse) Descriptor() ([]byte, []int) {
+func (*UpdateWorkerBuildIdCompatibilityResponse) ProtoMessage() {}
+func (*UpdateWorkerBuildIdCompatibilityResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a429a3813476c583, []int{19}
 }
-func (m *UpdateWorkerBuildIdCompatabilityResponse) XXX_Unmarshal(b []byte) error {
+func (m *UpdateWorkerBuildIdCompatibilityResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *UpdateWorkerBuildIdCompatabilityResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *UpdateWorkerBuildIdCompatibilityResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_UpdateWorkerBuildIdCompatabilityResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_UpdateWorkerBuildIdCompatibilityResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1429,34 +1429,34 @@ func (m *UpdateWorkerBuildIdCompatabilityResponse) XXX_Marshal(b []byte, determi
 		return b[:n], nil
 	}
 }
-func (m *UpdateWorkerBuildIdCompatabilityResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_UpdateWorkerBuildIdCompatabilityResponse.Merge(m, src)
+func (m *UpdateWorkerBuildIdCompatibilityResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UpdateWorkerBuildIdCompatibilityResponse.Merge(m, src)
 }
-func (m *UpdateWorkerBuildIdCompatabilityResponse) XXX_Size() int {
+func (m *UpdateWorkerBuildIdCompatibilityResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *UpdateWorkerBuildIdCompatabilityResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_UpdateWorkerBuildIdCompatabilityResponse.DiscardUnknown(m)
+func (m *UpdateWorkerBuildIdCompatibilityResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_UpdateWorkerBuildIdCompatibilityResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_UpdateWorkerBuildIdCompatabilityResponse proto.InternalMessageInfo
+var xxx_messageInfo_UpdateWorkerBuildIdCompatibilityResponse proto.InternalMessageInfo
 
-type GetWorkerBuildIdCompatabilityRequest struct {
+type GetWorkerBuildIdCompatibilityRequest struct {
 	NamespaceId string                                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Request     *v1.GetWorkerBuildIdCompatabilityRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	Request     *v1.GetWorkerBuildIdCompatibilityRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
 }
 
-func (m *GetWorkerBuildIdCompatabilityRequest) Reset()      { *m = GetWorkerBuildIdCompatabilityRequest{} }
-func (*GetWorkerBuildIdCompatabilityRequest) ProtoMessage() {}
-func (*GetWorkerBuildIdCompatabilityRequest) Descriptor() ([]byte, []int) {
+func (m *GetWorkerBuildIdCompatibilityRequest) Reset()      { *m = GetWorkerBuildIdCompatibilityRequest{} }
+func (*GetWorkerBuildIdCompatibilityRequest) ProtoMessage() {}
+func (*GetWorkerBuildIdCompatibilityRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a429a3813476c583, []int{20}
 }
-func (m *GetWorkerBuildIdCompatabilityRequest) XXX_Unmarshal(b []byte) error {
+func (m *GetWorkerBuildIdCompatibilityRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *GetWorkerBuildIdCompatabilityRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *GetWorkerBuildIdCompatibilityRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_GetWorkerBuildIdCompatabilityRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_GetWorkerBuildIdCompatibilityRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1466,47 +1466,47 @@ func (m *GetWorkerBuildIdCompatabilityRequest) XXX_Marshal(b []byte, determinist
 		return b[:n], nil
 	}
 }
-func (m *GetWorkerBuildIdCompatabilityRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetWorkerBuildIdCompatabilityRequest.Merge(m, src)
+func (m *GetWorkerBuildIdCompatibilityRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetWorkerBuildIdCompatibilityRequest.Merge(m, src)
 }
-func (m *GetWorkerBuildIdCompatabilityRequest) XXX_Size() int {
+func (m *GetWorkerBuildIdCompatibilityRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *GetWorkerBuildIdCompatabilityRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetWorkerBuildIdCompatabilityRequest.DiscardUnknown(m)
+func (m *GetWorkerBuildIdCompatibilityRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetWorkerBuildIdCompatibilityRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_GetWorkerBuildIdCompatabilityRequest proto.InternalMessageInfo
+var xxx_messageInfo_GetWorkerBuildIdCompatibilityRequest proto.InternalMessageInfo
 
-func (m *GetWorkerBuildIdCompatabilityRequest) GetNamespaceId() string {
+func (m *GetWorkerBuildIdCompatibilityRequest) GetNamespaceId() string {
 	if m != nil {
 		return m.NamespaceId
 	}
 	return ""
 }
 
-func (m *GetWorkerBuildIdCompatabilityRequest) GetRequest() *v1.GetWorkerBuildIdCompatabilityRequest {
+func (m *GetWorkerBuildIdCompatibilityRequest) GetRequest() *v1.GetWorkerBuildIdCompatibilityRequest {
 	if m != nil {
 		return m.Request
 	}
 	return nil
 }
 
-type GetWorkerBuildIdCompatabilityResponse struct {
-	Response *v1.GetWorkerBuildIdCompatabilityResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
+type GetWorkerBuildIdCompatibilityResponse struct {
+	Response *v1.GetWorkerBuildIdCompatibilityResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
 }
 
-func (m *GetWorkerBuildIdCompatabilityResponse) Reset()      { *m = GetWorkerBuildIdCompatabilityResponse{} }
-func (*GetWorkerBuildIdCompatabilityResponse) ProtoMessage() {}
-func (*GetWorkerBuildIdCompatabilityResponse) Descriptor() ([]byte, []int) {
+func (m *GetWorkerBuildIdCompatibilityResponse) Reset()      { *m = GetWorkerBuildIdCompatibilityResponse{} }
+func (*GetWorkerBuildIdCompatibilityResponse) ProtoMessage() {}
+func (*GetWorkerBuildIdCompatibilityResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_a429a3813476c583, []int{21}
 }
-func (m *GetWorkerBuildIdCompatabilityResponse) XXX_Unmarshal(b []byte) error {
+func (m *GetWorkerBuildIdCompatibilityResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *GetWorkerBuildIdCompatabilityResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *GetWorkerBuildIdCompatibilityResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_GetWorkerBuildIdCompatabilityResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_GetWorkerBuildIdCompatibilityResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1516,19 +1516,19 @@ func (m *GetWorkerBuildIdCompatabilityResponse) XXX_Marshal(b []byte, determinis
 		return b[:n], nil
 	}
 }
-func (m *GetWorkerBuildIdCompatabilityResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetWorkerBuildIdCompatabilityResponse.Merge(m, src)
+func (m *GetWorkerBuildIdCompatibilityResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetWorkerBuildIdCompatibilityResponse.Merge(m, src)
 }
-func (m *GetWorkerBuildIdCompatabilityResponse) XXX_Size() int {
+func (m *GetWorkerBuildIdCompatibilityResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *GetWorkerBuildIdCompatabilityResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetWorkerBuildIdCompatabilityResponse.DiscardUnknown(m)
+func (m *GetWorkerBuildIdCompatibilityResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetWorkerBuildIdCompatibilityResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_GetWorkerBuildIdCompatabilityResponse proto.InternalMessageInfo
+var xxx_messageInfo_GetWorkerBuildIdCompatibilityResponse proto.InternalMessageInfo
 
-func (m *GetWorkerBuildIdCompatabilityResponse) GetResponse() *v1.GetWorkerBuildIdCompatabilityResponse {
+func (m *GetWorkerBuildIdCompatibilityResponse) GetResponse() *v1.GetWorkerBuildIdCompatibilityResponse {
 	if m != nil {
 		return m.Response
 	}
@@ -1810,10 +1810,10 @@ func init() {
 	proto.RegisterType((*DescribeTaskQueueResponse)(nil), "temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse")
 	proto.RegisterType((*ListTaskQueuePartitionsRequest)(nil), "temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest")
 	proto.RegisterType((*ListTaskQueuePartitionsResponse)(nil), "temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse")
-	proto.RegisterType((*UpdateWorkerBuildIdCompatabilityRequest)(nil), "temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatabilityRequest")
-	proto.RegisterType((*UpdateWorkerBuildIdCompatabilityResponse)(nil), "temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatabilityResponse")
-	proto.RegisterType((*GetWorkerBuildIdCompatabilityRequest)(nil), "temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatabilityRequest")
-	proto.RegisterType((*GetWorkerBuildIdCompatabilityResponse)(nil), "temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatabilityResponse")
+	proto.RegisterType((*UpdateWorkerBuildIdCompatibilityRequest)(nil), "temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest")
+	proto.RegisterType((*UpdateWorkerBuildIdCompatibilityResponse)(nil), "temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse")
+	proto.RegisterType((*GetWorkerBuildIdCompatibilityRequest)(nil), "temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest")
+	proto.RegisterType((*GetWorkerBuildIdCompatibilityResponse)(nil), "temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse")
 	proto.RegisterType((*InvalidateTaskQueueMetadataRequest)(nil), "temporal.server.api.matchingservice.v1.InvalidateTaskQueueMetadataRequest")
 	proto.RegisterType((*InvalidateTaskQueueMetadataResponse)(nil), "temporal.server.api.matchingservice.v1.InvalidateTaskQueueMetadataResponse")
 	proto.RegisterType((*GetTaskQueueMetadataRequest)(nil), "temporal.server.api.matchingservice.v1.GetTaskQueueMetadataRequest")
@@ -1934,26 +1934,26 @@ var fileDescriptor_a429a3813476c583 = []byte{
 	0x98, 0x21, 0x1b, 0x31, 0x64, 0x5c, 0x42, 0xc9, 0x17, 0xe2, 0xae, 0x0d, 0xfc, 0xec, 0xd8, 0xa7,
 	0xab, 0xfe, 0xb3, 0x33, 0xaf, 0x74, 0xf6, 0x51, 0xf2, 0xcb, 0x4a, 0xf7, 0xec, 0xea, 0x9f, 0x35,
 	0xb8, 0xfe, 0x9d, 0xb6, 0x8d, 0x18, 0xe6, 0x63, 0x01, 0xfb, 0x1b, 0x81, 0xe3, 0xda, 0x3b, 0x36,
-	0xef, 0x2b, 0x88, 0xa1, 0xba, 0xe3, 0x3a, 0xec, 0xf8, 0x1c, 0x85, 0x52, 0x87, 0xa9, 0x78, 0x8d,
-	0x6c, 0x0f, 0xac, 0x91, 0x21, 0x4f, 0x37, 0x42, 0xe0, 0xea, 0x4d, 0x58, 0x1d, 0xac, 0xa3, 0x0a,
-	0xff, 0x4f, 0x1a, 0x5c, 0x7d, 0x88, 0xd9, 0x6b, 0xf1, 0xcd, 0x4c, 0xfa, 0xb6, 0x35, 0xd0, 0xb7,
-	0x61, 0x8e, 0xee, 0x3a, 0xf6, 0x0b, 0x0d, 0xae, 0x0d, 0xd0, 0x50, 0xd9, 0x5a, 0x87, 0x5c, 0xf8,
-	0x1f, 0x81, 0x9a, 0xd6, 0xdf, 0x78, 0x55, 0x5b, 0x24, 0x9a, 0x11, 0xe1, 0x56, 0x7f, 0x99, 0x81,
-	0xea, 0x8e, 0xd7, 0x41, 0xae, 0xc3, 0x63, 0x1d, 0xe5, 0x4e, 0x94, 0x56, 0xc3, 0x07, 0x6e, 0xa9,
-	0xaf, 0x88, 0xf3, 0xbd, 0xad, 0x3d, 0x65, 0xda, 0x8c, 0x8f, 0x3e, 0x6d, 0xbe, 0x0f, 0x17, 0x3a,
-	0xd8, 0xa7, 0x0e, 0xf1, 0x1c, 0xaf, 0x61, 0x72, 0x4b, 0xd5, 0x48, 0x5e, 0x4f, 0x5d, 0x2d, 0x7b,
-	0xfe, 0xae, 0x91, 0x0b, 0x66, 0xa8, 0xfa, 0x80, 0xfb, 0x38, 0xd3, 0x89, 0x3d, 0x57, 0xaf, 0xc1,
-	0x95, 0x33, 0x43, 0xa2, 0x42, 0xf7, 0x3b, 0x0d, 0x2e, 0x3d, 0xc4, 0xec, 0x0b, 0x8c, 0xd9, 0x3d,
-	0x58, 0x3c, 0x42, 0x1e, 0x33, 0x13, 0xae, 0x9a, 0x56, 0xe0, 0x37, 0x11, 0x6d, 0x8a, 0x00, 0x16,
-	0x8d, 0x79, 0x2e, 0x13, 0x77, 0x69, 0x53, 0x0a, 0x54, 0xff, 0xaa, 0xc1, 0x62, 0xba, 0x89, 0x2a,
-	0xc5, 0x7e, 0xd8, 0x1f, 0x47, 0x6d, 0xd4, 0x38, 0x6e, 0x8f, 0x25, 0x23, 0xa9, 0xdf, 0x84, 0x92,
-	0xf8, 0x0e, 0x2c, 0x37, 0x27, 0x53, 0x18, 0xcd, 0xbd, 0xcc, 0x71, 0x59, 0xc5, 0x31, 0xf0, 0xe1,
-	0x36, 0xa2, 0xcd, 0x8d, 0x39, 0x78, 0x2b, 0xe9, 0x27, 0xcf, 0xd2, 0x0d, 0xff, 0xf9, 0x8b, 0xca,
-	0xd8, 0x67, 0x2f, 0x2a, 0x63, 0x9f, 0xbf, 0xa8, 0x68, 0x3f, 0x39, 0xa9, 0x68, 0x7f, 0x38, 0xa9,
-	0x68, 0x7f, 0x3b, 0xa9, 0x68, 0xcf, 0x4f, 0x2a, 0xda, 0x3f, 0x4f, 0x2a, 0xda, 0xbf, 0x4e, 0x2a,
-	0x63, 0x9f, 0x9f, 0x54, 0xb4, 0x4f, 0x5f, 0x56, 0xc6, 0x9e, 0xbf, 0xac, 0x8c, 0x7d, 0xf6, 0xb2,
-	0x32, 0xf6, 0xec, 0x6b, 0x0d, 0xd2, 0xf5, 0xc0, 0x21, 0x67, 0xff, 0x9b, 0xfb, 0xd5, 0x04, 0xa9,
-	0x3e, 0x29, 0xde, 0xa6, 0xbe, 0xf2, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x7c, 0xc7, 0xb5, 0x75,
+	0xef, 0x2b, 0x88, 0x39, 0x75, 0xc7, 0x75, 0xd8, 0xf1, 0x39, 0x0a, 0xa5, 0x0e, 0x53, 0xf1, 0x1a,
+	0xd9, 0x1e, 0x58, 0x23, 0x43, 0x9e, 0x6e, 0x84, 0xc0, 0xd5, 0x9b, 0xb0, 0x3a, 0x58, 0x47, 0x15,
+	0xfe, 0x9f, 0x34, 0xb8, 0xfa, 0x10, 0xb3, 0xd7, 0xe2, 0x9b, 0x99, 0xf4, 0x6d, 0x6b, 0xa0, 0x6f,
+	0xc3, 0x1c, 0xdd, 0x75, 0xec, 0x17, 0x1a, 0x5c, 0x1b, 0xa0, 0xa1, 0xb2, 0xb5, 0x0e, 0xb9, 0xf0,
+	0x3f, 0x02, 0x35, 0xad, 0xbf, 0xf1, 0xaa, 0xb6, 0x48, 0x34, 0x23, 0xc2, 0xad, 0xfe, 0x32, 0x03,
+	0xd5, 0x1d, 0xaf, 0x83, 0x5c, 0x87, 0xc7, 0x3a, 0xca, 0x9d, 0x28, 0xad, 0x86, 0x0f, 0xdc, 0x52,
+	0x5f, 0x11, 0xe7, 0x7b, 0x5b, 0x7b, 0xca, 0xb4, 0x19, 0x1f, 0x7d, 0xda, 0x7c, 0x1f, 0x2e, 0x74,
+	0xb0, 0x4f, 0x1d, 0xe2, 0x39, 0x5e, 0xc3, 0xe4, 0x96, 0xaa, 0x91, 0xbc, 0x9e, 0xba, 0x5a, 0xf6,
+	0xfc, 0x5d, 0x23, 0x17, 0xcc, 0x50, 0xf5, 0x01, 0xf7, 0x71, 0xa6, 0x13, 0x7b, 0xae, 0x5e, 0x83,
+	0x2b, 0x67, 0x86, 0x44, 0x85, 0xee, 0x77, 0x1a, 0x5c, 0x7a, 0x88, 0xd9, 0x17, 0x18, 0xb3, 0x7b,
+	0xb0, 0x78, 0x84, 0x3c, 0x66, 0x26, 0x5c, 0x35, 0xad, 0xc0, 0x6f, 0x22, 0xda, 0x14, 0x01, 0x2c,
+	0x1a, 0xf3, 0x5c, 0x26, 0xee, 0xd2, 0xa6, 0x14, 0xa8, 0xfe, 0x55, 0x83, 0xc5, 0x74, 0x13, 0x55,
+	0x8a, 0xfd, 0xb0, 0x3f, 0x8e, 0xda, 0xa8, 0x71, 0xdc, 0x1e, 0x4b, 0x46, 0x52, 0xbf, 0x09, 0x25,
+	0xf1, 0x1d, 0x58, 0x6e, 0x4e, 0xa6, 0x30, 0x9a, 0x7b, 0x99, 0xe3, 0xb2, 0x8a, 0x63, 0xe0, 0xc3,
+	0x6d, 0x44, 0x9b, 0x1b, 0x73, 0xf0, 0x56, 0xd2, 0x4f, 0x9e, 0xa5, 0x1b, 0xfe, 0xf3, 0x17, 0x95,
+	0xb1, 0xcf, 0x5e, 0x54, 0xc6, 0x3e, 0x7f, 0x51, 0xd1, 0x7e, 0x72, 0x52, 0xd1, 0xfe, 0x70, 0x52,
+	0xd1, 0xfe, 0x76, 0x52, 0xd1, 0x9e, 0x9f, 0x54, 0xb4, 0x7f, 0x9e, 0x54, 0xb4, 0x7f, 0x9d, 0x54,
+	0xc6, 0x3e, 0x3f, 0xa9, 0x68, 0x9f, 0xbe, 0xac, 0x8c, 0x3d, 0x7f, 0x59, 0x19, 0xfb, 0xec, 0x65,
+	0x65, 0xec, 0xd9, 0xd7, 0x1a, 0xa4, 0xeb, 0x81, 0x43, 0xce, 0xfe, 0x37, 0xf7, 0xab, 0x09, 0x52,
+	0x7d, 0x52, 0xbc, 0x4d, 0x7d, 0xe5, 0xbf, 0x01, 0x00, 0x00, 0xff, 0xff, 0x35, 0xe8, 0xbf, 0x59,
 	0x0e, 0x1e, 0x00, 0x00,
 }
 
@@ -2650,14 +2650,14 @@ func (this *ListTaskQueuePartitionsResponse) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *UpdateWorkerBuildIdCompatabilityRequest) Equal(that interface{}) bool {
+func (this *UpdateWorkerBuildIdCompatibilityRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*UpdateWorkerBuildIdCompatabilityRequest)
+	that1, ok := that.(*UpdateWorkerBuildIdCompatibilityRequest)
 	if !ok {
-		that2, ok := that.(UpdateWorkerBuildIdCompatabilityRequest)
+		that2, ok := that.(UpdateWorkerBuildIdCompatibilityRequest)
 		if ok {
 			that1 = &that2
 		} else {
@@ -2677,14 +2677,14 @@ func (this *UpdateWorkerBuildIdCompatabilityRequest) Equal(that interface{}) boo
 	}
 	return true
 }
-func (this *UpdateWorkerBuildIdCompatabilityResponse) Equal(that interface{}) bool {
+func (this *UpdateWorkerBuildIdCompatibilityResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*UpdateWorkerBuildIdCompatabilityResponse)
+	that1, ok := that.(*UpdateWorkerBuildIdCompatibilityResponse)
 	if !ok {
-		that2, ok := that.(UpdateWorkerBuildIdCompatabilityResponse)
+		that2, ok := that.(UpdateWorkerBuildIdCompatibilityResponse)
 		if ok {
 			that1 = &that2
 		} else {
@@ -2698,14 +2698,14 @@ func (this *UpdateWorkerBuildIdCompatabilityResponse) Equal(that interface{}) bo
 	}
 	return true
 }
-func (this *GetWorkerBuildIdCompatabilityRequest) Equal(that interface{}) bool {
+func (this *GetWorkerBuildIdCompatibilityRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*GetWorkerBuildIdCompatabilityRequest)
+	that1, ok := that.(*GetWorkerBuildIdCompatibilityRequest)
 	if !ok {
-		that2, ok := that.(GetWorkerBuildIdCompatabilityRequest)
+		that2, ok := that.(GetWorkerBuildIdCompatibilityRequest)
 		if ok {
 			that1 = &that2
 		} else {
@@ -2725,14 +2725,14 @@ func (this *GetWorkerBuildIdCompatabilityRequest) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *GetWorkerBuildIdCompatabilityResponse) Equal(that interface{}) bool {
+func (this *GetWorkerBuildIdCompatibilityResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*GetWorkerBuildIdCompatabilityResponse)
+	that1, ok := that.(*GetWorkerBuildIdCompatibilityResponse)
 	if !ok {
-		that2, ok := that.(GetWorkerBuildIdCompatabilityResponse)
+		that2, ok := that.(GetWorkerBuildIdCompatibilityResponse)
 		if ok {
 			that1 = &that2
 		} else {
@@ -3231,12 +3231,12 @@ func (this *ListTaskQueuePartitionsResponse) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *UpdateWorkerBuildIdCompatabilityRequest) GoString() string {
+func (this *UpdateWorkerBuildIdCompatibilityRequest) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&matchingservice.UpdateWorkerBuildIdCompatabilityRequest{")
+	s = append(s, "&matchingservice.UpdateWorkerBuildIdCompatibilityRequest{")
 	s = append(s, "NamespaceId: "+fmt.Sprintf("%#v", this.NamespaceId)+",\n")
 	if this.Request != nil {
 		s = append(s, "Request: "+fmt.Sprintf("%#v", this.Request)+",\n")
@@ -3244,21 +3244,21 @@ func (this *UpdateWorkerBuildIdCompatabilityRequest) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *UpdateWorkerBuildIdCompatabilityResponse) GoString() string {
+func (this *UpdateWorkerBuildIdCompatibilityResponse) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 4)
-	s = append(s, "&matchingservice.UpdateWorkerBuildIdCompatabilityResponse{")
+	s = append(s, "&matchingservice.UpdateWorkerBuildIdCompatibilityResponse{")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *GetWorkerBuildIdCompatabilityRequest) GoString() string {
+func (this *GetWorkerBuildIdCompatibilityRequest) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&matchingservice.GetWorkerBuildIdCompatabilityRequest{")
+	s = append(s, "&matchingservice.GetWorkerBuildIdCompatibilityRequest{")
 	s = append(s, "NamespaceId: "+fmt.Sprintf("%#v", this.NamespaceId)+",\n")
 	if this.Request != nil {
 		s = append(s, "Request: "+fmt.Sprintf("%#v", this.Request)+",\n")
@@ -3266,12 +3266,12 @@ func (this *GetWorkerBuildIdCompatabilityRequest) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *GetWorkerBuildIdCompatabilityResponse) GoString() string {
+func (this *GetWorkerBuildIdCompatibilityResponse) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 5)
-	s = append(s, "&matchingservice.GetWorkerBuildIdCompatabilityResponse{")
+	s = append(s, "&matchingservice.GetWorkerBuildIdCompatibilityResponse{")
 	if this.Response != nil {
 		s = append(s, "Response: "+fmt.Sprintf("%#v", this.Response)+",\n")
 	}
@@ -4535,7 +4535,7 @@ func (m *ListTaskQueuePartitionsResponse) MarshalToSizedBuffer(dAtA []byte) (int
 	return len(dAtA) - i, nil
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityRequest) Marshal() (dAtA []byte, err error) {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -4545,12 +4545,12 @@ func (m *UpdateWorkerBuildIdCompatabilityRequest) Marshal() (dAtA []byte, err er
 	return dAtA[:n], nil
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -4577,7 +4577,7 @@ func (m *UpdateWorkerBuildIdCompatabilityRequest) MarshalToSizedBuffer(dAtA []by
 	return len(dAtA) - i, nil
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityResponse) Marshal() (dAtA []byte, err error) {
+func (m *UpdateWorkerBuildIdCompatibilityResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -4587,12 +4587,12 @@ func (m *UpdateWorkerBuildIdCompatabilityResponse) Marshal() (dAtA []byte, err e
 	return dAtA[:n], nil
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *UpdateWorkerBuildIdCompatibilityResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *UpdateWorkerBuildIdCompatibilityResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -4600,7 +4600,7 @@ func (m *UpdateWorkerBuildIdCompatabilityResponse) MarshalToSizedBuffer(dAtA []b
 	return len(dAtA) - i, nil
 }
 
-func (m *GetWorkerBuildIdCompatabilityRequest) Marshal() (dAtA []byte, err error) {
+func (m *GetWorkerBuildIdCompatibilityRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -4610,12 +4610,12 @@ func (m *GetWorkerBuildIdCompatabilityRequest) Marshal() (dAtA []byte, err error
 	return dAtA[:n], nil
 }
 
-func (m *GetWorkerBuildIdCompatabilityRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *GetWorkerBuildIdCompatibilityRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *GetWorkerBuildIdCompatabilityRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *GetWorkerBuildIdCompatibilityRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -4642,7 +4642,7 @@ func (m *GetWorkerBuildIdCompatabilityRequest) MarshalToSizedBuffer(dAtA []byte)
 	return len(dAtA) - i, nil
 }
 
-func (m *GetWorkerBuildIdCompatabilityResponse) Marshal() (dAtA []byte, err error) {
+func (m *GetWorkerBuildIdCompatibilityResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -4652,12 +4652,12 @@ func (m *GetWorkerBuildIdCompatabilityResponse) Marshal() (dAtA []byte, err erro
 	return dAtA[:n], nil
 }
 
-func (m *GetWorkerBuildIdCompatabilityResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *GetWorkerBuildIdCompatibilityResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *GetWorkerBuildIdCompatabilityResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *GetWorkerBuildIdCompatibilityResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5366,7 +5366,7 @@ func (m *ListTaskQueuePartitionsResponse) Size() (n int) {
 	return n
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityRequest) Size() (n int) {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -5383,7 +5383,7 @@ func (m *UpdateWorkerBuildIdCompatabilityRequest) Size() (n int) {
 	return n
 }
 
-func (m *UpdateWorkerBuildIdCompatabilityResponse) Size() (n int) {
+func (m *UpdateWorkerBuildIdCompatibilityResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -5392,7 +5392,7 @@ func (m *UpdateWorkerBuildIdCompatabilityResponse) Size() (n int) {
 	return n
 }
 
-func (m *GetWorkerBuildIdCompatabilityRequest) Size() (n int) {
+func (m *GetWorkerBuildIdCompatibilityRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -5409,7 +5409,7 @@ func (m *GetWorkerBuildIdCompatabilityRequest) Size() (n int) {
 	return n
 }
 
-func (m *GetWorkerBuildIdCompatabilityResponse) Size() (n int) {
+func (m *GetWorkerBuildIdCompatibilityResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -5788,43 +5788,43 @@ func (this *ListTaskQueuePartitionsResponse) String() string {
 	}, "")
 	return s
 }
-func (this *UpdateWorkerBuildIdCompatabilityRequest) String() string {
+func (this *UpdateWorkerBuildIdCompatibilityRequest) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&UpdateWorkerBuildIdCompatabilityRequest{`,
+	s := strings.Join([]string{`&UpdateWorkerBuildIdCompatibilityRequest{`,
 		`NamespaceId:` + fmt.Sprintf("%v", this.NamespaceId) + `,`,
-		`Request:` + strings.Replace(fmt.Sprintf("%v", this.Request), "UpdateWorkerBuildIdCompatabilityRequest", "v1.UpdateWorkerBuildIdCompatabilityRequest", 1) + `,`,
+		`Request:` + strings.Replace(fmt.Sprintf("%v", this.Request), "UpdateWorkerBuildIdCompatibilityRequest", "v1.UpdateWorkerBuildIdCompatibilityRequest", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *UpdateWorkerBuildIdCompatabilityResponse) String() string {
+func (this *UpdateWorkerBuildIdCompatibilityResponse) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&UpdateWorkerBuildIdCompatabilityResponse{`,
+	s := strings.Join([]string{`&UpdateWorkerBuildIdCompatibilityResponse{`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *GetWorkerBuildIdCompatabilityRequest) String() string {
+func (this *GetWorkerBuildIdCompatibilityRequest) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&GetWorkerBuildIdCompatabilityRequest{`,
+	s := strings.Join([]string{`&GetWorkerBuildIdCompatibilityRequest{`,
 		`NamespaceId:` + fmt.Sprintf("%v", this.NamespaceId) + `,`,
-		`Request:` + strings.Replace(fmt.Sprintf("%v", this.Request), "GetWorkerBuildIdCompatabilityRequest", "v1.GetWorkerBuildIdCompatabilityRequest", 1) + `,`,
+		`Request:` + strings.Replace(fmt.Sprintf("%v", this.Request), "GetWorkerBuildIdCompatibilityRequest", "v1.GetWorkerBuildIdCompatibilityRequest", 1) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *GetWorkerBuildIdCompatabilityResponse) String() string {
+func (this *GetWorkerBuildIdCompatibilityResponse) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&GetWorkerBuildIdCompatabilityResponse{`,
-		`Response:` + strings.Replace(fmt.Sprintf("%v", this.Response), "GetWorkerBuildIdCompatabilityResponse", "v1.GetWorkerBuildIdCompatabilityResponse", 1) + `,`,
+	s := strings.Join([]string{`&GetWorkerBuildIdCompatibilityResponse{`,
+		`Response:` + strings.Replace(fmt.Sprintf("%v", this.Response), "GetWorkerBuildIdCompatibilityResponse", "v1.GetWorkerBuildIdCompatibilityResponse", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -9527,7 +9527,7 @@ func (m *ListTaskQueuePartitionsResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *UpdateWorkerBuildIdCompatabilityRequest) Unmarshal(dAtA []byte) error {
+func (m *UpdateWorkerBuildIdCompatibilityRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -9550,10 +9550,10 @@ func (m *UpdateWorkerBuildIdCompatabilityRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: UpdateWorkerBuildIdCompatabilityRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: UpdateWorkerBuildIdCompatibilityRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: UpdateWorkerBuildIdCompatabilityRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: UpdateWorkerBuildIdCompatibilityRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -9618,7 +9618,7 @@ func (m *UpdateWorkerBuildIdCompatabilityRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Request == nil {
-				m.Request = &v1.UpdateWorkerBuildIdCompatabilityRequest{}
+				m.Request = &v1.UpdateWorkerBuildIdCompatibilityRequest{}
 			}
 			if err := m.Request.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -9648,7 +9648,7 @@ func (m *UpdateWorkerBuildIdCompatabilityRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *UpdateWorkerBuildIdCompatabilityResponse) Unmarshal(dAtA []byte) error {
+func (m *UpdateWorkerBuildIdCompatibilityResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -9671,10 +9671,10 @@ func (m *UpdateWorkerBuildIdCompatabilityResponse) Unmarshal(dAtA []byte) error 
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: UpdateWorkerBuildIdCompatabilityResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: UpdateWorkerBuildIdCompatibilityResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: UpdateWorkerBuildIdCompatabilityResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: UpdateWorkerBuildIdCompatibilityResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:
@@ -9701,7 +9701,7 @@ func (m *UpdateWorkerBuildIdCompatabilityResponse) Unmarshal(dAtA []byte) error 
 	}
 	return nil
 }
-func (m *GetWorkerBuildIdCompatabilityRequest) Unmarshal(dAtA []byte) error {
+func (m *GetWorkerBuildIdCompatibilityRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -9724,10 +9724,10 @@ func (m *GetWorkerBuildIdCompatabilityRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: GetWorkerBuildIdCompatabilityRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: GetWorkerBuildIdCompatibilityRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GetWorkerBuildIdCompatabilityRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: GetWorkerBuildIdCompatibilityRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -9792,7 +9792,7 @@ func (m *GetWorkerBuildIdCompatabilityRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Request == nil {
-				m.Request = &v1.GetWorkerBuildIdCompatabilityRequest{}
+				m.Request = &v1.GetWorkerBuildIdCompatibilityRequest{}
 			}
 			if err := m.Request.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -9822,7 +9822,7 @@ func (m *GetWorkerBuildIdCompatabilityRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *GetWorkerBuildIdCompatabilityResponse) Unmarshal(dAtA []byte) error {
+func (m *GetWorkerBuildIdCompatibilityResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -9845,10 +9845,10 @@ func (m *GetWorkerBuildIdCompatabilityResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: GetWorkerBuildIdCompatabilityResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: GetWorkerBuildIdCompatibilityResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GetWorkerBuildIdCompatabilityResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: GetWorkerBuildIdCompatibilityResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -9881,7 +9881,7 @@ func (m *GetWorkerBuildIdCompatabilityResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Response == nil {
-				m.Response = &v1.GetWorkerBuildIdCompatabilityResponse{}
+				m.Response = &v1.GetWorkerBuildIdCompatibilityResponse{}
 			}
 			if err := m.Response.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

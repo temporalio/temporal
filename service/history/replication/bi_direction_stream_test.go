@@ -131,7 +131,7 @@ func (s *biDirectionStreamSuite) TestSend() {
 	s.Equal(reqs, s.streamClient.requests)
 	s.biDirectionStream.Lock()
 	defer s.biDirectionStream.Unlock()
-	s.Equal(sreamStatusOpen, s.biDirectionStream.status)
+	s.Equal(streamStatusOpen, s.biDirectionStream.status)
 }
 
 func (s *biDirectionStreamSuite) TestSend_Err() {
@@ -141,7 +141,7 @@ func (s *biDirectionStreamSuite) TestSend_Err() {
 	s.Error(err)
 	s.biDirectionStream.Lock()
 	defer s.biDirectionStream.Unlock()
-	s.Equal(sreamStatusClosed, s.biDirectionStream.status)
+	s.Equal(streamStatusClosed, s.biDirectionStream.status)
 }
 
 func (s *biDirectionStreamSuite) TestRecv() {
@@ -155,7 +155,7 @@ func (s *biDirectionStreamSuite) TestRecv() {
 	s.Equal(s.streamClient.responses, resps)
 	s.biDirectionStream.Lock()
 	defer s.biDirectionStream.Unlock()
-	s.Equal(sreamStatusClosed, s.biDirectionStream.status)
+	s.Equal(streamStatusClosed, s.biDirectionStream.status)
 }
 
 func (s *biDirectionStreamSuite) TestRecv_Err() {
@@ -169,7 +169,7 @@ func (s *biDirectionStreamSuite) TestRecv_Err() {
 	s.False(ok)
 	s.biDirectionStream.Lock()
 	defer s.biDirectionStream.Unlock()
-	s.Equal(sreamStatusClosed, s.biDirectionStream.status)
+	s.Equal(streamStatusClosed, s.biDirectionStream.status)
 }
 
 func (p *mockStreamClientProvider) Get(

@@ -172,8 +172,8 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DeleteSchedule":                   {},
 		"ListSchedules":                    {},
 		"ListScheduleMatchingTimes":        {},
-		"UpdateWorkerBuildIdCompatability": {},
-		"GetWorkerBuildIdCompatability":    {},
+		"UpdateWorkerBuildIdCompatibility": {},
+		"GetWorkerBuildIdCompatibility":    {},
 
 		"StartBatchOperation":    {},
 		"StopBatchOperation":     {},

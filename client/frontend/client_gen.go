@@ -163,14 +163,14 @@ func (c *clientImpl) GetSystemInfo(
 	return c.client.GetSystemInfo(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetWorkerBuildIdCompatability(
+func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *workflowservice.GetWorkerBuildIdCompatabilityRequest,
+	request *workflowservice.GetWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetWorkerBuildIdCompatabilityResponse, error) {
+) (*workflowservice.GetWorkerBuildIdCompatibilityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.GetWorkerBuildIdCompatability(ctx, request, opts...)
+	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetWorkflowExecutionHistory(
@@ -573,14 +573,14 @@ func (c *clientImpl) UpdateSchedule(
 	return c.client.UpdateSchedule(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateWorkerBuildIdCompatability(
+func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkerBuildIdCompatabilityRequest,
+	request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateWorkerBuildIdCompatabilityResponse, error) {
+) (*workflowservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UpdateWorkerBuildIdCompatability(ctx, request, opts...)
+	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkflowExecution(

@@ -1588,3 +1588,85 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 }
+
+func (s *integrationSuite) TestSignalWithStartWorkflow_StartDelay() {
+	id := "integration-signal-with-start-workflow-start-delay-test"
+	wt := "integration-signal-with-start-workflow-start-delay-test-type"
+	tl := "integration-signal-with-start-workflow-start-delay-test-taskqueue"
+	identity := "worker1"
+
+	startDelay := 3 * time.Second
+
+	signalName := "my signal"
+	signalInput := payloads.EncodeString("my signal input")
+
+	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: wt},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		SignalName:          signalName,
+		SignalInput:         signalInput,
+		Identity:            identity,
+		WorkflowStartDelay:  &startDelay,
+	}
+
+	reqStartTime := time.Now()
+	we0, startErr := s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
+	s.NoError(startErr)
+
+	var signalEvent *historypb.HistoryEvent
+	delayEndTime := time.Now()
+
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+
+		delayEndTime = time.Now()
+
+		for _, event := range history.Events[previousStartedEventID:] {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+				signalEvent = event
+			}
+		}
+
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	_, pollErr := poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(pollErr)
+	s.GreaterOrEqual(delayEndTime.Sub(reqStartTime), startDelay)
+	s.NotNil(signalEvent)
+	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
+	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+
+	descResp, descErr := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we0.RunId,
+		},
+	})
+	s.NoError(descErr)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
+}

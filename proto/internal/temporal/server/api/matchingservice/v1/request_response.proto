@@ -186,21 +186,21 @@ message ListTaskQueuePartitionsResponse {
 }
 
 // (-- api-linter: core::0134::request-mask-required=disabled
-//     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest doesn't follow Google API format --)
+//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibilityRequest doesn't follow Google API format --)
 // (-- api-linter: core::0134::request-resource-required=disabled
-//     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest RPC doesn't follow Google API format. --)
-message UpdateWorkerBuildIdCompatabilityRequest {
+//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibilityRequest RPC doesn't follow Google API format. --)
+message UpdateWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatabilityRequest request = 2;
+    temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest request = 2;
 }
-message UpdateWorkerBuildIdCompatabilityResponse {}
+message UpdateWorkerBuildIdCompatibilityResponse {}
 
-message GetWorkerBuildIdCompatabilityRequest {
+message GetWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.GetWorkerBuildIdCompatabilityRequest request = 2;
+    temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest request = 2;
 }
-message GetWorkerBuildIdCompatabilityResponse {
-    temporal.api.workflowservice.v1.GetWorkerBuildIdCompatabilityResponse response = 1;
+message GetWorkerBuildIdCompatibilityResponse {
+    temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse response = 1;
 }
 
 message InvalidateTaskQueueMetadataRequest {
