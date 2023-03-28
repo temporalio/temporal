@@ -134,26 +134,25 @@ func (s *TestCluster) CreateSession(
 	}
 
 	var err error
+	cfg := config.Cassandra{
+		Hosts:    s.cfg.Hosts,
+		Port:     s.cfg.Port,
+		User:     s.cfg.User,
+		Password: s.cfg.Password,
+		Keyspace: keyspace,
+		Consistency: &config.CassandraStoreConsistency{
+			Default: &config.CassandraConsistencySettings{
+				Consistency: "ONE",
+			},
+		},
+		ConnectTimeout: s.cfg.ConnectTimeout,
+	}
 	s.session, err = commongocql.NewSession(
 		func() (*gocql.ClusterConfig, error) {
-			return commongocql.NewCassandraCluster(
-				config.Cassandra{
-					Hosts:    s.cfg.Hosts,
-					Port:     s.cfg.Port,
-					User:     s.cfg.User,
-					Password: s.cfg.Password,
-					Keyspace: keyspace,
-					Consistency: &config.CassandraStoreConsistency{
-						Default: &config.CassandraConsistencySettings{
-							Consistency: "ONE",
-						},
-					},
-					ConnectTimeout: s.cfg.ConnectTimeout,
-				},
-				resolver.NewNoopResolver(),
-			)
+			return commongocql.NewCassandraCluster(cfg, resolver.NewNoopResolver())
 		},
 		log.NewNoopLogger(),
+		commongocql.NewTracer(cfg),
 	)
 	if err != nil {
 		s.logger.Fatal("CreateSession", tag.Error(err))

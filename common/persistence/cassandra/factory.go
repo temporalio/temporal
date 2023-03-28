@@ -61,6 +61,7 @@ func NewFactory(
 			return commongocql.NewCassandraCluster(cfg, r)
 		},
 		logger,
+		commongocql.NewTracer(cfg),
 	)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))

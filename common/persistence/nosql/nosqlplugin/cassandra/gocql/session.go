@@ -33,6 +33,7 @@ import (
 	"github.com/gocql/gocql"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -59,14 +60,13 @@ type (
 func NewSession(
 	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
 	logger log.Logger,
+	tracer tracer,
 ) (*session, error) {
 
 	gocqlSession, err := initSession(newClusterConfigFunc)
 	if err != nil {
 		return nil, err
 	}
-
-	tracer := initTracer(config)
 
 	session := &session{
 		status:               common.DaemonStatusStarted,
@@ -116,7 +116,7 @@ func initSession(
 	return cluster.CreateSession()
 }
 
-func initTracer(
+func NewTracer(
 	cfg config.Cassandra,
 ) tracer {
 	if cfg.TracingLevel == 0 {

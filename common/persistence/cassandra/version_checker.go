@@ -87,6 +87,7 @@ func CheckCompatibleVersion(
 			return commongocql.NewCassandraCluster(cfg, r)
 		},
 		log.NewNoopLogger(),
+		commongocql.NewTracer(cfg),
 	)
 	if err != nil {
 		return err
