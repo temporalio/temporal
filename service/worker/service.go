@@ -304,7 +304,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			),
 			ExecutionScannerHistoryEventIdValidator: dc.GetBoolProperty(
 				dynamicconfig.ExecutionScannerHistoryEventIdValidator,
-				false,
+				true,
 			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
