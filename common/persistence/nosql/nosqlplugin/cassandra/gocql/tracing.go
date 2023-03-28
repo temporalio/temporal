@@ -148,17 +148,11 @@ func (g *gocqlTracer) Trace(traceId []byte) {
 	}
 	sourceTimes := make(map[string]*sourceTiming)
 
-	// fmt.Printf("Tracing session %016x (coordinator: %s, duration: %v):\n",
-	//      traceId, coordinator, time.Duration(duration)*time.Microsecond)
-
 	iter = session.Query(`SELECT event_id, activity, source, source_elapsed
                        FROM system_traces.events
                        WHERE session_id = ?`, traceId).Consistency(gocql.One).Iter()
 
 	for iter.Scan(&timestamp, &activity, &source, &elapsed) {
-		// fmt.Printf("%s: %s (source: %s, elapsed: %d)\n",
-		//      timestamp.Format("2006/01/02 15:04:05.999999"), activity, source, elapsed)
-
 		times, ok := sourceTimes[source]
 		if !ok {
 			sourceTimes[source] = &sourceTiming{
