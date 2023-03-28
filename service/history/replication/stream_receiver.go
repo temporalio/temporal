@@ -40,13 +40,17 @@ import (
 )
 
 const (
-	sendStatusInterval = 30 * time.Second
+	sendStatusInterval = 1 * time.Second
 )
 
 type (
 	ClusterShardKey struct {
 		ClusterName string
 		ShardID     int32
+	}
+	ClusterShardKeyPair struct {
+		Source ClusterShardKey
+		Target ClusterShardKey
 	}
 
 	Stream         BiDirectionStream[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse]
@@ -132,10 +136,6 @@ func (r *StreamReceiver) IsValid() bool {
 	return atomic.LoadInt32(&r.status) != common.DaemonStatusStopped
 }
 
-func (r *StreamReceiver) Key() ClusterShardKey {
-	return r.targetShardKey
-}
-
 func (r *StreamReceiver) sendEventLoop() {
 	defer r.Stop()
 	ticker := time.NewTicker(sendStatusInterval)
@@ -164,7 +164,7 @@ func (r *StreamReceiver) recvEventLoop() {
 		_ = r.processMessages(stream)
 
 		r.Lock()
-		r.stream = newStream(
+		r.stream = newStream( // TODO add exp backoff
 			r.ProcessToolBox,
 			r.sourceShardKey,
 			r.targetShardKey,
@@ -181,7 +181,6 @@ func (r *StreamReceiver) ackMessage(
 		return
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
-		ShardId: r.targetShardKey.ShardID,
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &repicationpb.SyncReplicationState{
 				LastProcessedMessageId:   watermarkInfo.Watermark,
@@ -207,11 +206,11 @@ func (r *StreamReceiver) processMessages(
 			return streamResp.Err
 		}
 		tasks := r.ConvertTasks(
-			r.sourceShardKey.ClusterName,
-			streamResp.Resp.GetReplicationMessages().ReplicationTasks...,
+			r.targetShardKey.ClusterName, // data come from target
+			streamResp.Resp.GetMessages().ReplicationTasks...,
 		)
-		highWatermark := streamResp.Resp.GetReplicationMessages().LastRetrievedMessageId
-		highWatermarkTime := time.Now() // TODO this should be passed from src
+		highWatermark := streamResp.Resp.GetMessages().LastTaskId
+		highWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().LastTaskTime)
 		r.taskTracker.TrackTasks(WatermarkInfo{
 			Watermark: highWatermark,
 			Timestamp: highWatermarkTime,
