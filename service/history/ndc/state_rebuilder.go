@@ -151,7 +151,7 @@ func (r *StateRebuilderImpl) Rebuild(
 		if err := r.applyEvents(
 			targetWorkflowIdentifier,
 			stateBuilder,
-			history.History.Events,
+			history.History,
 			requestID,
 		); err != nil {
 			return nil, 0, err
@@ -223,7 +223,7 @@ func (r *StateRebuilderImpl) initializeBuilders(
 func (r *StateRebuilderImpl) applyEvents(
 	workflowKey definition.WorkflowKey,
 	stateBuilder workflow.MutableStateRebuilder,
-	events []*historypb.HistoryEvent,
+	history *historypb.History,
 	requestID string,
 ) error {
 
@@ -235,7 +235,7 @@ func (r *StateRebuilderImpl) applyEvents(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		events,
+		[]*historypb.History{history},
 		nil, // no new run history when rebuilding mutable state
 	)
 	if err != nil {

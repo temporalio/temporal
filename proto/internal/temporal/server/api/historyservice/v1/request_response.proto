@@ -388,6 +388,7 @@ message ReplicateEventsV2Request {
     temporal.api.common.v1.DataBlob events = 4;
     // New run events does not need version history since there is no prior events.
     temporal.api.common.v1.DataBlob new_run_events = 5;
+    repeated temporal.api.common.v1.DataBlob histories = 6;
 }
 
 message ReplicateEventsV2Response {

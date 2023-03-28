@@ -174,10 +174,12 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			}
 
 			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
-				for _, event := range currentWorkflowEventsSeq {
-					if err := r.reapplyEvents(resetMutableState, event.Events); err != nil {
-						return err
-					}
+				var events []*historypb.HistoryEvent
+				for _, batch := range currentWorkflowEventsSeq {
+					events = append(events, batch.Events...)
+				}
+				if err := r.reapplyEvents(resetMutableState, events); err != nil {
+					return err
 				}
 			}
 			return nil
@@ -703,6 +705,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 
 	var nextRunID string
 	var lastEvents []*historypb.HistoryEvent
+	var events []*historypb.HistoryEvent
 
 	for iter.HasNext() {
 		batch, err := iter.Next()
@@ -710,9 +713,10 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 			return "", err
 		}
 		lastEvents = batch.Events
-		if err := r.reapplyEvents(mutableState, lastEvents); err != nil {
-			return "", err
-		}
+		events = append(events, batch.GetEvents()...)
+	}
+	if err := r.reapplyEvents(mutableState, events); err != nil {
+		return "", err
 	}
 
 	if len(lastEvents) > 0 {

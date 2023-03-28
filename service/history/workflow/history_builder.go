@@ -151,6 +151,42 @@ func NewImmutableHistoryBuilder(
 	}
 }
 
+func NewImmutableHistoryBuilderV2(
+	histories []*historypb.History,
+) *HistoryBuilder {
+	var lastBatch []*historypb.HistoryEvent
+	var eventsBatches [][]*historypb.HistoryEvent
+	for i := 0; i < len(histories); i++ {
+		eventsBatches = append(eventsBatches, histories[i].GetEvents())
+		if i == len(histories)-1 {
+			lastBatch = histories[i].GetEvents()
+		}
+	}
+	lastEvent := lastBatch[len(lastBatch)-1]
+	if lastEvent == nil {
+		panic("unexpected")
+	}
+	return &HistoryBuilder{
+		state:           HistoryBuilderStateImmutable,
+		timeSource:      nil,
+		taskIDGenerator: nil,
+
+		version:     lastEvent.GetVersion(),
+		nextEventID: lastEvent.GetEventId() + 1,
+
+		workflowFinished: false,
+
+		dbBufferBatch:          nil,
+		dbClearBuffer:          false,
+		memEventsBatches:       eventsBatches,
+		memLatestBatch:         nil,
+		memBufferBatch:         nil,
+		scheduledIDToStartedID: nil,
+
+		metricsHandler: nil,
+	}
+}
+
 // NOTE:
 // originalRunID is the runID when the WorkflowExecutionStarted event is written
 // firstRunID is the very first runID along the chain of ContinueAsNew and Reset

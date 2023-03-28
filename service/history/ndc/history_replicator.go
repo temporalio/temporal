@@ -35,6 +35,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -55,7 +57,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -444,7 +445,7 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
-		task.getEvents(),
+		task.getHistories(),
 		task.getNewEvents(),
 	)
 	if err != nil {
@@ -549,7 +550,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
-		task.getEvents(),
+		task.getHistories(),
 		task.getNewEvents(),
 	)
 	if err != nil {
@@ -660,11 +661,25 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 		return err
 	}
 
-	transactionID, err := r.shard.GenerateTaskID()
+	var workflowEvents []*persistence.WorkflowEvents
+	transactionIDs, err := r.shard.GenerateTaskIDs(len(task.getHistories()))
 	if err != nil {
 		return err
 	}
-
+	var prevTxnId int64 = 0
+	for i := 0; i < len(task.getHistories()); i++ {
+		wfEvents := &persistence.WorkflowEvents{
+			NamespaceID: task.getNamespaceID().String(),
+			WorkflowID:  task.getExecution().GetWorkflowId(),
+			RunID:       task.getExecution().GetRunId(),
+			BranchToken: versionHistory.GetBranchToken(),
+			PrevTxnID:   prevTxnId, // TODO @wxing1292 events chaining will not work for backfill case
+			TxnID:       transactionIDs[i],
+			Events:      task.getHistories()[i].GetEvents(),
+		}
+		workflowEvents = append(workflowEvents, wfEvents)
+		prevTxnId = transactionIDs[i]
+	}
 	err = r.transactionMgr.backfillWorkflow(
 		ctx,
 		task.getEventTime(),
@@ -676,15 +691,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 			mutableState,
 			releaseFn,
 		),
-		&persistence.WorkflowEvents{
-			NamespaceID: task.getNamespaceID().String(),
-			WorkflowID:  task.getExecution().GetWorkflowId(),
-			RunID:       task.getExecution().GetRunId(),
-			BranchToken: versionHistory.GetBranchToken(),
-			PrevTxnID:   0, // TODO @wxing1292 events chaining will not work for backfill case
-			TxnID:       transactionID,
-			Events:      task.getEvents(),
-		},
+		workflowEvents,
 	)
 	if err != nil {
 		task.getLogger().Error(
@@ -810,7 +817,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
-		task.getEvents(),
+		task.getHistories(),
 		task.getNewEvents(),
 	)
 	if err != nil {

@@ -57,7 +57,7 @@ type (
 		getLastEvent() *historypb.HistoryEvent
 		getVersion() int64
 		getSourceCluster() string
-		getEvents() []*historypb.HistoryEvent
+		getHistories() []*historypb.History
 		getNewEvents() []*historypb.HistoryEvent
 		getLogger() log.Logger
 		getVersionHistory() *historyspb.VersionHistory
@@ -74,8 +74,8 @@ type (
 		firstEvent     *historypb.HistoryEvent
 		lastEvent      *historypb.HistoryEvent
 		eventTime      time.Time
-		events         []*historypb.HistoryEvent
 		newEvents      []*historypb.HistoryEvent
+		histories      []*historypb.History
 		versionHistory *historyspb.VersionHistory
 
 		startTime time.Time
@@ -108,7 +108,7 @@ func newReplicationTask(
 	request *historyservice.ReplicateEventsV2Request,
 ) (*replicationTaskImpl, error) {
 
-	events, newEvents, err := validateReplicateEventsRequest(
+	histories, newEvents, err := validateReplicateEventsRequest(
 		historySerializer,
 		request,
 	)
@@ -123,15 +123,17 @@ func newReplicationTask(
 		Items:       request.VersionHistoryItems,
 	}
 
-	firstEvent := events[0]
-	lastEvent := events[len(events)-1]
+	firstBatchEvents := histories[0].GetEvents()
+	firstEvent := firstBatchEvents[0]
+	lastEvent := firstBatchEvents[len(firstBatchEvents)-1]
 	version := firstEvent.GetVersion()
 
 	sourceCluster := clusterMetadata.ClusterNameForFailoverVersion(true, version)
-
 	eventTime := time.Time{}
-	for _, event := range events {
-		eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
+	for _, history := range histories {
+		for _, event := range history.GetEvents() {
+			eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
+		}
 	}
 	for _, event := range newEvents {
 		eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
@@ -155,8 +157,8 @@ func newReplicationTask(
 		firstEvent:     firstEvent,
 		lastEvent:      lastEvent,
 		eventTime:      eventTime,
-		events:         events,
 		newEvents:      newEvents,
+		histories:      histories,
 		versionHistory: versionHistory,
 
 		startTime: taskStartTime,
@@ -200,8 +202,8 @@ func (t *replicationTaskImpl) getSourceCluster() string {
 	return t.sourceCluster
 }
 
-func (t *replicationTaskImpl) getEvents() []*historypb.HistoryEvent {
-	return t.events
+func (t *replicationTaskImpl) getHistories() []*historypb.History {
+	return t.histories
 }
 
 func (t *replicationTaskImpl) getNewEvents() []*historypb.HistoryEvent {
@@ -284,7 +286,7 @@ func (t *replicationTaskImpl) splitTask(
 		firstEvent:     newFirstEvent,
 		lastEvent:      newLastEvent,
 		eventTime:      newEventTime,
-		events:         newHistoryEvents,
+		histories:      []*historypb.History{{newHistoryEvents}},
 		newEvents:      []*historypb.HistoryEvent{},
 		versionHistory: newVersionHistory,
 
@@ -299,7 +301,7 @@ func (t *replicationTaskImpl) splitTask(
 func validateReplicateEventsRequest(
 	historySerializer serialization.Serializer,
 	request *historyservice.ReplicateEventsV2Request,
-) ([]*historypb.HistoryEvent, []*historypb.HistoryEvent, error) {
+) ([]*historypb.History, []*historypb.HistoryEvent, error) {
 
 	// TODO add validation on version history
 
@@ -317,8 +319,25 @@ func validateReplicateEventsRequest(
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(events) == 0 {
+
+	var histories []*historypb.History
+	for _, history := range request.Histories {
+		events, err := deserializeBlob(historySerializer, history)
+		if err != nil {
+			return nil, nil, err
+		}
+		histories = append(histories, &historypb.History{Events: events})
+	}
+	if len(events) == 0 && len(histories) == 0 {
 		return nil, nil, consts.ErrEmptyHistoryRawEventBatch
+	}
+
+	if len(events) != 0 && len(histories) != 0 {
+		return nil, nil, consts.ErrHistoryRawEventBatchVersion
+	}
+
+	if len(events) != 0 {
+		histories = []*historypb.History{{events}}
 	}
 
 	version, err := validateEvents(events)
@@ -327,7 +346,7 @@ func validateReplicateEventsRequest(
 	}
 
 	if request.NewRunEvents == nil {
-		return events, nil, nil
+		return histories, nil, nil
 	}
 
 	newRunEvents, err := deserializeBlob(historySerializer, request.NewRunEvents)
@@ -342,7 +361,7 @@ func validateReplicateEventsRequest(
 	if version != newRunVersion {
 		return nil, nil, ErrEventVersionMismatch
 	}
-	return events, newRunEvents, nil
+	return histories, newRunEvents, nil
 }
 
 func validateUUID(input string) bool {

@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/cluster"
@@ -130,7 +131,7 @@ type (
 			ctx context.Context,
 			now time.Time,
 			targetWorkflow Workflow,
-			targetWorkflowEvents *persistence.WorkflowEvents,
+			targetWorkflowEvents []*persistence.WorkflowEvents,
 		) error
 
 		checkWorkflowExists(
@@ -236,7 +237,7 @@ func (r *transactionMgrImpl) backfillWorkflow(
 	ctx context.Context,
 	now time.Time,
 	targetWorkflow Workflow,
-	targetWorkflowEvents *persistence.WorkflowEvents,
+	targetWorkflowEvents []*persistence.WorkflowEvents,
 ) (retError error) {
 
 	defer func() {
@@ -248,11 +249,13 @@ func (r *transactionMgrImpl) backfillWorkflow(
 		}
 	}()
 
-	if _, err := targetWorkflow.GetContext().PersistWorkflowEvents(
-		ctx,
-		targetWorkflowEvents,
-	); err != nil {
-		return err
+	for _, wfEvents := range targetWorkflowEvents {
+		if _, err := targetWorkflow.GetContext().PersistWorkflowEvents(
+			ctx,
+			wfEvents,
+		); err != nil {
+			return err
+		}
 	}
 
 	updateMode, transactionPolicy, err := r.backfillWorkflowEventsReapply(
@@ -278,7 +281,7 @@ func (r *transactionMgrImpl) backfillWorkflow(
 func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	ctx context.Context,
 	targetWorkflow Workflow,
-	targetWorkflowEvents *persistence.WorkflowEvents,
+	targetWorkflowEvents []*persistence.WorkflowEvents,
 ) (persistence.UpdateWorkflowMode, workflow.TransactionPolicy, error) {
 
 	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, targetWorkflow)
@@ -290,6 +293,10 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 	isActiveCluster := targetWorkflowActiveCluster == currentCluster
 
+	var reapplyEvents []*historypb.HistoryEvent
+	for _, wfEvents := range targetWorkflowEvents {
+		reapplyEvents = append(reapplyEvents, wfEvents.Events...)
+	}
 	// workflow events reapplication
 	// we need to handle 3 cases
 	// 1. target workflow is self & self being current & active
@@ -304,7 +311,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			if _, err := r.eventsReapplier.ReapplyEvents(
 				ctx,
 				targetWorkflow.GetMutableState(),
-				targetWorkflowEvents.Events,
+				reapplyEvents,
 				targetWorkflow.GetMutableState().GetExecutionState().GetRunId(),
 			); err != nil {
 				return 0, workflow.TransactionPolicyActive, err
@@ -346,7 +353,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			uuid.New(),
 			targetWorkflow,
 			EventsReapplicationResetWorkflowReason,
-			targetWorkflowEvents.Events,
+			reapplyEvents,
 			enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 		)
 		switch err.(type) {
@@ -367,7 +374,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	// case 2
 	//  find the current & active workflow to reapply
 	if err := targetWorkflow.GetContext().ReapplyEvents(
-		[]*persistence.WorkflowEvents{targetWorkflowEvents},
+		targetWorkflowEvents,
 	); err != nil {
 		return 0, workflow.TransactionPolicyActive, err
 	}
