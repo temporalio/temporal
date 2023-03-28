@@ -267,7 +267,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 		})
 
 		if err != nil {
-			s.Logger.Fatal("SetQueryHandler failed: " + err.Error())
+			s.T().Fatalf("SetQueryHandler failed: %s", err.Error())
 		}
 		// force workflow task to fail
 		panic("Workflow failed")
@@ -292,7 +292,8 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.True(workflowRun.GetRunID() != "")
 
 	// wait for workflow to fail
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 2)
 	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
+	s.Error(err)
 	s.IsType(&serviceerror.FailedPrecondition{}, err)
 }
