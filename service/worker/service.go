@@ -302,6 +302,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				dynamicconfig.ExecutionScannerWorkerCount,
 				8,
 			),
+			ExecutionScannerHistoryEventIdValidator: dc.GetBoolProperty(
+				dynamicconfig.ExecutionScannerHistoryEventIdValidator,
+				true,
+			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),

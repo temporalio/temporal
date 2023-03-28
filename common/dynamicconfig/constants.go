@@ -707,6 +707,8 @@ const (
 	ExecutionDataDurationBuffer = "worker.executionDataDurationBuffer"
 	// ExecutionScannerWorkerCount is the execution scavenger worker count
 	ExecutionScannerWorkerCount = "worker.executionScannerWorkerCount"
+	// ExecutionScannerHistoryEventIdValidator is the flag to enable history event id validator
+	ExecutionScannerHistoryEventIdValidator = "worker.executionEnableHistoryEventIdValidator"
 	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
 	TaskQueueScannerEnabled = "worker.taskQueueScannerEnabled"
 	// HistoryScannerEnabled indicates if history scanner should be started as part of worker.Scanner
