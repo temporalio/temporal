@@ -49,11 +49,13 @@ import (
 
 const localBroadcastAddress = "127.0.0.1"
 
+// LiteServerConfig encodes options for LiteServer instances.
 type LiteServerConfig struct {
 	// When true, Ephemeral disables file persistence and uses the in-memory storage driver.
 	// State will be reset on each process restart.
 	Ephemeral bool
-	// DatabaseFilePath persists state to the file at the specified path.
+	// DatabaseFilePath persists state to the file at the specified path. If the db file does
+	// not already exist, it is created and schema migrations are automatically run.
 	//
 	// This is required if Ephemeral is false.
 	DatabaseFilePath string
@@ -78,7 +80,9 @@ type LiteServerConfig struct {
 	// Storage and client configuration will always be overridden, however base config can be
 	// used to enable settings like TLS or authentication.
 	//
-	// Note that server options can also be passed to the NewLiteServer function.
+	// Note that ServerOption arguments can also be passed to the NewLiteServer function.
+	// Always prefer setting BaseConfig over using WithConfig however, as WithConfig overrides
+	// all LiteServer specific settings.
 	BaseConfig *config.Config
 	// DynamicConfig sets dynamic config values used by the server.
 	DynamicConfig dynamicconfig.StaticClient
@@ -208,7 +212,7 @@ func (cfg *LiteServerConfig) validate() error {
 	return nil
 }
 
-// LiteServer is a high level wrapper for temporal.LiteServer that automatically configures a SQLite backend.
+// LiteServer is a high level wrapper for Server that automatically configures a SQLite backend.
 type LiteServer struct {
 	internal         Server
 	frontendHostPort string
@@ -216,7 +220,11 @@ type LiteServer struct {
 
 // NewLiteServer initializes a Server with a SQLite backend.
 //
-// If the db file does not already exist, schema migrations are automatically run.
+// Additional configuration can be specified either via variadic ServerOption arguments or
+// by setting the BaseConfig field in LiteServerConfig.
+//
+// Always use BaseConfig instead of the WithConfig server option, as WithConfig overrides all
+// LiteServer specific settings.
 func NewLiteServer(liteConfig *LiteServerConfig, opts ...ServerOption) (*LiteServer, error) {
 	liteConfig.applyDefaults()
 	if err := liteConfig.validate(); err != nil {
