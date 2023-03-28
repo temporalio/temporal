@@ -30,12 +30,15 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
 type (
 	ExecutableUnknownTask struct {
+		ProcessToolBox
+
 		ExecutableTask
 		task any
 	}
@@ -51,6 +54,8 @@ func NewExecutableUnknownTask(
 	task any,
 ) *ExecutableUnknownTask {
 	return &ExecutableUnknownTask{
+		ProcessToolBox: processToolBox,
+
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
@@ -74,4 +79,12 @@ func (e *ExecutableUnknownTask) HandleErr(err error) error {
 
 func (e *ExecutableUnknownTask) IsRetryableError(err error) bool {
 	return false
+}
+
+func (e *ExecutableUnknownTask) MarkPoisonPill() error {
+	e.Logger.Error("unable to enqueue unknown replication task to DLQ",
+		tag.Task(e.task),
+		tag.TaskID(e.ExecutableTask.TaskID()),
+	)
+	return nil
 }

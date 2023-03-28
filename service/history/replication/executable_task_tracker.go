@@ -41,6 +41,7 @@ type (
 		ctasks.Task
 		TaskID() int64
 		TaskCreationTime() time.Time
+		MarkPoisonPill() error
 	}
 	WatermarkInfo struct {
 		Watermark int64
@@ -131,8 +132,12 @@ Loop:
 			delete(t.taskIDs, task.TaskID())
 			t.taskQueue.Remove(element)
 		case ctasks.TaskStateNacked:
-			// TODO put to DLQ, only after <- is successful, then remove from tracker
-			panic("implement me")
+			if err := task.MarkPoisonPill(); err != nil {
+				// unable to save poison pill, retry later
+				break Loop
+			}
+			delete(t.taskIDs, task.TaskID())
+			t.taskQueue.Remove(element)
 		case ctasks.TaskStateCancelled:
 			// noop, do not remove from queue, let it block low watermark
 			break Loop
