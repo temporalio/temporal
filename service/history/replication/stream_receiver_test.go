@@ -122,7 +122,6 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus() {
 	s.streamReceiver.ackMessage(s.stream)
 
 	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{
-		ShardId: s.streamReceiver.targetShardKey.ShardID,
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &repicationpb.SyncReplicationState{
 				LastProcessedMessageId:   watermarkInfo.Watermark,
@@ -141,11 +140,11 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 	}
 	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
-			ShardId: s.streamReceiver.sourceShardKey.ShardID,
-			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_ReplicationMessages{
-				ReplicationMessages: &repicationpb.ReplicationMessages{
-					LastRetrievedMessageId: rand.Int63(),
-					ReplicationTasks:       []*repicationpb.ReplicationTask{replicationTask},
+			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
+				Messages: &repicationpb.WorkflowReplicationMessages{
+					ReplicationTasks: []*repicationpb.ReplicationTask{replicationTask},
+					LastTaskId:       rand.Int63(),
+					LastTaskTime:     timestamp.TimePtr(time.Unix(0, rand.Int63())),
 				},
 			},
 		},
@@ -156,7 +155,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 
 	s.taskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).Do(
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) {
-			s.Equal(streamResp.Resp.GetReplicationMessages().LastRetrievedMessageId, highWatermarkInfo.Watermark)
+			s.Equal(streamResp.Resp.GetMessages().LastTaskId, highWatermarkInfo.Watermark)
+			s.Equal(*streamResp.Resp.GetMessages().LastTaskTime, highWatermarkInfo.Timestamp)
 			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 		},

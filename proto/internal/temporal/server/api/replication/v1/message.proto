@@ -82,6 +82,13 @@ message ReplicationMessages {
     SyncShardStatus sync_shard_status = 4;
 }
 
+message WorkflowReplicationMessages {
+    repeated ReplicationTask replication_tasks = 1;
+    // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
+    int64 last_task_id = 2;
+    google.protobuf.Timestamp  last_task_time = 3 [(gogoproto.stdtime) = true];
+}
+
 message ReplicationTaskInfo {
     string namespace_id = 1;
     string workflow_id = 2;
