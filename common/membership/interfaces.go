@@ -77,21 +77,19 @@ type (
 	}
 
 	// ServiceResolver provides membership information for a specific temporal service.
-	// It can be used to resolve which member host is responsible for serving a given key.
+	// It can also be used to determine the placement of resources across hosts.
 	ServiceResolver interface {
+		// Lookup looks up the host that currently owns the resource identified by the given key.
 		Lookup(key string) (HostInfo, error)
-		// AddListener adds a listener which will get notified on the given
-		// channel, whenever membership changes.
-		// @name: The name for identifying the listener
-		// @notifyChannel: The channel on which the caller receives notifications
+		// AddListener adds a listener which will get notified on the given channel whenever membership changes.
 		AddListener(name string, notifyChannel chan<- *ChangedEvent) error
 		// RemoveListener removes a listener for this service.
 		RemoveListener(name string) error
-		// MemberCount returns host count in hashring for any particular role
+		// MemberCount returns the number of known hosts running this service.
 		MemberCount() int
-		// Members returns all host addresses in hashring for any particular role
+		// Members returns all known hosts available for this service.
 		Members() []HostInfo
-		// Requests to rebuild the hash ring
+		// RequestRefresh requests that the membership information be refreshed.
 		RequestRefresh()
 	}
 

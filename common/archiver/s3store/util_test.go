@@ -22,43 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Package ringpop provides a service-based membership monitor
-package ringpop
+package s3store
 
-type hostInfo struct {
-	addr   string // ip:port
-	labels map[string]string
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestConstructVisibilitySearchPrefix(t *testing.T) {
+	t.Parallel()
+	assert.Equal(
+		t,
+		constructVisibilitySearchPrefix(
+			"path",
+			"namespaceID",
+		),
+		"path/namespaceID/visibility",
+	)
 }
 
-// newHostInfo creates a new *hostInfo instance
-func newHostInfo(addr string, labels map[string]string) *hostInfo {
-	if labels == nil {
-		labels = make(map[string]string)
-	}
-	return &hostInfo{
-		addr:   addr,
-		labels: labels,
-	}
-}
-
-// GetAddress returns the ip:port address
-func (hi *hostInfo) GetAddress() string {
-	return hi.addr
-}
-
-// Identity implements ringpop's Membership interface
-func (hi *hostInfo) Identity() string {
-	// For now, we just use the address as the identity.
-	return hi.addr
-}
-
-// Label implements ringpop's Membership interface
-func (hi *hostInfo) Label(key string) (string, bool) {
-	value, ok := hi.labels[key]
-	return value, ok
-}
-
-// SetLabel sets the label.
-func (hi *hostInfo) SetLabel(key string, value string) {
-	hi.labels[key] = value
+func TestConstructIndexedVisibilitySearchPrefix(t *testing.T) {
+	t.Parallel()
+	assert.Equal(
+		t,
+		constructIndexedVisibilitySearchPrefix(
+			"/path",
+			"namespaceID",
+			"primaryIndexKey",
+			"primaryIndexValue",
+			"secondaryIndexType",
+		),
+		"path/namespaceID/visibility/primaryIndexKey/primaryIndexValue/secondaryIndexType",
+	)
 }
