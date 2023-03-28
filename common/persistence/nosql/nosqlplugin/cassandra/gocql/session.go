@@ -49,6 +49,7 @@ type (
 		newClusterConfigFunc func() (*gocql.ClusterConfig, error)
 		atomic.Value         // *gocql.Session
 		logger               log.Logger
+		tracer               tracer
 
 		sync.Mutex
 		sessionInitTime time.Time
@@ -65,10 +66,13 @@ func NewSession(
 		return nil, err
 	}
 
+	tracer := initTracer(config)
+
 	session := &session{
 		status:               common.DaemonStatusStarted,
 		newClusterConfigFunc: newClusterConfigFunc,
 		logger:               logger,
+		tracer:               tracer,
 
 		sessionInitTime: time.Now().UTC(),
 	}
@@ -112,6 +116,18 @@ func initSession(
 	return cluster.CreateSession()
 }
 
+func initTracer(
+	cfg config.Cassandra,
+) tracer {
+	if cfg.TracingLevel == 0 {
+		return &nopTracer{}
+	} else {
+		return &cassandraTracer{
+			traceCassandra: (cfg.TracingLevel & config.TracingBitCassandraTraces) > 0,
+		}
+	}
+}
+
 func (s *session) Query(
 	stmt string,
 	values ...interface{},
@@ -144,6 +160,7 @@ func (s *session) ExecuteBatch(
 	b Batch,
 ) (retError error) {
 	defer func() { s.handleError(retError) }()
+	defer s.tracer.batchSpan(b.(*batch), "Exec")()
 
 	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.(*batch).gocqlBatch)
 }
@@ -153,6 +170,7 @@ func (s *session) MapExecuteBatchCAS(
 	previous map[string]interface{},
 ) (_ bool, _ Iter, retError error) {
 	defer func() { s.handleError(retError) }()
+	defer s.tracer.batchSpan(b.(*batch), "MapExecCAS")()
 
 	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.(*batch).gocqlBatch, previous)
 	return applied, iter, err

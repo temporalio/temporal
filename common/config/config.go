@@ -348,6 +348,8 @@ type (
 		DisableInitialHostLookup bool `yaml:"disableInitialHostLookup"`
 		// AddressTranslator translates Cassandra IP addresses, used for cases when IP addresses gocql driver returns are not accessible from the server
 		AddressTranslator *CassandraAddressTranslator `yaml:"addressTranslator"`
+		// TracingLevel determines with how much detail cassandra queries are traced. (default: 0 - no tracing)
+                TracingLevel int `yaml:"tracingLevel"`
 	}
 
 	// CassandraStoreConsistency enables you to set the consistency settings for each Cassandra Persistence Store for Temporal
@@ -574,6 +576,11 @@ const (
 	ForceTLSConfigAuto      = ""
 	ForceTLSConfigInternode = "internode"
 	ForceTLSConfigFrontend  = "frontend"
+)
+
+const (
+       TracingBitQueries = 1
+       TracingBitCassandraTraces = 2
 )
 
 // Validate validates this config
