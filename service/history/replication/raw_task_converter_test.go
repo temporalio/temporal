@@ -308,7 +308,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
-	s.mutableState.EXPECT().GetBaseWorkflow().Return(baseWorkflowInfo).AnyTimes()
+	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 
 	result, err := convertActivityStateReplicationTask(ctx, task, s.workflowCache)
 	s.NoError(err)
@@ -412,7 +412,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
-	s.mutableState.EXPECT().GetBaseWorkflow().Return(baseWorkflowInfo).AnyTimes()
+	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 
 	result, err := convertActivityStateReplicationTask(ctx, task, s.workflowCache)
 	s.NoError(err)
@@ -628,7 +628,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
-	s.mutableState.EXPECT().GetBaseWorkflow().Return(baseWorkflowInfo).AnyTimes()
+	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   versionHistory.BranchToken,
 		MinEventID:    firstEventID,
@@ -673,7 +673,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 	s.newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: newVersionHistories,
 	}).AnyTimes()
-	s.newMutableState.EXPECT().GetBaseWorkflow().Return(nil).AnyTimes()
+	s.newMutableState.EXPECT().GetBaseWorkflowInfo().Return(nil).AnyTimes()
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   newVersionHistory.BranchToken,
 		MinEventID:    common.FirstEventID,
@@ -764,7 +764,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
-	s.mutableState.EXPECT().GetBaseWorkflow().Return(baseWorkflowInfo).AnyTimes()
+	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   versionHistory.BranchToken,
 		MinEventID:    firstEventID,

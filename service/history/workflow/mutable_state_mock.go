@@ -1031,18 +1031,18 @@ func (mr *MockMutableStateMockRecorder) GetActivityScheduledEvent(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityScheduledEvent", reflect.TypeOf((*MockMutableState)(nil).GetActivityScheduledEvent), arg0, arg1)
 }
 
-// GetBaseWorkflow mocks base method.
-func (m *MockMutableState) GetBaseWorkflow() *v113.BaseExecutionInfo {
+// GetBaseWorkflowInfo mocks base method.
+func (m *MockMutableState) GetBaseWorkflowInfo() *v113.BaseExecutionInfo {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBaseWorkflow")
+	ret := m.ctrl.Call(m, "GetBaseWorkflowInfo")
 	ret0, _ := ret[0].(*v113.BaseExecutionInfo)
 	return ret0
 }
 
-// GetBaseWorkflow indicates an expected call of GetBaseWorkflow.
-func (mr *MockMutableStateMockRecorder) GetBaseWorkflow() *gomock.Call {
+// GetBaseWorkflowInfo indicates an expected call of GetBaseWorkflowInfo.
+func (mr *MockMutableStateMockRecorder) GetBaseWorkflowInfo() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaseWorkflow", reflect.TypeOf((*MockMutableState)(nil).GetBaseWorkflow))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaseWorkflowInfo", reflect.TypeOf((*MockMutableState)(nil).GetBaseWorkflowInfo))
 }
 
 // GetChildExecutionInfo mocks base method.

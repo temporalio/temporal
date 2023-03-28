@@ -98,7 +98,7 @@ func convertActivityStateReplicationTask(
 						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
-						BaseExecutionInfo:  copyBaseWorkflowInfo(mutableState.GetBaseWorkflow()),
+						BaseExecutionInfo:  copyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
 						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
 					},
 				},
@@ -340,7 +340,7 @@ func getVersionHistoryItems(
 	eventID int64,
 	version int64,
 ) ([]*historyspb.VersionHistoryItem, []byte, *workflowspb.BaseExecutionInfo, error) {
-	baseWorkflowInfo := copyBaseWorkflowInfo(mutableState.GetBaseWorkflow())
+	baseWorkflowInfo := copyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo())
 	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		versionHistories,

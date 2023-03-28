@@ -484,7 +484,7 @@ func (ms *MutableStateImpl) SetBaseWorkflow(
 	}
 }
 
-func (ms *MutableStateImpl) GetBaseWorkflow() *workflowspb.BaseExecutionInfo {
+func (ms *MutableStateImpl) GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
 	return ms.executionInfo.BaseExecutionInfo
 }
 
