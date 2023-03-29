@@ -307,7 +307,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		NumberOfShards:             numberOfShards,
 		DefaultVisibilityIndexName: defaultVisibilityIndex,
 
-		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, true),
+		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                      dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),

@@ -33,13 +33,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/util"
-)
-
-var (
-	_ tasks.Monitor[Executable] = (*schedulerMonitor)(nil)
-	_ tasks.Monitor[Executable] = (*noopSchedulerMonitor)(nil)
 )
 
 var noopScheduleMonitor = &noopSchedulerMonitor{}

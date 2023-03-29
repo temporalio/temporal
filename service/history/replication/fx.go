@@ -80,7 +80,6 @@ func ReplicationStreamSchedulerProvider(
 	logger log.Logger,
 ) ctasks.Scheduler[ctasks.Task] {
 	return ctasks.NewFIFOScheduler[ctasks.Task](
-		ctasks.NewNoopMonitor[ctasks.Task](),
 		&ctasks.FIFOSchedulerOptions{
 			// TODO make it configurable
 			QueueSize: 1024,

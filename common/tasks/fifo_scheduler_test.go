@@ -218,7 +218,6 @@ func (s *fifoSchedulerSuite) TestStartStopWorkers() {
 
 func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
 	return NewFIFOScheduler[*MockTask](
-		NewNoopMonitor[*MockTask](),
 		&FIFOSchedulerOptions{
 			QueueSize:   1,
 			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
