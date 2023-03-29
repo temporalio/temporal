@@ -48,7 +48,7 @@ func (hi *hostInfo) GetAddress() string {
 
 // Identity implements ringpop's Membership interface
 func (hi *hostInfo) Identity() string {
-	// for now we just use the address as the identity
+	// For now, we just use the address as the identity.
 	return hi.addr
 }
 

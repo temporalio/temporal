@@ -292,7 +292,7 @@ func (r *serviceResolver) getReachableMembers() ([]string, error) {
 		servicePort := r.port
 
 		// Each temporal service in the ring should advertise which port it has its gRPC listener
-		// on via a service label. If we cannot find the label, we will assume that that the
+		// on via a service label. If we cannot find the label, we will assume that the
 		// temporal service is listening on the same port that this node is listening on.
 		servicePortLabel, ok := member.Label(rolePort)
 		if ok {

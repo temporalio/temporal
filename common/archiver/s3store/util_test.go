@@ -22,19 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package s3store
 
 import (
-	"go.temporal.io/server/common"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-type (
-	Monitor[T Task] interface {
-		common.Daemon
+func TestConstructVisibilitySearchPrefix(t *testing.T) {
+	t.Parallel()
+	assert.Equal(
+		t,
+		constructVisibilitySearchPrefix(
+			"path",
+			"namespaceID",
+		),
+		"path/namespaceID/visibility",
+	)
+}
 
-		RecordStart(T)
-
-		// Add more methods here to monitor
-		// other task processing events
-	}
-)
+func TestConstructIndexedVisibilitySearchPrefix(t *testing.T) {
+	t.Parallel()
+	assert.Equal(
+		t,
+		constructIndexedVisibilitySearchPrefix(
+			"/path",
+			"namespaceID",
+			"primaryIndexKey",
+			"primaryIndexValue",
+			"secondaryIndexType",
+		),
+		"path/namespaceID/visibility/primaryIndexKey/primaryIndexValue/secondaryIndexType",
+	)
+}

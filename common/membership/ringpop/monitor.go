@@ -84,7 +84,7 @@ func newMonitor(
 	logger log.Logger,
 	metadataManager persistence.ClusterMetadataManager,
 	broadcastHostPortResolver func() (string, error),
-) membership.Monitor {
+) *monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
 		lifecycleCtx,
@@ -338,7 +338,7 @@ func (rpo *monitor) Stop() {
 // WhoAmI returns the address (host:port) and labels for a service
 // Ringpop implementation of WhoAmI return the address used by ringpop listener.
 // This is different from service address as we register ringpop handlers on a separate port.
-// For this reason we need to lookup the port for the service and replace ringpop port with service port before
+// For this reason we need to look up the port for the service and replace ringpop port with service port before
 // returning HostInfo back.
 func (rpo *monitor) WhoAmI() (membership.HostInfo, error) {
 	address, err := rpo.rp.WhoAmI()

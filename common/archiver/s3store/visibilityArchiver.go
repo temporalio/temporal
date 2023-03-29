@@ -26,6 +26,7 @@ package s3store
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -179,6 +180,10 @@ func (v *visibilityArchiver) Query(
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidQueryVisibilityRequest.Error())
 	}
 
+	if strings.TrimSpace(request.Query) == "" {
+		return v.queryAll(ctx, URI, request, saTypeMap)
+	}
+
 	parsedQuery, err := v.queryParser.Parse(request.Query)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(err.Error())
@@ -197,34 +202,84 @@ func (v *visibilityArchiver) Query(
 	)
 }
 
+// queryAll returns all workflow executions in the archive.
+func (v *visibilityArchiver) queryAll(
+	ctx context.Context,
+	uri archiver.URI,
+	request *archiver.QueryVisibilityRequest,
+	saTypeMap searchattribute.NameTypeMap,
+) (*archiver.QueryVisibilityResponse, error) {
+	return v.queryPrefix(ctx, uri, &queryVisibilityRequest{
+		namespaceID:   request.NamespaceID,
+		pageSize:      request.PageSize,
+		nextPageToken: request.NextPageToken,
+		parsedQuery:   &parsedQuery{},
+	}, saTypeMap, constructVisibilitySearchPrefix(uri.Path(), request.NamespaceID))
+}
+
 func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
-	ctx, cancel := ensureContextTimeout(ctx)
-	defer cancel()
-	var token *string
-	if request.nextPageToken != nil {
-		token = deserializeQueryVisibilityToken(request.nextPageToken)
-	}
 	primaryIndex := primaryIndexKeyWorkflowTypeName
 	primaryIndexValue := request.parsedQuery.workflowTypeName
 	if request.parsedQuery.workflowID != nil {
 		primaryIndex = primaryIndexKeyWorkflowID
 		primaryIndexValue = request.parsedQuery.workflowID
 	}
-	var prefix = constructVisibilitySearchPrefix(URI.Path(), request.namespaceID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout) + "/"
+
+	prefix := constructIndexedVisibilitySearchPrefix(
+		URI.Path(),
+		request.namespaceID,
+		primaryIndex,
+		*primaryIndexValue,
+		secondaryIndexKeyCloseTimeout,
+	) + "/"
 	if request.parsedQuery.closeTime != nil {
-		prefix = constructTimeBasedSearchKey(URI.Path(), request.namespaceID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout, *request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(
+			URI.Path(),
+			request.namespaceID,
+			primaryIndex,
+			*primaryIndexValue,
+			secondaryIndexKeyCloseTimeout,
+			*request.parsedQuery.closeTime,
+			*request.parsedQuery.searchPrecision,
+		)
 	}
 	if request.parsedQuery.startTime != nil {
-		prefix = constructTimeBasedSearchKey(URI.Path(), request.namespaceID, primaryIndex, *primaryIndexValue, secondaryIndexKeyStartTimeout, *request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(
+			URI.Path(),
+			request.namespaceID,
+			primaryIndex,
+			*primaryIndexValue,
+			secondaryIndexKeyStartTimeout,
+			*request.parsedQuery.startTime,
+			*request.parsedQuery.searchPrecision,
+		)
 	}
 
+	return v.queryPrefix(ctx, URI, request, saTypeMap, prefix)
+}
+
+func (v *visibilityArchiver) queryPrefix(
+	ctx context.Context,
+	uri archiver.URI,
+	request *queryVisibilityRequest,
+	saTypeMap searchattribute.NameTypeMap,
+	prefix string,
+) (*archiver.QueryVisibilityResponse, error) {
+	ctx, cancel := ensureContextTimeout(ctx)
+	defer cancel()
+
+	var token *string
+
+	if request.nextPageToken != nil {
+		token = deserializeQueryVisibilityToken(request.nextPageToken)
+	}
 	results, err := v.s3cli.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
-		Bucket:            aws.String(URI.Hostname()),
+		Bucket:            aws.String(uri.Hostname()),
 		Prefix:            aws.String(prefix),
 		MaxKeys:           aws.Int64(int64(request.pageSize)),
 		ContinuationToken: token,
@@ -244,7 +299,7 @@ func (v *visibilityArchiver) query(
 		response.NextPageToken = serializeQueryVisibilityToken(*results.NextContinuationToken)
 	}
 	for _, item := range results.Contents {
-		encodedRecord, err := Download(ctx, v.s3cli, URI, *item.Key)
+		encodedRecord, err := Download(ctx, v.s3cli, uri, *item.Key)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(err.Error())
 		}

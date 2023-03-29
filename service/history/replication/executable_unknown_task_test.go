@@ -58,7 +58,8 @@ type (
 		metricsHandler     metrics.Handler
 		logger             log.Logger
 
-		task *ExecutableUnknownTask
+		taskID int64
+		task   *ExecutableUnknownTask
 	}
 )
 
@@ -85,6 +86,7 @@ func (s *executableUnknownTaskSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 
+	s.taskID = rand.Int63()
 	s.task = NewExecutableUnknownTask(
 		ProcessToolBox{
 			ClusterMetadata:    s.clusterMetadata,
@@ -95,7 +97,7 @@ func (s *executableUnknownTaskSuite) SetupTest() {
 			MetricsHandler:     s.metricsHandler,
 			Logger:             s.logger,
 		},
-		rand.Int63(),
+		s.taskID,
 		time.Unix(0, rand.Int63()),
 		nil,
 	)
@@ -116,4 +118,9 @@ func (s *executableUnknownTaskSuite) TestHandleErr() {
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
+}
+
+func (s *executableUnknownTaskSuite) TestMarkPoisonPill() {
+	err := s.task.MarkPoisonPill()
+	s.NoError(err)
 }

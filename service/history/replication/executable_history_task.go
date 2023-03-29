@@ -30,11 +30,16 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -79,6 +84,7 @@ func NewExecutableHistoryTask(
 				WorkflowId: task.WorkflowId,
 				RunId:      task.RunId,
 			},
+			BaseExecutionInfo:   task.BaseExecutionInfo,
 			VersionHistoryItems: task.VersionHistoryItems,
 			Events:              task.Events,
 			// new run events does not need version history since there is no prior events
@@ -136,4 +142,65 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 	default:
 		return err
 	}
+}
+
+func (e *ExecutableHistoryTask) MarkPoisonPill() error {
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+		namespace.ID(e.NamespaceID),
+		e.WorkflowID,
+	)
+	if err != nil {
+		return err
+	}
+
+	events, err := serialization.NewSerializer().DeserializeEvents(e.req.Events)
+	if err != nil {
+		e.Logger.Error("unable to enqueue history replication task to DLQ, ser/de error",
+			tag.ShardID(shardContext.GetShardID()),
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
+		return nil
+	} else if len(events) == 0 {
+		e.Logger.Error("unable to enqueue history replication task to DLQ, no events",
+			tag.ShardID(shardContext.GetShardID()),
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+		)
+		return nil
+	}
+
+	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+	req := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardContext.GetShardID(),
+		SourceClusterName: e.sourceClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId:  e.NamespaceID,
+			WorkflowId:   e.WorkflowID,
+			RunId:        e.RunID,
+			TaskId:       e.ExecutableTask.TaskID(),
+			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+			FirstEventId: events[0].GetEventId(),
+			NextEventId:  events[len(events)-1].GetEventId() + 1,
+			Version:      events[0].GetVersion(),
+		},
+	}
+
+	e.Logger.Error("enqueue history replication task to DLQ",
+		tag.ShardID(shardContext.GetShardID()),
+		tag.WorkflowNamespaceID(e.NamespaceID),
+		tag.WorkflowID(e.WorkflowID),
+		tag.WorkflowRunID(e.RunID),
+		tag.TaskID(e.ExecutableTask.TaskID()),
+	)
+
+	ctx, cancel := newTaskContext(e.NamespaceID)
+	defer cancel()
+
+	return shardContext.GetExecutionManager().PutReplicationTaskToDLQ(ctx, req)
 }

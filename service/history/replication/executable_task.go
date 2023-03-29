@@ -55,6 +55,10 @@ const (
 	taskStateNacked    = int32(ctasks.TaskStateNacked)
 )
 
+const (
+	applyReplicationTimeout = 20 * time.Second
+)
+
 var (
 	TaskRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
 		WithBackoffCoefficient(1.2).
@@ -345,5 +349,5 @@ func newTaskContext(
 		headers.SystemPreemptableCallerInfo,
 	)
 	ctx = headers.SetCallerName(ctx, namespaceName)
-	return context.WithTimeout(ctx, replicationTimeout)
+	return context.WithTimeout(ctx, applyReplicationTimeout)
 }

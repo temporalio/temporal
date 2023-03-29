@@ -38,14 +38,18 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
@@ -70,7 +74,8 @@ type (
 		replicationTask   *replicationspb.SyncActivityTaskAttributes
 		sourceClusterName string
 
-		task *ExecutableActivityStateTask
+		taskID int64
+		task   *ExecutableActivityStateTask
 	}
 )
 
@@ -111,10 +116,11 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		Attempt:            rand.Int31(),
 		LastFailure:        &failurepb.Failure{},
 		LastWorkerIdentity: uuid.NewString(),
+		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
 		VersionHistory:     &history.VersionHistory{},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
-
+	s.taskID = rand.Int63()
 	s.task = NewExecutableActivityStateTask(
 		ProcessToolBox{
 			ClusterMetadata:    s.clusterMetadata,
@@ -125,12 +131,13 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 			MetricsHandler:     s.metricsHandler,
 			Logger:             s.logger,
 		},
-		rand.Int63(),
+		s.taskID,
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
 	)
 	s.task.ExecutableTask = s.executableTask
+	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
 }
 
 func (s *executableActivityStateTaskSuite) TearDownTest() {
@@ -163,6 +170,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 		Attempt:            s.replicationTask.Attempt,
 		LastFailure:        s.replicationTask.LastFailure,
 		LastWorkerIdentity: s.replicationTask.LastWorkerIdentity,
+		BaseExecutionInfo:  s.replicationTask.BaseExecutionInfo,
 		VersionHistory:     s.replicationTask.GetVersionHistory(),
 	}).Return(nil)
 
@@ -213,6 +221,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 		Attempt:            s.replicationTask.Attempt,
 		LastFailure:        s.replicationTask.LastFailure,
 		LastWorkerIdentity: s.replicationTask.LastWorkerIdentity,
+		BaseExecutionInfo:  s.replicationTask.BaseExecutionInfo,
 		VersionHistory:     s.replicationTask.GetVersionHistory(),
 	}).Return(nil)
 
@@ -259,4 +268,32 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Other() {
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
+}
+
+func (s *executableActivityStateTaskSuite) TestMarkPoisonPill() {
+	shardID := rand.Int31()
+	shardContext := shard.NewMockContext(s.controller)
+	executionManager := persistence.NewMockExecutionManager(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.task.NamespaceID),
+		s.task.WorkflowID,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	shardContext.EXPECT().GetExecutionManager().Return(executionManager).AnyTimes()
+	executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardID,
+		SourceClusterName: s.sourceClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId:      s.task.NamespaceID,
+			WorkflowId:       s.task.WorkflowID,
+			RunId:            s.task.RunID,
+			TaskId:           s.task.ExecutableTask.TaskID(),
+			TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+			ScheduledEventId: s.task.req.ScheduledEventId,
+			Version:          s.task.req.Version,
+		},
+	}).Return(nil)
+
+	err := s.task.MarkPoisonPill()
+	s.NoError(err)
 }

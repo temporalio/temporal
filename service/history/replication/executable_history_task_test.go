@@ -35,16 +35,23 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
@@ -68,7 +75,8 @@ type (
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
 
-		task *ExecutableHistoryTask
+		taskID int64
+		task   *ExecutableHistoryTask
 	}
 )
 
@@ -95,16 +103,33 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
+
+	firstEventID := rand.Int63()
+	nextEventID := firstEventID + 1
+	version := rand.Int63()
+	events, _ := serialization.NewSerializer().SerializeEvents([]*historypb.HistoryEvent{{
+		EventId: firstEventID,
+		Version: version,
+	}}, enumspb.ENCODING_TYPE_PROTO3)
+	newEvents, _ := serialization.NewSerializer().SerializeEvents([]*historypb.HistoryEvent{{
+		EventId: 1,
+		Version: version,
+	}}, enumspb.ENCODING_TYPE_PROTO3)
 	s.replicationTask = &replicationspb.HistoryTaskAttributes{
-		NamespaceId:         uuid.NewString(),
-		WorkflowId:          uuid.NewString(),
-		RunId:               uuid.NewString(),
-		VersionHistoryItems: []*history.VersionHistoryItem{},
-		Events:              &commonpb.DataBlob{},
-		NewRunEvents:        &commonpb.DataBlob{},
+		NamespaceId:       uuid.NewString(),
+		WorkflowId:        uuid.NewString(),
+		RunId:             uuid.NewString(),
+		BaseExecutionInfo: &workflowspb.BaseExecutionInfo{},
+		VersionHistoryItems: []*history.VersionHistoryItem{{
+			EventId: nextEventID - 1,
+			Version: version,
+		}},
+		Events:       events,
+		NewRunEvents: newEvents,
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 
+	s.taskID = rand.Int63()
 	s.task = NewExecutableHistoryTask(
 		ProcessToolBox{
 			ClusterMetadata:    s.clusterMetadata,
@@ -115,12 +140,13 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 			MetricsHandler:     s.metricsHandler,
 			Logger:             s.logger,
 		},
-		rand.Int63(),
+		s.taskID,
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
 	)
 	s.task.ExecutableTask = s.executableTask
+	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
 }
 
 func (s *executableHistoryTaskSuite) TearDownTest() {
@@ -145,6 +171,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 			WorkflowId: s.task.WorkflowID,
 			RunId:      s.task.RunID,
 		},
+		BaseExecutionInfo:   s.replicationTask.BaseExecutionInfo,
 		VersionHistoryItems: s.replicationTask.VersionHistoryItems,
 		Events:              s.replicationTask.Events,
 		NewRunEvents:        s.replicationTask.NewRunEvents,
@@ -189,6 +216,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 			WorkflowId: s.task.WorkflowID,
 			RunId:      s.task.RunID,
 		},
+		BaseExecutionInfo:   s.replicationTask.BaseExecutionInfo,
 		VersionHistoryItems: s.replicationTask.VersionHistoryItems,
 		Events:              s.replicationTask.Events,
 		NewRunEvents:        s.replicationTask.NewRunEvents,
@@ -237,4 +265,35 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Other() {
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
+}
+
+func (s *executableHistoryTaskSuite) TestMarkPoisonPill() {
+	events, _ := serialization.NewSerializer().DeserializeEvents(s.task.req.Events)
+
+	shardID := rand.Int31()
+	shardContext := shard.NewMockContext(s.controller)
+	executionManager := persistence.NewMockExecutionManager(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.task.NamespaceID),
+		s.task.WorkflowID,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	shardContext.EXPECT().GetExecutionManager().Return(executionManager).AnyTimes()
+	executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardID,
+		SourceClusterName: s.sourceClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId:  s.task.NamespaceID,
+			WorkflowId:   s.task.WorkflowID,
+			RunId:        s.task.RunID,
+			TaskId:       s.task.ExecutableTask.TaskID(),
+			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+			FirstEventId: events[0].GetEventId(),
+			NextEventId:  events[len(events)-1].GetEventId() + 1,
+			Version:      events[0].GetVersion(),
+		},
+	}).Return(nil)
+
+	err := s.task.MarkPoisonPill()
+	s.NoError(err)
 }

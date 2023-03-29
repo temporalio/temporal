@@ -116,3 +116,8 @@ func (s *executableNoopTaskSuite) TestHandleErr() {
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
 }
+
+func (s *executableNoopTaskSuite) TestMarkPoisonPill() {
+	err := s.task.MarkPoisonPill()
+	s.NoError(err)
+}
