@@ -452,7 +452,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	)
 	// hasPendingUpdates indicates if there are more pending updates (excluding those which are accepted/rejected by this workflow task).
 	hasPendingUpdates := weContext.UpdateRegistry().HasPending(request.GetMessages())
-	hasBufferedEvents := ms.HasBufferedEvents()
+	// hasBufferedEvents indicates if there are any buffered events which should generate a new workflow task
+	hasBufferedEvents := ms.HasBufferedEvents() && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
@@ -560,11 +561,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			}
 			hasBufferedEvents = false
 		}
-	}
-
-	// Check whether buffered events should actually generate a new task
-	if hasBufferedEvents {
-		hasBufferedEvents = ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
 	}
 
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
