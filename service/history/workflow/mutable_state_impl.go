@@ -3957,7 +3957,7 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	}
 
 	// update last update time
-	ms.executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	ms.executionInfo.LastUpdateTime = timestamp.TimePtr(ms.shard.GetTimeSource().Now())
 	ms.executionInfo.StateTransitionCount += 1
 
 	// we generate checksum here based on the assumption that the returned
@@ -4039,7 +4039,7 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	}
 
 	// update last update time
-	ms.executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	ms.executionInfo.LastUpdateTime = timestamp.TimePtr(ms.shard.GetTimeSource().Now())
 	ms.executionInfo.StateTransitionCount += 1
 
 	// we generate checksum here based on the assumption that the returned
