@@ -339,7 +339,7 @@ const (
 	// keys for history
 
 	// EnableReplicationStream turn on replication stream
-	EnableReplicationStream = "history,enableReplicationStream"
+	EnableReplicationStream = "history.enableReplicationStream"
 
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS = "history.rps"
