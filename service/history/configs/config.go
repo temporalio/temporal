@@ -40,6 +40,8 @@ type Config struct {
 	NumberOfShards             int32
 	DefaultVisibilityIndexName string
 
+	EnableReplicationStream dynamicconfig.BoolPropertyFn
+
 	RPS                                   dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit                      dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
@@ -232,6 +234,7 @@ type Config struct {
 	ReplicationTaskProcessorHostQPS                      dynamicconfig.FloatPropertyFn
 	ReplicationTaskProcessorShardQPS                     dynamicconfig.FloatPropertyFn
 	ReplicationBypassCorruptedData                       dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
+	ReplicationProcessorSchedulerWorkerCount             dynamicconfig.IntPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -303,6 +306,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 	cfg := &Config{
 		NumberOfShards:             numberOfShards,
 		DefaultVisibilityIndexName: defaultVisibilityIndex,
+
+		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, true),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                      dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
@@ -398,6 +403,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ReplicationTaskProcessorHostQPS:                       dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorHostQPS, 1500),
 		ReplicationTaskProcessorShardQPS:                      dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorShardQPS, 30),
 		ReplicationBypassCorruptedData:                        dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.ReplicationBypassCorruptedData, false),
+		ReplicationProcessorSchedulerWorkerCount:              dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
 
 		MaximumBufferedEventsBatch:      dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
 		MaximumSignalsPerExecution:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 0),

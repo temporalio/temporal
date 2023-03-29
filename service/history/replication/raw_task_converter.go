@@ -47,6 +47,33 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
+func convertTask(
+	ctx context.Context,
+	task tasks.Task,
+	shardID int32,
+	workflowCache wcache.Cache,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+) (*replicationspb.ReplicationTask, error) {
+	switch task := task.(type) {
+	case *tasks.SyncActivityTask:
+		return convertActivityStateReplicationTask(ctx, task, workflowCache)
+	case *tasks.SyncWorkflowStateTask:
+		return convertWorkflowStateReplicationTask(ctx, task, workflowCache)
+	case *tasks.HistoryReplicationTask:
+		return convertHistoryReplicationTask(
+			ctx,
+			task,
+			shardID,
+			workflowCache,
+			executionManager,
+			logger,
+		)
+	default:
+		return nil, errUnknownReplicationTask
+	}
+}
+
 func convertActivityStateReplicationTask(
 	ctx context.Context,
 	taskInfo *tasks.SyncActivityTask,

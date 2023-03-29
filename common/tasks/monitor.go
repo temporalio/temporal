@@ -37,4 +37,14 @@ type (
 		// Add more methods here to monitor
 		// other task processing events
 	}
+
+	NoopMonitor[T Task] struct{}
 )
+
+func NewNoopMonitor[T Task]() *NoopMonitor[T] {
+	return &NoopMonitor[T]{}
+}
+
+func (m *NoopMonitor[T]) Start()        {}
+func (m *NoopMonitor[T]) Stop()         {}
+func (m *NoopMonitor[T]) RecordStart(T) {}

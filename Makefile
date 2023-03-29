@@ -116,7 +116,7 @@ update-linters:
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	@go install github.com/golang/mock/mockgen@v1.6.0
+	@go install github.com/golang/mock/mockgen@v1.7.0-rc.1
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
