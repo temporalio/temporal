@@ -135,6 +135,7 @@ func (s *VisibilityStore) RecordWorkflowExecutionClosed(
 		CloseTime:        &request.CloseTime,
 		Status:           int32(request.Status),
 		HistoryLength:    &request.HistoryLength,
+		HistorySizeBytes: &request.HistorySizeBytes,
 		Memo:             request.Memo.Data,
 		Encoding:         request.Memo.EncodingType.String(),
 		TaskQueue:        request.TaskQueue,
@@ -561,6 +562,9 @@ func (s *VisibilityStore) rowToInfo(
 	}
 	if row.HistoryLength != nil {
 		info.HistoryLength = *row.HistoryLength
+	}
+	if row.HistorySizeBytes != nil {
+		info.HistorySizeBytes = *row.HistorySizeBytes
 	}
 	return info, nil
 }
