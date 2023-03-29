@@ -156,9 +156,7 @@ func (r *workflowRebuilderImpl) persistToDB(
 	mutableState workflow.MutableState,
 	historySize int64,
 ) error {
-	now := r.shard.GetTimeSource().Now()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyPassive,
 	)
 	if err != nil {

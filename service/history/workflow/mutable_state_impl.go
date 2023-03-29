@@ -3931,7 +3931,6 @@ func (ms *MutableStateImpl) StartTransaction(
 }
 
 func (ms *MutableStateImpl) CloseTransactionAsMutation(
-	now time.Time,
 	transactionPolicy TransactionPolicy,
 ) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 
@@ -3941,7 +3940,7 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, nil, err
 	}
 
-	workflowEventsSeq, bufferEvents, clearBuffer, err := ms.prepareEventsAndReplicationTasks(now, transactionPolicy)
+	workflowEventsSeq, bufferEvents, clearBuffer, err := ms.prepareEventsAndReplicationTasks(transactionPolicy)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3958,7 +3957,7 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	}
 
 	// update last update time
-	ms.executionInfo.LastUpdateTime = &now
+	ms.executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	ms.executionInfo.StateTransitionCount += 1
 
 	// we generate checksum here based on the assumption that the returned
@@ -4009,7 +4008,6 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 }
 
 func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
-	now time.Time,
 	transactionPolicy TransactionPolicy,
 ) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
 
@@ -4019,7 +4017,7 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		return nil, nil, err
 	}
 
-	workflowEventsSeq, bufferEvents, _, err := ms.prepareEventsAndReplicationTasks(now, transactionPolicy)
+	workflowEventsSeq, bufferEvents, _, err := ms.prepareEventsAndReplicationTasks(transactionPolicy)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -4041,7 +4039,7 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	}
 
 	// update last update time
-	ms.executionInfo.LastUpdateTime = &now
+	ms.executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	ms.executionInfo.StateTransitionCount += 1
 
 	// we generate checksum here based on the assumption that the returned
@@ -4176,7 +4174,6 @@ func (ms *MutableStateImpl) cleanupTransaction(
 }
 
 func (ms *MutableStateImpl) prepareEventsAndReplicationTasks(
-	now time.Time,
 	transactionPolicy TransactionPolicy,
 ) ([]*persistence.WorkflowEvents, []*historypb.HistoryEvent, bool, error) {
 
@@ -4231,7 +4228,7 @@ func (ms *MutableStateImpl) prepareEventsAndReplicationTasks(
 
 	ms.InsertTasks[tasks.CategoryReplication] = append(
 		ms.InsertTasks[tasks.CategoryReplication],
-		ms.syncActivityToReplicationTask(now, transactionPolicy)...,
+		ms.syncActivityToReplicationTask(transactionPolicy)...,
 	)
 
 	if transactionPolicy == TransactionPolicyPassive &&
@@ -4260,10 +4257,9 @@ func (ms *MutableStateImpl) eventsToReplicationTask(
 }
 
 func (ms *MutableStateImpl) syncActivityToReplicationTask(
-	now time.Time,
 	transactionPolicy TransactionPolicy,
 ) []tasks.Task {
-
+	now := time.Now().UTC()
 	switch transactionPolicy {
 	case TransactionPolicyActive:
 		if ms.generateReplicationTask() {

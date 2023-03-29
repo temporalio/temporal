@@ -209,7 +209,6 @@ func startAndSignalWithoutCurrentWorkflow(
 ) (string, error) {
 	now := shard.GetTimeSource().Now()
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowContext.GetMutableState().CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {

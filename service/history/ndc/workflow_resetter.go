@@ -148,7 +148,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetWorkflowVersion = currentMutableState.GetCurrentVersion()
 
 		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
-			r.shard.GetTimeSource().Now(),
 			workflow.TransactionPolicyActive,
 		)
 		if err != nil {
@@ -351,7 +350,6 @@ func (r *workflowResetterImpl) persistToDB(
 
 	now := r.shard.GetTimeSource().Now()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {

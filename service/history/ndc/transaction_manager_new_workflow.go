@@ -157,7 +157,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 ) error {
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyPassive,
 	)
 	if err != nil {
@@ -224,7 +223,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	currentWorkflow = nil
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		now,
 		targetWorkflowPolicy,
 	)
 	if err != nil {

@@ -218,14 +218,12 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 		return nil, err
 	}
 
-	now := s.shardCtx.GetTimeSource().Now()
 	mutableState := workflowContext.GetMutableState()
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
 	if s.requestEagerStart() && workflowTaskInfo == nil {
 		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
 	}
 	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {

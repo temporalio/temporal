@@ -395,7 +395,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	}()
 
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
-		now,
 		TransactionPolicyPassive,
 	)
 	if err != nil {
@@ -416,7 +415,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}()
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
-			now,
 			TransactionPolicyPassive,
 		)
 		if err != nil {
@@ -438,7 +436,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}()
 
 		currentWorkflow, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
-			now,
 			*currentTransactionPolicy,
 		)
 		if err != nil {
@@ -591,7 +588,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	}()
 
 	currentWorkflow, currentWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
-		now,
 		currentWorkflowTransactionPolicy,
 	)
 	if err != nil {
@@ -611,7 +607,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}()
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
-			now,
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
@@ -679,7 +674,6 @@ func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (
 	}()
 
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
-		now,
 		TransactionPolicyPassive,
 	)
 	if err != nil {
