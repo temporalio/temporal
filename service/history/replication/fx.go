@@ -81,10 +81,8 @@ func ReplicationStreamSchedulerProvider(
 ) ctasks.Scheduler[ctasks.Task] {
 	return ctasks.NewFIFOScheduler[ctasks.Task](
 		&ctasks.FIFOSchedulerOptions{
-			// TODO make it configurable
-			QueueSize: 1024,
-			// TODO need to apply events sequentially per workflow
-			WorkerCount: func() int { return 1 }, // config.ReplicationProcessorSchedulerWorkerCount,
+			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
+			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
 		},
 		logger,
 	)

@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"errors"
 	"math/rand"
 	"testing"
 	"time"
@@ -188,6 +189,54 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_AckedTask() {
 	s.Equal([]int64{}, taskIDs)
 }
 
+func (s *executableTaskTrackerSuite) TestLowWatermark_NackedTask_Success() {
+	task0 := NewMockTrackableExecutableTask(s.controller)
+	task0.EXPECT().TaskID().Return(rand.Int63()).AnyTimes()
+	task0.EXPECT().TaskCreationTime().Return(time.Unix(0, rand.Int63())).AnyTimes()
+	task0.EXPECT().State().Return(ctasks.TaskStateNacked).AnyTimes()
+	task0.EXPECT().MarkPoisonPill().Return(nil)
+
+	highWatermark0 := WatermarkInfo{
+		Watermark: task0.TaskID() + 1,
+		Timestamp: time.Unix(0, rand.Int63()),
+	}
+	s.taskTracker.TrackTasks(highWatermark0, task0)
+
+	lowWatermark := s.taskTracker.LowWatermark()
+	s.Equal(highWatermark0, *lowWatermark)
+
+	taskIDs := []int64{}
+	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
+		taskIDs = append(taskIDs, element.Value.(TrackableExecutableTask).TaskID())
+	}
+	s.Equal([]int64{}, taskIDs)
+}
+
+func (s *executableTaskTrackerSuite) TestLowWatermark_NackedTask_Error() {
+	task0 := NewMockTrackableExecutableTask(s.controller)
+	task0.EXPECT().TaskID().Return(rand.Int63()).AnyTimes()
+	task0.EXPECT().TaskCreationTime().Return(time.Unix(0, rand.Int63())).AnyTimes()
+	task0.EXPECT().State().Return(ctasks.TaskStateNacked).AnyTimes()
+	task0.EXPECT().MarkPoisonPill().Return(errors.New("random error"))
+
+	s.taskTracker.TrackTasks(WatermarkInfo{
+		Watermark: task0.TaskID() + 1,
+		Timestamp: time.Unix(0, rand.Int63()),
+	}, task0)
+
+	lowWatermark := s.taskTracker.LowWatermark()
+	s.Equal(WatermarkInfo{
+		Watermark: task0.TaskID(),
+		Timestamp: task0.TaskCreationTime(),
+	}, *lowWatermark)
+
+	taskIDs := []int64{}
+	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
+		taskIDs = append(taskIDs, element.Value.(TrackableExecutableTask).TaskID())
+	}
+	s.Equal([]int64{task0.TaskID()}, taskIDs)
+}
+
 func (s *executableTaskTrackerSuite) TestLowWatermark_CancelledTask() {
 	task0 := NewMockTrackableExecutableTask(s.controller)
 	task0.EXPECT().TaskID().Return(rand.Int63()).AnyTimes()
@@ -210,10 +259,6 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_CancelledTask() {
 		taskIDs = append(taskIDs, element.Value.(TrackableExecutableTask).TaskID())
 	}
 	s.Equal([]int64{task0.TaskID()}, taskIDs)
-}
-
-func (s *executableTaskTrackerSuite) TestLowWatermark_NackedTask() {
-	// TODO add support for poison pill
 }
 
 func (s *executableTaskTrackerSuite) TestLowWatermark_PendingTask() {

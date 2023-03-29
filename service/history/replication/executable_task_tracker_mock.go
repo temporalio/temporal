@@ -126,6 +126,20 @@ func (mr *MockTrackableExecutableTaskMockRecorder) IsRetryableError(err interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockTrackableExecutableTask)(nil).IsRetryableError), err)
 }
 
+// MarkPoisonPill mocks base method.
+func (m *MockTrackableExecutableTask) MarkPoisonPill() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkPoisonPill")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkPoisonPill indicates an expected call of MarkPoisonPill.
+func (mr *MockTrackableExecutableTaskMockRecorder) MarkPoisonPill() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPoisonPill", reflect.TypeOf((*MockTrackableExecutableTask)(nil).MarkPoisonPill))
+}
+
 // Nack mocks base method.
 func (m *MockTrackableExecutableTask) Nack(err error) {
 	m.ctrl.T.Helper()
