@@ -678,7 +678,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
-	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left part of comparison expression: invalid search attribute: AliasForUnknownField")
+	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left side of \"AliasForUnknownField = 'pid'\": invalid search attribute: AliasForUnknownField")
 
 	query = `order by ExecutionTime`
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
