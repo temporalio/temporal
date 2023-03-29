@@ -109,16 +109,22 @@ func (s *biDirectionStreamSuite) TearDownTest() {
 func (s *biDirectionStreamSuite) TestLazyInit() {
 	s.Nil(s.biDirectionStream.streamingClient)
 
-	err := s.biDirectionStream.lazyInit()
+	s.biDirectionStream.Lock()
+	err := s.biDirectionStream.lazyInitLocked()
+	s.biDirectionStream.Unlock()
 	s.NoError(err)
 	s.Equal(s.streamClient, s.biDirectionStream.streamingClient)
 
-	err = s.biDirectionStream.lazyInit()
+	s.biDirectionStream.Lock()
+	err = s.biDirectionStream.lazyInitLocked()
+	s.biDirectionStream.Unlock()
 	s.NoError(err)
 	s.Equal(s.streamClient, s.biDirectionStream.streamingClient)
 
 	s.biDirectionStream.Close()
-	err = s.biDirectionStream.lazyInit()
+	s.biDirectionStream.Lock()
+	err = s.biDirectionStream.lazyInitLocked()
+	s.biDirectionStream.Unlock()
 	s.Error(err)
 }
 
