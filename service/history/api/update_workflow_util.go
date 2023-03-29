@@ -104,15 +104,11 @@ func UpdateWorkflowWithNew(
 
 		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
-			shard.GetTimeSource().Now(),
 			newContext,
 			newMutableState,
 		)
 	} else {
-		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
-			ctx,
-			shard.GetTimeSource().Now(),
-		)
+		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(ctx)
 	}
 
 	return updateErr

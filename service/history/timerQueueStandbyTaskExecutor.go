@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -239,7 +239,6 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, nil
 		}
 
-		now := t.getStandbyClusterTime()
 		// we need to handcraft some of the variables
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
@@ -247,7 +246,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, err
 		}
 
-		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx, now)
+		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx)
 		return nil, err
 	}
 

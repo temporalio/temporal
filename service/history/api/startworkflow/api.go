@@ -218,14 +218,12 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 		return nil, err
 	}
 
-	now := s.shardCtx.GetTimeSource().Now()
 	mutableState := workflowContext.GetMutableState()
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
 	if s.requestEagerStart() && workflowTaskInfo == nil {
 		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
 	}
 	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {
@@ -247,10 +245,8 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 
 // createBrandNew creates a new "brand new" execution in the executions table.
 func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationParams) error {
-	now := s.shardCtx.GetTimeSource().Now()
 	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		persistence.CreateWorkflowModeBrandNew,
 		"", // prevRunID
 		0,  // prevLastWriteVersion
@@ -293,10 +289,8 @@ func (s *Starter) createAsCurrent(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) error {
-	now := s.shardCtx.GetTimeSource().Now()
 	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.LastWriteVersion,
