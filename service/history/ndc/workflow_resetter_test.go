@@ -324,6 +324,11 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		resetBranchToken,
 		resetRequestID,
 	).Return(resetMutableState, resetHistorySize, nil)
+	resetMutableState.EXPECT().SetBaseWorkflow(
+		s.baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+	)
 
 	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
 		ctx,

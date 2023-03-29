@@ -33,6 +33,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -63,6 +64,19 @@ type (
 		GetTasks(ctx context.Context, pollingCluster string, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetTask(ctx context.Context, taskInfo *replicationspb.ReplicationTaskInfo) (*replicationspb.ReplicationTask, error)
 		Close()
+
+		SubscribeNotification() (<-chan struct{}, string)
+		UnsubscribeNotification(string)
+		ConvertTask(
+			ctx context.Context,
+			task tasks.Task,
+		) (*replicationspb.ReplicationTask, error)
+		GetReplicationTasksIter(
+			ctx context.Context,
+			pollingCluster string,
+			minInclusiveTaskID int64,
+			maxExclusiveTaskID int64,
+		) (collection.Iterator[tasks.Task], error)
 	}
 
 	ackMgrImpl struct {
@@ -84,6 +98,9 @@ type (
 		maxTaskVisibilityTimestamp *time.Time
 		sanityCheckTime            time.Time
 		registeredQueueReaders     map[int32]struct{}
+
+		subscriberLock sync.Mutex
+		subscribers    map[string]chan struct{}
 	}
 )
 
@@ -125,6 +142,8 @@ func NewAckManager(
 		maxTaskID:              nil,
 		sanityCheckTime:        time.Time{},
 		registeredQueueReaders: make(map[int32]struct{}),
+
+		subscribers: make(map[string]chan struct{}),
 	}
 }
 
@@ -145,6 +164,8 @@ func (p *ackMgrImpl) NotifyNewTasks(
 			maxVisibilityTimestamp = task.GetVisibilityTime()
 		}
 	}
+
+	defer p.broadcast()
 
 	p.Lock()
 	defer p.Unlock()
@@ -184,7 +205,7 @@ func (p *ackMgrImpl) GetTask(
 
 	switch taskInfo.TaskType {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-		return p.toReplicationTask(ctx, &tasks.SyncActivityTask{
+		return p.ConvertTask(ctx, &tasks.SyncActivityTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				taskInfo.GetNamespaceId(),
 				taskInfo.GetWorkflowId(),
@@ -196,7 +217,7 @@ func (p *ackMgrImpl) GetTask(
 			ScheduledEventID:    taskInfo.ScheduledEventId,
 		})
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-		return p.toReplicationTask(ctx, &tasks.HistoryReplicationTask{
+		return p.ConvertTask(ctx, &tasks.HistoryReplicationTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				taskInfo.GetNamespaceId(),
 				taskInfo.GetWorkflowId(),
@@ -209,7 +230,7 @@ func (p *ackMgrImpl) GetTask(
 			NextEventID:         taskInfo.NextEventId,
 		})
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
-		return p.toReplicationTask(ctx, &tasks.SyncWorkflowStateTask{
+		return p.ConvertTask(ctx, &tasks.SyncWorkflowStateTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				taskInfo.GetNamespaceId(),
 				taskInfo.GetWorkflowId(),
@@ -342,7 +363,7 @@ func (p *ackMgrImpl) getTasks(
 			continue
 		}
 
-		replicationTask, err := p.toReplicationTask(ctx, task)
+		replicationTask, err := p.ConvertTask(ctx, task)
 		if err != nil {
 			return p.swallowPartialResultsError(replicationTasks, lastTaskID, err)
 		} else if replicationTask == nil {
@@ -420,59 +441,6 @@ func (p *ackMgrImpl) taskIDsRange(
 	return minTaskID, maxTaskID
 }
 
-func (p *ackMgrImpl) toReplicationTask(
-	ctx context.Context,
-	task tasks.Task,
-) (*replicationspb.ReplicationTask, error) {
-
-	switch task := task.(type) {
-	case *tasks.SyncActivityTask:
-		return p.generateSyncActivityTask(ctx, task)
-	case *tasks.HistoryReplicationTask:
-		return p.generateHistoryReplicationTask(ctx, task)
-	case *tasks.SyncWorkflowStateTask:
-		return p.generateSyncWorkflowStateTask(ctx, task)
-	default:
-		return nil, errUnknownReplicationTask
-	}
-}
-
-func (p *ackMgrImpl) generateSyncActivityTask(
-	ctx context.Context,
-	taskInfo *tasks.SyncActivityTask,
-) (*replicationspb.ReplicationTask, error) {
-	return convertActivityStateReplicationTask(
-		ctx,
-		taskInfo,
-		p.workflowCache,
-	)
-}
-
-func (p *ackMgrImpl) generateHistoryReplicationTask(
-	ctx context.Context,
-	taskInfo *tasks.HistoryReplicationTask,
-) (*replicationspb.ReplicationTask, error) {
-	return convertHistoryReplicationTask(
-		ctx,
-		taskInfo,
-		p.shard.GetShardID(),
-		p.workflowCache,
-		p.executionMgr,
-		p.logger,
-	)
-}
-
-func (p *ackMgrImpl) generateSyncWorkflowStateTask(
-	ctx context.Context,
-	taskInfo *tasks.SyncWorkflowStateTask,
-) (*replicationspb.ReplicationTask, error) {
-	return convertWorkflowStateReplicationTask(
-		ctx,
-		taskInfo,
-		p.workflowCache,
-	)
-}
-
 func (p *ackMgrImpl) clusterToReaderID(
 	ctx context.Context,
 	pollingCluster string,
@@ -502,4 +470,100 @@ func (p *ackMgrImpl) clusterToReaderID(
 	}
 
 	return readerID, nil
+}
+
+// TODO split the ack manager into 2 components
+
+func (p *ackMgrImpl) ConvertTask(
+	ctx context.Context,
+	task tasks.Task,
+) (*replicationspb.ReplicationTask, error) {
+	switch task := task.(type) {
+	case *tasks.SyncActivityTask:
+		return convertActivityStateReplicationTask(
+			ctx,
+			task,
+			p.workflowCache,
+		)
+	case *tasks.SyncWorkflowStateTask:
+		return convertWorkflowStateReplicationTask(
+			ctx,
+			task,
+			p.workflowCache,
+		)
+	case *tasks.HistoryReplicationTask:
+		return convertHistoryReplicationTask(
+			ctx,
+			task,
+			p.shard.GetShardID(),
+			p.workflowCache,
+			p.executionMgr,
+			p.logger,
+		)
+	default:
+		return nil, errUnknownReplicationTask
+	}
+}
+
+func (p *ackMgrImpl) SubscribeNotification() (<-chan struct{}, string) {
+	subscriberID := uuid.New().String()
+
+	p.subscriberLock.Lock()
+	defer p.subscriberLock.Unlock()
+
+	for {
+		if _, ok := p.subscribers[subscriberID]; !ok {
+			channel := make(chan struct{}, 1)
+			p.subscribers[subscriberID] = channel
+			return channel, subscriberID
+		}
+		subscriberID = uuid.New().String()
+	}
+}
+
+func (p *ackMgrImpl) UnsubscribeNotification(subscriberID string) {
+	p.subscriberLock.Lock()
+	defer p.subscriberLock.Unlock()
+
+	delete(p.subscribers, subscriberID)
+}
+
+func (p *ackMgrImpl) broadcast() {
+	p.subscriberLock.Lock()
+	defer p.subscriberLock.Unlock()
+
+	for _, channel := range p.subscribers {
+		select {
+		case channel <- struct{}{}:
+		default:
+			// noop
+		}
+	}
+}
+
+func (p *ackMgrImpl) GetReplicationTasksIter(
+	ctx context.Context,
+	pollingCluster string,
+	minInclusiveTaskID int64,
+	maxExclusiveTaskID int64,
+) (collection.Iterator[tasks.Task], error) {
+	readerID, err := p.clusterToReaderID(ctx, pollingCluster)
+	if err != nil {
+		return nil, err
+	}
+	return collection.NewPagingIterator[tasks.Task](func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+			ShardID:             p.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryReplication,
+			ReaderID:            readerID,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(minInclusiveTaskID),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxExclusiveTaskID),
+			BatchSize:           p.config.ReplicatorProcessorFetchTasksBatchSize(),
+			NextPageToken:       paginationToken,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return response.Tasks, response.NextPageToken, nil
+	}), nil
 }

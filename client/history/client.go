@@ -244,7 +244,10 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	if err != nil {
 		return nil, err
 	}
-	return client.StreamWorkflowReplicationMessages(ctx, opts...)
+	return client.StreamWorkflowReplicationMessages(
+		metadata.NewOutgoingContext(ctx, ctxMetadata),
+		opts...,
+	)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

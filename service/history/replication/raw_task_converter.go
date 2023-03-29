@@ -34,6 +34,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -45,6 +46,33 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
+
+func convertTask(
+	ctx context.Context,
+	task tasks.Task,
+	shardID int32,
+	workflowCache wcache.Cache,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+) (*replicationspb.ReplicationTask, error) {
+	switch task := task.(type) {
+	case *tasks.SyncActivityTask:
+		return convertActivityStateReplicationTask(ctx, task, workflowCache)
+	case *tasks.SyncWorkflowStateTask:
+		return convertWorkflowStateReplicationTask(ctx, task, workflowCache)
+	case *tasks.HistoryReplicationTask:
+		return convertHistoryReplicationTask(
+			ctx,
+			task,
+			shardID,
+			workflowCache,
+			executionManager,
+			logger,
+		)
+	default:
+		return nil, errUnknownReplicationTask
+	}
+}
 
 func convertActivityStateReplicationTask(
 	ctx context.Context,
@@ -97,6 +125,7 @@ func convertActivityStateReplicationTask(
 						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
+						BaseExecutionInfo:  copyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
 						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
 					},
 				},
@@ -142,7 +171,7 @@ func convertHistoryReplicationTask(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) (*replicationspb.ReplicationTask, error) {
-	currentVersionHistory, currentEvents, err := getVersionHistoryAndEvents(
+	currentVersionHistory, currentEvents, currentBaseWorkflowInfo, err := getVersionHistoryAndEvents(
 		ctx,
 		shardID,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
@@ -161,7 +190,7 @@ func convertHistoryReplicationTask(
 	}
 	var newEvents *commonpb.DataBlob
 	if len(taskInfo.NewRunID) != 0 {
-		newVersionHistory, newEventBlob, err := getVersionHistoryAndEvents(
+		newVersionHistory, newEventBlob, _, err := getVersionHistoryAndEvents(
 			ctx,
 			shardID,
 			definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.NewRunID),
@@ -188,6 +217,7 @@ func convertHistoryReplicationTask(
 				NamespaceId:         taskInfo.NamespaceID,
 				WorkflowId:          taskInfo.WorkflowID,
 				RunId:               taskInfo.RunID,
+				BaseExecutionInfo:   currentBaseWorkflowInfo,
 				VersionHistoryItems: currentVersionHistory,
 				Events:              currentEvents,
 				NewRunEvents:        newEvents,
@@ -238,8 +268,8 @@ func getVersionHistoryAndEvents(
 	workflowCache wcache.Cache,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
-) ([]*historyspb.VersionHistoryItem, *commonpb.DataBlob, error) {
-	versionHistory, branchToken, err := getBranchToken(
+) ([]*historyspb.VersionHistoryItem, *commonpb.DataBlob, *workflowspb.BaseExecutionInfo, error) {
+	versionHistory, branchToken, baseWorkflowInfo, err := getBranchToken(
 		ctx,
 		workflowKey,
 		workflowCache,
@@ -247,16 +277,16 @@ func getVersionHistoryAndEvents(
 		eventVersion,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if versionHistory == nil {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	events, err := getEventsBlob(ctx, shardID, branchToken, firstEventID, nextEventID, executionManager)
 	if err != nil {
-		return nil, nil, convertGetHistoryError(workflowKey, logger, err)
+		return nil, nil, nil, convertGetHistoryError(workflowKey, logger, err)
 	}
-	return versionHistory, events, nil
+	return versionHistory, events, baseWorkflowInfo, nil
 }
 
 func getBranchToken(
@@ -265,7 +295,7 @@ func getBranchToken(
 	workflowCache wcache.Cache,
 	eventID int64,
 	eventVersion int64,
-) (_ []*historyspb.VersionHistoryItem, _ []byte, retError error) {
+) (_ []*historyspb.VersionHistoryItem, _ []byte, _ *workflowspb.BaseExecutionInfo, retError error) {
 	wfContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespace.ID(workflowKey.NamespaceID),
@@ -276,7 +306,7 @@ func getBranchToken(
 		workflow.CallerTypeTask,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer func() { release(retError) }()
 
@@ -285,9 +315,9 @@ func getBranchToken(
 	case nil:
 		return getVersionHistoryItems(ms, eventID, eventVersion)
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	default:
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 }
 
@@ -336,7 +366,8 @@ func getVersionHistoryItems(
 	mutableState workflow.MutableState,
 	eventID int64,
 	version int64,
-) ([]*historyspb.VersionHistoryItem, []byte, error) {
+) ([]*historyspb.VersionHistoryItem, []byte, *workflowspb.BaseExecutionInfo, error) {
+	baseWorkflowInfo := copyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo())
 	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		versionHistories,
@@ -346,14 +377,14 @@ func getVersionHistoryItems(
 		),
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	versionHistoryBranch, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
+	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), baseWorkflowInfo, nil
 }
 
 func convertGetHistoryError(
@@ -380,5 +411,18 @@ func convertGetHistoryError(
 		return nil
 	default:
 		return err
+	}
+}
+
+func copyBaseWorkflowInfo(
+	baseWorkflowInfo *workflowspb.BaseExecutionInfo,
+) *workflowspb.BaseExecutionInfo {
+	if baseWorkflowInfo == nil {
+		return nil
+	}
+	return &workflowspb.BaseExecutionInfo{
+		RunId:                            baseWorkflowInfo.RunId,
+		LowestCommonAncestorEventId:      baseWorkflowInfo.LowestCommonAncestorEventId,
+		LowestCommonAncestorEventVersion: baseWorkflowInfo.LowestCommonAncestorEventVersion,
 	}
 }

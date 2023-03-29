@@ -455,6 +455,12 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		return nil, err
 	}
 
+	resetMutableState.SetBaseWorkflow(
+		baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+	)
+
 	resetContext.SetHistorySize(resetHistorySize)
 	return NewWorkflow(
 		ctx,

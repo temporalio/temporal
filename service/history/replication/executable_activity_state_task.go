@@ -86,7 +86,8 @@ func NewExecutableActivityStateTask(
 			Attempt:            task.Attempt,
 			LastFailure:        task.LastFailure,
 			LastWorkerIdentity: task.LastWorkerIdentity,
-			VersionHistory:     task.GetVersionHistory(),
+			BaseExecutionInfo:  task.BaseExecutionInfo,
+			VersionHistory:     task.VersionHistory,
 		},
 
 		sourceClusterName: sourceClusterName,
