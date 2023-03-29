@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -111,6 +112,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		Attempt:            rand.Int31(),
 		LastFailure:        &failurepb.Failure{},
 		LastWorkerIdentity: uuid.NewString(),
+		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
 		VersionHistory:     &history.VersionHistory{},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
@@ -163,6 +165,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 		Attempt:            s.replicationTask.Attempt,
 		LastFailure:        s.replicationTask.LastFailure,
 		LastWorkerIdentity: s.replicationTask.LastWorkerIdentity,
+		BaseExecutionInfo:  s.replicationTask.BaseExecutionInfo,
 		VersionHistory:     s.replicationTask.GetVersionHistory(),
 	}).Return(nil)
 
@@ -213,6 +216,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 		Attempt:            s.replicationTask.Attempt,
 		LastFailure:        s.replicationTask.LastFailure,
 		LastWorkerIdentity: s.replicationTask.LastWorkerIdentity,
+		BaseExecutionInfo:  s.replicationTask.BaseExecutionInfo,
 		VersionHistory:     s.replicationTask.GetVersionHistory(),
 	}).Return(nil)
 
