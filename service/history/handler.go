@@ -63,7 +63,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
-	replication2 "go.temporal.io/server/service/history/api/replication"
+	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -1883,7 +1883,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	if err != nil {
 		return err
 	}
-	return replication2.StreamReplicationTasks(server, shardContext, sourceClusterShardID, targetClusterShardID)
+	return replicationapi.StreamReplicationTasks(server, shardContext, sourceClusterShardID, targetClusterShardID)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

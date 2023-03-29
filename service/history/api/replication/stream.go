@@ -130,7 +130,7 @@ func sendLoop(
 	if err != nil {
 		return err
 	}
-	channel, subscriberID := engine.SubscribeReplicationNotification()
+	newTaskNotificationChan, subscriberID := engine.SubscribeReplicationNotification()
 	defer engine.UnsubscribeReplicationNotification(subscriberID)
 
 	catchupEndExclusiveWatermark, err := sendCatchUp(
@@ -154,7 +154,7 @@ func sendLoop(
 		shardContext,
 		sourceClusterShardID,
 		targetClusterShardID,
-		channel,
+		newTaskNotificationChan,
 		catchupEndExclusiveWatermark,
 	); err != nil {
 		shardContext.GetLogger().Error(
@@ -200,12 +200,12 @@ func sendLive(
 	shardContext shard.Context,
 	sourceClusterShardID historyclient.ClusterShardID,
 	targetClusterShardID historyclient.ClusterShardID,
-	channel <-chan struct{},
+	newTaskNotificationChan <-chan struct{},
 	beginInclusiveWatermark int64,
 ) error {
 	for {
 		select {
-		case <-channel:
+		case <-newTaskNotificationChan:
 			endExclusiveWatermark := shardContext.GetImmediateQueueExclusiveHighReadWatermark().TaskID
 			if err := sendTasks(
 				ctx,
