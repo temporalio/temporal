@@ -338,6 +338,9 @@ const (
 
 	// keys for history
 
+	// EnableReplicationStream turn on replication stream
+	EnableReplicationStream = "history.enableReplicationStream"
+
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS = "history.rps"
 	// HistoryPersistenceMaxQPS is the max qps history host can query DB
@@ -649,6 +652,8 @@ const (
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
 	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
+	// ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count
+	ReplicationProcessorSchedulerWorkerCount = "history.ReplicationProcessorSchedulerWorkerCount"
 
 	// keys for worker
 

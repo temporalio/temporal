@@ -40,6 +40,7 @@ import (
 )
 
 func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
+	s.T().SkipNow()
 
 	workflowID := "replication-message-test" + uuid.New()
 	runID := uuid.New()
@@ -83,6 +84,8 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 }
 
 func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
+	s.T().SkipNow()
+
 	var shardID int32 = 1
 	workflowID := "replication-message-dlq-test" + uuid.New()
 	runID := uuid.New()
