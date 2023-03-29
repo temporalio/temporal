@@ -472,6 +472,22 @@ func (ms *MutableStateImpl) SetHistoryBuilder(hBuilder *HistoryBuilder) {
 	ms.hBuilder = hBuilder
 }
 
+func (ms *MutableStateImpl) SetBaseWorkflow(
+	baseRunID string,
+	baseRunLowestCommonAncestorEventID int64,
+	baseRunLowestCommonAncestorEventVersion int64,
+) {
+	ms.executionInfo.BaseExecutionInfo = &workflowspb.BaseExecutionInfo{
+		RunId:                            baseRunID,
+		LowestCommonAncestorEventId:      baseRunLowestCommonAncestorEventID,
+		LowestCommonAncestorEventVersion: baseRunLowestCommonAncestorEventVersion,
+	}
+}
+
+func (ms *MutableStateImpl) GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
+	return ms.executionInfo.BaseExecutionInfo
+}
+
 func (ms *MutableStateImpl) GetExecutionInfo() *persistencespb.WorkflowExecutionInfo {
 	return ms.executionInfo
 }

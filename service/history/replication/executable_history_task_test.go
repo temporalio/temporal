@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -99,6 +100,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		NamespaceId:         uuid.NewString(),
 		WorkflowId:          uuid.NewString(),
 		RunId:               uuid.NewString(),
+		BaseExecutionInfo:   &workflowspb.BaseExecutionInfo{},
 		VersionHistoryItems: []*history.VersionHistoryItem{},
 		Events:              &commonpb.DataBlob{},
 		NewRunEvents:        &commonpb.DataBlob{},
@@ -145,6 +147,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 			WorkflowId: s.task.WorkflowID,
 			RunId:      s.task.RunID,
 		},
+		BaseExecutionInfo:   s.replicationTask.BaseExecutionInfo,
 		VersionHistoryItems: s.replicationTask.VersionHistoryItems,
 		Events:              s.replicationTask.Events,
 		NewRunEvents:        s.replicationTask.NewRunEvents,
@@ -189,6 +192,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 			WorkflowId: s.task.WorkflowID,
 			RunId:      s.task.RunID,
 		},
+		BaseExecutionInfo:   s.replicationTask.BaseExecutionInfo,
 		VersionHistoryItems: s.replicationTask.VersionHistoryItems,
 		Events:              s.replicationTask.Events,
 		NewRunEvents:        s.replicationTask.NewRunEvents,

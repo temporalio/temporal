@@ -80,7 +80,6 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	ctx context.Context,
 	opts ...grpc.CallOption,
 ) (adminservice.AdminService_StreamWorkflowReplicationMessagesClient, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
+	// do not use createContext function, let caller manage stream API lifecycle
 	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 }
