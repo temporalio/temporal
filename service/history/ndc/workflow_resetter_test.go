@@ -266,7 +266,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetContext.EXPECT().GetHistorySize().Return(int64(123)).AnyTimes()
 	resetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		gomock.Any(),
 		persistence.CreateWorkflowModeUpdateCurrent,
 		s.currentRunID,
 		currentLastWriteVersion,

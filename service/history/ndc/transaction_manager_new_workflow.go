@@ -174,7 +174,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		}
 		return targetWorkflow.GetContext().CreateWorkflowExecution(
 			ctx,
-			now,
 			createMode,
 			prevRunID,
 			prevLastWriteVersion,
@@ -190,7 +189,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	prevLastWriteVersion := int64(0)
 	return targetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -241,7 +239,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	prevLastWriteVersion := int64(0)
 	err = targetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -279,7 +276,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 
 	return currentWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetWorkflow.GetContext(),
 		targetWorkflow.GetMutableState(),

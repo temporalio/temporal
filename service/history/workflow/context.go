@@ -93,7 +93,6 @@ type (
 
 		CreateWorkflowExecution(
 			ctx context.Context,
-			now time.Time,
 			createMode persistence.CreateWorkflowMode,
 			prevRunID string,
 			prevLastWriteVersion int64,
@@ -103,7 +102,6 @@ type (
 		) error
 		ConflictResolveWorkflowExecution(
 			ctx context.Context,
-			now time.Time,
 			conflictResolveMode persistence.ConflictResolveWorkflowMode,
 			resetMutableState MutableState,
 			newContext Context,
@@ -114,27 +112,22 @@ type (
 		) error
 		UpdateWorkflowExecutionAsActive(
 			ctx context.Context,
-			now time.Time,
 		) error
 		UpdateWorkflowExecutionWithNewAsActive(
 			ctx context.Context,
-			now time.Time,
 			newContext Context,
 			newMutableState MutableState,
 		) error
 		UpdateWorkflowExecutionAsPassive(
 			ctx context.Context,
-			now time.Time,
 		) error
 		UpdateWorkflowExecutionWithNewAsPassive(
 			ctx context.Context,
-			now time.Time,
 			newContext Context,
 			newMutableState MutableState,
 		) error
 		UpdateWorkflowExecutionWithNew(
 			ctx context.Context,
-			now time.Time,
 			updateMode persistence.UpdateWorkflowMode,
 			newContext Context,
 			newMutableState MutableState,
@@ -143,7 +136,6 @@ type (
 		) error
 		SetWorkflowExecution(
 			ctx context.Context,
-			now time.Time,
 		) error
 		// TODO (alex-update): move this from workflow context.
 		UpdateRegistry() update.Registry
@@ -304,7 +296,6 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context) (MutableState, error
 
 	if err = c.UpdateWorkflowExecutionAsActive(
 		ctx,
-		c.shard.GetTimeSource().Now(),
 	); err != nil {
 		return nil, err
 	}
@@ -329,7 +320,6 @@ func (c *ContextImpl) PersistWorkflowEvents(
 
 func (c *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
-	_ time.Time,
 	createMode persistence.CreateWorkflowMode,
 	prevRunID string,
 	prevLastWriteVersion int64,
@@ -378,7 +368,6 @@ func (c *ContextImpl) CreateWorkflowExecution(
 
 func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
-	now time.Time,
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
 	resetMutableState MutableState,
 	newContext Context,
@@ -488,7 +477,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 	ctx context.Context,
-	now time.Time,
 ) error {
 
 	// We only perform this check on active cluster for the namespace
@@ -499,7 +487,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 
 	if err := c.UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
@@ -521,14 +508,12 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 
 func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsActive(
 	ctx context.Context,
-	now time.Time,
 	newContext Context,
 	newMutableState MutableState,
 ) error {
 
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		newContext,
 		newMutableState,
@@ -539,12 +524,10 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsActive(
 
 func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 	ctx context.Context,
-	now time.Time,
 ) error {
 
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
@@ -555,14 +538,12 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 
 func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsPassive(
 	ctx context.Context,
-	now time.Time,
 	newContext Context,
 	newMutableState MutableState,
 ) error {
 
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		newContext,
 		newMutableState,
@@ -573,7 +554,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsPassive(
 
 func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	ctx context.Context,
-	now time.Time,
 	updateMode persistence.UpdateWorkflowMode,
 	newContext Context,
 	newMutableState MutableState,
@@ -666,7 +646,9 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	return nil
 }
 
-func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (retError error) {
+func (c *ContextImpl) SetWorkflowExecution(
+	ctx context.Context,
+) (retError error) {
 	defer func() {
 		if retError != nil {
 			c.Clear()

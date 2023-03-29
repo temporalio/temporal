@@ -139,7 +139,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew_
 
 	weContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBrandNew,
 		"",
 		int64(0),
@@ -194,7 +193,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew_
 
 	weContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBrandNew,
 		"",
 		int64(0),
@@ -268,7 +266,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
@@ -343,7 +340,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
@@ -412,7 +408,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -482,7 +477,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -552,7 +546,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -622,7 +615,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -685,7 +677,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressC
 
 	currentContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
-		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetContext,
 		targetMutableState,

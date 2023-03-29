@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -583,7 +583,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	newExecutionState := newMutableState.GetExecutionState()
 	return weContext.UpdateWorkflowExecutionWithNewAsActive(
 		ctx,
-		t.shard.GetTimeSource().Now(),
 		workflow.NewContext(
 			t.shard,
 			definition.NewWorkflowKey(
@@ -617,9 +616,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 			return err
 		}
 	}
-
-	now := t.shard.GetTimeSource().Now()
-	return context.UpdateWorkflowExecutionAsActive(ctx, now)
+	return context.UpdateWorkflowExecutionAsActive(ctx)
 }
 
 func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(

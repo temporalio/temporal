@@ -1250,7 +1250,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 		}
 	}
 
-	return context.UpdateWorkflowExecutionAsActive(ctx, t.shard.GetTimeSource().Now())
+	return context.UpdateWorkflowExecutionAsActive(ctx)
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecution(

@@ -207,7 +207,6 @@ func startAndSignalWithoutCurrentWorkflow(
 	newWorkflowContext api.WorkflowContext,
 	requestID string,
 ) (string, error) {
-	now := shard.GetTimeSource().Now()
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowContext.GetMutableState().CloseTransactionAsSnapshot(
 		workflow.TransactionPolicyActive,
 	)
@@ -231,7 +230,6 @@ func startAndSignalWithoutCurrentWorkflow(
 	}
 	err = newWorkflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -297,7 +295,6 @@ func signalWorkflow(
 	// the history and try the operation again.
 	if err := workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
 		ctx,
-		shard.GetTimeSource().Now(),
 	); err != nil {
 		return err
 	}

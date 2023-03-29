@@ -619,7 +619,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newWorkflowExecutionState := newMutableState.GetExecutionState()
 		updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
-			handler.shard.GetTimeSource().Now(),
 			workflow.NewContext(
 				handler.shard,
 				definition.NewWorkflowKey(
@@ -632,7 +631,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			newMutableState,
 		)
 	} else {
-		updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx, handler.shard.GetTimeSource().Now())
+		updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx)
 	}
 
 	if updateErr != nil {
@@ -665,7 +664,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			}
 			if err := weContext.UpdateWorkflowExecutionAsActive(
 				ctx,
-				handler.shard.GetTimeSource().Now(),
 			); err != nil {
 				return nil, err
 			}

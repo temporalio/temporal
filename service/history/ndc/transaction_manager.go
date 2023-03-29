@@ -266,7 +266,6 @@ func (r *transactionMgrImpl) backfillWorkflow(
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		updateMode,
 		nil,
 		nil,
