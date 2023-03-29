@@ -30,4 +30,4 @@ package v8
 const Version = "1.9"
 
 // VisibilityVersion is the MySQL visibility database release version
-const VisibilityVersion = "1.2"
+const VisibilityVersion = "1.3"

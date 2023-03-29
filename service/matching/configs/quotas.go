@@ -39,8 +39,8 @@ var (
 		"PollWorkflowTaskQueue":            0,
 		"QueryWorkflow":                    0,
 		"RespondQueryTaskCompleted":        0,
-		"GetWorkerBuildIdCompatability":    0,
-		"UpdateWorkerBuildIdCompatability": 0,
+		"GetWorkerBuildIdCompatibility":    0,
+		"UpdateWorkerBuildIdCompatibility": 0,
 		"InvalidateTaskQueueMetadata":      0,
 		"GetTaskQueueMetadata":             0,
 	}

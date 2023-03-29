@@ -410,7 +410,7 @@ func VisibilityManagerProvider(
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.EnableReadVisibilityFromES,
-		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
+		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
@@ -507,7 +507,6 @@ func OperatorHandlerProvider(
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
 	historyClient historyservice.HistoryServiceClient,
-	namespaceRegistry namespace.Registry,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
@@ -523,7 +522,6 @@ func OperatorHandlerProvider(
 		saManager,
 		healthServer,
 		historyClient,
-		namespaceRegistry,
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,

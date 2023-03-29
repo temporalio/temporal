@@ -390,6 +390,11 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
+	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START {
+		t.metricHandler.Counter(metrics.WorkflowDelayedStartBackoffTimerCount.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
+		)
 	}
 
 	if mutableState.HadOrHasWorkflowTask() {

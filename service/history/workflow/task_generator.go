@@ -99,7 +99,6 @@ type (
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
-			branchToken []byte,
 			events []*historypb.HistoryEvent,
 		) error
 		GenerateMigrationTasks() (tasks.Task, error)
@@ -302,7 +301,7 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
+		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
 	}
 
 	r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
@@ -569,9 +568,12 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 }
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
-	branchToken []byte,
 	events []*historypb.HistoryEvent,
 ) error {
+	if len(events) == 0 {
+		return nil
+	}
+
 	firstEvent := events[0]
 	lastEvent := events[len(events)-1]
 	if firstEvent.GetVersion() != lastEvent.GetVersion() {

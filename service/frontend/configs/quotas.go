@@ -46,6 +46,7 @@ var (
 		"TerminateWorkflowExecution":       0,
 		"GetWorkflowExecutionHistory":      0,
 		"UpdateWorkflowExecution":          0,
+		"PollWorkflowExecutionUpdate":      0,
 
 		// priority 1
 		"RecordActivityTaskHeartbeat":      1,
@@ -67,8 +68,8 @@ var (
 		"PollWorkflowTaskQueue":              2,
 		"PollActivityTaskQueue":              2,
 		"GetWorkflowExecutionHistoryReverse": 2,
-		"GetWorkerBuildIdCompatability":      2,
-		"UpdateWorkerBuildIdCompatability":   2,
+		"GetWorkerBuildIdCompatibility":      2,
+		"UpdateWorkerBuildIdCompatibility":   2,
 		"DeleteWorkflowExecution":            2,
 
 		// priority 3

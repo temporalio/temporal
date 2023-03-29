@@ -27,6 +27,7 @@ package ringpop
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -41,7 +42,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -60,15 +60,17 @@ type factory struct {
 	servicePortMap map[primitives.ServiceName]int
 	logger         log.Logger
 
-	membershipMonitor membership.Monitor
-	metadataManager   persistence.ClusterMetadataManager
-	rpcConfig         *config.RPC
-	tlsFactory        encryption.TLSConfigProvider
-	dc                *dynamicconfig.Collection
+	monitor         *monitor
+	metadataManager persistence.ClusterMetadataManager
+	rpcConfig       *config.RPC
+	tlsFactory      encryption.TLSConfigProvider
+	dc              *dynamicconfig.Collection
 
 	chOnce  sync.Once
 	monOnce sync.Once
 }
+
+var errMalformedBroadcastAddress = errors.New("ringpop config malformed `broadcastAddress` param")
 
 // newFactory builds a ringpop factory conforming
 // to the underlying configuration
@@ -82,8 +84,8 @@ func newFactory(
 	tlsProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
 ) (*factory, error) {
-	if err := membership.ValidateConfig(rpConfig); err != nil {
-		return nil, err
+	if rpConfig.BroadcastAddress != "" && net.ParseIP(rpConfig.BroadcastAddress) == nil {
+		return nil, fmt.Errorf("%w: %s", errMalformedBroadcastAddress, rpConfig.BroadcastAddress)
 	}
 	if rpConfig.MaxJoinDuration == 0 {
 		rpConfig.MaxJoinDuration = defaultMaxJoinDuration
@@ -100,12 +102,8 @@ func newFactory(
 	}, nil
 }
 
-// getMembershipMonitor return a membership monitor
-func (factory *factory) getMembershipMonitor() (membership.Monitor, error) {
-	return factory.getMembership()
-}
-
-func (factory *factory) getMembership() (membership.Monitor, error) {
+// getMonitor return a membership monitor
+func (factory *factory) getMonitor() (*monitor, error) {
 	var err error
 	factory.monOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), persistenceOperationTimeout)
@@ -125,7 +123,7 @@ func (factory *factory) getMembership() (membership.Monitor, error) {
 		} else {
 			mrp := newService(rp, factory.config.MaxJoinDuration, factory.logger)
 
-			factory.membershipMonitor = newMonitor(
+			factory.monitor = newMonitor(
 				factory.serviceName,
 				factory.servicePortMap,
 				mrp,
@@ -136,7 +134,7 @@ func (factory *factory) getMembership() (membership.Monitor, error) {
 		}
 	})
 
-	return factory.membershipMonitor, err
+	return factory.monitor, err
 }
 
 func (factory *factory) broadcastAddressResolver() (string, error) {

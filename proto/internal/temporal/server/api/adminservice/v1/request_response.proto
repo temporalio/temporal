@@ -376,3 +376,15 @@ message DeleteWorkflowExecutionRequest {
 message DeleteWorkflowExecutionResponse {
     repeated string warnings = 1;
 }
+
+message StreamWorkflowReplicationMessagesRequest {
+    oneof attributes {
+        temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 1;
+    }
+}
+
+message StreamWorkflowReplicationMessagesResponse {
+    oneof attributes {
+        temporal.server.api.replication.v1.WorkflowReplicationMessages messages = 1;
+    }
+}

@@ -269,19 +269,19 @@ func (mr *MockHandlerMockRecorder) GetSystemInfo(arg0, arg1 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSystemInfo", reflect.TypeOf((*MockHandler)(nil).GetSystemInfo), arg0, arg1)
 }
 
-// GetWorkerBuildIdCompatability mocks base method.
-func (m *MockHandler) GetWorkerBuildIdCompatability(arg0 context.Context, arg1 *v10.GetWorkerBuildIdCompatabilityRequest) (*v10.GetWorkerBuildIdCompatabilityResponse, error) {
+// GetWorkerBuildIdCompatibility mocks base method.
+func (m *MockHandler) GetWorkerBuildIdCompatibility(arg0 context.Context, arg1 *v10.GetWorkerBuildIdCompatibilityRequest) (*v10.GetWorkerBuildIdCompatibilityResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkerBuildIdCompatability", arg0, arg1)
-	ret0, _ := ret[0].(*v10.GetWorkerBuildIdCompatabilityResponse)
+	ret := m.ctrl.Call(m, "GetWorkerBuildIdCompatibility", arg0, arg1)
+	ret0, _ := ret[0].(*v10.GetWorkerBuildIdCompatibilityResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetWorkerBuildIdCompatability indicates an expected call of GetWorkerBuildIdCompatability.
-func (mr *MockHandlerMockRecorder) GetWorkerBuildIdCompatability(arg0, arg1 interface{}) *gomock.Call {
+// GetWorkerBuildIdCompatibility indicates an expected call of GetWorkerBuildIdCompatibility.
+func (mr *MockHandlerMockRecorder) GetWorkerBuildIdCompatibility(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatability", reflect.TypeOf((*MockHandler)(nil).GetWorkerBuildIdCompatability), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockHandler)(nil).GetWorkerBuildIdCompatibility), arg0, arg1)
 }
 
 // GetWorkflowExecutionHistory mocks base method.
@@ -477,6 +477,21 @@ func (m *MockHandler) PollActivityTaskQueue(arg0 context.Context, arg1 *v10.Poll
 func (mr *MockHandlerMockRecorder) PollActivityTaskQueue(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollActivityTaskQueue", reflect.TypeOf((*MockHandler)(nil).PollActivityTaskQueue), arg0, arg1)
+}
+
+// PollWorkflowExecutionUpdate mocks base method.
+func (m *MockHandler) PollWorkflowExecutionUpdate(arg0 context.Context, arg1 *v10.PollWorkflowExecutionUpdateRequest) (*v10.PollWorkflowExecutionUpdateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollWorkflowExecutionUpdate", arg0, arg1)
+	ret0, _ := ret[0].(*v10.PollWorkflowExecutionUpdateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollWorkflowExecutionUpdate indicates an expected call of PollWorkflowExecutionUpdate.
+func (mr *MockHandlerMockRecorder) PollWorkflowExecutionUpdate(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowExecutionUpdate", reflect.TypeOf((*MockHandler)(nil).PollWorkflowExecutionUpdate), arg0, arg1)
 }
 
 // PollWorkflowTaskQueue mocks base method.
@@ -893,19 +908,19 @@ func (mr *MockHandlerMockRecorder) UpdateSchedule(arg0, arg1 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSchedule", reflect.TypeOf((*MockHandler)(nil).UpdateSchedule), arg0, arg1)
 }
 
-// UpdateWorkerBuildIdCompatability mocks base method.
-func (m *MockHandler) UpdateWorkerBuildIdCompatability(arg0 context.Context, arg1 *v10.UpdateWorkerBuildIdCompatabilityRequest) (*v10.UpdateWorkerBuildIdCompatabilityResponse, error) {
+// UpdateWorkerBuildIdCompatibility mocks base method.
+func (m *MockHandler) UpdateWorkerBuildIdCompatibility(arg0 context.Context, arg1 *v10.UpdateWorkerBuildIdCompatibilityRequest) (*v10.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdCompatability", arg0, arg1)
-	ret0, _ := ret[0].(*v10.UpdateWorkerBuildIdCompatabilityResponse)
+	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdCompatibility", arg0, arg1)
+	ret0, _ := ret[0].(*v10.UpdateWorkerBuildIdCompatibilityResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// UpdateWorkerBuildIdCompatability indicates an expected call of UpdateWorkerBuildIdCompatability.
-func (mr *MockHandlerMockRecorder) UpdateWorkerBuildIdCompatability(arg0, arg1 interface{}) *gomock.Call {
+// UpdateWorkerBuildIdCompatibility indicates an expected call of UpdateWorkerBuildIdCompatibility.
+func (mr *MockHandlerMockRecorder) UpdateWorkerBuildIdCompatibility(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatability", reflect.TypeOf((*MockHandler)(nil).UpdateWorkerBuildIdCompatability), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatibility", reflect.TypeOf((*MockHandler)(nil).UpdateWorkerBuildIdCompatibility), arg0, arg1)
 }
 
 // UpdateWorkflowExecution mocks base method.

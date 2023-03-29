@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
@@ -342,17 +344,21 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 	if nsName == "" {
 		return errNamespaceNotSet
 	}
-	ns, err := adh.namespaceRegistry.GetNamespace(namespace.Name(nsName))
+	resp, err := client.DescribeNamespace(
+		ctx,
+		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+	)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
 	}
 
 	customSearchAttributes := currentSearchAttributes.Custom()
-	mapper := ns.CustomSearchAttributesMapper()
-	fieldToAliasMap := util.CloneMapNonNil(mapper.FieldToAliasMap())
+	upsertFieldToAliasMap := make(map[string]string)
+	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
+	aliasToFieldMap := util.InverseMap(fieldToAliasMap)
 	for saName, saType := range request.GetSearchAttributes() {
 		// check if alias is already in use
-		if _, err := mapper.GetFieldName(saName, nsName); err == nil {
+		if _, ok := aliasToFieldMap[saName]; ok {
 			return serviceerror.NewAlreadyExist(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
 			)
@@ -375,15 +381,18 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 				fmt.Sprintf(errTooManySearchAttributesMessage, cntUsed, saType.String()),
 			)
 		}
-		fieldToAliasMap[targetFieldName] = saName
+		upsertFieldToAliasMap[targetFieldName] = saName
 	}
 
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: nsName,
 		Config: &namespacepb.NamespaceConfig{
-			CustomSearchAttributeAliases: fieldToAliasMap,
+			CustomSearchAttributeAliases: upsertFieldToAliasMap,
 		},
 	})
+	if err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
+		return errRaceConditionAddingSearchAttributes
+	}
 	return err
 }
 
@@ -470,25 +479,28 @@ func (adh *AdminHandler) removeSearchAttributesSQL(
 	if nsName == "" {
 		return errNamespaceNotSet
 	}
-	ns, err := adh.namespaceRegistry.GetNamespace(namespace.Name(nsName))
+	resp, err := client.DescribeNamespace(
+		ctx,
+		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+	)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
 	}
 
-	mapper := ns.CustomSearchAttributesMapper()
-	fieldToAliasMap := maps.Clone(mapper.FieldToAliasMap())
+	upsertFieldToAliasMap := make(map[string]string)
+	aliasToFieldMap := util.InverseMap(resp.Config.CustomSearchAttributeAliases)
 	for _, saName := range request.GetSearchAttributes() {
-		fieldName, err := mapper.GetFieldName(saName, nsName)
-		if err != nil {
+		fieldName, ok := aliasToFieldMap[saName]
+		if !ok {
 			return serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
 		}
-		delete(fieldToAliasMap, fieldName)
+		upsertFieldToAliasMap[fieldName] = ""
 	}
 
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: nsName,
 		Config: &namespacepb.NamespaceConfig{
-			CustomSearchAttributeAliases: fieldToAliasMap,
+			CustomSearchAttributeAliases: upsertFieldToAliasMap,
 		},
 	})
 	return err
@@ -523,7 +535,7 @@ func (adh *AdminHandler) GetSearchAttributes(
 	if adh.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
 		return adh.getSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
 	}
-	return adh.getSearchAttributesSQL(request, searchAttributes)
+	return adh.getSearchAttributesSQL(ctx, request, searchAttributes)
 }
 
 func (adh *AdminHandler) getSearchAttributesElasticsearch(
@@ -567,23 +579,36 @@ func (adh *AdminHandler) getSearchAttributesElasticsearch(
 }
 
 func (adh *AdminHandler) getSearchAttributesSQL(
+	ctx context.Context,
 	request *adminservice.GetSearchAttributesRequest,
 	searchAttributes searchattribute.NameTypeMap,
 ) (*adminservice.GetSearchAttributesResponse, error) {
+	_, client, err := adh.clientFactory.NewLocalFrontendClientWithTimeout(
+		frontend.DefaultTimeout,
+		frontend.DefaultLongPollTimeout,
+	)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
+	}
+
 	nsName := request.GetNamespace()
 	if nsName == "" {
 		return nil, errNamespaceNotSet
 	}
-	ns, err := adh.namespaceRegistry.GetNamespace(namespace.Name(nsName))
+	resp, err := client.DescribeNamespace(
+		ctx,
+		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+	)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName),
 		)
 	}
-	mapper := ns.CustomSearchAttributesMapper()
+
+	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
 	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
 	for field, tp := range searchAttributes.Custom() {
-		if alias, err := mapper.GetAlias(field, nsName); err == nil {
+		if alias, ok := fieldToAliasMap[field]; ok {
 			customSearchAttributes[alias] = tp
 		}
 	}
@@ -638,7 +663,11 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDStr := convert.Int32ToString(shardID)
 
-	historyHost, err := adh.membershipMonitor.Lookup(primitives.HistoryService, shardIDStr)
+	resolver, err := adh.membershipMonitor.GetResolver(primitives.HistoryService)
+	if err != nil {
+		return nil, err
+	}
+	historyHost, err := resolver.Lookup(shardIDStr)
 	if err != nil {
 		return nil, err
 	}
@@ -1918,4 +1947,65 @@ func (adh *AdminHandler) getWorkflowCompletionEvent(
 	}
 
 	return nil, serviceerror.NewInternal("Unable to find closed event for workflow")
+}
+
+func (adh *AdminHandler) StreamWorkflowReplicationMessages(
+	targetCluster adminservice.AdminService_StreamWorkflowReplicationMessagesServer,
+) (retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	ctx := targetCluster.Context()
+	sourceCluster, err := adh.historyClient.StreamWorkflowReplicationMessages(ctx)
+	if err != nil {
+		return err
+	}
+
+	errGroup, ctx := errgroup.WithContext(ctx)
+	errGroup.Go(func() error {
+		for ctx.Err() == nil {
+			req, err := targetCluster.Recv()
+			if err != nil {
+				return err
+			}
+			switch attr := req.GetAttributes().(type) {
+			case *adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
+				if err = sourceCluster.Send(&historyservice.StreamWorkflowReplicationMessagesRequest{
+					Attributes: &historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
+						SyncReplicationState: attr.SyncReplicationState,
+					},
+				}); err != nil {
+					return err
+				}
+			default:
+				return serviceerror.NewInternal(fmt.Sprintf(
+					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
+				))
+			}
+		}
+		return ctx.Err()
+	})
+	errGroup.Go(func() error {
+		for ctx.Err() == nil {
+			resp, err := sourceCluster.Recv()
+			if err != nil {
+				return err
+			}
+			switch attr := resp.GetAttributes().(type) {
+			case *historyservice.StreamWorkflowReplicationMessagesResponse_Messages:
+				if err = targetCluster.Send(&adminservice.StreamWorkflowReplicationMessagesResponse{
+					Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
+						Messages: attr.Messages,
+					},
+				}); err != nil {
+					return err
+				}
+			default:
+				return serviceerror.NewInternal(fmt.Sprintf(
+					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
+				))
+			}
+		}
+		return ctx.Err()
+	})
+	return errGroup.Wait()
 }

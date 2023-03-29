@@ -160,6 +160,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"SignalWorkflowExecution":            {},
 		"StartWorkflowExecution":             {},
 		"UpdateWorkflowExecution":            {},
+		"PollWorkflowExecutionUpdate":        {},
 		"TerminateWorkflowExecution":         {},
 		"DeleteWorkflowExecution":            {},
 		"ListTaskQueuePartitions":            {},
@@ -171,8 +172,8 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DeleteSchedule":                   {},
 		"ListSchedules":                    {},
 		"ListScheduleMatchingTimes":        {},
-		"UpdateWorkerBuildIdCompatability": {},
-		"GetWorkerBuildIdCompatability":    {},
+		"UpdateWorkerBuildIdCompatibility": {},
+		"GetWorkerBuildIdCompatibility":    {},
 
 		"StartBatchOperation":    {},
 		"StopBatchOperation":     {},

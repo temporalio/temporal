@@ -706,10 +706,10 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 	return partitionHostInfo, nil
 }
 
-func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatability(
+func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	hCtx *handlerContext,
-	req *matchingservice.UpdateWorkerBuildIdCompatabilityRequest,
-) (*matchingservice.UpdateWorkerBuildIdCompatabilityResponse, error) {
+	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
+) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -726,13 +726,13 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatability(
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.UpdateWorkerBuildIdCompatabilityResponse{}, nil
+	return &matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil
 }
 
-func (e *matchingEngineImpl) GetWorkerBuildIdCompatability(
+func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	hCtx *handlerContext,
-	req *matchingservice.GetWorkerBuildIdCompatabilityRequest,
-) (*matchingservice.GetWorkerBuildIdCompatabilityResponse, error) {
+	req *matchingservice.GetWorkerBuildIdCompatibilityRequest,
+) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -742,18 +742,18 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatability(
 	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			return &matchingservice.GetWorkerBuildIdCompatabilityResponse{}, nil
+			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
 		}
 		return nil, err
 	}
 	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			return &matchingservice.GetWorkerBuildIdCompatabilityResponse{}, nil
+			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
 		}
 		return nil, err
 	}
-	return &matchingservice.GetWorkerBuildIdCompatabilityResponse{
+	return &matchingservice.GetWorkerBuildIdCompatibilityResponse{
 		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxSets())),
 	}, nil
 }

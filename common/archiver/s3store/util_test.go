@@ -22,19 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+package s3store
 
 import (
-	"fmt"
-	"net"
+	"testing"
 
-	"go.temporal.io/server/common/config"
+	"github.com/stretchr/testify/assert"
 )
 
-// ValidateConfig validates that the membership config is parseable and valid
-func ValidateConfig(cfg *config.Membership) error {
-	if cfg.BroadcastAddress != "" && net.ParseIP(cfg.BroadcastAddress) == nil {
-		return fmt.Errorf("ringpop config malformed `broadcastAddress` param")
-	}
-	return nil
+func TestConstructVisibilitySearchPrefix(t *testing.T) {
+	t.Parallel()
+	assert.Equal(
+		t,
+		constructVisibilitySearchPrefix(
+			"path",
+			"namespaceID",
+		),
+		"path/namespaceID/visibility",
+	)
+}
+
+func TestConstructIndexedVisibilitySearchPrefix(t *testing.T) {
+	t.Parallel()
+	assert.Equal(
+		t,
+		constructIndexedVisibilitySearchPrefix(
+			"/path",
+			"namespaceID",
+			"primaryIndexKey",
+			"primaryIndexValue",
+			"secondaryIndexType",
+		),
+		"path/namespaceID/visibility/primaryIndexKey/primaryIndexValue/secondaryIndexType",
+	)
 }

@@ -80,7 +80,7 @@ var fileDescriptor_1a5c83076e651916 = []byte{
 	0x09, 0x16, 0x97, 0x20, 0x68, 0xb9, 0x1f, 0x08, 0x5f, 0xda, 0x65, 0xa1, 0xd4, 0xbf, 0xd5, 0xa9,
 	0x90, 0x4c, 0x32, 0xee, 0x87, 0xf6, 0x43, 0xd3, 0x01, 0x33, 0x00, 0x4a, 0xb4, 0xb2, 0x34, 0x47,
 	0xeb, 0xfe, 0x46, 0xf8, 0xda, 0x8b, 0xc0, 0xa5, 0x12, 0xd2, 0x6d, 0x0c, 0x62, 0x27, 0x62, 0x9e,
-	0x5b, 0x75, 0xd3, 0xfd, 0x41, 0x25, 0x6d, 0x30, 0x8f, 0xc9, 0x8e, 0xbd, 0x67, 0x3a, 0xef, 0x2c,
+	0x5b, 0x75, 0xd3, 0xfd, 0x41, 0x25, 0x6b, 0x30, 0x8f, 0xc9, 0x8e, 0xbd, 0x67, 0x3a, 0xef, 0x2c,
 	0x92, 0x2a, 0x50, 0x5f, 0x1d, 0x50, 0x37, 0xf9, 0x85, 0xf0, 0xd5, 0x0a, 0xc8, 0x39, 0x35, 0x76,
 	0x4d, 0xa7, 0xce, 0xc5, 0xa8, 0x0e, 0xb5, 0x15, 0xd1, 0x74, 0x81, 0x43, 0x84, 0xaf, 0x54, 0xfd,
 	0x98, 0x7a, 0x2c, 0xed, 0xac, 0x5f, 0x5b, 0x0d, 0x24, 0x75, 0xa9, 0xa4, 0xf6, 0x63, 0xd3, 0x81,
@@ -89,8 +89,8 @@ var fileDescriptor_1a5c83076e651916 = []byte{
 	0xd4, 0x23, 0xd6, 0x71, 0x8f, 0xa0, 0x0f, 0x09, 0x41, 0xdf, 0x13, 0x82, 0xfe, 0x24, 0x04, 0x75,
 	0x13, 0x82, 0xfe, 0x26, 0x04, 0xfd, 0x4b, 0x88, 0x75, 0x9c, 0x10, 0xf4, 0xa9, 0x4f, 0xac, 0x6e,
 	0x9f, 0x58, 0x47, 0x7d, 0x62, 0xbd, 0xda, 0x6a, 0xf1, 0xd3, 0xf9, 0x8c, 0xcf, 0xbf, 0x35, 0xdd,
-	0x19, 0x7b, 0xd4, 0x38, 0x77, 0x72, 0x6b, 0xba, 0xf5, 0x3f, 0x00, 0x00, 0xff, 0xff, 0x96, 0x4c,
-	0xd4, 0x87, 0xd4, 0x09, 0x00, 0x00,
+	0x19, 0x7b, 0xd4, 0x38, 0x77, 0x72, 0x6b, 0xba, 0xf5, 0x3f, 0x00, 0x00, 0xff, 0xff, 0xc3, 0x39,
+	0x89, 0x97, 0xd4, 0x09, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -138,8 +138,8 @@ type MatchingServiceClient interface {
 	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled
 	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
-	UpdateWorkerBuildIdCompatability(ctx context.Context, in *UpdateWorkerBuildIdCompatabilityRequest, opts ...grpc.CallOption) (*UpdateWorkerBuildIdCompatabilityResponse, error)
-	GetWorkerBuildIdCompatability(ctx context.Context, in *GetWorkerBuildIdCompatabilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatabilityResponse, error)
+	UpdateWorkerBuildIdCompatibility(ctx context.Context, in *UpdateWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*UpdateWorkerBuildIdCompatibilityResponse, error)
+	GetWorkerBuildIdCompatibility(ctx context.Context, in *GetWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Tell a task queue that some metadata has changed.
 	InvalidateTaskQueueMetadata(ctx context.Context, in *InvalidateTaskQueueMetadataRequest, opts ...grpc.CallOption) (*InvalidateTaskQueueMetadataResponse, error)
 	// Fetch some metadata about a task queue.
@@ -235,18 +235,18 @@ func (c *matchingServiceClient) ListTaskQueuePartitions(ctx context.Context, in 
 	return out, nil
 }
 
-func (c *matchingServiceClient) UpdateWorkerBuildIdCompatability(ctx context.Context, in *UpdateWorkerBuildIdCompatabilityRequest, opts ...grpc.CallOption) (*UpdateWorkerBuildIdCompatabilityResponse, error) {
-	out := new(UpdateWorkerBuildIdCompatabilityResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerBuildIdCompatability", in, out, opts...)
+func (c *matchingServiceClient) UpdateWorkerBuildIdCompatibility(ctx context.Context, in *UpdateWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*UpdateWorkerBuildIdCompatibilityResponse, error) {
+	out := new(UpdateWorkerBuildIdCompatibilityResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerBuildIdCompatibility", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *matchingServiceClient) GetWorkerBuildIdCompatability(ctx context.Context, in *GetWorkerBuildIdCompatabilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatabilityResponse, error) {
-	out := new(GetWorkerBuildIdCompatabilityResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerBuildIdCompatability", in, out, opts...)
+func (c *matchingServiceClient) GetWorkerBuildIdCompatibility(ctx context.Context, in *GetWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatibilityResponse, error) {
+	out := new(GetWorkerBuildIdCompatibilityResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerBuildIdCompatibility", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -306,8 +306,8 @@ type MatchingServiceServer interface {
 	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled
 	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
-	UpdateWorkerBuildIdCompatability(context.Context, *UpdateWorkerBuildIdCompatabilityRequest) (*UpdateWorkerBuildIdCompatabilityResponse, error)
-	GetWorkerBuildIdCompatability(context.Context, *GetWorkerBuildIdCompatabilityRequest) (*GetWorkerBuildIdCompatabilityResponse, error)
+	UpdateWorkerBuildIdCompatibility(context.Context, *UpdateWorkerBuildIdCompatibilityRequest) (*UpdateWorkerBuildIdCompatibilityResponse, error)
+	GetWorkerBuildIdCompatibility(context.Context, *GetWorkerBuildIdCompatibilityRequest) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Tell a task queue that some metadata has changed.
 	InvalidateTaskQueueMetadata(context.Context, *InvalidateTaskQueueMetadataRequest) (*InvalidateTaskQueueMetadataResponse, error)
 	// Fetch some metadata about a task queue.
@@ -345,11 +345,11 @@ func (*UnimplementedMatchingServiceServer) DescribeTaskQueue(ctx context.Context
 func (*UnimplementedMatchingServiceServer) ListTaskQueuePartitions(ctx context.Context, req *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTaskQueuePartitions not implemented")
 }
-func (*UnimplementedMatchingServiceServer) UpdateWorkerBuildIdCompatability(ctx context.Context, req *UpdateWorkerBuildIdCompatabilityRequest) (*UpdateWorkerBuildIdCompatabilityResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateWorkerBuildIdCompatability not implemented")
+func (*UnimplementedMatchingServiceServer) UpdateWorkerBuildIdCompatibility(ctx context.Context, req *UpdateWorkerBuildIdCompatibilityRequest) (*UpdateWorkerBuildIdCompatibilityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateWorkerBuildIdCompatibility not implemented")
 }
-func (*UnimplementedMatchingServiceServer) GetWorkerBuildIdCompatability(ctx context.Context, req *GetWorkerBuildIdCompatabilityRequest) (*GetWorkerBuildIdCompatabilityResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetWorkerBuildIdCompatability not implemented")
+func (*UnimplementedMatchingServiceServer) GetWorkerBuildIdCompatibility(ctx context.Context, req *GetWorkerBuildIdCompatibilityRequest) (*GetWorkerBuildIdCompatibilityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetWorkerBuildIdCompatibility not implemented")
 }
 func (*UnimplementedMatchingServiceServer) InvalidateTaskQueueMetadata(ctx context.Context, req *InvalidateTaskQueueMetadataRequest) (*InvalidateTaskQueueMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvalidateTaskQueueMetadata not implemented")
@@ -524,38 +524,38 @@ func _MatchingService_ListTaskQueuePartitions_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_UpdateWorkerBuildIdCompatability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateWorkerBuildIdCompatabilityRequest)
+func _MatchingService_UpdateWorkerBuildIdCompatibility_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateWorkerBuildIdCompatibilityRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).UpdateWorkerBuildIdCompatability(ctx, in)
+		return srv.(MatchingServiceServer).UpdateWorkerBuildIdCompatibility(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerBuildIdCompatability",
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerBuildIdCompatibility",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).UpdateWorkerBuildIdCompatability(ctx, req.(*UpdateWorkerBuildIdCompatabilityRequest))
+		return srv.(MatchingServiceServer).UpdateWorkerBuildIdCompatibility(ctx, req.(*UpdateWorkerBuildIdCompatibilityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_GetWorkerBuildIdCompatability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetWorkerBuildIdCompatabilityRequest)
+func _MatchingService_GetWorkerBuildIdCompatibility_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkerBuildIdCompatibilityRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).GetWorkerBuildIdCompatability(ctx, in)
+		return srv.(MatchingServiceServer).GetWorkerBuildIdCompatibility(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerBuildIdCompatability",
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerBuildIdCompatibility",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).GetWorkerBuildIdCompatability(ctx, req.(*GetWorkerBuildIdCompatabilityRequest))
+		return srv.(MatchingServiceServer).GetWorkerBuildIdCompatibility(ctx, req.(*GetWorkerBuildIdCompatibilityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -637,12 +637,12 @@ var _MatchingService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_ListTaskQueuePartitions_Handler,
 		},
 		{
-			MethodName: "UpdateWorkerBuildIdCompatability",
-			Handler:    _MatchingService_UpdateWorkerBuildIdCompatability_Handler,
+			MethodName: "UpdateWorkerBuildIdCompatibility",
+			Handler:    _MatchingService_UpdateWorkerBuildIdCompatibility_Handler,
 		},
 		{
-			MethodName: "GetWorkerBuildIdCompatability",
-			Handler:    _MatchingService_GetWorkerBuildIdCompatability_Handler,
+			MethodName: "GetWorkerBuildIdCompatibility",
+			Handler:    _MatchingService_GetWorkerBuildIdCompatibility_Handler,
 		},
 		{
 			MethodName: "InvalidateTaskQueueMetadata",

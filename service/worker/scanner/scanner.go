@@ -82,6 +82,8 @@ type (
 		ExecutionDataDurationBuffer dynamicconfig.DurationPropertyFn
 		// ExecutionScannerWorkerCount is the execution scavenger task worker number
 		ExecutionScannerWorkerCount dynamicconfig.IntPropertyFn
+		// ExecutionScannerHistoryEventIdValidator indicates if the execution scavenger to validate history event id.
+		ExecutionScannerHistoryEventIdValidator dynamicconfig.BoolPropertyFn
 	}
 
 	// scannerContext is the context object that get's

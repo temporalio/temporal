@@ -35,6 +35,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	adminservice "go.temporal.io/server/api/adminservice/v1"
 	grpc "google.golang.org/grpc"
+	metadata "google.golang.org/grpc/metadata"
 )
 
 // MockAdminServiceClient is a mock of AdminServiceClient interface.
@@ -600,6 +601,163 @@ func (mr *MockAdminServiceClientMockRecorder) ResendReplicationTasks(ctx, in int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ResendReplicationTasks), varargs...)
 }
 
+// StreamWorkflowReplicationMessages mocks base method.
+func (m *MockAdminServiceClient) StreamWorkflowReplicationMessages(ctx context.Context, opts ...grpc.CallOption) (adminservice.AdminService_StreamWorkflowReplicationMessagesClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StreamWorkflowReplicationMessages", varargs...)
+	ret0, _ := ret[0].(adminservice.AdminService_StreamWorkflowReplicationMessagesClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StreamWorkflowReplicationMessages indicates an expected call of StreamWorkflowReplicationMessages.
+func (mr *MockAdminServiceClientMockRecorder) StreamWorkflowReplicationMessages(ctx interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).StreamWorkflowReplicationMessages), varargs...)
+}
+
+// MockAdminService_StreamWorkflowReplicationMessagesClient is a mock of AdminService_StreamWorkflowReplicationMessagesClient interface.
+type MockAdminService_StreamWorkflowReplicationMessagesClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder
+}
+
+// MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder is the mock recorder for MockAdminService_StreamWorkflowReplicationMessagesClient.
+type MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder struct {
+	mock *MockAdminService_StreamWorkflowReplicationMessagesClient
+}
+
+// NewMockAdminService_StreamWorkflowReplicationMessagesClient creates a new mock instance.
+func NewMockAdminService_StreamWorkflowReplicationMessagesClient(ctrl *gomock.Controller) *MockAdminService_StreamWorkflowReplicationMessagesClient {
+	mock := &MockAdminService_StreamWorkflowReplicationMessagesClient{ctrl: ctrl}
+	mock.recorder = &MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesClient) EXPECT() *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder {
+	return m.recorder
+}
+
+// CloseSend mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesClient) CloseSend() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseSend")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CloseSend indicates an expected call of CloseSend.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder) CloseSend() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseSend", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesClient)(nil).CloseSend))
+}
+
+// Context mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesClient) Context() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Context")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// Context indicates an expected call of Context.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder) Context() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesClient)(nil).Context))
+}
+
+// Header mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesClient) Header() (metadata.MD, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Header")
+	ret0, _ := ret[0].(metadata.MD)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Header indicates an expected call of Header.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder) Header() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Header", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesClient)(nil).Header))
+}
+
+// Recv mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesClient) Recv() (*adminservice.StreamWorkflowReplicationMessagesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Recv")
+	ret0, _ := ret[0].(*adminservice.StreamWorkflowReplicationMessagesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Recv indicates an expected call of Recv.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder) Recv() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recv", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesClient)(nil).Recv))
+}
+
+// RecvMsg mocks base method.
+func (m_2 *MockAdminService_StreamWorkflowReplicationMessagesClient) RecvMsg(m interface{}) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecvMsg indicates an expected call of RecvMsg.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder) RecvMsg(m interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesClient)(nil).RecvMsg), m)
+}
+
+// Send mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesClient) Send(arg0 *adminservice.StreamWorkflowReplicationMessagesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Send", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Send indicates an expected call of Send.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder) Send(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesClient)(nil).Send), arg0)
+}
+
+// SendMsg mocks base method.
+func (m_2 *MockAdminService_StreamWorkflowReplicationMessagesClient) SendMsg(m interface{}) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendMsg indicates an expected call of SendMsg.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder) SendMsg(m interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesClient)(nil).SendMsg), m)
+}
+
+// Trailer mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesClient) Trailer() metadata.MD {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Trailer")
+	ret0, _ := ret[0].(metadata.MD)
+	return ret0
+}
+
+// Trailer indicates an expected call of Trailer.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesClientMockRecorder) Trailer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trailer", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesClient)(nil).Trailer))
+}
+
 // MockAdminServiceServer is a mock of AdminServiceServer interface.
 type MockAdminServiceServer struct {
 	ctrl     *gomock.Controller
@@ -1026,4 +1184,152 @@ func (m *MockAdminServiceServer) ResendReplicationTasks(arg0 context.Context, ar
 func (mr *MockAdminServiceServerMockRecorder) ResendReplicationTasks(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ResendReplicationTasks), arg0, arg1)
+}
+
+// StreamWorkflowReplicationMessages mocks base method.
+func (m *MockAdminServiceServer) StreamWorkflowReplicationMessages(arg0 adminservice.AdminService_StreamWorkflowReplicationMessagesServer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StreamWorkflowReplicationMessages", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StreamWorkflowReplicationMessages indicates an expected call of StreamWorkflowReplicationMessages.
+func (mr *MockAdminServiceServerMockRecorder) StreamWorkflowReplicationMessages(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).StreamWorkflowReplicationMessages), arg0)
+}
+
+// MockAdminService_StreamWorkflowReplicationMessagesServer is a mock of AdminService_StreamWorkflowReplicationMessagesServer interface.
+type MockAdminService_StreamWorkflowReplicationMessagesServer struct {
+	ctrl     *gomock.Controller
+	recorder *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder
+}
+
+// MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder is the mock recorder for MockAdminService_StreamWorkflowReplicationMessagesServer.
+type MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder struct {
+	mock *MockAdminService_StreamWorkflowReplicationMessagesServer
+}
+
+// NewMockAdminService_StreamWorkflowReplicationMessagesServer creates a new mock instance.
+func NewMockAdminService_StreamWorkflowReplicationMessagesServer(ctrl *gomock.Controller) *MockAdminService_StreamWorkflowReplicationMessagesServer {
+	mock := &MockAdminService_StreamWorkflowReplicationMessagesServer{ctrl: ctrl}
+	mock.recorder = &MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesServer) EXPECT() *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder {
+	return m.recorder
+}
+
+// Context mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesServer) Context() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Context")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// Context indicates an expected call of Context.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder) Context() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesServer)(nil).Context))
+}
+
+// Recv mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesServer) Recv() (*adminservice.StreamWorkflowReplicationMessagesRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Recv")
+	ret0, _ := ret[0].(*adminservice.StreamWorkflowReplicationMessagesRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Recv indicates an expected call of Recv.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder) Recv() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recv", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesServer)(nil).Recv))
+}
+
+// RecvMsg mocks base method.
+func (m_2 *MockAdminService_StreamWorkflowReplicationMessagesServer) RecvMsg(m interface{}) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecvMsg indicates an expected call of RecvMsg.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder) RecvMsg(m interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesServer)(nil).RecvMsg), m)
+}
+
+// Send mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesServer) Send(arg0 *adminservice.StreamWorkflowReplicationMessagesResponse) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Send", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Send indicates an expected call of Send.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder) Send(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesServer)(nil).Send), arg0)
+}
+
+// SendHeader mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesServer) SendHeader(arg0 metadata.MD) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendHeader", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendHeader indicates an expected call of SendHeader.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder) SendHeader(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendHeader", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesServer)(nil).SendHeader), arg0)
+}
+
+// SendMsg mocks base method.
+func (m_2 *MockAdminService_StreamWorkflowReplicationMessagesServer) SendMsg(m interface{}) error {
+	m_2.ctrl.T.Helper()
+	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendMsg indicates an expected call of SendMsg.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder) SendMsg(m interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesServer)(nil).SendMsg), m)
+}
+
+// SetHeader mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesServer) SetHeader(arg0 metadata.MD) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetHeader", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetHeader indicates an expected call of SetHeader.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder) SetHeader(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHeader", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesServer)(nil).SetHeader), arg0)
+}
+
+// SetTrailer mocks base method.
+func (m *MockAdminService_StreamWorkflowReplicationMessagesServer) SetTrailer(arg0 metadata.MD) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetTrailer", arg0)
+}
+
+// SetTrailer indicates an expected call of SetTrailer.
+func (mr *MockAdminService_StreamWorkflowReplicationMessagesServerMockRecorder) SetTrailer(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTrailer", reflect.TypeOf((*MockAdminService_StreamWorkflowReplicationMessagesServer)(nil).SetTrailer), arg0)
 }

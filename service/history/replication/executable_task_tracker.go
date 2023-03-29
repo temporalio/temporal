@@ -34,6 +34,8 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_tracker_mock.go
+
 type (
 	TrackableExecutableTask interface {
 		ctasks.Task
@@ -52,8 +54,9 @@ type (
 		logger log.Logger
 
 		sync.Mutex
-		highWatermarkInfo *WatermarkInfo
-		taskQueue         *list.List // sorted by task ID
+		highWatermarkInfo *WatermarkInfo // this is exclusive, i.e. source need to resend with this watermark / task ID
+		taskQueue         *list.List     // sorted by task ID
+		taskIDs           map[int64]struct{}
 	}
 )
 
@@ -67,6 +70,7 @@ func NewExecutableTaskTracker(
 
 		highWatermarkInfo: nil,
 		taskQueue:         list.New(),
+		taskIDs:           make(map[int64]struct{}),
 	}
 }
 
@@ -77,18 +81,24 @@ func (t *ExecutableTaskTrackerImpl) TrackTasks(
 	t.Lock()
 	defer t.Unlock()
 
-	lastTaskID := int64(0)
+	// need to assume source side send replication tasks in order
+	if t.highWatermarkInfo != nil && highWatermarkInfo.Watermark <= t.highWatermarkInfo.Watermark {
+		return
+	}
+
+	lastTaskID := int64(-1)
 	if item := t.taskQueue.Back(); item != nil {
 		lastTaskID = item.Value.(TrackableExecutableTask).TaskID()
 	}
+Loop:
 	for _, task := range tasks {
 		if lastTaskID >= task.TaskID() {
-			panic(fmt.Sprintf(
-				"ExecutableTaskTracker encountered out of order task, ID: %v",
-				task.TaskID(),
-			))
+			// need to assume source side send replication tasks in order
+			continue Loop
 		}
 		t.taskQueue.PushBack(task)
+		t.taskIDs[task.TaskID()] = struct{}{}
+		lastTaskID = task.TaskID()
 	}
 
 	if t.highWatermarkInfo != nil && highWatermarkInfo.Watermark < t.highWatermarkInfo.Watermark {
@@ -98,6 +108,13 @@ func (t *ExecutableTaskTrackerImpl) TrackTasks(
 			t.highWatermarkInfo.Watermark,
 		))
 	}
+	if highWatermarkInfo.Watermark < lastTaskID {
+		panic(fmt.Sprintf(
+			"ExecutableTaskTracker encountered lower high watermark: %v < %v",
+			highWatermarkInfo.Watermark,
+			lastTaskID,
+		))
+	}
 	t.highWatermarkInfo = &highWatermarkInfo
 }
 
@@ -105,19 +122,23 @@ func (t *ExecutableTaskTrackerImpl) LowWatermark() *WatermarkInfo {
 	t.Lock()
 	defer t.Unlock()
 
+Loop:
 	for element := t.taskQueue.Front(); element != nil; element = element.Next() {
 		task := element.Value.(TrackableExecutableTask)
 		taskState := task.State()
 		switch taskState {
 		case ctasks.TaskStateAcked:
+			delete(t.taskIDs, task.TaskID())
 			t.taskQueue.Remove(element)
 		case ctasks.TaskStateNacked:
 			// TODO put to DLQ, only after <- is successful, then remove from tracker
 			panic("implement me")
 		case ctasks.TaskStateCancelled:
 			// noop, do not remove from queue, let it block low watermark
+			break Loop
 		case ctasks.TaskStatePending:
 			// noop, do not remove from queue, let it block low watermark
+			break Loop
 		default:
 			panic(fmt.Sprintf(
 				"ExecutableTaskTracker encountered unknown task state: %v",

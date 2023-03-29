@@ -22,19 +22,50 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package replication
 
 import (
-	"go.temporal.io/server/common"
+	"context"
+
+	"google.golang.org/grpc/metadata"
+
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/history"
 )
 
 type (
-	Monitor[T Task] interface {
-		common.Daemon
-
-		RecordStart(T)
-
-		// Add more methods here to monitor
-		// other task processing events
+	StreamBiDirectionStreamClientProvider struct {
+		clientBean client.Bean
 	}
 )
+
+func NewStreamBiDirectionStreamClientProvider(
+	clientBean client.Bean,
+) *StreamBiDirectionStreamClientProvider {
+	return &StreamBiDirectionStreamClientProvider{
+		clientBean: clientBean,
+	}
+}
+
+func (p *StreamBiDirectionStreamClientProvider) Get(
+	ctx context.Context,
+	sourceShardKey ClusterShardKey,
+	targetShardKey ClusterShardKey,
+) (BiDirectionStreamClient[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse], error) {
+	adminClient, err := p.clientBean.GetRemoteAdminClient(targetShardKey.ClusterName)
+	if err != nil {
+		return nil, err
+	}
+	ctx = metadata.NewOutgoingContext(ctx, history.EncodeClusterShardMD(
+		history.ClusterShardID{
+			ClusterName: sourceShardKey.ClusterName,
+			ShardID:     sourceShardKey.ShardID,
+		},
+		history.ClusterShardID{
+			ClusterName: targetShardKey.ClusterName,
+			ShardID:     targetShardKey.ShardID,
+		},
+	))
+	return adminClient.StreamWorkflowReplicationMessages(ctx)
+}

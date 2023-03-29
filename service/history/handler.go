@@ -37,12 +37,14 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
+	"google.golang.org/grpc/metadata"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -61,6 +63,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -74,51 +77,55 @@ type (
 	Handler struct {
 		status int32
 
-		tokenSerializer               common.TaskTokenSerializer
-		startWG                       sync.WaitGroup
-		config                        *configs.Config
-		eventNotifier                 events.Notifier
+		tokenSerializer              common.TaskTokenSerializer
+		startWG                      sync.WaitGroup
+		config                       *configs.Config
+		eventNotifier                events.Notifier
+		logger                       log.Logger
+		throttledLogger              log.Logger
+		persistenceExecutionManager  persistence.ExecutionManager
+		persistenceShardManager      persistence.ShardManager
+		persistenceVisibilityManager manager.VisibilityManager
+		historyServiceResolver       membership.ServiceResolver
+		metricsHandler               metrics.Handler
+		payloadSerializer            serialization.Serializer
+		timeSource                   clock.TimeSource
+		namespaceRegistry            namespace.Registry
+		saProvider                   searchattribute.Provider
+		clusterMetadata              cluster.Metadata
+		archivalMetadata             archiver.ArchivalMetadata
+		hostInfoProvider             membership.HostInfoProvider
+		controller                   shard.Controller
+		tracer                       trace.Tracer
+
 		replicationTaskFetcherFactory replication.TaskFetcherFactory
-		logger                        log.Logger
-		throttledLogger               log.Logger
-		persistenceExecutionManager   persistence.ExecutionManager
-		persistenceShardManager       persistence.ShardManager
-		persistenceVisibilityManager  manager.VisibilityManager
-		historyServiceResolver        membership.ServiceResolver
-		metricsHandler                metrics.Handler
-		payloadSerializer             serialization.Serializer
-		timeSource                    clock.TimeSource
-		namespaceRegistry             namespace.Registry
-		saProvider                    searchattribute.Provider
-		clusterMetadata               cluster.Metadata
-		archivalMetadata              archiver.ArchivalMetadata
-		hostInfoProvider              membership.HostInfoProvider
-		controller                    shard.Controller
-		tracer                        trace.Tracer
+		streamReceiverMonitor         replication.StreamReceiverMonitor
 	}
 
 	NewHandlerArgs struct {
 		fx.In
 
-		Config                        *configs.Config
-		Logger                        log.SnTaggedLogger
-		ThrottledLogger               log.ThrottledLogger
-		PersistenceExecutionManager   persistence.ExecutionManager
-		PersistenceShardManager       persistence.ShardManager
-		PersistenceVisibilityManager  manager.VisibilityManager
-		HistoryServiceResolver        membership.ServiceResolver
-		MetricsHandler                metrics.Handler
-		PayloadSerializer             serialization.Serializer
-		TimeSource                    clock.TimeSource
-		NamespaceRegistry             namespace.Registry
-		SaProvider                    searchattribute.Provider
-		ClusterMetadata               cluster.Metadata
-		ArchivalMetadata              archiver.ArchivalMetadata
-		HostInfoProvider              membership.HostInfoProvider
-		ShardController               shard.Controller
-		EventNotifier                 events.Notifier
+		Config                       *configs.Config
+		Logger                       log.SnTaggedLogger
+		ThrottledLogger              log.ThrottledLogger
+		PersistenceExecutionManager  persistence.ExecutionManager
+		PersistenceShardManager      persistence.ShardManager
+		PersistenceVisibilityManager manager.VisibilityManager
+		HistoryServiceResolver       membership.ServiceResolver
+		MetricsHandler               metrics.Handler
+		PayloadSerializer            serialization.Serializer
+		TimeSource                   clock.TimeSource
+		NamespaceRegistry            namespace.Registry
+		SaProvider                   searchattribute.Provider
+		ClusterMetadata              cluster.Metadata
+		ArchivalMetadata             archiver.ArchivalMetadata
+		HostInfoProvider             membership.HostInfoProvider
+		ShardController              shard.Controller
+		EventNotifier                events.Notifier
+		TracerProvider               trace.TracerProvider
+
 		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
-		TracerProvider                trace.TracerProvider
+		StreamReceiverMonitor         replication.StreamReceiverMonitor
 	}
 )
 
@@ -154,7 +161,7 @@ func (h *Handler) Start() {
 	}
 
 	h.replicationTaskFetcherFactory.Start()
-
+	h.streamReceiverMonitor.Start()
 	// events notifier must starts before controller
 	h.eventNotifier.Start()
 	h.controller.Start()
@@ -172,6 +179,7 @@ func (h *Handler) Stop() {
 		return
 	}
 
+	h.streamReceiverMonitor.Stop()
 	h.replicationTaskFetcherFactory.Stop()
 	h.controller.Stop()
 	h.eventNotifier.Stop()
@@ -1844,6 +1852,38 @@ func (h *Handler) UpdateWorkflowExecution(
 	}
 
 	return engine.UpdateWorkflowExecution(ctx, request)
+}
+
+func (h *Handler) StreamWorkflowReplicationMessages(
+	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
+) (retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return errShuttingDown
+	}
+
+	ctxMetadata, ok := metadata.FromIncomingContext(server.Context())
+	if !ok {
+		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
+	}
+	sourceClusterShardID, targetClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	if err != nil {
+		return err
+	}
+	if targetClusterShardID.ClusterName != h.clusterMetadata.GetCurrentClusterName() {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"wrong cluster: target: %v, current: %v",
+			targetClusterShardID.ClusterName,
+			h.clusterMetadata.GetCurrentClusterName(),
+		))
+	}
+	shardContext, err := h.controller.GetShardByID(targetClusterShardID.ShardID)
+	if err != nil {
+		return err
+	}
+	return replicationapi.StreamReplicationTasks(server, shardContext, sourceClusterShardID, targetClusterShardID)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
