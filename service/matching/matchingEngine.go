@@ -399,6 +399,9 @@ pollLoop:
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
+			// A non-sticky poll may get task for a workflow that has sticky still set in its mutable state after
+			// their sticky worker is dead for longer than 10s. In such case, we should set this to false so that
+			// frontend returns full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 			resp := &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId:     mutableStateResp.PreviousStartedEventId,

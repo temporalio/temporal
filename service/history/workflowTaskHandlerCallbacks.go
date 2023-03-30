@@ -227,13 +227,15 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 
 			// Assuming a workflow is running on a sticky task queue by a workerA.
 			// After workerA is dead for more than 10s, matching will return StickyWorkerUnavailable error when history
-			// trying to push a new workflow task. When history sees that error, it will fall back to push the task to
+			// tries to push a new workflow task. When history sees that error, it will fall back to push the task to
 			// its original normal task queue without clear its stickiness to avoid an extra persistence write.
 			// We will clear the stickiness here when that task is delivered to another worker polling from normal queue.
 			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
 			if mutableState.IsStickyTaskQueueEnabled() &&
 				mutableState.TaskQueue().GetName() != req.PollRequest.TaskQueue.GetName() {
+				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
+				// and sticky queue never has partition, so it does not matter.
 				mutableState.ClearStickyness()
 			}
 
