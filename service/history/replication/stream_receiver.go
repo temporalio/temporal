@@ -128,12 +128,13 @@ func (r *StreamReceiver) Stop() {
 
 	r.shutdownChan.Shutdown()
 	r.stream.Close()
+	r.taskTracker.Cancel()
 
 	r.Logger.Info("StreamReceiver shutting down.")
 }
 
 func (r *StreamReceiver) IsValid() bool {
-	return atomic.LoadInt32(&r.status) != common.DaemonStatusStopped
+	return atomic.LoadInt32(&r.status) == common.DaemonStatusStarted
 }
 
 func (r *StreamReceiver) sendEventLoop() {
