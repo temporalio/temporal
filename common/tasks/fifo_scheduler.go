@@ -232,7 +232,7 @@ func (f *FIFOScheduler[T]) executeTask(
 
 	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
 		if f.isStopped() {
-			task.Reschedule()
+			task.Cancel()
 			return
 		}
 
@@ -248,7 +248,7 @@ LoopDrain:
 	for {
 		select {
 		case task := <-f.tasksChan:
-			task.Reschedule()
+			task.Cancel()
 		default:
 			break LoopDrain
 		}

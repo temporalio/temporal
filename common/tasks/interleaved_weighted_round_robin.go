@@ -210,7 +210,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Stop() {
 
 	s.fifoScheduler.Stop()
 
-	s.rescheduleTasks()
+	s.cancelTasks()
 
 	s.logger.Info("interleaved weighted round robin task scheduler stopped")
 }
@@ -350,7 +350,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) setupDispatchTimer() {
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) notifyDispatcher() {
 	if s.isStopped() {
-		s.rescheduleTasks()
+		s.cancelTasks()
 		return
 	}
 
@@ -531,7 +531,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) hasRemainingTasks() bool 
 	return numTasks > 0
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) rescheduleTasks() {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) cancelTasks() {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -541,7 +541,7 @@ DrainLoop:
 		for {
 			select {
 			case task := <-channel.Chan():
-				task.Reschedule()
+				task.Cancel()
 				numTasks++
 			default:
 				continue DrainLoop

@@ -191,7 +191,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() 
 
 	mockTask := newTestTask(s.controller, 0)
 	// either drain immediately
-	mockTask.EXPECT().Reschedule().Do(func() {
+	mockTask.EXPECT().Cancel().Do(func() {
 		testWaitGroup.Done()
 	}).MaxTimes(1)
 	// or process by worker
