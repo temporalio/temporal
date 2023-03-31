@@ -995,7 +995,7 @@ func panicIfErr(err error) {
 	}
 }
 
-func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs) *schedpb.ScheduleListInfo {
+func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time) *schedpb.ScheduleListInfo {
 	// note that this does not take into account InitialPatch
 	fakeScheduler := &scheduler{
 		StartScheduleArgs: *args,
@@ -1003,5 +1003,6 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs) *schedpb.Schedul
 	}
 	fakeScheduler.ensureFields()
 	fakeScheduler.compileSpec()
+	fakeScheduler.State.LastProcessedTime = timestamp.TimePtr(now)
 	return fakeScheduler.getListInfo()
 }
