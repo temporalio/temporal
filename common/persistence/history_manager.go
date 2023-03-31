@@ -163,9 +163,8 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 
 	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
 	historyTreeResp, err := m.GetHistoryTree(ctx, &GetHistoryTreeRequest{
-		TreeID:      branch.TreeId,
-		ShardID:     &request.ShardID,
-		BranchToken: request.BranchToken,
+		TreeID:  branch.TreeId,
+		ShardID: &request.ShardID,
 	})
 	if err != nil {
 		return err
@@ -217,8 +216,6 @@ findDeleteRanges:
 	req := &InternalDeleteHistoryBranchRequest{
 		BranchToken:  request.BranchToken,
 		ShardID:      request.ShardID,
-		TreeId:       branch.TreeId,
-		BranchId:     branch.BranchId,
 		BranchRanges: deleteRanges,
 	}
 	return m.persistence.DeleteHistoryBranch(ctx, req)
@@ -266,7 +263,6 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 			ctx,
 			request.BranchToken,
 			shardID,
-			treeID,
 			branchAncestors,
 			minNodeID,
 			maxNodeID,
@@ -329,13 +325,6 @@ func (m *executionManagerImpl) GetHistoryTree(
 	request *GetHistoryTreeRequest,
 ) (*GetHistoryTreeResponse, error) {
 
-	if len(request.TreeID) == 0 {
-		branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
-		if err != nil {
-			return nil, err
-		}
-		request.TreeID = branch.GetTreeId()
-	}
 	resp, err := m.persistence.GetHistoryTree(ctx, request)
 	if err != nil {
 		return nil, err
@@ -669,7 +658,6 @@ func (m *executionManagerImpl) readRawHistoryBranch(
 	ctx context.Context,
 	branchToken []byte,
 	shardID int32,
-	treeID string,
 	branchAncestors []*persistencespb.HistoryBranchRange,
 	minNodeID int64,
 	maxNodeID int64,
@@ -710,7 +698,6 @@ func (m *executionManagerImpl) readRawHistoryBranch(
 	resp, err := m.persistence.ReadHistoryBranch(ctx, &InternalReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		ShardID:       shardID,
-		TreeID:        treeID,
 		BranchID:      branchID,
 		MinNodeID:     minNodeID,
 		MaxNodeID:     maxNodeID,
@@ -771,7 +758,6 @@ func (m *executionManagerImpl) readRawHistoryBranchReverse(
 	resp, err := m.persistence.ReadHistoryBranch(ctx, &InternalReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		ShardID:       shardID,
-		TreeID:        treeID,
 		BranchID:      branchID,
 		MinNodeID:     minNodeID,
 		MaxNodeID:     maxNodeID,
@@ -801,7 +787,6 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	if err != nil {
 		return nil, nil, nil, nil, 0, err
 	}
-	treeID := branch.TreeId
 	branchID := branch.BranchId
 	branchAncestors := branch.Ancestors
 
@@ -829,7 +814,6 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		ctx,
 		branchToken,
 		shardID,
-		treeID,
 		branchAncestors,
 		minNodeID,
 		maxNodeID,

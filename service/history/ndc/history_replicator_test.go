@@ -181,7 +181,6 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		gomock.Any(),
 		persistence.CreateWorkflowModeBrandNew,
 		"",
 		int64(0),
@@ -283,7 +282,6 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		workflow.CallerTypeTask,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
-		gomock.Any(),
 		gomock.Any(),
 		persistence.CreateWorkflowModeBrandNew,
 		"",

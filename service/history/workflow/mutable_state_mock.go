@@ -874,9 +874,9 @@ func (mr *MockMutableStateMockRecorder) CloneToProto() *gomock.Call {
 }
 
 // CloseTransactionAsMutation mocks base method.
-func (m *MockMutableState) CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
+func (m *MockMutableState) CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseTransactionAsMutation", now, transactionPolicy)
+	ret := m.ctrl.Call(m, "CloseTransactionAsMutation", transactionPolicy)
 	ret0, _ := ret[0].(*persistence.WorkflowMutation)
 	ret1, _ := ret[1].([]*persistence.WorkflowEvents)
 	ret2, _ := ret[2].(error)
@@ -884,15 +884,15 @@ func (m *MockMutableState) CloseTransactionAsMutation(now time.Time, transaction
 }
 
 // CloseTransactionAsMutation indicates an expected call of CloseTransactionAsMutation.
-func (mr *MockMutableStateMockRecorder) CloseTransactionAsMutation(now, transactionPolicy interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) CloseTransactionAsMutation(transactionPolicy interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsMutation", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsMutation), now, transactionPolicy)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsMutation", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsMutation), transactionPolicy)
 }
 
 // CloseTransactionAsSnapshot mocks base method.
-func (m *MockMutableState) CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
+func (m *MockMutableState) CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseTransactionAsSnapshot", now, transactionPolicy)
+	ret := m.ctrl.Call(m, "CloseTransactionAsSnapshot", transactionPolicy)
 	ret0, _ := ret[0].(*persistence.WorkflowSnapshot)
 	ret1, _ := ret[1].([]*persistence.WorkflowEvents)
 	ret2, _ := ret[2].(error)
@@ -900,9 +900,9 @@ func (m *MockMutableState) CloseTransactionAsSnapshot(now time.Time, transaction
 }
 
 // CloseTransactionAsSnapshot indicates an expected call of CloseTransactionAsSnapshot.
-func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(now, transactionPolicy interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(transactionPolicy interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsSnapshot", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsSnapshot), now, transactionPolicy)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsSnapshot", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsSnapshot), transactionPolicy)
 }
 
 // ContinueAsNewMinBackoff mocks base method.

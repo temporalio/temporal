@@ -823,7 +823,6 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
-		gomock.Any(),
 		persistence.UpdateWorkflowModeBypassCurrent,
 		workflow.Context(nil),
 		workflow.MutableState(nil),
@@ -915,7 +914,6 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(),
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		workflow.Context(nil),

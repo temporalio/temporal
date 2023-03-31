@@ -209,7 +209,7 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name: "closeTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), TransactionPolicyPassive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -220,7 +220,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -663,7 +663,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent,
 		newWorkflowTaskStartedEvent,
 	}))
-	_, _, err = s.mutableState.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyPassive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
 	s.NoError(err)
 
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent
@@ -909,7 +909,6 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 
 	mutation, _, err := mutableState.CloseTransactionAsMutation(
-		s.mockShard.GetTimeSource().Now(),
 		TransactionPolicyActive,
 	)
 	s.NoError(err)

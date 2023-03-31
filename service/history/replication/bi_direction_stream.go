@@ -107,7 +107,7 @@ func (s *BiDirectionStreamImpl[Req, Resp]) Send(
 	s.Lock()
 	defer s.Unlock()
 
-	if err := s.lazyInit(); err != nil {
+	if err := s.lazyInitLocked(); err != nil {
 		return err
 	}
 	if err := s.streamingClient.Send(request); err != nil {
@@ -121,7 +121,7 @@ func (s *BiDirectionStreamImpl[Req, Resp]) Recv() (<-chan StreamResp[Resp], erro
 	s.Lock()
 	defer s.Unlock()
 
-	if err := s.lazyInit(); err != nil {
+	if err := s.lazyInitLocked(); err != nil {
 		return nil, err
 	}
 	return s.channel, nil
@@ -143,7 +143,7 @@ func (s *BiDirectionStreamImpl[Req, Resp]) closeLocked() {
 	s.cancel()
 }
 
-func (s *BiDirectionStreamImpl[Req, Resp]) lazyInit() error {
+func (s *BiDirectionStreamImpl[Req, Resp]) lazyInitLocked() error {
 	switch s.status {
 	case streamStatusInitialized:
 		streamingClient, err := s.clientProvider.Get(s.ctx)

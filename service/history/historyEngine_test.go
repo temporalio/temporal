@@ -4796,7 +4796,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	wt2 := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt2.ScheduledEventID, tl, identity)
 	addTimerFiredEvent(ms, timerID)
-	_, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), workflow.TransactionPolicyActive)
+	_, _, err := ms.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
 	s.Nil(err)
 
 	wfMs := workflow.TestCloneToProto(ms)
