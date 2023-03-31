@@ -1611,17 +1611,17 @@ func (mr *MockMutableStateMockRecorder) HadOrHasWorkflowTask() *gomock.Call {
 }
 
 // HasAnyBufferedEvent mocks base method.
-func (m *MockMutableState) HasAnyBufferedEvent(arg0 func(*v13.HistoryEvent) bool) bool {
+func (m *MockMutableState) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasAnyBufferedEvent", arg0)
+	ret := m.ctrl.Call(m, "HasAnyBufferedEvent", filter)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // HasAnyBufferedEvent indicates an expected call of HasAnyBufferedEvent.
-func (mr *MockMutableStateMockRecorder) HasAnyBufferedEvent(arg0 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) HasAnyBufferedEvent(filter interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasAnyBufferedEvent", reflect.TypeOf((*MockMutableState)(nil).HasAnyBufferedEvent), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasAnyBufferedEvent", reflect.TypeOf((*MockMutableState)(nil).HasAnyBufferedEvent), filter)
 }
 
 // HasBufferedEvents mocks base method.
