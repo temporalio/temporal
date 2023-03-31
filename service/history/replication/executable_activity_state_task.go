@@ -99,6 +99,10 @@ func NewExecutableActivityStateTask(
 }
 
 func (e *ExecutableActivityStateTask) Execute() error {
+	if e.TerminalState() {
+		return nil
+	}
+
 	namespaceName, apply, nsError := e.GetNamespaceInfo(e.NamespaceID)
 	if nsError != nil {
 		return nsError

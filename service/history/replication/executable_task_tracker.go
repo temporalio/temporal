@@ -50,11 +50,13 @@ type (
 	ExecutableTaskTracker interface {
 		TrackTasks(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask)
 		LowWatermark() *WatermarkInfo
+		Cancel()
 	}
 	ExecutableTaskTrackerImpl struct {
 		logger log.Logger
 
 		sync.Mutex
+		cancelled         bool
 		highWatermarkInfo *WatermarkInfo // this is exclusive, i.e. source need to resend with this watermark / task ID
 		taskQueue         *list.List     // sorted by task ID
 		taskIDs           map[int64]struct{}
@@ -75,6 +77,8 @@ func NewExecutableTaskTracker(
 	}
 }
 
+// TrackTasks add tasks for tracking,
+// if task tracker is cancelled, then newly added tasks will also be cancelled
 func (t *ExecutableTaskTrackerImpl) TrackTasks(
 	highWatermarkInfo WatermarkInfo,
 	tasks ...TrackableExecutableTask,
@@ -102,13 +106,6 @@ Loop:
 		lastTaskID = task.TaskID()
 	}
 
-	if t.highWatermarkInfo != nil && highWatermarkInfo.Watermark < t.highWatermarkInfo.Watermark {
-		panic(fmt.Sprintf(
-			"ExecutableTaskTracker encountered lower high watermark: %v < %v",
-			highWatermarkInfo.Watermark,
-			t.highWatermarkInfo.Watermark,
-		))
-	}
 	if highWatermarkInfo.Watermark < lastTaskID {
 		panic(fmt.Sprintf(
 			"ExecutableTaskTracker encountered lower high watermark: %v < %v",
@@ -117,6 +114,10 @@ Loop:
 		))
 	}
 	t.highWatermarkInfo = &highWatermarkInfo
+
+	if t.cancelled {
+		t.cancelLocked()
+	}
 }
 
 func (t *ExecutableTaskTrackerImpl) LowWatermark() *WatermarkInfo {
@@ -163,5 +164,20 @@ Loop:
 		return &lowWatermarkInfo
 	} else {
 		return nil
+	}
+}
+
+func (t *ExecutableTaskTrackerImpl) Cancel() {
+	t.Lock()
+	defer t.Unlock()
+
+	t.cancelled = true
+	t.cancelLocked()
+}
+
+func (t *ExecutableTaskTrackerImpl) cancelLocked() {
+	for element := t.taskQueue.Front(); element != nil; element = element.Next() {
+		task := element.Value.(TrackableExecutableTask)
+		task.Cancel()
 	}
 }

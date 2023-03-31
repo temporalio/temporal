@@ -78,6 +78,7 @@ type (
 		IsRetryableError(err error) bool
 		RetryPolicy() backoff.RetryPolicy
 		State() ctasks.State
+		TerminalState() bool
 		Attempt() int
 		Resend(
 			ctx context.Context,
@@ -136,10 +137,6 @@ func (e *ExecutableTaskImpl) TaskCreationTime() time.Time {
 
 func (e *ExecutableTaskImpl) Ack() {
 	if atomic.LoadInt32(&e.taskState) != taskStatePending {
-		e.Logger.Error(fmt.Sprintf(
-			"replication task: %v encountered concurrent completion event",
-			e.taskID,
-		))
 		return
 	}
 	if !atomic.CompareAndSwapInt32(&e.taskState, taskStatePending, taskStateAcked) {
@@ -152,10 +149,6 @@ func (e *ExecutableTaskImpl) Ack() {
 
 func (e *ExecutableTaskImpl) Nack(err error) {
 	if atomic.LoadInt32(&e.taskState) != taskStatePending {
-		e.Logger.Error(fmt.Sprintf(
-			"replication task: %v encountered concurrent completion event",
-			e.taskID,
-		))
 		return
 	}
 	if !atomic.CompareAndSwapInt32(&e.taskState, taskStatePending, taskStateNacked) {
@@ -172,17 +165,13 @@ func (e *ExecutableTaskImpl) Nack(err error) {
 
 func (e *ExecutableTaskImpl) Cancel() {
 	if atomic.LoadInt32(&e.taskState) != taskStatePending {
-		e.Logger.Error(fmt.Sprintf(
-			"replication task: %v encountered concurrent completion event",
-			e.taskID,
-		))
 		return
 	}
 	if !atomic.CompareAndSwapInt32(&e.taskState, taskStatePending, taskStateCancelled) {
 		e.Cancel() // retry cancel
 	}
 
-	e.Logger.Info(fmt.Sprintf(
+	e.Logger.Debug(fmt.Sprintf(
 		"replication task: %v encountered cancellation event",
 		e.taskID,
 	))
@@ -191,15 +180,14 @@ func (e *ExecutableTaskImpl) Cancel() {
 }
 
 func (e *ExecutableTaskImpl) Reschedule() {
-	taskState := atomic.LoadInt32(&e.taskState)
-	if taskState != taskStatePending {
-		e.Logger.Error(fmt.Sprintf(
-			"replication task: %v encountered concurrent completion event",
-			e.taskID,
-		))
+	if atomic.LoadInt32(&e.taskState) != taskStatePending {
 		return
 	}
 
+	e.Logger.Info(fmt.Sprintf(
+		"replication task: %v scheduled for retry",
+		e.taskID,
+	))
 	atomic.AddInt32(&e.attempt, 1)
 }
 
@@ -220,6 +208,11 @@ func (e *ExecutableTaskImpl) State() ctasks.State {
 	return ctasks.State(atomic.LoadInt32(&e.taskState))
 }
 
+func (e *ExecutableTaskImpl) TerminalState() bool {
+	state := atomic.LoadInt32(&e.taskState)
+	return state != taskStatePending
+}
+
 func (e *ExecutableTaskImpl) Attempt() int {
 	return int(atomic.LoadInt32(&e.attempt))
 }
@@ -231,7 +224,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		now.Sub(e.taskReceivedTime),
 		metrics.OperationTag(e.metricsTag),
 	)
-	e.MetricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+	e.MetricsHandler.Timer(metrics.ReplicationLatency.GetMetricName()).Record(
 		e.taskReceivedTime.Sub(e.taskCreationTime),
 		metrics.OperationTag(e.metricsTag),
 	)

@@ -134,6 +134,7 @@ func (s *executableWorkflowStateTaskSuite) TearDownTest() {
 }
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -155,7 +156,15 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
 	s.NoError(err)
 }
 
-func (s *executableWorkflowStateTaskSuite) TestExecute_Skip() {
+func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_TerminalState() {
+	s.executableTask.EXPECT().TerminalState().Return(true)
+
+	err := s.task.Execute()
+	s.NoError(err)
+}
+
+func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_Namespace() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
@@ -165,6 +174,7 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Skip() {
 }
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	err := errors.New("OwO")
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		"", false, err,
