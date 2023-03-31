@@ -945,8 +945,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	// Workflow task can't be persisted as Speculative, because when it is completed,
 	// it gets deleted from memory only but not from the database.
 	// If execution info in mutable state has speculative workflow task, then
-	// convert it to normal workflow task and persist.
-
+	// convert it to normal workflow task before persisting.
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 
 	wt := m.getWorkflowTaskInfo()
@@ -975,6 +974,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 
+		// TODO: ???? this might be a wrong trick because this timeout is probably used to compute next attempts timeout
 		m.ms.executionInfo.WorkflowTaskTimeout = m.remainingTimeout(
 			m.ms.executionInfo.StartTime,
 			m.ms.executionInfo.WorkflowTaskTimeout,
