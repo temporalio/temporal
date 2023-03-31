@@ -930,7 +930,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 		{
 			name: "CloseTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), TransactionPolicyPassive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -941,7 +941,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 			name:                 "CloseTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
