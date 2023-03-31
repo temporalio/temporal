@@ -41,6 +41,7 @@ import (
 
 const (
 	sendStatusInterval = 1 * time.Second
+	reconnectDelay     = 4 * time.Second
 )
 
 type (
@@ -60,11 +61,12 @@ type (
 		status         int32
 		sourceShardKey ClusterShardKey
 		targetShardKey ClusterShardKey
-		shutdownChan   channel.ShutdownOnce
 		taskTracker    ExecutableTaskTracker
+		shutdownChan   channel.ShutdownOnce
 
 		sync.Mutex
-		stream Stream
+		streamCreationTime time.Time
+		stream             Stream
 	}
 )
 
@@ -90,13 +92,15 @@ func NewStreamReceiver(
 		status:         common.DaemonStatusInitialized,
 		sourceShardKey: sourceShardKey,
 		targetShardKey: targetShardKey,
+		taskTracker:    taskTracker,
 		shutdownChan:   channel.NewShutdownOnce(),
+
+		streamCreationTime: time.Now().UTC(),
 		stream: newStream(
 			processToolBox,
 			sourceShardKey,
 			targetShardKey,
 		),
-		taskTracker: taskTracker,
 	}
 }
 
@@ -160,12 +164,22 @@ func (r *StreamReceiver) recvEventLoop() {
 
 	for !r.shutdownChan.IsShutdown() {
 		r.Lock()
+		streamCreationTime := r.streamCreationTime
 		stream := r.stream
 		r.Unlock()
+
 		_ = r.processMessages(stream)
+		delay := streamCreationTime.Add(reconnectDelay).Sub(time.Now().UTC())
+		if delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-r.shutdownChan.Channel():
+			}
+		}
 
 		r.Lock()
-		r.stream = newStream( // TODO add exp backoff
+		r.streamCreationTime = time.Now().UTC()
+		r.stream = newStream(
 			r.ProcessToolBox,
 			r.sourceShardKey,
 			r.targetShardKey,

@@ -224,7 +224,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		now.Sub(e.taskReceivedTime),
 		metrics.OperationTag(e.metricsTag),
 	)
-	e.MetricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+	e.MetricsHandler.Timer(metrics.ReplicationLatency.GetMetricName()).Record(
 		e.taskReceivedTime.Sub(e.taskCreationTime),
 		metrics.OperationTag(e.metricsTag),
 	)
