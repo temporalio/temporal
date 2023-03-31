@@ -39,11 +39,6 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
-const (
-	sendStatusInterval = 1 * time.Second
-	reconnectDelay     = 4 * time.Second
-)
-
 type (
 	ClusterShardKey struct {
 		ClusterName string
@@ -143,12 +138,13 @@ func (r *StreamReceiver) IsValid() bool {
 
 func (r *StreamReceiver) sendEventLoop() {
 	defer r.Stop()
-	ticker := time.NewTicker(sendStatusInterval)
-	defer ticker.Stop()
+	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
+	defer timer.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-timer.C:
+			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
 			r.Lock()
 			stream := r.stream
 			r.Unlock()
@@ -169,7 +165,7 @@ func (r *StreamReceiver) recvEventLoop() {
 		r.Unlock()
 
 		_ = r.processMessages(stream)
-		delay := streamCreationTime.Add(reconnectDelay).Sub(time.Now().UTC())
+		delay := streamCreationTime.Add(r.Config.ReplicationStreamMinReconnectDuration()).Sub(time.Now().UTC())
 		if delay > 0 {
 			select {
 			case <-time.After(delay):
