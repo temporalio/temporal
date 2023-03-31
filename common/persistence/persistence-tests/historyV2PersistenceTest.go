@@ -578,7 +578,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	}
 
 	wg.Wait()
-	branches = s.descTreeByToken(masterBr)
+	branches = s.descTree(treeID)
 	s.Equal(concurrency, len(branches))
 	forkOnLevel1 := int32(0)
 	level2Br := sync.Map{}
@@ -774,17 +774,6 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistencespb.HistoryBranch {
-	resp, err := s.ExecutionManager.GetHistoryTree(s.ctx, &p.GetHistoryTreeRequest{
-		BranchToken: br,
-		ShardID:     convert.Int32Ptr(s.ShardInfo.GetShardId()),
-	})
-	s.Nil(err)
-	branches, err := s.toHistoryBranches(resp.BranchTokens)
-	s.NoError(err)
-	return branches
-}
-
 func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.HistoryBranch {
 	resp, err := s.ExecutionManager.GetHistoryTree(s.ctx, &p.GetHistoryTreeRequest{
 		TreeID:  treeID,

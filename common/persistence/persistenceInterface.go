@@ -536,9 +536,7 @@ type (
 		// The raw branch token
 		BranchToken []byte
 		// Used in sharded data stores to identify which shard to use
-		ShardID  int32
-		TreeId   string // TreeId, BranchId is used to delete target history branch itself.
-		BranchId string
+		ShardID int32
 		// branch ranges is used to delete range of history nodes from target branch and it ancestors.
 		BranchRanges []InternalDeleteHistoryBranchRange
 	}
@@ -553,8 +551,6 @@ type (
 	InternalReadHistoryBranchRequest struct {
 		// The raw branch token
 		BranchToken []byte
-		// The tree of branch range to be read
-		TreeID string
 		// The branch range to be read
 		BranchID string
 		// Get the history nodes from MinNodeID. Inclusive.
