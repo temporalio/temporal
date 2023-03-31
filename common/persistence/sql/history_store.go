@@ -177,11 +177,15 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
+	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
 	branchIDBytes, err := primitives.ParseUUID(request.BranchID)
 	if err != nil {
 		return nil, err
 	}
-	treeIDBytes, err := primitives.ParseUUID(request.TreeID)
+	treeIDBytes, err := primitives.ParseUUID(branch.TreeId)
 	if err != nil {
 		return nil, err
 	}
@@ -350,11 +354,16 @@ func (m *sqlExecutionStore) DeleteHistoryBranch(
 	ctx context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
-	branchIDBytes, err := primitives.ParseUUID(request.BranchId)
+	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
 		return err
 	}
-	treeIDBytes, err := primitives.ParseUUID(request.TreeId)
+
+	branchIDBytes, err := primitives.ParseUUID(branch.BranchId)
+	if err != nil {
+		return err
+	}
+	treeIDBytes, err := primitives.ParseUUID(branch.TreeId)
 	if err != nil {
 		return err
 	}
