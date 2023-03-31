@@ -38,9 +38,11 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -82,6 +84,12 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
 		ProcessToolBox{
+			Config: configs.NewConfig(
+				dynamicconfig.NewNoopCollection(),
+				1,
+				false,
+				"",
+			),
 			ClientBean:     s.clientBean,
 			MetricsHandler: metrics.NoopMetricsHandler,
 			Logger:         log.NewNoopLogger(),
