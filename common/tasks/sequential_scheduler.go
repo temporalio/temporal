@@ -312,7 +312,7 @@ LoopDrainQueue:
 				queueSize := queue.Len()
 				if queueSize > 0 {
 					// TODO: double check the replication task reschedule function
-					queue.Remove().Reschedule()
+					queue.Remove().Cancel()
 				}
 			}
 			s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
