@@ -974,12 +974,6 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 
-		// TODO: ???? this might be a wrong trick because this timeout is probably used to compute next attempts timeout
-		m.ms.executionInfo.WorkflowTaskTimeout = m.remainingTimeout(
-			m.ms.executionInfo.StartTime,
-			m.ms.executionInfo.WorkflowTaskTimeout,
-		)
-
 		if err := m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
 			scheduledEvent.EventId,
 		); err != nil {
@@ -987,11 +981,6 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 		}
 	} else {
 		if m.ms.IsStickyTaskQueueEnabled() {
-			m.ms.executionInfo.StickyScheduleToStartTimeout = m.remainingTimeout(
-				m.ms.executionInfo.WorkflowTaskScheduledTime,
-				m.ms.executionInfo.StickyScheduleToStartTimeout,
-			)
-
 			if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
 				scheduledEvent.EventId,
 				true, // Only workflow task timeout task needs to be created.
@@ -1002,10 +991,4 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	}
 
 	return nil
-}
-
-func (m *workflowTaskStateMachine) remainingTimeout(initialTime *time.Time, originalTimeout *time.Duration) *time.Duration {
-	age := m.ms.timeSource.Now().Sub(timestamp.TimeValue(initialTime))
-	remainingTimeout := timestamp.DurationValue(originalTimeout) - age
-	return &remainingTimeout
 }
