@@ -92,6 +92,9 @@ type (
 
 		tweakables tweakablePolicies
 
+		currentTimer         workflow.Future
+		currentTimerDeadline time.Time
+
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
@@ -118,6 +121,7 @@ type (
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
 		MaxBufferSize  int
 		AllowZeroSleep bool // Whether to allow a zero-length timer. Used for workflow compatibility.
+		ReuseTimer     bool // Whether to reuse timer. Used for workflow compatibility.
 	}
 )
 
@@ -150,6 +154,7 @@ var (
 		SleepWhilePaused:                  true,
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
+		ReuseTimer:                        true,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -423,8 +428,20 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 		if !s.tweakables.AllowZeroSleep && sleepTime <= 0 {
 			sleepTime = time.Second
 		}
-		tmr := workflow.NewTimer(s.ctx, sleepTime)
-		sel.AddFuture(tmr, func(_ workflow.Future) {})
+		// A previous version of this workflow always created a new timer here, which is wasteful.
+		// We can reuse a previous timer if we have the same deadline and it didn't fire yet.
+		if s.tweakables.ReuseTimer {
+			if s.currentTimer == nil || !s.currentTimerDeadline.Equal(nextWakeup) {
+				s.currentTimer = workflow.NewTimer(s.ctx, sleepTime)
+				s.currentTimerDeadline = nextWakeup
+			}
+			sel.AddFuture(s.currentTimer, func(_ workflow.Future) {
+				s.currentTimer = nil
+			})
+		} else {
+			tmr := workflow.NewTimer(s.ctx, sleepTime)
+			sel.AddFuture(tmr, func(_ workflow.Future) {})
+		}
 	}
 
 	if s.watchingFuture != nil {
