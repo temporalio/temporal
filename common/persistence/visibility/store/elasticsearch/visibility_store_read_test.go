@@ -414,6 +414,27 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 	}, p)
 }
 
+func (s *ESVisibilitySuite) TestSetDefaultFieldSort() {
+	// test defaultSorter is retunred when not isScan
+	fieldSorts := make([]*elastic.FieldSort, 0)
+	sorter := s.visibilityStore.setDefaultFieldSort(fieldSorts, false)
+	s.Equal(defaultSorter, sorter)
+
+	// test docSorter is returned when isScan
+	sorter = s.visibilityStore.setDefaultFieldSort(fieldSorts, true)
+	s.Equal(docSorter, sorter)
+
+	// test passing non-empty fieldSorts
+	testFieldSorts := [2]*elastic.FieldSort{elastic.NewFieldSort("_test"), elastic.NewFieldSort("_second_tes")}
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
+	sorter = s.visibilityStore.setDefaultFieldSort(testFieldSorts[:], true)
+	expectedSorter := make([]elastic.Sorter, len(testFieldSorts)+1)
+	expectedSorter[0] = testFieldSorts[0]
+	expectedSorter[1] = testFieldSorts[1]
+	expectedSorter[2] = elastic.NewFieldSort(searchattribute.RunID).Desc()
+	s.Equal(expectedSorter, sorter)
+}
+
 func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	request := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
@@ -428,7 +449,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	request.Query = `WorkflowId="guid-2208"`
 	filterQuery := elastic.NewBoolQuery().Filter(elastic.NewMatchQuery(searchattribute.WorkflowID, "guid-2208"))
 	boolQuery := elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery).MustNot(namespaceDivisionExists)
-	p, err := s.visibilityStore.buildSearchParametersV2(request)
+	p, err := s.visibilityStore.buildSearchParametersV2(request, false)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
@@ -445,7 +466,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	// note namespace division appears in the filterQuery, not the boolQuery like the negative version
 	filterQuery = elastic.NewBoolQuery().Filter(elastic.NewMatchQuery(searchattribute.WorkflowID, "guid-2208"), matchNSDivision)
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery)
-	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	p, err = s.visibilityStore.buildSearchParametersV2(request, false)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
@@ -461,7 +482,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	request.Query = `Order bY WorkflowId`
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).MustNot(namespaceDivisionExists)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
-	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	p, err = s.visibilityStore.buildSearchParametersV2(request, false)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
@@ -476,9 +497,25 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	}, p)
 	request.Query = ""
 
+	// test with Scan API
+	request.Query = `WorkflowId="guid-2208"`
+	filterQuery = elastic.NewBoolQuery().Filter(elastic.NewMatchQuery(searchattribute.WorkflowID, "guid-2208"))
+	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery).MustNot(namespaceDivisionExists)
+	p, err = s.visibilityStore.buildSearchParametersV2(request, true)
+	s.NoError(err)
+	s.Equal(&client.SearchParameters{
+		Index:       testIndex,
+		Query:       boolQuery,
+		SearchAfter: nil,
+		PointInTime: nil,
+		PageSize:    testPageSize,
+		Sorter:      docSorter,
+	}, p)
+	request.Query = ""
+
 	// test for wrong query
 	request.Query = "invalid query"
-	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	p, err = s.visibilityStore.buildSearchParametersV2(request, false)
 	s.Nil(p)
 	s.Error(err)
 	request.Query = ""
@@ -500,7 +537,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 	request.Query = `WorkflowId="guid-2208"`
 	filterQuery := elastic.NewBoolQuery().Filter(elastic.NewMatchQuery(searchattribute.WorkflowID, "guid-2208"))
 	boolQuery := elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery).MustNot(namespaceDivisionExists)
-	p, err := s.visibilityStore.buildSearchParametersV2(request)
+	p, err := s.visibilityStore.buildSearchParametersV2(request, false)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
@@ -514,7 +551,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 
 	// test invalid query with ORDER BY
 	request.Query = `ORDER BY WorkflowId`
-	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	p, err = s.visibilityStore.buildSearchParametersV2(request, false)
 	s.Nil(p)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
