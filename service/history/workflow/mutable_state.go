@@ -63,6 +63,8 @@ func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 	return &policy
 }
 
+type BufferedEventFilter func(*historypb.HistoryEvent) bool
+
 var emptyTasks = []tasks.Task{}
 
 type (
@@ -201,7 +203,7 @@ type (
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
-		HasAnyBufferedEvent(func(*historypb.HistoryEvent) bool) bool
+		HasAnyBufferedEvent(filter BufferedEventFilter) bool
 		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool

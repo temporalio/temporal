@@ -1353,7 +1353,7 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 }
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
-func (ms *MutableStateImpl) HasAnyBufferedEvent(filter func(event *historypb.HistoryEvent) bool) bool {
+func (ms *MutableStateImpl) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
 }
 

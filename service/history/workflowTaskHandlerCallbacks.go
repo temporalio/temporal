@@ -951,8 +951,6 @@ func failWorkflowTask(
 func eventShouldGenerateNewTaskFilter(event *historypb.HistoryEvent) bool {
 	if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
 		return true
-	} else if !event.GetWorkflowExecutionSignaledEventAttributes().GetSkipGenerateWorkflowTask() {
-		return true
 	}
-	return false
+	return !event.GetWorkflowExecutionSignaledEventAttributes().GetSkipGenerateWorkflowTask()
 }

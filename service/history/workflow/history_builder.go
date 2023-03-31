@@ -1102,7 +1102,7 @@ func (b *HistoryBuilder) HasBufferEvents() bool {
 }
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
-func (b *HistoryBuilder) HasAnyBufferedEvent(filter func(event *historypb.HistoryEvent) bool) bool {
+func (b *HistoryBuilder) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
 	for _, event := range b.memBufferBatch {
 		if filter(event) {
 			return true
