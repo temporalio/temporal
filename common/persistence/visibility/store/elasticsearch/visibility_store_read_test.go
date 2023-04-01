@@ -425,7 +425,7 @@ func (s *ESVisibilitySuite) TestGetListFieldSorter() {
 	// test passing non-empty fieldSorts
 	testFieldSorts := [2]*elastic.FieldSort{elastic.NewFieldSort("_test"), elastic.NewFieldSort("_second_tes")}
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
-	sorter, err = s.visibilityStore.getFieldSorter(testFieldSorts[:])
+	sorter, err = s.visibilityStore.getListFieldSorter(testFieldSorts[:])
 	expectedSorter := make([]elastic.Sorter, len(testFieldSorts)+1)
 	expectedSorter[0] = testFieldSorts[0]
 	expectedSorter[1] = testFieldSorts[1]
@@ -453,12 +453,11 @@ func (s *ESVisibilitySuite) TestGetFieldSorter() {
 	// test passing non-empty fieldSorts and not sortByDoc
 	testFieldSorts := [2]*elastic.FieldSort{elastic.NewFieldSort("_test"), elastic.NewFieldSort("_second_tes")}
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
-	sorter, err := s.visibilityStore.getFieldSorter(testFieldSorts[:])
+	sorter := s.visibilityStore.getFieldSorter(testFieldSorts[:])
 	expectedSorter := make([]elastic.Sorter, len(testFieldSorts)+1)
 	expectedSorter[0] = testFieldSorts[0]
 	expectedSorter[1] = testFieldSorts[1]
 	expectedSorter[2] = elastic.NewFieldSort(searchattribute.RunID).Desc()
-	s.NoError(err)
 	s.Equal(expectedSorter, sorter)
 }
 

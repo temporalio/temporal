@@ -745,25 +745,21 @@ func (s *visibilityStore) convertQuery(
 }
 
 func (s *visibilityStore) getScanFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
-	// if sortByDoc is set (which means ScanWorkflowExecutions is invoked), custom
-	// ORDER BY is not supported.
-	if len(fieldSorts) > 0 {
-		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
-	}
 	if len(fieldSorts) == 0 {
 		return docSorter, nil
 	}
-	return s.getFieldSorter(fieldSorts)
+	// custom order is not supported by Scan API
+	return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 }
 
 func (s *visibilityStore) getListFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
 	if len(fieldSorts) == 0 {
 		return defaultSorter, nil
 	}
-	return s.getFieldSorter(fieldSorts)
+	return s.getFieldSorter(fieldSorts), nil
 }
 
-func (s *visibilityStore) getFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
+func (s *visibilityStore) getFieldSorter(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
 	s.metricsHandler.Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
 	for i, fs := range fieldSorts {
@@ -772,7 +768,7 @@ func (s *visibilityStore) getFieldSorter(fieldSorts []*elastic.FieldSort) ([]ela
 	// RunID is explicit tiebreaker.
 	res[len(res)-1] = elastic.NewFieldSort(searchattribute.RunID).Desc()
 
-	return res, nil
+	return res
 }
 
 func (s *visibilityStore) getListWorkflowExecutionsResponse(
