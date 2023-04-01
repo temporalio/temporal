@@ -745,11 +745,12 @@ func (s *visibilityStore) convertQuery(
 }
 
 func (s *visibilityStore) getScanFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
-	if len(fieldSorts) == 0 {
-		return docSorter, nil
-	}
 	// custom order is not supported by Scan API
-	return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
+	if len(fieldSorts) > 0 {
+		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
+	}
+
+	return docSorter, nil
 }
 
 func (s *visibilityStore) getListFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
