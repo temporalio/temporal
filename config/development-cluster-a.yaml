@@ -6,12 +6,12 @@ persistence:
   defaultStore: cass-default
   visibilityStore:
   advancedVisibilityStore: es-visibility
-  numHistoryShards: 4
+  numHistoryShards: 32
   datastores:
     cass-default:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "temporal_standby"
+        keyspace: "temporal_cluster_a"
     es-visibility:
       elasticsearch:
         version: "v7"
@@ -20,72 +20,67 @@ persistence:
           scheme: "http"
           host: "127.0.0.1:9200"
         indices:
-          visibility: temporal_visibility_v1_dev_standby
+          visibility: temporal_visibility_v1_dev_cluster_a
           # secondary_visibility: temporal_visibility_v2_dev
         closeIdleConnectionsInterval: 15s
-
 global:
   membership:
     maxJoinDuration: 30s
+    broadcastAddress: "127.0.0.1"
   pprof:
-    port: 8936
+    port: 7936
   metrics:
     prometheus:
 #      # specify framework to use new approach for initializing metrics and/or use opentelemetry
 #      framework: "opentelemetry"
-      framework: "tally"
+      framework: "opentelemetry"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"
 
 services:
   frontend:
     rpc:
-      grpcPort: 8233
-      membershipPort: 8933
+      grpcPort: 7233
+      membershipPort: 6933
       bindOnLocalHost: true
 
   matching:
     rpc:
-      grpcPort: 8235
-      membershipPort: 8935
+      grpcPort: 7235
+      membershipPort: 6935
       bindOnLocalHost: true
 
   history:
     rpc:
-      grpcPort: 8234
-      membershipPort: 8934
+      grpcPort: 7234
+      membershipPort: 6934
       bindOnLocalHost: true
 
   worker:
     rpc:
-      grpcPort: 8240
-      membershipPort: 8940
+      grpcPort: 7940
+      membershipPort: 6940
       bindOnLocalHost: true
 
 clusterMetadata:
   enableGlobalNamespace: true
-  failoverVersionIncrement: 10
-  masterClusterName: "active"
-  currentClusterName: "standby"
+  failoverVersionIncrement: 100
+  masterClusterName: "cluster-a"
+  currentClusterName: "cluster-a"
   clusterInformation:
-    active:
+    cluster-a:
       enabled: true
       initialFailoverVersion: 1
       rpcName: "frontend"
       rpcAddress: "localhost:7233"
-    standby:
-      enabled: true
-      initialFailoverVersion: 2
-      rpcName: "frontend"
-      rpcAddress: "localhost:8233"
-# Use tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "localhost:7233"
-#    active:
+# Use tctl --ad 127.0.0.1:7233 adm cl upsert-remote-cluster --frontend_address "localhost:8233"
+#    cluster-b:
 #      enabled: true
-#      initialFailoverVersion: 1
+#      initialFailoverVersion: 2
 #      rpcName: "frontend"
-#      rpcAddress: "localhost:7233"
-# Use tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "localhost:9233"
-#    other:
+#      rpcAddress: "localhost:8233"
+# Use tctl --ad 127.0.0.1:7233 adm cl upsert-remote-cluster --frontend_address "localhost:9233"
+#    cluster-c:
 #      enabled: false
 #      initialFailoverVersion: 3
 #      rpcName: "frontend"

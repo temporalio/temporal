@@ -695,6 +695,8 @@ func (s *scheduleIntegrationSuite) TestListBeforeRun() {
 		RequestId:  uuid.New(),
 	}
 
+	startTime := time.Now()
+
 	_, err := s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
 
@@ -714,6 +716,7 @@ func (s *scheduleIntegrationSuite) TestListBeforeRun() {
 		s.Equal(wt, entry.Info.WorkflowType.Name)
 		s.False(entry.Info.Paused)
 		s.Greater(len(entry.Info.FutureActionTimes), 1)
+		s.True(entry.Info.FutureActionTimes[0].After(startTime))
 		return true
 	}, 10*time.Second, 1*time.Second)
 

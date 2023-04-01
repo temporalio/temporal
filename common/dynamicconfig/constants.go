@@ -652,6 +652,11 @@ const (
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
 	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
+
+	// ReplicationStreamSyncStatusDuration sync replication status duration
+	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
+	// ReplicationStreamMinReconnectDuration minimal replication stream reconnection duration
+	ReplicationStreamMinReconnectDuration = "history.ReplicationStreamMinReconnectDuration"
 	// ReplicationProcessorSchedulerQueueSize is the replication task executor queue size
 	ReplicationProcessorSchedulerQueueSize = "history.ReplicationProcessorSchedulerQueueSize"
 	// ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count

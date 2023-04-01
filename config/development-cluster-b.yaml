@@ -6,12 +6,12 @@ persistence:
   defaultStore: cass-default
   visibilityStore:
   advancedVisibilityStore: es-visibility
-  numHistoryShards: 4
+  numHistoryShards: 32
   datastores:
     cass-default:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "temporal_other"
+        keyspace: "temporal_cluster_b"
     es-visibility:
       elasticsearch:
         version: "v7"
@@ -20,7 +20,7 @@ persistence:
           scheme: "http"
           host: "127.0.0.1:9200"
         indices:
-          visibility: temporal_visibility_v1_dev_other
+          visibility: temporal_visibility_v1_dev_cluster_b
           # secondary_visibility: temporal_visibility_v2_dev
         closeIdleConnectionsInterval: 15s
 
@@ -28,68 +28,68 @@ global:
   membership:
     maxJoinDuration: 30s
   pprof:
-    port: 9936
+    port: 8936
   metrics:
     prometheus:
 #      # specify framework to use new approach for initializing metrics and/or use opentelemetry
 #      framework: "opentelemetry"
-      framework: "tally"
+      framework: "opentelemetry"
       timerType: "histogram"
-      listenAddress: "127.0.0.1:8000"
+      listenAddress: "127.0.0.1:8001"
 
 services:
   frontend:
     rpc:
-      grpcPort: 9233
-      membershipPort: 9933
+      grpcPort: 8233
+      membershipPort: 8933
       bindOnLocalHost: true
 
   matching:
     rpc:
-      grpcPort: 9235
-      membershipPort: 9935
+      grpcPort: 8235
+      membershipPort: 8935
       bindOnLocalHost: true
 
   history:
     rpc:
-      grpcPort: 9234
-      membershipPort: 9934
+      grpcPort: 8234
+      membershipPort: 8934
       bindOnLocalHost: true
 
   worker:
     rpc:
-      grpcPort: 9240
-      membershipPort: 9940
+      grpcPort: 8240
+      membershipPort: 8940
       bindOnLocalHost: true
 
 clusterMetadata:
   enableGlobalNamespace: true
-  failoverVersionIncrement: 10
-  masterClusterName: "active"
-  currentClusterName: "other"
+  failoverVersionIncrement: 100
+  masterClusterName: "cluster-a"
+  currentClusterName: "cluster-b"
   clusterInformation:
-    active:
+    cluster-a:
       enabled: true
       initialFailoverVersion: 1
       rpcName: "frontend"
       rpcAddress: "localhost:7233"
-    other:
+    cluster-b:
       enabled: true
-      initialFailoverVersion: 3
+      initialFailoverVersion: 2
       rpcName: "frontend"
-      rpcAddress: "localhost:9233"
-# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "localhost:7233"
+      rpcAddress: "localhost:8233"
+# Use tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "localhost:7233"
 #    active:
 #      enabled: true
 #      initialFailoverVersion: 1
 #      rpcName: "frontend"
 #      rpcAddress: "localhost:7233"
-# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "localhost:8233"
-#    standby:
-#      enabled: true
-#      initialFailoverVersion: 2
+# Use tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "localhost:9233"
+#    other:
+#      enabled: false
+#      initialFailoverVersion: 3
 #      rpcName: "frontend"
-#      rpcAddress: "localhost:8233"
+#      rpcAddress: "localhost:9233"
 
 dcRedirectionPolicy:
   policy: "selected-apis-forwarding"
