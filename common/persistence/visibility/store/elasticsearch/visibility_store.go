@@ -66,6 +66,10 @@ var defaultSorter = []elastic.Sorter{
 	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
 }
 
+var docSorter = []elastic.Sorter{
+	elastic.SortByDoc{},
+}
+
 type (
 	visibilityStore struct {
 		esClient                       client.Client
@@ -86,6 +90,10 @@ type (
 		ScrollID string
 		// For ES>=7.10.0 and "default" flavor.
 		PointInTimeID string
+	}
+
+	searchParameterBuilder struct {
+		store *visibilityStore
 	}
 )
 
@@ -439,7 +447,7 @@ func (s *visibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	p, err := s.buildSearchParametersV2(request)
+	p, err := s.buildSearchParametersV2(request, s.getListFieldSorter)
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +486,7 @@ func (s *visibilityStore) scanWorkflowExecutionsWithPit(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	p, err := s.buildSearchParametersV2(request)
+	p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
 	if err != nil {
 		return nil, err
 	}
@@ -527,7 +535,7 @@ func (s *visibilityStore) scanWorkflowExecutionsWithScroll(ctx context.Context, 
 	// First call doesn't have token with ScrollID.
 	if len(request.NextPageToken) == 0 {
 		// First page.
-		p, err := s.buildSearchParametersV2(request)
+		p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
 		if err != nil {
 			return nil, err
 		}
@@ -663,6 +671,7 @@ func (s *visibilityStore) buildSearchParameters(
 
 func (s *visibilityStore) buildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
+	getFieldSorter func([]*elastic.FieldSort) ([]elastic.Sorter, error),
 ) (*client.SearchParameters, error) {
 
 	boolQuery, fieldSorts, err := s.convertQuery(
@@ -683,11 +692,16 @@ func (s *visibilityStore) buildSearchParametersV2(
 		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
+	sorter, err := getFieldSorter(fieldSorts)
+	if err != nil {
+		return nil, err
+	}
+
 	params := &client.SearchParameters{
 		Index:    s.index,
 		Query:    boolQuery,
 		PageSize: request.PageSize,
-		Sorter:   s.setDefaultFieldSort(fieldSorts),
+		Sorter:   sorter,
 	}
 
 	return params, nil
@@ -730,11 +744,23 @@ func (s *visibilityStore) convertQuery(
 	return namespaceFilterQuery, fieldSorts, nil
 }
 
-func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
-	if len(fieldSorts) == 0 {
-		return defaultSorter
+func (s *visibilityStore) getScanFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
+	// custom order is not supported by Scan API
+	if len(fieldSorts) > 0 {
+		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
+	return docSorter, nil
+}
+
+func (s *visibilityStore) getListFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
+	if len(fieldSorts) == 0 {
+		return defaultSorter, nil
+	}
+	return s.getFieldSorter(fieldSorts), nil
+}
+
+func (s *visibilityStore) getFieldSorter(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
 	s.metricsHandler.Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
 	for i, fs := range fieldSorts {
