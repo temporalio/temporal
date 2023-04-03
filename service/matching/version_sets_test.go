@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	clockpb "go.temporal.io/server/api/clock/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
 
 func mkNewSet(id string, clock clockpb.HybridLogicalClock) *persistencepb.CompatibleVersionSet {
@@ -57,7 +58,7 @@ func mkInitialData(numSets int, clock clockpb.HybridLogicalClock) *persistencepb
 }
 
 func mkUserData(numSets int) *persistencepb.TaskQueueUserData {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	return &persistencepb.TaskQueueUserData{
 		Clock:          &clock,
 		VersioningData: mkInitialData(numSets, clock),
@@ -97,17 +98,13 @@ func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdCompatibility
 	}
 }
 
+// Asserts that clock1 is greater than clock2
 func assertClockGreater(t *testing.T, clock1 clockpb.HybridLogicalClock, clock2 clockpb.HybridLogicalClock) {
-	if clock1.Version == clock2.Version {
-		assert.GreaterOrEqual(t, clock1.WallClock, clock2.WallClock)
-	} else {
-		assert.Equal(t, clock1.WallClock, clock2.WallClock)
-	}
-	assert.Equal(t, clock1.ClusterId, clock2.ClusterId)
+	assert.True(t, hlc.Greater(clock1, clock2))
 }
 
 func TestNewDefaultUpdate(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	initialData := mkInitialData(2, clock)
 
 	req := mkNewDefReq("2")
@@ -143,7 +140,7 @@ func TestNewDefaultUpdate(t *testing.T) {
 }
 
 func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
 
 	req := mkNewDefReq("1")
@@ -166,7 +163,7 @@ func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
 }
 
 func TestNewDefaultSetUpdateCompatWithCurDefault(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	initialData := mkInitialData(2, clock)
 
 	req := mkNewCompatReq("1.1", "1", true)
@@ -197,7 +194,7 @@ func TestNewDefaultSetUpdateCompatWithCurDefault(t *testing.T) {
 }
 
 func TestNewDefaultSetUpdateCompatWithNonDefaultSet(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	initialData := mkInitialData(2, clock)
 
 	req := mkNewCompatReq("0.1", "0", true)
@@ -228,7 +225,7 @@ func TestNewDefaultSetUpdateCompatWithNonDefaultSet(t *testing.T) {
 }
 
 func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	initialData := mkInitialData(2, clock)
 
 	req := mkNewCompatReq("0.1", "0", false)
@@ -262,7 +259,7 @@ func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
 }
 
 func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
-	clock0 := zeroHLC(1)
+	clock0 := hlc.Zero(1)
 	data := mkInitialData(2, clock0)
 
 	req := mkNewCompatReq("0.1", "0", false)
@@ -324,7 +321,7 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 }
 
 func TestCompatibleTargetsNotFound(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	data := mkInitialData(1, clock)
 
 	req := mkNewCompatReq("1.1", "1", false)
@@ -334,7 +331,7 @@ func TestCompatibleTargetsNotFound(t *testing.T) {
 }
 
 func TestMakeExistingSetDefault(t *testing.T) {
-	clock0 := zeroHLC(1)
+	clock0 := hlc.Zero(1)
 	data := mkInitialData(3, clock0)
 
 	req := mkExistingDefault("1")
@@ -398,7 +395,7 @@ func TestMakeExistingSetDefault(t *testing.T) {
 }
 
 func TestSayVersionIsCompatWithDifferentSetThanItsAlreadyCompatWithNotAllowed(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
 	req := mkNewCompatReq("0.1", "0", false)
@@ -412,7 +409,7 @@ func TestSayVersionIsCompatWithDifferentSetThanItsAlreadyCompatWithNotAllowed(t 
 }
 
 func TestLimitsMaxSets(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	maxSets := 10
 	data := mkInitialData(maxSets, clock)
 
@@ -423,7 +420,7 @@ func TestLimitsMaxSets(t *testing.T) {
 }
 
 func TestLimitsMaxBuildIDs(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	maxBuildIDs := 10
 	data := mkInitialData(maxBuildIDs, clock)
 
@@ -434,7 +431,7 @@ func TestLimitsMaxBuildIDs(t *testing.T) {
 }
 
 func TestPromoteWithinVersion(t *testing.T) {
-	clock0 := zeroHLC(1)
+	clock0 := hlc.Zero(1)
 	data := mkInitialData(2, clock0)
 
 	req := mkNewCompatReq("0.1", "0", false)
@@ -470,7 +467,7 @@ func TestPromoteWithinVersion(t *testing.T) {
 }
 
 func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
 	req := mkNewDefReq("0")
@@ -480,7 +477,7 @@ func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
 }
 
 func TestAddAlreadyExtantVersionToAnotherSetErrors(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
 	req := mkNewCompatReq("0", "1", false)
@@ -490,7 +487,7 @@ func TestAddAlreadyExtantVersionToAnotherSetErrors(t *testing.T) {
 }
 
 func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
 	req := mkExistingDefault("crab boi")
@@ -500,7 +497,7 @@ func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
 }
 
 func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
 	req := mkPromoteInSet("i'd rather be writing rust ;)")
@@ -510,7 +507,7 @@ func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
 }
 
 func TestToBuildIdOrderingResponseTrimsResponse(t *testing.T) {
-	clock := zeroHLC(1)
+	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 	actual := ToBuildIdOrderingResponse(data, 2)
 	expected := []*taskqueuepb.CompatibleVersionSet{{BuildIds: []string{"1"}}, {BuildIds: []string{"2"}}}

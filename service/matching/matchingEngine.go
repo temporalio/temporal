@@ -45,6 +45,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -723,7 +724,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	err = tqMgr.UpdateUserData(hCtx.Context, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		clock := data.GetClock()
 		if clock == nil {
-			tmp := zeroHLC(e.clusterMeta.GetClusterID())
+			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
 			clock = &tmp
 		}
 

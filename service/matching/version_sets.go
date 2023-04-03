@@ -27,14 +27,13 @@ package matching
 import (
 	"encoding/binary"
 	"fmt"
-	"time"
 
 	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	clockpb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/persistence/v1"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
 
 // ToBuildIdOrderingResponse transforms the internal VersioningData representation to public representation.
@@ -117,8 +116,8 @@ func checkLimits(g *persistence.VersioningData, maxSets, maxBuildIDs int) error 
 // Deletions are performed by a background process which verifies build IDs are no longer in use and safe to delete (not yet implemented).
 //
 // Update may fail with FailedPrecondition if it would cause exceeding the supplied limits.
-func UpdateVersionSets(clock clockpb.HybridLogicalClock, data *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIDs int) (clockpb.HybridLogicalClock, *persistence.VersioningData, error) {
-	clock = generateHLCTimestamp(clock)
+func UpdateVersionSets(clock hlc.Clock, data *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIDs int) (hlc.Clock, *persistence.VersioningData, error) {
+	clock = hlc.Next(clock)
 	data, err := updateImpl(clock, data, req)
 	if err != nil {
 		return clock, nil, err
@@ -130,7 +129,7 @@ func UpdateVersionSets(clock clockpb.HybridLogicalClock, data *persistence.Versi
 }
 
 //nolint:revive // cyclomatic complexity
-func updateImpl(timestamp clockpb.HybridLogicalClock, existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistence.VersioningData, error) {
+func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistence.VersioningData, error) {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
 	findRes := findVersion(existingData, targetedVersion)
@@ -231,7 +230,7 @@ func findVersion(data *persistence.VersioningData, buildID string) findVersionRe
 	}
 }
 
-func makeDefaultSet(data *persistence.VersioningData, setIx int, timestamp *clockpb.HybridLogicalClock) {
+func makeDefaultSet(data *persistence.VersioningData, setIx int, timestamp *hlc.Clock) {
 	data.DefaultUpdateTimestamp = timestamp
 	if len(data.VersionSets) <= 1 {
 		return
@@ -244,7 +243,7 @@ func makeDefaultSet(data *persistence.VersioningData, setIx int, timestamp *cloc
 	}
 }
 
-func makeVersionInSetDefault(data *persistence.VersioningData, setIx, versionIx int, timestamp *clockpb.HybridLogicalClock) {
+func makeVersionInSetDefault(data *persistence.VersioningData, setIx, versionIx int, timestamp *hlc.Clock) {
 	data.VersionSets[setIx].DefaultUpdateTimestamp = timestamp
 	setVersions := data.VersionSets[setIx].BuildIds
 	if len(setVersions) <= 1 {
@@ -256,25 +255,4 @@ func makeVersionInSetDefault(data *persistence.VersioningData, setIx, versionIx 
 		copy(setVersions[versionIx:], setVersions[versionIx+1:])
 		setVersions[len(setVersions)-1] = moveMe
 	}
-}
-
-func generateHLCTimestamp(clock clockpb.HybridLogicalClock) clockpb.HybridLogicalClock {
-	wallclock := time.Now().UnixMilli()
-	// Ensure time does not move backwards
-	if wallclock < clock.GetWallClock() {
-		wallclock = clock.GetWallClock()
-	}
-	// Ensure timestamp is monotonically increasing
-	if wallclock == clock.GetWallClock() {
-		clock.Version = clock.GetVersion() + 1
-	} else {
-		clock.Version = 0
-		clock.WallClock = wallclock
-	}
-
-	return clockpb.HybridLogicalClock{WallClock: wallclock, Version: clock.Version, ClusterId: clock.ClusterId}
-}
-
-func zeroHLC(clusterID int64) clockpb.HybridLogicalClock {
-	return clockpb.HybridLogicalClock{WallClock: 0, Version: 0, ClusterId: clusterID}
 }
