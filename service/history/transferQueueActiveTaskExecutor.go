@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -84,6 +85,7 @@ func newTransferQueueActiveTaskExecutor(
 	metricProvider metrics.Handler,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
+	visibilityManager manager.VisibilityManager,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -93,6 +95,7 @@ func newTransferQueueActiveTaskExecutor(
 			logger,
 			metricProvider,
 			matchingClient,
+			visibilityManager,
 		),
 		workflowResetter: ndc.NewWorkflowResetter(
 			shard,
