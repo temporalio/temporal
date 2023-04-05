@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func GenerateTask(
@@ -57,6 +58,7 @@ func GenerateTask(
 			request.Execution.WorkflowId,
 			request.Execution.RunId,
 		),
+		workflow.CallerTypeAPI,
 	)
 	if err != nil {
 		return nil, err

@@ -68,6 +68,7 @@ func Invoke(
 			req.Request.Execution.WorkflowId,
 			req.Request.Execution.RunId,
 		),
+		workflow.CallerTypeAPI,
 	)
 	if err != nil {
 		return nil, err

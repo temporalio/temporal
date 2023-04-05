@@ -124,6 +124,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.CallerTypeAPI,
 	)
 	s.NoError(err)
 	s.Equal(mutableState, workflowContext.GetMutableState())
@@ -160,6 +161,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.CallerTypeAPI,
 	)
 	s.NoError(err)
 	s.Equal(mutableState2, workflowContext.GetMutableState())
@@ -192,6 +194,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.CallerTypeAPI,
 	)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Nil(workflowContext)
@@ -224,6 +227,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.CallerTypeAPI,
 	)
 	s.IsType(&persistence.ShardOwnershipLostError{}, err)
 	s.Nil(workflowContext)
@@ -254,6 +258,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.CallerTypeAPI,
 	)
 	s.IsType(&serviceerror.Unavailable{}, err)
 	s.Nil(workflowContext)

@@ -162,6 +162,7 @@ func GetMutableState(
 		nil,
 		BypassMutableStateConsistencyPredicate,
 		workflowKey,
+		workflow.CallerTypeAPI,
 	)
 	if err != nil {
 		return nil, err
