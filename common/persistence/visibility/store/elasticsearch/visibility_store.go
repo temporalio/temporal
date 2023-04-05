@@ -91,10 +91,6 @@ type (
 		// For ES>=7.10.0 and "default" flavor.
 		PointInTimeID string
 	}
-
-	searchParameterBuilder struct {
-		store *visibilityStore
-	}
 )
 
 var _ store.VisibilityStore = (*visibilityStore)(nil)
@@ -757,10 +753,6 @@ func (s *visibilityStore) getListFieldSorter(fieldSorts []*elastic.FieldSort) ([
 	if len(fieldSorts) == 0 {
 		return defaultSorter, nil
 	}
-	return s.getFieldSorter(fieldSorts), nil
-}
-
-func (s *visibilityStore) getFieldSorter(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
 	s.metricsHandler.Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
 	for i, fs := range fieldSorts {
@@ -769,7 +761,7 @@ func (s *visibilityStore) getFieldSorter(fieldSorts []*elastic.FieldSort) []elas
 	// RunID is explicit tiebreaker.
 	res[len(res)-1] = elastic.NewFieldSort(searchattribute.RunID).Desc()
 
-	return res
+	return res, nil
 }
 
 func (s *visibilityStore) getListWorkflowExecutionsResponse(
