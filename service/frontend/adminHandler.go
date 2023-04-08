@@ -390,7 +390,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 			CustomSearchAttributeAliases: upsertFieldToAliasMap,
 		},
 	})
-	if err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
+	if err != nil && err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
 		return errRaceConditionAddingSearchAttributes
 	}
 	return err
