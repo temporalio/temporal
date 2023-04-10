@@ -903,7 +903,7 @@ type (
 		// A UUID of a tree
 		TreeID string
 		// Get data from this shard
-		ShardID *int32
+		ShardID int32
 	}
 
 	// HistoryBranchDetail contains detailed information of a branch

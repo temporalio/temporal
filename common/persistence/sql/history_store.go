@@ -476,7 +476,7 @@ func (m *sqlExecutionStore) GetHistoryTree(
 
 	rows, err := m.Db.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
 		TreeID:  treeID,
-		ShardID: *request.ShardID,
+		ShardID: request.ShardID,
 	})
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
 		return &p.InternalGetHistoryTreeResponse{}, nil
