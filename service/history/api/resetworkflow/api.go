@@ -67,7 +67,7 @@ func Invoke(
 			workflowID,
 			baseRunID,
 		),
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func Invoke(
 				workflowID,
 				currentRunID,
 			),
-			workflow.CallerTypeAPI,
+			workflow.LockPriorityHigh,
 		)
 		if err != nil {
 			return nil, err

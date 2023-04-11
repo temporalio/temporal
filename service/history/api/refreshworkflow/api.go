@@ -51,7 +51,7 @@ func Invoke(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		workflowKey,
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err

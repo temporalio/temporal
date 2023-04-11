@@ -59,7 +59,7 @@ type (
 			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
-			callerType workflow.CallerType,
+			lockPriority workflow.LockPriority,
 		) (WorkflowContext, error)
 	}
 
@@ -109,7 +109,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-	callerType workflow.CallerType,
+	lockPriority workflow.LockPriority,
 ) (WorkflowContext, error) {
 	if reqClock != nil {
 		currentClock := c.shardContext.CurrentVectorClock()
@@ -119,7 +119,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 				reqClock,
 				currentClock,
 				workflowKey,
-				callerType,
+				lockPriority,
 			)
 		}
 		// request vector clock cannot is not comparable with current shard vector clock
@@ -136,7 +136,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 			&shardOwnershipAsserted,
 			consistencyPredicate,
 			workflowKey,
-			callerType,
+			lockPriority,
 		)
 	}
 	return c.getCurrentWorkflowContext(
@@ -145,7 +145,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 		consistencyPredicate,
 		workflowKey.NamespaceID,
 		workflowKey.WorkflowID,
-		callerType,
+		lockPriority,
 	)
 }
 
@@ -154,7 +154,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	reqClock *clockspb.VectorClock,
 	currentClock *clockspb.VectorClock,
 	workflowKey definition.WorkflowKey,
-	callerType workflow.CallerType,
+	lockPriority workflow.LockPriority,
 ) (WorkflowContext, error) {
 	cmpResult, err := vclock.Compare(reqClock, currentClock)
 	if err != nil {
@@ -176,7 +176,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		callerType,
+		lockPriority,
 	)
 	if err != nil {
 		return nil, err
@@ -195,7 +195,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 	shardOwnershipAsserted *bool,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-	callerType workflow.CallerType,
+	lockPriority workflow.LockPriority,
 ) (WorkflowContext, error) {
 	if len(workflowKey.RunID) == 0 {
 		return nil, serviceerror.NewInternal(fmt.Sprintf(
@@ -210,7 +210,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		callerType,
+		lockPriority,
 	)
 	if err != nil {
 		return nil, err
@@ -252,7 +252,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
 	workflowID string,
-	callerType workflow.CallerType,
+	lockPriority workflow.LockPriority,
 ) (WorkflowContext, error) {
 	runID, err := c.getCurrentRunID(
 		ctx,
@@ -268,7 +268,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		shardOwnershipAsserted,
 		consistencyPredicate,
 		definition.NewWorkflowKey(namespaceID, workflowID, runID),
-		callerType,
+		lockPriority,
 	)
 	if err != nil {
 		return nil, err

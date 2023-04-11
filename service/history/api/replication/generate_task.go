@@ -58,7 +58,7 @@ func GenerateTask(
 			request.Execution.WorkflowId,
 			request.Execution.RunId,
 		),
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err

@@ -60,7 +60,7 @@ func Invoke(
 			signalWithStartRequest.SignalWithStartRequest.WorkflowId,
 			"",
 		),
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	switch err.(type) {
 	case nil:

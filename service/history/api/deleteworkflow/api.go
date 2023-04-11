@@ -55,7 +55,7 @@ func Invoke(
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return nil, err
