@@ -248,7 +248,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err
@@ -357,7 +357,7 @@ func (r *HistoryReplicatorImpl) applyEvents(
 		ctx,
 		task.getNamespaceID(),
 		*task.getExecution(),
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
@@ -750,16 +750,24 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 
 	// for non reset workflow execution replication task, just do re-replication
 	if !task.isWorkflowReset() {
+		startEventId := common.EmptyEventID
+		startEventVersion := common.EmptyVersion
+		if task.getBaseWorkflowInfo() != nil {
+			startEventId = task.getBaseWorkflowInfo().LowestCommonAncestorEventId
+			startEventVersion = task.getBaseWorkflowInfo().LowestCommonAncestorEventVersion
+		}
 		firstEvent := task.getFirstEvent()
+		endEventId := firstEvent.GetEventId()
+		endEventVersion := firstEvent.GetVersion()
 		return nil, serviceerrors.NewRetryReplication(
 			mutableStateMissingMessage,
 			task.getNamespaceID().String(),
 			task.getWorkflowID(),
 			task.getRunID(),
-			common.EmptyEventID,
-			common.EmptyVersion,
-			firstEvent.GetEventId(),
-			firstEvent.GetVersion(),
+			startEventId,
+			startEventVersion,
+			endEventId,
+			endEventVersion,
 		)
 	}
 

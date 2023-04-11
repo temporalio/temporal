@@ -145,6 +145,7 @@ func (s *executableActivityStateTaskSuite) TearDownTest() {
 }
 
 func (s *executableActivityStateTaskSuite) TestExecute_Process() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -178,7 +179,15 @@ func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 	s.NoError(err)
 }
 
-func (s *executableActivityStateTaskSuite) TestExecute_Skip() {
+func (s *executableActivityStateTaskSuite) TestExecute_Skip_TerminalState() {
+	s.executableTask.EXPECT().TerminalState().Return(true)
+
+	err := s.task.Execute()
+	s.NoError(err)
+}
+
+func (s *executableActivityStateTaskSuite) TestExecute_Skip_Namespace() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
@@ -189,6 +198,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Skip() {
 
 func (s *executableActivityStateTaskSuite) TestExecute_Err() {
 	err := errors.New("OwO")
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		"", false, err,
 	).AnyTimes()
@@ -197,6 +207,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Err() {
 }
 
 func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()

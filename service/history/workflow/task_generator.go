@@ -141,13 +141,14 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 		return nil
 	}
 
-	r.mutableState.AddTasks(&tasks.WorkflowTimeoutTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: workflowRunExpirationTime,
-		Version:             startVersion,
-	})
-
+	if r.mutableState.IsWorkflowExecutionRunning() {
+		r.mutableState.AddTasks(&tasks.WorkflowTimeoutTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: workflowRunExpirationTime,
+			Version:             startVersion,
+		})
+	}
 	return nil
 }
 

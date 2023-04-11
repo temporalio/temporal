@@ -466,7 +466,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		metrics.AddMetricsContext(context.Background()),
 		tests.NamespaceID,
 		workflowExecution,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background())
@@ -1946,7 +1946,7 @@ func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we commonpb.Wor
 		metrics.AddMetricsContext(context.Background()),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil

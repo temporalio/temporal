@@ -157,6 +157,26 @@ func (s *executableTaskTrackerSuite) TestTrackTasks_Duplication() {
 	s.Equal(highWatermark2, *s.taskTracker.highWatermarkInfo)
 }
 
+func (s *executableTaskTrackerSuite) TestTrackTasks_Cancellation() {
+	task0 := NewMockTrackableExecutableTask(s.controller)
+	task0.EXPECT().TaskID().Return(rand.Int63()).AnyTimes()
+	task0.EXPECT().Cancel()
+	highWatermark0 := WatermarkInfo{
+		Watermark: task0.TaskID(),
+		Timestamp: time.Unix(0, rand.Int63()),
+	}
+
+	s.taskTracker.Cancel()
+	s.taskTracker.TrackTasks(highWatermark0, task0)
+
+	taskIDs := []int64{}
+	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
+		taskIDs = append(taskIDs, element.Value.(TrackableExecutableTask).TaskID())
+	}
+	s.Equal([]int64{task0.TaskID()}, taskIDs)
+	s.Equal(highWatermark0, *s.taskTracker.highWatermarkInfo)
+}
+
 func (s *executableTaskTrackerSuite) TestLowWatermark_Empty() {
 	taskIDs := []int64{}
 	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
@@ -283,4 +303,24 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_PendingTask() {
 		taskIDs = append(taskIDs, element.Value.(TrackableExecutableTask).TaskID())
 	}
 	s.Equal([]int64{task0.TaskID()}, taskIDs)
+}
+
+func (s *executableTaskTrackerSuite) TestCancellation() {
+	task0 := NewMockTrackableExecutableTask(s.controller)
+	task0.EXPECT().TaskID().Return(rand.Int63()).AnyTimes()
+	task0.EXPECT().Cancel()
+	highWatermark0 := WatermarkInfo{
+		Watermark: task0.TaskID(),
+		Timestamp: time.Unix(0, rand.Int63()),
+	}
+
+	s.taskTracker.TrackTasks(highWatermark0, task0)
+	s.taskTracker.Cancel()
+
+	taskIDs := []int64{}
+	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
+		taskIDs = append(taskIDs, element.Value.(TrackableExecutableTask).TaskID())
+	}
+	s.Equal([]int64{task0.TaskID()}, taskIDs)
+	s.Equal(highWatermark0, *s.taskTracker.highWatermarkInfo)
 }

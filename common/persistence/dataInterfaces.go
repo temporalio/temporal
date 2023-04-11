@@ -899,8 +899,6 @@ type (
 		TreeID string
 		// Get data from this shard
 		ShardID *int32
-		// optional: can provide treeID via branchToken if treeID is empty
-		BranchToken []byte
 	}
 
 	// HistoryBranchDetail contains detailed information of a branch

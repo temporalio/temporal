@@ -238,3 +238,17 @@ func (mr *MockExecutableTaskMockRecorder) TaskID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskID", reflect.TypeOf((*MockExecutableTask)(nil).TaskID))
 }
+
+// TerminalState mocks base method.
+func (m *MockExecutableTask) TerminalState() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TerminalState")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// TerminalState indicates an expected call of TerminalState.
+func (mr *MockExecutableTaskMockRecorder) TerminalState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminalState", reflect.TypeOf((*MockExecutableTask)(nil).TerminalState))
+}

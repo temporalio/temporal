@@ -107,12 +107,11 @@ func ReplicationStreamSchedulerLifetimeHooks(
 }
 
 func StreamReceiverMonitorProvider(
-	config *configs.Config,
 	processToolBox ProcessToolBox,
 ) StreamReceiverMonitor {
 	return NewStreamReceiverMonitor(
 		processToolBox,
-		config.EnableReplicationStream(),
+		processToolBox.Config.EnableReplicationStream(),
 	)
 }
 

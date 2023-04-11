@@ -168,7 +168,12 @@ func (h *HistoryStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
-	treeID, err := primitives.ValidateUUID(request.TreeID)
+	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
+
+	treeID, err := primitives.ValidateUUID(branch.TreeId)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
@@ -290,15 +295,20 @@ func (h *HistoryStore) DeleteHistoryBranch(
 	ctx context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
+	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	if err != nil {
+		return err
+	}
+
 	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-	batch.Query(v2templateDeleteBranch, request.TreeId, request.BranchId)
+	batch.Query(v2templateDeleteBranch, branch.TreeId, branch.BranchId)
 
 	// delete each branch range
 	for _, br := range request.BranchRanges {
-		h.deleteBranchRangeNodes(batch, request.TreeId, br.BranchId, br.BeginNodeId)
+		h.deleteBranchRangeNodes(batch, branch.TreeId, br.BranchId, br.BeginNodeId)
 	}
 
-	err := h.Session.ExecuteBatch(batch)
+	err = h.Session.ExecuteBatch(batch)
 	if err != nil {
 		return gocql.ConvertError("DeleteHistoryBranch", err)
 	}

@@ -243,6 +243,18 @@ func (m *MockExecutableTaskTracker) EXPECT() *MockExecutableTaskTrackerMockRecor
 	return m.recorder
 }
 
+// Cancel mocks base method.
+func (m *MockExecutableTaskTracker) Cancel() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Cancel")
+}
+
+// Cancel indicates an expected call of Cancel.
+func (mr *MockExecutableTaskTrackerMockRecorder) Cancel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cancel", reflect.TypeOf((*MockExecutableTaskTracker)(nil).Cancel))
+}
+
 // LowWatermark mocks base method.
 func (m *MockExecutableTaskTracker) LowWatermark() *WatermarkInfo {
 	m.ctrl.T.Helper()
