@@ -85,6 +85,7 @@ func (r *workflowRebuilderImpl) rebuild(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		workflowKey,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return err
