@@ -610,7 +610,7 @@ func (p *ackMgrImpl) processReplication(
 		ctx,
 		namespaceID,
 		execution,
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return nil, err
@@ -659,7 +659,7 @@ func (p *ackMgrImpl) processNewRunReplication(
 				WorkflowId: workflowID,
 				RunId:      newRunID,
 			},
-			workflow.CallerTypeTask,
+			workflow.LockPriorityLow,
 		)
 		if err != nil {
 			return nil, err

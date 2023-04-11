@@ -49,6 +49,7 @@ func GetAndUpdateWorkflowWithNew(
 		reqClock,
 		consistencyCheckFn,
 		workflowKey,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return err

@@ -364,6 +364,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			token.WorkflowId,
 			token.RunId,
 		),
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -736,6 +737,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 			req.WorkflowExecution.WorkflowId,
 			req.WorkflowExecution.RunId,
 		),
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err

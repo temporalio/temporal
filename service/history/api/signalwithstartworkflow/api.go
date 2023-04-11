@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -59,6 +60,7 @@ func Invoke(
 			signalWithStartRequest.SignalWithStartRequest.WorkflowId,
 			"",
 		),
+		workflow.LockPriorityHigh,
 	)
 	switch err.(type) {
 	case nil:

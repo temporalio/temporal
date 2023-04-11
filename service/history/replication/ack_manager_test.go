@@ -269,7 +269,7 @@ func (s *ackManagerSuite) TestSyncActivity_WorkflowCompleted() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
 	release(nil)
@@ -309,7 +309,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityCompleted() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 
 	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
@@ -352,7 +352,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRetry() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 
 	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
@@ -453,7 +453,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 
 	context.(*workflow.ContextImpl).MutableState = s.mockMutableState

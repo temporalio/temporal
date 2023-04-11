@@ -194,7 +194,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 		ctx,
 		s.namespace.ID(),
 		s.request.StartRequest.WorkflowId,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -443,7 +443,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 		ctx,
 		s.namespace.ID(),
 		commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err

@@ -107,7 +107,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		namespaceID,
 		execution1,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	ctx.(*workflow.ContextImpl).MutableState = mockMS1
@@ -116,7 +116,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		namespaceID,
 		execution1,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
@@ -130,7 +130,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		namespaceID,
 		execution2,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	s.NotEqual(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
@@ -150,7 +150,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 
@@ -164,7 +164,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we2,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.NotNil(err2)
 
@@ -175,7 +175,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we2,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err3)
 	release2(err3)
@@ -185,7 +185,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err4)
 	s.False(ctx == newContext)
@@ -205,7 +205,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
@@ -221,7 +221,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 
@@ -236,7 +236,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	s.Nil(ctx.(*workflow.ContextImpl).MutableState)
@@ -271,7 +271,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 				WorkflowId: workflowId,
 				RunId:      runID,
 			},
-			workflow.CallerTypeAPI,
+			workflow.LockPriorityHigh,
 		)
 		s.Nil(err)
 		// since each time the is reset to nil
@@ -297,7 +297,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 			WorkflowId: workflowId,
 			RunId:      runID,
 		},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
@@ -344,7 +344,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 					WorkflowId: workflowID,
 					RunId:      runID,
 				},
-				workflow.CallerTypeAPI,
+				workflow.LockPriorityHigh,
 			)
 			if err == nil {
 				break
@@ -375,7 +375,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 		ctx,
 		tests.NamespaceID,
 		tests.WorkflowID,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	defer currentRelease(nil)
@@ -391,7 +391,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	defer release(nil)

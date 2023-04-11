@@ -105,7 +105,7 @@ func (r *ActivityReplicatorImpl) SyncActivity(
 		ctx,
 		namespaceID,
 		execution,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id

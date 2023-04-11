@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -61,6 +62,7 @@ func Invoke(
 			request.ParentExecution.WorkflowId,
 			request.ParentExecution.RunId,
 		),
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return nil, err

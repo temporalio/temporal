@@ -247,7 +247,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err
@@ -353,7 +353,7 @@ func (r *HistoryReplicatorImpl) applyEvents(
 		ctx,
 		task.getNamespaceID(),
 		*task.getExecution(),
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id

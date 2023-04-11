@@ -61,12 +61,12 @@ const (
 )
 
 const (
-	CallerTypeAPI  CallerType = 0
-	CallerTypeTask CallerType = 1
+	LockPriorityHigh LockPriority = 0
+	LockPriorityLow  LockPriority = 1
 )
 
 type (
-	CallerType int
+	LockPriority int
 
 	Context interface {
 		GetWorkflowKey() definition.WorkflowKey
@@ -75,8 +75,8 @@ type (
 		LoadExecutionStats(ctx context.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
 
-		Lock(ctx context.Context, caller CallerType) error
-		Unlock(caller CallerType)
+		Lock(ctx context.Context, lockPriority LockPriority) error
+		Unlock(lockPriority LockPriority)
 
 		GetHistorySize() int64
 		SetHistorySize(size int64)
@@ -189,28 +189,28 @@ func NewContext(
 
 func (c *ContextImpl) Lock(
 	ctx context.Context,
-	caller CallerType,
+	lockPriority LockPriority,
 ) error {
-	switch caller {
-	case CallerTypeAPI:
+	switch lockPriority {
+	case LockPriorityHigh:
 		return c.mutex.LockHigh(ctx)
-	case CallerTypeTask:
+	case LockPriorityLow:
 		return c.mutex.LockLow(ctx)
 	default:
-		panic(fmt.Sprintf("unknown caller type: %v", caller))
+		panic(fmt.Sprintf("unknown lock priority: %v", lockPriority))
 	}
 }
 
 func (c *ContextImpl) Unlock(
-	caller CallerType,
+	lockPriority LockPriority,
 ) {
-	switch caller {
-	case CallerTypeAPI:
+	switch lockPriority {
+	case LockPriorityHigh:
 		c.mutex.UnlockHigh()
-	case CallerTypeTask:
+	case LockPriorityLow:
 		c.mutex.UnlockLow()
 	default:
-		panic(fmt.Sprintf("unknown caller type: %v", caller))
+		panic(fmt.Sprintf("unknown lock priority: %v", lockPriority))
 	}
 }
 
