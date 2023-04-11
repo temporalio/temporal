@@ -245,6 +245,20 @@ func (c *metricClient) PollMutableState(
 	return c.client.PollMutableState(ctx, request, opts...)
 }
 
+func (c *metricClient) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *historyservice.PollWorkflowExecutionUpdateRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.PollWorkflowExecutionUpdateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientPollWorkflowExecutionUpdateScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollWorkflowExecutionUpdate(ctx, request, opts...)
+}
+
 func (c *metricClient) PurgeDLQMessages(
 	ctx context.Context,
 	request *historyservice.PurgeDLQMessagesRequest,

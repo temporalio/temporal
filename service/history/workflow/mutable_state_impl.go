@@ -134,6 +134,8 @@ type (
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
 		deleteSignalRequestedIDs  map[string]struct{} // Deleted signaled requestId
 
+		updateOutcomes map[string]*historyspb.EventHistoryPointer
+
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
 
@@ -218,6 +220,8 @@ func NewMutableState(
 		updateSignalRequestedIDs:  make(map[string]struct{}),
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
+
+		updateOutcomes: make(map[string]*historyspb.EventHistoryPointer),
 
 		currentVersion:   namespaceEntry.FailoverVersion(),
 		bufferEventsInDB: nil,
@@ -317,6 +321,7 @@ func newMutableStateFromDB(
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.executionInfo = dbRecord.ExecutionInfo
+	mutableState.updateOutcomes = dbRecord.UpdateOutcomes
 
 	mutableState.hBuilder = NewMutableHistoryBuilder(
 		mutableState.timeSource,
@@ -394,6 +399,7 @@ func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState 
 		NextEventId:         ms.hBuilder.NextEventID(),
 		BufferedEvents:      ms.bufferEventsInDB,
 		Checksum:            ms.checksum,
+		UpdateOutcomes:      ms.updateOutcomes,
 	}
 
 	return common.CloneProto(msProto)
@@ -648,6 +654,33 @@ func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
 
 func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
+}
+
+func (ms *MutableStateImpl) GetUpdateOutcome(
+	ctx context.Context,
+	updateID string,
+) (*updatepb.Outcome, error) {
+	ptr, ok := ms.updateOutcomes[updateID]
+	if !ok || ptr.EventId == 0 {
+		return nil, serviceerror.NewNotFound("update not found")
+	}
+	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(ptr.EventId)
+	if err != nil {
+		return nil, err
+	}
+	eventKey := events.EventKey{
+		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
+		WorkflowID:  ms.executionInfo.WorkflowId,
+		RunID:       ms.executionState.RunId,
+		EventID:     ptr.EventId,
+		Version:     version,
+	}
+	event, err := ms.eventsCache.GetEvent(ctx, eventKey, ptr.EventId, currentBranchToken)
+	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
+	if attrs == nil {
+		return nil, serviceerror.NewInternal("event pointer does not reference an update completed event")
+	}
+	return attrs.GetOutcome(), nil
 }
 
 func (ms *MutableStateImpl) GetActivityScheduledEvent(
@@ -4066,6 +4099,7 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		RequestCancelInfos:  ms.pendingRequestCancelInfoIDs,
 		SignalInfos:         ms.pendingSignalInfoIDs,
 		SignalRequestedIDs:  ms.pendingSignalRequestedIDs,
+		UpdateOutcomes:      ms.updateOutcomes,
 
 		Tasks: ms.InsertTasks,
 

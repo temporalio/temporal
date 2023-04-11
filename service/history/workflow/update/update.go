@@ -85,3 +85,7 @@ func (u *Update) sendReject(f *failurepb.Failure) {
 		},
 	}, nil)
 }
+
+func (u *Update) Outcome() future.Future[*updatepb.Outcome] {
+	return u.out
+}

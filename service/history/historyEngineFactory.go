@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -60,6 +61,7 @@ type (
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
 		TracerProvider                  trace.TracerProvider
 		PersistenceVisibilityMgr        manager.VisibilityManager
+		WorkflowObservers               *workflow.ObserverSet
 	}
 
 	historyEngineFactory struct {
@@ -70,10 +72,11 @@ type (
 func (f *historyEngineFactory) CreateEngine(
 	shard shard.Context,
 ) shard.Engine {
-	workflowCache := f.NewCacheFn(shard)
+	workflowCache := f.NewCacheFn(shard, f.WorkflowObservers)
 	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, workflowCache)
 	return NewEngineWithShardContext(
 		shard,
+		f.WorkflowObservers,
 		f.ClientBean,
 		f.MatchingClient,
 		f.SdkClientFactory,

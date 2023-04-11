@@ -76,9 +76,14 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 		config         *configs.Config
+		observers      Observers
 	}
 
-	NewCacheFn func(shard shard.Context) Cache
+	Observers interface {
+		ConnectAll(context.Context, workflow.Context)
+	}
+
+	NewCacheFn func(shard shard.Context, observers Observers) Cache
 )
 
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
@@ -88,7 +93,7 @@ const (
 	cacheReleased    int32 = 1
 )
 
-func NewCache(shard shard.Context) Cache {
+func NewCache(shard shard.Context, observers Observers) Cache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
 	opts.InitialCapacity = config.HistoryCacheInitialSize()
@@ -101,6 +106,7 @@ func NewCache(shard shard.Context) Cache {
 		logger:         log.With(shard.GetLogger(), tag.ComponentHistoryCache),
 		metricsHandler: shard.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
 		config:         config,
+		observers:      observers,
 	}
 }
 
@@ -204,6 +210,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		handler.Counter(metrics.AcquireLockFailedCounter.GetMetricName()).Record(1)
 		return nil, nil, err
 	}
+	c.observers.ConnectAll(ctx, workflowCtx)
 	return workflowCtx, releaseFunc, nil
 }
 

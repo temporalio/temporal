@@ -58,7 +58,18 @@ type (
 
 		cache Cache
 	}
+
+	mockObserverSet struct {
+		Observers
+		ConnectAllFunc func(context.Context, workflow.Context)
+	}
 )
+
+func (mos *mockObserverSet) ConnectAll(ctx context.Context, wfctx workflow.Context) {
+	mos.ConnectAllFunc(ctx, wfctx)
+}
+
+var noObservers = &mockObserverSet{ConnectAllFunc: func(context.Context, workflow.Context) {}}
 
 func TestWorkflowCacheSuite(t *testing.T) {
 	s := new(workflowCacheSuite)
@@ -94,7 +105,7 @@ func (s *workflowCacheSuite) TearDownTest() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCacheBasic() {
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, noObservers)
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -139,7 +150,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, noObservers)
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
@@ -194,7 +205,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, noObservers)
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-clear",
 		RunId:      uuid.New(),
@@ -246,7 +257,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 	coroutineCount := 50
 
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, noObservers)
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -310,7 +321,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
 	s.mockShard.GetConfig().HistoryCacheTTL = dynamicconfig.GetDurationPropertyFn(time.Nanosecond)
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, noObservers)
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -365,7 +376,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, noObservers)
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	_, currentRelease, err := s.cache.GetOrCreateCurrentWorkflowExecution(
@@ -397,4 +408,24 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 	s.True(ok)
 	s.Greater(latency2, latency1)
 
+}
+
+func (s *workflowCacheSuite) TestHistoryCache_ReconnectObservers() {
+	connectAllInvocations := 0
+	observers := &mockObserverSet{
+		ConnectAllFunc: func(context.Context, workflow.Context) {
+			connectAllInvocations++
+		},
+	}
+	s.cache = NewCache(s.mockShard, observers)
+
+	_, release, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+		context.TODO(),
+		tests.NamespaceID,
+		tests.WorkflowID,
+		workflow.CallerTypeAPI,
+	)
+	s.NoError(err)
+	defer release(nil)
+	s.Require().EqualValues(1, connectAllInvocations)
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/server/common/future"
 )
 
 type (
@@ -40,6 +41,8 @@ type (
 
 		HasPending(filterMessages []*protocolpb.Message) bool
 		ProcessIncomingMessages(messages []*protocolpb.Message) error
+
+		Outcome(protoInstID string) (future.Future[*updatepb.Outcome], bool)
 	}
 
 	Duplicate bool
@@ -58,6 +61,16 @@ func NewRegistry() *RegistryImpl {
 	return &RegistryImpl{
 		updates: make(map[string]*Update),
 	}
+}
+
+func (r *RegistryImpl) Outcome(protoInstID string) (future.Future[*updatepb.Outcome], bool) {
+	r.Lock()
+	defer r.Unlock()
+	upd, ok := r.updates[protoInstID]
+	if !ok {
+		return nil, false
+	}
+	return upd.out, true
 }
 
 func (r *RegistryImpl) Add(request *updatepb.Request) (*Update, Duplicate, RemoveFunc) {

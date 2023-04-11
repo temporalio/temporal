@@ -357,6 +357,8 @@ const (
 	HistoryClientGetMutableStateScope = "HistoryClientGetMutableState"
 	// HistoryClientPollMutableStateScope tracks RPC calls to history service
 	HistoryClientPollMutableStateScope = "HistoryClientPollMutableState"
+	// HistoryClientPollWorkflowExecutionUpdateScope tracks RPC calls to history service
+	HistoryClientPollWorkflowExecutionUpdateScope = "HistoryClientPollPollWorkflowExecutionUpdate"
 	// HistoryClientResetStickyTaskQueueScope tracks RPC calls to history service
 	HistoryClientResetStickyTaskQueueScope = "HistoryClientResetStickyTaskQueue"
 	// HistoryClientDescribeWorkflowExecutionScope tracks RPC calls to history service

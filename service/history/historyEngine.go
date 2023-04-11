@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
@@ -87,6 +88,7 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -127,6 +129,7 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		workflowObservers          *workflow.ObserverSet
 		tracer                     trace.Tracer
 	}
 )
@@ -134,6 +137,7 @@ type (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
+	observers *workflow.ObserverSet,
 	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
@@ -184,6 +188,7 @@ func NewEngineWithShardContext(
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
+		workflowObservers:          observers,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -545,6 +550,13 @@ func (e *historyEngineImpl) UpdateWorkflowExecution(
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 
 	return updateworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker, e.matchingClient)
+}
+
+func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	req *historyservice.PollWorkflowExecutionUpdateRequest,
+) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	return pollupdate.Invoke(ctx, req, e.workflowConsistencyChecker.GetWorkflowContext, e.workflowObservers)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
