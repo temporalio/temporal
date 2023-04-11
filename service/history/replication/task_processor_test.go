@@ -116,8 +116,12 @@ func (s *taskProcessorSuite) SetupTest() {
 			RangeId: 1,
 			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
 				tasks.CategoryReplication.ID(): {
-					ClusterAckLevel: map[string]int64{
-						cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
+					ClusterConsumerState: map[string]*persistencespb.QueueConsumerState{
+						cluster.TestAlternativeClusterName: {
+							ShardWatermarks: map[int32]int64{
+								s.shardID: persistence.EmptyQueueMessageID,
+							},
+						},
 					},
 				},
 			},

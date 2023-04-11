@@ -28,7 +28,13 @@ import "temporal/server/api/persistence/v1/tasks.proto";
 
 message QueueAckLevel {
     int64 ack_level = 1;
+    // Deprecated. Use cluster_consumer_state instead.
     map<string, int64> cluster_ack_level = 2;
+    map<string, QueueConsumerState> cluster_consumer_state = 3;
+}
+
+message QueueConsumerState {
+    map<int32, int64> shard_watermarks = 1;
 }
 
 message QueueState {

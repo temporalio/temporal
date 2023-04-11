@@ -358,7 +358,7 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 	categoryID := category.ID()
 	if _, ok := s.shardInfo.QueueAckLevels[categoryID]; !ok {
 		s.shardInfo.QueueAckLevels[categoryID] = &persistencespb.QueueAckLevel{
-			ClusterAckLevel: make(map[string]int64),
+			ClusterConsumerState: make(map[string]*persistencespb.QueueConsumerState),
 		}
 	}
 	persistenceAckLevel := convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
@@ -368,10 +368,12 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 	// as well to prevent loading too many tombstones if the cluster ack level is used later
 	// this may happen when adding back a removed cluster or rolling back the change for using
 	// single queue in timer/transfer queue processor
-	clusterAckLevel := s.shardInfo.QueueAckLevels[categoryID].ClusterAckLevel
-	for clusterName, persistenceClusterAckLevel := range clusterAckLevel {
-		if persistenceClusterAckLevel < persistenceAckLevel {
-			clusterAckLevel[clusterName] = persistenceAckLevel
+	clusterConsumerState := s.shardInfo.QueueAckLevels[categoryID].ClusterConsumerState
+	for _, consumerState := range clusterConsumerState {
+		for shardID, watermark := range consumerState.ShardWatermarks {
+			if watermark < persistenceAckLevel {
+				consumerState.ShardWatermarks[shardID] = persistenceAckLevel
+			}
 		}
 	}
 
@@ -391,17 +393,18 @@ func (s *ContextImpl) GetQueueClusterAckLevel(
 	s.rLock()
 	defer s.rUnlock()
 
-	return s.getQueueClusterAckLevelLocked(category, cluster)
-}
-
-func (s *ContextImpl) getQueueClusterAckLevelLocked(
-	category tasks.Category,
-	cluster string,
-) tasks.Key {
+	lowWatermark := int64(math.MaxInt64)
 	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[category.ID()]; ok {
-		if ackLevel, ok := queueAckLevel.ClusterAckLevel[cluster]; ok {
-			return convertPersistenceAckLevelToTaskKey(category.Type(), ackLevel)
+		for _, consumerState := range queueAckLevel.ClusterConsumerState {
+			for _, watermark := range consumerState.ShardWatermarks {
+				if watermark < lowWatermark {
+					lowWatermark = watermark
+				}
+			}
 		}
+	}
+	if lowWatermark != int64(math.MaxInt64) {
+		return convertPersistenceAckLevelToTaskKey(category.Type(), lowWatermark)
 	}
 
 	// otherwise, default to existing ack level, which belongs to local cluster
@@ -419,10 +422,14 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 
 	if _, ok := s.shardInfo.QueueAckLevels[category.ID()]; !ok {
 		s.shardInfo.QueueAckLevels[category.ID()] = &persistencespb.QueueAckLevel{
-			ClusterAckLevel: make(map[string]int64),
+			ClusterConsumerState: make(map[string]*persistencespb.QueueConsumerState),
 		}
 	}
-	s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel[cluster] = convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
+	s.shardInfo.QueueAckLevels[category.ID()].ClusterConsumerState[cluster] = &persistencespb.QueueConsumerState{
+		ShardWatermarks: map[int32]int64{
+			s.shardID: convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel),
+		},
+	}
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -469,14 +476,18 @@ func (s *ContextImpl) UpdateQueueState(
 
 	if _, ok := s.shardInfo.QueueAckLevels[categoryID]; !ok {
 		s.shardInfo.QueueAckLevels[categoryID] = &persistencespb.QueueAckLevel{
-			ClusterAckLevel: make(map[string]int64),
+			ClusterConsumerState: make(map[string]*persistencespb.QueueConsumerState),
 		}
 	}
 	s.shardInfo.QueueAckLevels[categoryID].AckLevel = persistenceAckLevel
 
-	clusterAckLevel := s.shardInfo.QueueAckLevels[categoryID].ClusterAckLevel
-	for clusterName := range clusterAckLevel {
-		clusterAckLevel[clusterName] = persistenceAckLevel
+	clusterConsumerState := s.shardInfo.QueueAckLevels[categoryID].ClusterConsumerState
+	for clusterName := range clusterConsumerState {
+		clusterConsumerState[clusterName] = &persistencespb.QueueConsumerState{
+			ShardWatermarks: map[int32]int64{
+				s.shardID: persistenceAckLevel,
+			},
+		}
 	}
 
 	s.shardInfo.StolenSinceRenew = 0
@@ -1173,7 +1184,7 @@ func (s *ContextImpl) updateRangeIfNeededLocked() error {
 }
 
 func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
-	updatedShardInfo := copyShardInfo(s.shardInfo)
+	updatedShardInfo := storeShardInfoCompatibilityCheck(copyShardInfo(s.shardInfo))
 	updatedShardInfo.RangeId++
 	if isStealing {
 		updatedShardInfo.StolenSinceRenew++
@@ -1229,7 +1240,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		return nil
 	}
-	updatedShardInfo := copyShardInfo(s.shardInfo)
+	updatedShardInfo := storeShardInfoCompatibilityCheck(copyShardInfo(s.shardInfo))
 	s.emitShardInfoMetricsLogsLocked()
 
 	ctx, cancel := s.newIOContext()
@@ -1754,13 +1765,9 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		s.contextTaggedLogger.Error("Failed to load shard", tag.Error(err))
 		return err
 	}
-	shardInfo := resp.ShardInfo
-
-	// shardInfo is a fresh value, so we don't really need to copy, but
-	// copyShardInfo also ensures that all maps are non-nil
-	updatedShardInfo := copyShardInfo(shardInfo)
+	shardInfo := loadShardInfoCompatibilityCheck(copyShardInfo(resp.ShardInfo))
 	*ownershipChanged = shardInfo.Owner != s.owner
-	updatedShardInfo.Owner = s.owner
+	shardInfo.Owner = s.owner
 
 	// initialize the cluster current time to be the same as ack level
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
@@ -1784,10 +1791,12 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 				maxReadTime = util.MaxTime(maxReadTime, currentTime)
 			}
 
-			if queueAckLevels.ClusterAckLevel != nil {
-				if ackLevel, ok := queueAckLevels.ClusterAckLevel[clusterName]; ok {
-					currentTime := timestamp.UnixOrZeroTime(ackLevel)
-					maxReadTime = util.MaxTime(maxReadTime, currentTime)
+			if queueAckLevels.ClusterConsumerState != nil {
+				for _, consumerState := range queueAckLevels.ClusterConsumerState {
+					for _, watermark := range consumerState.ShardWatermarks {
+						currentTime := timestamp.UnixOrZeroTime(watermark)
+						maxReadTime = util.MaxTime(maxReadTime, currentTime)
+					}
 				}
 			}
 		}
@@ -1819,7 +1828,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.wLock()
 	defer s.wUnlock()
 
-	s.shardInfo = updatedShardInfo
+	s.shardInfo = shardInfo
 	s.remoteClusterInfos = remoteClusterInfos
 	s.scheduledTaskMaxReadLevel = scheduledTaskMaxReadLevel
 
@@ -2055,8 +2064,9 @@ func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInf
 	queueAckLevels := make(map[int32]*persistencespb.QueueAckLevel)
 	for category, ackLevels := range shardInfo.QueueAckLevels {
 		queueAckLevels[category] = &persistencespb.QueueAckLevel{
-			AckLevel:        ackLevels.AckLevel,
-			ClusterAckLevel: maps.Clone(ackLevels.ClusterAckLevel),
+			AckLevel:             ackLevels.AckLevel,
+			ClusterAckLevel:      maps.Clone(ackLevels.ClusterAckLevel),
+			ClusterConsumerState: maps.Clone(ackLevels.ClusterConsumerState),
 		}
 	}
 
@@ -2071,6 +2081,60 @@ func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInf
 		QueueAckLevels:               queueAckLevels,
 		QueueStates:                  shardInfo.QueueStates,
 	}
+}
+
+func storeShardInfoCompatibilityCheck(
+	shardInfo *persistencespb.ShardInfo,
+) *persistencespb.ShardInfo {
+	// TODO this section maintains the forward / backward compatibility
+	//  should be removed once the migration is done
+	//  propagate info from ClusterConsumerState -> ClusterAckLevel
+	//  also see ShardInfoFromBlob
+	for _, queueAckLevel := range shardInfo.QueueAckLevels {
+		if queueAckLevel.ClusterAckLevel == nil {
+			queueAckLevel.ClusterAckLevel = make(map[string]int64)
+		}
+		for consumerCluster, consumerState := range queueAckLevel.ClusterConsumerState {
+			lowWatermark := int64(math.MaxInt64)
+			for _, watermark := range consumerState.ShardWatermarks {
+				if watermark < lowWatermark {
+					lowWatermark = watermark
+				}
+			}
+			if lowWatermark != int64(math.MaxInt64) {
+				queueAckLevel.ClusterAckLevel[consumerCluster] = lowWatermark
+			}
+		}
+	}
+	return shardInfo
+}
+
+func loadShardInfoCompatibilityCheck(
+	shardInfo *persistencespb.ShardInfo,
+) *persistencespb.ShardInfo {
+	// TODO this section maintains the forward / backward compatibility
+	//  should be removed once the migration is done
+	//  propagate info from ClusterAckLevel-> ClusterConsumerState
+	//  also see ShardInfoToBlob
+	for _, queueAckLevel := range shardInfo.QueueAckLevels {
+		for consumerCluster, ackLevel := range queueAckLevel.ClusterAckLevel {
+			// NOTE this will only handle forward / backward compatibility if # of shards are the same
+			consumerState, ok := queueAckLevel.ClusterConsumerState[consumerCluster]
+			if !ok {
+				consumerState = &persistencespb.QueueConsumerState{
+					ShardWatermarks: make(map[int32]int64),
+				}
+				queueAckLevel.ClusterConsumerState[consumerCluster] = consumerState
+			}
+			watermark, ok := consumerState.ShardWatermarks[shardInfo.ShardId]
+			if !ok || watermark < ackLevel {
+				consumerState.ShardWatermarks[shardInfo.ShardId] = ackLevel
+			}
+		}
+		// clear ClusterAckLevel to force new logic to only use ClusterConsumerState
+		queueAckLevel.ClusterAckLevel = nil
+	}
+	return shardInfo
 }
 
 func (s *ContextImpl) GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error) {

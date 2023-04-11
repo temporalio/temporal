@@ -346,6 +346,9 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob) (*persistenc
 		if queueAckLevel.ClusterAckLevel == nil {
 			queueAckLevel.ClusterAckLevel = make(map[string]int64)
 		}
+		if queueAckLevel.ClusterConsumerState == nil {
+			queueAckLevel.ClusterConsumerState = make(map[string]*persistencespb.QueueConsumerState)
+		}
 	}
 
 	if shardInfo.GetQueueStates() == nil {

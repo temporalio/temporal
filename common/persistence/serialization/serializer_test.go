@@ -169,7 +169,8 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
 	categoryID := rand.Int31()
 	shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
 	shardInfo.QueueAckLevels[categoryID] = &persistencespb.QueueAckLevel{
-		ClusterAckLevel: make(map[string]int64),
+		ClusterAckLevel:      make(map[string]int64),
+		ClusterConsumerState: make(map[string]*persistencespb.QueueConsumerState),
 	}
 	shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
 	shardInfo.QueueStates[categoryID] = &persistencespb.QueueState{

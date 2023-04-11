@@ -137,8 +137,12 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
 			tasks.CategoryTimer.ID(): {
 				AckLevel: now.Add(-time.Minute).UnixNano(),
-				ClusterAckLevel: map[string]int64{
-					cluster.TestCurrentClusterName: now.UnixNano(),
+				ClusterConsumerState: map[string]*persistencespb.QueueConsumerState{
+					cluster.TestCurrentClusterName: {
+						ShardWatermarks: map[int32]int64{
+							s.mockShard.shardID: now.UnixNano(),
+						},
+					},
 				},
 			},
 		},
@@ -175,8 +179,10 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
 		s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(timerQueueAckLevels.AckLevel)))
 
-		if clusterAckLevel, ok := timerQueueAckLevels.ClusterAckLevel[clusterName]; ok {
-			s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(clusterAckLevel)))
+		if consumerState, ok := timerQueueAckLevels.ClusterConsumerState[clusterName]; ok {
+			for _, watermark := range consumerState.ShardWatermarks {
+				s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(watermark)))
+			}
 		}
 
 		s.False(maxReadLevel.Before(timestamp.TimeValue(timerQueueStates.ExclusiveReaderHighWatermark.FireTime)))
@@ -445,4 +451,51 @@ func (s *contextSuite) TestHandoverNamespace() {
 
 	_, ok = handoverNS[namespaceEntry.Name().String()]
 	s.False(ok)
+}
+
+func (s *contextSuite) TestAckCompatibility_OldToNew() {
+	var shardInfo persistencespb.ShardInfo
+
+	shardInfo.QueueAckLevels = map[int32]*persistencespb.QueueAckLevel{
+		21: {
+			AckLevel: rand.Int63(),
+			ClusterAckLevel: map[string]int64{
+				"random cluster name": 42,
+			},
+			ClusterConsumerState: map[string]*persistencespb.QueueConsumerState{},
+		},
+	}
+
+	loadShardInfoCompatibilityCheck(&shardInfo)
+	s.Nil(shardInfo.QueueAckLevels[21].ClusterAckLevel)
+	s.Equal(map[string]*persistencespb.QueueConsumerState{
+		"random cluster name": {
+			ShardWatermarks: map[int32]int64{
+				shardInfo.ShardId: 42,
+			},
+		},
+	}, shardInfo.QueueAckLevels[21].ClusterConsumerState)
+}
+
+func (s *contextSuite) TestAckCompatibility_NewToOld() {
+	var shardInfo persistencespb.ShardInfo
+
+	shardInfo.QueueAckLevels = map[int32]*persistencespb.QueueAckLevel{
+		21: {
+			AckLevel:        rand.Int63(),
+			ClusterAckLevel: map[string]int64{},
+			ClusterConsumerState: map[string]*persistencespb.QueueConsumerState{
+				"random cluster name": {
+					ShardWatermarks: map[int32]int64{
+						shardInfo.ShardId: 42,
+					},
+				},
+			},
+		},
+	}
+
+	storeShardInfoCompatibilityCheck(&shardInfo)
+	s.Equal(map[string]int64{
+		"random cluster name": 42,
+	}, shardInfo.QueueAckLevels[21].ClusterAckLevel)
 }

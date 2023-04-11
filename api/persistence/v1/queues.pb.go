@@ -51,8 +51,10 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type QueueAckLevel struct {
-	AckLevel        int64            `protobuf:"varint,1,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
-	ClusterAckLevel map[string]int64 `protobuf:"bytes,2,rep,name=cluster_ack_level,json=clusterAckLevel,proto3" json:"cluster_ack_level,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	AckLevel int64 `protobuf:"varint,1,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
+	// Deprecated. Use cluster_consumer_state instead.
+	ClusterAckLevel      map[string]int64               `protobuf:"bytes,2,rep,name=cluster_ack_level,json=clusterAckLevel,proto3" json:"cluster_ack_level,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	ClusterConsumerState map[string]*QueueConsumerState `protobuf:"bytes,3,rep,name=cluster_consumer_state,json=clusterConsumerState,proto3" json:"cluster_consumer_state,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *QueueAckLevel) Reset()      { *m = QueueAckLevel{} }
@@ -101,6 +103,56 @@ func (m *QueueAckLevel) GetClusterAckLevel() map[string]int64 {
 	return nil
 }
 
+func (m *QueueAckLevel) GetClusterConsumerState() map[string]*QueueConsumerState {
+	if m != nil {
+		return m.ClusterConsumerState
+	}
+	return nil
+}
+
+type QueueConsumerState struct {
+	ShardWatermarks map[int32]int64 `protobuf:"bytes,1,rep,name=shard_watermarks,json=shardWatermarks,proto3" json:"shard_watermarks,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+}
+
+func (m *QueueConsumerState) Reset()      { *m = QueueConsumerState{} }
+func (*QueueConsumerState) ProtoMessage() {}
+func (*QueueConsumerState) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b7fa5f143ac80378, []int{1}
+}
+func (m *QueueConsumerState) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueueConsumerState) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueueConsumerState.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueueConsumerState) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueueConsumerState.Merge(m, src)
+}
+func (m *QueueConsumerState) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueueConsumerState) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueueConsumerState.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueueConsumerState proto.InternalMessageInfo
+
+func (m *QueueConsumerState) GetShardWatermarks() map[int32]int64 {
+	if m != nil {
+		return m.ShardWatermarks
+	}
+	return nil
+}
+
 type QueueState struct {
 	ReaderStates                 map[int32]*QueueReaderState `protobuf:"bytes,1,rep,name=reader_states,json=readerStates,proto3" json:"reader_states,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	ExclusiveReaderHighWatermark *TaskKey                    `protobuf:"bytes,2,opt,name=exclusive_reader_high_watermark,json=exclusiveReaderHighWatermark,proto3" json:"exclusive_reader_high_watermark,omitempty"`
@@ -109,7 +161,7 @@ type QueueState struct {
 func (m *QueueState) Reset()      { *m = QueueState{} }
 func (*QueueState) ProtoMessage() {}
 func (*QueueState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b7fa5f143ac80378, []int{1}
+	return fileDescriptor_b7fa5f143ac80378, []int{2}
 }
 func (m *QueueState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -159,7 +211,7 @@ type QueueReaderState struct {
 func (m *QueueReaderState) Reset()      { *m = QueueReaderState{} }
 func (*QueueReaderState) ProtoMessage() {}
 func (*QueueReaderState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b7fa5f143ac80378, []int{2}
+	return fileDescriptor_b7fa5f143ac80378, []int{3}
 }
 func (m *QueueReaderState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -203,7 +255,7 @@ type QueueSliceScope struct {
 func (m *QueueSliceScope) Reset()      { *m = QueueSliceScope{} }
 func (*QueueSliceScope) ProtoMessage() {}
 func (*QueueSliceScope) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b7fa5f143ac80378, []int{3}
+	return fileDescriptor_b7fa5f143ac80378, []int{4}
 }
 func (m *QueueSliceScope) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -254,7 +306,7 @@ type QueueSliceRange struct {
 func (m *QueueSliceRange) Reset()      { *m = QueueSliceRange{} }
 func (*QueueSliceRange) ProtoMessage() {}
 func (*QueueSliceRange) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b7fa5f143ac80378, []int{4}
+	return fileDescriptor_b7fa5f143ac80378, []int{5}
 }
 func (m *QueueSliceRange) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -300,6 +352,9 @@ func (m *QueueSliceRange) GetExclusiveMax() *TaskKey {
 func init() {
 	proto.RegisterType((*QueueAckLevel)(nil), "temporal.server.api.persistence.v1.QueueAckLevel")
 	proto.RegisterMapType((map[string]int64)(nil), "temporal.server.api.persistence.v1.QueueAckLevel.ClusterAckLevelEntry")
+	proto.RegisterMapType((map[string]*QueueConsumerState)(nil), "temporal.server.api.persistence.v1.QueueAckLevel.ClusterConsumerStateEntry")
+	proto.RegisterType((*QueueConsumerState)(nil), "temporal.server.api.persistence.v1.QueueConsumerState")
+	proto.RegisterMapType((map[int32]int64)(nil), "temporal.server.api.persistence.v1.QueueConsumerState.ShardWatermarksEntry")
 	proto.RegisterType((*QueueState)(nil), "temporal.server.api.persistence.v1.QueueState")
 	proto.RegisterMapType((map[int32]*QueueReaderState)(nil), "temporal.server.api.persistence.v1.QueueState.ReaderStatesEntry")
 	proto.RegisterType((*QueueReaderState)(nil), "temporal.server.api.persistence.v1.QueueReaderState")
@@ -312,41 +367,47 @@ func init() {
 }
 
 var fileDescriptor_b7fa5f143ac80378 = []byte{
-	// 542 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x94, 0xc1, 0x6e, 0xd3, 0x30,
-	0x18, 0xc7, 0xe3, 0x4e, 0x9d, 0xa8, 0xdb, 0x6a, 0x5b, 0xb4, 0x43, 0x55, 0x90, 0x99, 0x7a, 0x9a,
-	0x84, 0x48, 0xb4, 0x76, 0x07, 0x04, 0x17, 0x18, 0x02, 0x01, 0x65, 0xd2, 0xc8, 0x90, 0x90, 0xb8,
-	0x44, 0x26, 0xfb, 0xd4, 0x9a, 0xa4, 0x49, 0xb0, 0xdd, 0xd0, 0xde, 0x78, 0x04, 0x1e, 0x03, 0x1e,
-	0x80, 0x77, 0xe0, 0xd8, 0xe3, 0x4e, 0x88, 0xa6, 0x1c, 0x38, 0xee, 0x11, 0x50, 0x9c, 0x26, 0x4d,
-	0x07, 0x88, 0x8c, 0x5b, 0x3e, 0xdb, 0xff, 0xdf, 0xf7, 0xff, 0xfe, 0x75, 0x8d, 0x4d, 0x09, 0xa3,
-	0x30, 0xe0, 0xd4, 0x33, 0x05, 0xf0, 0x08, 0xb8, 0x49, 0x43, 0x66, 0x86, 0xc0, 0x05, 0x13, 0x12,
-	0x7c, 0x07, 0xcc, 0xe8, 0xc0, 0x7c, 0x37, 0x86, 0x31, 0x08, 0x23, 0xe4, 0x81, 0x0c, 0xf4, 0x4e,
-	0x26, 0x30, 0x52, 0x81, 0x41, 0x43, 0x66, 0x14, 0x04, 0x46, 0x74, 0xd0, 0xee, 0x95, 0x80, 0x86,
-	0x1c, 0xce, 0x98, 0x43, 0x65, 0x06, 0x6e, 0x1b, 0x25, 0x44, 0x92, 0x0a, 0x77, 0x79, 0xbe, 0xf3,
-	0x03, 0xe1, 0xe6, 0x8b, 0xc4, 0xd9, 0x03, 0xc7, 0x7d, 0x0e, 0x11, 0x78, 0xfa, 0x75, 0x5c, 0xa3,
-	0x8e, 0x6b, 0x7b, 0x49, 0xd1, 0x42, 0x7b, 0x68, 0x7f, 0xc3, 0xba, 0x46, 0xb3, 0x4d, 0x8e, 0x77,
-	0x1c, 0x6f, 0x2c, 0x24, 0x70, 0x7b, 0x75, 0xa8, 0xb2, 0xb7, 0xb1, 0x5f, 0xef, 0x3e, 0x36, 0xfe,
-	0x3d, 0x93, 0xb1, 0xd6, 0xca, 0x78, 0x98, 0xa2, 0xb2, 0xfa, 0x91, 0x2f, 0xf9, 0xd4, 0xda, 0x72,
-	0xd6, 0x57, 0xdb, 0x47, 0x78, 0xf7, 0x4f, 0x07, 0xf5, 0x6d, 0xbc, 0xe1, 0xc2, 0x54, 0x59, 0xac,
-	0x59, 0xc9, 0xa7, 0xbe, 0x8b, 0xab, 0x11, 0xf5, 0xc6, 0xd0, 0xaa, 0x28, 0xdb, 0x69, 0x71, 0xb7,
-	0x72, 0x07, 0x75, 0xbe, 0x55, 0x30, 0x56, 0xbd, 0x4f, 0x25, 0x95, 0xa0, 0x03, 0x6e, 0x72, 0xa0,
-	0x67, 0xc0, 0x6d, 0x91, 0xd4, 0xa2, 0x85, 0xd4, 0x08, 0xf7, 0x4b, 0x8f, 0xa0, 0x30, 0x86, 0xa5,
-	0x18, 0xea, 0x5b, 0xa4, 0xe6, 0x1b, 0xbc, 0xb0, 0xa4, 0x73, 0x7c, 0x13, 0x26, 0xc9, 0x38, 0x2c,
-	0x02, 0x7b, 0xd9, 0x70, 0xc8, 0x06, 0x43, 0xfb, 0x3d, 0x95, 0xc0, 0x47, 0x94, 0xbb, 0xca, 0x69,
-	0xbd, 0x7b, 0xab, 0x4c, 0xe3, 0x97, 0x54, 0xb8, 0x7d, 0x98, 0x5a, 0x37, 0x72, 0x66, 0xda, 0xff,
-	0x09, 0x1b, 0x0c, 0x5f, 0x65, 0xc0, 0xf6, 0x18, 0xef, 0xfc, 0x66, 0xab, 0x18, 0x55, 0x35, 0x8d,
-	0xea, 0x59, 0x31, 0xaa, 0x7a, 0xf7, 0xb0, 0xf4, 0xe4, 0x05, 0x78, 0x31, 0x60, 0x1b, 0x6f, 0x5f,
-	0xde, 0xd6, 0xfb, 0x78, 0x53, 0x38, 0x41, 0x98, 0xc7, 0xdb, 0x2b, 0x1f, 0xaf, 0xc7, 0x1c, 0x38,
-	0x4d, 0xb4, 0xd6, 0x12, 0xd1, 0xf9, 0x8c, 0xf0, 0xd6, 0xa5, 0x3d, 0xfd, 0x29, 0xae, 0x72, 0xea,
-	0x0f, 0x40, 0x0d, 0x76, 0x65, 0xbe, 0x95, 0x48, 0xad, 0x94, 0xa0, 0xf7, 0x71, 0x2d, 0xff, 0x2f,
-	0x2d, 0x33, 0xb9, 0x5d, 0x06, 0x77, 0x92, 0x89, 0xac, 0x95, 0xbe, 0xf3, 0x65, 0xcd, 0xab, 0xea,
-	0xa3, 0x9f, 0xe0, 0x26, 0xf3, 0xb3, 0xbb, 0x30, 0x62, 0xfe, 0xd2, 0xf3, 0x95, 0x7e, 0xf9, 0x46,
-	0x4e, 0x38, 0x66, 0x7e, 0x42, 0x5c, 0xdd, 0xae, 0x11, 0x9d, 0xfc, 0xcf, 0x5d, 0x6a, 0xe4, 0x84,
-	0x63, 0x3a, 0x39, 0x7a, 0x3b, 0x9b, 0x13, 0xed, 0x7c, 0x4e, 0xb4, 0x8b, 0x39, 0x41, 0x1f, 0x62,
-	0x82, 0x3e, 0xc5, 0x04, 0x7d, 0x8d, 0x09, 0x9a, 0xc5, 0x04, 0x7d, 0x8f, 0x09, 0xfa, 0x19, 0x13,
-	0xed, 0x22, 0x26, 0xe8, 0xe3, 0x82, 0x68, 0xb3, 0x05, 0xd1, 0xce, 0x17, 0x44, 0x7b, 0x7d, 0x38,
-	0x08, 0x56, 0x2d, 0x59, 0xf0, 0xf7, 0x87, 0xe7, 0x5e, 0xa1, 0x7c, 0xb3, 0xa9, 0xde, 0x9f, 0xde,
-	0xaf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x72, 0x0f, 0xf4, 0x16, 0x3b, 0x05, 0x00, 0x00,
+	// 627 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x95, 0x4d, 0x4f, 0xd4, 0x40,
+	0x18, 0xc7, 0x77, 0x76, 0x03, 0x91, 0x01, 0x02, 0x4c, 0x88, 0x59, 0x57, 0x33, 0x92, 0x9e, 0x48,
+	0x8c, 0x6d, 0x78, 0x89, 0x31, 0x7a, 0x51, 0x88, 0x46, 0x5d, 0x48, 0xb0, 0x98, 0x98, 0x78, 0x69,
+	0xc6, 0xf2, 0x64, 0x77, 0x6c, 0xb7, 0xad, 0x33, 0x6d, 0x85, 0x93, 0xfa, 0x0d, 0xfc, 0x18, 0xfa,
+	0x01, 0xfc, 0x0e, 0x1e, 0xf7, 0xc8, 0xc9, 0x48, 0xb9, 0xe8, 0x8d, 0x8f, 0x60, 0xfa, 0xba, 0x2d,
+	0x2c, 0xa1, 0xcb, 0x6d, 0xe7, 0xe5, 0xf9, 0xfd, 0xff, 0xcf, 0x7f, 0x9e, 0x6c, 0xb1, 0xe6, 0xc3,
+	0xc0, 0x73, 0x05, 0xb3, 0x35, 0x09, 0x22, 0x04, 0xa1, 0x31, 0x8f, 0x6b, 0x1e, 0x08, 0xc9, 0xa5,
+	0x0f, 0x8e, 0x09, 0x5a, 0xb8, 0xa6, 0x7d, 0x0c, 0x20, 0x00, 0xa9, 0x7a, 0xc2, 0xf5, 0x5d, 0xa2,
+	0xe4, 0x05, 0x6a, 0x5a, 0xa0, 0x32, 0x8f, 0xab, 0xa5, 0x02, 0x35, 0x5c, 0xeb, 0x6c, 0xd4, 0x80,
+	0x7a, 0x02, 0x0e, 0xb8, 0xc9, 0xfc, 0x1c, 0xdc, 0x51, 0x6b, 0x14, 0xf9, 0x4c, 0x5a, 0xd9, 0x7d,
+	0xe5, 0x5f, 0x0b, 0xcf, 0xbf, 0x8e, 0x9d, 0x3d, 0x35, 0xad, 0x1d, 0x08, 0xc1, 0x26, 0xb7, 0xf1,
+	0x0c, 0x33, 0x2d, 0xc3, 0x8e, 0x17, 0x6d, 0xb4, 0x82, 0x56, 0x5b, 0xfa, 0x0d, 0x96, 0x1f, 0x0a,
+	0xbc, 0x64, 0xda, 0x81, 0xf4, 0x41, 0x18, 0xa3, 0x4b, 0xcd, 0x95, 0xd6, 0xea, 0xec, 0xfa, 0x73,
+	0xf5, 0xea, 0x9e, 0xd4, 0x8a, 0x94, 0xba, 0x9d, 0xa2, 0xf2, 0xf5, 0x33, 0xc7, 0x17, 0x47, 0xfa,
+	0x82, 0x59, 0xdd, 0x25, 0x5f, 0x11, 0xbe, 0x99, 0x8b, 0x9a, 0xae, 0x23, 0x83, 0x01, 0x08, 0x43,
+	0xfa, 0xcc, 0x87, 0x76, 0x2b, 0x51, 0xee, 0x5e, 0x5b, 0x79, 0x3b, 0xc3, 0xed, 0xc7, 0xb4, 0x54,
+	0x7e, 0xd9, 0x1c, 0x73, 0xd4, 0xd9, 0xc2, 0xcb, 0xe3, 0xcc, 0x92, 0x45, 0xdc, 0xb2, 0xe0, 0x28,
+	0x89, 0x69, 0x46, 0x8f, 0x7f, 0x92, 0x65, 0x3c, 0x15, 0x32, 0x3b, 0x80, 0x76, 0x33, 0x89, 0x2e,
+	0x5d, 0x3c, 0x6a, 0x3e, 0x44, 0x9d, 0xcf, 0xf8, 0xd6, 0xa5, 0xb2, 0x63, 0x40, 0x3b, 0x65, 0xd0,
+	0xec, 0xfa, 0x83, 0xda, 0x4d, 0x56, 0xe8, 0x25, 0x03, 0xca, 0x10, 0x61, 0x72, 0xf1, 0x06, 0x09,
+	0xf1, 0xa2, 0xec, 0x33, 0x71, 0x60, 0x7c, 0x62, 0x3e, 0x88, 0x01, 0x13, 0x96, 0x6c, 0xa3, 0x09,
+	0x83, 0xad, 0x10, 0xd5, 0xfd, 0x18, 0xf7, 0xb6, 0xa0, 0x65, 0xef, 0x2a, 0xab, 0xbb, 0x71, 0xa6,
+	0xe3, 0x2e, 0x96, 0xa3, 0x98, 0xba, 0x22, 0x53, 0xe5, 0x77, 0x13, 0xe3, 0xc4, 0x40, 0xda, 0x0a,
+	0xe0, 0x79, 0x01, 0xec, 0x20, 0x9f, 0x8f, 0xbc, 0x8f, 0x27, 0xb5, 0xfb, 0x48, 0xfd, 0xeb, 0x09,
+	0x23, 0xf9, 0x9d, 0x99, 0x9f, 0x13, 0xa5, 0x2d, 0x22, 0xf0, 0x5d, 0x38, 0x8c, 0xe7, 0x84, 0x87,
+	0x60, 0x64, 0x82, 0x7d, 0xde, 0xeb, 0x8f, 0x12, 0xcc, 0x1e, 0xed, 0x5e, 0x1d, 0xe1, 0x37, 0x4c,
+	0x5a, 0x5d, 0x38, 0xd2, 0xef, 0x14, 0xcc, 0x54, 0xff, 0x05, 0xef, 0xf5, 0x8b, 0x6c, 0x3a, 0x01,
+	0x5e, 0xba, 0x60, 0x6b, 0x4c, 0x54, 0xaf, 0xaa, 0x53, 0xb3, 0x59, 0xbb, 0xf3, 0x12, 0xbc, 0x1c,
+	0xb0, 0x81, 0x17, 0xcf, 0x1f, 0x93, 0x2e, 0x9e, 0x96, 0xa6, 0xeb, 0x15, 0xf1, 0x6e, 0xd4, 0x8f,
+	0xd7, 0xe6, 0x26, 0xec, 0xc7, 0xb5, 0x7a, 0x86, 0x50, 0x7e, 0x20, 0xbc, 0x70, 0xee, 0x8c, 0xbc,
+	0xc4, 0x53, 0x82, 0x39, 0x3d, 0x48, 0x1a, 0x9b, 0x98, 0xaf, 0xc7, 0xa5, 0x7a, 0x4a, 0x20, 0x5d,
+	0x3c, 0x53, 0xfc, 0x47, 0x66, 0x99, 0xdc, 0xaf, 0x83, 0xdb, 0xcb, 0x8b, 0xf4, 0x51, 0xbd, 0xf2,
+	0xb3, 0xe2, 0x35, 0xd1, 0x21, 0x7b, 0x78, 0x9e, 0x3b, 0xf9, 0x2c, 0x0c, 0xb8, 0x93, 0x79, 0x9e,
+	0xe8, 0xe5, 0xe7, 0x0a, 0xc2, 0x2e, 0x77, 0x62, 0xe2, 0x68, 0xba, 0x06, 0xec, 0xf0, 0x3a, 0xb3,
+	0x34, 0x57, 0x10, 0x76, 0xd9, 0xe1, 0xd6, 0x87, 0xe1, 0x09, 0x6d, 0x1c, 0x9f, 0xd0, 0xc6, 0xd9,
+	0x09, 0x45, 0x5f, 0x22, 0x8a, 0xbe, 0x47, 0x14, 0xfd, 0x8a, 0x28, 0x1a, 0x46, 0x14, 0xfd, 0x89,
+	0x28, 0xfa, 0x1b, 0xd1, 0xc6, 0x59, 0x44, 0xd1, 0xb7, 0x53, 0xda, 0x18, 0x9e, 0xd2, 0xc6, 0xf1,
+	0x29, 0x6d, 0xbc, 0xdb, 0xec, 0xb9, 0x23, 0x49, 0xee, 0x5e, 0xfe, 0x41, 0x79, 0x5c, 0x5a, 0xbe,
+	0x9f, 0x4e, 0xbe, 0x2b, 0x1b, 0xff, 0x03, 0x00, 0x00, 0xff, 0xff, 0xc3, 0xdd, 0xdd, 0x8c, 0x13,
+	0x07, 0x00, 0x00,
 }
 
 func (this *QueueAckLevel) Equal(that interface{}) bool {
@@ -376,6 +437,43 @@ func (this *QueueAckLevel) Equal(that interface{}) bool {
 	}
 	for i := range this.ClusterAckLevel {
 		if this.ClusterAckLevel[i] != that1.ClusterAckLevel[i] {
+			return false
+		}
+	}
+	if len(this.ClusterConsumerState) != len(that1.ClusterConsumerState) {
+		return false
+	}
+	for i := range this.ClusterConsumerState {
+		if !this.ClusterConsumerState[i].Equal(that1.ClusterConsumerState[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *QueueConsumerState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*QueueConsumerState)
+	if !ok {
+		that2, ok := that.(QueueConsumerState)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if len(this.ShardWatermarks) != len(that1.ShardWatermarks) {
+		return false
+	}
+	for i := range this.ShardWatermarks {
+		if this.ShardWatermarks[i] != that1.ShardWatermarks[i] {
 			return false
 		}
 	}
@@ -500,7 +598,7 @@ func (this *QueueAckLevel) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 6)
+	s := make([]string, 0, 7)
 	s = append(s, "&persistence.QueueAckLevel{")
 	s = append(s, "AckLevel: "+fmt.Sprintf("%#v", this.AckLevel)+",\n")
 	keysForClusterAckLevel := make([]string, 0, len(this.ClusterAckLevel))
@@ -515,6 +613,41 @@ func (this *QueueAckLevel) GoString() string {
 	mapStringForClusterAckLevel += "}"
 	if this.ClusterAckLevel != nil {
 		s = append(s, "ClusterAckLevel: "+mapStringForClusterAckLevel+",\n")
+	}
+	keysForClusterConsumerState := make([]string, 0, len(this.ClusterConsumerState))
+	for k, _ := range this.ClusterConsumerState {
+		keysForClusterConsumerState = append(keysForClusterConsumerState, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForClusterConsumerState)
+	mapStringForClusterConsumerState := "map[string]*QueueConsumerState{"
+	for _, k := range keysForClusterConsumerState {
+		mapStringForClusterConsumerState += fmt.Sprintf("%#v: %#v,", k, this.ClusterConsumerState[k])
+	}
+	mapStringForClusterConsumerState += "}"
+	if this.ClusterConsumerState != nil {
+		s = append(s, "ClusterConsumerState: "+mapStringForClusterConsumerState+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *QueueConsumerState) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&persistence.QueueConsumerState{")
+	keysForShardWatermarks := make([]int32, 0, len(this.ShardWatermarks))
+	for k, _ := range this.ShardWatermarks {
+		keysForShardWatermarks = append(keysForShardWatermarks, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Int32s(keysForShardWatermarks)
+	mapStringForShardWatermarks := "map[int32]int64{"
+	for _, k := range keysForShardWatermarks {
+		mapStringForShardWatermarks += fmt.Sprintf("%#v: %#v,", k, this.ShardWatermarks[k])
+	}
+	mapStringForShardWatermarks += "}"
+	if this.ShardWatermarks != nil {
+		s = append(s, "ShardWatermarks: "+mapStringForShardWatermarks+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -614,6 +747,32 @@ func (m *QueueAckLevel) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.ClusterConsumerState) > 0 {
+		for k := range m.ClusterConsumerState {
+			v := m.ClusterConsumerState[k]
+			baseI := i
+			if v != nil {
+				{
+					size, err := v.MarshalToSizedBuffer(dAtA[:i])
+					if err != nil {
+						return 0, err
+					}
+					i -= size
+					i = encodeVarintQueues(dAtA, i, uint64(size))
+				}
+				i--
+				dAtA[i] = 0x12
+			}
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintQueues(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintQueues(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
 	if len(m.ClusterAckLevel) > 0 {
 		for k := range m.ClusterAckLevel {
 			v := m.ClusterAckLevel[k]
@@ -635,6 +794,44 @@ func (m *QueueAckLevel) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i = encodeVarintQueues(dAtA, i, uint64(m.AckLevel))
 		i--
 		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueueConsumerState) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueueConsumerState) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueueConsumerState) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.ShardWatermarks) > 0 {
+		for k := range m.ShardWatermarks {
+			v := m.ShardWatermarks[k]
+			baseI := i
+			i = encodeVarintQueues(dAtA, i, uint64(v))
+			i--
+			dAtA[i] = 0x10
+			i = encodeVarintQueues(dAtA, i, uint64(k))
+			i--
+			dAtA[i] = 0x8
+			i = encodeVarintQueues(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0xa
+		}
 	}
 	return len(dAtA) - i, nil
 }
@@ -857,6 +1054,36 @@ func (m *QueueAckLevel) Size() (n int) {
 			n += mapEntrySize + 1 + sovQueues(uint64(mapEntrySize))
 		}
 	}
+	if len(m.ClusterConsumerState) > 0 {
+		for k, v := range m.ClusterConsumerState {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+				l += 1 + sovQueues(uint64(l))
+			}
+			mapEntrySize := 1 + len(k) + sovQueues(uint64(len(k))) + l
+			n += mapEntrySize + 1 + sovQueues(uint64(mapEntrySize))
+		}
+	}
+	return n
+}
+
+func (m *QueueConsumerState) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.ShardWatermarks) > 0 {
+		for k, v := range m.ShardWatermarks {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + sovQueues(uint64(k)) + 1 + sovQueues(uint64(v))
+			n += mapEntrySize + 1 + sovQueues(uint64(mapEntrySize))
+		}
+	}
 	return n
 }
 
@@ -955,9 +1182,40 @@ func (this *QueueAckLevel) String() string {
 		mapStringForClusterAckLevel += fmt.Sprintf("%v: %v,", k, this.ClusterAckLevel[k])
 	}
 	mapStringForClusterAckLevel += "}"
+	keysForClusterConsumerState := make([]string, 0, len(this.ClusterConsumerState))
+	for k, _ := range this.ClusterConsumerState {
+		keysForClusterConsumerState = append(keysForClusterConsumerState, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForClusterConsumerState)
+	mapStringForClusterConsumerState := "map[string]*QueueConsumerState{"
+	for _, k := range keysForClusterConsumerState {
+		mapStringForClusterConsumerState += fmt.Sprintf("%v: %v,", k, this.ClusterConsumerState[k])
+	}
+	mapStringForClusterConsumerState += "}"
 	s := strings.Join([]string{`&QueueAckLevel{`,
 		`AckLevel:` + fmt.Sprintf("%v", this.AckLevel) + `,`,
 		`ClusterAckLevel:` + mapStringForClusterAckLevel + `,`,
+		`ClusterConsumerState:` + mapStringForClusterConsumerState + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *QueueConsumerState) String() string {
+	if this == nil {
+		return "nil"
+	}
+	keysForShardWatermarks := make([]int32, 0, len(this.ShardWatermarks))
+	for k, _ := range this.ShardWatermarks {
+		keysForShardWatermarks = append(keysForShardWatermarks, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Int32s(keysForShardWatermarks)
+	mapStringForShardWatermarks := "map[int32]int64{"
+	for _, k := range keysForShardWatermarks {
+		mapStringForShardWatermarks += fmt.Sprintf("%v: %v,", k, this.ShardWatermarks[k])
+	}
+	mapStringForShardWatermarks += "}"
+	s := strings.Join([]string{`&QueueConsumerState{`,
+		`ShardWatermarks:` + mapStringForShardWatermarks + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1188,6 +1446,287 @@ func (m *QueueAckLevel) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.ClusterAckLevel[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterConsumerState", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueues
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQueues
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQueues
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ClusterConsumerState == nil {
+				m.ClusterConsumerState = make(map[string]*QueueConsumerState)
+			}
+			var mapkey string
+			var mapvalue *QueueConsumerState
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowQueues
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowQueues
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthQueues
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthQueues
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var mapmsglen int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowQueues
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapmsglen |= int(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					if mapmsglen < 0 {
+						return ErrInvalidLengthQueues
+					}
+					postmsgIndex := iNdEx + mapmsglen
+					if postmsgIndex < 0 {
+						return ErrInvalidLengthQueues
+					}
+					if postmsgIndex > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = &QueueConsumerState{}
+					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+						return err
+					}
+					iNdEx = postmsgIndex
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipQueues(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthQueues
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.ClusterConsumerState[mapkey] = mapvalue
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQueues(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthQueues
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthQueues
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueueConsumerState) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQueues
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueueConsumerState: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueueConsumerState: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ShardWatermarks", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQueues
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQueues
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQueues
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ShardWatermarks == nil {
+				m.ShardWatermarks = make(map[int32]int64)
+			}
+			var mapkey int32
+			var mapvalue int64
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowQueues
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowQueues
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapkey |= int32(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else if fieldNum == 2 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowQueues
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapvalue |= int64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipQueues(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthQueues
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.ShardWatermarks[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
