@@ -65,7 +65,7 @@ type (
 		getVersionHistory() *historyspb.VersionHistory
 		isWorkflowReset() bool
 
-		splitTask(taskStartTime time.Time) (replicationTask, replicationTask, error)
+		splitTask() (replicationTask, replicationTask, error)
 	}
 
 	replicationTaskImpl struct {
@@ -81,8 +81,8 @@ type (
 		events           []*historypb.HistoryEvent
 		newEvents        []*historypb.HistoryEvent
 
-		startTime time.Time
-		logger    log.Logger
+		// startTime time.Time
+		logger log.Logger
 	}
 )
 
@@ -106,7 +106,6 @@ var (
 func newReplicationTask(
 	clusterMetadata cluster.Metadata,
 	historySerializer serialization.Serializer,
-	taskStartTime time.Time,
 	logger log.Logger,
 	request *historyservice.ReplicateEventsV2Request,
 ) (*replicationTaskImpl, error) {
@@ -164,8 +163,8 @@ func newReplicationTask(
 		events:           events,
 		newEvents:        newEvents,
 
-		startTime: taskStartTime,
-		logger:    logger,
+		// startTime: taskStartTime,
+		logger: logger,
 	}, nil
 }
 
@@ -265,9 +264,7 @@ func (t *replicationTaskImpl) isWorkflowReset() bool {
 	}
 }
 
-func (t *replicationTaskImpl) splitTask(
-	taskStartTime time.Time,
-) (replicationTask, replicationTask, error) {
+func (t *replicationTaskImpl) splitTask() (replicationTask, replicationTask, error) {
 
 	if len(t.newEvents) == 0 {
 		return nil, nil, ErrNoNewRunHistory
@@ -322,8 +319,7 @@ func (t *replicationTaskImpl) splitTask(
 		events:           newHistoryEvents,
 		newEvents:        []*historypb.HistoryEvent{},
 
-		startTime: taskStartTime,
-		logger:    logger,
+		logger: logger,
 	}
 	t.newEvents = nil
 

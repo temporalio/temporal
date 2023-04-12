@@ -213,11 +213,9 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
 
-	startTime := r.shard.GetTimeSource().Now().UTC()
 	task, err := newReplicationTask(
 		r.clusterMetadata,
 		r.historySerializer,
-		startTime,
 		r.logger,
 		request,
 	)
@@ -718,8 +716,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithContinu
 	releaseFn(nil)
 
 	// step 2
-	startTime := time.Now().UTC()
-	task, newTask, err := task.splitTask(startTime)
+	task, newTask, err := task.splitTask()
 	if err != nil {
 		return err
 	}
