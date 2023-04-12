@@ -358,15 +358,15 @@ func (s *scheduler) processTimeRange(
 		if t1.IsZero() || t1.After(t2) {
 			return t1
 		}
+		// Peek at paused/remaining actions state and don't bother if we're not going to
+		// take an action now. (Don't count as missed catchup window either.)
+		if !s.canTakeScheduledAction(manual, false) {
+			continue
+		}
 		if !manual && t2.Sub(t1) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
 			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.GetMetricName()).Inc(1)
 			s.Info.MissedCatchupWindow++
-			continue
-		}
-		// Peek at paused/remaining actions state and don't even bother adding
-		// to buffer if we're not going to take an action now.
-		if !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
