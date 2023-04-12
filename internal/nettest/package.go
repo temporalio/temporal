@@ -22,34 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ringpop
-
-import (
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/common/membership"
-)
-
-// Module provides a membership.Monitor given the types in factoryParams. It also adds lifecycle hooks, so there's no
-// need to start or stop the monitor manually.
-var Module = fx.Provide(
-	provideMonitor,
-)
-
-func provideMonitor(lc fx.Lifecycle, params factoryParams) (membership.Monitor, error) {
-	f, err := newFactory(params)
-	if err != nil {
-		return nil, err
-	}
-
-	lc.Append(fx.StopHook(f.closeTChannel))
-
-	m, err := f.getMonitor()
-	if err != nil {
-		return nil, err
-	}
-
-	lc.Append(fx.StartStopHook(m.Start, m.Stop))
-
-	return m, nil
-}
+// Package nettest provides an in-memory socket, Pipe. It can be used in place of net.Dial and net.Listen for faster and
+// more hermetic tests.
+package nettest
