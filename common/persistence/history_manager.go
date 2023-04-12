@@ -369,17 +369,43 @@ func ToHistoryTreeInfo(serializer serialization.Serializer, blob *commonpb.DataB
 	return treeInfo, nil
 }
 
+func (m *executionManagerImpl) serializeInsertHistoryTreeRequest(
+	shardID int32,
+	info string,
+	branchToken []byte,
+) (*InternalInsertHistoryTreeRequest, error) {
+	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(branchToken)
+	if err != nil {
+		return nil, err
+	}
+
+	// TreeInfo is only needed for new branch
+	treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
+		BranchToken: branchToken,
+		BranchInfo:  branch,
+		ForkTime:    timestamp.TimeNowPtrUtc(),
+		Info:        info,
+	}, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+	return &InternalInsertHistoryTreeRequest{
+		BranchInfo: branch,
+		TreeInfo:   treeInfoBlob,
+		ShardID:    shardID,
+	}, nil
+}
+
 func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
-	ctx context.Context,
 	request *AppendHistoryNodesRequest,
-) (*InternalInsertHistoryTreeRequest, *InternalAppendHistoryNodesRequest, error) {
+) (*InternalAppendHistoryNodesRequest, error) {
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if len(request.Events) == 0 {
-		return nil, nil, &InvalidPersistenceRequestError{
+		return nil, &InvalidPersistenceRequestError{
 			Msg: "events to be appended cannot be empty",
 		}
 	}
@@ -390,18 +416,18 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	lastID := nodeID - 1
 
 	if nodeID <= 0 {
-		return nil, nil, &InvalidPersistenceRequestError{
+		return nil, &InvalidPersistenceRequestError{
 			Msg: "eventID cannot be less than 1",
 		}
 	}
 	for _, e := range request.Events {
 		if e.Version != version {
-			return nil, nil, &InvalidPersistenceRequestError{
+			return nil, &InvalidPersistenceRequestError{
 				Msg: "event version must be the same inside a batch",
 			}
 		}
 		if e.EventId != lastID+1 {
-			return nil, nil, &InvalidPersistenceRequestError{
+			return nil, &InvalidPersistenceRequestError{
 				Msg: "event ID must be continous",
 			}
 		}
@@ -411,12 +437,12 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	// nodeID will be the first eventID
 	blob, err := m.serializer.SerializeEvents(request.Events, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	size := len(blob.Data)
 	sizeLimit := m.transactionSizeLimit()
 	if size > sizeLimit {
-		return nil, nil, &TransactionSizeLimitError{
+		return nil, &TransactionSizeLimitError{
 			Msg: fmt.Sprintf("transaction size of %v bytes exceeds limit of %v bytes", size, sizeLimit),
 		}
 	}
@@ -435,43 +461,24 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	}
 
 	if nodeID < GetBeginNodeID(branch) {
-		return nil, nil, &InvalidPersistenceRequestError{
+		return nil, &InvalidPersistenceRequestError{
 			Msg: "cannot append to ancestors' nodes",
 		}
 	}
 
-	if request.IsNewBranch {
-		// TreeInfo is only needed for new branch
-		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
-			BranchToken: request.BranchToken,
-			BranchInfo:  branch,
-			ForkTime:    timestamp.TimeNowPtrUtc(),
-			Info:        request.Info,
-		}, enumspb.ENCODING_TYPE_PROTO3)
-		if err != nil {
-			return nil, nil, err
-		}
-		return &InternalInsertHistoryTreeRequest{
-			BranchInfo: req.BranchInfo,
-			TreeInfo:   treeInfoBlob,
-			ShardID:    request.ShardID,
-		}, req, nil
-	}
-
-	return nil, req, nil
+	return req, nil
 }
 
 func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
-	ctx context.Context,
 	request *AppendRawHistoryNodesRequest,
-) (*InternalInsertHistoryTreeRequest, *InternalAppendHistoryNodesRequest, error) {
+) (*InternalAppendHistoryNodesRequest, error) {
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if len(request.History.Data) == 0 {
-		return nil, nil, &InvalidPersistenceRequestError{
+		return nil, &InvalidPersistenceRequestError{
 			Msg: "events to be appended cannot be empty",
 		}
 	}
@@ -479,7 +486,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 
 	nodeID := request.NodeID
 	if nodeID <= 0 {
-		return nil, nil, &InvalidPersistenceRequestError{
+		return nil, &InvalidPersistenceRequestError{
 			Msg: "eventID cannot be less than 1",
 		}
 	}
@@ -487,7 +494,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	size := len(request.History.Data)
 	sizeLimit := m.transactionSizeLimit()
 	if size > sizeLimit {
-		return nil, nil, &TransactionSizeLimitError{
+		return nil, &TransactionSizeLimitError{
 			Msg: fmt.Sprintf("transaction size of %v bytes exceeds limit of %v bytes", size, sizeLimit),
 		}
 	}
@@ -506,30 +513,15 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	}
 
 	if nodeID < GetBeginNodeID(branch) {
-		return nil, nil, &InvalidPersistenceRequestError{
+		return nil, &InvalidPersistenceRequestError{
 			Msg: "cannot append to ancestors' nodes",
 		}
 	}
 
 	if request.IsNewBranch {
-		// TreeInfo is only needed for new branch
-		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
-			BranchToken: request.BranchToken,
-			BranchInfo:  branch,
-			ForkTime:    timestamp.TimeNowPtrUtc(),
-			Info:        request.Info,
-		}, enumspb.ENCODING_TYPE_PROTO3)
-		if err != nil {
-			return nil, nil, err
-		}
-		return &InternalInsertHistoryTreeRequest{
-			BranchInfo: req.BranchInfo,
-			TreeInfo:   treeInfoBlob,
-			ShardID:    request.ShardID,
-		}, req, nil
 	}
 
-	return nil, req, nil
+	return req, nil
 }
 
 // AppendHistoryNodes add a node to history node table
@@ -538,14 +530,18 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	treeReq, nodeReq, err := m.serializeAppendHistoryNodesRequest(ctx, request)
-
+	nodeReq, err := m.serializeAppendHistoryNodesRequest(request)
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.persistence.AppendHistoryNodes(ctx, nodeReq)
-	if err == nil && treeReq != nil {
+	if err == nil && request.IsNewBranch {
+		treeReq, err := m.serializeInsertHistoryTreeRequest(request.ShardID, request.Info, request.BranchToken)
+		if err != nil {
+			return nil, err
+		}
+
 		// Only insert history tree if first history node append succeeds
 		err = m.persistence.InsertHistoryTree(ctx, treeReq)
 	}
@@ -561,13 +557,18 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 	request *AppendRawHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	treeReq, nodeReq, err := m.serializeAppendRawHistoryNodesRequest(ctx, request)
+	nodeReq, err := m.serializeAppendRawHistoryNodesRequest(request)
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.persistence.AppendHistoryNodes(ctx, nodeReq)
-	if err == nil && treeReq != nil {
+	if err == nil && request.IsNewBranch {
+		treeReq, err := m.serializeInsertHistoryTreeRequest(request.ShardID, request.Info, request.BranchToken)
+		if err != nil {
+			return nil, err
+		}
+
 		// Only insert history tree if first history node append succeeds
 		err = m.persistence.InsertHistoryTree(ctx, treeReq)
 	}
