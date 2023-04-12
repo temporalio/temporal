@@ -389,6 +389,7 @@ func (m *executionManagerImpl) serializeInsertHistoryTreeRequest(
 	if err != nil {
 		return nil, err
 	}
+
 	return &InternalInsertHistoryTreeRequest{
 		BranchInfo: branch,
 		TreeInfo:   treeInfoBlob,
@@ -534,13 +535,12 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 
 	err = m.persistence.AppendHistoryNodes(ctx, nodeReq)
 	if err == nil && request.IsNewBranch {
-		treeReq, err := m.serializeInsertHistoryTreeRequest(request.ShardID, request.Info, request.BranchToken)
-		if err != nil {
-			return nil, err
+		var treeReq *InternalInsertHistoryTreeRequest
+		treeReq, err = m.serializeInsertHistoryTreeRequest(request.ShardID, request.Info, request.BranchToken)
+		if err == nil {
+			// Only insert history tree if first history node append succeeds
+			err = m.persistence.InsertHistoryTree(ctx, treeReq)
 		}
-
-		// Only insert history tree if first history node append succeeds
-		err = m.persistence.InsertHistoryTree(ctx, treeReq)
 	}
 
 	return &AppendHistoryNodesResponse{
@@ -561,13 +561,12 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 
 	err = m.persistence.AppendHistoryNodes(ctx, nodeReq)
 	if err == nil && request.IsNewBranch {
-		treeReq, err := m.serializeInsertHistoryTreeRequest(request.ShardID, request.Info, request.BranchToken)
-		if err != nil {
-			return nil, err
+		var treeReq *InternalInsertHistoryTreeRequest
+		treeReq, err = m.serializeInsertHistoryTreeRequest(request.ShardID, request.Info, request.BranchToken)
+		if err == nil {
+			// Only insert history tree if first history node append succeeds
+			err = m.persistence.InsertHistoryTree(ctx, treeReq)
 		}
-
-		// Only insert history tree if first history node append succeeds
-		err = m.persistence.InsertHistoryTree(ctx, treeReq)
 	}
 
 	return &AppendHistoryNodesResponse{
