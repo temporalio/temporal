@@ -518,9 +518,6 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 		}
 	}
 
-	if request.IsNewBranch {
-	}
-
 	return req, nil
 }
 
