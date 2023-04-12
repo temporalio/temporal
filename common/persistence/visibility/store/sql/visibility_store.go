@@ -425,10 +425,14 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 }
 
 func (s *VisibilityStore) ScanWorkflowExecutions(
-	_ context.Context,
-	_ *manager.ListWorkflowExecutionsRequestV2,
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return nil, store.OperationNotSupportedErr
+	// custom order is not supported by Scan API
+	if strings.Contains(strings.ToLower(request.Query), "order by") {
+		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
+	}
+	return s.ListWorkflowExecutions(ctx, request)
 }
 
 func (s *VisibilityStore) CountWorkflowExecutions(
