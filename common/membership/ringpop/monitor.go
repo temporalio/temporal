@@ -35,6 +35,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -64,7 +65,7 @@ type monitor struct {
 	lifecycleCancel context.CancelFunc
 
 	serviceName               primitives.ServiceName
-	services                  map[primitives.ServiceName]int
+	services                  config.ServicePortMap
 	rp                        *service
 	rings                     map[primitives.ServiceName]*serviceResolver
 	logger                    log.Logger
@@ -79,7 +80,7 @@ var _ membership.Monitor = (*monitor)(nil)
 // newMonitor returns a ringpop-based membership monitor
 func newMonitor(
 	serviceName primitives.ServiceName,
-	services map[primitives.ServiceName]int,
+	services config.ServicePortMap,
 	rp *service,
 	logger log.Logger,
 	metadataManager persistence.ClusterMetadataManager,
