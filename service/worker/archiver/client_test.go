@@ -81,7 +81,7 @@ func (s *clientSuite) SetupTest() {
 		s.sdkClientFactory,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
-		dynamicconfig.GetDurationPropertyFn(300*time.Millisecond),
+		dynamicconfig.GetDurationPropertyFn(3000*time.Millisecond),
 		s.archiverProvider,
 	).(*client)
 }
