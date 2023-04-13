@@ -39,8 +39,10 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -96,10 +98,27 @@ type (
 		logger log.Logger,
 	) resetter
 
+	EventBlobs struct {
+		CurrentRunEvents commonpb.DataBlob
+		NewRunEvents     *commonpb.DataBlob
+	}
+
 	HistoryReplicator interface {
 		ApplyEvents(
 			ctx context.Context,
 			request *historyservice.ReplicateEventsV2Request,
+		) error
+		// ApplyEventBlobs is the batch version of ApplyEvents
+		// NOTE:
+		//  1. all history events should have the same version
+		//  2. all history events should share the same version history
+		ApplyEventBlobs(
+			ctx context.Context,
+			workflow definition.WorkflowKey,
+			baseExecutionInfo *workflowpb.BaseExecutionInfo,
+			versionHistoryItems []*historyspb.VersionHistoryItem,
+			events [][]*historypb.HistoryEvent,
+			newEvents []*historypb.HistoryEvent,
 		) error
 		ApplyWorkflowState(
 			ctx context.Context,
@@ -213,11 +232,35 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
 
-	task, err := newReplicationTask(
+	task, err := newReplicationTaskFromRequest(
 		r.clusterMetadata,
 		r.historySerializer,
 		r.logger,
 		request,
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.applyEvents(ctx, task)
+}
+
+func (r *HistoryReplicatorImpl) ApplyEventBlobs(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	baseExecutionInfo *workflowpb.BaseExecutionInfo,
+	versionHistoryItems []*historyspb.VersionHistoryItem,
+	eventsSlice [][]*historypb.HistoryEvent,
+	newEvents []*historypb.HistoryEvent,
+) error {
+	task, err := newReplicationTaskFromBatch(
+		r.clusterMetadata,
+		r.logger,
+		workflowKey,
+		baseExecutionInfo,
+		versionHistoryItems,
+		eventsSlice,
+		newEvents,
 	)
 	if err != nil {
 		return err
@@ -664,9 +707,20 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 		return err
 	}
 
+	eventsSlice := make([]*persistence.WorkflowEvents, len(task.getEvents()))
+	for i, events := range task.getEvents() {
+		eventsSlice[i] = &persistence.WorkflowEvents{
+			NamespaceID: task.getNamespaceID().String(),
+			WorkflowID:  task.getExecution().GetWorkflowId(),
+			RunID:       task.getExecution().GetRunId(),
+			BranchToken: versionHistory.GetBranchToken(),
+			PrevTxnID:   0, // TODO @wxing1292 events chaining will not work for backfill case
+			TxnID:       transactionID,
+			Events:      events,
+		}
+	}
 	err = r.transactionMgr.backfillWorkflow(
 		ctx,
-		task.getEventTime(),
 		NewWorkflow(
 			ctx,
 			r.namespaceRegistry,
@@ -675,15 +729,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 			mutableState,
 			releaseFn,
 		),
-		&persistence.WorkflowEvents{
-			NamespaceID: task.getNamespaceID().String(),
-			WorkflowID:  task.getExecution().GetWorkflowId(),
-			RunID:       task.getExecution().GetRunId(),
-			BranchToken: versionHistory.GetBranchToken(),
-			PrevTxnID:   0, // TODO @wxing1292 events chaining will not work for backfill case
-			TxnID:       transactionID,
-			Events:      task.getEvents(),
-		},
+		eventsSlice...,
 	)
 	if err != nil {
 		task.getLogger().Error(

@@ -88,7 +88,7 @@ type (
 
 		PersistWorkflowEvents(
 			ctx context.Context,
-			workflowEvents *persistence.WorkflowEvents,
+			workflowEventsSlice ...*persistence.WorkflowEvents,
 		) (int64, error)
 
 		CreateWorkflowExecution(
@@ -313,9 +313,9 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context) (MutableState, error
 
 func (c *ContextImpl) PersistWorkflowEvents(
 	ctx context.Context,
-	workflowEvents *persistence.WorkflowEvents,
+	workflowEventsSlice ...*persistence.WorkflowEvents,
 ) (int64, error) {
-	return PersistWorkflowEvents(ctx, c.shard, workflowEvents)
+	return PersistWorkflowEvents(ctx, c.shard, workflowEventsSlice...)
 }
 
 func (c *ContextImpl) CreateWorkflowExecution(

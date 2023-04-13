@@ -175,18 +175,23 @@ func (mr *MockContextMockRecorder) Lock(ctx, caller interface{}) *gomock.Call {
 }
 
 // PersistWorkflowEvents mocks base method.
-func (m *MockContext) PersistWorkflowEvents(ctx context.Context, workflowEvents *persistence.WorkflowEvents) (int64, error) {
+func (m *MockContext) PersistWorkflowEvents(ctx context.Context, workflowEventsSlice ...*persistence.WorkflowEvents) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PersistWorkflowEvents", ctx, workflowEvents)
+	varargs := []interface{}{ctx}
+	for _, a := range workflowEventsSlice {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PersistWorkflowEvents", varargs...)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PersistWorkflowEvents indicates an expected call of PersistWorkflowEvents.
-func (mr *MockContextMockRecorder) PersistWorkflowEvents(ctx, workflowEvents interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) PersistWorkflowEvents(ctx interface{}, workflowEventsSlice ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PersistWorkflowEvents", reflect.TypeOf((*MockContext)(nil).PersistWorkflowEvents), ctx, workflowEvents)
+	varargs := append([]interface{}{ctx}, workflowEventsSlice...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PersistWorkflowEvents", reflect.TypeOf((*MockContext)(nil).PersistWorkflowEvents), varargs...)
 }
 
 // ReapplyEvents mocks base method.

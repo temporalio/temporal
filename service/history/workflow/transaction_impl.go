@@ -251,18 +251,31 @@ func (t *TransactionImpl) SetWorkflowExecution(
 func PersistWorkflowEvents(
 	ctx context.Context,
 	shard shard.Context,
-	workflowEvents *persistence.WorkflowEvents,
+	workflowEventsSlice ...*persistence.WorkflowEvents,
 ) (int64, error) {
 
-	if len(workflowEvents.Events) == 0 {
-		return 0, nil // allow update workflow without events
-	}
+	var totalSize int64
+	for _, workflowEvents := range workflowEventsSlice {
+		if len(workflowEvents.Events) == 0 {
+			continue // allow update workflow without events
+		}
 
-	firstEventID := workflowEvents.Events[0].EventId
-	if firstEventID == common.FirstEventID {
-		return persistFirstWorkflowEvents(ctx, shard, workflowEvents)
+		firstEventID := workflowEvents.Events[0].EventId
+		if firstEventID == common.FirstEventID {
+			size, err := persistFirstWorkflowEvents(ctx, shard, workflowEvents)
+			if err != nil {
+				return 0, err
+			}
+			totalSize += size
+		} else {
+			size, err := persistNonFirstWorkflowEvents(ctx, shard, workflowEvents)
+			if err != nil {
+				return 0, err
+			}
+			totalSize += size
+		}
 	}
-	return persistNonFirstWorkflowEvents(ctx, shard, workflowEvents)
+	return totalSize, nil
 }
 
 func persistFirstWorkflowEvents(
