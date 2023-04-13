@@ -101,7 +101,7 @@ func (s *transactionMgrSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 	s.namespaceEntry = tests.GlobalNamespaceEntry
 
-	s.transactionMgr = newTransactionMgr(s.mockShard, wcache.NewCache(s.mockShard), s.mockEventsReapplier, s.logger)
+	s.transactionMgr = newTransactionMgr(s.mockShard, wcache.NewCache(s.mockShard, wcache.DisableObservation), s.mockEventsReapplier, s.logger)
 	s.transactionMgr.createMgr = s.mockCreateMgr
 	s.transactionMgr.updateMgr = s.mockUpdateMgr
 	s.transactionMgr.workflowResetter = s.mockWorkflowResetter

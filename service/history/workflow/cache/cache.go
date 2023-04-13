@@ -77,9 +77,16 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 		config         *configs.Config
+		observers      Observers
 	}
 
-	NewCacheFn func(shard shard.Context) Cache
+	Observers interface {
+		ConnectAll(context.Context, workflow.Context)
+	}
+
+	NewCacheFn func(shard.Context, Observers) Cache
+
+	disableObs int
 )
 
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
@@ -87,21 +94,26 @@ var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
 const (
 	cacheNotReleased int32 = 0
 	cacheReleased    int32 = 1
+
+	DisableObservation = disableObs(iota)
 )
 
-func NewCache(shard shard.Context) Cache {
+func (disableObs) ConnectAll(context.Context, workflow.Context) {}
+
+func NewCache(shardCtx shard.Context, observers Observers) Cache {
 	opts := &cache.Options{}
-	config := shard.GetConfig()
+	config := shardCtx.GetConfig()
 	opts.InitialCapacity = config.HistoryCacheInitialSize()
 	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 
 	return &CacheImpl{
 		Cache:          cache.New(config.HistoryCacheMaxSize(), opts),
-		shard:          shard,
-		logger:         log.With(shard.GetLogger(), tag.ComponentHistoryCache),
-		metricsHandler: shard.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
+		shard:          shardCtx,
+		logger:         log.With(shardCtx.GetLogger(), tag.ComponentHistoryCache),
+		metricsHandler: shardCtx.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
 		config:         config,
+		observers:      observers,
 	}
 }
 
@@ -204,6 +216,9 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 		handler.Counter(metrics.AcquireLockFailedCounter.GetMetricName()).Record(1)
 		return nil, nil, err
+	}
+	if !cacheHit {
+		c.observers.ConnectAll(ctx, workflowCtx)
 	}
 	return workflowCtx, releaseFunc, nil
 }

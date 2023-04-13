@@ -87,6 +87,7 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -127,6 +128,7 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		workflowObservers          *workflow.ObserverSet
 		tracer                     trace.Tracer
 	}
 )
@@ -134,6 +136,7 @@ type (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
+	observers *workflow.ObserverSet,
 	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
@@ -184,6 +187,7 @@ func NewEngineWithShardContext(
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
+		workflowObservers:          observers,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)

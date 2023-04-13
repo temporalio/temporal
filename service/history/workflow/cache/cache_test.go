@@ -58,7 +58,16 @@ type (
 
 		cache Cache
 	}
+
+	mockObserverSet struct {
+		Observers
+		ConnectAllFunc func(context.Context, workflow.Context)
+	}
 )
+
+func (mos *mockObserverSet) ConnectAll(ctx context.Context, wfctx workflow.Context) {
+	mos.ConnectAllFunc(ctx, wfctx)
+}
 
 func TestWorkflowCacheSuite(t *testing.T) {
 	s := new(workflowCacheSuite)
@@ -94,7 +103,7 @@ func (s *workflowCacheSuite) TearDownTest() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCacheBasic() {
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, DisableObservation)
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -139,7 +148,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, DisableObservation)
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
@@ -194,7 +203,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, DisableObservation)
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-clear",
 		RunId:      uuid.New(),
@@ -246,7 +255,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 	coroutineCount := 50
 
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, DisableObservation)
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -310,7 +319,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
 	s.mockShard.GetConfig().HistoryCacheTTL = dynamicconfig.GetDurationPropertyFn(time.Nanosecond)
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, DisableObservation)
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -365,7 +374,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewCache(s.mockShard, DisableObservation)
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	_, currentRelease, err := s.cache.GetOrCreateCurrentWorkflowExecution(
@@ -397,4 +406,42 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 	s.True(ok)
 	s.Greater(latency2, latency1)
 
+}
+
+func (s *workflowCacheSuite) TestHistoryCache_ReconnectObservers() {
+	connectAllInvocations := 0
+	observers := &mockObserverSet{
+		ConnectAllFunc: func(context.Context, workflow.Context) {
+			connectAllInvocations++
+		},
+	}
+	s.cache = NewCache(s.mockShard, observers)
+
+	s.T().Run("cache miss", func(t *testing.T) {
+		expectedInvocations := connectAllInvocations + 1
+		_, release, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+			context.TODO(),
+			tests.NamespaceID,
+			tests.WorkflowID,
+			workflow.LockPriorityHigh,
+		)
+		s.NoError(err)
+		defer release(nil)
+		s.Require().EqualValues(expectedInvocations, connectAllInvocations,
+			"expected cache fault to result in a call to ConnectAll")
+	})
+
+	s.T().Run("cache hit", func(t *testing.T) {
+		expectedInvocations := connectAllInvocations
+		_, release, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+			context.TODO(),
+			tests.NamespaceID,
+			tests.WorkflowID,
+			workflow.LockPriorityHigh,
+		)
+		s.NoError(err)
+		defer release(nil)
+		s.Require().EqualValues(expectedInvocations, connectAllInvocations,
+			"expected cache hit to result in no calls to ConnectAll")
+	})
 }

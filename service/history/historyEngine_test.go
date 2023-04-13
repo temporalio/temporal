@@ -151,7 +151,7 @@ func (s *engineSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard, wcache.DisableObservation)
 	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.eventsCache = events.NewEventsCache(

@@ -36,7 +36,7 @@ var Module = fx.Options(
 
 // NewCacheFnProvider provide a NewCacheFn that can be used to create new workflow cache.
 func NewCacheFnProvider() NewCacheFn {
-	return func(shard shard.Context) Cache {
-		return NewCache(shard)
+	return func(shard shard.Context, observers Observers) Cache {
+		return NewCache(shard, observers)
 	}
 }

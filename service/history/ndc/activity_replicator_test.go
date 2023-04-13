@@ -110,7 +110,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 		},
 		tests.NewDynamicConfig(),
 	)
-	s.workflowCache = wcache.NewCache(s.mockShard).(*wcache.CacheImpl)
+	s.workflowCache = wcache.NewCache(s.mockShard, wcache.DisableObservation).(*wcache.CacheImpl)
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr

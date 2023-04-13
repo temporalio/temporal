@@ -145,7 +145,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.version).Return(mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard, wcache.DisableObservation)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{

@@ -89,6 +89,8 @@ var Module = fx.Options(
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
+	fx.Provide(fx.Annotate(workflow.NewObserverSet, fx.As(new(cache.Observers)))),
+	fx.Provide(workflow.NewObserverSet),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 

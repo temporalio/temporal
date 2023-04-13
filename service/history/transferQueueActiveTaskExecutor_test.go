@@ -208,7 +208,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
 	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
 
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard, wcache.DisableObservation)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{

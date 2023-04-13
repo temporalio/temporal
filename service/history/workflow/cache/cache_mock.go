@@ -92,3 +92,38 @@ func (mr *MockCacheMockRecorder) GetOrCreateWorkflowExecution(ctx, namespaceID, 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateWorkflowExecution", reflect.TypeOf((*MockCache)(nil).GetOrCreateWorkflowExecution), ctx, namespaceID, execution, lockPriority)
 }
+
+// MockObservers is a mock of Observers interface.
+type MockObservers struct {
+	ctrl     *gomock.Controller
+	recorder *MockObserversMockRecorder
+}
+
+// MockObserversMockRecorder is the mock recorder for MockObservers.
+type MockObserversMockRecorder struct {
+	mock *MockObservers
+}
+
+// NewMockObservers creates a new mock instance.
+func NewMockObservers(ctrl *gomock.Controller) *MockObservers {
+	mock := &MockObservers{ctrl: ctrl}
+	mock.recorder = &MockObserversMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockObservers) EXPECT() *MockObserversMockRecorder {
+	return m.recorder
+}
+
+// ConnectAll mocks base method.
+func (m *MockObservers) ConnectAll(arg0 context.Context, arg1 workflow.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ConnectAll", arg0, arg1)
+}
+
+// ConnectAll indicates an expected call of ConnectAll.
+func (mr *MockObserversMockRecorder) ConnectAll(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectAll", reflect.TypeOf((*MockObservers)(nil).ConnectAll), arg0, arg1)
+}

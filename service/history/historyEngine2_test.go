@@ -159,7 +159,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard, wcache.DisableObservation)
 	s.logger = log.NewMockLogger(s.controller)
 	s.logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
