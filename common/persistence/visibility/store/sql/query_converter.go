@@ -620,3 +620,13 @@ func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
 	}
 	return false
 }
+
+func removeOrderByFromSelectQuery(queryString string) (string, error) {
+	stmt, err := sqlparser.Parse(queryString)
+	if err != nil {
+		return "", err
+	}
+	selectStmt, _ := stmt.(*sqlparser.Select)
+	selectStmt.OrderBy = nil
+	return sqlparser.String(selectStmt), nil
+}

@@ -357,82 +357,27 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	selectFilter, err := s.buildSelectStmtFromListWorkflowExecutionsRequestV2(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	converter := NewQueryConverter(
-		s.GetName(),
-		request.Namespace,
-		request.NamespaceID,
-		saTypeMap,
-		saMapper,
-		request.Query,
-	)
-	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
-	if err != nil {
-		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
-	rows, err := s.sqlStore.Db.SelectFromVisibility(ctx, *selectFilter)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("ListWorkflowExecutions operation failed. Select failed: %v", err))
-	}
-	if len(rows) == 0 {
-		return &store.InternalListWorkflowExecutionsResponse{}, nil
-	}
-
-	var infos = make([]*store.InternalWorkflowExecutionInfo, len(rows))
-	for i, row := range rows {
-		infos[i], err = s.rowToInfo(&row, request.Namespace)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var nextPageToken []byte
-	if len(rows) == request.PageSize {
-		lastRow := rows[len(rows)-1]
-		closeTime := maxTime
-		if lastRow.CloseTime != nil {
-			closeTime = *lastRow.CloseTime
-		}
-		nextPageToken, err = serializePageToken(&pageToken{
-			CloseTime: closeTime,
-			StartTime: lastRow.StartTime,
-			RunID:     lastRow.RunID,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-	return &store.InternalListWorkflowExecutionsResponse{
-		Executions:    infos,
-		NextPageToken: nextPageToken,
-	}, nil
+	return s.executeSelectStmtFromListWorkflowExecutionsRequestV2(ctx, request, selectFilter)
 }
 
 func (s *VisibilityStore) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	// custom order is not supported by Scan API
-	if strings.Contains(strings.ToLower(request.Query), "order by") {
-		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
+	selectFilter, err := s.buildSelectStmtFromListWorkflowExecutionsRequestV2(ctx, request)
+	if err != nil {
+		return nil, err
 	}
-	return s.ListWorkflowExecutions(ctx, request)
+	queryString, err := removeOrderByFromSelectQuery(selectFilter.Query)
+	if err != nil {
+		return nil, err
+	}
+	selectFilter.Query = queryString
+	return s.executeSelectStmtFromListWorkflowExecutionsRequestV2(ctx, request, selectFilter)
 }
 
 func (s *VisibilityStore) CountWorkflowExecutions(
@@ -695,4 +640,83 @@ func (s *VisibilityStore) buildQueryStringFromListRequest(
 	}
 
 	return strings.Join(queryTerms, " AND ")
+}
+
+func (s *VisibilityStore) buildSelectStmtFromListWorkflowExecutionsRequestV2(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*sqlplugin.VisibilitySelectFilter, error) {
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	converter := NewQueryConverter(
+		s.GetName(),
+		request.Namespace,
+		request.NamespaceID,
+		saTypeMap,
+		saMapper,
+		request.Query,
+	)
+	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
+	if err != nil {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
+	}
+
+	return selectFilter, nil
+}
+
+func (s *VisibilityStore) executeSelectStmtFromListWorkflowExecutionsRequestV2(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+	selectFilter *sqlplugin.VisibilitySelectFilter,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	rows, err := s.sqlStore.Db.SelectFromVisibility(ctx, *selectFilter)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("ListWorkflowExecutions operation failed. Select failed: %v", err))
+	}
+	if len(rows) == 0 {
+		return &store.InternalListWorkflowExecutionsResponse{}, nil
+	}
+
+	var infos = make([]*store.InternalWorkflowExecutionInfo, len(rows))
+	for i, row := range rows {
+		infos[i], err = s.rowToInfo(&row, request.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var nextPageToken []byte
+	if len(rows) == request.PageSize {
+		lastRow := rows[len(rows)-1]
+		closeTime := maxTime
+		if lastRow.CloseTime != nil {
+			closeTime = *lastRow.CloseTime
+		}
+		nextPageToken, err = serializePageToken(&pageToken{
+			CloseTime: closeTime,
+			StartTime: lastRow.StartTime,
+			RunID:     lastRow.RunID,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &store.InternalListWorkflowExecutionsResponse{
+		Executions:    infos,
+		NextPageToken: nextPageToken,
+	}, nil
 }
