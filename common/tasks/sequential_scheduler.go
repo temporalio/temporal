@@ -139,6 +139,7 @@ func (s *SequentialScheduler[T]) Submit(task T) {
 		if s.isStopped() {
 			s.drainTasks()
 		}
+		return
 	}
 
 	// need to dispatch this task set
@@ -261,7 +262,7 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 		default:
 			queueSize := queue.Len()
 			if queueSize > 0 {
-				s.executeTasks(queue)
+				s.executeTask(queue)
 			} else {
 				deleted := s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
 					return value.(SequentialTaskQueue[T]).IsEmpty()
@@ -277,9 +278,8 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 }
 
 // TODO: change this function to process all available tasks in the queue.
-func (s *SequentialScheduler[T]) executeTasks(queue SequentialTaskQueue[T]) {
+func (s *SequentialScheduler[T]) executeTask(queue SequentialTaskQueue[T]) {
 	task := queue.Remove()
-
 	operation := func() error {
 		if err := task.Execute(); err != nil {
 			return task.HandleErr(err)
@@ -289,10 +289,9 @@ func (s *SequentialScheduler[T]) executeTasks(queue SequentialTaskQueue[T]) {
 	isRetryable := func(err error) bool {
 		return !s.isStopped() && task.IsRetryableError(err)
 	}
-
 	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
 		if s.isStopped() {
-			task.Reschedule()
+			task.Cancel()
 			return
 		}
 
