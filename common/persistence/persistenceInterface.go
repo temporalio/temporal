@@ -143,6 +143,7 @@ type (
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 
+		InsertHistoryTree(ctx context.Context, request *InternalInsertHistoryTreeRequest) error
 		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(ctx context.Context, request *InternalAppendHistoryNodesRequest) error
 		// DeleteHistoryNodes delete a node from history node table
@@ -446,6 +447,15 @@ type (
 		ExecutionState *persistencespb.WorkflowExecutionState
 	}
 
+	InternalInsertHistoryTreeRequest struct {
+		// The branch to be appended
+		BranchInfo *persistencespb.HistoryBranch
+		// Serialized TreeInfo
+		TreeInfo *commonpb.DataBlob
+		// Used in sharded data stores to identify which shard to use
+		ShardID int32
+	}
+
 	// InternalHistoryNode represent a history node metadata
 	InternalHistoryNode struct {
 		// The first eventID becomes the nodeID to be appended
@@ -462,14 +472,10 @@ type (
 	InternalAppendHistoryNodesRequest struct {
 		// The raw branch token
 		BranchToken []byte
-		// True if it is the first append request to the branch
-		IsNewBranch bool
 		// The info for clean up data in background
 		Info string
 		// The branch to be appended
 		BranchInfo *persistencespb.HistoryBranch
-		// Serialized TreeInfo
-		TreeInfo *commonpb.DataBlob
 		// The history node
 		Node InternalHistoryNode
 		// Used in sharded data stores to identify which shard to use
