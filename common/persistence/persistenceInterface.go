@@ -507,8 +507,6 @@ type (
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
-		// The raw branch token
-		BranchToken []byte
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
 		// Serialized TreeInfo
@@ -539,8 +537,8 @@ type (
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
-		// The raw branch token
-		BranchToken []byte
+		// The branch
+		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
 		// branch ranges is used to delete range of history nodes from target branch and it ancestors.

@@ -122,7 +122,6 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	}
 
 	req := &InternalForkHistoryBranchRequest{
-		BranchToken:    request.ForkBranchToken,
 		ForkBranchInfo: forkBranch,
 		TreeInfo:       treeInfoBlob,
 		ForkNodeID:     request.ForkNodeID,
@@ -214,7 +213,7 @@ findDeleteRanges:
 	}
 
 	req := &InternalDeleteHistoryBranchRequest{
-		BranchToken:  request.BranchToken,
+		BranchInfo:   branch,
 		ShardID:      request.ShardID,
 		BranchRanges: deleteRanges,
 	}

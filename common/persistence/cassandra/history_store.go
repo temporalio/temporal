@@ -285,20 +285,16 @@ func (h *HistoryStore) DeleteHistoryBranch(
 	ctx context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
-	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
-	if err != nil {
-		return err
-	}
 
 	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-	batch.Query(v2templateDeleteBranch, branch.TreeId, branch.BranchId)
+	batch.Query(v2templateDeleteBranch, request.BranchInfo.TreeId, request.BranchInfo.BranchId)
 
 	// delete each branch range
 	for _, br := range request.BranchRanges {
-		h.deleteBranchRangeNodes(batch, branch.TreeId, br.BranchId, br.BeginNodeId)
+		h.deleteBranchRangeNodes(batch, request.BranchInfo.TreeId, br.BranchId, br.BeginNodeId)
 	}
 
-	err = h.Session.ExecuteBatch(batch)
+	err := h.Session.ExecuteBatch(batch)
 	if err != nil {
 		return gocql.ConvertError("DeleteHistoryBranch", err)
 	}
