@@ -37,6 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -384,6 +385,7 @@ type (
 		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
 		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
+		UpdateOutcomes      map[string]*historyspb.EventHistoryPointer
 
 		Tasks map[tasks.Category][]tasks.Task
 
