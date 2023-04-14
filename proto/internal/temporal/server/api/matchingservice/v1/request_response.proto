@@ -37,7 +37,7 @@ import "temporal/api/protocol/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/task_queues.proto";
+import "temporal/server/api/persistence/v1/tasks.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 
@@ -208,8 +208,7 @@ message InvalidateTaskQueueMetadataRequest {
     string task_queue = 2;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
     // The task queue versioning data should be invalidated and replaced with this data, if set.
-    temporal.server.api.persistence.v1.TaskQueueUserData user_data = 4;
-    int64 user_data_version = 5;
+    temporal.server.api.persistence.v1.VersioningData versioning_data = 4;
 }
 message InvalidateTaskQueueMetadataResponse {}
 
@@ -218,16 +217,18 @@ message GetTaskQueueMetadataRequest {
     // The task queue to fetch data from. Is always considered as a workflow queue, since root
     // workflow queues own the metadata.
     string task_queue = 2;
-    // If set to a value greater than 0, the requester wants the latest versioning data.
-    // If the requester has no data, it should set this field to 0.
+    // If set nonempty, the requester wants the latest versioning data. The value must be the hash
+    // (using farm hash Fingerprint64) of the latest versioning data. If the requester has no data,
+    // it can use any invalid value (ex: [0]).
     // If the data is up to date, no value will be returned.
-    int64 known_user_data_version = 3;
+    bytes want_versioning_data_curhash = 3;
 }
 message GetTaskQueueMetadataResponse {
     oneof versioning_data_resp {
         // The latest versioning data, if the request's hash did not match. May be null if no
         // versioning data exists.
-        temporal.server.api.persistence.v1.TaskQueueUserData user_data = 1;
-        int64 user_data_version = 2;
+        temporal.server.api.persistence.v1.VersioningData versioning_data = 1;
+        // If the request's hash matched, this variant is set (and will be true).
+        bool matched_req_hash = 2;
     }
 }
