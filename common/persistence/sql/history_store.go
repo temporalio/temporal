@@ -350,16 +350,11 @@ func (m *sqlExecutionStore) DeleteHistoryBranch(
 	ctx context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
-	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	branchIDBytes, err := primitives.ParseUUID(request.BranchInfo.BranchId)
 	if err != nil {
 		return err
 	}
-
-	branchIDBytes, err := primitives.ParseUUID(branch.BranchId)
-	if err != nil {
-		return err
-	}
-	treeIDBytes, err := primitives.ParseUUID(branch.TreeId)
+	treeIDBytes, err := primitives.ParseUUID(request.BranchInfo.TreeId)
 	if err != nil {
 		return err
 	}
