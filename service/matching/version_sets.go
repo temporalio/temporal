@@ -29,7 +29,6 @@ import (
 	"fmt"
 
 	"github.com/dgryski/go-farm"
-	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -116,8 +115,7 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 		}
 
 		existingData.VersionSets = append(existingData.GetVersionSets(), &taskqueuepb.CompatibleVersionSet{
-			VersionSetId: uuid.New(),
-			BuildIds:     []string{targetedVersion},
+			BuildIds: []string{targetedVersion},
 		})
 	} else if addNew := req.GetAddNewCompatibleBuildId(); addNew != nil {
 		compatVer := addNew.GetExistingCompatibleBuildId()
