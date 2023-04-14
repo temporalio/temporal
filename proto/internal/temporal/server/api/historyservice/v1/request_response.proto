@@ -638,6 +638,15 @@ message UpdateWorkflowExecutionResponse {
     temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse response = 1;
 }
 
+message PollWorkflowExecutionUpdateRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateRequest request = 2;
+}
+
+message PollWorkflowExecutionUpdateResponse {
+    temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateResponse response = 1;
+}
+
 message StreamWorkflowReplicationMessagesRequest {
     oneof attributes {
         temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 1;

@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -3676,7 +3677,7 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 	}
 	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
 
-	_, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
@@ -3685,7 +3686,20 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 		return nil, errUpdateWorkflowExecutionAPINotAllowed
 	}
 
-	return nil, serviceerror.NewUnimplemented("PollWorkflowExecutionUpdate is not implemented")
+	ctx, cancel := context.WithTimeout(ctx, frontend.DefaultLongPollTimeout)
+	defer cancel()
+
+	histResp, err := wh.historyClient.PollWorkflowExecutionUpdate(
+		ctx,
+		&historyservice.PollWorkflowExecutionUpdateRequest{
+			NamespaceId: ns.ID().String(),
+			Request:     request,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return histResp.GetResponse(), nil
 }
 
 func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {

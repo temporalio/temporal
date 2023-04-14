@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
@@ -549,6 +550,13 @@ func (e *historyEngineImpl) UpdateWorkflowExecution(
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 
 	return updateworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker, e.matchingClient)
+}
+
+func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	req *historyservice.PollWorkflowExecutionUpdateRequest,
+) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	return pollupdate.Invoke(ctx, req, e.workflowConsistencyChecker.GetWorkflowContext, e.workflowObservers)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
