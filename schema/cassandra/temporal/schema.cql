@@ -94,6 +94,20 @@ CREATE TABLE tasks (
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
 
+-- Stores task queue information such as user provided versioning data
+CREATE TABLE task_queue_user_data (
+  namespace_id    uuid,
+  task_queue_name text,
+  data            binary, -- temporal.server.api.persistence.v1.TaskQueueUserData as proto binary blob
+  version         int64,  -- Version of this row, used for optimistic concurrency
+  updated_at      timestamp,
+  -- task_queue_name is not a part of the parititioning key to allow iterating all task queues in a single namespace.
+  -- Access to this table should be infrequent enough that a single partition per namespace can be used.
+  PRIMARY KEY ((namespace_id), task_queue_name)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  };
+
 -- this table is only used for storage of mapping of namespace uuid to namespace name
 CREATE TABLE namespaces_by_id (
   id     uuid,
