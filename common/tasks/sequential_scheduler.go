@@ -258,6 +258,8 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 		case <-s.shutdownChan:
 			return
 		case <-workerShutdownCh:
+			// Put queue back to the queue channel
+			s.queueChan <- queue
 			return
 		default:
 			queueSize := queue.Len()
