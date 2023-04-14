@@ -116,7 +116,7 @@ func (s *fifoSchedulerSuite) TestSubmitProcess_Stopped_Submission() {
 	mockTask.EXPECT().Ack().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
 	// if task get drained
-	mockTask.EXPECT().Cancel().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
+	mockTask.EXPECT().Abort().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
 	s.scheduler.Submit(mockTask)
 
@@ -136,7 +136,7 @@ func (s *fifoSchedulerSuite) TestSubmitProcess_Stopped_FailExecution() {
 		return err
 	}).Times(1)
 	mockTask.EXPECT().IsRetryableError(executionErr).Return(true).MaxTimes(1)
-	mockTask.EXPECT().Cancel().Do(func() { testWaitGroup.Done() }).Times(1)
+	mockTask.EXPECT().Abort().Do(func() { testWaitGroup.Done() }).Times(1)
 
 	s.scheduler.Submit(mockTask)
 
