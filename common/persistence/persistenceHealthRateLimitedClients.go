@@ -30,7 +30,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/health"
 )
 
 var (
@@ -41,37 +41,37 @@ var (
 
 type (
 	shardHealthRateLimitedPersistenceClient struct {
-		rateLimiter quotas.HealthRateLimiter
+		rateLimiter health.HealthRateLimiter
 		persistence ShardManager
 		logger      log.Logger
 	}
 
 	executionHealthRateLimitedPersistenceClient struct {
-		rateLimiter quotas.HealthRateLimiter
+		rateLimiter health.HealthRateLimiter
 		persistence ExecutionManager
 		logger      log.Logger
 	}
 
 	taskHealthRateLimitedPersistenceClient struct {
-		rateLimiter quotas.HealthRateLimiter
+		rateLimiter health.HealthRateLimiter
 		persistence TaskManager
 		logger      log.Logger
 	}
 
 	metadataHealthRateLimitedPersistenceClient struct {
-		rateLimiter quotas.HealthRateLimiter
+		rateLimiter health.HealthRateLimiter
 		persistence MetadataManager
 		logger      log.Logger
 	}
 
 	clusterMetadataHealthRateLimitedPersistenceClient struct {
-		rateLimiter quotas.HealthRateLimiter
+		rateLimiter health.HealthRateLimiter
 		persistence ClusterMetadataManager
 		logger      log.Logger
 	}
 
 	queueHealthRateLimitedPersistenceClient struct {
-		rateLimiter quotas.HealthRateLimiter
+		rateLimiter health.HealthRateLimiter
 		persistence Queue
 		logger      log.Logger
 	}
@@ -84,7 +84,7 @@ var _ MetadataManager = (*metadataHealthRateLimitedPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataHealthRateLimitedPersistenceClient)(nil)
 var _ Queue = (*queueHealthRateLimitedPersistenceClient)(nil)
 
-func NewShardPersistenceHealthRateLimitedClient(persistence ShardManager, rateLimiter quotas.HealthRateLimiter, logger log.Logger) ShardManager {
+func NewShardPersistenceHealthRateLimitedClient(persistence ShardManager, rateLimiter health.HealthRateLimiter, logger log.Logger) ShardManager {
 	return &shardHealthRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -92,7 +92,7 @@ func NewShardPersistenceHealthRateLimitedClient(persistence ShardManager, rateLi
 	}
 }
 
-func NewExecutionPersistenceHealthRateLimitedClient(persistence ExecutionManager, rateLimiter quotas.HealthRateLimiter, logger log.Logger) ExecutionManager {
+func NewExecutionPersistenceHealthRateLimitedClient(persistence ExecutionManager, rateLimiter health.HealthRateLimiter, logger log.Logger) ExecutionManager {
 	return &executionHealthRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -100,7 +100,7 @@ func NewExecutionPersistenceHealthRateLimitedClient(persistence ExecutionManager
 	}
 }
 
-func NewTaskPersistenceHealthRateLimitedClient(persistence TaskManager, rateLimiter quotas.HealthRateLimiter, logger log.Logger) TaskManager {
+func NewTaskPersistenceHealthRateLimitedClient(persistence TaskManager, rateLimiter health.HealthRateLimiter, logger log.Logger) TaskManager {
 	return &taskHealthRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -108,7 +108,7 @@ func NewTaskPersistenceHealthRateLimitedClient(persistence TaskManager, rateLimi
 	}
 }
 
-func NewMetadataPersistenceHealthRateLimitedClient(persistence MetadataManager, rateLimiter quotas.HealthRateLimiter, logger log.Logger) MetadataManager {
+func NewMetadataPersistenceHealthRateLimitedClient(persistence MetadataManager, rateLimiter health.HealthRateLimiter, logger log.Logger) MetadataManager {
 	return &metadataHealthRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -116,7 +116,7 @@ func NewMetadataPersistenceHealthRateLimitedClient(persistence MetadataManager, 
 	}
 }
 
-func NewClusterMetadataPersistenceHealthRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.HealthRateLimiter, logger log.Logger) ClusterMetadataManager {
+func NewClusterMetadataPersistenceHealthRateLimitedClient(persistence ClusterMetadataManager, rateLimiter health.HealthRateLimiter, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataHealthRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -124,7 +124,7 @@ func NewClusterMetadataPersistenceHealthRateLimitedClient(persistence ClusterMet
 	}
 }
 
-func NewQueuePersistenceHealthRateLimitedClient(persistence Queue, rateLimiter quotas.HealthRateLimiter, logger log.Logger) Queue {
+func NewQueuePersistenceHealthRateLimitedClient(persistence Queue, rateLimiter health.HealthRateLimiter, logger log.Logger) Queue {
 	return &queueHealthRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,

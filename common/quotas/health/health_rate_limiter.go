@@ -22,11 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas
+package health
+
+import "go.temporal.io/server/common/quotas"
 
 type (
 	HealthRateLimiter interface {
-		RequestRateLimiter
+		quotas.RequestRateLimiter
 
 		RecordLatency(api string) func()
 		RecordLatencyByShard(api string, shardID int32) func()
