@@ -77,6 +77,7 @@ var (
 		"DeleteWorkflowVisibilityRecord":         0,
 		"UpdateWorkflowExecution":                0,
 		"StreamWorkflowReplicationMessages":      0,
+		"PollWorkflowExecutionUpdate":            0,
 	}
 
 	APIPrioritiesOrdered = []int{0}

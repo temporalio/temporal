@@ -260,6 +260,21 @@ func (c *retryableClient) PollMutableState(
 	return resp, err
 }
 
+func (c *retryableClient) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *historyservice.PollWorkflowExecutionUpdateRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	var resp *historyservice.PollWorkflowExecutionUpdateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollWorkflowExecutionUpdate(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PurgeDLQMessages(
 	ctx context.Context,
 	request *historyservice.PurgeDLQMessagesRequest,
