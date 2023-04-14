@@ -43,7 +43,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
 )
 
@@ -777,7 +776,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.HistoryBranch {
 	resp, err := s.ExecutionManager.GetHistoryTree(s.ctx, &p.GetHistoryTreeRequest{
 		TreeID:  treeID,
-		ShardID: convert.Int32Ptr(s.ShardInfo.GetShardId()),
+		ShardID: s.ShardInfo.GetShardId(),
 	})
 	s.Nil(err)
 	branches, err := s.toHistoryBranches(resp.BranchTokens)

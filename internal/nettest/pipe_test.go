@@ -22,34 +22,59 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ringpop
+package nettest
 
 import (
-	"go.uber.org/fx"
+	"sync"
+	"testing"
 
-	"go.temporal.io/server/common/membership"
+	"github.com/stretchr/testify/assert"
 )
 
-// Module provides a membership.Monitor given the types in factoryParams. It also adds lifecycle hooks, so there's no
-// need to start or stop the monitor manually.
-var Module = fx.Provide(
-	provideMonitor,
-)
+func TestPipe_Accept(t *testing.T) {
+	t.Parallel()
 
-func provideMonitor(lc fx.Lifecycle, params factoryParams) (membership.Monitor, error) {
-	f, err := newFactory(params)
-	if err != nil {
-		return nil, err
-	}
+	listener := NewPipe()
 
-	lc.Append(fx.StopHook(f.closeTChannel))
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(1)
 
-	m, err := f.getMonitor()
-	if err != nil {
-		return nil, err
-	}
+	go func() {
+		defer wg.Done()
 
-	lc.Append(fx.StartStopHook(m.Start, m.Stop))
+		c, err := listener.Accept(nil)
+		assert.NoError(t, err)
 
-	return m, nil
+		defer func() {
+			assert.NoError(t, c.Close())
+		}()
+	}()
+
+	c, err := listener.Connect(nil)
+	assert.NoError(t, err)
+
+	defer func() {
+		assert.NoError(t, c.Close())
+	}()
+}
+
+func TestPipe_ClientCanceled(t *testing.T) {
+	t.Parallel()
+
+	listener := NewPipe()
+	done := make(chan struct{})
+	close(done) // hi efe
+	_, err := listener.Connect(done)
+	assert.ErrorIs(t, err, ErrCanceled)
+}
+
+func TestPipe_ServerCanceled(t *testing.T) {
+	t.Parallel()
+
+	listener := NewPipe()
+	done := make(chan struct{})
+	close(done)
+	_, err := listener.Accept(done)
+	assert.ErrorIs(t, err, ErrCanceled)
 }

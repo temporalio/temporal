@@ -22,34 +22,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ringpop
+package config
 
 import (
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/primitives"
 )
 
-// Module provides a membership.Monitor given the types in factoryParams. It also adds lifecycle hooks, so there's no
-// need to start or stop the monitor manually.
+// ServicePortMap contains the gRPC ports for our services.
+type ServicePortMap map[primitives.ServiceName]int
+
 var Module = fx.Provide(
-	provideMonitor,
+	provideRPCConfig,
+	provideMembershipConfig,
+	provideServicePortMap,
 )
 
-func provideMonitor(lc fx.Lifecycle, params factoryParams) (membership.Monitor, error) {
-	f, err := newFactory(params)
-	if err != nil {
-		return nil, err
+func provideRPCConfig(cfg *Config, svcName primitives.ServiceName) *RPC {
+	c := cfg.Services[string(svcName)].RPC
+
+	return &c
+}
+
+func provideMembershipConfig(cfg *Config) *Membership {
+	return &cfg.Global.Membership
+}
+
+func provideServicePortMap(cfg *Config) ServicePortMap {
+	servicePortMap := make(ServicePortMap)
+	for sn, sc := range cfg.Services {
+		servicePortMap[primitives.ServiceName(sn)] = sc.RPC.GRPCPort
 	}
 
-	lc.Append(fx.StopHook(f.closeTChannel))
-
-	m, err := f.getMonitor()
-	if err != nil {
-		return nil, err
-	}
-
-	lc.Append(fx.StartStopHook(m.Start, m.Stop))
-
-	return m, nil
+	return servicePortMap
 }
