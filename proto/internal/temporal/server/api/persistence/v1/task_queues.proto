@@ -63,7 +63,7 @@ message CompatibleVersionSet {
 message VersioningData {
     // All the incompatible version sets, unordered except for the last element, which is considered the set "default".
     repeated CompatibleVersionSet version_sets = 1;
-    // HLC timestamp representing when the set default was updated.
+    // HLC timestamp representing when the default set was last updated or established.
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
     temporal.server.api.clock.v1.HybridLogicalClock default_update_timestamp = 2;
