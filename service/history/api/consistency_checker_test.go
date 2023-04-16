@@ -115,7 +115,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx).Return(mutableState, nil)
 
@@ -124,6 +124,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mutableState, workflowContext.GetMutableState())
@@ -147,7 +148,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	gomock.InOrder(
 		wfContext.EXPECT().LoadMutableState(ctx).Return(mutableState1, nil),
@@ -160,6 +161,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mutableState2, workflowContext.GetMutableState())
@@ -181,7 +183,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx).Return(nil, serviceerror.NewNotFound(""))
 
@@ -192,6 +194,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.LockPriorityHigh,
 	)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Nil(workflowContext)
@@ -213,7 +216,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx).Return(nil, serviceerror.NewNotFound(""))
 
@@ -224,6 +227,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.LockPriorityHigh,
 	)
 	s.IsType(&persistence.ShardOwnershipLostError{}, err)
 	s.Nil(workflowContext)
@@ -245,7 +249,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx).Return(nil, serviceerror.NewUnavailable(""))
 
@@ -254,6 +258,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		&shardOwnershipAsserted,
 		FailMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
+		workflow.LockPriorityHigh,
 	)
 	s.IsType(&serviceerror.Unavailable{}, err)
 	s.Nil(workflowContext)

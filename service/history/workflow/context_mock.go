@@ -161,17 +161,17 @@ func (mr *MockContextMockRecorder) LoadMutableState(ctx interface{}) *gomock.Cal
 }
 
 // Lock mocks base method.
-func (m *MockContext) Lock(ctx context.Context, caller CallerType) error {
+func (m *MockContext) Lock(ctx context.Context, lockPriority LockPriority) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Lock", ctx, caller)
+	ret := m.ctrl.Call(m, "Lock", ctx, lockPriority)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Lock indicates an expected call of Lock.
-func (mr *MockContextMockRecorder) Lock(ctx, caller interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) Lock(ctx, lockPriority interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockContext)(nil).Lock), ctx, caller)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockContext)(nil).Lock), ctx, lockPriority)
 }
 
 // PersistWorkflowEvents mocks base method.
@@ -235,15 +235,15 @@ func (mr *MockContextMockRecorder) SetWorkflowExecution(ctx interface{}) *gomock
 }
 
 // Unlock mocks base method.
-func (m *MockContext) Unlock(caller CallerType) {
+func (m *MockContext) Unlock(lockPriority LockPriority) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Unlock", caller)
+	m.ctrl.Call(m, "Unlock", lockPriority)
 }
 
 // Unlock indicates an expected call of Unlock.
-func (mr *MockContextMockRecorder) Unlock(caller interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) Unlock(lockPriority interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockContext)(nil).Unlock), caller)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockContext)(nil).Unlock), lockPriority)
 }
 
 // UpdateRegistry mocks base method.

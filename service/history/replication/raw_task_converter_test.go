@@ -158,7 +158,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 
@@ -191,7 +191,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
@@ -225,7 +225,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -260,7 +260,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 
 	activityVersion := version
@@ -362,7 +362,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 
 	activityVersion := version
@@ -464,7 +464,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enums.WORKFLOW_EXECUTION_STATUS_RUNNING).AnyTimes()
@@ -496,7 +496,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
@@ -561,7 +561,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WorkflowMissin
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 
@@ -622,7 +622,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -667,7 +667,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 			WorkflowId: s.workflowID,
 			RunId:      s.newRunID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.newWorkflowContext, s.releaseFn, nil)
 	s.newWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.newMutableState, nil)
 	s.newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -758,7 +758,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
