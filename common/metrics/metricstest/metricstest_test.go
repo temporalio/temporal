@@ -25,6 +25,7 @@
 package metricstest
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -35,7 +36,7 @@ import (
 
 func TestBasic(t *testing.T) {
 	logger := log.NewTestLogger()
-	handler := MustNewHandler(logger)
+	handler := MustNewHandler(logger, metrics.ClientConfig{})
 
 	counterName := "counter1"
 	counterTags := []metrics.Tag{
@@ -67,4 +68,41 @@ func TestBasic(t *testing.T) {
 	s2 := handler.MustSnapshot()
 	require.Equal(t, float64(2), s2.MustCounter(counterName+"_total", expectedCounterTags...))
 	require.Equal(t, float64(10), s2.MustGauge(gaugeName, expectedGaugeTags...))
+}
+
+func TestHistogram(t *testing.T) {
+	logger := log.NewTestLogger()
+	handler := MustNewHandler(logger, metrics.ClientConfig{
+		PerUnitHistogramBoundaries: map[string][]float64{
+			metrics.Dimensionless: {
+				1,
+				2,
+				5,
+			},
+		},
+	})
+
+	histogramName := "histogram1"
+	histogramTags := []metrics.Tag{
+		metrics.StringTag("l2", "v2"),
+		metrics.StringTag("l1", "v1"),
+	}
+	expectedSystemTags := []metrics.Tag{
+		metrics.StringTag("otel_scope_name", "temporal"),
+		metrics.StringTag("otel_scope_version", ""),
+	}
+	expectedHistogramTags := append(expectedSystemTags, histogramTags...)
+	histogram := handler.WithTags(histogramTags...).Histogram(histogramName, metrics.Dimensionless)
+	histogram.Record(1)
+	histogram.Record(3)
+
+	s1 := handler.MustSnapshot()
+
+	expectedBuckets := []histogramBucket{
+		{value: 1, upperBound: 1},
+		{value: 1, upperBound: 2},
+		{value: 2, upperBound: 5},
+		{value: 2, upperBound: math.Inf(1)},
+	}
+	require.Equal(t, expectedBuckets, s1.MustHistogram(histogramName+"_ratio", expectedHistogramTags...))
 }

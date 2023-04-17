@@ -36,7 +36,9 @@ import (
 	"github.com/prometheus/common/expfmt"
 	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/unit"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
@@ -55,29 +57,59 @@ type (
 		sampleValue float64
 	}
 
+	histogramBucket struct {
+		value      float64
+		upperBound float64
+	}
+
+	histogramSample struct {
+		metricType  dto.MetricType
+		labelValues map[string]string
+		buckets     []histogramBucket
+	}
+
 	Snapshot struct {
-		samples map[string]sample
+		samples          map[string]sample
+		histogramSamples map[string]histogramSample
 	}
 )
 
-func MustNewHandler(logger log.Logger) *Handler {
-	h, err := NewHandler(logger)
+func MustNewHandler(logger log.Logger, clientConfig metrics.ClientConfig) *Handler {
+	h, err := NewHandler(logger, clientConfig)
 	if err != nil {
 		panic(err)
 	}
 	return h
 }
 
-func NewHandler(logger log.Logger) (*Handler, error) {
+func NewHandler(logger log.Logger, clientConfig metrics.ClientConfig) (*Handler, error) {
 	registry := prometheus.NewRegistry()
 	exporter, err := exporters.New(exporters.WithRegisterer(registry))
 	if err != nil {
 		return nil, err
 	}
 
-	provider := sdkmetrics.NewMeterProvider(sdkmetrics.WithReader(exporter))
+	// Set any custom histogram bucket configuration.
+	var views []sdkmetrics.View
+	for _, u := range []string{metrics.Dimensionless, metrics.Bytes, metrics.Milliseconds} {
+		views = append(views, sdkmetrics.NewView(
+			sdkmetrics.Instrument{
+				Kind: sdkmetrics.InstrumentKindHistogram,
+				Unit: unit.Unit(u),
+			},
+			sdkmetrics.Stream{
+				Aggregation: aggregation.ExplicitBucketHistogram{
+					Boundaries: clientConfig.PerUnitHistogramBoundaries[u],
+				},
+			},
+		))
+	}
+	provider := sdkmetrics.NewMeterProvider(
+		sdkmetrics.WithReader(exporter),
+		sdkmetrics.WithView(views...),
+	)
 	meter := provider.Meter("temporal")
-	clientConfig := metrics.ClientConfig{}
+
 	otelHandler := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig)
 	metricsHandler := &Handler{
 		Handler: otelHandler,
@@ -102,6 +134,7 @@ func (h *Handler) Snapshot() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	samples := map[string]sample{}
+	histogramSamples := map[string]histogramSample{}
 	for name, family := range families {
 		for _, m := range family.GetMetric() {
 			labelvalues := map[string]string{}
@@ -112,7 +145,22 @@ func (h *Handler) Snapshot() (Snapshot, error) {
 			// are multiple samples recorded.
 			switch family.GetType() {
 			default:
-				// Not yet supporting histogram, summary, untyped.
+				// Not yet supporting summary, untyped.
+			case dto.MetricType_HISTOGRAM:
+				buckets := m.Histogram.GetBucket()
+				hbs := []histogramBucket{}
+				for _, bucket := range buckets {
+					hb := histogramBucket{
+						value:      float64(bucket.GetCumulativeCount()),
+						upperBound: bucket.GetUpperBound(),
+					}
+					hbs = append(hbs, hb)
+				}
+				histogramSamples[name] = histogramSample{
+					metricType:  family.GetType(),
+					labelValues: labelvalues,
+					buckets:     hbs,
+				}
 			case dto.MetricType_COUNTER:
 				samples[name] = sample{
 					metricType:  family.GetType(),
@@ -128,7 +176,10 @@ func (h *Handler) Snapshot() (Snapshot, error) {
 			}
 		}
 	}
-	return Snapshot{samples: samples}, nil
+	return Snapshot{
+		samples:          samples,
+		histogramSamples: histogramSamples,
+	}, nil
 }
 
 func (h *Handler) MustSnapshot() Snapshot {
@@ -193,10 +244,43 @@ func (s Snapshot) MustGauge(name string, tags ...metrics.Tag) float64 {
 	return v
 }
 
+func (s Snapshot) Histogram(name string, tags ...metrics.Tag) ([]histogramBucket, error) {
+	labelValues := map[string]string{}
+	for _, tag := range tags {
+		labelValues[tag.Key()] = tag.Value()
+	}
+
+	sample, ok := s.histogramSamples[name]
+	if !ok {
+		return nil, fmt.Errorf("metric %s not found", name)
+	}
+	if sample.metricType != dto.MetricType_HISTOGRAM {
+		return nil, fmt.Errorf("metric %s not a %s type", name, dto.MetricType_HISTOGRAM.String())
+	}
+	if !maps.Equal(sample.labelValues, labelValues) {
+		return nil, fmt.Errorf("metric %s label mismatch, has %v, asked for %v", name, sample.labelValues, labelValues)
+	}
+	return sample.buckets, nil
+}
+
+func (s Snapshot) MustHistogram(name string, tags ...metrics.Tag) []histogramBucket {
+	v, err := s.Histogram(name, tags...)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 func (s Snapshot) String() string {
 	var b strings.Builder
 	for n, s := range s.samples {
 		b.WriteString(fmt.Sprintf("%v %v %v %v\n", n, s.labelValues, s.sampleValue, s.metricType))
+	}
+	for n, s := range s.histogramSamples {
+		b.WriteString(fmt.Sprintf("%v %v %v\n", n, s.labelValues, s.metricType))
+		for _, bucket := range s.buckets {
+			b.WriteString(fmt.Sprintf("\t %v: %v \n", bucket.upperBound, bucket.value))
+		}
 	}
 	return b.String()
 }
