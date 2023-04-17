@@ -242,7 +242,7 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 		return err
 	}
 
-	return r.applyEvents(ctx, task)
+	return r.doApplyEvents(ctx, task)
 }
 
 func (r *HistoryReplicatorImpl) ApplyEventBlobs(
@@ -266,7 +266,7 @@ func (r *HistoryReplicatorImpl) ApplyEventBlobs(
 		return err
 	}
 
-	return r.applyEvents(ctx, task)
+	return r.doApplyEvents(ctx, task)
 }
 
 func (r *HistoryReplicatorImpl) ApplyWorkflowState(
@@ -389,7 +389,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 	)
 }
 
-func (r *HistoryReplicatorImpl) applyEvents(
+func (r *HistoryReplicatorImpl) doApplyEvents(
 	ctx context.Context,
 	task replicationTask,
 ) (retError error) {
@@ -766,7 +766,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithContinu
 	if err != nil {
 		return err
 	}
-	if err := r.applyEvents(ctx, newTask); err != nil {
+	if err := r.doApplyEvents(ctx, newTask); err != nil {
 		newTask.getLogger().Error(
 			"nDCHistoryReplicator unable to create new workflow when applyNonStartEventsToNonCurrentBranchWithContinueAsNew",
 			tag.Error(err),
@@ -775,7 +775,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithContinu
 	}
 
 	// step 3
-	if err := r.applyEvents(ctx, task); err != nil {
+	if err := r.doApplyEvents(ctx, task); err != nil {
 		newTask.getLogger().Error(
 			"nDCHistoryReplicator unable to create target workflow when applyNonStartEventsToNonCurrentBranchWithContinueAsNew",
 			tag.Error(err),
