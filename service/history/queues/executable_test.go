@@ -237,6 +237,24 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 	})
 }
 
+func (s *executableSuite) TestTaskAbort() {
+	executable := s.newTestExecutable()
+
+	executable.Abort()
+
+	s.NoError(executable.Execute()) // should be no-op and won't invoke executor
+
+	executable.Ack() // should be no-op
+	s.Equal(ctasks.TaskStateAborted, executable.State())
+
+	executable.Nack(errors.New("some random error")) // should be no-op and won't invoke scheduler or rescheduler
+
+	executable.Reschedule() // should be no-op and won't invoke rescheduler
+
+	// all error should be treated as non-retryable to break retry loop
+	s.False(executable.IsRetryableError(errors.New("some random error")))
+}
+
 func (s *executableSuite) TestTaskCancellation() {
 	executable := s.newTestExecutable()
 
