@@ -61,11 +61,17 @@ func NewTestLogger() *zapLogger {
 	if format == "" {
 		format = "console"
 	}
-	return NewZapLogger(BuildZapLogger(Config{
+
+	logger := BuildZapLogger(Config{
 		Level:       os.Getenv(testLogLevelEnvVar),
 		Format:      format,
 		Development: true,
-	}))
+	})
+
+	// Don't include stack traces for warnings during tests. Only include them for logs with level error and above.
+	logger = logger.WithOptions(zap.AddStacktrace(zap.ErrorLevel))
+
+	return NewZapLogger(logger)
 }
 
 // NewCLILogger returns a logger at debug level and log into STDERR for logging from within CLI tools

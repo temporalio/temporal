@@ -163,14 +163,14 @@ func (c *clientImpl) GetSystemInfo(
 	return c.client.GetSystemInfo(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetWorkerBuildIdOrdering(
+func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+	request *workflowservice.GetWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetWorkerBuildIdOrderingResponse, error) {
+) (*workflowservice.GetWorkerBuildIdCompatibilityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetWorkflowExecutionHistory(
@@ -301,6 +301,16 @@ func (c *clientImpl) PollActivityTaskQueue(
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionUpdateRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PollWorkflowExecutionUpdate(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollWorkflowTaskQueue(
@@ -563,14 +573,14 @@ func (c *clientImpl) UpdateSchedule(
 	return c.client.UpdateSchedule(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateWorkerBuildIdOrdering(
+func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateWorkerBuildIdOrderingResponse, error) {
+) (*workflowservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkflowExecution(

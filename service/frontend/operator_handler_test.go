@@ -88,7 +88,6 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetSearchAttributesManager(),
 		health.NewServer(),
 		s.mockResource.GetHistoryClient(),
-		s.mockResource.GetNamespaceRegistry(),
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),

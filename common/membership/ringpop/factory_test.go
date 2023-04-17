@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -138,9 +137,13 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Nil(err)
 	s.Equal("1.2.3.4", cfg.BroadcastAddress)
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
-	err = membership.ValidateConfig(&cfg)
-	s.Nil(err)
-	f, err := newFactory(&cfg, "test", nil, log.NewNoopLogger(), nil, nil, nil, nil)
+
+	params := factoryParams{
+		Config:      &cfg,
+		ServiceName: "test",
+		Logger:      log.Logger(log.NewNoopLogger()),
+	}
+	f, err := newFactory(params)
 	s.Nil(err)
 	s.NotNil(f)
 }
@@ -151,6 +154,23 @@ broadcastAddress: "1.2.3.4"
 maxJoinDuration: 30s`
 }
 
+func (s *RingpopSuite) TestInvalidBroadcastAddress() {
+	cfg := config.Membership{
+		MaxJoinDuration:  time.Minute,
+		BroadcastAddress: "oopsie",
+	}
+	logger := log.Logger(log.NewNoopLogger())
+	params := factoryParams{
+		Config:      &cfg,
+		ServiceName: "test",
+		Logger:      logger,
+	}
+	_, err := newFactory(params)
+
+	s.ErrorIs(err, errMalformedBroadcastAddress)
+	s.ErrorContains(err, "oopsie")
+}
+
 func newTestRingpopFactory(
 	serviceName primitives.ServiceName,
 	logger log.Logger,
@@ -159,14 +179,13 @@ func newTestRingpopFactory(
 	dc *dynamicconfig.Collection,
 ) *factory {
 	return &factory{
-		config:          nil,
-		serviceName:     serviceName,
-		servicePortMap:  nil,
-		logger:          logger,
-		metadataManager: nil,
-		rpcConfig:       rpcConfig,
-		tlsFactory:      tlsProvider,
-		dc:              dc,
+		factoryParams: factoryParams{
+			ServiceName: serviceName,
+			Logger:      logger,
+			RPCConfig:   rpcConfig,
+			TLSFactory:  tlsProvider,
+			DC:          dc,
+		},
 	}
 }
 
@@ -196,7 +215,7 @@ func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error
 	}
 
 	// Confirm that A's listener is actually using TLS
-	clientTLSConfig, err := serverB.tlsFactory.GetInternodeClientConfig()
+	clientTLSConfig, err := serverB.TLSFactory.GetInternodeClientConfig()
 	s.NoError(err)
 
 	conn, err := tls.Dial("tcp", hostPortA, clientTLSConfig)

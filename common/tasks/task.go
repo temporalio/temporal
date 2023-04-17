@@ -40,7 +40,9 @@ type (
 		IsRetryableError(err error) bool
 		// RetryPolicy returns the retry policy for task processing
 		RetryPolicy() backoff.RetryPolicy
-		// Cancel requests cancellation for processing the task
+		// Abort marks the task as aborted, usually means task executor shutdown
+		Abort()
+		// Cancel marks the task as cancelled, usually by the task submitter
 		Cancel()
 		// Ack marks the task as successful completed
 		Ack()

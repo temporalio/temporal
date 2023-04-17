@@ -31,7 +31,6 @@ package workflow
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/server/api/persistence/v1"
@@ -76,31 +75,31 @@ func (mr *MockContextMockRecorder) Clear() *gomock.Call {
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
-func (m *MockContext) ConflictResolveWorkflowExecution(ctx context.Context, now time.Time, conflictResolveMode persistence.ConflictResolveWorkflowMode, resetMutableState MutableState, newContext Context, newMutableState MutableState, currentContext Context, currentMutableState MutableState, currentTransactionPolicy *TransactionPolicy) error {
+func (m *MockContext) ConflictResolveWorkflowExecution(ctx context.Context, conflictResolveMode persistence.ConflictResolveWorkflowMode, resetMutableState MutableState, newContext Context, newMutableState MutableState, currentContext Context, currentMutableState MutableState, currentTransactionPolicy *TransactionPolicy) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", ctx, now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy)
+	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", ctx, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ConflictResolveWorkflowExecution indicates an expected call of ConflictResolveWorkflowExecution.
-func (mr *MockContextMockRecorder) ConflictResolveWorkflowExecution(ctx, now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) ConflictResolveWorkflowExecution(ctx, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockContext)(nil).ConflictResolveWorkflowExecution), ctx, now, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockContext)(nil).ConflictResolveWorkflowExecution), ctx, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy)
 }
 
 // CreateWorkflowExecution mocks base method.
-func (m *MockContext) CreateWorkflowExecution(ctx context.Context, now time.Time, createMode persistence.CreateWorkflowMode, prevRunID string, prevLastWriteVersion int64, newMutableState MutableState, newWorkflow *persistence.WorkflowSnapshot, newWorkflowEvents []*persistence.WorkflowEvents) error {
+func (m *MockContext) CreateWorkflowExecution(ctx context.Context, createMode persistence.CreateWorkflowMode, prevRunID string, prevLastWriteVersion int64, newMutableState MutableState, newWorkflow *persistence.WorkflowSnapshot, newWorkflowEvents []*persistence.WorkflowEvents) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateWorkflowExecution", ctx, now, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents)
+	ret := m.ctrl.Call(m, "CreateWorkflowExecution", ctx, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateWorkflowExecution indicates an expected call of CreateWorkflowExecution.
-func (mr *MockContextMockRecorder) CreateWorkflowExecution(ctx, now, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) CreateWorkflowExecution(ctx, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockContext)(nil).CreateWorkflowExecution), ctx, now, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockContext)(nil).CreateWorkflowExecution), ctx, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents)
 }
 
 // GetHistorySize mocks base method.
@@ -162,17 +161,17 @@ func (mr *MockContextMockRecorder) LoadMutableState(ctx interface{}) *gomock.Cal
 }
 
 // Lock mocks base method.
-func (m *MockContext) Lock(ctx context.Context, caller CallerType) error {
+func (m *MockContext) Lock(ctx context.Context, lockPriority LockPriority) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Lock", ctx, caller)
+	ret := m.ctrl.Call(m, "Lock", ctx, lockPriority)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Lock indicates an expected call of Lock.
-func (mr *MockContextMockRecorder) Lock(ctx, caller interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) Lock(ctx, lockPriority interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockContext)(nil).Lock), ctx, caller)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockContext)(nil).Lock), ctx, lockPriority)
 }
 
 // PersistWorkflowEvents mocks base method.
@@ -217,29 +216,29 @@ func (mr *MockContextMockRecorder) SetHistorySize(size interface{}) *gomock.Call
 }
 
 // SetWorkflowExecution mocks base method.
-func (m *MockContext) SetWorkflowExecution(ctx context.Context, now time.Time) error {
+func (m *MockContext) SetWorkflowExecution(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetWorkflowExecution", ctx, now)
+	ret := m.ctrl.Call(m, "SetWorkflowExecution", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetWorkflowExecution indicates an expected call of SetWorkflowExecution.
-func (mr *MockContextMockRecorder) SetWorkflowExecution(ctx, now interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) SetWorkflowExecution(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).SetWorkflowExecution), ctx, now)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).SetWorkflowExecution), ctx)
 }
 
 // Unlock mocks base method.
-func (m *MockContext) Unlock(caller CallerType) {
+func (m *MockContext) Unlock(lockPriority LockPriority) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Unlock", caller)
+	m.ctrl.Call(m, "Unlock", lockPriority)
 }
 
 // Unlock indicates an expected call of Unlock.
-func (mr *MockContextMockRecorder) Unlock(caller interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) Unlock(lockPriority interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockContext)(nil).Unlock), caller)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockContext)(nil).Unlock), lockPriority)
 }
 
 // UpdateRegistry mocks base method.
@@ -257,71 +256,71 @@ func (mr *MockContextMockRecorder) UpdateRegistry() *gomock.Call {
 }
 
 // UpdateWorkflowExecutionAsActive mocks base method.
-func (m *MockContext) UpdateWorkflowExecutionAsActive(ctx context.Context, now time.Time) error {
+func (m *MockContext) UpdateWorkflowExecutionAsActive(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionAsActive", ctx, now)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionAsActive", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateWorkflowExecutionAsActive indicates an expected call of UpdateWorkflowExecutionAsActive.
-func (mr *MockContextMockRecorder) UpdateWorkflowExecutionAsActive(ctx, now interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateWorkflowExecutionAsActive(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionAsActive", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionAsActive), ctx, now)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionAsActive", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionAsActive), ctx)
 }
 
 // UpdateWorkflowExecutionAsPassive mocks base method.
-func (m *MockContext) UpdateWorkflowExecutionAsPassive(ctx context.Context, now time.Time) error {
+func (m *MockContext) UpdateWorkflowExecutionAsPassive(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionAsPassive", ctx, now)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionAsPassive", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateWorkflowExecutionAsPassive indicates an expected call of UpdateWorkflowExecutionAsPassive.
-func (mr *MockContextMockRecorder) UpdateWorkflowExecutionAsPassive(ctx, now interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateWorkflowExecutionAsPassive(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionAsPassive", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionAsPassive), ctx, now)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionAsPassive", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionAsPassive), ctx)
 }
 
 // UpdateWorkflowExecutionWithNew mocks base method.
-func (m *MockContext) UpdateWorkflowExecutionWithNew(ctx context.Context, now time.Time, updateMode persistence.UpdateWorkflowMode, newContext Context, newMutableState MutableState, currentWorkflowTransactionPolicy TransactionPolicy, newWorkflowTransactionPolicy *TransactionPolicy) error {
+func (m *MockContext) UpdateWorkflowExecutionWithNew(ctx context.Context, updateMode persistence.UpdateWorkflowMode, newContext Context, newMutableState MutableState, currentWorkflowTransactionPolicy TransactionPolicy, newWorkflowTransactionPolicy *TransactionPolicy) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionWithNew", ctx, now, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionWithNew", ctx, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateWorkflowExecutionWithNew indicates an expected call of UpdateWorkflowExecutionWithNew.
-func (mr *MockContextMockRecorder) UpdateWorkflowExecutionWithNew(ctx, now, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateWorkflowExecutionWithNew(ctx, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionWithNew", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionWithNew), ctx, now, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionWithNew", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionWithNew), ctx, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
 }
 
 // UpdateWorkflowExecutionWithNewAsActive mocks base method.
-func (m *MockContext) UpdateWorkflowExecutionWithNewAsActive(ctx context.Context, now time.Time, newContext Context, newMutableState MutableState) error {
+func (m *MockContext) UpdateWorkflowExecutionWithNewAsActive(ctx context.Context, newContext Context, newMutableState MutableState) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionWithNewAsActive", ctx, now, newContext, newMutableState)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionWithNewAsActive", ctx, newContext, newMutableState)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateWorkflowExecutionWithNewAsActive indicates an expected call of UpdateWorkflowExecutionWithNewAsActive.
-func (mr *MockContextMockRecorder) UpdateWorkflowExecutionWithNewAsActive(ctx, now, newContext, newMutableState interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateWorkflowExecutionWithNewAsActive(ctx, newContext, newMutableState interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionWithNewAsActive", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionWithNewAsActive), ctx, now, newContext, newMutableState)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionWithNewAsActive", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionWithNewAsActive), ctx, newContext, newMutableState)
 }
 
 // UpdateWorkflowExecutionWithNewAsPassive mocks base method.
-func (m *MockContext) UpdateWorkflowExecutionWithNewAsPassive(ctx context.Context, now time.Time, newContext Context, newMutableState MutableState) error {
+func (m *MockContext) UpdateWorkflowExecutionWithNewAsPassive(ctx context.Context, newContext Context, newMutableState MutableState) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionWithNewAsPassive", ctx, now, newContext, newMutableState)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionWithNewAsPassive", ctx, newContext, newMutableState)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateWorkflowExecutionWithNewAsPassive indicates an expected call of UpdateWorkflowExecutionWithNewAsPassive.
-func (mr *MockContextMockRecorder) UpdateWorkflowExecutionWithNewAsPassive(ctx, now, newContext, newMutableState interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateWorkflowExecutionWithNewAsPassive(ctx, newContext, newMutableState interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionWithNewAsPassive", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionWithNewAsPassive), ctx, now, newContext, newMutableState)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionWithNewAsPassive", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionWithNewAsPassive), ctx, newContext, newMutableState)
 }

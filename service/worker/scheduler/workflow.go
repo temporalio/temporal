@@ -76,8 +76,6 @@ const (
 	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
 
-	invalidDuration time.Duration = -1
-
 	rateLimitedErrorType = "RateLimited"
 )
 
@@ -93,6 +91,9 @@ type (
 		cspec *CompiledSpec
 
 		tweakables tweakablePolicies
+
+		currentTimer         workflow.Future
+		currentTimerDeadline time.Time
 
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
@@ -118,16 +119,18 @@ type (
 		SleepWhilePaused                  bool // If true, don't set timers while paused/out of actions
 		// MaxBufferSize limits the number of buffered starts. This also limits the number of
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
-		MaxBufferSize int
+		MaxBufferSize  int
+		AllowZeroSleep bool // Whether to allow a zero-length timer. Used for workflow compatibility.
+		ReuseTimer     bool // Whether to reuse timer. Used for workflow compatibility.
 	}
 )
 
 var (
 	defaultLocalActivityOptions = workflow.LocalActivityOptions{
-		// This applies to poll, cancel, and terminate. Start workflow overrides this.
+		// This applies to watch, cancel, and terminate. Start workflow overrides this.
 		ScheduleToCloseTimeout: 1 * time.Hour,
-		// We're using the default workflow task timeout of 10s, so limit local activities to 5s.
-		// We might do up to two per workflow task (cancel previous and start new workflow).
+		// Each local activity is one or a few local RPCs.
+		// Currently this is applied manually, see https://github.com/temporalio/sdk-go/issues/1066
 		StartToCloseTimeout: 5 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
@@ -150,6 +153,8 @@ var (
 		IterationsBeforeContinueAsNew:     500,
 		SleepWhilePaused:                  true,
 		MaxBufferSize:                     1000,
+		AllowZeroSleep:                    true,
+		ReuseTimer:                        true,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -204,7 +209,7 @@ func (s *scheduler) run() error {
 			s.logger.Warn("Time went backwards", "from", t1, "to", t2)
 			t2 = t1
 		}
-		nextSleep := s.processTimeRange(
+		nextWakeup := s.processTimeRange(
 			t1, t2,
 			// resolve this to the schedule's policy as late as possible
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
@@ -215,7 +220,7 @@ func (s *scheduler) run() error {
 		scheduleChanged := s.processSignals()
 		if scheduleChanged {
 			// need to calculate sleep again
-			nextSleep = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false)
+			nextWakeup = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false)
 		}
 		// try starting workflows in the buffer
 		//nolint:revive
@@ -226,7 +231,7 @@ func (s *scheduler) run() error {
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
 		// 3. a workflow that we were watching finished
-		s.sleep(nextSleep)
+		s.sleep(nextWakeup)
 		s.updateTweakables()
 	}
 
@@ -333,11 +338,11 @@ func (s *scheduler) processTimeRange(
 	t1, t2 time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
-) time.Duration {
+) time.Time {
 	s.logger.Debug("processTimeRange", "t1", t1, "t2", t2, "overlap-policy", overlapPolicy, "manual", manual)
 
 	if s.cspec == nil {
-		return invalidDuration
+		return time.Time{}
 	}
 
 	catchupWindow := s.getCatchupWindow()
@@ -350,20 +355,18 @@ func (s *scheduler) processTimeRange(
 			return s.cspec.getNextTime(t1)
 		}).Get(&next))
 		t1 = next.Next
-		if t1.IsZero() {
-			return invalidDuration
-		} else if t1.After(t2) {
-			return t1.Sub(t2)
+		if t1.IsZero() || t1.After(t2) {
+			return t1
+		}
+		// Peek at paused/remaining actions state and don't bother if we're not going to
+		// take an action now. (Don't count as missed catchup window either.)
+		if !s.canTakeScheduledAction(manual, false) {
+			continue
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
 			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.GetMetricName()).Inc(1)
 			s.Info.MissedCatchupWindow++
-			continue
-		}
-		// Peek at paused/remaining actions state and don't even bother adding
-		// to buffer if we're not going to take an action now.
-		if !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
@@ -395,7 +398,7 @@ func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
 	return false
 }
 
-func (s *scheduler) sleep(nextSleep time.Duration) {
+func (s *scheduler) sleep(nextWakeup time.Time) {
 	sel := workflow.NewSelector(s.ctx)
 
 	upCh := workflow.GetSignalChannel(s.ctx, SignalNameUpdate)
@@ -413,19 +416,39 @@ func (s *scheduler) sleep(nextSleep time.Duration) {
 
 	// if we're paused or out of actions, we don't need to wake up until we get an update
 	if s.tweakables.SleepWhilePaused && !s.canTakeScheduledAction(false, false) {
-		nextSleep = invalidDuration
+		nextWakeup = time.Time{}
 	}
 
-	if nextSleep != invalidDuration {
-		tmr := workflow.NewTimer(s.ctx, nextSleep)
-		sel.AddFuture(tmr, func(_ workflow.Future) {})
+	if !nextWakeup.IsZero() {
+		sleepTime := nextWakeup.Sub(s.now())
+		// A previous version of this workflow passed around sleep duration instead of wakeup time,
+		// which means it always set a timer even in cases where sleepTime comes out negative. For
+		// compatibility, we have to continue setting a positive timer in those cases. The value
+		// doesn't have to match, though.
+		if !s.tweakables.AllowZeroSleep && sleepTime <= 0 {
+			sleepTime = time.Second
+		}
+		// A previous version of this workflow always created a new timer here, which is wasteful.
+		// We can reuse a previous timer if we have the same deadline and it didn't fire yet.
+		if s.tweakables.ReuseTimer {
+			if s.currentTimer == nil || !s.currentTimerDeadline.Equal(nextWakeup) {
+				s.currentTimer = workflow.NewTimer(s.ctx, sleepTime)
+				s.currentTimerDeadline = nextWakeup
+			}
+			sel.AddFuture(s.currentTimer, func(_ workflow.Future) {
+				s.currentTimer = nil
+			})
+		} else {
+			tmr := workflow.NewTimer(s.ctx, sleepTime)
+			sel.AddFuture(tmr, func(_ workflow.Future) {})
+		}
 	}
 
 	if s.watchingFuture != nil {
 		sel.AddFuture(s.watchingFuture, s.wfWatcherReturned)
 	}
 
-	s.logger.Debug("sleeping", "next-sleep", nextSleep, "watching", s.watchingFuture != nil)
+	s.logger.Debug("sleeping", "next-wakeup", nextWakeup, "watching", s.watchingFuture != nil)
 	sel.Select(s.ctx)
 	for sel.HasPending() {
 		sel.Select(s.ctx)
@@ -989,7 +1012,7 @@ func panicIfErr(err error) {
 	}
 }
 
-func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs) *schedpb.ScheduleListInfo {
+func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time) *schedpb.ScheduleListInfo {
 	// note that this does not take into account InitialPatch
 	fakeScheduler := &scheduler{
 		StartScheduleArgs: *args,
@@ -997,5 +1020,6 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs) *schedpb.Schedul
 	}
 	fakeScheduler.ensureFields()
 	fakeScheduler.compileSpec()
+	fakeScheduler.State.LastProcessedTime = timestamp.TimePtr(now)
 	return fakeScheduler.getListInfo()
 }

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/headers"
@@ -89,4 +90,17 @@ func (c *metricClient) finishMetricsRecording(
 		metricsHandler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
 	metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
+}
+
+func (c *metricClient) StreamWorkflowReplicationMessages(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (_ adminservice.AdminService_StreamWorkflowReplicationMessagesClient, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.AdminStreamWorkflowReplicationMessagesScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 }

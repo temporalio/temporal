@@ -22,19 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
-
-import (
-	"fmt"
-	"net"
-
-	"go.temporal.io/server/common/config"
-)
-
-// ValidateConfig validates that the membership config is parseable and valid
-func ValidateConfig(cfg *config.Membership) error {
-	if cfg.BroadcastAddress != "" && net.ParseIP(cfg.BroadcastAddress) == nil {
-		return fmt.Errorf("ringpop config malformed `broadcastAddress` param")
-	}
-	return nil
-}
+// Package nettest provides an in-memory socket, Pipe. It can be used in place of net.Dial and net.Listen for faster and
+// more hermetic tests.
+package nettest

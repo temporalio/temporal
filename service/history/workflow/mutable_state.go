@@ -45,6 +45,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -166,7 +167,7 @@ type (
 		GetChildExecutionInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetWorkflowCloseTime(ctx context.Context) (*time.Time, error)
-		GetWorkflowTaskInfo(int64) (*WorkflowTaskInfo, bool)
+		GetWorkflowTaskByID(scheduledEventID int64) *WorkflowTaskInfo
 		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetSignalExternalInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
@@ -175,12 +176,12 @@ type (
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetExecutionState() *persistencespb.WorkflowExecutionState
-		GetInFlightWorkflowTask() (*WorkflowTaskInfo, bool)
-		GetPendingWorkflowTask() (*WorkflowTaskInfo, bool)
+		GetStartedWorkflowTask() *WorkflowTaskInfo
+		GetPendingWorkflowTask() *WorkflowTaskInfo
 		GetLastFirstEventIDTxnID() (int64, int64)
 		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
-		GetPreviousStartedEventID() int64
+		GetLastWorkflowTaskStartedEventID() int64
 		GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistencespb.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
@@ -196,13 +197,14 @@ type (
 		GetWorkflowType() *commonpb.WorkflowType
 		GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus)
 		GetQueryRegistry() QueryRegistry
+		GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
-		HasInFlightWorkflowTask() bool
+		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool
-		HasProcessedOrPendingWorkflowTask() bool
+		HadOrHasWorkflowTask() bool
 		IsCancelRequested() bool
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
@@ -257,6 +259,11 @@ type (
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *HistoryBuilder)
 		SetHistoryTree(ctx context.Context, executionTimeout *time.Duration, runTimeout *time.Duration, treeID string) error
+		SetBaseWorkflow(
+			baseRunID string,
+			baseRunLowestCommonAncestorEventID int64,
+			baseRunLowestCommonAncestorEventVersion int64,
+		)
 		UpdateActivity(*persistencespb.ActivityInfo) error
 		UpdateActivityWithTimerHeartbeat(*persistencespb.ActivityInfo, time.Time) error
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
@@ -270,8 +277,8 @@ type (
 		GetUpdateCondition() (int64, int64)
 
 		StartTransaction(entry *namespace.Namespace) (bool, error)
-		CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
-		CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
+		CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
+		CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 		GenerateMigrationTasks() (tasks.Task, error)
 
 		// ContinueAsNewMinBackoff calculate minimal backoff for next ContinueAsNew run.

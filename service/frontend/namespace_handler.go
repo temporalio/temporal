@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -107,6 +108,8 @@ var (
 	errCannotDoNamespaceFailoverAndUpdate = serviceerror.NewInvalidArgument("Cannot set active cluster to current cluster when other parameters are set.")
 	errInvalidRetentionPeriod             = serviceerror.NewInvalidArgument("A valid retention period is not set on request.")
 	errInvalidNamespaceStateUpdate        = serviceerror.NewInvalidArgument("Invalid namespace state update.")
+
+	errCustomSearchAttributeFieldAlreadyAllocated = serviceerror.NewInvalidArgument("Custom search attribute field name already allocated.")
 )
 
 // newNamespaceHandler create a new namespace handler
@@ -512,9 +515,16 @@ func (d *namespaceHandlerImpl) UpdateNamespace(
 				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Total resetBinaries cannot exceed the max limit: %v", maxLength))
 			}
 		}
-		if updatedConfig.CustomSearchAttributeAliases != nil {
+		if len(updatedConfig.CustomSearchAttributeAliases) > 0 {
 			configurationChanged = true
-			config.CustomSearchAttributeAliases = updatedConfig.CustomSearchAttributeAliases
+			csaAliases, err := d.upsertCustomSearchAttributesAliases(
+				config.CustomSearchAttributeAliases,
+				updatedConfig.CustomSearchAttributeAliases,
+			)
+			if err != nil {
+				return nil, err
+			}
+			config.CustomSearchAttributeAliases = csaAliases
 		}
 	}
 
@@ -776,6 +786,23 @@ func (d *namespaceHandlerImpl) mergeNamespaceData(
 		old[k] = v
 	}
 	return old
+}
+
+func (d *namespaceHandlerImpl) upsertCustomSearchAttributesAliases(
+	current map[string]string,
+	upsert map[string]string,
+) (map[string]string, error) {
+	result := util.CloneMapNonNil(current)
+	for key, value := range upsert {
+		if value == "" {
+			delete(result, key)
+		} else if _, ok := current[key]; !ok {
+			result[key] = value
+		} else {
+			return nil, errCustomSearchAttributeFieldAlreadyAllocated
+		}
+	}
+	return result, nil
 }
 
 func (d *namespaceHandlerImpl) toArchivalRegisterEvent(

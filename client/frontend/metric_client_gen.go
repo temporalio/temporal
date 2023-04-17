@@ -217,18 +217,18 @@ func (c *metricClient) GetSystemInfo(
 	return c.client.GetSystemInfo(ctx, request, opts...)
 }
 
-func (c *metricClient) GetWorkerBuildIdOrdering(
+func (c *metricClient) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+	request *workflowservice.GetWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (_ *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
+) (_ *workflowservice.GetWorkerBuildIdCompatibilityResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientGetWorkerBuildIdOrderingScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientGetWorkerBuildIdCompatibilityScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
 func (c *metricClient) GetWorkflowExecutionHistory(
@@ -411,6 +411,20 @@ func (c *metricClient) PollActivityTaskQueue(
 	}()
 
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
+}
+
+func (c *metricClient) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionUpdateRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PollWorkflowExecutionUpdateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientPollWorkflowExecutionUpdateScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollWorkflowExecutionUpdate(ctx, request, opts...)
 }
 
 func (c *metricClient) PollWorkflowTaskQueue(
@@ -777,18 +791,18 @@ func (c *metricClient) UpdateSchedule(
 	return c.client.UpdateSchedule(ctx, request, opts...)
 }
 
-func (c *metricClient) UpdateWorkerBuildIdOrdering(
+func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (_ *workflowservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+) (_ *workflowservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateWorkerBuildIdOrderingScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateWorkerBuildIdCompatibilityScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateWorkflowExecution(

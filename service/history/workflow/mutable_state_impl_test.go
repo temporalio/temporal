@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -43,6 +44,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -161,7 +163,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 
 	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
 
-	newWorkflowTask, _ := s.mutableState.GetWorkflowTaskInfo(newWorkflowTaskScheduleEvent.GetEventId())
+	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
 	s.NotNil(newWorkflowTask)
 
 	_, err := s.mutableState.AddWorkflowTaskTimedOutEvent(
@@ -184,7 +186,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 
 	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
 
-	newWorkflowTask, _ := s.mutableState.GetWorkflowTaskInfo(newWorkflowTaskScheduleEvent.GetEventId())
+	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
 	s.NotNil(newWorkflowTask)
 
 	_, err := s.mutableState.AddWorkflowTaskFailedEvent(
@@ -207,7 +209,7 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name: "closeTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), TransactionPolicyPassive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -218,7 +220,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -661,7 +663,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent,
 		newWorkflowTaskStartedEvent,
 	}))
-	_, _, err = s.mutableState.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyPassive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
 	s.NoError(err)
 
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent
@@ -833,4 +835,87 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 	s.Assert().Equal(now, *ai.StartedTime)
 	s.Assert().Equal(requestID, ai.RequestId)
 	s.Assert().Nil(ai.LastHeartbeatDetails)
+}
+
+func (s *mutableStateSuite) TestTotalEntitiesCount() {
+	namespaceEntry := s.newNamespaceCacheEntry()
+	mutableState := TestLocalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		namespaceEntry,
+		s.logger,
+		uuid.New(),
+	)
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// scheduling, starting & completing workflow task is omitted here
+
+	workflowTaskCompletedEventID := int64(4)
+	_, _, err := mutableState.AddActivityTaskScheduledEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{},
+		false,
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		uuid.New(),
+		&commandpb.StartChildWorkflowExecutionCommandAttributes{},
+		namespace.ID(uuid.New()),
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddTimerStartedEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.StartTimerCommandAttributes{},
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		uuid.New(),
+		&commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{},
+		namespace.ID(uuid.New()),
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		uuid.New(),
+		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			},
+		},
+		namespace.ID(uuid.New()),
+	)
+	s.NoError(err)
+
+	_, err = mutableState.AddWorkflowExecutionSignaled(
+		"signalName",
+		&commonpb.Payloads{},
+		"identity",
+		&commonpb.Header{},
+	)
+	s.NoError(err)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
+		namespaceEntry.IsGlobalNamespace(),
+		mutableState.GetCurrentVersion(),
+	).Return(cluster.TestCurrentClusterName)
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
+
+	mutation, _, err := mutableState.CloseTransactionAsMutation(
+		TransactionPolicyActive,
+	)
+	s.NoError(err)
+
+	s.Equal(int64(1), mutation.ExecutionInfo.ActivityCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.ChildExecutionCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.UserTimerCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.RequestCancelExternalCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.SignalExternalCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.SignalCount)
 }

@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
@@ -173,22 +174,39 @@ func (r *resetterImpl) getBaseBranchToken(
 		r.workflowID,
 		r.baseRunID,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		baseWorkflow.GetReleaseFn()(retError)
-	}()
+	switch err.(type) {
+	case nil:
+		defer func() {
+			baseWorkflow.GetReleaseFn()(retError)
+		}()
 
-	baseVersionHistories := baseWorkflow.GetMutableState().GetExecutionInfo().GetVersionHistories()
-	index, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		baseVersionHistories,
-		versionhistory.NewVersionHistoryItem(baseLastEventID, baseLastEventVersion),
-	)
-	if err != nil {
-		// the base event and incoming event are from different branch
-		// only re-replicate the gap on the incoming branch
-		// the base branch event will eventually arrived
+		baseVersionHistories := baseWorkflow.GetMutableState().GetExecutionInfo().GetVersionHistories()
+		index, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+			baseVersionHistories,
+			versionhistory.NewVersionHistoryItem(baseLastEventID, baseLastEventVersion),
+		)
+		if err != nil {
+			// the base event and incoming event are from different branch
+			// only re-replicate the gap on the incoming branch
+			// the base branch event will eventually arrived
+			return nil, serviceerrors.NewRetryReplication(
+				resendOnResetWorkflowMessage,
+				r.namespaceID.String(),
+				r.workflowID,
+				r.newRunID,
+				common.EmptyEventID,
+				common.EmptyVersion,
+				incomingFirstEventID,
+				incomingFirstEventVersion,
+			)
+		}
+
+		baseVersionHistory, err := versionhistory.GetVersionHistory(baseVersionHistories, index)
+		if err != nil {
+			return nil, err
+		}
+		return baseVersionHistory.GetBranchToken(), nil
+	case *serviceerror.NotFound:
 		return nil, serviceerrors.NewRetryReplication(
 			resendOnResetWorkflowMessage,
 			r.namespaceID.String(),
@@ -199,13 +217,9 @@ func (r *resetterImpl) getBaseBranchToken(
 			incomingFirstEventID,
 			incomingFirstEventVersion,
 		)
-	}
-
-	baseVersionHistory, err := versionhistory.GetVersionHistory(baseVersionHistories, index)
-	if err != nil {
+	default:
 		return nil, err
 	}
-	return baseVersionHistory.GetBranchToken(), nil
 }
 
 func (r *resetterImpl) getResetBranchToken(
@@ -221,6 +235,7 @@ func (r *resetterImpl) getResetBranchToken(
 		ForkNodeID:      baseLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID.String(), r.workflowID, r.newRunID),
 		ShardID:         shardID,
+		NamespaceID:     r.namespaceID.String(),
 	})
 	if err != nil {
 		return nil, err

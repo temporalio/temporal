@@ -78,11 +78,16 @@ var (
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
 	errBatchOperationNotSet                               = serviceerror.NewInvalidArgument("Batch operation is not set on request.")
+	errCronAndStartDelaySet                               = serviceerror.NewInvalidArgument("CronSchedule and WorkflowStartDelay may not be used together.")
+	errInvalidWorkflowStartDelaySeconds                   = serviceerror.NewInvalidArgument("An invalid WorkflowStartDelaySeconds is set on request.")
+	errRaceConditionAddingSearchAttributes                = serviceerror.NewUnavailable("Generated search attributes mapping unavailble.")
 
-	errUpdateMetaNotSet  = serviceerror.NewInvalidArgument("Update meta is not set on request.")
-	errUpdateInputNotSet = serviceerror.NewInvalidArgument("Update input is not set on request.")
-	errUpdateNameNotSet  = serviceerror.NewInvalidArgument("Update name is not set on request.")
-	errUpdateIDTooLong   = serviceerror.NewInvalidArgument("UpdateId length exceeds limit.")
+	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
+	errUpdateInputNotSet      = serviceerror.NewInvalidArgument("Update input is not set on request.")
+	errUpdateNameNotSet       = serviceerror.NewInvalidArgument("Update name is not set on request.")
+	errUpdateIDTooLong        = serviceerror.NewInvalidArgument("UpdateId length exceeds limit.")
+	errUpdateRefNotSet        = serviceerror.NewInvalidArgument("UpdateRef is not set on request.")
+	errUpdateWaitPolicyNotSet = serviceerror.NewInvalidArgument("WaitPolicy is not set on request.")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 

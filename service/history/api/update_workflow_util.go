@@ -49,6 +49,7 @@ func GetAndUpdateWorkflowWithNew(
 		reqClock,
 		consistencyCheckFn,
 		workflowKey,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -104,15 +105,11 @@ func UpdateWorkflowWithNew(
 
 		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
-			shard.GetTimeSource().Now(),
 			newContext,
 			newMutableState,
 		)
 	} else {
-		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
-			ctx,
-			shard.GetTimeSource().Now(),
-		)
+		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(ctx)
 	}
 
 	return updateErr

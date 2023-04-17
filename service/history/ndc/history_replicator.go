@@ -35,6 +35,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -55,7 +57,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -247,7 +248,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err
@@ -279,6 +280,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 	newHistoryBranchToken, err := r.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+		request.NamespaceId,
 		branchInfo.GetTreeId(),
 		&branchInfo.BranchId,
 		branchInfo.Ancestors,
@@ -355,7 +357,7 @@ func (r *HistoryReplicatorImpl) applyEvents(
 		ctx,
 		task.getNamespaceID(),
 		*task.getExecution(),
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
@@ -748,25 +750,32 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 
 	// for non reset workflow execution replication task, just do re-replication
 	if !task.isWorkflowReset() {
+		startEventId := common.EmptyEventID
+		startEventVersion := common.EmptyVersion
+		if task.getBaseWorkflowInfo() != nil {
+			startEventId = task.getBaseWorkflowInfo().LowestCommonAncestorEventId
+			startEventVersion = task.getBaseWorkflowInfo().LowestCommonAncestorEventVersion
+		}
 		firstEvent := task.getFirstEvent()
+		endEventId := firstEvent.GetEventId()
+		endEventVersion := firstEvent.GetVersion()
 		return nil, serviceerrors.NewRetryReplication(
 			mutableStateMissingMessage,
 			task.getNamespaceID().String(),
 			task.getWorkflowID(),
 			task.getRunID(),
-			common.EmptyEventID,
-			common.EmptyVersion,
-			firstEvent.GetEventId(),
-			firstEvent.GetVersion(),
+			startEventId,
+			startEventVersion,
+			endEventId,
+			endEventVersion,
 		)
 	}
 
-	workflowTaskFailedEvent := task.getFirstEvent()
-	attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
-	baseRunID := attr.GetBaseRunId()
-	baseEventID := workflowTaskFailedEvent.GetEventId() - 1
-	baseEventVersion := attr.GetForkEventVersion()
-	newRunID := attr.GetNewRunId()
+	baseWorkflowInfo := task.getBaseWorkflowInfo()
+	baseRunID := baseWorkflowInfo.RunId
+	baseEventID := baseWorkflowInfo.LowestCommonAncestorEventId
+	baseEventVersion := baseWorkflowInfo.LowestCommonAncestorEventVersion
+	newRunID := newContext.GetWorkflowKey().RunID
 
 	workflowResetter := r.newResetter(
 		task.getNamespaceID(),

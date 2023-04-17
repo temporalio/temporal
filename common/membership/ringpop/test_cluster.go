@@ -34,6 +34,7 @@ import (
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/tchannel-go"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -46,7 +47,7 @@ type testCluster struct {
 	hostUUIDs    []string
 	hostAddrs    []string
 	hostInfoList []membership.HostInfo
-	rings        []membership.Monitor
+	rings        []*monitor
 	channels     []*tchannel.Channel
 	seedNode     string
 }
@@ -75,7 +76,7 @@ func newTestCluster(
 		hostUUIDs:    make([]string, size),
 		hostAddrs:    make([]string, size),
 		hostInfoList: make([]membership.HostInfo, size),
-		rings:        make([]membership.Monitor, size),
+		rings:        make([]*monitor, size),
 		channels:     make([]*tchannel.Channel, size),
 		seedNode:     seed,
 	}
@@ -158,7 +159,7 @@ func newTestCluster(
 		_, port, _ := splitHostPortTyped(cluster.hostAddrs[i])
 		cluster.rings[i] = newMonitor(
 			serviceName,
-			map[primitives.ServiceName]int{serviceName: int(port)}, // use same port for "grpc" port
+			config.ServicePortMap{serviceName: int(port)}, // use same port for "grpc" port
 			rpWrapper,
 			logger,
 			mockMgr,

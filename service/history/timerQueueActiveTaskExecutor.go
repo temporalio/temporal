@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -310,8 +310,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		return nil
 	}
 
-	workflowTask, ok := mutableState.GetWorkflowTaskInfo(task.EventID)
-	if !ok {
+	workflowTask := mutableState.GetWorkflowTaskByID(task.EventID)
+	if workflowTask == nil {
 		return nil
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
@@ -390,9 +390,14 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 			1,
 			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
 		)
+	} else if task.WorkflowBackoffType == enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START {
+		t.metricHandler.Counter(metrics.WorkflowDelayedStartBackoffTimerCount.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(metrics.TimerActiveTaskWorkflowBackoffTimerScope),
+		)
 	}
 
-	if mutableState.HasProcessedOrPendingWorkflowTask() {
+	if mutableState.HadOrHasWorkflowTask() {
 		// already has workflow task
 		return nil
 	}
@@ -578,7 +583,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	newExecutionState := newMutableState.GetExecutionState()
 	return weContext.UpdateWorkflowExecutionWithNewAsActive(
 		ctx,
-		t.shard.GetTimeSource().Now(),
 		workflow.NewContext(
 			t.shard,
 			definition.NewWorkflowKey(
@@ -612,9 +616,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 			return err
 		}
 	}
-
-	now := t.shard.GetTimeSource().Now()
-	return context.UpdateWorkflowExecutionAsActive(ctx, now)
+	return context.UpdateWorkflowExecutionAsActive(ctx)
 }
 
 func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(

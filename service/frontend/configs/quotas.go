@@ -33,8 +33,11 @@ import (
 
 var (
 	ExecutionAPICountLimitOverride = map[string]int{
-		"PollActivityTaskQueue": 1,
-		"PollWorkflowTaskQueue": 1,
+		"PollActivityTaskQueue":       1,
+		"PollWorkflowTaskQueue":       1,
+		"QueryWorkflow":               1,
+		"UpdateWorkflowExecution":     1,
+		"GetWorkflowExecutionHistory": 1,
 	}
 
 	ExecutionAPIToPriority = map[string]int{
@@ -46,6 +49,7 @@ var (
 		"TerminateWorkflowExecution":       0,
 		"GetWorkflowExecutionHistory":      0,
 		"UpdateWorkflowExecution":          0,
+		"PollWorkflowExecutionUpdate":      0,
 
 		// priority 1
 		"RecordActivityTaskHeartbeat":      1,
@@ -67,8 +71,8 @@ var (
 		"PollWorkflowTaskQueue":              2,
 		"PollActivityTaskQueue":              2,
 		"GetWorkflowExecutionHistoryReverse": 2,
-		"GetWorkerBuildIdOrdering":           2,
-		"UpdateWorkerBuildIdOrdering":        2,
+		"GetWorkerBuildIdCompatibility":      2,
+		"UpdateWorkerBuildIdCompatibility":   2,
 		"DeleteWorkflowExecution":            2,
 
 		// priority 3

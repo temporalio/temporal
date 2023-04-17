@@ -107,7 +107,7 @@ func (r *service) bootstrap(
 
 		_, err = r.Ringpop.Bootstrap(bootParams)
 		if err != nil {
-			r.logger.Error("unable to bootstrap ringpop. retrying", tag.Error(err))
+			r.logger.Warn("unable to bootstrap ringpop. retrying", tag.Error(err))
 		}
 		return err
 	}

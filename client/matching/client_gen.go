@@ -80,11 +80,11 @@ func (c *clientImpl) GetTaskQueueMetadata(
 	return client.GetTaskQueueMetadata(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetWorkerBuildIdOrdering(
+func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.GetWorkerBuildIdOrderingRequest,
+	request *matchingservice.GetWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
 
 	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
@@ -92,7 +92,7 @@ func (c *clientImpl) GetWorkerBuildIdOrdering(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+	return client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
 func (c *clientImpl) InvalidateTaskQueueMetadata(
@@ -140,11 +140,11 @@ func (c *clientImpl) RespondQueryTaskCompleted(
 	return client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateWorkerBuildIdOrdering(
+func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.UpdateWorkerBuildIdOrderingRequest,
+	request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 
 	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
@@ -152,5 +152,5 @@ func (c *clientImpl) UpdateWorkerBuildIdOrdering(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+	return client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 }

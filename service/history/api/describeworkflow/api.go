@@ -68,6 +68,7 @@ func Invoke(
 			req.Request.Execution.WorkflowId,
 			req.Request.Execution.RunId,
 		),
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -183,7 +184,7 @@ func Invoke(
 		}
 	}
 
-	if pendingWorkflowTask, ok := mutableState.GetPendingWorkflowTask(); ok {
+	if pendingWorkflowTask := mutableState.GetPendingWorkflowTask(); pendingWorkflowTask != nil {
 		result.PendingWorkflowTask = &workflowpb.PendingWorkflowTaskInfo{
 			State:                 enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
 			ScheduledTime:         pendingWorkflowTask.ScheduledTime,

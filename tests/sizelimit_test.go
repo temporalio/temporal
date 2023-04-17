@@ -28,19 +28,19 @@ import (
 	"bytes"
 	"encoding/binary"
 	"flag"
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -242,4 +242,105 @@ SignalLoop:
 		time.Sleep(100 * time.Millisecond)
 	}
 	s.True(isCloseCorrect)
+}
+
+func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
+
+	id := "integration-workflow-failed-large-payload"
+	wt := "integration-workflow-failed-large-payload-type"
+	tl := "integration-workflow-failed-large-payload-taskqueue"
+	identity := "worker1"
+
+	var largePayload []byte
+	for i := 0; i < 101; i++ {
+		largePayload = append(largePayload, byte(rand.Int()))
+	}
+	pl, err := payloads.Encode(largePayload)
+	s.NoError(err)
+	sigReadyToSendChan := make(chan struct{}, 1)
+	sigSendDoneChan := make(chan struct{})
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		select {
+		case sigReadyToSendChan <- struct{}{}:
+		default:
+		}
+
+		select {
+		case <-sigSendDoneChan:
+		}
+		return []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+				Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+					RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{
+						MarkerName: "large-payload",
+						Details:    map[string]*commonpb.Payloads{"test": pl},
+					},
+				},
+			},
+		}, nil
+	}
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: wt},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Input:               nil,
+		WorkflowTaskTimeout: timestamp.DurationPtr(60 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	go func() {
+		_, err = poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	}()
+
+	select {
+	case <-sigReadyToSendChan:
+	}
+
+	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()},
+		SignalName:        "signal-name",
+		Identity:          identity,
+		RequestId:         uuid.New(),
+	})
+	s.NoError(err)
+	close(sigSendDoneChan)
+
+	verifyWorkflowFailed := false
+	for i := 0; i < 10; i++ {
+		lastEvent := s.getLastEvent(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
+		if enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED == lastEvent.GetEventType() {
+			verifyWorkflowFailed = true
+		}
+		time.Sleep(time.Second)
+	}
+	if !verifyWorkflowFailed {
+		s.Fail("The workflow is expected to fail but it is not.")
+	}
+	histories := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
+	for _, event := range histories {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+			return
+		}
+	}
+	s.Fail("Missing signal event")
 }

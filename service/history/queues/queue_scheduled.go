@@ -214,7 +214,7 @@ func (p *scheduledQueue) processEventLoop() {
 			p.processNewTime()
 		case <-p.lookAheadCh:
 			p.lookAheadTask()
-		case <-p.timerGate.FireChan():
+		case <-p.timerGate.FireCh():
 			p.processNewRange()
 		case <-p.checkpointTimer.C:
 			p.checkpoint()

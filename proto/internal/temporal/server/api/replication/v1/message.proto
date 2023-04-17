@@ -37,6 +37,7 @@ import "temporal/api/common/v1/message.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/replication/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
+import "temporal/server/api/workflow/v1/message.proto";
 
 message ReplicationTask {
     temporal.server.api.enums.v1.ReplicationTaskType task_type = 1;
@@ -68,6 +69,11 @@ message SyncShardStatus {
     google.protobuf.Timestamp status_time = 1 [(gogoproto.stdtime) = true];
 }
 
+message SyncReplicationState {
+    int64 last_processed_message_id = 1;
+    google.protobuf.Timestamp  last_processed_message_time = 2 [(gogoproto.stdtime) = true];
+}
+
 message ReplicationMessages {
     repeated ReplicationTask replication_tasks = 1;
     // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
@@ -75,6 +81,13 @@ message ReplicationMessages {
     // Hint for flow control.
     bool has_more  = 3;
     SyncShardStatus sync_shard_status = 4;
+}
+
+message WorkflowReplicationMessages {
+    repeated ReplicationTask replication_tasks = 1;
+    // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
+    int64 last_task_id = 2;
+    google.protobuf.Timestamp  last_task_time = 3 [(gogoproto.stdtime) = true];
 }
 
 message ReplicationTaskInfo {
@@ -121,6 +134,7 @@ message SyncActivityTaskAttributes {
     temporal.api.failure.v1.Failure last_failure = 12;
     string last_worker_identity = 13;
     temporal.server.api.history.v1.VersionHistory version_history = 14;
+    temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 15;
 }
 
 message HistoryTaskAttributes {
@@ -132,6 +146,8 @@ message HistoryTaskAttributes {
     temporal.api.common.v1.DataBlob events = 6;
     // New run events does not need version history since there is no prior events.
     temporal.api.common.v1.DataBlob new_run_events = 7;
+    temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 8;
+
 }
 
 message SyncWorkflowStateTaskAttributes {

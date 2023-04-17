@@ -234,12 +234,11 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
 ) error {
 
 	if newWorkflow == nil {
-		return targetWorkflow.GetContext().UpdateWorkflowExecutionAsPassive(ctx, now)
+		return targetWorkflow.GetContext().UpdateWorkflowExecutionAsPassive(ctx)
 	}
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNewAsPassive(
 		ctx,
-		now,
 		newWorkflow.GetContext(),
 		newWorkflow.GetMutableState(),
 	)
@@ -310,7 +309,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		persistence.UpdateWorkflowModeBypassCurrent,
 		newContext,
 		newMutableState,
@@ -354,7 +352,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
 		ctx,
-		now,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetWorkflow.GetMutableState(),
 		newContext,
@@ -381,7 +378,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
 		ctx,
-		now,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetWorkflow.GetMutableState(),
 		newContext,
@@ -454,7 +450,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
 		ctx,
-		now,
 		persistence.ConflictResolveWorkflowModeBypassCurrent,
 		targetWorkflow.GetMutableState(),
 		newContext,

@@ -197,8 +197,8 @@ const (
 	AdminRemoveRemoteClusterScope = "AdminRemoveRemoteCluster"
 	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecution
 	AdminDeleteWorkflowExecutionScope = "AdminDeleteWorkflowExecution"
-	// AdminStreamReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
-	AdminStreamReplicationMessagesScope = "AdminStreamReplicationMessages"
+	// AdminStreamWorkflowReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
+	AdminStreamWorkflowReplicationMessagesScope = "AdminStreamWorkflowReplicationMessages"
 
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope
@@ -247,6 +247,8 @@ const (
 	FrontendClientListOpenWorkflowExecutionsScope = "FrontendClientListOpenWorkflowExecutions"
 	// FrontendClientPollActivityTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollActivityTaskQueueScope = "FrontendClientPollActivityTaskQueue"
+	//FrontendClientPollWorkflowExecutionUpdateScope tracks RPC calls to frontend service
+	FrontendClientPollWorkflowExecutionUpdateScope = "FrontendClientPollWorkflowExecutionUpdate"
 	// FrontendClientPollWorkflowTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollWorkflowTaskQueueScope = "FrontendClientPollWorkflowTaskQueue"
 	// FrontendClientQueryWorkflowScope tracks RPC calls to frontend service
@@ -319,12 +321,12 @@ const (
 	FrontendClientDeleteScheduleScope = "FrontendClientDeleteSchedule"
 	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
 	FrontendClientListSchedulesScope = "FrontendClientListSchedules"
-	// FrontendClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to frontend service
-	FrontendClientUpdateWorkerBuildIdOrderingScope = "FrontendClientUpdateWorkerBuildIdOrdering"
+	// FrontendClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
+	FrontendClientUpdateWorkerBuildIdCompatibilityScope = "FrontendClientUpdateWorkerBuildIdCompatibility"
 	// FrontendClientUpdateWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientUpdateWorkflowExecutionScope = "FrontendClientUpdateWorkflowExecution"
-	// FrontendClientGetWorkerBuildIdOrderingScope tracks RPC calls to frontend service
-	FrontendClientGetWorkerBuildIdOrderingScope = "FrontendClientGetWorkerBuildIdOrdering"
+	// FrontendClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
+	FrontendClientGetWorkerBuildIdCompatibilityScope = "FrontendClientGetWorkerBuildIdCompatibility"
 	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
 	FrontendClientDescribeBatchOperationScope = "FrontendClientDescribeBatchOperation"
 	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
@@ -435,8 +437,8 @@ const (
 	HistoryClientDescribeHistoryHostScope = "HistoryClientDescribeHistoryHost"
 	// HistoryClientGetReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
-	// HistoryClientStreamReplicationMessagesScope tracks RPC calls to history service
-	HistoryClientStreamReplicationMessagesScope = "HistoryClientStreamReplicationMessages"
+	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientStreamWorkflowReplicationMessagesScope = "HistoryClientStreamWorkflowReplicationMessages"
 )
 
 // Matching Client Operations
@@ -459,10 +461,10 @@ const (
 	MatchingClientDescribeTaskQueueScope = "MatchingClientDescribeTaskQueue"
 	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskQueuePartitionsScope = "MatchingClientListTaskQueuePartitions"
-	// MatchingClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to matching service
-	MatchingClientUpdateWorkerBuildIdOrderingScope = "MatchingClientUpdateWorkerBuildIdOrdering"
-	// MatchingClientGetWorkerBuildIdOrderingScope tracks RPC calls to matching service
-	MatchingClientGetWorkerBuildIdOrderingScope = "MatchingClientGetWorkerBuildIdOrdering"
+	// MatchingClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
+	MatchingClientUpdateWorkerBuildIdCompatibilityScope = "MatchingClientUpdateWorkerBuildIdCompatibility"
+	// MatchingClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
+	MatchingClientGetWorkerBuildIdCompatibilityScope = "MatchingClientGetWorkerBuildIdCompatibility"
 	// MatchingClientInvalidateTaskQueueMetadataScope tracks RPC calls to matching service
 	MatchingClientInvalidateTaskQueueMetadataScope = "MatchingClientInvalidateTaskQueueMetadata"
 	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
@@ -796,10 +798,10 @@ const (
 	FrontendDeleteScheduleScope = "DeleteSchedule"
 	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope = "ListSchedulesScope is the metric scope for frontend.ListSchedules"
 	FrontendListSchedulesScope = "ListSchedules"
-	// FrontendUpdateWorkerBuildIdOrderingScope is the metric scope for frontend.UpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrderingScope is the metric scope for frontend.UpdateWorkerBuildIdOrdering"
-	FrontendUpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrdering"
-	// FrontendGetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrdering"
-	FrontendGetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrdering"
+	// FrontendUpdateWorkerBuildIdCompatibilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatibility"
+	FrontendUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
+	// FrontendGetWorkerBuildIdCompatibilityScope is the metric scope for frontend.GetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibilityScope is the metric scope for frontend.GetWorkerBuildIdCompatibility"
+	FrontendGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
 	// FrontendUpdateWorkflowExecutionScope is the metric scope for frontend.UpdateWorkflowExecution
 	FrontendUpdateWorkflowExecutionScope = "UpdateWorkflowExecution"
 	// FrontendDescribeBatchOperationScope is the metric scope for frontend.DescribeBatchOperation
@@ -1090,13 +1092,13 @@ const (
 	MatchingDescribeTaskQueueScope = "DescribeTaskQueue"
 	// MatchingListTaskQueuePartitionsScope tracks ListTaskQueuePartitions API calls received by service
 	MatchingListTaskQueuePartitionsScope = "ListTaskQueuePartitions"
-	// MatchingUpdateWorkerBuildIdOrderingScope tracks UpdateWorkerBuildIdOrdering API calls received by service
-	MatchingUpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrdering"
-	// MatchingGetWorkerBuildIdOrderingScope tracks GetWorkerBuildIdOrdering API calls received by service
-	MatchingGetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrdering"
-	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	// MatchingUpdateWorkerBuildIdCompatibilityScope tracks UpdateWorkerBuildIdCompatibility API calls received by service
+	MatchingUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
+	// MatchingGetWorkerBuildIdCompatibilityScope tracks GetWorkerBuildIdCompatibility API calls received by service
+	MatchingGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
+	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
 	MatchingInvalidateTaskQueueMetadataScope = "InvalidateTaskQueueMetadata"
-	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
 	MatchingGetTaskQueueMetadataScope = "GetTaskQueueMetadata"
 )
 
@@ -1404,16 +1406,25 @@ var (
 	ChildInfoSize                                  = NewBytesHistogramDef("child_info_size")
 	RequestCancelInfoSize                          = NewBytesHistogramDef("request_cancel_info_size")
 	SignalInfoSize                                 = NewBytesHistogramDef("signal_info_size")
+	SignalRequestIDSize                            = NewBytesHistogramDef("signal_request_id_size")
 	BufferedEventsSize                             = NewBytesHistogramDef("buffered_events_size")
 	ActivityInfoCount                              = NewDimensionlessHistogramDef("activity_info_count")
 	TimerInfoCount                                 = NewDimensionlessHistogramDef("timer_info_count")
 	ChildInfoCount                                 = NewDimensionlessHistogramDef("child_info_count")
 	SignalInfoCount                                = NewDimensionlessHistogramDef("signal_info_count")
 	RequestCancelInfoCount                         = NewDimensionlessHistogramDef("request_cancel_info_count")
+	SignalRequestIDCount                           = NewDimensionlessHistogramDef("signal_request_id_count")
 	BufferedEventsCount                            = NewDimensionlessHistogramDef("buffered_events_count")
 	TaskCount                                      = NewDimensionlessHistogramDef("task_count")
+	TotalActivityCount                             = NewDimensionlessHistogramDef("total_activity_count")
+	TotalUserTimerCount                            = NewDimensionlessHistogramDef("total_user_timer_count")
+	TotalChildExecutionCount                       = NewDimensionlessHistogramDef("total_child_execution_count")
+	TotalRequestCancelExternalCount                = NewDimensionlessHistogramDef("total_request_cancel_external_count")
+	TotalSignalExternalCount                       = NewDimensionlessHistogramDef("total_signal_external_count")
+	TotalSignalCount                               = NewDimensionlessHistogramDef("total_signal_count")
 	WorkflowRetryBackoffTimerCount                 = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount                  = NewCounterDef("workflow_cron_backoff_timer")
+	WorkflowDelayedStartBackoffTimerCount          = NewCounterDef("workflow_delayed_start_backoff_timer")
 	WorkflowCleanupDeleteCount                     = NewCounterDef("workflow_cleanup_delete")
 	WorkflowCleanupArchiveCount                    = NewCounterDef("workflow_cleanup_archive")
 	WorkflowCleanupNopCount                        = NewCounterDef("workflow_cleanup_nop")
@@ -1595,6 +1606,7 @@ var (
 	ElasticsearchBulkProcessorBulkSize                        = NewDimensionlessHistogramDef("elasticsearch_bulk_processor_bulk_size")
 	ElasticsearchDocumentParseFailuresCount                   = NewCounterDef("elasticsearch_document_parse_failures_counter")
 	ElasticsearchDocumentGenerateFailuresCount                = NewCounterDef("elasticsearch_document_generate_failures_counter")
+	ElasticsearchCustomOrderByClauseCount                     = NewCounterDef("elasticsearch_custom_order_by_clause_counter")
 	CatchUpReadyShardCountGauge                               = NewGaugeDef("catchup_ready_shard_count")
 	HandoverReadyShardCountGauge                              = NewGaugeDef("handover_ready_shard_count")
 	ReplicatorMessages                                        = NewCounterDef("replicator_messages")
