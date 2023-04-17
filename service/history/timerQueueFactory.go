@@ -94,7 +94,7 @@ func NewTimerQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					timerQueuePersistenceMaxRPSRatio,
 				),
-				params.Config.QueueMaxReaderCount(),
+				int64(params.Config.QueueMaxReaderCount()),
 			),
 		},
 	}

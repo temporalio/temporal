@@ -50,7 +50,7 @@ type (
 		MergeWithSlice(Slice) []Slice
 		CompactWithSlice(Slice) Slice
 		ShrinkScope()
-		SelectTasks(readerID int32, batchSize int) ([]Executable, error)
+		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
 		MoreTasks() bool
 		TaskStats() TaskStats
 		Clear()
@@ -60,7 +60,7 @@ type (
 		PendingPerNamespace map[namespace.ID]int
 	}
 
-	ExecutableInitializer func(readerID int32, t tasks.Task) Executable
+	ExecutableInitializer func(readerID int64, t tasks.Task) Executable
 
 	SliceImpl struct {
 		paginationFnProvider  PaginationFnProvider
@@ -359,7 +359,7 @@ func (s *SliceImpl) shrinkPredicate() {
 	s.scope.Predicate = tasks.AndPredicates(s.scope.Predicate, namespacePredicate)
 }
 
-func (s *SliceImpl) SelectTasks(readerID int32, batchSize int) ([]Executable, error) {
+func (s *SliceImpl) SelectTasks(readerID int64, batchSize int) ([]Executable, error) {
 	s.stateSanityCheck()
 
 	if len(s.iterators) == 0 {

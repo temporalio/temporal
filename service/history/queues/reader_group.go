@@ -38,7 +38,7 @@ import (
 )
 
 type (
-	ReaderInitializer func(readerID int32, slices []Slice) Reader
+	ReaderInitializer func(readerID int64, slices []Slice) Reader
 
 	ReaderGroup struct {
 		sync.Mutex
@@ -50,7 +50,7 @@ type (
 		executionManager persistence.ExecutionManager
 
 		status    int32
-		readerMap map[int32]Reader
+		readerMap map[int64]Reader
 	}
 )
 
@@ -69,7 +69,7 @@ func NewReaderGroup(
 		executionManager: executionManager,
 
 		status:    common.DaemonStatusInitialized,
-		readerMap: make(map[int32]Reader),
+		readerMap: make(map[int64]Reader),
 	}
 }
 
@@ -99,7 +99,7 @@ func (g *ReaderGroup) Stop() {
 	}
 }
 
-func (g *ReaderGroup) ForEach(f func(int32, Reader)) {
+func (g *ReaderGroup) ForEach(f func(int64, Reader)) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -108,17 +108,17 @@ func (g *ReaderGroup) ForEach(f func(int32, Reader)) {
 	}
 }
 
-func (g *ReaderGroup) Readers() map[int32]Reader {
+func (g *ReaderGroup) Readers() map[int64]Reader {
 	g.Lock()
 	defer g.Unlock()
 
-	readerMapCopy := make(map[int32]Reader, len(g.readerMap))
+	readerMapCopy := make(map[int64]Reader, len(g.readerMap))
 	maps.Copy(readerMapCopy, g.readerMap)
 
 	return readerMapCopy
 }
 
-func (g *ReaderGroup) ReaderByID(readerID int32) (Reader, bool) {
+func (g *ReaderGroup) ReaderByID(readerID int64) (Reader, bool) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -128,7 +128,7 @@ func (g *ReaderGroup) ReaderByID(readerID int32) (Reader, bool) {
 
 // TODO: this method should return error
 // if reader registration fails or reader group already closed
-func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
+func (g *ReaderGroup) NewReader(readerID int64, slices ...Slice) Reader {
 	reader := g.initializer(readerID, slices)
 
 	g.Lock()
@@ -157,14 +157,14 @@ func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
 	return reader
 }
 
-func (g *ReaderGroup) RemoveReader(readerID int32) {
+func (g *ReaderGroup) RemoveReader(readerID int64) {
 	g.Lock()
 	defer g.Unlock()
 
 	g.removeReaderLocked(readerID)
 }
 
-func (g *ReaderGroup) removeReaderLocked(readerID int32) {
+func (g *ReaderGroup) removeReaderLocked(readerID int64) {
 	reader, ok := g.readerMap[readerID]
 	if !ok {
 		return

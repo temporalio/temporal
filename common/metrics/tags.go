@@ -210,7 +210,7 @@ func TaskPriorityTag(value string) Tag {
 	return &tagImpl{key: TaskPriorityTagName, value: value}
 }
 
-func QueueReaderIDTag(readerID int32) Tag {
+func QueueReaderIDTag(readerID int64) Tag {
 	return &tagImpl{key: QueueReaderIDTagName, value: strconv.Itoa(int(readerID))}
 }
 

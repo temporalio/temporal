@@ -353,7 +353,7 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob) (*persistenc
 	}
 	for _, queueState := range shardInfo.QueueStates {
 		if queueState.ReaderStates == nil {
-			queueState.ReaderStates = make(map[int32]*persistencespb.QueueReaderState)
+			queueState.ReaderStates = make(map[int64]*persistencespb.QueueReaderState)
 		}
 		for _, readerState := range queueState.ReaderStates {
 			if readerState.Scopes == nil {

@@ -96,7 +96,7 @@ func NewTransferQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					transferQueuePersistenceMaxRPSRatio,
 				),
-				params.Config.QueueMaxReaderCount(),
+				int64(params.Config.QueueMaxReaderCount()),
 			),
 		},
 	}

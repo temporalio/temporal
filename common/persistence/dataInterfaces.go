@@ -415,7 +415,7 @@ type (
 		ShardID      int32
 		ShardOwner   string
 		TaskCategory tasks.Category
-		ReaderID     int32
+		ReaderID     int64
 	}
 
 	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
@@ -429,7 +429,7 @@ type (
 		ShardID                    int32
 		ShardOwner                 string
 		TaskCategory               tasks.Category
-		ReaderID                   int32
+		ReaderID                   int64
 		InclusiveMinPendingTaskKey tasks.Key
 	}
 
@@ -439,7 +439,7 @@ type (
 	GetHistoryTasksRequest struct {
 		ShardID             int32
 		TaskCategory        tasks.Category
-		ReaderID            int32
+		ReaderID            int64
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
 		BatchSize           int

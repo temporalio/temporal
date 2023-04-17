@@ -92,7 +92,7 @@ func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) {
 }
 
 func (a *actionQueuePendingTask) tryShrinkSlice(
-	readers map[int32]Reader,
+	readers map[int64]Reader,
 ) bool {
 	for _, reader := range readers {
 		reader.ShrinkSlices()
@@ -108,7 +108,7 @@ func (a *actionQueuePendingTask) init() {
 }
 
 func (a *actionQueuePendingTask) gatherStatistics(
-	readers map[int32]Reader,
+	readers map[int64]Reader,
 ) {
 	// gather statistic for
 	// 1. total # of pending tasks per namespace
@@ -175,11 +175,11 @@ func (a *actionQueuePendingTask) findSliceToClear(
 }
 
 func (a *actionQueuePendingTask) splitAndClearSlice(
-	readers map[int32]Reader,
+	readers map[int64]Reader,
 	readerGroup *ReaderGroup,
 ) {
 	for readerID, reader := range readers {
-		if readerID == int32(a.maxReaderCount)-1 {
+		if readerID == int64(a.maxReaderCount)-1 {
 			// we can't do further split, have to clear entire slice
 			cleared := false
 			reader.ClearSlices(func(s Slice) bool {

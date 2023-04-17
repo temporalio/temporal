@@ -70,7 +70,7 @@ func (a *slicePredicateAction) Run(readerGroup *ReaderGroup) {
 		return
 	}
 
-	if a.maxReaderCount <= DefaultReaderId+1 {
+	if int64(a.maxReaderCount) <= DefaultReaderId+1 {
 		return
 	}
 

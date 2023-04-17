@@ -48,15 +48,15 @@ type (
 		GetSlicePendingTaskCount(slice Slice) int
 		SetSlicePendingTaskCount(slice Slice, count int)
 
-		GetReaderWatermark(readerID int32) (tasks.Key, bool)
-		SetReaderWatermark(readerID int32, watermark tasks.Key)
+		GetReaderWatermark(readerID int64) (tasks.Key, bool)
+		SetReaderWatermark(readerID int64, watermark tasks.Key)
 
 		GetTotalSliceCount() int
-		GetSliceCount(readerID int32) int
-		SetSliceCount(readerID int32, count int)
+		GetSliceCount(readerID int64) int
+		SetSliceCount(readerID int64, count int)
 
 		RemoveSlice(slice Slice)
-		RemoveReader(readerID int32)
+		RemoveReader(readerID int64)
 
 		ResolveAlert(AlertType)
 		AlertCh() <-chan *Alert
@@ -75,7 +75,7 @@ type (
 		totalPendingTaskCount int
 		totalSliceCount       int
 
-		readerStats map[int32]readerStats
+		readerStats map[int64]readerStats
 		sliceStats  map[Slice]sliceStats
 
 		categoryType tasks.CategoryType
@@ -106,7 +106,7 @@ func newMonitor(
 	options *MonitorOptions,
 ) *monitorImpl {
 	return &monitorImpl{
-		readerStats:   make(map[int32]readerStats),
+		readerStats:   make(map[int64]readerStats),
 		sliceStats:    make(map[Slice]sliceStats),
 		categoryType:  categoryType,
 		options:       options,
@@ -155,7 +155,7 @@ func (m *monitorImpl) SetSlicePendingTaskCount(slice Slice, count int) {
 	}
 }
 
-func (m *monitorImpl) GetReaderWatermark(readerID int32) (tasks.Key, bool) {
+func (m *monitorImpl) GetReaderWatermark(readerID int64) (tasks.Key, bool) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -167,7 +167,7 @@ func (m *monitorImpl) GetReaderWatermark(readerID int32) (tasks.Key, bool) {
 	return stats.progress.watermark, true
 }
 
-func (m *monitorImpl) SetReaderWatermark(readerID int32, watermark tasks.Key) {
+func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key) {
 	// TODO: currently only tracking default reader progress for scheduled queue
 	if readerID != DefaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
 		return
@@ -216,7 +216,7 @@ func (m *monitorImpl) GetTotalSliceCount() int {
 	return count
 }
 
-func (m *monitorImpl) GetSliceCount(readerID int32) int {
+func (m *monitorImpl) GetSliceCount(readerID int64) int {
 	m.Lock()
 	defer m.Unlock()
 
@@ -226,7 +226,7 @@ func (m *monitorImpl) GetSliceCount(readerID int32) int {
 	return 0
 }
 
-func (m *monitorImpl) SetSliceCount(readerID int32, count int) {
+func (m *monitorImpl) SetSliceCount(readerID int64, count int) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -261,7 +261,7 @@ func (m *monitorImpl) RemoveSlice(slice Slice) {
 	delete(m.sliceStats, slice)
 }
 
-func (m *monitorImpl) RemoveReader(readerID int32) {
+func (m *monitorImpl) RemoveReader(readerID int64) {
 	m.Lock()
 	defer m.Unlock()
 

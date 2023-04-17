@@ -77,7 +77,7 @@ func (s *readerGroupSuite) SetupTest() {
 		s.shardID,
 		s.shardOwner,
 		s.category,
-		func(_ int32, _ []Slice) Reader {
+		func(_ int64, _ []Slice) Reader {
 			return newTestReader()
 		},
 		s.mockExecutionManager,
@@ -89,7 +89,7 @@ func (s *readerGroupSuite) TearDownTest() {
 }
 
 func (s *readerGroupSuite) TestStartStop() {
-	readerID := int32(DefaultReaderId)
+	readerID := DefaultReaderId
 	s.setupRegisterReaderMock(readerID)
 	r := s.readerGroup.NewReader(readerID)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
@@ -97,7 +97,7 @@ func (s *readerGroupSuite) TestStartStop() {
 	s.readerGroup.Start()
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
-	readerID = int32(DefaultReaderId + 1)
+	readerID = DefaultReaderId + 1
 	s.setupRegisterReaderMock(readerID)
 	r = s.readerGroup.NewReader(readerID)
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
@@ -113,7 +113,7 @@ func (s *readerGroupSuite) TestStartStop() {
 		s.Equal(common.DaemonStatusStopped, r.status)
 	}
 
-	readerID = int32(DefaultReaderId + 2)
+	readerID = DefaultReaderId + 2
 	s.setupRegisterReaderMock(readerID)
 	r = s.readerGroup.NewReader(readerID)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
@@ -126,7 +126,7 @@ func (s *readerGroupSuite) TestAddGetReader() {
 	s.False(ok)
 	s.Nil(r)
 
-	for i := int32(0); i < 3; i++ {
+	for i := int64(0); i < 3; i++ {
 		s.setupRegisterReaderMock(i)
 		r = s.readerGroup.NewReader(i)
 
@@ -148,7 +148,7 @@ func (s *readerGroupSuite) TestRemoveReader() {
 	s.readerGroup.Start()
 	defer s.readerGroup.Stop()
 
-	readerID := int32(DefaultReaderId)
+	readerID := DefaultReaderId
 
 	s.setupRegisterReaderMock(readerID)
 	r := s.readerGroup.NewReader(readerID)
@@ -161,14 +161,14 @@ func (s *readerGroupSuite) TestRemoveReader() {
 }
 
 func (s *readerGroupSuite) TestForEach() {
-	readerIDs := []int32{1, 2, 3}
+	readerIDs := []int64{1, 2, 3}
 	for _, readerID := range readerIDs {
 		s.setupRegisterReaderMock(readerID)
 		s.readerGroup.NewReader(readerID)
 	}
 
-	forEachResult := make(map[int32]Reader)
-	s.readerGroup.ForEach(func(i int32, r Reader) {
+	forEachResult := make(map[int64]Reader)
+	s.readerGroup.ForEach(func(i int64, r Reader) {
 		forEachResult[i] = r
 	})
 
@@ -176,7 +176,7 @@ func (s *readerGroupSuite) TestForEach() {
 }
 
 func (s *readerGroupSuite) setupRegisterReaderMock(
-	readerID int32,
+	readerID int64,
 ) {
 	request := &persistence.RegisterHistoryTaskReaderRequest{
 		ShardID:      s.shardID,
@@ -189,7 +189,7 @@ func (s *readerGroupSuite) setupRegisterReaderMock(
 }
 
 func (s *readerGroupSuite) setupUnRegisterReaderMock(
-	readerID int32,
+	readerID int64,
 ) {
 	request := &persistence.UnregisterHistoryTaskReaderRequest{
 		ShardID:      s.shardID,
