@@ -66,7 +66,6 @@ type Config struct {
 	VisibilityMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ESIndexMaxResultWindow                    dynamicconfig.IntPropertyFn
 	VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HistoryMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -185,7 +184,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		VisibilityMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
 		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
 		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
-		ESIndexMaxResultWindow:                    dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 		VisibilityDisableOrderByClause:            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, false),
 
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
