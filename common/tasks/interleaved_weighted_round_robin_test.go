@@ -136,7 +136,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Succ
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
-func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail() {
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_FailThenSuccess() {
 	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()
 	s.mockFIFOScheduler.EXPECT().Stop()
@@ -160,6 +160,28 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail_Shutdown() {
+	s.mockFIFOScheduler.EXPECT().Start()
+	s.scheduler.Start()
+	s.mockFIFOScheduler.EXPECT().Stop()
+	s.scheduler.Stop()
+
+	testWaitGroup := sync.WaitGroup{}
+	testWaitGroup.Add(1)
+
+	mockTask := newTestTask(s.controller, 0)
+	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
+		return false
+	}).Times(1)
+	mockTask.EXPECT().Abort().Do(func() {
+		testWaitGroup.Done()
+	}).Times(1)
+	s.True(s.scheduler.TrySubmit(mockTask))
+
+	testWaitGroup.Wait()
+	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+}
+
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success() {
 	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()
@@ -180,7 +202,31 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
-func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() {
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_FailThenSuccess() {
+	s.mockFIFOScheduler.EXPECT().Start()
+	s.scheduler.Start()
+	s.mockFIFOScheduler.EXPECT().Stop()
+
+	testWaitGroup := sync.WaitGroup{}
+	testWaitGroup.Add(1)
+
+	mockTask := newTestTask(s.controller, 0)
+	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
+		return false
+	}).Times(1)
+	s.mockFIFOScheduler.EXPECT().Submit(mockTask).Do(func(task Task) {
+		testWaitGroup.Done()
+	}).Times(1)
+
+	s.scheduler.Submit(mockTask)
+
+	testWaitGroup.Wait()
+	// need to wait for the dispatch event loop to update the numInflightTask count
+	time.Sleep(time.Millisecond * 100)
+	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+}
+
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail_Shutdown() {
 	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()
 	s.mockFIFOScheduler.EXPECT().Stop()
@@ -190,15 +236,12 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() 
 	testWaitGroup.Add(1)
 
 	mockTask := newTestTask(s.controller, 0)
-	// either drain immediately
 	mockTask.EXPECT().Abort().Do(func() {
 		testWaitGroup.Done()
-	}).MaxTimes(1)
-	// or process by worker
+	}).Times(1)
 	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
-		testWaitGroup.Done()
-		return true
-	}).MaxTimes(1)
+		return false
+	}).Times(1)
 
 	s.scheduler.Submit(mockTask)
 
