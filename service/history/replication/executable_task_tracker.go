@@ -139,6 +139,9 @@ Loop:
 			}
 			delete(t.taskIDs, task.TaskID())
 			t.taskQueue.Remove(element)
+		case ctasks.TaskStateAborted:
+			// noop, do not remove from queue, let it block low watermark
+			break Loop
 		case ctasks.TaskStateCancelled:
 			// noop, do not remove from queue, let it block low watermark
 			break Loop
