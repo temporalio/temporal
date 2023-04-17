@@ -1440,7 +1440,10 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 			return nil, errors.New("malformed request")
 		case 4:
 			// 3rd attempt doesn't have any updates attached to it because UpdateWorkflowExecution call has timed out.
-			s.Empty(task.Messages)
+			// TODO: needs discussion - just because the caller went away
+			// doesn't mean we should give up on the update.
+			//s.Empty(task.Messages)
+
 			wtHandlerCalls++ // because it won't be called for case 4 but counter should be in sync.
 			// Fail WT one more time. This is transient WT and shouldn't appear in the history.
 			// Returning error will cause the poller to fail WT.
@@ -1512,7 +1515,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 
 	// Complete workflow.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
-	s.NoError(err)
+	s.Error(err, "error expected because WF has incomplete update")
 
 	s.Equal(5, wtHandlerCalls)
 	s.Equal(5, msgHandlerCalls)
@@ -1526,9 +1529,11 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskFailed
-  9 WorkflowTaskScheduled
- 10 WorkflowTaskStarted
- 11 WorkflowTaskCompleted
- 12 WorkflowExecutionCompleted`, events)
+  8 WorkflowTaskFailed`, events)
+	/* not these because the wf can't complete with an outstanding update
+	 9 WorkflowTaskScheduled
+	10 WorkflowTaskStarted
+	11 WorkflowTaskCompleted
+	12 WorkflowExecutionCompleted`, events)
+	*/
 }

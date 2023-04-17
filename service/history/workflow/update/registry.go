@@ -30,21 +30,24 @@ import (
 	"github.com/gogo/protobuf/types"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/server/common/future"
 )
 
 type (
 	Registry interface {
-		Add(request *updatepb.Request) (*Update, Duplicate, RemoveFunc)
+		Add(request *updatepb.Request) (*Update, Duplicate)
 
 		CreateOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
 
 		HasPending(filterMessages []*protocolpb.Message) bool
 		ProcessIncomingMessages(messages []*protocolpb.Message) error
+
+		Outcome(protoInstID string) (future.Future[*updatepb.Outcome], bool)
+
+		Prune()
 	}
 
 	Duplicate bool
-
-	RemoveFunc func()
 
 	RegistryImpl struct {
 		sync.RWMutex
@@ -60,17 +63,27 @@ func NewRegistry() *RegistryImpl {
 	}
 }
 
-func (r *RegistryImpl) Add(request *updatepb.Request) (*Update, Duplicate, RemoveFunc) {
+func (r *RegistryImpl) Outcome(protoInstID string) (future.Future[*updatepb.Outcome], bool) {
+	r.Lock()
+	defer r.Unlock()
+	upd, ok := r.updates[protoInstID]
+	if !ok {
+		return nil, false
+	}
+	return upd.out, true
+}
+
+func (r *RegistryImpl) Add(request *updatepb.Request) (*Update, Duplicate) {
 	r.Lock()
 	defer r.Unlock()
 	protocolInstanceID := request.GetMeta().GetUpdateId()
 	upd, ok := r.updates[protocolInstanceID]
 	if ok {
-		return upd, true, nil
+		return upd, true
 	}
 	upd = newUpdate(request, protocolInstanceID)
 	r.updates[upd.protocolInstanceID] = upd
-	return upd, false, func() { r.remove(protocolInstanceID) }
+	return upd, false
 }
 
 func (r *RegistryImpl) HasPending(filterMessages []*protocolpb.Message) bool {
@@ -181,8 +194,12 @@ func (r *RegistryImpl) getAcceptedUpdateNoLock(protocolInstanceID string) *Updat
 	return nil
 }
 
-func (r *RegistryImpl) remove(id string) {
+func (r *RegistryImpl) Prune() {
 	r.Lock()
 	defer r.Unlock()
-	delete(r.updates, id)
+	for id, upd := range r.updates {
+		if upd.state == stateCompleted {
+			delete(r.updates, id)
+		}
+	}
 }

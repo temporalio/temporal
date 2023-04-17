@@ -32,6 +32,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -76,10 +77,8 @@ func Invoke(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
-	upd, duplicate, removeFn := weCtx.GetContext().UpdateRegistry().Add(req.GetRequest().GetRequest())
-	if removeFn != nil {
-		defer removeFn()
-	}
+	reg := weCtx.GetContext().UpdateRegistry()
+	upd, duplicate := reg.Add(req.GetRequest().GetRequest())
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
 	// If WT has already started, new speculative WT will be created when started WT completes.
@@ -108,11 +107,19 @@ func Invoke(
 	} else {
 		weCtx.GetReleaseFn()(nil)
 	}
+	var updOutcome *updatepb.Outcome
 
-	updOutcome, err := upd.WaitOutcome(ctx)
-	if err != nil {
-		return nil, err
+	switch req.GetRequest().GetWaitPolicy().GetLifecycleStage() {
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
+		if err := upd.WaitAccepted(ctx); err != nil {
+			return nil, err
+		}
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
+		if updOutcome, err = upd.WaitOutcome(ctx); err != nil {
+			return nil, err
+		}
 	}
+
 	resp := &historyservice.UpdateWorkflowExecutionResponse{
 		Response: &workflowservice.UpdateWorkflowExecutionResponse{
 			UpdateRef: &updatepb.UpdateRef{
@@ -122,7 +129,7 @@ func Invoke(
 				},
 				UpdateId: req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
 			},
-			Outcome: updOutcome,
+			Outcome: updOutcome, // might be nil - this is ok for waiting on ACCEPTED
 		},
 	}
 

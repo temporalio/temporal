@@ -42,6 +42,7 @@ type (
 		messageID             string
 		protocolInstanceID    string
 		out                   *future.FutureImpl[*updatepb.Outcome]
+		accepted              chan struct{}
 	}
 
 	state int32
@@ -61,7 +62,16 @@ func newUpdate(request *updatepb.Request, protocolInstanceID string) *Update {
 		messageID:          uuid.New(),
 		protocolInstanceID: protocolInstanceID,
 		out:                future.NewFuture[*updatepb.Outcome](),
+		accepted:           make(chan struct{}),
 	}
+}
+
+func (u *Update) WaitAccepted(ctx context.Context) error {
+	select {
+	case <-u.accepted:
+	case <-ctx.Done():
+	}
+	return ctx.Err()
 }
 
 func (u *Update) WaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
@@ -70,6 +80,7 @@ func (u *Update) WaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
 
 func (u *Update) accept() {
 	u.state = stateAccepted
+	close(u.accepted)
 }
 
 func (u *Update) sendComplete(o *updatepb.Outcome) {
@@ -84,4 +95,8 @@ func (u *Update) sendReject(f *failurepb.Failure) {
 			Failure: f,
 		},
 	}, nil)
+}
+
+func (u *Update) Outcome() future.Future[*updatepb.Outcome] {
+	return u.out
 }

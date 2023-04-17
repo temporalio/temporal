@@ -306,6 +306,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			token.RunId,
 		),
 		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			defer workflowContext.GetContext().UpdateRegistry().Prune()
 			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
@@ -383,6 +384,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
+	defer workflowContext.GetContext().UpdateRegistry().Prune()
 	defer func() { workflowContext.GetReleaseFn()(retError) }()
 
 	weContext := workflowContext.GetContext()
