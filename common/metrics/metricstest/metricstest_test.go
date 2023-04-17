@@ -98,7 +98,7 @@ func TestHistogram(t *testing.T) {
 
 	s1 := handler.MustSnapshot()
 
-	expectedBuckets := []histogramBucket{
+	expectedBuckets := []HistogramBucket{
 		{value: 1, upperBound: 1},
 		{value: 1, upperBound: 2},
 		{value: 2, upperBound: 5},

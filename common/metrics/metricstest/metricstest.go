@@ -57,7 +57,7 @@ type (
 		sampleValue float64
 	}
 
-	histogramBucket struct {
+	HistogramBucket struct {
 		value      float64
 		upperBound float64
 	}
@@ -65,7 +65,7 @@ type (
 	histogramSample struct {
 		metricType  dto.MetricType
 		labelValues map[string]string
-		buckets     []histogramBucket
+		buckets     []HistogramBucket
 	}
 
 	Snapshot struct {
@@ -148,9 +148,9 @@ func (h *Handler) Snapshot() (Snapshot, error) {
 				// Not yet supporting summary, untyped.
 			case dto.MetricType_HISTOGRAM:
 				buckets := m.Histogram.GetBucket()
-				hbs := []histogramBucket{}
+				hbs := []HistogramBucket{}
 				for _, bucket := range buckets {
-					hb := histogramBucket{
+					hb := HistogramBucket{
 						value:      float64(bucket.GetCumulativeCount()),
 						upperBound: bucket.GetUpperBound(),
 					}
@@ -244,7 +244,7 @@ func (s Snapshot) MustGauge(name string, tags ...metrics.Tag) float64 {
 	return v
 }
 
-func (s Snapshot) Histogram(name string, tags ...metrics.Tag) ([]histogramBucket, error) {
+func (s Snapshot) Histogram(name string, tags ...metrics.Tag) ([]HistogramBucket, error) {
 	labelValues := map[string]string{}
 	for _, tag := range tags {
 		labelValues[tag.Key()] = tag.Value()
@@ -263,7 +263,7 @@ func (s Snapshot) Histogram(name string, tags ...metrics.Tag) ([]histogramBucket
 	return sample.buckets, nil
 }
 
-func (s Snapshot) MustHistogram(name string, tags ...metrics.Tag) []histogramBucket {
+func (s Snapshot) MustHistogram(name string, tags ...metrics.Tag) []HistogramBucket {
 	v, err := s.Histogram(name, tags...)
 	if err != nil {
 		panic(err)
@@ -274,12 +274,21 @@ func (s Snapshot) MustHistogram(name string, tags ...metrics.Tag) []histogramBuc
 func (s Snapshot) String() string {
 	var b strings.Builder
 	for n, s := range s.samples {
-		b.WriteString(fmt.Sprintf("%v %v %v %v\n", n, s.labelValues, s.sampleValue, s.metricType))
+		_, err := b.WriteString(fmt.Sprintf("%v %v %v %v\n", n, s.labelValues, s.sampleValue, s.metricType))
+		if err != nil {
+			panic(err)
+		}
 	}
 	for n, s := range s.histogramSamples {
-		b.WriteString(fmt.Sprintf("%v %v %v\n", n, s.labelValues, s.metricType))
+		_, err := b.WriteString(fmt.Sprintf("%v %v %v\n", n, s.labelValues, s.metricType))
+		if err != nil {
+			panic(err)
+		}
 		for _, bucket := range s.buckets {
-			b.WriteString(fmt.Sprintf("\t %v: %v \n", bucket.upperBound, bucket.value))
+			_, err := b.WriteString(fmt.Sprintf("\t %v: %v \n", bucket.upperBound, bucket.value))
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 	return b.String()
