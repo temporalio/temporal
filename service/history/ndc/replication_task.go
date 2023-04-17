@@ -330,7 +330,7 @@ func (t *replicationTaskImpl) isWorkflowReset() bool {
 	}
 }
 
-func (t *replicationTaskImpl) splitTask() (replicationTask, replicationTask, error) {
+func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask, _ error) {
 
 	if len(t.newEvents) == 0 {
 		return nil, nil, ErrNoNewRunHistory

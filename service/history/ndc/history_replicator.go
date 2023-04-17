@@ -114,7 +114,7 @@ type (
 		//  2. all history events should share the same version history
 		ApplyEventBlobs(
 			ctx context.Context,
-			workflow definition.WorkflowKey,
+			workflowKey definition.WorkflowKey,
 			baseExecutionInfo *workflowpb.BaseExecutionInfo,
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			events [][]*historypb.HistoryEvent,
