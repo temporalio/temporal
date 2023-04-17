@@ -357,27 +357,22 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	selectFilter, err := s.buildSelectStmtFromListWorkflowExecutionsRequestV2(ctx, request)
+	selectFilter, err := s.buildSelectStmt(ctx, request, true)
 	if err != nil {
 		return nil, err
 	}
-	return s.executeSelectStmtFromListWorkflowExecutionsRequestV2(ctx, request, selectFilter)
+	return s.executeSelectStmt(ctx, request, selectFilter)
 }
 
 func (s *VisibilityStore) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	selectFilter, err := s.buildSelectStmtFromListWorkflowExecutionsRequestV2(ctx, request)
+	selectFilter, err := s.buildSelectStmt(ctx, request, false)
 	if err != nil {
 		return nil, err
 	}
-	queryString, err := removeOrderByFromSelectQuery(selectFilter.Query)
-	if err != nil {
-		return nil, err
-	}
-	selectFilter.Query = queryString
-	return s.executeSelectStmtFromListWorkflowExecutionsRequestV2(ctx, request, selectFilter)
+	return s.executeSelectStmt(ctx, request, selectFilter)
 }
 
 func (s *VisibilityStore) CountWorkflowExecutions(
@@ -642,9 +637,10 @@ func (s *VisibilityStore) buildQueryStringFromListRequest(
 	return strings.Join(queryTerms, " AND ")
 }
 
-func (s *VisibilityStore) buildSelectStmtFromListWorkflowExecutionsRequestV2(
+func (s *VisibilityStore) buildSelectStmt(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
+	withOrderBy bool,
 ) (*sqlplugin.VisibilitySelectFilter, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
@@ -664,7 +660,7 @@ func (s *VisibilityStore) buildSelectStmtFromListWorkflowExecutionsRequestV2(
 		saMapper,
 		request.Query,
 	)
-	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
+	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken, withOrderBy)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
 		var converterErr *query.ConverterError
@@ -677,7 +673,7 @@ func (s *VisibilityStore) buildSelectStmtFromListWorkflowExecutionsRequestV2(
 	return selectFilter, nil
 }
 
-func (s *VisibilityStore) executeSelectStmtFromListWorkflowExecutionsRequestV2(
+func (s *VisibilityStore) executeSelectStmt(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 	selectFilter *sqlplugin.VisibilitySelectFilter,
