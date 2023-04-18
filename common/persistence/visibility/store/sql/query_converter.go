@@ -149,7 +149,9 @@ func (c *QueryConverter) BuildSelectStmt(
 	if err != nil {
 		return nil, err
 	}
-	orderByClause := c.getOrderByClause(withOrderBy)
+	if withDefaultOrderBy {
+		orderByClause := c.getDefaultOrderByClause()
+	}
 	queryString, queryArgs := c.buildSelectStmt(
 		c.namespaceID,
 		queryString,
