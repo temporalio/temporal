@@ -151,7 +151,7 @@ func (g *ReaderGroup) ReaderByID(readerID int64) (Reader, bool) {
 	return g.getReaderByIDLocked(readerID)
 }
 
-func (g *ReaderGroup) getReaderByIDLocked(readerID int32) (Reader, bool) {
+func (g *ReaderGroup) getReaderByIDLocked(readerID int64) (Reader, bool) {
 	if g.readerMap == nil {
 		return nil, false
 	}
@@ -167,7 +167,7 @@ func (g *ReaderGroup) NewReader(readerID int64, slices ...Slice) (Reader, error)
 	return g.newReaderLocked(readerID, slices...)
 }
 
-func (g *ReaderGroup) newReaderLocked(readerID int32, slices ...Slice) (Reader, error) {
+func (g *ReaderGroup) newReaderLocked(readerID int64, slices ...Slice) (Reader, error) {
 	reader := g.initializer(readerID, slices)
 
 	if g.readerMap == nil {
