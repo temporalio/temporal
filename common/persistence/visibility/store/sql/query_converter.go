@@ -139,7 +139,7 @@ func newQueryConverterInternal(
 func (c *QueryConverter) BuildSelectStmt(
 	pageSize int,
 	nextPageToken []byte,
-	withOrderBy bool,
+	withDefaultOrderBy bool,
 ) (*sqlplugin.VisibilitySelectFilter, error) {
 	token, err := deserializePageToken(nextPageToken)
 	if err != nil {
