@@ -22,13 +22,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package config
 
-type (
-	// Action is a set of operations that can be run on a ReaderGroup.
-	// It is created and run by Mitigator upon receiving an Alert.
-	Action interface {
-		Name() string
-		Run(*ReaderGroup) error
-	}
+import (
+	"go.uber.org/fx"
+
+	"go.temporal.io/server/common/primitives"
 )
+
+// ServicePortMap contains the gRPC ports for our services.
+type ServicePortMap map[primitives.ServiceName]int
+
+var Module = fx.Provide(
+	provideRPCConfig,
+	provideMembershipConfig,
+	provideServicePortMap,
+)
+
+func provideRPCConfig(cfg *Config, svcName primitives.ServiceName) *RPC {
+	c := cfg.Services[string(svcName)].RPC
+
+	return &c
+}
+
+func provideMembershipConfig(cfg *Config) *Membership {
+	return &cfg.Global.Membership
+}
+
+func provideServicePortMap(cfg *Config) ServicePortMap {
+	servicePortMap := make(ServicePortMap)
+	for sn, sc := range cfg.Services {
+		servicePortMap[primitives.ServiceName(sn)] = sc.RPC.GRPCPort
+	}
+
+	return servicePortMap
+}

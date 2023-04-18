@@ -22,13 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
-
-type (
-	// Action is a set of operations that can be run on a ReaderGroup.
-	// It is created and run by Mitigator upon receiving an Alert.
-	Action interface {
-		Name() string
-		Run(*ReaderGroup) error
-	}
-)
+// Package nettest provides an in-memory socket, Pipe. It can be used in place of net.Dial and net.Listen for faster and
+// more hermetic tests.
+package nettest

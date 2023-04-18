@@ -363,7 +363,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, nsID, ex, workflow.CallerTypeTask)
+	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, nsID, ex, workflow.LockPriorityLow)
 	if err != nil {
 		return err
 	}

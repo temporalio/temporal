@@ -123,6 +123,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(health.NewServer),
 	deadlock.Module,
+	config.Module,
 )
 
 var DefaultOptions = fx.Options(

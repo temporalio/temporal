@@ -50,10 +50,9 @@ type (
 	}
 
 	openTelemetryProviderImpl struct {
-		exporter *exporters.Exporter
-		meter    metric.Meter
-		config   *PrometheusConfig
-		server   *http.Server
+		meter  metric.Meter
+		config *PrometheusConfig
+		server *http.Server
 	}
 )
 
@@ -90,10 +89,9 @@ func NewOpenTelemetryProvider(
 	metricServer := initPrometheusListener(prometheusConfig, reg, logger)
 	meter := provider.Meter("temporal")
 	reporter := &openTelemetryProviderImpl{
-		exporter: exporter,
-		meter:    meter,
-		config:   prometheusConfig,
-		server:   metricServer,
+		meter:  meter,
+		config: prometheusConfig,
+		server: metricServer,
 	}
 
 	return reporter, nil

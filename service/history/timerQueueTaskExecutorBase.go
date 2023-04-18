@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -100,7 +100,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err
@@ -177,7 +177,7 @@ func getWorkflowExecutionContext(
 		ctx,
 		namespaceID,
 		execution,
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if common.IsContextDeadlineExceededErr(err) {
 		err = consts.ErrWorkflowBusy

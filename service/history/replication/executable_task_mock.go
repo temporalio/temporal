@@ -63,6 +63,18 @@ func (m *MockExecutableTask) EXPECT() *MockExecutableTaskMockRecorder {
 	return m.recorder
 }
 
+// Abort mocks base method.
+func (m *MockExecutableTask) Abort() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Abort")
+}
+
+// Abort indicates an expected call of Abort.
+func (mr *MockExecutableTaskMockRecorder) Abort() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Abort", reflect.TypeOf((*MockExecutableTask)(nil).Abort))
+}
+
 // Ack mocks base method.
 func (m *MockExecutableTask) Ack() {
 	m.ctrl.T.Helper()
@@ -237,4 +249,18 @@ func (m *MockExecutableTask) TaskID() int64 {
 func (mr *MockExecutableTaskMockRecorder) TaskID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskID", reflect.TypeOf((*MockExecutableTask)(nil).TaskID))
+}
+
+// TerminalState mocks base method.
+func (m *MockExecutableTask) TerminalState() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TerminalState")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// TerminalState indicates an expected call of TerminalState.
+func (mr *MockExecutableTaskMockRecorder) TerminalState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminalState", reflect.TypeOf((*MockExecutableTask)(nil).TerminalState))
 }

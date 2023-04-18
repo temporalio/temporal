@@ -653,7 +653,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 		context.Background(),
 		tests.NamespaceID,
 		execution,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background())
@@ -4437,7 +4437,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 		context.Background(),
 		tests.NamespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background())
@@ -5302,7 +5302,7 @@ func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we commonpb.
 		context.Background(),
 		tests.NamespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil

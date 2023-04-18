@@ -56,6 +56,7 @@ func Invoke(
 			req.Execution.WorkflowId,
 			req.Execution.RunId,
 		),
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err

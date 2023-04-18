@@ -91,6 +91,10 @@ func NewExecutableWorkflowStateTask(
 }
 
 func (e *ExecutableWorkflowStateTask) Execute() error {
+	if e.TerminalState() {
+		return nil
+	}
+
 	namespaceName, apply, err := e.GetNamespaceInfo(e.NamespaceID)
 	if err != nil {
 		return err

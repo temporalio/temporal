@@ -164,8 +164,6 @@ const (
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize = "frontend.visibilityMaxPageSize"
-	// FrontendESIndexMaxResultWindow is ElasticSearch index setting max_result_window
-	FrontendESIndexMaxResultWindow = "frontend.esIndexMaxResultWindow"
 	// FrontendHistoryMaxPageSize is default max size for GetWorkflowExecutionHistory in one page
 	FrontendHistoryMaxPageSize = "frontend.historyMaxPageSize"
 	// FrontendRPS is workflow rate limit per second
@@ -652,6 +650,11 @@ const (
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
 	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
+
+	// ReplicationStreamSyncStatusDuration sync replication status duration
+	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
+	// ReplicationStreamMinReconnectDuration minimal replication stream reconnection duration
+	ReplicationStreamMinReconnectDuration = "history.ReplicationStreamMinReconnectDuration"
 	// ReplicationProcessorSchedulerQueueSize is the replication task executor queue size
 	ReplicationProcessorSchedulerQueueSize = "history.ReplicationProcessorSchedulerQueueSize"
 	// ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count

@@ -27,10 +27,15 @@ package replication
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/cluster"
+)
+
+const (
+	streamReceiverMonitorInterval = 5 * time.Second
 )
 
 type (
@@ -105,6 +110,8 @@ func (m *StreamReceiverMonitorImpl) Stop() {
 
 func (m *StreamReceiverMonitorImpl) eventLoop() {
 	defer m.Stop()
+	ticker := time.NewTicker(streamReceiverMonitorInterval)
+	defer ticker.Stop()
 
 	clusterMetadataChangeChan := make(chan struct{}, 1)
 	m.ClusterMetadata.RegisterMetadataChangeCallback(m, func(_ map[string]*cluster.ClusterInformation, _ map[string]*cluster.ClusterInformation) {
@@ -114,20 +121,27 @@ func (m *StreamReceiverMonitorImpl) eventLoop() {
 		}
 	})
 	defer m.ClusterMetadata.UnRegisterMetadataChangeCallback(m)
-	m.monitor()
+	m.reconcileStreams()
 
 Loop:
 	for !m.shutdownOnce.IsShutdown() {
 		select {
 		case <-clusterMetadataChangeChan:
-			m.monitor()
+			m.reconcileStreams()
+		case <-ticker.C:
+			m.reconcileStreams()
 		case <-m.shutdownOnce.Channel():
 			break Loop
 		}
 	}
 }
 
-func (m *StreamReceiverMonitorImpl) monitor() {
+func (m *StreamReceiverMonitorImpl) reconcileStreams() {
+	streamKeys := m.generateStreamKeys()
+	m.reconcileToTargetStreams(streamKeys)
+}
+
+func (m *StreamReceiverMonitorImpl) generateStreamKeys() map[ClusterShardKeyPair]struct{} {
 	// NOTE: source / target are relative to stream itself, not replication data flow
 
 	sourceClusterName := m.ClusterMetadata.GetCurrentClusterName()
@@ -150,7 +164,12 @@ func (m *StreamReceiverMonitorImpl) monitor() {
 			}] = struct{}{}
 		}
 	}
+	return streamKeys
+}
 
+func (m *StreamReceiverMonitorImpl) reconcileToTargetStreams(
+	streamKeys map[ClusterShardKeyPair]struct{},
+) {
 	m.Lock()
 	defer m.Unlock()
 	if m.shutdownOnce.IsShutdown() {

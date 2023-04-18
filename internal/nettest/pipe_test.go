@@ -22,13 +22,59 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package nettest
 
-type (
-	// Action is a set of operations that can be run on a ReaderGroup.
-	// It is created and run by Mitigator upon receiving an Alert.
-	Action interface {
-		Name() string
-		Run(*ReaderGroup) error
-	}
+import (
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func TestPipe_Accept(t *testing.T) {
+	t.Parallel()
+
+	listener := NewPipe()
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		c, err := listener.Accept(nil)
+		assert.NoError(t, err)
+
+		defer func() {
+			assert.NoError(t, c.Close())
+		}()
+	}()
+
+	c, err := listener.Connect(nil)
+	assert.NoError(t, err)
+
+	defer func() {
+		assert.NoError(t, c.Close())
+	}()
+}
+
+func TestPipe_ClientCanceled(t *testing.T) {
+	t.Parallel()
+
+	listener := NewPipe()
+	done := make(chan struct{})
+	close(done) // hi efe
+	_, err := listener.Connect(done)
+	assert.ErrorIs(t, err, ErrCanceled)
+}
+
+func TestPipe_ServerCanceled(t *testing.T) {
+	t.Parallel()
+
+	listener := NewPipe()
+	done := make(chan struct{})
+	close(done)
+	_, err := listener.Accept(done)
+	assert.ErrorIs(t, err, ErrCanceled)
+}

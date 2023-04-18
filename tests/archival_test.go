@@ -296,7 +296,7 @@ func (s *archivalSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) 
 		s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetHistoryTreeRequest{
 		TreeID:  execution.GetRunId(),
-		ShardID: convert.Int32Ptr(shardID),
+		ShardID: shardID,
 	}
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.ExecutionManager.GetHistoryTree(NewContext(), request)

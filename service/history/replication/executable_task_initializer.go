@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -46,6 +47,7 @@ type (
 	ProcessToolBox struct {
 		fx.In
 
+		Config             *configs.Config
 		ClusterMetadata    cluster.Metadata
 		ClientBean         client.Bean
 		ShardController    shard.Controller
