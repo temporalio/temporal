@@ -238,11 +238,11 @@ func (a *actionQueuePendingTask) splitAndClearSlice(
 }
 
 func (a *actionQueuePendingTask) ensureNewReaders(
-	readers map[int32]Reader,
+	readers map[int64]Reader,
 	readerGroup *ReaderGroup,
 ) error {
 	for readerID, reader := range readers {
-		if readerID == int32(a.maxReaderCount)-1 {
+		if readerID == a.maxReaderCount-1 {
 			// we won't perform split
 			continue
 		}
