@@ -597,16 +597,12 @@ func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 	return nil
 }
 
-func (c *QueryConverter) getOrderByClause(withOrderBy bool) string {
-	orderByClause := ""
-	if withOrderBy {
-		orderByClause = fmt.Sprintf("ORDER BY %s DESC, %s DESC, %s",
-			sqlparser.String(c.getCoalesceCloseTimeExpr()),
-			searchattribute.GetSqlDbColName(searchattribute.StartTime),
-			searchattribute.GetSqlDbColName(searchattribute.RunID),
-		)
-	}
-	return orderByClause
+func (c *QueryConverter) getDefaultOrderByClause() string {
+	return fmt.Sprintf("ORDER BY %s DESC, %s DESC, %s",
+		sqlparser.String(c.getCoalesceCloseTimeExpr()),
+		searchattribute.GetSqlDbColName(searchattribute.StartTime),
+		searchattribute.GetSqlDbColName(searchattribute.RunID),
+	)
 }
 func isSupportedOperator(supportedOperators []string, operator string) bool {
 	for _, op := range supportedOperators {
