@@ -1,7 +1,6 @@
-package health
+package backpressure
 
 import (
-	"go.temporal.io/server/internal/goro"
 	"sync/atomic"
 	"time"
 )
@@ -21,7 +20,6 @@ type (
 		windowSize    time.Duration
 		buffer        chan TimestampedData
 		forceExpireCh chan interface{}
-		expireWorker  *goro.Handle
 		sum           atomic.Int64
 		count         atomic.Int64
 	}

@@ -22,17 +22,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package health
-
-import "go.temporal.io/server/common/quotas"
+package backpressure
 
 type (
-	HealthRateLimiter interface {
-		quotas.RequestRateLimiter
-
+	HealthSignalAggregator interface {
+		GetLatencyAverage() float64
 		RecordLatency(api string) func()
 		RecordLatencyByShard(api string, shardID int32) func()
 		RecordLatencyByNamespace(api string, nsID string) func()
+		GetErrorRatio() float64
 		RecordError(api string)
 		RecordErrorByShard(api string, shardID int32)
 		RecordErrorByNamespace(api string, nsID string)
