@@ -640,7 +640,7 @@ func (s *VisibilityStore) buildQueryStringFromListRequest(
 func (s *VisibilityStore) buildSelectStmt(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
-	withOrderBy bool,
+	withDefaultOrderBy bool,
 ) (*sqlplugin.VisibilitySelectFilter, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
@@ -660,7 +660,11 @@ func (s *VisibilityStore) buildSelectStmt(
 		saMapper,
 		request.Query,
 	)
-	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken, withOrderBy)
+	orderByClause := ""
+	if withDefaultOrderBy {
+		orderByClause = converter.getDefaultOrderByClause()
+	}
+	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken, orderByClause)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
 		var converterErr *query.ConverterError
@@ -681,7 +685,7 @@ func (s *VisibilityStore) executeSelectStmt(
 	rows, err := s.sqlStore.Db.SelectFromVisibility(ctx, *selectFilter)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("ListWorkflowExecutions operation failed. Select failed: %v", err))
+			fmt.Sprintf("Select failed: %v", err))
 	}
 	if len(rows) == 0 {
 		return &store.InternalListWorkflowExecutionsResponse{}, nil
