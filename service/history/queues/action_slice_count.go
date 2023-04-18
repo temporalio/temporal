@@ -31,11 +31,12 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+var _ Action = (*actionSliceCount)(nil)
+
 type (
 	actionSliceCount struct {
-		attributes   *AlertAttributesSlicesCount
-		monitor      Monitor
-		completionFn actionCompletionFn
+		attributes *AlertAttributesSlicesCount
+		monitor    Monitor
 	}
 
 	compactCandidate struct {
@@ -47,21 +48,21 @@ type (
 func newSliceCountAction(
 	attributes *AlertAttributesSlicesCount,
 	monitor Monitor,
-	completionFn actionCompletionFn,
-) Action {
+) *actionSliceCount {
 	return &actionSliceCount{
-		attributes:   attributes,
-		monitor:      monitor,
-		completionFn: completionFn,
+		attributes: attributes,
+		monitor:    monitor,
 	}
 }
 
-func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
-	defer a.completionFn()
+func (a *actionSliceCount) Name() string {
+	return "slice-count"
+}
 
+func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
 	// first check if the alert is still valid
 	if a.monitor.GetTotalSliceCount() <= a.attributes.CriticalSliceCount {
-		return
+		return nil
 	}
 
 	// then try to shrink existing slices, which may reduce slice count
@@ -71,7 +72,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 	}
 	currentSliceCount := a.monitor.GetTotalSliceCount()
 	if currentSliceCount <= a.attributes.CriticalSliceCount {
-		return
+		return nil
 	}
 
 	// have to compact (force merge) slices to reduce slice count
@@ -102,7 +103,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 		isNotUniversalPredicate,
 		preferredSliceCount,
 	) {
-		return
+		return nil
 	}
 
 	if a.findAndCompactCandidates(
@@ -111,7 +112,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 		isNotUniversalPredicate,
 		preferredSliceCount,
 	) {
-		return
+		return nil
 	}
 
 	if a.findAndCompactCandidates(
@@ -120,7 +121,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 		isUniversalPredicate,
 		a.attributes.CriticalSliceCount,
 	) {
-		return
+		return nil
 	}
 
 	a.findAndCompactCandidates(
@@ -129,6 +130,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 		isUniversalPredicate,
 		a.attributes.CriticalSliceCount,
 	)
+	return nil
 }
 
 func (a *actionSliceCount) findAndCompactCandidates(

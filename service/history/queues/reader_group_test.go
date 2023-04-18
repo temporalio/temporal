@@ -91,7 +91,8 @@ func (s *readerGroupSuite) TearDownTest() {
 func (s *readerGroupSuite) TestStartStop() {
 	readerID := DefaultReaderId
 	s.setupRegisterReaderMock(readerID)
-	r := s.readerGroup.NewReader(readerID)
+	r, err := s.readerGroup.NewReader(readerID)
+	s.NoError(err)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
 
 	s.readerGroup.Start()
@@ -99,7 +100,8 @@ func (s *readerGroupSuite) TestStartStop() {
 
 	readerID = DefaultReaderId + 1
 	s.setupRegisterReaderMock(readerID)
-	r = s.readerGroup.NewReader(readerID)
+	r, err = s.readerGroup.NewReader(readerID)
+	s.NoError(err)
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
 	var readers []*testReader
@@ -114,9 +116,9 @@ func (s *readerGroupSuite) TestStartStop() {
 	}
 
 	readerID = DefaultReaderId + 2
-	s.setupRegisterReaderMock(readerID)
-	r = s.readerGroup.NewReader(readerID)
-	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
+	r, err = s.readerGroup.NewReader(readerID)
+	s.Nil(r)
+	s.Equal(errReaderGroupStopped, err)
 }
 
 func (s *readerGroupSuite) TestAddGetReader() {
@@ -128,7 +130,8 @@ func (s *readerGroupSuite) TestAddGetReader() {
 
 	for i := int64(0); i < 3; i++ {
 		s.setupRegisterReaderMock(i)
-		r = s.readerGroup.NewReader(i)
+		r, err := s.readerGroup.NewReader(i)
+		s.NoError(err)
 
 		readers := s.readerGroup.Readers()
 		s.Len(readers, int(i)+1)
@@ -140,7 +143,7 @@ func (s *readerGroupSuite) TestAddGetReader() {
 	}
 
 	s.Panics(func() {
-		s.readerGroup.NewReader(DefaultReaderId)
+		_, _ = s.readerGroup.NewReader(DefaultReaderId)
 	})
 }
 
@@ -151,7 +154,8 @@ func (s *readerGroupSuite) TestRemoveReader() {
 	readerID := DefaultReaderId
 
 	s.setupRegisterReaderMock(readerID)
-	r := s.readerGroup.NewReader(readerID)
+	r, err := s.readerGroup.NewReader(readerID)
+	s.NoError(err)
 
 	s.setupUnRegisterReaderMock(readerID)
 	s.readerGroup.RemoveReader(readerID)
@@ -164,7 +168,8 @@ func (s *readerGroupSuite) TestForEach() {
 	readerIDs := []int64{1, 2, 3}
 	for _, readerID := range readerIDs {
 		s.setupRegisterReaderMock(readerID)
-		s.readerGroup.NewReader(readerID)
+		_, err := s.readerGroup.NewReader(readerID)
+		s.NoError(err)
 	}
 
 	forEachResult := make(map[int64]Reader)
