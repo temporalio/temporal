@@ -45,7 +45,7 @@ type (
 	actionQueuePendingTask struct {
 		attributes     *AlertAttributesQueuePendingTaskCount
 		monitor        Monitor
-		maxReaderCount int
+		maxReaderCount int64
 
 		// state of the action, used when running the action
 		tasksPerNamespace               map[namespace.ID]int
@@ -63,7 +63,7 @@ func newQueuePendingTaskAction(
 	return &actionQueuePendingTask{
 		attributes:     attributes,
 		monitor:        monitor,
-		maxReaderCount: maxReaderCount,
+		maxReaderCount: int64(maxReaderCount),
 	}
 }
 
