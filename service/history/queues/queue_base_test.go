@@ -247,7 +247,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 
 func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreFailed() {
 	persistenceState := &persistencespb.QueueState{
-		ReaderStates: map[int32]*persistencespb.QueueReaderState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
 			DefaultReaderId: {
 				Scopes: []*persistencespb.QueueSliceScope{
 					{
