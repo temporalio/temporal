@@ -1712,14 +1712,10 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration(skipGener
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
-	_, sigErr := ms.AddWorkflowExecutionSignaled(signal.GetSignalName(), signal.GetInput(), signal.GetIdentity(), signal.GetHeader(), signal.GetSkipGenerateWorkflowTask())
-	s.NoError(sigErr)
-	ms.AddSignalRequested(signal.GetRequestId())
-
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).AnyTimes()
 
 	_, err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
 	s.NoError(err)

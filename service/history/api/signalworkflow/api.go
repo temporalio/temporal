@@ -74,7 +74,7 @@ func Invoke(
 			}
 
 			executionInfo := mutableState.GetExecutionInfo()
-			createWorkflowTask := true
+			createWorkflowTask := !request.GetSkipGenerateWorkflowTask()
 			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
 				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
 				createWorkflowTask = false

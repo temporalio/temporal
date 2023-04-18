@@ -466,7 +466,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	// hasPendingUpdates indicates if there are more pending updates (excluding those which are accepted/rejected by this workflow task).
 	hasPendingUpdates := weContext.UpdateRegistry().HasPending(request.GetMessages())
 	// hasBufferedEvents indicates if there are any buffered events which should generate a new workflow task
-	hasBufferedEvents := ms.HasBufferedEvents() && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
+	hasBufferedEvents := ms.HasBufferedEvents()
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
@@ -541,6 +541,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		hasBufferedEvents = workflowTaskHandler.hasBufferedEvents
 	}
 
+	wtFailedShouldCreateNewTask := false
 	if wtFailedCause != nil {
 		handler.metricsHandler.Counter(metrics.FailedWorkflowTasksCounter.GetMetricName()).Record(
 			1,
@@ -559,7 +560,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		if err != nil {
 			return nil, err
 		}
-		hasBufferedEvents = true
+		wtFailedShouldCreateNewTask = true
 		newMutableState = nil
 
 		if wtFailedCause.workflowFailure != nil {
@@ -572,12 +573,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			if _, err := ms.AddFailWorkflowEvent(nextEventBatchId, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
 				return nil, err
 			}
-			hasBufferedEvents = false
+			wtFailedShouldCreateNewTask = false
 		}
 	}
 
+	bufferedEventShouldCreateNewTask := hasBufferedEvents && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
-	if ms.IsWorkflowExecutionRunning() && (hasBufferedEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled) {
+	if ms.IsWorkflowExecutionRunning() && (wtFailedShouldCreateNewTask || bufferedEventShouldCreateNewTask || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled) {
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 	} else if ms.IsWorkflowExecutionRunning() && hasPendingUpdates {
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE

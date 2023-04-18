@@ -285,7 +285,7 @@ func signalWorkflow(
 	}
 
 	// Create a transfer task to schedule a workflow task
-	if !mutableState.HasPendingWorkflowTask() {
+	if !mutableState.HasPendingWorkflowTask() && !request.GetSkipGenerateWorkflowTask() {
 		_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 		if err != nil {
 			return err
