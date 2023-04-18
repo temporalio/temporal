@@ -43,42 +43,42 @@ var (
 type (
 	shardHealthRateLimitedPersistenceClient struct {
 		healthSignals backpressure.HealthSignalAggregator
-		rateLimiter   *quotas.HealthRequestRateLimiterImpl
+		rateLimiter   quotas.RequestRateLimiter
 		persistence   ShardManager
 		logger        log.Logger
 	}
 
 	executionHealthRateLimitedPersistenceClient struct {
 		healthSignals backpressure.HealthSignalAggregator
-		rateLimiter   *quotas.HealthRequestRateLimiterImpl
+		rateLimiter   quotas.RequestRateLimiter
 		persistence   ExecutionManager
 		logger        log.Logger
 	}
 
 	taskHealthRateLimitedPersistenceClient struct {
 		healthSignals backpressure.HealthSignalAggregator
-		rateLimiter   *quotas.HealthRequestRateLimiterImpl
+		rateLimiter   quotas.RequestRateLimiter
 		persistence   TaskManager
 		logger        log.Logger
 	}
 
 	metadataHealthRateLimitedPersistenceClient struct {
 		healthSignals backpressure.HealthSignalAggregator
-		rateLimiter   *quotas.HealthRequestRateLimiterImpl
+		rateLimiter   quotas.RequestRateLimiter
 		persistence   MetadataManager
 		logger        log.Logger
 	}
 
 	clusterMetadataHealthRateLimitedPersistenceClient struct {
 		healthSignals backpressure.HealthSignalAggregator
-		rateLimiter   *quotas.HealthRequestRateLimiterImpl
+		rateLimiter   quotas.RequestRateLimiter
 		persistence   ClusterMetadataManager
 		logger        log.Logger
 	}
 
 	queueHealthRateLimitedPersistenceClient struct {
 		healthSignals backpressure.HealthSignalAggregator
-		rateLimiter   *quotas.HealthRequestRateLimiterImpl
+		rateLimiter   quotas.RequestRateLimiter
 		persistence   Queue
 		logger        log.Logger
 	}
@@ -91,7 +91,7 @@ var _ MetadataManager = (*metadataHealthRateLimitedPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataHealthRateLimitedPersistenceClient)(nil)
 var _ Queue = (*queueHealthRateLimitedPersistenceClient)(nil)
 
-func NewShardPersistenceHealthRateLimitedClient(persistence ShardManager, rateLimiter *quotas.HealthRequestRateLimiterImpl, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) ShardManager {
+func NewShardPersistenceHealthRateLimitedClient(persistence ShardManager, rateLimiter quotas.RequestRateLimiter, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) ShardManager {
 	return &shardHealthRateLimitedPersistenceClient{
 		persistence:   persistence,
 		rateLimiter:   rateLimiter,
@@ -100,7 +100,7 @@ func NewShardPersistenceHealthRateLimitedClient(persistence ShardManager, rateLi
 	}
 }
 
-func NewExecutionPersistenceHealthRateLimitedClient(persistence ExecutionManager, rateLimiter *quotas.HealthRequestRateLimiterImpl, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) ExecutionManager {
+func NewExecutionPersistenceHealthRateLimitedClient(persistence ExecutionManager, rateLimiter quotas.RequestRateLimiter, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) ExecutionManager {
 	return &executionHealthRateLimitedPersistenceClient{
 		persistence:   persistence,
 		rateLimiter:   rateLimiter,
@@ -109,7 +109,7 @@ func NewExecutionPersistenceHealthRateLimitedClient(persistence ExecutionManager
 	}
 }
 
-func NewTaskPersistenceHealthRateLimitedClient(persistence TaskManager, rateLimiter *quotas.HealthRequestRateLimiterImpl, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) TaskManager {
+func NewTaskPersistenceHealthRateLimitedClient(persistence TaskManager, rateLimiter quotas.RequestRateLimiter, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) TaskManager {
 	return &taskHealthRateLimitedPersistenceClient{
 		persistence:   persistence,
 		rateLimiter:   rateLimiter,
@@ -118,7 +118,7 @@ func NewTaskPersistenceHealthRateLimitedClient(persistence TaskManager, rateLimi
 	}
 }
 
-func NewMetadataPersistenceHealthRateLimitedClient(persistence MetadataManager, rateLimiter *quotas.HealthRequestRateLimiterImpl, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) MetadataManager {
+func NewMetadataPersistenceHealthRateLimitedClient(persistence MetadataManager, rateLimiter quotas.RequestRateLimiter, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) MetadataManager {
 	return &metadataHealthRateLimitedPersistenceClient{
 		persistence:   persistence,
 		rateLimiter:   rateLimiter,
@@ -127,7 +127,7 @@ func NewMetadataPersistenceHealthRateLimitedClient(persistence MetadataManager, 
 	}
 }
 
-func NewClusterMetadataPersistenceHealthRateLimitedClient(persistence ClusterMetadataManager, rateLimiter *quotas.HealthRequestRateLimiterImpl, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) ClusterMetadataManager {
+func NewClusterMetadataPersistenceHealthRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.RequestRateLimiter, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataHealthRateLimitedPersistenceClient{
 		persistence:   persistence,
 		rateLimiter:   rateLimiter,
@@ -136,7 +136,7 @@ func NewClusterMetadataPersistenceHealthRateLimitedClient(persistence ClusterMet
 	}
 }
 
-func NewQueuePersistenceHealthRateLimitedClient(persistence Queue, rateLimiter *quotas.HealthRequestRateLimiterImpl, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) Queue {
+func NewQueuePersistenceHealthRateLimitedClient(persistence Queue, rateLimiter quotas.RequestRateLimiter, healthSignals backpressure.HealthSignalAggregator, logger log.Logger) Queue {
 	return &queueHealthRateLimitedPersistenceClient{
 		persistence:   persistence,
 		rateLimiter:   rateLimiter,
