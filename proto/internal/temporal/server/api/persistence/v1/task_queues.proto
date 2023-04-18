@@ -41,7 +41,7 @@ message BuildID {
     temporal.server.api.clock.v1.HybridLogicalClock state_update_timestamp = 3;
 }
 
-// An internal represenation of https://github.com/temporalio/api/blob/9206f1556469515d8e5a82c4d4bf21f2dd9730ce/temporal/api/taskqueue/v1/message.proto#L92
+// An internal represenation of temporal.api.taskqueue.v1.CompatibleVersionSet
 message CompatibleVersionSet {
     // Set IDs are used internally by matching.
     // The first set ID for a given set is the first added build ID.

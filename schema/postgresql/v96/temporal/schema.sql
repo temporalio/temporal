@@ -97,7 +97,6 @@ CREATE TABLE task_queue_user_data (
   data          BYTEA NOT NULL,  -- temporal.server.api.persistence.v1.TaskQueueUserData as blob
   data_encoding VARCHAR(16) NOT NULL,
   version       BIGINT NOT NULL, -- Version of this row, used for optimistic concurrency
-  updated_at    TIMESTAMP NOT NULL,
   PRIMARY KEY (namespace_id, task_queue_id)
 );
 
