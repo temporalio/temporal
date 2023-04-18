@@ -240,7 +240,7 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 		ShardOwner:   s.mockShard.GetOwner(),
 		TaskCategory: tasks.CategoryTimer,
 		ReaderID:     lookAheadReaderID,
-	}).Times(1)
+	}).Return(nil).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("some random error")).Times(1)
 	s.scheduledQueue.lookAheadTask()
@@ -275,7 +275,7 @@ func (s *scheduledQueueSuite) setupLookAheadMock(
 		ShardOwner:   s.mockShard.GetOwner(),
 		TaskCategory: tasks.CategoryTimer,
 		ReaderID:     lookAheadReaderID,
-	}).Times(1)
+	}).Return(nil).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
 		s.Equal(s.mockShard.GetShardID(), request.ShardID)
 		s.Equal(tasks.CategoryTimer, request.TaskCategory)

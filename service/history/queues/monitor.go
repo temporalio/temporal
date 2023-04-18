@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -35,7 +36,8 @@ import (
 var _ Monitor = (*monitorImpl)(nil)
 
 const (
-	monitorWatermarkPrecision = time.Second
+	monitorWatermarkPrecision   = time.Second
+	defaultAlertSilenceDuration = 10 * time.Second
 
 	alertChSize = 10
 )
@@ -59,6 +61,7 @@ type (
 		RemoveReader(readerID int32)
 
 		ResolveAlert(AlertType)
+		SilenceAlert(AlertType)
 		AlertCh() <-chan *Alert
 		Close()
 	}
@@ -79,11 +82,13 @@ type (
 		sliceStats  map[Slice]sliceStats
 
 		categoryType tasks.CategoryType
+		timeSource   clock.TimeSource
 		options      *MonitorOptions
 
-		pendingAlerts map[AlertType]struct{}
-		alertCh       chan *Alert
-		shutdownCh    chan struct{}
+		pendingAlerts  map[AlertType]struct{}
+		silencedAlerts map[AlertType]time.Time // silenced alertType => expiration
+		alertCh        chan *Alert
+		shutdownCh     chan struct{}
 	}
 
 	readerStats struct {
@@ -103,16 +108,19 @@ type (
 
 func newMonitor(
 	categoryType tasks.CategoryType,
+	timeSource clock.TimeSource,
 	options *MonitorOptions,
 ) *monitorImpl {
 	return &monitorImpl{
-		readerStats:   make(map[int32]readerStats),
-		sliceStats:    make(map[Slice]sliceStats),
-		categoryType:  categoryType,
-		options:       options,
-		pendingAlerts: make(map[AlertType]struct{}),
-		alertCh:       make(chan *Alert, alertChSize),
-		shutdownCh:    make(chan struct{}),
+		readerStats:    make(map[int32]readerStats),
+		sliceStats:     make(map[Slice]sliceStats),
+		categoryType:   categoryType,
+		timeSource:     timeSource,
+		options:        options,
+		pendingAlerts:  make(map[AlertType]struct{}),
+		silencedAlerts: make(map[AlertType]time.Time),
+		alertCh:        make(chan *Alert, alertChSize),
+		shutdownCh:     make(chan struct{}),
 	}
 }
 
@@ -281,6 +289,14 @@ func (m *monitorImpl) ResolveAlert(alertType AlertType) {
 	delete(m.pendingAlerts, alertType)
 }
 
+func (m *monitorImpl) SilenceAlert(alertType AlertType) {
+	m.Lock()
+	defer m.Unlock()
+
+	delete(m.pendingAlerts, alertType)
+	m.silencedAlerts[alertType] = m.timeSource.Now().Add(defaultAlertSilenceDuration)
+}
+
 func (m *monitorImpl) AlertCh() <-chan *Alert {
 	return m.alertCh
 }
@@ -305,6 +321,10 @@ func (m *monitorImpl) Close() {
 func (m *monitorImpl) sendAlertLocked(alert *Alert) {
 	if m.isClosed() {
 		// make sure alert won't be sent to a closed chan
+		return
+	}
+
+	if m.timeSource.Now().Before(m.silencedAlerts[alert.AlertType]) {
 		return
 	}
 
