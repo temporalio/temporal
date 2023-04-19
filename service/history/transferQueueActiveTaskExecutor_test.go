@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -98,6 +99,7 @@ type (
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
+		mockVisibilityManager        *manager.MockVisibilityManager
 
 		mockExecutionMgr            *persistence.MockExecutionManager
 		mockArchivalClient          *warchiver.MockClient
@@ -186,6 +188,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
+	s.mockVisibilityManager = s.mockShard.Resource.VisibilityManager
 	s.mockArchivalMetadata = s.mockShard.Resource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockShard.Resource.ArchiverProvider
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -236,6 +239,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 		config,
 		s.mockShard.Resource.MatchingClient,
+		s.mockVisibilityManager,
 	).(*transferQueueActiveTaskExecutor)
 	s.transferQueueActiveTaskExecutor.parentClosePolicyClient = s.mockParentClosePolicyClient
 }
@@ -798,6 +802,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_CanSkip
 					)).AnyTimes()
 				s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
 				s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
+				s.mockVisibilityManager.EXPECT().GetIndexName().Return("")
 			}
 
 			_, _, err = s.transferQueueActiveTaskExecutor.Execute(
@@ -858,6 +863,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
+	s.mockVisibilityManager.EXPECT().GetIndexName().Return("")
 
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
@@ -1378,6 +1384,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Times(2)
+	s.mockVisibilityManager.EXPECT().GetIndexName().Return("").Times(2)
 	mockDeleteMgr := deletemanager.NewMockDeleteManager(s.controller)
 	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.transferQueueActiveTaskExecutor.workflowDeleteManager = mockDeleteMgr
@@ -2579,8 +2586,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			}), nil)
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
-			clusterName := namespaceEntry.ActiveClusterName()
-			mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
 			mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 
 			mockShard := shard.NewMockContext(ctrl)
@@ -2616,8 +2621,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 					ackLevel = closeTransferTaskId - 1
 				}
 				mockShard.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(nil, false).AnyTimes()
-				mockShard.EXPECT().GetQueueClusterAckLevel(tasks.CategoryTransfer,
-					clusterName).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
+				mockShard.EXPECT().GetQueueAckLevel(tasks.CategoryTransfer).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
 			}
 
 			mockWorkflowDeleteManager := deletemanager.NewMockDeleteManager(ctrl)
