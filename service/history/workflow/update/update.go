@@ -42,6 +42,7 @@ type (
 		messageID             string
 		protocolInstanceID    string
 		out                   *future.FutureImpl[*updatepb.Outcome]
+		pendingOutcome        *updatepb.Outcome
 	}
 
 	state int32
@@ -53,6 +54,21 @@ const (
 	stateRejected
 	stateCompleted
 )
+
+func stateToString(s state) string {
+	switch s {
+	case statePending:
+		return "pending"
+	case stateAccepted:
+		return "accepted"
+	case stateRejected:
+		return "rejected"
+	case stateCompleted:
+		return "completed"
+	default:
+		return "unknown"
+	}
+}
 
 func newUpdate(request *updatepb.Request, protocolInstanceID string) *Update {
 	return &Update{
@@ -72,16 +88,23 @@ func (u *Update) accept() {
 	u.state = stateAccepted
 }
 
-func (u *Update) sendComplete(o *updatepb.Outcome) {
+func (u *Update) setOutcome(o *updatepb.Outcome) {
 	u.state = stateCompleted
-	u.out.Set(o, nil)
+	u.pendingOutcome = o
 }
 
-func (u *Update) sendReject(f *failurepb.Failure) {
+func (u *Update) setFailure(f *failurepb.Failure) {
 	u.state = stateRejected
-	u.out.Set(&updatepb.Outcome{
+	u.pendingOutcome = &updatepb.Outcome{
 		Value: &updatepb.Outcome_Failure{
 			Failure: f,
 		},
-	}, nil)
+	}
+}
+
+func (u *Update) notifyResult() {
+	if u.pendingOutcome != nil {
+		u.out.Set(u.pendingOutcome, nil)
+		u.pendingOutcome = nil
+	}
 }

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/server/service/history/workflow/update"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -1004,7 +1005,13 @@ func (v *commandAttrValidator) commandTypes(
 // TODO (alex-update): move to messageValidator and dedicated package.
 func (v *commandAttrValidator) validateMessages(
 	messages []*protocolpb.Message,
+	updateRegistry update.Registry,
 ) error {
+	if err := updateRegistry.ValidateIncomingMessages(messages); err != nil {
+		return err
+	}
+	// TODO? Do we still need below validation logic?
+
 	// Validates messages:
 	// 1. Sequence: Response message for the same protocol_instance_id must go after Acceptance.
 	// 2. Rejection can't be paired with Response or Acceptance.
