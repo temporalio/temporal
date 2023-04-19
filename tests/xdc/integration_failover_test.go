@@ -1295,6 +1295,9 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	eventSignaled := false
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		if previousStartedEventID == 0 {
+			return []*commandpb.Command{}, nil
+		}
 		if !eventSignaled {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
@@ -1332,6 +1335,25 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		T:                   s.T(),
 	}
 
+	// Process start event in cluster 1
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.NoError(err)
+	s.False(eventSignaled)
+
+	// Send a signal without a task in cluster 1
+	_, err = client1.SignalWorkflowExecution(tests.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		},
+		SignalName:               "signal without task",
+		Input:                    payloads.EncodeString("my signal input without task"),
+		Identity:                 identity,
+		SkipGenerateWorkflowTask: true,
+	})
+	s.NoError(err)
+
 	// Send a signal in cluster 1
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
@@ -1367,7 +1389,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	eventsReplicated := false
 	for i := 0; i < 15; i++ {
 		historyResponse, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 5 {
+		if err == nil && len(historyResponse.History.Events) == 9 {
 			eventsReplicated = true
 			break
 		}
@@ -1375,6 +1397,20 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	}
 	s.NoError(err)
 	s.True(eventsReplicated)
+
+	// Send another signal without a task in cluster 2
+	_, err = client2.SignalWorkflowExecution(tests.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		},
+		SignalName:               "signal without task",
+		Input:                    payloads.EncodeString("my signal input without task"),
+		Identity:                 identity,
+		SkipGenerateWorkflowTask: true,
+	})
+	s.NoError(err)
 
 	// Send another signal in cluster 2
 	signalName2 := "my signal 2"
@@ -1401,7 +1437,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	eventsReplicated = false
 	for i := 0; i < 15; i++ {
 		historyResponse, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 9 {
+		if err == nil && len(historyResponse.History.Events) == 14 {
 			eventsReplicated = true
 			break
 		}
