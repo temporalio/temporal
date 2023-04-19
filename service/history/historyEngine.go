@@ -232,7 +232,7 @@ func NewEngineWithShardContext(
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
-		config.DefaultVisibilityIndexName,
+		persistenceVisibilityMgr.GetIndexName(),
 		visibility.AllowListForValidation(persistenceVisibilityMgr.GetStoreNames()),
 	)
 
