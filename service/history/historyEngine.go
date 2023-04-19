@@ -161,6 +161,7 @@ func NewEngineWithShardContext(
 		config,
 		archivalClient,
 		shard.GetTimeSource(),
+		persistenceVisibilityMgr,
 	)
 
 	historyEngImpl := &historyEngineImpl{
