@@ -665,7 +665,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 ) (*updatepb.Outcome, error) {
 	ptr, ok := ms.updateOutcomes[updateID]
 	if !ok || ptr.EventId == 0 {
-		return nil, serviceerror.NewNotFound("update not found")
+		return nil, serviceerror.NewNotFound("update outcome not found")
 	}
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(ptr.EventId)
 	if err != nil {

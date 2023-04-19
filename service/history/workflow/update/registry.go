@@ -42,7 +42,7 @@ type (
 		HasPending(filterMessages []*protocolpb.Message) bool
 		ProcessIncomingMessages(messages []*protocolpb.Message) error
 
-		Outcome(protoInstID string) (future.Future[*updatepb.Outcome], bool)
+		Outcome(protocolInstID string) (future.Future[*updatepb.Outcome], bool)
 
 		Prune()
 	}
@@ -63,10 +63,10 @@ func NewRegistry() *RegistryImpl {
 	}
 }
 
-func (r *RegistryImpl) Outcome(protoInstID string) (future.Future[*updatepb.Outcome], bool) {
+func (r *RegistryImpl) Outcome(protocolInstID string) (future.Future[*updatepb.Outcome], bool) {
 	r.Lock()
 	defer r.Unlock()
-	upd, ok := r.updates[protoInstID]
+	upd, ok := r.updates[protocolInstID]
 	if !ok {
 		return nil, false
 	}

@@ -61,7 +61,7 @@ func Invoke(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
 	findWorkflow WorkflowCtxLookup,
-	wfobservers *workflow.ObserverSet,
+	observerSet *workflow.ObserverSet,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
 	updateRef := req.GetRequest().GetUpdateRef()
 	obsKey := workflow.ObserverKey{
@@ -94,7 +94,7 @@ func Invoke(
 		}, nil
 	}
 
-	obs, release, err := wfobservers.FindOrCreate(ctx, obsKey, wfCtxLookup, observerCtor)
+	obs, release, err := observerSet.FindOrCreate(ctx, obsKey, wfCtxLookup, observerCtor)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func Invoke(
 	if !ok {
 		return nil, serviceerror.NewInternal("wrong observer type found, perhaps due to ID reuse")
 	}
-	outcome, err := upObserver.AwaitOutcome(ctx)
+	outcome, err := upObserver.awaitOutcome(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +137,6 @@ func (uo *updateObserver) Connect(ctx context.Context, wfctx workflow.Context) e
 	return nil
 }
 
-func (uo *updateObserver) AwaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
+func (uo *updateObserver) awaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
 	return uo.fut.Get(ctx)
 }

@@ -55,7 +55,7 @@ type (
 		// Connect is called whenever the workflow.Context that this Observer
 		// was created to track is loaded into memory in the workflow Cache.
 		// Implementations should assume that the workflow Context lock is
-		// already held but the caller when this function is called. If an
+		// already held by the caller when this function is called. If an
 		// Observer implementation returns an error from a call to Connect, the
 		// Observer will remain in the ObserverSet and Connect will be called
 		// again the next time the observed workflow Context is loaded.
