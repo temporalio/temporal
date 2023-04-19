@@ -62,17 +62,22 @@ func (m *MocktransactionMgr) EXPECT() *MocktransactionMgrMockRecorder {
 }
 
 // backfillWorkflow mocks base method.
-func (m *MocktransactionMgr) backfillWorkflow(ctx context.Context, now time.Time, targetWorkflow Workflow, targetWorkflowEvents *persistence.WorkflowEvents) error {
+func (m *MocktransactionMgr) backfillWorkflow(ctx context.Context, targetWorkflow Workflow, targetWorkflowEventsSlice ...*persistence.WorkflowEvents) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "backfillWorkflow", ctx, now, targetWorkflow, targetWorkflowEvents)
+	varargs := []interface{}{ctx, targetWorkflow}
+	for _, a := range targetWorkflowEventsSlice {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "backfillWorkflow", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // backfillWorkflow indicates an expected call of backfillWorkflow.
-func (mr *MocktransactionMgrMockRecorder) backfillWorkflow(ctx, now, targetWorkflow, targetWorkflowEvents interface{}) *gomock.Call {
+func (mr *MocktransactionMgrMockRecorder) backfillWorkflow(ctx, targetWorkflow interface{}, targetWorkflowEventsSlice ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "backfillWorkflow", reflect.TypeOf((*MocktransactionMgr)(nil).backfillWorkflow), ctx, now, targetWorkflow, targetWorkflowEvents)
+	varargs := append([]interface{}{ctx, targetWorkflow}, targetWorkflowEventsSlice...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "backfillWorkflow", reflect.TypeOf((*MocktransactionMgr)(nil).backfillWorkflow), varargs...)
 }
 
 // checkWorkflowExists mocks base method.

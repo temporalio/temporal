@@ -157,8 +157,8 @@ func (s *stateBuilderSuite) mockUpdateVersion(events ...*historypb.HistoryEvent)
 	s.mockMutableState.EXPECT().SetHistoryBuilder(NewImmutableHistoryBuilder(events))
 }
 
-func (s *stateBuilderSuite) toHistory(events ...*historypb.HistoryEvent) []*historypb.HistoryEvent {
-	return events
+func (s *stateBuilderSuite) toHistory(eventss ...*historypb.HistoryEvent) [][]*historypb.HistoryEvent {
+	return [][]*historypb.HistoryEvent{eventss}
 }
 
 // workflow operations
