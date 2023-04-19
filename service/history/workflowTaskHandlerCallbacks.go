@@ -579,6 +579,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	bufferedEventShouldCreateNewTask := hasBufferedEvents && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
+	if hasBufferedEvents && !bufferedEventShouldCreateNewTask {
+		// Make sure tasks that should not create a new event don't get stuck in ms forever
+		ms.FlushBufferedEvents()
+	}
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
 	if ms.IsWorkflowExecutionRunning() && (wtFailedShouldCreateNewTask || bufferedEventShouldCreateNewTask || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled) {
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
