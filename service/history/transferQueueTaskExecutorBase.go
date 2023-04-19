@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -76,6 +77,7 @@ type (
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
+		visibilityManager        manager.VisibilityManager
 		workflowDeleteManager    deletemanager.DeleteManager
 	}
 )
@@ -87,6 +89,7 @@ func newTransferQueueTaskExecutorBase(
 	logger log.Logger,
 	metricHandler metrics.Handler,
 	matchingClient matchingservice.MatchingServiceClient,
+	visibilityManager manager.VisibilityManager,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
 		currentClusterName:       shard.GetClusterMetadata().GetCurrentClusterName(),
@@ -100,12 +103,14 @@ func newTransferQueueTaskExecutorBase(
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
+		visibilityManager:        visibilityManager,
 		workflowDeleteManager: deletemanager.NewDeleteManager(
 			shard,
 			workflowCache,
 			shard.GetConfig(),
 			archivalClient,
 			shard.GetTimeSource(),
+			visibilityManager,
 		),
 	}
 }
@@ -194,7 +199,7 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 	ctx, cancel := context.WithTimeout(ctx, t.config.TransferProcessorVisibilityArchivalTimeLimit())
 	defer cancel()
 
-	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.config.DefaultVisibilityIndexName, false)
+	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.visibilityManager.GetIndexName(), false)
 	if err != nil {
 		return err
 	}

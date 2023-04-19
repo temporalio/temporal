@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/xdc"
@@ -54,11 +55,12 @@ type (
 
 		QueueFactoryBaseParams
 
-		ClientBean       client.Bean
-		ArchivalClient   archiver.Client
-		SdkClientFactory sdk.ClientFactory
-		MatchingClient   resource.MatchingClient
-		HistoryClient    historyservice.HistoryServiceClient
+		ClientBean        client.Bean
+		ArchivalClient    archiver.Client
+		SdkClientFactory  sdk.ClientFactory
+		MatchingClient    resource.MatchingClient
+		HistoryClient     historyservice.HistoryServiceClient
+		VisibilityManager manager.VisibilityManager
 	}
 
 	transferQueueFactory struct {
@@ -126,6 +128,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MetricsHandler,
 		f.Config,
 		f.MatchingClient,
+		f.VisibilityManager,
 	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
@@ -150,6 +153,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MetricsHandler,
 		currentClusterName,
 		f.MatchingClient,
+		f.VisibilityManager,
 	)
 
 	executor := queues.NewExecutorWrapper(
