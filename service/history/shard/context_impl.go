@@ -438,7 +438,7 @@ func (s *ContextImpl) GetQueueState(
 	return queueState, ok
 }
 
-func (s *ContextImpl) UpdateQueueState(
+func (s *ContextImpl) SetQueueState(
 	category tasks.Category,
 	state *persistencespb.QueueState,
 ) error {
