@@ -234,6 +234,7 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 	queryString string,
 	pageSize int,
 	token *pageToken,
+	orderByClause string,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
@@ -278,13 +279,11 @@ func (c *sqliteQueryConverter) buildSelectStmt(
 		`SELECT %s
 		FROM executions_visibility
 		WHERE %s
-		ORDER BY %s DESC, %s DESC, %s
+		%s
 		LIMIT ?`,
 		strings.Join(sqlplugin.DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
-		sqlparser.String(c.getCoalesceCloseTimeExpr()),
-		searchattribute.GetSqlDbColName(searchattribute.StartTime),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		orderByClause,
 	), queryArgs
 }
 
