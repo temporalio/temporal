@@ -70,6 +70,8 @@ type (
 
 	TaskIDGenerator func(number int) ([]int64, error)
 
+	BufferedEventFilter func(*historypb.HistoryEvent) bool
+
 	HistoryBuilder struct {
 		state           HistoryBuilderState
 		timeSource      clock.TimeSource

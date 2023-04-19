@@ -63,8 +63,6 @@ func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 	return &policy
 }
 
-type BufferedEventFilter func(*historypb.HistoryEvent) bool
-
 var emptyTasks = []tasks.Task{}
 
 type (

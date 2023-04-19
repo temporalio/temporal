@@ -96,10 +96,10 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
 
-	shouldScheduleSignalTask := false
+	shouldScheduleWorkflowTask := false
 	for _, event := range reappliedEvents {
 		signal := event.GetWorkflowExecutionSignaledEventAttributes()
-		shouldScheduleSignalTask = shouldScheduleSignalTask || !signal.GetSkipGenerateWorkflowTask()
+		shouldScheduleWorkflowTask = shouldScheduleWorkflowTask || !signal.GetSkipGenerateWorkflowTask()
 		if _, err := ms.AddWorkflowExecutionSignaled(
 			signal.GetSignalName(),
 			signal.GetInput(),
@@ -118,7 +118,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 		// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
 		return reappliedEvents, nil
 	}
-	if !shouldScheduleSignalTask {
+	if !shouldScheduleWorkflowTask {
 		// Do not create workflow task when all reapplied signals had SkipGenerateWorkflowTask=true flag set
 		return reappliedEvents, nil
 	}
