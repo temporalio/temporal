@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -261,35 +262,41 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 
 func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	clusterMetadata := r.shard.GetClusterMetadata()
-	currentCluster := clusterMetadata.GetCurrentClusterName()
-	var minAckedTaskID *int64
-	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
-		if !clusterInfo.Enabled {
-			continue
-		}
+	allClusterInfo := clusterMetadata.GetAllClusterInfo()
+	currentClusterName := clusterMetadata.GetCurrentClusterName()
 
-		var ackLevel int64
-		if clusterName == currentCluster {
-			ackLevel = r.shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID
-		} else {
-			ackLevel = r.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName).TaskID
-		}
-
-		if minAckedTaskID == nil || ackLevel < *minAckedTaskID {
-			minAckedTaskID = &ackLevel
+	minAckedTaskID := r.shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID - 1
+	queueStates, ok := r.shard.GetQueueState(tasks.CategoryReplication)
+	if !ok {
+		queueStates = &persistencespb.QueueState{
+			ExclusiveReaderHighWatermark: nil,
+			ReaderStates:                 make(map[int64]*persistencespb.QueueReaderState),
 		}
 	}
-	if minAckedTaskID == nil || *minAckedTaskID <= r.minTxAckedTaskID {
+	for _, readerID := range targetReaderIDs(
+		currentClusterName,
+		r.shard.GetShardID(),
+		allClusterInfo,
+	) {
+		readerState, ok := queueStates.ReaderStates[readerID]
+		if !ok {
+			minAckedTaskID = minInt64(minAckedTaskID, 0)
+		} else {
+			minAckedTaskID = minInt64(minAckedTaskID, readerState.Scopes[0].Range.InclusiveMin.TaskId-1)
+		}
+	}
+
+	if minAckedTaskID <= r.minTxAckedTaskID {
 		return nil
 	}
 
-	r.logger.Debug("cleaning up replication task queue", tag.ReadLevel(*minAckedTaskID))
+	r.logger.Debug("cleaning up replication task queue", tag.ReadLevel(minAckedTaskID))
 	r.metricsHandler.Counter(metrics.ReplicationTaskCleanupCount.GetMetricName()).Record(
 		1,
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
 	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
-		r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-*minAckedTaskID,
+		r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-minAckedTaskID,
 		metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
 	)
 
@@ -297,7 +304,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 	defer cancel()
 
-	inclusiveMinPendingTaskKey := tasks.NewImmediateKey(*minAckedTaskID + 1)
+	inclusiveMinPendingTaskKey := tasks.NewImmediateKey(minAckedTaskID + 1)
 	r.shard.GetExecutionManager().UpdateHistoryTaskReaderProgress(ctx, &persistence.UpdateHistoryTaskReaderProgressRequest{
 		ShardID:                    r.shard.GetShardID(),
 		ShardOwner:                 r.shard.GetOwner(),
@@ -315,7 +322,53 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 		},
 	)
 	if err == nil {
-		r.minTxAckedTaskID = *minAckedTaskID
+		r.minTxAckedTaskID = minAckedTaskID
 	}
 	return err
+}
+
+func targetReaderIDs(
+	currentClusterName string,
+	currentShardID int32,
+	allClusterInfo map[string]cluster.ClusterInformation,
+) []int64 {
+	currentShardCount := allClusterInfo[currentClusterName].ShardCount
+	var readerIDs []int64
+	for clusterName, clusterInfo := range allClusterInfo {
+		if clusterName == currentClusterName || !clusterInfo.Enabled {
+			continue
+		}
+
+		targetClusterID := allClusterInfo[clusterName].InitialFailoverVersion
+		targetShardCount := allClusterInfo[clusterName].ShardCount
+		for _, targetShardID := range common.MapShardID(
+			currentShardCount,
+			targetShardCount,
+			currentShardID,
+		) {
+			readerIDs = append(readerIDs, shard.ReplicationReaderIDFromClusterShardID(
+				targetClusterID, targetShardID,
+			))
+		}
+	}
+	return readerIDs
+}
+
+func minInt64(
+	accumulateMin int64,
+	minCursor int64,
+) int64 {
+	if accumulateMin <= minCursor {
+		return accumulateMin
+	}
+	return minCursor
+	//if accumulateMin == nil {
+	//	return convert.Int64Ptr(minCursor)
+	//}
+	//
+	//if *accumulateMin <= minCursor {
+	//	return accumulateMin
+	//} else {
+	//	return convert.Int64Ptr(minCursor)
+	//}
 }

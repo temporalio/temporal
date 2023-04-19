@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	reflect "reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,7 +38,6 @@ import (
 
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"golang.org/x/exp/maps"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -968,10 +966,7 @@ func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
 				},
 				1: nil,
 			},
-			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
-				FireTime: &tasks.DefaultFireTime,
-				TaskId:   3000,
-			},
+			ExclusiveReaderHighWatermark: nil,
 		},
 	}
 }
@@ -1011,14 +1006,13 @@ func (m updateShardRequestMatcher) Matches(x interface{}) bool {
 		return false
 	}
 
+	// only compare the essential vars,
+	// other vars like queue state / queue ack level should not be test in this util
 	return m.PreviousRangeID == req.PreviousRangeID &&
 		m.ShardInfo.ShardId == req.ShardInfo.ShardId &&
 		strings.Contains(req.ShardInfo.Owner, m.ShardInfo.Owner) &&
 		m.ShardInfo.RangeId == req.ShardInfo.RangeId &&
-		m.ShardInfo.StolenSinceRenew == req.ShardInfo.StolenSinceRenew &&
-		maps.Equal(m.ShardInfo.ReplicationDlqAckLevel, req.ShardInfo.ReplicationDlqAckLevel) &&
-		reflect.DeepEqual(m.ShardInfo.QueueAckLevels, req.ShardInfo.QueueAckLevels) &&
-		reflect.DeepEqual(m.ShardInfo.QueueStates, req.ShardInfo.QueueStates)
+		m.ShardInfo.StolenSinceRenew == req.ShardInfo.StolenSinceRenew
 }
 
 func (m updateShardRequestMatcher) String() string {

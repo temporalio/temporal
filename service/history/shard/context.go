@@ -77,12 +77,9 @@ type (
 
 		GetImmediateQueueExclusiveHighReadWatermark() tasks.Key
 		UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error)
-		GetQueueAckLevel(category tasks.Category) tasks.Key
-		UpdateQueueAckLevel(category tasks.Category, ackLevel tasks.Key) error
-		GetQueueClusterAckLevel(category tasks.Category, cluster string) tasks.Key
-		UpdateQueueClusterAckLevel(category tasks.Category, cluster string, ackLevel tasks.Key) error
 		GetQueueState(category tasks.Category) (*persistencespb.QueueState, bool)
 		SetQueueState(category tasks.Category, state *persistencespb.QueueState) error
+		UpdateReplicationQueueReaderState(readerID int64, readerState *persistencespb.QueueReaderState) error
 
 		GetReplicatorDLQAckLevel(sourceCluster string) int64
 		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error

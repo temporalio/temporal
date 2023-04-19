@@ -29,11 +29,14 @@ package replication
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/sync/errgroup"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	historyclient "go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -71,6 +74,14 @@ func StreamReplicationTasks(
 	if err != nil {
 		return err
 	}
+	_, serverShardCount, err := clusterIDToClusterNameShardCount(allClusterInfo, int32(shardContext.GetClusterMetadata().GetClusterID()))
+	if err != nil {
+		return err
+	}
+	err = common.VerifyShardIDMapping(clientShardCount, serverShardCount, clientClusterShardID.ShardID, serverClusterShardID.ShardID)
+	if err != nil {
+		return err
+	}
 	engine, err := shardContext.GetEngine(server.Context())
 	if err != nil {
 		return err
@@ -83,9 +94,10 @@ func StreamReplicationTasks(
 		ClientClusterName:       clientClusterName,
 		ClientClusterShardID:    clientClusterShardID,
 	}
+
 	errGroup, ctx := errgroup.WithContext(server.Context())
 	errGroup.Go(func() error {
-		return recvLoop(ctx, server, shardContext, clientClusterShardID)
+		return recvLoop(ctx, server, shardContext, clientClusterShardID, serverClusterShardID)
 	})
 	errGroup.Go(func() error {
 		return sendLoop(ctx, server, shardContext, filter, clientClusterShardID)
@@ -98,12 +110,18 @@ func recvLoop(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
 	clientClusterShardID historyclient.ClusterShardID,
+	serverClusterShardID historyclient.ClusterShardID,
 ) error {
 	for ctx.Err() == nil {
 		req, err := server.Recv()
 		if err != nil {
 			return err
 		}
+		shardContext.GetLogger().Debug(fmt.Sprintf(
+			"cluster shard ID %v/%v <- cluster shard ID %v/%v",
+			serverClusterShardID.ClusterID, serverClusterShardID.ShardID,
+			clientClusterShardID.ClusterID, clientClusterShardID.ShardID,
+		))
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
 			if err := recvSyncReplicationState(
@@ -138,11 +156,29 @@ func recvSyncReplicationState(
 		return nil
 	}
 
-	// TODO wait for #4176 to be merged and then use cluster & shard ID as reader ID
-	if err := shardContext.UpdateQueueClusterAckLevel(
-		tasks.CategoryReplication,
-		string(clientClusterShardID.ClusterID),
-		tasks.NewImmediateKey(lastProcessedMessageID),
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(clientClusterShardID.ClusterID),
+		clientClusterShardID.ShardID,
+	)
+	readerState := &persistencespb.QueueReaderState{
+		Scopes: []*persistencespb.QueueSliceScope{{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(
+					tasks.NewImmediateKey(lastProcessedMessageID + 1),
+				),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+					tasks.NewImmediateKey(math.MaxInt64),
+				),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}},
+	}
+	if err := shardContext.UpdateReplicationQueueReaderState(
+		readerID,
+		readerState,
 	); err != nil {
 		shardContext.GetLogger().Error(
 			"error updating replication level for shard",
@@ -214,24 +250,39 @@ func sendCatchUp(
 	taskConvertor TaskConvertor,
 	clientClusterShardID historyclient.ClusterShardID,
 ) (int64, error) {
-	// TODO wait for #4176 to be merged and then use cluster & shard ID as reader ID
-	catchupBeginInclusiveWatermark := shardContext.GetQueueClusterAckLevel(
-		tasks.CategoryReplication,
-		string(clientClusterShardID.ClusterID),
+
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(clientClusterShardID.ClusterID),
+		clientClusterShardID.ShardID,
 	)
-	catchupEndExclusiveWatermark := shardContext.GetImmediateQueueExclusiveHighReadWatermark()
+
+	var catchupBeginInclusiveWatermark int64
+	queueState, ok := shardContext.GetQueueState(
+		tasks.CategoryReplication,
+	)
+	if !ok {
+		catchupBeginInclusiveWatermark = 0
+	} else {
+		readerState, ok := queueState.ReaderStates[readerID]
+		if !ok {
+			catchupBeginInclusiveWatermark = 0
+		} else {
+			catchupBeginInclusiveWatermark = readerState.Scopes[0].Range.InclusiveMin.TaskId
+		}
+	}
+	catchupEndExclusiveWatermark := shardContext.GetImmediateQueueExclusiveHighReadWatermark().TaskID
 	if err := sendTasks(
 		ctx,
 		server,
 		shardContext,
 		taskConvertor,
 		clientClusterShardID,
-		catchupBeginInclusiveWatermark.TaskID,
-		catchupEndExclusiveWatermark.TaskID,
+		catchupBeginInclusiveWatermark,
+		catchupEndExclusiveWatermark,
 	); err != nil {
 		return 0, err
 	}
-	return catchupEndExclusiveWatermark.TaskID, nil
+	return catchupEndExclusiveWatermark, nil
 }
 
 func sendLive(

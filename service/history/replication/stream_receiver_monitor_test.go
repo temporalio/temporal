@@ -209,6 +209,8 @@ func (s *streamReceiverMonitorSuite) TestGenerateStreamKeys_4To1() {
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Add() {
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
 	clientKey := NewClusterShardKey(s.clientClusterID, rand.Int31())
 	serverKey := NewClusterShardKey(s.serverClusterID, rand.Int31())
 
@@ -236,6 +238,8 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Add() {
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Remove() {
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
 	clientKey := NewClusterShardKey(s.clientClusterID, rand.Int31())
 	serverKey := NewClusterShardKey(s.serverClusterID, rand.Int31())
 	stream := NewStreamReceiver(s.streamReceiverMonitor.ProcessToolBox, clientKey, serverKey)
@@ -259,6 +263,8 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Remove() {
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Reactivate() {
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
 	clientKey := NewClusterShardKey(s.clientClusterID, rand.Int31())
 	serverKey := NewClusterShardKey(s.serverClusterID, rand.Int31())
 	stream := NewStreamReceiver(s.streamReceiverMonitor.ProcessToolBox, clientKey, serverKey)
