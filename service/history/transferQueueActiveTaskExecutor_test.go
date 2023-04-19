@@ -2579,8 +2579,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			}), nil)
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
-			clusterName := namespaceEntry.ActiveClusterName()
-			mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
 			mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 
 			mockShard := shard.NewMockContext(ctrl)
@@ -2616,8 +2614,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 					ackLevel = closeTransferTaskId - 1
 				}
 				mockShard.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(nil, false).AnyTimes()
-				mockShard.EXPECT().GetQueueClusterAckLevel(tasks.CategoryTransfer,
-					clusterName).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
+				mockShard.EXPECT().GetQueueAckLevel(tasks.CategoryTransfer).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
 			}
 
 			mockWorkflowDeleteManager := deletemanager.NewMockDeleteManager(ctrl)
