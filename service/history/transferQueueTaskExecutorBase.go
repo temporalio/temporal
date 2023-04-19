@@ -318,7 +318,6 @@ func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.
 	// check if close execution transfer task is completed
 	transferQueueState, ok := t.shard.GetQueueState(tasks.CategoryTransfer)
 	if !ok {
-		// Use cluster ack level for transfer queue ack level because it gets updated more often.
 		transferQueueAckLevel := t.shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID
 		return closeTransferTaskId > transferQueueAckLevel
 	}
