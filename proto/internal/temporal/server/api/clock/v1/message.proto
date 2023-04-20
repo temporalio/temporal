@@ -29,3 +29,17 @@ message VectorClock {
     int64 clock = 2;
     int64 cluster_id = 3;
 }
+
+// A Hybrid Logical Clock timestamp.
+// Guarantees strict total ordering for conflict resolution purposes.
+message HybridLogicalClock {
+    // Wall clock - A single time source MUST guarantee that 2 consecutive timestamps are monotonically non-decreasing.
+    // e.g. by storing the last wall clock and returning max(gettimeofday(), lastWallClock).
+    int64 wall_clock = 1;
+    // Incremental sequence that is reset every time the system's wallclock moves forward.
+    // Ensures the clock generates monotonically increasing timestamps.
+    int32 version = 2;
+    // The cluster version ID as described in the XDC docs - used as a tie breaker.
+    // See: https://github.com/uber/cadence/blob/master/docs/design/2290-cadence-ndc.md
+    int64 cluster_id = 3;
+}
