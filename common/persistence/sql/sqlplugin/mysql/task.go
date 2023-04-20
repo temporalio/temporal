@@ -295,15 +295,15 @@ func (mdb *db) LockTaskQueues(
 	return rangeID, err
 }
 
-func (d *db) GetTaskQueueUserData(ctx context.Context, request *sqlplugin.GetTaskQueueUserDataRequest) (*sqlplugin.VersionedBlob, error) {
+func (mdb *db) GetTaskQueueUserData(ctx context.Context, request *sqlplugin.GetTaskQueueUserDataRequest) (*sqlplugin.VersionedBlob, error) {
 	var row sqlplugin.VersionedBlob
-	err := d.conn.GetContext(ctx, &row, getTaskQueueUserDataQry, request.NamespaceID, request.TaskQueueName)
+	err := mdb.conn.GetContext(ctx, &row, getTaskQueueUserDataQry, request.NamespaceID, request.TaskQueueName)
 	return &row, err
 }
 
-func (d *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.UpdateTaskQueueDataRequest) error {
+func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.UpdateTaskQueueDataRequest) error {
 	if request.Version == 0 {
-		_, err := d.conn.ExecContext(
+		_, err := mdb.conn.ExecContext(
 			ctx,
 			insertTaskQueueUserDataQry,
 			request.NamespaceID,
@@ -311,26 +311,25 @@ func (d *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.Upd
 			request.Data,
 			request.DataEncoding)
 		return err
-	} else {
-		result, err := d.conn.ExecContext(
-			ctx,
-			updateTaskQueueUserDataQry,
-			request.Data,
-			request.DataEncoding,
-			request.Version+1,
-			request.NamespaceID,
-			request.TaskQueueName,
-			request.Version)
-		if err != nil {
-			return err
-		}
-		numRows, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if numRows != 1 {
-			return &persistence.ConditionFailedError{Msg: "Expected exactly one row to be updated"}
-		}
-		return nil
 	}
+	result, err := mdb.conn.ExecContext(
+		ctx,
+		updateTaskQueueUserDataQry,
+		request.Data,
+		request.DataEncoding,
+		request.Version+1,
+		request.NamespaceID,
+		request.TaskQueueName,
+		request.Version)
+	if err != nil {
+		return err
+	}
+	numRows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if numRows != 1 {
+		return &persistence.ConditionFailedError{Msg: "Expected exactly one row to be updated"}
+	}
+	return nil
 }

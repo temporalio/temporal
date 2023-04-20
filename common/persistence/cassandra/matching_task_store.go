@@ -513,7 +513,7 @@ func (d *MatchingTaskStore) CompleteTasksLessThan(
 func (d *MatchingTaskStore) GetTaskQueueUserData(
 	ctx context.Context,
 	request *p.GetTaskQueueUserDataRequest,
-) (*p.InternalGetTaskQueueDataResponse, error) {
+) (*p.InternalGetTaskQueueUserDataResponse, error) {
 	query := d.Session.Query(templateGetTaskQueueUserDataQuery,
 		request.NamespaceID,
 		request.TaskQueue,
@@ -525,7 +525,7 @@ func (d *MatchingTaskStore) GetTaskQueueUserData(
 		return nil, gocql.ConvertError("GetTaskQueueData", err)
 	}
 
-	return &p.InternalGetTaskQueueDataResponse{
+	return &p.InternalGetTaskQueueUserDataResponse{
 		Version:  version,
 		UserData: p.NewDataBlob(userDataBytes, encoding),
 	}, nil

@@ -1539,7 +1539,7 @@ type InvalidateTaskQueueUserDataRequest struct {
 	NamespaceId   string            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	TaskQueue     string            `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	TaskQueueType v18.TaskQueueType `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
-	// The user data should be invalidated and replaced with this data, if set.
+	// The partition's cached user data should be invalidated and replaced with this data, if set.
 	UserData *v19.VersionedTaskQueueUserData `protobuf:"bytes,4,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
 }
 
@@ -1645,6 +1645,7 @@ type GetTaskQueueUserDataRequest struct {
 	TaskQueue string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	// The value of the last known user data version.
 	// If the requester has no data, it should set this to 0.
+	// This value must not be set to a negative number (note that our linter suggests avoiding uint64).
 	LastKnownUserDataVersion int64 `protobuf:"varint,3,opt,name=last_known_user_data_version,json=lastKnownUserDataVersion,proto3" json:"last_known_user_data_version,omitempty"`
 }
 
@@ -1702,10 +1703,10 @@ func (m *GetTaskQueueUserDataRequest) GetLastKnownUserDataVersion() int64 {
 }
 
 type GetTaskQueueUserDataResponse struct {
-	// Whether this task queue have any stored user data
+	// Whether this task queue has any stored user data
 	TaskQueueHasUserData bool `protobuf:"varint,1,opt,name=task_queue_has_user_data,json=taskQueueHasUserData,proto3" json:"task_queue_has_user_data,omitempty"`
-	// The versioned user data, set if the task queue has user data and the request's last_known_user_data_version is
-	// less than the version stored in the root partition.
+	// Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
+	// than the version cached in the root partition.
 	UserData *v19.VersionedTaskQueueUserData `protobuf:"bytes,2,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
 }
 

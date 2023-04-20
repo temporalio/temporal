@@ -149,11 +149,11 @@ const (
 	// the version graph for a task queue
 	WorkerBuildIdSizeLimit = "limit.workerBuildIdSize"
 	// VersionCompatibleSetLimitPerQueue is the max number of compatible sets allowed in the versioning data for a task
-	// queue. Update requests which would cause the versioning data to exceed this number will fail with
+	// queue. Update requests which would cause the versioning data to exceed this number will fail with a
 	// FailedPrecondition error.
 	VersionCompatibleSetLimitPerQueue = "limit.versionCompatibleSetLimitPerQueue"
 	// VersionBuildIDLimitPerQueue is the max number of build IDs allowed to be defined in the versioning data for a
-	// task queue.  Update requests which would cause the versioning data to exceed this number will fail with
+	// task queue. Update requests which would cause the versioning data to exceed this number will fail with a
 	// FailedPrecondition error.
 	VersionBuildIDLimitPerQueue = "limit.versionBuildIDLimitPerQueue"
 

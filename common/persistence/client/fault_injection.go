@@ -1034,7 +1034,7 @@ func (t *FaultInjectionTaskStore) CompleteTasksLessThan(
 	return t.baseTaskStore.CompleteTasksLessThan(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueDataResponse, error) {
+func (t *FaultInjectionTaskStore) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueUserDataResponse, error) {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}

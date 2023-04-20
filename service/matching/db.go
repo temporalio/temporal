@@ -308,8 +308,8 @@ func (db *taskQueueDB) getUserDataLocked(
 			NamespaceID: db.namespaceID.String(),
 			TaskQueue:   db.taskQueue.FullName(),
 		})
-		var notFoundError *serviceerror.NotFound
 		if err != nil {
+			var notFoundError *serviceerror.NotFound
 			if errors.As(err, &notFoundError) {
 				return nil, nil
 			}
@@ -321,8 +321,8 @@ func (db *taskQueueDB) getUserDataLocked(
 	return db.userData, nil
 }
 
-// UpdateUserData allows callers to update versioning data for this task queue. The pointer passed to the
-// update function is guaranteed to be non-nil.
+// UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed
+// to the update function is guaranteed to be non-nil.
 // Note that the user data's clock may be nil and should be initialized externally where there's access to the cluster
 // metadata and the cluster ID can be obtained.
 //

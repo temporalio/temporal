@@ -114,9 +114,9 @@ func checkLimits(g *persistence.VersioningData, maxSets, maxBuildIDs int) error 
 //     default for that set.
 //  3. Target some existing version, marking it (and thus its set) as the default set.
 //
-// Deletions are done by a background process (not implemented).
+// Deletions are performed by a background process which verifies build IDs are no longer in use and safe to delete (not yet implemented).
 //
-// Update may fail with ErrToManyVersionSets or ErrToManyBuildIDs if it would cause exceeding the passed in limits.
+// Update may fail with FailedPrecondition if it would cause exceeding the supplied limits.
 func UpdateVersionSets(clock clockpb.HybridLogicalClock, data *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIDs int) (clockpb.HybridLogicalClock, *persistence.VersioningData, error) {
 	clock = generateHLCTimestamp(clock)
 	data, err := updateImpl(clock, data, req)

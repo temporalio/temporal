@@ -477,7 +477,7 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 	return int(nRows), nil
 }
 
-func (m *sqlTaskManager) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueDataResponse, error) {
+func (m *sqlTaskManager) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueUserDataResponse, error) {
 	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to parse namespace ID as UUID: %v", err))
@@ -492,7 +492,7 @@ func (m *sqlTaskManager) GetTaskQueueUserData(ctx context.Context, request *pers
 		}
 		return nil, err
 	}
-	return &persistence.InternalGetTaskQueueDataResponse{
+	return &persistence.InternalGetTaskQueueUserDataResponse{
 		Version:  response.Version,
 		UserData: persistence.NewDataBlob(response.Data, response.DataEncoding),
 	}, nil

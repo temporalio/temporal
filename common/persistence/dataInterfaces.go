@@ -552,7 +552,7 @@ type (
 		UserData *persistencespb.VersionedTaskQueueUserData
 	}
 
-	// UpdateTaskQueueUserDataRequest is the output type for the UpdateTaskQueueUserData API
+	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API
 	UpdateTaskQueueUserDataRequest struct {
 		NamespaceID string
 		TaskQueue   string
@@ -1136,11 +1136,12 @@ type (
 		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
 
 		// GetTaskQueueUserData gets versioned user data.
-		// This data would only exist if a user uses APIs that generate this such as the worker versioning related APIs.
-		// Caller should be prepared to gracefully handle the "NotFound" service error.
+		// This data would only exist if a user uses APIs that generate it, such as the worker versioning related APIs.
+		// The caller should be prepared to gracefully handle the "NotFound" service error.
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 		// UpdateTaskQueueUserData updates the user data for a given task queue.
-		// The request takes the current known version along with the data to update.
+		// The request takes the _current_ known version along with the data to update.
+		// The caller should +1 increment the cached version number if this call succeeds.
 		// Fails with ConditionFailedError if the user data was updated concurrently.
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error
 	}

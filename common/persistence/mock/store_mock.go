@@ -280,10 +280,10 @@ func (mr *MockTaskStoreMockRecorder) GetTaskQueue(ctx, request interface{}) *gom
 }
 
 // GetTaskQueueData mocks base method.
-func (m *MockTaskStore) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueDataResponse, error) {
+func (m *MockTaskStore) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueUserDataResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskQueueUserData", ctx, request)
-	ret0, _ := ret[0].(*persistence.InternalGetTaskQueueDataResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetTaskQueueUserDataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -815,24 +815,26 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
-	resp := &matchingservice.GetTaskQueueUserDataResponse{}
 	version := req.GetLastKnownUserDataVersion()
-	if version > -1 {
-		userData, err := tqMgr.GetUserData(hCtx)
-		if err != nil {
-			return nil, err
+	if version < 0 {
+		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
+	}
+	resp := &matchingservice.GetTaskQueueUserDataResponse{}
+	userData, err := tqMgr.GetUserData(hCtx)
+	if err != nil {
+		return nil, err
+	}
+	if userData != nil {
+		resp.TaskQueueHasUserData = true
+		if userData.Version > version {
+			resp.UserData = userData
 		}
-		if userData != nil {
-			resp.TaskQueueHasUserData = true
-			if userData.Version > version {
-				resp.UserData = userData
-			}
-			if userData.Version < version {
-				e.logger.Error("Non-root partition requested task queue user data for version greater than known version")
-				// TODO: When would this happen? Do we go to the store and reload the user data?
-			}
+		if userData.Version < version {
+			e.logger.Error("Non-root partition requested task queue user data for version greater than known version")
+			// TODO: When would this happen? Likely due to ownership transfer of the root partition.
+			// Do we go to the store and reload the user data?
+			// How should we inform the caller when this happens?
 		}
-
 	}
 	return resp, nil
 }

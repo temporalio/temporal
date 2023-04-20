@@ -141,7 +141,6 @@ func (m *BuildID) GetStateUpdateTimestamp() *v1.HybridLogicalClock {
 // An internal represenation of temporal.api.taskqueue.v1.CompatibleVersionSet
 type CompatibleVersionSet struct {
 	// Set IDs are used internally by matching.
-	// The first set ID for a given set is the first added build ID.
 	// A set typically has one set ID and extra care is taken to enforce this.
 	// In split brain scenarios, there may be conflicting concurrent writes to the task queue versioning data, in which
 	// case a set might end up with more than one ID.
@@ -272,7 +271,7 @@ func (m *VersioningData) GetDefaultUpdateTimestamp() *v1.HybridLogicalClock {
 // This data must all fit in a single DB column and is kept cached in-memory, take extra care to ensure data added here
 // has reasonable size limits imposed on it.
 type TaskQueueUserData struct {
-	// The last recorded cluster-local Hybrid Logical Clock timestamp.
+	// The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ task queue.
 	// Updated whenever user data is directly updated due to a user action but not when applying replication events.
 	// The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
 	// timestamps.
