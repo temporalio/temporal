@@ -71,7 +71,7 @@ type (
 		) error
 		GenerateScheduleWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
-			timeoutOnly bool,
+			generateTimeoutTaskOnly bool,
 		) error
 		GenerateStartWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
@@ -333,7 +333,7 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
-	timeoutOnly bool,
+	generateTimeoutTaskOnly bool, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching.
 ) error {
 
 	workflowTask := r.mutableState.GetWorkflowTaskByID(
@@ -341,16 +341,6 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	)
 	if workflowTask == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
-	}
-
-	if !timeoutOnly {
-		r.mutableState.AddTasks(&tasks.WorkflowTask{
-			// TaskID, VisibilityTimestamp is set by shard
-			WorkflowKey:      r.mutableState.GetWorkflowKey(),
-			TaskQueue:        workflowTask.TaskQueue.GetName(),
-			ScheduledEventID: workflowTask.ScheduledEventID,
-			Version:          workflowTask.Version,
-		})
 	}
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
@@ -367,6 +357,18 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 			Version:             workflowTask.Version,
 		})
 	}
+
+	if generateTimeoutTaskOnly {
+		return nil
+	}
+
+	r.mutableState.AddTasks(&tasks.WorkflowTask{
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:      r.mutableState.GetWorkflowKey(),
+		TaskQueue:        workflowTask.TaskQueue.GetName(),
+		ScheduledEventID: workflowTask.ScheduledEventID,
+		Version:          workflowTask.Version,
+	})
 
 	return nil
 }

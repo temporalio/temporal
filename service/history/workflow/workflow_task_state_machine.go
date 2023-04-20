@@ -964,6 +964,9 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	}
 
 	if wt.StartedEventID != common.EmptyEventID {
+		// If WT is has started then started event is written to the history and
+		// timeout timer task (for START_TO_CLOSE timeout) is created.
+
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEvent.EventId,
 			wt.RequestID,
@@ -980,10 +983,12 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			return err
 		}
 	} else {
+		// If WT was only scheduled but not started yet, then SCHEDULE_TO_START timeout timer task is created only if using sticky task queue.
+		// Normal task queue doesn't have a timeout.
 		if m.ms.IsStickyTaskQueueEnabled() {
 			if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
 				scheduledEvent.EventId,
-				true, // Only workflow task timeout task needs to be created.
+				true, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching because WT was already pushed to matching.
 			); err != nil {
 				return err
 			}
