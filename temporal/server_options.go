@@ -45,6 +45,11 @@ import (
 )
 
 type (
+	blockingStartParams struct {
+		interruptCh   <-chan interface{}
+		blockingStart bool
+	}
+
 	serverOptions struct {
 		serviceNames map[primitives.ServiceName]struct{}
 
@@ -53,8 +58,7 @@ type (
 		env       string
 		zone      string
 
-		interruptCh   <-chan interface{}
-		blockingStart bool
+		blockingStart blockingStartParams
 
 		logger                     log.Logger
 		namespaceLogger            log.Logger

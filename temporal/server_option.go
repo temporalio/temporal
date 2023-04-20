@@ -79,8 +79,8 @@ func ForServices(names []string) ServerOption {
 // InterruptOn interrupts server on the signal from server. If channel is nil Start() will block forever.
 func InterruptOn(interruptCh <-chan interface{}) ServerOption {
 	return applyFunc(func(s *serverOptions) {
-		s.blockingStart = true
-		s.interruptCh = interruptCh
+		s.blockingStart.blockingStart = true
+		s.blockingStart.interruptCh = interruptCh
 	})
 }
 
