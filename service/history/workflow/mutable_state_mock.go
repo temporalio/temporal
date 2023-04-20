@@ -2329,6 +2329,20 @@ func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionTimedoutEvent(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowExecutionTimedoutEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateWorkflowExecutionTimedoutEvent), arg0, arg1)
 }
 
+// ReplicateWorkflowExecutionUpdateCompletedEvent mocks base method.
+func (m *MockMutableState) ReplicateWorkflowExecutionUpdateCompletedEvent(arg0 *v13.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicateWorkflowExecutionUpdateCompletedEvent", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplicateWorkflowExecutionUpdateCompletedEvent indicates an expected call of ReplicateWorkflowExecutionUpdateCompletedEvent.
+func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionUpdateCompletedEvent(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowExecutionUpdateCompletedEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateWorkflowExecutionUpdateCompletedEvent), arg0)
+}
+
 // ReplicateWorkflowPropertiesModifiedEvent mocks base method.
 func (m *MockMutableState) ReplicateWorkflowPropertiesModifiedEvent(arg0 *v13.HistoryEvent) {
 	m.ctrl.T.Helper()

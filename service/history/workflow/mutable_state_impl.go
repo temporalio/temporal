@@ -3241,10 +3241,22 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(updResp *up
 		return nil, err
 	}
 	event := ms.hBuilder.AddWorkflowExecutionUpdateCompletedEvent(updResp)
-	ms.updateOutcomes[updResp.GetMeta().GetUpdateId()] = &historyspb.EventHistoryPointer{EventId: event.GetEventId()}
-	// TODO (alex-update): Async workflow update will require ReplicateWorkflowExecutionUpdateCompletedEvent
-	// which removes it from registry and notify update result pollers.
+	if err := ms.ReplicateWorkflowExecutionUpdateCompletedEvent(event); err != nil {
+		return nil, err
+	}
 	return event, nil
+}
+
+func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
+	event *historypb.HistoryEvent,
+) error {
+	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
+	if attrs == nil {
+		return serviceerror.NewInternal("wrong event type")
+	}
+	ms.updateOutcomes[attrs.GetMeta().GetUpdateId()] = &historyspb.EventHistoryPointer{EventId: event.GetEventId()}
+	ms.writeEventToCache(event)
+	return nil
 }
 
 func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.Rejection) error {

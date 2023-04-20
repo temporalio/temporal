@@ -44,6 +44,7 @@ import (
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
 	log "go.temporal.io/server/common/log"
+	memory "go.temporal.io/server/common/memory"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
@@ -621,6 +622,20 @@ func (mr *MockContextMockRecorder) GetWorkflowExecution(ctx, request interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).GetWorkflowExecution), ctx, request)
 }
 
+// Hold mocks base method.
+func (m *MockContext) Hold(key, data any) memory.Releaser {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Hold", key, data)
+	ret0, _ := ret[0].(memory.Releaser)
+	return ret0
+}
+
+// Hold indicates an expected call of Hold.
+func (mr *MockContextMockRecorder) Hold(key, data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hold", reflect.TypeOf((*MockContext)(nil).Hold), key, data)
+}
+
 // NewVectorClock mocks base method.
 func (m *MockContext) NewVectorClock() (*v11.VectorClock, error) {
 	m.ctrl.T.Helper()
@@ -634,6 +649,22 @@ func (m *MockContext) NewVectorClock() (*v11.VectorClock, error) {
 func (mr *MockContextMockRecorder) NewVectorClock() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewVectorClock", reflect.TypeOf((*MockContext)(nil).NewVectorClock))
+}
+
+// Recall mocks base method.
+func (m *MockContext) Recall(key any) (any, memory.Releaser, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Recall", key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(memory.Releaser)
+	ret2, _ := ret[2].(bool)
+	return ret0, ret1, ret2
+}
+
+// Recall indicates an expected call of Recall.
+func (mr *MockContextMockRecorder) Recall(key interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recall", reflect.TypeOf((*MockContext)(nil).Recall), key)
 }
 
 // SetCurrentTime mocks base method.

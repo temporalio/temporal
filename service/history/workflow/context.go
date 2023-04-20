@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/memory"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -54,7 +55,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow/update"
+	update "go.temporal.io/server/service/history/workflow/update"
 )
 
 const (
@@ -143,6 +144,12 @@ type (
 )
 
 type (
+	memento struct {
+		updateRegistry update.Registry
+	}
+
+	mementoKey definition.WorkflowKey
+
 	ContextImpl struct {
 		shard           shard.Context
 		workflowKey     definition.WorkflowKey
@@ -153,10 +160,11 @@ type (
 		config          *configs.Config
 		transaction     Transaction
 
-		mutex          locks.PriorityMutex
-		MutableState   MutableState
-		updateRegistry update.Registry
-		stats          *persistencespb.ExecutionStats
+		*memento
+
+		mutex        locks.PriorityMutex
+		MutableState MutableState
+		stats        *persistencespb.ExecutionStats
 	}
 )
 
@@ -167,6 +175,12 @@ func NewContext(
 	workflowKey definition.WorkflowKey,
 	logger log.Logger,
 ) *ContextImpl {
+	key := mementoKey(workflowKey)
+	m, _, ok := memory.Recall[mementoKey, *memento](shard, key)
+	if !ok {
+		m = &memento{updateRegistry: update.NewRegistry()}
+		_ = memory.Hold(shard, key, m)
+	}
 	return &ContextImpl{
 		shard:           shard,
 		workflowKey:     workflowKey,
@@ -176,8 +190,8 @@ func NewContext(
 		timeSource:      shard.GetTimeSource(),
 		config:          shard.GetConfig(),
 		mutex:           locks.NewPriorityMutex(),
-		updateRegistry:  update.NewRegistry(),
 		transaction:     NewTransaction(shard),
+		memento:         m,
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
 		},

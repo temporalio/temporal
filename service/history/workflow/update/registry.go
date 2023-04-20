@@ -32,22 +32,20 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/server/common/future"
 )
 
 type (
 	Registry interface {
-		Add(request *updatepb.Request) (*Update, Duplicate, RemoveFunc)
-
+		Add(request *updatepb.Request) (*Update, Duplicate)
 		CreateOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
-
 		HasPending(filterMessages []*protocolpb.Message) bool
 		ValidateIncomingMessages(messages []*protocolpb.Message) error
 		ProcessIncomingMessages(messages []*protocolpb.Message) error
+		Outcome(updateID string) (future.Future[*updatepb.Outcome], bool)
 	}
 
 	Duplicate bool
-
-	RemoveFunc func()
 
 	RegistryImpl struct {
 		sync.RWMutex
@@ -63,17 +61,17 @@ func NewRegistry() *RegistryImpl {
 	}
 }
 
-func (r *RegistryImpl) Add(request *updatepb.Request) (*Update, Duplicate, RemoveFunc) {
+func (r *RegistryImpl) Add(request *updatepb.Request) (*Update, Duplicate) {
 	r.Lock()
 	defer r.Unlock()
 	protocolInstanceID := request.GetMeta().GetUpdateId()
 	upd, ok := r.updates[protocolInstanceID]
 	if ok {
-		return upd, true, nil
+		return upd, true
 	}
 	upd = newUpdate(request, protocolInstanceID)
 	r.updates[upd.protocolInstanceID] = upd
-	return upd, false, func() { r.remove(protocolInstanceID) }
+	return upd, false
 }
 
 func (r *RegistryImpl) HasPending(filterMessages []*protocolpb.Message) bool {
@@ -209,6 +207,7 @@ func processIncomingMessages(updates map[string]*Update, messages []*protocolpb.
 				return nil, err
 			}
 			upd.complete(response.GetOutcome())
+			delete(updates, instanceId)
 			closedUpdates = append(closedUpdates, upd)
 		} else if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
 			if upd.state != statePending {
@@ -219,6 +218,7 @@ func processIncomingMessages(updates map[string]*Update, messages []*protocolpb.
 				return nil, err
 			}
 			upd.reject(rejection.GetFailure())
+			delete(updates, instanceId)
 			closedUpdates = append(closedUpdates, upd)
 		} else {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown message type: %s", message.GetBody().GetTypeUrl()))
@@ -227,8 +227,12 @@ func processIncomingMessages(updates map[string]*Update, messages []*protocolpb.
 	return closedUpdates, nil
 }
 
-func (r *RegistryImpl) remove(id string) {
+func (r *RegistryImpl) Outcome(updateID string) (future.Future[*updatepb.Outcome], bool) {
 	r.Lock()
 	defer r.Unlock()
-	delete(r.updates, id)
+	upd, ok := r.updates[updateID]
+	if !ok {
+		return nil, false
+	}
+	return upd.outcome, true
 }

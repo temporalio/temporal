@@ -76,10 +76,7 @@ func Invoke(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
-	upd, duplicate, removeFn := weCtx.GetContext().UpdateRegistry().Add(req.GetRequest().GetRequest())
-	if removeFn != nil {
-		defer removeFn()
-	}
+	upd, duplicate := weCtx.GetContext().UpdateRegistry().Add(req.GetRequest().GetRequest())
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
 	// If WT has already started, new speculative WT will be created when started WT completes.

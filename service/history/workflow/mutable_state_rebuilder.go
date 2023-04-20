@@ -675,13 +675,13 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
-			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
-			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
-			// TODO (alex-update): Async workflow update might require update to be restored in registry from Accepted event.
-			//  Completed event will remove it from registry and notify update result pollers.
-			//  For now, there is nothing to modify in mutable state and there are no tasks to generate for those events.
-
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED:
 			return nil, nil
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
+			if err := b.mutableState.ReplicateWorkflowExecutionUpdateCompletedEvent(event); err != nil {
+				return nil, err
+			}
+			return b.mutableState, nil
 
 		case enumspb.EVENT_TYPE_ACTIVITY_PROPERTIES_MODIFIED_EXTERNALLY,
 			enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY:

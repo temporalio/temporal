@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/memory"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -97,6 +98,7 @@ type (
 	contextState int32
 
 	ContextImpl struct {
+		memory.ThreadsafeCaretaker
 		// These fields are constant:
 		shardID             int32
 		owner               string

@@ -26,25 +26,14 @@ package pollupdate
 
 import (
 	"context"
-	"sync"
 
-	"go.temporal.io/api/serviceerror"
-	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/workflow"
 )
-
-// updateObserver is an implementation of workflow.Observer that observes the
-// outcome of workflow execution update.
-type updateObserver struct {
-	mut sync.Mutex
-	id  string
-	fut *future.Proxy[*updatepb.Outcome]
-}
 
 type WorkflowCtxLookup func(
 	context.Context,
@@ -60,15 +49,46 @@ func Invoke(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
 	findWorkflow WorkflowCtxLookup,
-	wfobservers *workflow.ObserverSet,
-) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
-	return nil, serviceerror.NewUnimplemented("not implemented")
-}
+) (_ *historyservice.PollWorkflowExecutionUpdateResponse, retErr error) {
+	updateRef := req.GetRequest().GetUpdateRef()
+	wfkey := definition.WorkflowKey{
+		NamespaceID: req.GetNamespaceId(),
+		WorkflowID:  updateRef.GetWorkflowExecution().GetWorkflowId(),
+		RunID:       updateRef.GetWorkflowExecution().GetRunId(),
+	}
+	apictx, err := findWorkflow(
+		ctx,
+		nil,
+		api.BypassMutableStateConsistencyPredicate,
+		wfkey,
+		workflow.LockPriorityLow,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { apictx.GetReleaseFn()(retErr) }()
+	updateReg := apictx.GetContext().UpdateRegistry()
+	if futureOutcome, ok := updateReg.Outcome(updateRef.GetUpdateId()); ok {
+		apictx.GetReleaseFn()(nil)
+		outcome, err := futureOutcome.Get(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &historyservice.PollWorkflowExecutionUpdateResponse{
+			Response: &workflowservice.PollWorkflowExecutionUpdateResponse{
+				Outcome: outcome,
+			},
+		}, nil
+	}
 
-func (uo *updateObserver) Connect(ctx context.Context, wfctx workflow.Context) error {
-	return serviceerror.NewUnimplemented("not implemented")
-}
-
-func (uo *updateObserver) AwaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
-	return nil, serviceerror.NewUnimplemented("not implemented")
+	ms := apictx.GetMutableState()
+	outcome, err := ms.GetUpdateOutcome(ctx, updateRef.GetUpdateId())
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.PollWorkflowExecutionUpdateResponse{
+		Response: &workflowservice.PollWorkflowExecutionUpdateResponse{
+			Outcome: outcome,
+		},
+	}, nil
 }
