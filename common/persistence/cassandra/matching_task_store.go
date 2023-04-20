@@ -131,6 +131,22 @@ const (
 		`AND type = ? ` +
 		`AND task_id = ? ` +
 		`IF range_id = ?`
+
+	templateGetTaskQueueUserDataQuery = `SELECT data, data_encoding, version FROM task_queue_user_data ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? `
+
+	templateUpdateTaskQueueUserDataQuery = `UPDATE task_queue_user_data SET ` +
+		`data = ?, ` +
+		`data_encoding = ?, ` +
+		`version = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? ` +
+		`IF version = ?`
+
+	templateInsertTaskQueueUserDataQuery = `INSERT INTO task_queue_user_data` +
+		`(namespace_id, task_queue_name, data, data_encoding, version) ` +
+		`VALUES (?, ?, ?, ?, 1) IF NOT EXISTS`
 )
 
 type (
@@ -492,6 +508,72 @@ func (d *MatchingTaskStore) CompleteTasksLessThan(
 		return 0, gocql.ConvertError("CompleteTasksLessThan", err)
 	}
 	return p.UnknownNumRowsAffected, nil
+}
+
+func (d *MatchingTaskStore) GetTaskQueueUserData(
+	ctx context.Context,
+	request *p.GetTaskQueueUserDataRequest,
+) (*p.InternalGetTaskQueueDataResponse, error) {
+	query := d.Session.Query(templateGetTaskQueueUserDataQuery,
+		request.NamespaceID,
+		request.TaskQueue,
+	).WithContext(ctx)
+	var version int64
+	var userDataBytes []byte
+	var encoding string
+	if err := query.Scan(&userDataBytes, &encoding, &version); err != nil {
+		return nil, gocql.ConvertError("GetTaskQueueData", err)
+	}
+
+	return &p.InternalGetTaskQueueDataResponse{
+		Version:  version,
+		UserData: p.NewDataBlob(userDataBytes, encoding),
+	}, nil
+}
+
+func (d *MatchingTaskStore) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *p.InternalUpdateTaskQueueUserDataRequest,
+) error {
+	var query gocql.Query
+
+	if request.Version == 0 {
+		query = d.Session.Query(templateInsertTaskQueueUserDataQuery,
+			request.NamespaceID,
+			request.TaskQueue,
+			request.UserData.Data,
+			request.UserData.EncodingType.String(),
+		).WithContext(ctx)
+	} else {
+		query = d.Session.Query(templateUpdateTaskQueueUserDataQuery,
+			request.UserData.Data,
+			request.UserData.EncodingType.String(),
+			request.Version+1,
+			request.NamespaceID,
+			request.TaskQueue,
+			request.Version,
+		).WithContext(ctx)
+	}
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+
+	if err != nil {
+		return gocql.ConvertError("UpdateTaskQueueData", err)
+	}
+
+	if !applied {
+		var columns []string
+		for k, v := range previous {
+			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+		}
+
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("Failed to update task queue. name: %v, version: %v, columns: (%v)",
+				request.TaskQueue, request.Version, strings.Join(columns, ",")),
+		}
+	}
+
+	return nil
 }
 
 func (d *MatchingTaskStore) GetName() string {

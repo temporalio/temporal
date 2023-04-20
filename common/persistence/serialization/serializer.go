@@ -94,6 +94,9 @@ type (
 		TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error)
 
+		TaskQueueUserDataToBlob(info *persistencespb.TaskQueueUserData, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		TaskQueueUserDataFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueUserData, error)
+
 		ChecksumToBlob(checksum *persistencespb.Checksum, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ChecksumFromBlob(data *commonpb.DataBlob) (*persistencespb.Checksum, error)
 
@@ -470,6 +473,15 @@ func (t *serializerImpl) TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo,
 
 func (t *serializerImpl) TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error) {
 	result := &persistencespb.TaskQueueInfo{}
+	return result, ProtoDecodeBlob(data, result)
+}
+
+func (t *serializerImpl) TaskQueueUserDataToBlob(data *persistencespb.TaskQueueUserData, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	return ProtoEncodeBlob(data, encodingType)
+}
+
+func (t *serializerImpl) TaskQueueUserDataFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueUserData, error) {
+	result := &persistencespb.TaskQueueUserData{}
 	return result, ProtoDecodeBlob(data, result)
 }
 

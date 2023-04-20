@@ -248,3 +248,31 @@ func (m *taskManagerImpl) CompleteTasksLessThan(
 ) (int, error) {
 	return m.taskStore.CompleteTasksLessThan(ctx, request)
 }
+
+// GetTaskQueueUserData implements TaskManager
+func (m *taskManagerImpl) GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
+	response, err := m.taskStore.GetTaskQueueUserData(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	data, err := m.serializer.TaskQueueUserDataFromBlob(response.UserData)
+	if err != nil {
+		return nil, err
+	}
+	return &GetTaskQueueUserDataResponse{UserData: &persistencespb.VersionedTaskQueueUserData{Version: response.Version, Data: data}}, nil
+}
+
+// UpdateTaskQueueUserData implements TaskManager
+func (m *taskManagerImpl) UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error {
+	userData, err := m.serializer.TaskQueueUserDataToBlob(request.UserData.Data, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return err
+	}
+	internalRequest := &InternalUpdateTaskQueueUserDataRequest{
+		NamespaceID: request.NamespaceID,
+		TaskQueue:   request.TaskQueue,
+		Version:     request.UserData.Version,
+		UserData:    userData,
+	}
+	return m.taskStore.UpdateTaskQueueUserData(ctx, internalRequest)
+}

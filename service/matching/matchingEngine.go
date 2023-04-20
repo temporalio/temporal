@@ -720,8 +720,28 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) error {
-		return UpdateVersionSets(data, req.GetRequest(), e.config.MaxVersionGraphSize())
+	err = tqMgr.UpdateUserData(hCtx.Context, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+		clock := data.GetClock()
+		if clock == nil {
+			tmp := zeroHLC(e.clusterMeta.GetClusterID())
+			clock = &tmp
+		}
+
+		updatedClock, versioningData, err := UpdateVersionSets(
+			*clock,
+			data.GetVersioningData(),
+			req.GetRequest(),
+			e.config.VersionCompatibleSetLimitPerQueue(),
+			e.config.VersionBuildIDLimitPerQueue(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		// Avoid mutation
+		ret := *data
+		ret.Clock = &updatedClock
+		ret.VersioningData = versioningData
+		return &ret, nil
 	})
 	if err != nil {
 		return nil, err
@@ -746,7 +766,7 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 		}
 		return nil, err
 	}
-	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
+	userData, err := tqMgr.GetUserData(hCtx.Context)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
@@ -754,14 +774,14 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 		return nil, err
 	}
 	return &matchingservice.GetWorkerBuildIdCompatibilityResponse{
-		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxSets())),
+		Response: ToBuildIdOrderingResponse(userData.GetData().GetVersioningData(), int(req.GetRequest().GetMaxSets())),
 	}, nil
 }
 
-func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
+func (e *matchingEngineImpl) InvalidateTaskQueueUserData(
 	hCtx *handlerContext,
-	req *matchingservice.InvalidateTaskQueueMetadataRequest,
-) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+	req *matchingservice.InvalidateTaskQueueUserDataRequest,
+) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
 	taskQueue, err := newTaskQueueID(namespace.ID(req.GetNamespaceId()), req.GetTaskQueue(), req.GetTaskQueueType())
 	if err != nil {
 		return nil, err
@@ -769,22 +789,22 @@ func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
 	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
 	if tqMgr == nil && err == nil {
 		// Task queue is not currently loaded, so nothing to do here
-		return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+		return &matchingservice.InvalidateTaskQueueUserDataResponse{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.InvalidateMetadata(req)
+	err = tqMgr.InvalidateUserData(req)
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+	return &matchingservice.InvalidateTaskQueueUserDataResponse{}, nil
 }
 
-func (e *matchingEngineImpl) GetTaskQueueMetadata(
+func (e *matchingEngineImpl) GetTaskQueueUserData(
 	hCtx *handlerContext,
-	req *matchingservice.GetTaskQueueMetadataRequest,
-) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+	req *matchingservice.GetTaskQueueUserDataRequest,
+) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -795,20 +815,24 @@ func (e *matchingEngineImpl) GetTaskQueueMetadata(
 	if err != nil {
 		return nil, err
 	}
-	resp := &matchingservice.GetTaskQueueMetadataResponse{}
-	verDatHash := req.GetWantVersioningDataCurhash()
-	// This isn't != nil, because gogoproto will round-trip serialize an empty byte array in a request
-	// into a nil field.
-	if len(verDatHash) > 0 {
-		vDat, err := tqMgr.GetVersioningData(hCtx)
+	resp := &matchingservice.GetTaskQueueUserDataResponse{}
+	version := req.GetLastKnownUserDataVersion()
+	if version > -1 {
+		userData, err := tqMgr.GetUserData(hCtx)
 		if err != nil {
 			return nil, err
 		}
-		if !bytes.Equal(HashVersioningData(vDat), verDatHash) {
-			resp.VersioningDataResp = &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
-				VersioningData: vDat,
+		if userData != nil {
+			resp.TaskQueueHasUserData = true
+			if userData.Version > version {
+				resp.UserData = userData
+			}
+			if userData.Version < version {
+				e.logger.Error("Non-root partition requested task queue user data for version greater than known version")
+				// TODO: When would this happen? Do we go to the store and reload the user data?
 			}
 		}
+
 	}
 	return resp, nil
 }

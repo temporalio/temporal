@@ -367,10 +367,10 @@ func (h *Handler) GetWorkerBuildIdCompatibility(
 }
 
 // InvalidateTaskQueueMetadata notifies a task queue that some data has changed, and should be invalidated/refreshed
-func (h *Handler) InvalidateTaskQueueMetadata(
+func (h *Handler) InvalidateTaskQueueUserData(
 	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueMetadataRequest,
-) (_ *matchingservice.InvalidateTaskQueueMetadataResponse, retError error) {
+	request *matchingservice.InvalidateTaskQueueUserDataRequest,
+) (_ *matchingservice.InvalidateTaskQueueUserDataResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -379,16 +379,16 @@ func (h *Handler) InvalidateTaskQueueMetadata(
 			Name: request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingInvalidateTaskQueueMetadataScope,
+		metrics.MatchingInvalidateTaskQueueUserDataScope,
 	)
 
-	return h.engine.InvalidateTaskQueueMetadata(hCtx, request)
+	return h.engine.InvalidateTaskQueueUserData(hCtx, request)
 }
 
-func (h *Handler) GetTaskQueueMetadata(
+func (h *Handler) GetTaskQueueUserData(
 	ctx context.Context,
-	request *matchingservice.GetTaskQueueMetadataRequest,
-) (_ *matchingservice.GetTaskQueueMetadataResponse, retError error) {
+	request *matchingservice.GetTaskQueueUserDataRequest,
+) (_ *matchingservice.GetTaskQueueUserDataResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -397,10 +397,10 @@ func (h *Handler) GetTaskQueueMetadata(
 			Name: request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingGetTaskQueueMetadataScope,
+		metrics.MatchingGetTaskQueueUserDataScope,
 	)
 
-	return h.engine.GetTaskQueueMetadata(hCtx, request)
+	return h.engine.GetTaskQueueUserData(hCtx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

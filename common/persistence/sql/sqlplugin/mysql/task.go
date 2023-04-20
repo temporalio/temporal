@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -87,6 +88,21 @@ task_queue_id = :task_queue_id
 	rangeDeleteTaskQry = `DELETE FROM tasks ` +
 		`WHERE range_hash = ? AND task_queue_id = ? AND task_id < ? ` +
 		`ORDER BY task_queue_id,task_id LIMIT ?`
+
+	getTaskQueueUserDataQry = `SELECT data, data_encoding, version FROM task_queue_user_data ` +
+		`WHERE namespace_id = ? AND task_queue_name = ?`
+
+	updateTaskQueueUserDataQry = `UPDATE task_queue_user_data SET ` +
+		`data = ?, ` +
+		`data_encoding = ?, ` +
+		`version = ? ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND version = ?`
+
+	insertTaskQueueUserDataQry = `INSERT INTO task_queue_user_data` +
+		`(namespace_id, task_queue_name, data, data_encoding, version) ` +
+		`VALUES (?, ?, ?, ?, 1)`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -277,4 +293,44 @@ func (mdb *db) LockTaskQueues(
 		filter.TaskQueueID,
 	)
 	return rangeID, err
+}
+
+func (d *db) GetTaskQueueUserData(ctx context.Context, request *sqlplugin.GetTaskQueueUserDataRequest) (*sqlplugin.VersionedBlob, error) {
+	var row sqlplugin.VersionedBlob
+	err := d.conn.GetContext(ctx, &row, getTaskQueueUserDataQry, request.NamespaceID, request.TaskQueueName)
+	return &row, err
+}
+
+func (d *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.UpdateTaskQueueDataRequest) error {
+	if request.Version == 0 {
+		_, err := d.conn.ExecContext(
+			ctx,
+			insertTaskQueueUserDataQry,
+			request.NamespaceID,
+			request.TaskQueueName,
+			request.Data,
+			request.DataEncoding)
+		return err
+	} else {
+		result, err := d.conn.ExecContext(
+			ctx,
+			updateTaskQueueUserDataQry,
+			request.Data,
+			request.DataEncoding,
+			request.Version+1,
+			request.NamespaceID,
+			request.TaskQueueName,
+			request.Version)
+		if err != nil {
+			return err
+		}
+		numRows, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if numRows != 1 {
+			return &persistence.ConditionFailedError{Msg: "Expected exactly one row to be updated"}
+		}
+		return nil
+	}
 }

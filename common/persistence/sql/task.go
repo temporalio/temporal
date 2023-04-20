@@ -477,6 +477,45 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 	return int(nRows), nil
 }
 
+func (m *sqlTaskManager) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueDataResponse, error) {
+	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to parse namespace ID as UUID: %v", err))
+	}
+	response, err := m.Db.GetTaskQueueUserData(ctx, &sqlplugin.GetTaskQueueUserDataRequest{
+		NamespaceID:   namespaceID,
+		TaskQueueName: request.TaskQueue,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("task queue user data not found for %v.%v", request.NamespaceID, request.TaskQueue))
+		}
+		return nil, err
+	}
+	return &persistence.InternalGetTaskQueueDataResponse{
+		Version:  response.Version,
+		UserData: persistence.NewDataBlob(response.Data, response.DataEncoding),
+	}, nil
+}
+
+func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *persistence.InternalUpdateTaskQueueUserDataRequest) error {
+	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("failed to parse namespace ID as UUID: %v", err))
+	}
+	err = m.Db.UpdateTaskQueueUserData(ctx, &sqlplugin.UpdateTaskQueueDataRequest{
+		NamespaceID:   namespaceID,
+		TaskQueueName: request.TaskQueue,
+		Data:          request.UserData.Data,
+		DataEncoding:  request.UserData.EncodingType.String(),
+		Version:       request.Version,
+	})
+	if m.Db.IsDupEntryError(err) {
+		return &persistence.ConditionFailedError{Msg: err.Error()}
+	}
+	return err
+}
+
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
 func (m *sqlTaskManager) taskQueueIdAndHash(
 	namespaceID primitives.UUID,
