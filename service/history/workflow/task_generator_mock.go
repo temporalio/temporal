@@ -217,17 +217,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateRequestCancelExternalTasks(even
 }
 
 // GenerateScheduleWorkflowTaskTasks mocks base method.
-func (m *MockTaskGenerator) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID int64) error {
+func (m *MockTaskGenerator) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID int64, generateTimeoutTaskOnly bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateScheduleWorkflowTaskTasks", workflowTaskScheduledEventID)
+	ret := m.ctrl.Call(m, "GenerateScheduleWorkflowTaskTasks", workflowTaskScheduledEventID, generateTimeoutTaskOnly)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateScheduleWorkflowTaskTasks indicates an expected call of GenerateScheduleWorkflowTaskTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID, generateTimeoutTaskOnly interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateScheduleWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateScheduleWorkflowTaskTasks), workflowTaskScheduledEventID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateScheduleWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateScheduleWorkflowTaskTasks), workflowTaskScheduledEventID, generateTimeoutTaskOnly)
 }
 
 // GenerateSignalExternalTasks mocks base method.

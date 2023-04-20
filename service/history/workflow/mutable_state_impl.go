@@ -3940,6 +3940,10 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, nil, err
 	}
 
+	if err := ms.workflowTaskManager.convertSpeculativeWorkflowTaskToNormal(); err != nil {
+		return nil, nil, err
+	}
+
 	workflowEventsSeq, bufferEvents, clearBuffer, err := ms.prepareEventsAndReplicationTasks(transactionPolicy)
 	if err != nil {
 		return nil, nil, err
@@ -4014,6 +4018,10 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	if err := ms.prepareCloseTransaction(
 		transactionPolicy,
 	); err != nil {
+		return nil, nil, err
+	}
+
+	if err := ms.workflowTaskManager.convertSpeculativeWorkflowTaskToNormal(); err != nil {
 		return nil, nil, err
 	}
 

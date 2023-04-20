@@ -250,6 +250,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				return nil, err
 			}
 
+			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+				updateAction.Noop = true
+			}
+
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
 			taskQueue := workflowTask.TaskQueue
@@ -582,40 +586,38 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	} else if ms.IsWorkflowExecutionRunning() && hasPendingUpdates {
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 	}
-	createNewWorkflowTask := newWorkflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
 
-	var newWorkflowTaskScheduledEventID int64
-	if createNewWorkflowTask {
-		// TODO (alex-update): Need to support case when ReturnNewWorkflowTask=false and WT.Type=Speculative.
-		// In this case WT needs to be added directly to matching.
-		// Current implementation will create normal WT.
-		bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
-		if !bypassTaskGeneration {
-			// If task generation can't be bypassed workflow task must be of Normal type because Speculative workflow task always skip task generation.
-			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-		}
+	bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
+	// TODO (alex-update): Need to support case when ReturnNewWorkflowTask=false and WT.Type=Speculative.
+	// In this case WT needs to be added directly to matching.
+	// Current implementation will create normal WT.
+	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && !bypassTaskGeneration {
+		// If task generation can't be bypassed workflow task must be of Normal type because Speculative workflow task always skip task generation.
+		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+	}
 
-		var newWorkflowTask *workflow.WorkflowTaskInfo
-		var err error
+	var newWorkflowTask *workflow.WorkflowTaskInfo
+	// Speculative workflow task will be created after mutable state is persisted.
+	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
+		var newWTErr error
 		if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
-			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
+			newWorkflowTask, newWTErr = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
 				bypassTaskGeneration,
 				currentWorkflowTask.OriginalScheduledTime,
 				enumsspb.WORKFLOW_TASK_TYPE_NORMAL, // Heartbeat workflow task is always of Normal type.
 			)
 		} else {
-			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, newWorkflowTaskType)
+			newWorkflowTask, newWTErr = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, newWorkflowTaskType)
 		}
-		if err != nil {
-			return nil, err
+		if newWTErr != nil {
+			return nil, newWTErr
 		}
 
-		newWorkflowTaskScheduledEventID = newWorkflowTask.ScheduledEventID
 		// skip transfer task for workflow task if request asking to return new workflow task
 		if bypassTaskGeneration {
 			// start the new workflow task if request asked to do so
 			// TODO: replace the poll request
-			_, _, err := ms.AddWorkflowTaskStartedEvent(
+			_, newWorkflowTask, err = ms.AddWorkflowTaskStartedEvent(
 				newWorkflowTask.ScheduledEventID,
 				"request-from-RespondWorkflowTaskCompleted",
 				newWorkflowTask.TaskQueue,
@@ -645,7 +647,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			newMutableState,
 		)
 	} else {
-		updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx)
+		// If completedEvent is not nil (which it means that WT wasn't speculative)
+		// OR new WT is normal, then mutable state is persisted.
+		// Otherwise, (both old and new WT are speculative) mutable state is updated in memory only but not persisted.
+		if completedEvent != nil || newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
+			updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx)
+		}
 	}
 
 	if updateErr != nil {
@@ -686,13 +693,30 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, updateErr
 	}
 
+	// Create speculative workflow task after mutable state is persisted.
+	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, newWorkflowTaskType)
+		if err != nil {
+			return nil, err
+		}
+		_, newWorkflowTask, err = ms.AddWorkflowTaskStartedEvent(
+			newWorkflowTask.ScheduledEventID,
+			"request-from-RespondWorkflowTaskCompleted",
+			newWorkflowTask.TaskQueue,
+			request.Identity,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Send update results to gRPC API callers.
 	err = weContext.UpdateRegistry().ProcessIncomingMessages(req.GetCompleteRequest().GetMessages())
 	if err != nil {
 		return nil, err
 	}
 
-	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), createNewWorkflowTask, namespaceEntry, workflowTaskHeartbeating)
+	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), newWorkflowTask != nil, namespaceEntry, workflowTaskHeartbeating)
 
 	if workflowTaskHeartbeatTimeout {
 		// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
@@ -704,9 +728,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
-	if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
-		workflowTask := ms.GetWorkflowTaskByID(newWorkflowTaskScheduledEventID)
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(), workflowTask, request.GetIdentity())
+	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(), newWorkflowTask, request.GetIdentity())
 		if err != nil {
 			return nil, err
 		}
