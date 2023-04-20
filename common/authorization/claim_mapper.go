@@ -70,6 +70,10 @@ func (*noopClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
 	return &Claims{System: RoleAdmin}, nil
 }
 
+// tag this implementation to always run even without auth info
+func (*noopClaimMapper) AuthInfoNotRequired() {
+}
+
 func GetClaimMapperFromConfig(config *config.Authorization, logger log.Logger) (ClaimMapper, error) {
 
 	switch strings.ToLower(config.ClaimMapper) {
