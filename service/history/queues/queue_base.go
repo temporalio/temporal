@@ -483,7 +483,7 @@ func (p *queueBase) updateQueueState(
 		}
 	}
 
-	err := p.shard.UpdateQueueState(p.category, ToPersistenceQueueState(&queueState{
+	err := p.shard.SetQueueState(p.category, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
 	}))

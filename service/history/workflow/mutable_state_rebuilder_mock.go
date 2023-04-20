@@ -62,7 +62,7 @@ func (m *MockMutableStateRebuilder) EXPECT() *MockMutableStateRebuilderMockRecor
 }
 
 // ApplyEvents mocks base method.
-func (m *MockMutableStateRebuilder) ApplyEvents(ctx context.Context, namespaceID namespace.ID, requestID string, execution v1.WorkflowExecution, history, newRunHistory []*v10.HistoryEvent) (MutableState, error) {
+func (m *MockMutableStateRebuilder) ApplyEvents(ctx context.Context, namespaceID namespace.ID, requestID string, execution v1.WorkflowExecution, history [][]*v10.HistoryEvent, newRunHistory []*v10.HistoryEvent) (MutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplyEvents", ctx, namespaceID, requestID, execution, history, newRunHistory)
 	ret0, _ := ret[0].(MutableState)
