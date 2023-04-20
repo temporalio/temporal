@@ -295,15 +295,15 @@ func (pdb *db) LockTaskQueues(
 	return rangeID, err
 }
 
-func (mdb *db) GetTaskQueueUserData(ctx context.Context, request *sqlplugin.GetTaskQueueUserDataRequest) (*sqlplugin.VersionedBlob, error) {
+func (pdb *db) GetTaskQueueUserData(ctx context.Context, request *sqlplugin.GetTaskQueueUserDataRequest) (*sqlplugin.VersionedBlob, error) {
 	var row sqlplugin.VersionedBlob
-	err := mdb.conn.GetContext(ctx, &row, getTaskQueueUserDataQry, request.NamespaceID, request.TaskQueueName)
+	err := pdb.conn.GetContext(ctx, &row, getTaskQueueUserDataQry, request.NamespaceID, request.TaskQueueName)
 	return &row, err
 }
 
-func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.UpdateTaskQueueDataRequest) error {
+func (pdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.UpdateTaskQueueDataRequest) error {
 	if request.Version == 0 {
-		_, err := mdb.conn.ExecContext(
+		_, err := pdb.conn.ExecContext(
 			ctx,
 			insertTaskQueueUserDataQry,
 			request.NamespaceID,
@@ -312,7 +312,7 @@ func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.U
 			request.DataEncoding)
 		return err
 	}
-	result, err := mdb.conn.ExecContext(
+	result, err := pdb.conn.ExecContext(
 		ctx,
 		updateTaskQueueUserDataQry,
 		request.Data,
