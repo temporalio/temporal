@@ -77,7 +77,7 @@ func NewScheduledQueue(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *scheduledQueue {
-	paginationFnProvider := func(readerID int32, r Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(readerID int64, r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			ctx, cancel := newQueueIOContext()
 			defer cancel()
@@ -111,7 +111,7 @@ func NewScheduledQueue(
 	}
 
 	lookAheadCh := make(chan struct{}, 1)
-	readerCompletionFn := func(readerID int32) {
+	readerCompletionFn := func(readerID int64) {
 		if readerID != DefaultReaderId {
 			return
 		}

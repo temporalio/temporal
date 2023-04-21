@@ -73,7 +73,7 @@ const (
 
 type (
 	queueState struct {
-		readerScopes                 map[int32][]Scope
+		readerScopes                 map[int64][]Scope
 		exclusiveReaderHighWatermark tasks.Key
 	}
 
@@ -136,7 +136,7 @@ func newQueueBase(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *queueBase {
-	var readerScopes map[int32][]Scope
+	var readerScopes map[int64][]Scope
 	var exclusiveReaderHighWatermark tasks.Key
 	if persistenceState, ok := shard.GetQueueState(category); ok {
 		queueState := FromPersistenceQueueState(persistenceState)
@@ -154,7 +154,7 @@ func newQueueBase(
 	}
 
 	timeSource := shard.GetTimeSource()
-	executableInitializer := func(readerID int32, t tasks.Task) Executable {
+	executableInitializer := func(readerID int64, t tasks.Task) Executable {
 		return NewExecutable(
 			readerID,
 			t,
@@ -174,9 +174,9 @@ func newQueueBase(
 	readerRateLimiter := newShardReaderRateLimiter(
 		options.MaxPollRPS,
 		hostReaderRateLimiter,
-		options.MaxReaderCount(),
+		int64(options.MaxReaderCount()),
 	)
-	readerInitializer := func(readerID int32, slices []Slice) Reader {
+	readerInitializer := func(readerID int64, slices []Slice) Reader {
 		readerOptions := options.ReaderOptions // make a copy
 		if readerID != DefaultReaderId {
 			// non-default reader should not trigger task unloading
@@ -345,7 +345,7 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
-	p.readerGroup.ForEach(func(_ int32, r Reader) {
+	p.readerGroup.ForEach(func(_ int64, r Reader) {
 		r.ShrinkSlices()
 	})
 
@@ -358,7 +358,7 @@ func (p *queueBase) checkpoint() {
 		p.logger,
 	)
 
-	readerScopes := make(map[int32][]Scope)
+	readerScopes := make(map[int64][]Scope)
 	newExclusiveDeletionHighWatermark := p.nonReadableScope.Range.InclusiveMin
 	for readerID, reader := range p.readerGroup.Readers() {
 		scopes := reader.Scopes()
@@ -404,7 +404,7 @@ func (p *queueBase) checkpoint() {
 }
 
 func (p *queueBase) updateReaderProgress(
-	readerScopes map[int32][]Scope,
+	readerScopes map[int64][]Scope,
 ) {
 	// NOTE: A reader has progress = X means that reader will
 	// never try to load/process tasks with key < X.
@@ -420,7 +420,7 @@ func (p *queueBase) updateReaderProgress(
 	ctx, cancel := newQueueIOContext()
 	defer cancel()
 
-	readerIDs := make([]int32, 0, len(readerScopes))
+	readerIDs := make([]int64, 0, len(readerScopes))
 	for readerID := range readerScopes {
 		readerIDs = append(readerIDs, readerID)
 	}
@@ -474,7 +474,7 @@ func (p *queueBase) rangeCompleteTasks(
 }
 
 func (p *queueBase) updateQueueState(
-	readerScopes map[int32][]Scope,
+	readerScopes map[int64][]Scope,
 ) error {
 	p.metricsHandler.Counter(metrics.AckLevelUpdateCounter.GetMetricName()).Record(1)
 	for readerID, scopes := range readerScopes {
@@ -523,7 +523,7 @@ func (p *queueBase) handleAlert(alert *Alert) {
 }
 
 func (p *queueBase) notifyReaders() {
-	p.readerGroup.ForEach(func(_ int32, r Reader) {
+	p.readerGroup.ForEach(func(_ int64, r Reader) {
 		r.Notify()
 	})
 }
