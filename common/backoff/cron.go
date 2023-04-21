@@ -36,13 +36,22 @@ import (
 // NoBackoff is used to represent backoff when no cron backoff is needed
 const NoBackoff = time.Duration(-1)
 
+// InfiniteBackoff is used to represent a long backoff that in practice won't fire
+const InfiniteBackoff = time.Duration(1<<63 - 1)
+
 // ValidateSchedule validates a cron schedule spec
 func ValidateSchedule(cronSchedule string) error {
 	if cronSchedule == "" {
 		return nil
 	}
-	if _, err := cron.ParseStandard(cronSchedule); err != nil {
-		return serviceerror.NewInvalidArgument("Invalid CronSchedule.")
+	schedule, err := cron.ParseStandard(cronSchedule)
+	if err != nil {
+		return serviceerror.NewInvalidArgument("invalid CronSchedule.")
+	}
+	nextTime := schedule.Next(time.Now().UTC())
+	if nextTime.IsZero() {
+		// no time can be found to satisfy the schedule
+		return serviceerror.NewInvalidArgument("invalid CronSchedule, no time can be found to satisfy the schedule")
 	}
 	return nil
 }
@@ -68,8 +77,12 @@ func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now
 	} else {
 		nextScheduleTime = schedule.Next(scheduledUTCTime)
 		// Calculate the next schedule start time which is nearest to now (right after now).
-		for nextScheduleTime.Before(nowUTC) {
+		for !nextScheduleTime.IsZero() && nextScheduleTime.Before(nowUTC) {
 			nextScheduleTime = schedule.Next(nextScheduleTime)
+		}
+		if nextScheduleTime.IsZero() {
+			// no time can be found to satisfy the schedule
+			return InfiniteBackoff
 		}
 	}
 
