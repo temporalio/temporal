@@ -279,7 +279,7 @@ func (mr *MockTaskStoreMockRecorder) GetTaskQueue(ctx, request interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueue", reflect.TypeOf((*MockTaskStore)(nil).GetTaskQueue), ctx, request)
 }
 
-// GetTaskQueueData mocks base method.
+// GetTaskQueueUserData mocks base method.
 func (m *MockTaskStore) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueUserDataResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskQueueUserData", ctx, request)
@@ -288,7 +288,7 @@ func (m *MockTaskStore) GetTaskQueueUserData(ctx context.Context, request *persi
 	return ret0, ret1
 }
 
-// GetTaskQueueData indicates an expected call of GetTaskQueueUserData.
+// GetTaskQueueUserData indicates an expected call of GetTaskQueueUserData.
 func (mr *MockTaskStoreMockRecorder) GetTaskQueueUserData(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockTaskStore)(nil).GetTaskQueueUserData), ctx, request)
@@ -333,13 +333,13 @@ func (m *MockTaskStore) UpdateTaskQueue(ctx context.Context, request *persistenc
 	return ret0, ret1
 }
 
-// UpdateTaskQueue indicates an expected call of UpdateTaskUserQueue.
+// UpdateTaskQueue indicates an expected call of UpdateTaskQueue.
 func (mr *MockTaskStoreMockRecorder) UpdateTaskQueue(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueue", reflect.TypeOf((*MockTaskStore)(nil).UpdateTaskQueue), ctx, request)
 }
 
-// UpdateTaskQueueData mocks base method.
+// UpdateTaskQueueUserData mocks base method.
 func (m *MockTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *persistence.InternalUpdateTaskQueueUserDataRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateTaskQueueUserData", ctx, request)
@@ -347,7 +347,7 @@ func (m *MockTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *pe
 	return ret0
 }
 
-// UpdateTaskQueueData indicates an expected call of UpdateTaskQueueUserData.
+// UpdateTaskQueueUserData indicates an expected call of UpdateTaskQueueUserData.
 func (mr *MockTaskStoreMockRecorder) UpdateTaskQueueUserData(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueUserData", reflect.TypeOf((*MockTaskStore)(nil).UpdateTaskQueueUserData), ctx, request)
