@@ -193,7 +193,7 @@ func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh work
 	actx := workflow.WithActivityOptions(ctx, ao)
 
 	for i := 0; i < params.PageCountPerExecution; i++ {
-		listFuture := workflow.ExecuteActivity(actx, a.ListWorkflows, &workflowservice.ListWorkflowExecutionsRequest{
+		listFuture := workflow.ExecuteActivity(actx, a.ListWorkflows, &workflowservice.ScanWorkflowExecutionsRequest{
 			Namespace:     params.Namespace,
 			PageSize:      int32(params.ListWorkflowsPageSize),
 			NextPageToken: params.NextPageToken,

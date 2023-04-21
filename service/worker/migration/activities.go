@@ -298,8 +298,8 @@ func (a *activities) UpdateActiveCluster(ctx context.Context, req updateActiveCl
 	return err
 }
 
-func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
-	resp, err := a.frontendClient.ListWorkflowExecutions(ctx, request)
+func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+	resp, err := a.frontendClient.ScanWorkflowExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}

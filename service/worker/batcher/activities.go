@@ -117,7 +117,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		executions := batchParams.Executions
 		pageToken := hbd.PageToken
 		if len(batchParams.Query) > 0 {
-			resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			resp, err := sdkClient.ScanWorkflow(ctx, &workflowservice.ScanWorkflowExecutionsRequest{
 				PageSize:      int32(pageSize),
 				NextPageToken: pageToken,
 				Query:         batchParams.Query,

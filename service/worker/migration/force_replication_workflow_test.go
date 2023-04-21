@@ -54,7 +54,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	startTime, _ := time.Parse(layout, "2020-01-01 00:00Z")
 	closeTime, _ := time.Parse(layout, "2020-02-01 00:00Z")
 
-	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		assert.Equal(t, "test-ns", request.Namespace)
 		currentPageCount++
 		if currentPageCount < totalPageCount {
@@ -115,7 +115,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 	startTime, _ := time.Parse(layout, "2020-01-01 00:00Z")
 	closeTime, _ := time.Parse(layout, "2020-02-01 00:00Z")
 
-	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		assert.Equal(t, "test-ns", request.Namespace)
 		currentPageCount++
 		if currentPageCount < totalPageCount {
@@ -199,7 +199,7 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskError(t *testing.T) {
 
 	totalPageCount := 4
 	currentPageCount := 0
-	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ScanWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		assert.Equal(t, "test-ns", request.Namespace)
 		currentPageCount++
 		if currentPageCount < totalPageCount {

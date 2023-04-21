@@ -124,7 +124,7 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_NoExecutions(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
 
-	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
+	visibilityManager.EXPECT().ScanWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 		PageSize:    1,
@@ -147,7 +147,7 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_ExecutionsExist(t *testing.T) 
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
 
-	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
+	visibilityManager.EXPECT().ScanWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 		PageSize:    1,

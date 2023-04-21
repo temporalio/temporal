@@ -145,7 +145,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 }
 
 func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
-	// Standard visibility does not support CountWorkflowExecutions but only supports ListWorkflowExecutions.
+	// Standard visibility does not support CountWorkflowExecutions but only supports ScanWorkflowExecutions.
 	// To prevent read of many records from DB, set PageSize to 1 and use this single record as indicator of workflow executions existence.
 	// Unfortunately, this doesn't allow to report progress and retry is limited only by timeout.
 	// TODO: remove this activity after CountWorkflowExecutions is implemented in standard visibility.
@@ -157,7 +157,7 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 		Namespace:   nsName,
 		PageSize:    1,
 	}
-	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
+	resp, err := a.visibilityManager.ScanWorkflowExecutions(ctx, req)
 	if err != nil {
 		a.metricsHandler.Counter(metrics.ListExecutionsFailuresCount.GetMetricName()).Record(1)
 		a.logger.Error("Unable to count workflow executions using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))

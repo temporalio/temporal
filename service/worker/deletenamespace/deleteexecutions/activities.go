@@ -94,7 +94,7 @@ func (a *Activities) GetNextPageTokenActivity(ctx context.Context, params GetNex
 		NextPageToken: params.NextPageToken,
 	}
 
-	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
+	resp, err := a.visibilityManager.ScanWorkflowExecutions(ctx, req)
 	if err != nil {
 		a.metricsHandler.Counter(metrics.ListExecutionsFailuresCount.GetMetricName()).Record(1)
 		a.logger.Error("Unable to list all workflows to get next page token.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
@@ -117,7 +117,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		PageSize:      params.ListPageSize,
 		NextPageToken: params.NextPageToken,
 	}
-	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
+	resp, err := a.visibilityManager.ScanWorkflowExecutions(ctx, req)
 	if err != nil {
 		a.metricsHandler.Counter(metrics.ListExecutionsFailuresCount.GetMetricName()).Record(1)
 		a.logger.Error("Unable to list all workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
@@ -143,7 +143,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 			a.metricsHandler.Counter(metrics.DeleteExecutionNotFoundCount.GetMetricName()).Record(1)
 			a.logger.Info("Workflow execution is not found in history service.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
 			// The reasons why workflow execution doesn't exist in history service, but exists in visibility store might be:
-			// 1. The workflow execution was deleted by someone else after last ListWorkflowExecutions call but before historyClient.DeleteWorkflowExecution call.
+			// 1. The workflow execution was deleted by someone else after last ScanWorkflowExecutions call but before historyClient.DeleteWorkflowExecution call.
 			// 2. Database is in inconsistent state: workflow execution was manually deleted from history store, but not from visibility store.
 			// To avoid continuously getting this workflow execution from visibility store, it needs to be deleted directly from visibility store.
 			s, e := a.deleteWorkflowExecutionFromVisibility(ctx, params.NamespaceID, execution)
