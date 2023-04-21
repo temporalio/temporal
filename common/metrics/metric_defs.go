@@ -467,10 +467,10 @@ const (
 	MatchingClientUpdateWorkerBuildIdCompatibilityScope = "MatchingClientUpdateWorkerBuildIdCompatibility"
 	// MatchingClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
 	MatchingClientGetWorkerBuildIdCompatibilityScope = "MatchingClientGetWorkerBuildIdCompatibility"
-	// MatchingClientInvalidateTaskQueueMetadataScope tracks RPC calls to matching service
-	MatchingClientInvalidateTaskQueueMetadataScope = "MatchingClientInvalidateTaskQueueMetadata"
-	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
-	MatchingClientGetTaskQueueMetadataScope = "MatchingClientGetTaskQueueMetadata"
+	// MatchingClientInvalidateTaskQueueUserDataScope tracks RPC calls to matching service
+	MatchingClientInvalidateTaskQueueUserDataScope = "MatchingClientInvalidateTaskQueueUserData"
+	// MatchingClientGetTaskQueueUserDataScope tracks RPC calls to matching service
+	MatchingClientGetTaskQueueUserDataScope = "MatchingClientGetTaskQueueUserData"
 )
 
 // Worker
@@ -630,6 +630,10 @@ const (
 	PersistenceListTaskQueueScope = "ListTaskQueue"
 	// PersistenceDeleteTaskQueueScope is the metric scope for persistence.TaskManager.DeleteTaskQueue API
 	PersistenceDeleteTaskQueueScope = "DeleteTaskQueue"
+	// PersistenceGetTaskQueueUserDataScope is the metric scope for persistence.TaskManager.GetTaskQueueUserData API
+	PersistenceGetTaskQueueUserDataScope = "GetTaskQueueUserData"
+	// PersistenceUpdateTaskQueueUserDataScope is the metric scope for persistence.TaskManager.UpdateTaskQueueUserData API
+	PersistenceUpdateTaskQueueUserDataScope = "UpdateTaskQueueUserData"
 	// PersistenceAppendHistoryEventsScope tracks AppendHistoryEvents calls made by service to persistence layer
 	PersistenceAppendHistoryEventsScope = "AppendHistoryEvents"
 	// PersistenceGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory calls made by service to persistence layer
@@ -1098,10 +1102,10 @@ const (
 	MatchingUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
 	// MatchingGetWorkerBuildIdCompatibilityScope tracks GetWorkerBuildIdCompatibility API calls received by service
 	MatchingGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
-	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
-	MatchingInvalidateTaskQueueMetadataScope = "InvalidateTaskQueueMetadata"
-	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
-	MatchingGetTaskQueueMetadataScope = "GetTaskQueueMetadata"
+	// MatchingInvalidateTaskQueueUserDataScope tracks InvalidateTaskQueueUserData API calls received by service
+	MatchingInvalidateTaskQueueUserDataScope = "InvalidateTaskQueueUserData"
+	// MatchingGetTaskQueueUserDataScope tracks GetTaskQueueUserData API calls received by service
+	MatchingGetTaskQueueUserDataScope = "GetTaskQueueUserData"
 )
 
 // Worker Scope

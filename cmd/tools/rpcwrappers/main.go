@@ -188,7 +188,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"UpdateWorkerBuildIdCompatibilityRequest",
 		"RespondQueryTaskCompletedRequest",
 		"ListTaskQueuePartitionsRequest",
-		"GetTaskQueueMetadataRequest":
+		"GetTaskQueueUserDataRequest":
 		tqtPath = "enumspb.TASK_QUEUE_TYPE_WORKFLOW"
 	default:
 		tqtPath = pathToField(t, "TaskQueueType", "request", 2)

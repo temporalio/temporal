@@ -544,6 +544,26 @@ func (p *taskRateLimitedPersistenceClient) DeleteTaskQueue(
 	return p.persistence.DeleteTaskQueue(ctx, request)
 }
 
+func (p taskRateLimitedPersistenceClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *GetTaskQueueUserDataRequest,
+) (*GetTaskQueueUserDataResponse, error) {
+	if ok := allow(ctx, "GetTaskQueueUserData", p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.GetTaskQueueUserData(ctx, request)
+}
+
+func (p taskRateLimitedPersistenceClient) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *UpdateTaskQueueUserDataRequest,
+) error {
+	if ok := allow(ctx, "UpdateTaskQueueUserData", p.rateLimiter); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return p.persistence.UpdateTaskQueueUserData(ctx, request)
+}
+
 func (p *taskRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

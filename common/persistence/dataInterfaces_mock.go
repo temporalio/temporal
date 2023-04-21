@@ -826,6 +826,21 @@ func (mr *MockTaskManagerMockRecorder) GetTaskQueue(ctx, request interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueue), ctx, request)
 }
 
+// GetTaskQueueUserData mocks base method.
+func (m *MockTaskManager) GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueueUserData", ctx, request)
+	ret0, _ := ret[0].(*GetTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueUserData indicates an expected call of GetTaskQueueUserData.
+func (mr *MockTaskManagerMockRecorder) GetTaskQueueUserData(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueueUserData), ctx, request)
+}
+
 // GetTasks mocks base method.
 func (m *MockTaskManager) GetTasks(ctx context.Context, request *GetTasksRequest) (*GetTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -869,6 +884,20 @@ func (m *MockTaskManager) UpdateTaskQueue(ctx context.Context, request *UpdateTa
 func (mr *MockTaskManagerMockRecorder) UpdateTaskQueue(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).UpdateTaskQueue), ctx, request)
+}
+
+// UpdateTaskQueueUserData mocks base method.
+func (m *MockTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTaskQueueUserData", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateTaskQueueUserData indicates an expected call of UpdateTaskQueueUserData.
+func (mr *MockTaskManagerMockRecorder) UpdateTaskQueueUserData(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueUserData", reflect.TypeOf((*MockTaskManager)(nil).UpdateTaskQueueUserData), ctx, request)
 }
 
 // MockMetadataManager is a mock of MetadataManager interface.
