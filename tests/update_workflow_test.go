@@ -293,7 +293,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateMessages() {
 		},
 		{
 			Name:                     "complete-without-accept",
-			RespondWorkflowTaskError: "invalid state: pending",
+			RespondWorkflowTaskError: "current state: pending",
 			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
@@ -315,7 +315,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateMessages() {
 		},
 		{
 			Name:                     "accept-twice",
-			RespondWorkflowTaskError: "invalid state: accepted",
+			RespondWorkflowTaskError: "current state: accepted",
 			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
