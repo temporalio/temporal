@@ -37,7 +37,7 @@ import "temporal/api/protocol/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/tasks.proto";
+import "temporal/server/api/persistence/v1/task_queues.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 
@@ -203,32 +203,29 @@ message GetWorkerBuildIdCompatibilityResponse {
     temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse response = 1;
 }
 
-message InvalidateTaskQueueMetadataRequest {
+message InvalidateTaskQueueUserDataRequest {
     string namespace_id = 1;
     string task_queue = 2;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
-    // The task queue versioning data should be invalidated and replaced with this data, if set.
-    temporal.server.api.persistence.v1.VersioningData versioning_data = 4;
+    // The partition's cached user data should be invalidated and replaced with this data, if set.
+    temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 4;
 }
-message InvalidateTaskQueueMetadataResponse {}
+message InvalidateTaskQueueUserDataResponse {}
 
-message GetTaskQueueMetadataRequest {
+message GetTaskQueueUserDataRequest {
     string namespace_id = 1;
     // The task queue to fetch data from. Is always considered as a workflow queue, since root
     // workflow queues own the metadata.
     string task_queue = 2;
-    // If set nonempty, the requester wants the latest versioning data. The value must be the hash
-    // (using farm hash Fingerprint64) of the latest versioning data. If the requester has no data,
-    // it can use any invalid value (ex: [0]).
-    // If the data is up to date, no value will be returned.
-    bytes want_versioning_data_curhash = 3;
+    // The value of the last known user data version.
+    // If the requester has no data, it should set this to 0.
+    // This value must not be set to a negative number (note that our linter suggests avoiding uint64).
+    int64 last_known_user_data_version = 3;
 }
-message GetTaskQueueMetadataResponse {
-    oneof versioning_data_resp {
-        // The latest versioning data, if the request's hash did not match. May be null if no
-        // versioning data exists.
-        temporal.server.api.persistence.v1.VersioningData versioning_data = 1;
-        // If the request's hash matched, this variant is set (and will be true).
-        bool matched_req_hash = 2;
-    }
+message GetTaskQueueUserDataResponse {
+    // Whether this task queue has any stored user data
+    bool task_queue_has_user_data = 1;
+    // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
+    // than the version cached in the root partition.
+    temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 2;
 }

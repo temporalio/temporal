@@ -596,6 +596,30 @@ func (p *taskPersistenceClient) DeleteTaskQueue(
 	return p.persistence.DeleteTaskQueue(ctx, request)
 }
 
+func (p *taskPersistenceClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *GetTaskQueueUserDataRequest,
+) (_ *GetTaskQueueUserDataResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetTaskQueueUserDataScope, caller, startTime, retErr)
+	}()
+	return p.persistence.GetTaskQueueUserData(ctx, request)
+}
+
+func (p *taskPersistenceClient) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *UpdateTaskQueueUserDataRequest,
+) (retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceUpdateTaskQueueUserDataScope, caller, startTime, retErr)
+	}()
+	return p.persistence.UpdateTaskQueueUserData(ctx, request)
+}
+
 func (p *taskPersistenceClient) Close() {
 	p.persistence.Close()
 }

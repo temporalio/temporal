@@ -65,11 +65,11 @@ func (c *clientImpl) DescribeTaskQueue(
 	return client.DescribeTaskQueue(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetTaskQueueMetadata(
+func (c *clientImpl) GetTaskQueueUserData(
 	ctx context.Context,
-	request *matchingservice.GetTaskQueueMetadataRequest,
+	request *matchingservice.GetTaskQueueUserDataRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 
 	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
@@ -77,7 +77,7 @@ func (c *clientImpl) GetTaskQueueMetadata(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetTaskQueueMetadata(ctx, request, opts...)
+	return client.GetTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetWorkerBuildIdCompatibility(
@@ -95,11 +95,11 @@ func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	return client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
-func (c *clientImpl) InvalidateTaskQueueMetadata(
+func (c *clientImpl) InvalidateTaskQueueUserData(
 	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueMetadataRequest,
+	request *matchingservice.InvalidateTaskQueueUserDataRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
 
 	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetTaskQueueType())
 	if err != nil {
@@ -107,7 +107,7 @@ func (c *clientImpl) InvalidateTaskQueueMetadata(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.InvalidateTaskQueueMetadata(ctx, request, opts...)
+	return client.InvalidateTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListTaskQueuePartitions(

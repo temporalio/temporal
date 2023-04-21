@@ -279,6 +279,21 @@ func (mr *MockTaskStoreMockRecorder) GetTaskQueue(ctx, request interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueue", reflect.TypeOf((*MockTaskStore)(nil).GetTaskQueue), ctx, request)
 }
 
+// GetTaskQueueUserData mocks base method.
+func (m *MockTaskStore) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueueUserData", ctx, request)
+	ret0, _ := ret[0].(*persistence.InternalGetTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueUserData indicates an expected call of GetTaskQueueUserData.
+func (mr *MockTaskStoreMockRecorder) GetTaskQueueUserData(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockTaskStore)(nil).GetTaskQueueUserData), ctx, request)
+}
+
 // GetTasks mocks base method.
 func (m *MockTaskStore) GetTasks(ctx context.Context, request *persistence.GetTasksRequest) (*persistence.InternalGetTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -322,6 +337,20 @@ func (m *MockTaskStore) UpdateTaskQueue(ctx context.Context, request *persistenc
 func (mr *MockTaskStoreMockRecorder) UpdateTaskQueue(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueue", reflect.TypeOf((*MockTaskStore)(nil).UpdateTaskQueue), ctx, request)
+}
+
+// UpdateTaskQueueUserData mocks base method.
+func (m *MockTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *persistence.InternalUpdateTaskQueueUserDataRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTaskQueueUserData", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateTaskQueueUserData indicates an expected call of UpdateTaskQueueUserData.
+func (mr *MockTaskStoreMockRecorder) UpdateTaskQueueUserData(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueUserData", reflect.TypeOf((*MockTaskStore)(nil).UpdateTaskQueueUserData), ctx, request)
 }
 
 // MockMetadataStore is a mock of MetadataStore interface.

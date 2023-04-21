@@ -27,17 +27,34 @@ package matching
 import (
 	"encoding/binary"
 	"fmt"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockpb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/util"
 )
 
-func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatibilityResponse {
-	return depthLimiter(g, maxDepth)
+// ToBuildIdOrderingResponse transforms the internal VersioningData representation to public representation.
+// If maxSets is given, the last sets up to maxSets will be returned.
+func ToBuildIdOrderingResponse(data *persistence.VersioningData, maxSets int) *workflowservice.GetWorkerBuildIdCompatibilityResponse {
+	lenSets := len(data.GetVersionSets())
+	numSets := lenSets
+	if maxSets > 0 && numSets > maxSets {
+		numSets = maxSets
+	}
+	versionSets := make([]*taskqueue.CompatibleVersionSet, numSets)
+	for i := range versionSets {
+		set := data.GetVersionSets()[i+lenSets-numSets]
+		buildIds := make([]string, len(set.GetBuildIds()))
+		for j, version := range set.GetBuildIds() {
+			buildIds[j] = version.Id
+		}
+		versionSets[i] = &taskqueue.CompatibleVersionSet{BuildIds: buildIds}
+	}
+	return &workflowservice.GetWorkerBuildIdCompatibilityResponse{MajorVersionSets: versionSets}
 }
 
 // HashVersioningData returns a farm.Fingerprint64 hash of the versioning data as bytes. If the data is nonexistent or
@@ -55,15 +72,25 @@ func HashVersioningData(data *persistence.VersioningData) []byte {
 	return b
 }
 
-func depthLimiter(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdCompatibilityResponse {
+func checkLimits(g *persistence.VersioningData, maxSets, maxBuildIDs int) error {
 	sets := g.GetVersionSets()
-	if maxDepth > 0 {
-		sets = util.SliceTail(sets, maxDepth)
+	if maxSets > 0 && len(sets) > maxSets {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of compatible version sets permitted in namespace dynamic config (%v/%v)", len(sets), maxSets))
 	}
-	return &workflowservice.GetWorkerBuildIdCompatibilityResponse{MajorVersionSets: sets}
+	if maxBuildIDs == 0 {
+		return nil
+	}
+	numBuildIDs := 0
+	for _, set := range sets {
+		numBuildIDs += len(set.GetBuildIds())
+	}
+	if numBuildIDs > maxBuildIDs {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of build IDs permitted in namespace dynamic config (%v/%v)", numBuildIDs, maxBuildIDs))
+	}
+	return nil
 }
 
-// Given existing versioning data and an update request, update the version sets appropriately. The request is expected
+// UpdateVersionSets updates version sets given existing versioning data and an update request. The request is expected
 // to have already been validated.
 //
 // See the API docs for more detail. In short, the versioning data representation consists of a sequence of sequences of
@@ -87,68 +114,86 @@ func depthLimiter(g *persistence.VersioningData, maxDepth int) *workflowservice.
 //     default for that set.
 //  3. Target some existing version, marking it (and thus its set) as the default set.
 //
-// Deletions are not permitted, as inserting new versions can accomplish the same goals with less complexity. However,
-// sets may be dropped when the number of sets limit is reached. They are dropped oldest first - the current default set
-// is never dropped, instead dropping the next oldest set.
-func UpdateVersionSets(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSize int) error {
-	err := updateImpl(existingData, req)
+// Deletions are performed by a background process which verifies build IDs are no longer in use and safe to delete (not yet implemented).
+//
+// Update may fail with FailedPrecondition if it would cause exceeding the supplied limits.
+func UpdateVersionSets(clock clockpb.HybridLogicalClock, data *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIDs int) (clockpb.HybridLogicalClock, *persistence.VersioningData, error) {
+	clock = generateHLCTimestamp(clock)
+	data, err := updateImpl(clock, data, req)
 	if err != nil {
-		return err
+		return clock, nil, err
 	}
-	// Limit graph size if it's grown too large
-	newResp := depthLimiter(existingData, maxSize)
-	existingData.VersionSets = newResp.GetMajorVersionSets()
-	return nil
+	if err := checkLimits(data, maxSets, maxBuildIDs); err != nil {
+		return clock, nil, err
+	}
+	return clock, data, nil
 }
 
 //nolint:revive // cyclomatic complexity
-func updateImpl(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) error {
+func updateImpl(timestamp clockpb.HybridLogicalClock, existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistence.VersioningData, error) {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
 	findRes := findVersion(existingData, targetedVersion)
 	targetSetIdx, versionInSetIdx := findRes.setIdx, findRes.indexInSet
+	modifiedData := persistence.VersioningData{
+		VersionSets:            make([]*persistence.CompatibleVersionSet, len(existingData.GetVersionSets())),
+		DefaultUpdateTimestamp: existingData.GetDefaultUpdateTimestamp(),
+	}
+	copy(modifiedData.VersionSets, existingData.GetVersionSets())
 
 	if req.GetAddNewBuildIdInNewDefaultSet() != "" {
 		// If it's not already in the sets, add it as the new default set
 		if targetSetIdx != -1 {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
 		}
 
-		existingData.VersionSets = append(existingData.GetVersionSets(), &taskqueuepb.CompatibleVersionSet{
-			BuildIds: []string{targetedVersion},
+		modifiedData.VersionSets = append(modifiedData.VersionSets, &persistence.CompatibleVersionSet{
+			SetIds:   []string{targetedVersion},
+			BuildIds: []*persistence.BuildID{{Id: targetedVersion, State: persistence.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}},
 		})
+		makeVersionInSetDefault(&modifiedData, len(modifiedData.VersionSets)-1, 0, &timestamp)
+		makeDefaultSet(&modifiedData, len(modifiedData.VersionSets)-1, &timestamp)
 	} else if addNew := req.GetAddNewCompatibleBuildId(); addNew != nil {
 		compatVer := addNew.GetExistingCompatibleBuildId()
-		compatSetIdx := findVersion(existingData, compatVer).setIdx
+		compatSetIdx := findVersion(&modifiedData, compatVer).setIdx
 		if compatSetIdx == -1 {
-			return serviceerror.NewNotFound(
+			return nil, serviceerror.NewNotFound(
 				fmt.Sprintf("targeted compatible_version %v not found", compatVer))
 		}
 		if targetSetIdx != -1 {
 			// If the version does exist, this operation can't do anything meaningful, but we can fail if the user
 			// says the version is now compatible with some different set.
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
 		}
 
+		// First duplicate the build IDs to avoid mutation
+		lastIdx := len(existingData.VersionSets[compatSetIdx].BuildIds)
+		modifiedData.VersionSets[compatSetIdx] = &persistence.CompatibleVersionSet{
+			SetIds:   existingData.VersionSets[compatSetIdx].SetIds,
+			BuildIds: make([]*persistence.BuildID, lastIdx+1),
+		}
+		copy(modifiedData.VersionSets[compatSetIdx].BuildIds, existingData.VersionSets[compatSetIdx].BuildIds)
+
 		// If the version doesn't exist, add it to the compatible set
-		existingData.VersionSets[compatSetIdx].BuildIds =
-			append(existingData.VersionSets[compatSetIdx].BuildIds, targetedVersion)
+		modifiedData.VersionSets[compatSetIdx].BuildIds[lastIdx] =
+			&persistence.BuildID{Id: targetedVersion, State: persistence.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}
+		makeVersionInSetDefault(&modifiedData, compatSetIdx, lastIdx, &timestamp)
 		if addNew.GetMakeSetDefault() {
-			makeDefaultSet(existingData, compatSetIdx)
+			makeDefaultSet(&modifiedData, compatSetIdx, &timestamp)
 		}
 	} else if req.GetPromoteSetByBuildId() != "" {
 		if targetSetIdx == -1 {
-			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
-		makeDefaultSet(existingData, targetSetIdx)
+		makeDefaultSet(&modifiedData, targetSetIdx, &timestamp)
 	} else if req.GetPromoteBuildIdWithinSet() != "" {
 		if targetSetIdx == -1 {
-			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
-		makeVersionInSetDefault(existingData, targetSetIdx, versionInSetIdx)
+		makeVersionInSetDefault(&modifiedData, targetSetIdx, versionInSetIdx, &timestamp)
 	}
 
-	return nil
+	return &modifiedData, nil
 }
 
 func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) string {
@@ -172,7 +217,7 @@ type findVersionRes struct {
 func findVersion(data *persistence.VersioningData, buildID string) findVersionRes {
 	for setIx, set := range data.GetVersionSets() {
 		for versionIx, version := range set.GetBuildIds() {
-			if version == buildID {
+			if version.Id == buildID {
 				return findVersionRes{
 					setIdx:     setIx,
 					indexInSet: versionIx,
@@ -186,22 +231,50 @@ func findVersion(data *persistence.VersioningData, buildID string) findVersionRe
 	}
 }
 
-func makeDefaultSet(data *persistence.VersioningData, setIx int) {
+func makeDefaultSet(data *persistence.VersioningData, setIx int, timestamp *clockpb.HybridLogicalClock) {
+	data.DefaultUpdateTimestamp = timestamp
 	if len(data.VersionSets) <= 1 {
 		return
 	}
-	// Move the set to the end and shift all the others down
-	moveMe := data.VersionSets[setIx]
-	copy(data.VersionSets[setIx:], data.VersionSets[setIx+1:])
-	data.VersionSets[len(data.VersionSets)-1] = moveMe
+	if setIx < len(data.VersionSets)-1 {
+		// Move the set to the end and shift all the others down
+		moveMe := data.VersionSets[setIx]
+		copy(data.VersionSets[setIx:], data.VersionSets[setIx+1:])
+		data.VersionSets[len(data.VersionSets)-1] = moveMe
+	}
 }
 
-func makeVersionInSetDefault(data *persistence.VersioningData, setIx, versionIx int) {
+func makeVersionInSetDefault(data *persistence.VersioningData, setIx, versionIx int, timestamp *clockpb.HybridLogicalClock) {
+	data.VersionSets[setIx].DefaultUpdateTimestamp = timestamp
 	setVersions := data.VersionSets[setIx].BuildIds
 	if len(setVersions) <= 1 {
 		return
 	}
-	moveMe := setVersions[versionIx]
-	copy(setVersions[versionIx:], setVersions[versionIx+1:])
-	setVersions[len(setVersions)-1] = moveMe
+	if versionIx < len(setVersions)-1 {
+		// Move the build ID to the end and shift all the others down
+		moveMe := setVersions[versionIx]
+		copy(setVersions[versionIx:], setVersions[versionIx+1:])
+		setVersions[len(setVersions)-1] = moveMe
+	}
+}
+
+func generateHLCTimestamp(clock clockpb.HybridLogicalClock) clockpb.HybridLogicalClock {
+	wallclock := time.Now().UnixMilli()
+	// Ensure time does not move backwards
+	if wallclock < clock.GetWallClock() {
+		wallclock = clock.GetWallClock()
+	}
+	// Ensure timestamp is monotonically increasing
+	if wallclock == clock.GetWallClock() {
+		clock.Version = clock.GetVersion() + 1
+	} else {
+		clock.Version = 0
+		clock.WallClock = wallclock
+	}
+
+	return clockpb.HybridLogicalClock{WallClock: wallclock, Version: clock.Version, ClusterId: clock.ClusterId}
+}
+
+func zeroHLC(clusterID int64) clockpb.HybridLogicalClock {
+	return clockpb.HybridLogicalClock{WallClock: 0, Version: 0, ClusterId: clusterID}
 }

@@ -308,20 +308,20 @@ func (h *Handler) GetWorkerBuildIdCompatibility(
 }
 
 // InvalidateTaskQueueMetadata notifies a task queue that some data has changed, and should be invalidated/refreshed
-func (h *Handler) InvalidateTaskQueueMetadata(
+func (h *Handler) InvalidateTaskQueueUserData(
 	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueMetadataRequest,
-) (_ *matchingservice.InvalidateTaskQueueMetadataResponse, retError error) {
+	request *matchingservice.InvalidateTaskQueueUserDataRequest,
+) (_ *matchingservice.InvalidateTaskQueueUserDataResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.InvalidateTaskQueueMetadata(ctx, request)
+	return h.engine.InvalidateTaskQueueUserData(ctx, request)
 }
 
-func (h *Handler) GetTaskQueueMetadata(
+func (h *Handler) GetTaskQueueUserData(
 	ctx context.Context,
-	request *matchingservice.GetTaskQueueMetadataRequest,
-) (_ *matchingservice.GetTaskQueueMetadataResponse, retError error) {
+	request *matchingservice.GetTaskQueueUserDataRequest,
+) (_ *matchingservice.GetTaskQueueUserDataResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.GetTaskQueueMetadata(ctx, request)
+	return h.engine.GetTaskQueueUserData(ctx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
