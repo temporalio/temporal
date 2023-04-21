@@ -110,8 +110,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockMatchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
-	s.mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.GetTaskQueueMetadataResponse{}, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "")
@@ -1911,7 +1911,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 }
 
 func (s *matchingEngineSuite) TestGetVersioningData() {
-	s.mockMatchingClient.EXPECT().InvalidateTaskQueueMetadata(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().InvalidateTaskQueueUserData(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
 
@@ -1928,7 +1928,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NotNil(res)
 
 	// Set a long list of versions
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
 		id := fmt.Sprintf("%d", i)
 		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
@@ -1944,11 +1944,11 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		s.NotNil(res)
 	}
 	// Make a long compat-versions chain
-	for i := 0; i < 10; i++ {
-		id := fmt.Sprintf("99.%d", i)
-		prevCompat := fmt.Sprintf("99.%d", i-1)
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("9.%d", i)
+		prevCompat := fmt.Sprintf("9.%d", i-1)
 		if i == 0 {
-			prevCompat = "99"
+			prevCompat = "9"
 		}
 		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
@@ -1981,9 +1981,9 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	majorSets := res.GetResponse().GetMajorVersionSets()
 	curDefault := majorSets[len(majorSets)-1]
 	s.NotNil(curDefault)
-	s.Equal("99", curDefault.GetBuildIds()[0])
+	s.Equal("9", curDefault.GetBuildIds()[0])
 	lastNode := curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
-	s.Equal("99.9", lastNode)
+	s.Equal("9.99", lastNode)
 	s.Equal("0", majorSets[0].GetBuildIds()[0])
 
 	// Ensure depth limiting works
@@ -1998,9 +1998,9 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NoError(err)
 	majorSets = res.GetResponse().GetMajorVersionSets()
 	curDefault = majorSets[len(majorSets)-1]
-	s.Equal("99", curDefault.GetBuildIds()[0])
+	s.Equal("9", curDefault.GetBuildIds()[0])
 	lastNode = curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
-	s.Equal("99.9", lastNode)
+	s.Equal("9.99", lastNode)
 	s.Equal(1, len(majorSets))
 
 	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
@@ -2013,14 +2013,14 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	})
 	s.NoError(err)
 	majorSets = res.GetResponse().GetMajorVersionSets()
-	s.Equal("95", majorSets[0].GetBuildIds()[0])
+	s.Equal("5", majorSets[0].GetBuildIds()[0])
 }
 
 func (s *matchingEngineSuite) TestActivityQueueMetadataInvalidate() {
 	// Overwrite the matching mock - we expect one and only one fetch call here, after the activity queue is invalidated
 	mockMatch := matchingservicemock.NewMockMatchingServiceClient(s.controller)
-	mockMatch.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.GetTaskQueueMetadataResponse{}, nil).
+	mockMatch.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{}, nil).
 		Times(1)
 	s.matchingEngine.matchingClient = mockMatch
 
@@ -2044,12 +2044,13 @@ func (s *matchingEngineSuite) TestActivityQueueMetadataInvalidate() {
 	s.NoError(err)
 	s.NotNil(ttqm)
 
-	_, err = s.matchingEngine.InvalidateTaskQueueMetadata(s.handlerContext, &matchingservice.InvalidateTaskQueueMetadataRequest{
+	_, err = s.matchingEngine.InvalidateTaskQueueUserData(s.handlerContext, &matchingservice.InvalidateTaskQueueUserDataRequest{
 		NamespaceId:   namespaceID.String(),
 		TaskQueue:     tq,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		VersioningData: &persistencespb.VersioningData{
-			VersionSets: []*taskqueuepb.CompatibleVersionSet{mkNewSet("hi")},
+		UserData: &persistencespb.VersionedTaskQueueUserData{
+			Version: 1,
+			Data:    mkUserData(1),
 		},
 	})
 	s.NoError(err)
@@ -2163,6 +2164,7 @@ type testTaskQueueManager struct {
 	createTaskCount int
 	getTasksCount   int
 	tasks           *treemap.Map
+	userData        *persistencespb.VersionedTaskQueueUserData
 }
 
 func (m *testTaskQueueManager) RangeID() int64 {
@@ -2440,6 +2442,21 @@ func (m *testTaskManager) String() string {
 		tl.Unlock()
 	}
 	return result
+}
+
+// GetTaskQueueData implements persistence.TaskManager
+func (m *testTaskManager) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.GetTaskQueueUserDataResponse, error) {
+	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+	return &persistence.GetTaskQueueUserDataResponse{
+		UserData: tlm.userData,
+	}, nil
+}
+
+// UpdateTaskQueueUserData implements persistence.TaskManager
+func (m *testTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *persistence.UpdateTaskQueueUserDataRequest) error {
+	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+	tlm.userData = request.UserData
+	return nil
 }
 
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {

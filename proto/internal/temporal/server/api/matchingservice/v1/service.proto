@@ -85,8 +85,8 @@ service MatchingService {
     //     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
     rpc UpdateWorkerBuildIdCompatibility (UpdateWorkerBuildIdCompatibilityRequest) returns (UpdateWorkerBuildIdCompatibilityResponse) {}
     rpc GetWorkerBuildIdCompatibility (GetWorkerBuildIdCompatibilityRequest) returns (GetWorkerBuildIdCompatibilityResponse) {}
-    // Tell a task queue that some metadata has changed.
-    rpc InvalidateTaskQueueMetadata (InvalidateTaskQueueMetadataRequest) returns (InvalidateTaskQueueMetadataResponse) {}
-    // Fetch some metadata about a task queue.
-    rpc GetTaskQueueMetadata (GetTaskQueueMetadataRequest) returns (GetTaskQueueMetadataResponse) {}
+    // Tell a task queue that the associated user data has changed.
+    rpc InvalidateTaskQueueUserData (InvalidateTaskQueueUserDataRequest) returns (InvalidateTaskQueueUserDataResponse) {}
+    // Fetch user data for a task queue, this request should always be routed to the node holding the task queue's root partition.
+    rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
 }

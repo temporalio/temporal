@@ -51,6 +51,25 @@ type (
 		PageSize                    *int
 	}
 
+	GetTaskQueueUserDataRequest struct {
+		NamespaceID   []byte
+		TaskQueueName string
+	}
+
+	UpdateTaskQueueDataRequest struct {
+		NamespaceID   []byte
+		TaskQueueName string
+		Version       int64
+		Data          []byte
+		DataEncoding  string
+	}
+
+	VersionedBlob struct {
+		Version      int64
+		Data         []byte
+		DataEncoding string
+	}
+
 	// MatchingTaskQueue is the SQL persistence interface for matching task queues
 	MatchingTaskQueue interface {
 		InsertIntoTaskQueues(ctx context.Context, row *TaskQueuesRow) (sql.Result, error)
@@ -62,5 +81,7 @@ type (
 		SelectFromTaskQueues(ctx context.Context, filter TaskQueuesFilter) ([]TaskQueuesRow, error)
 		DeleteFromTaskQueues(ctx context.Context, filter TaskQueuesFilter) (sql.Result, error)
 		LockTaskQueues(ctx context.Context, filter TaskQueuesFilter) (int64, error)
+		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*VersionedBlob, error)
+		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueDataRequest) error
 	}
 )

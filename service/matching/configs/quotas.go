@@ -41,8 +41,8 @@ var (
 		"RespondQueryTaskCompleted":        0,
 		"GetWorkerBuildIdCompatibility":    0,
 		"UpdateWorkerBuildIdCompatibility": 0,
-		"InvalidateTaskQueueMetadata":      0,
-		"GetTaskQueueMetadata":             0,
+		"InvalidateTaskQueueUserData":      0,
+		"GetTaskQueueUserData":             0,
 	}
 
 	APIPrioritiesOrdered = []int{0}

@@ -63,18 +63,18 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
-func (c *metricClient) GetTaskQueueMetadata(
+func (c *metricClient) GetTaskQueueUserData(
 	ctx context.Context,
-	request *matchingservice.GetTaskQueueMetadataRequest,
+	request *matchingservice.GetTaskQueueUserDataRequest,
 	opts ...grpc.CallOption,
-) (_ *matchingservice.GetTaskQueueMetadataResponse, retError error) {
+) (_ *matchingservice.GetTaskQueueUserDataResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientGetTaskQueueMetadataScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientGetTaskQueueUserDataScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.GetTaskQueueMetadata(ctx, request, opts...)
+	return c.client.GetTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *metricClient) GetWorkerBuildIdCompatibility(
@@ -91,18 +91,18 @@ func (c *metricClient) GetWorkerBuildIdCompatibility(
 	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
-func (c *metricClient) InvalidateTaskQueueMetadata(
+func (c *metricClient) InvalidateTaskQueueUserData(
 	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueMetadataRequest,
+	request *matchingservice.InvalidateTaskQueueUserDataRequest,
 	opts ...grpc.CallOption,
-) (_ *matchingservice.InvalidateTaskQueueMetadataResponse, retError error) {
+) (_ *matchingservice.InvalidateTaskQueueUserDataResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientInvalidateTaskQueueMetadataScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientInvalidateTaskQueueUserDataScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.InvalidateTaskQueueMetadata(ctx, request, opts...)
+	return c.client.InvalidateTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *metricClient) ListTaskQueuePartitions(
