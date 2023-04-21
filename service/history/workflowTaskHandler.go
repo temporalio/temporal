@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/history/workflow/update"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -248,6 +249,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, comma
 func (handler *workflowTaskHandlerImpl) handleMessages(
 	ctx context.Context,
 	messages []*protocolpb.Message,
+	updateRegistry update.Registry,
 ) error {
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		// Workflow might get completed within the same WT after processing corresponding command.
@@ -258,10 +260,8 @@ func (handler *workflowTaskHandlerImpl) handleMessages(
 		return nil
 	}
 
-	if err := handler.attrValidator.validateMessages(
-		messages,
-	); err != nil {
-		return err
+	if err := updateRegistry.ValidateIncomingMessages(messages); err != nil {
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 	}
 
 	for _, message := range messages {

@@ -259,6 +259,190 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_AcceptComplete()
  15 WorkflowExecutionCompleted`, events)
 }
 
+func (s *integrationSuite) TestUpdateWorkflow_ValidateMessages() {
+	id := "integration-update-workflow-validate-message-id"
+	wt := "integration-update-workflow-validate-message-wt"
+	tq := "integration-update-workflow-validate-message-tq"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+
+	testCases := []struct {
+		Name                     string
+		RespondWorkflowTaskError string
+		MessageFn                func(reqMsg *protocolpb.Message) []*protocolpb.Message
+	}{
+		{
+			Name:                     "update-id-not-found",
+			RespondWorkflowTaskError: "not found",
+			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: "bogus-update-id",
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest,
+						}),
+					},
+				}
+			},
+		},
+		{
+			Name:                     "complete-without-accept",
+			RespondWorkflowTaskError: "current state: pending",
+			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Response{
+							Meta: updRequest.GetMeta(),
+							Outcome: &updatepb.Outcome{
+								Value: &updatepb.Outcome_Success{
+									Success: payloads.EncodeString("update success"),
+								},
+							},
+						}),
+					},
+				}
+			},
+		},
+		{
+			Name:                     "accept-twice",
+			RespondWorkflowTaskError: "current state: accepted",
+			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest,
+						}),
+					},
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest,
+						}),
+					},
+				}
+			},
+		},
+		{
+			Name:                     "success-case",
+			RespondWorkflowTaskError: "",
+			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest,
+						}),
+					},
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Response{
+							Meta: updRequest.GetMeta(),
+							Outcome: &updatepb.Outcome{
+								Value: &updatepb.Outcome_Success{
+									Success: payloads.EncodeString("update success"),
+								},
+							},
+						}),
+					},
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.Name, func(t *testing.T) {
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:    uuid.New(),
+				Namespace:    s.namespace,
+				WorkflowId:   id + tc.Name,
+				WorkflowType: workflowType,
+				TaskQueue:    taskQueue,
+			}
+
+			startResp, err := s.engine.StartWorkflowExecution(NewContext(), request)
+			s.NoError(err)
+
+			we := &commonpb.WorkflowExecution{
+				WorkflowId: id + tc.Name,
+				RunId:      startResp.GetRunId(),
+			}
+
+			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+				return nil, nil
+			}
+
+			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+				updRequestMsg := task.Messages[0]
+				return tc.MessageFn(updRequestMsg), nil
+			}
+
+			poller := &TaskPoller{
+				Engine:              s.engine,
+				Namespace:           s.namespace,
+				TaskQueue:           taskQueue,
+				WorkflowTaskHandler: wtHandler,
+				MessageHandler:      msgHandler,
+				Logger:              s.Logger,
+				T:                   s.T(),
+			}
+
+			updateWorkflowFn := func() {
+				_, _ = s.engine.UpdateWorkflowExecution(NewContext(), &workflowservice.UpdateWorkflowExecutionRequest{
+					Namespace: s.namespace,
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: we.GetWorkflowId(),
+						RunId:      we.GetRunId(),
+					},
+					Request: &updatepb.Request{
+						Meta:  &updatepb.Meta{UpdateId: uuid.New()},
+						Input: &updatepb.Input{Name: "update_handler", Args: payloads.EncodeString("update args")},
+					},
+				})
+			}
+			go updateWorkflowFn()
+
+			// Process update in workflow.
+			_, _, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, false, nil)
+			if len(tc.RespondWorkflowTaskError) > 0 {
+				// respond workflow task should return error
+				s.Error(err, "RespondWorkflowTaskCompleted should return an error contains`%v`", tc.RespondWorkflowTaskError)
+				s.Contains(err.Error(), tc.RespondWorkflowTaskError)
+			} else {
+				s.NoError(err)
+			}
+
+		})
+	}
+
+}
+
 func (s *integrationSuite) TestUpdateWorkflow_NewWorkflowTask_AcceptComplete() {
 	id := "integration-update-workflow-test-2"
 	wt := "integration-update-workflow-test-2-type"
@@ -1493,7 +1677,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 	// Try to accept update in workflow: get malformed response.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Error(err)
-	s.Equal(err.Error(), "BadUpdateWorkflowExecutionMessage: accepted_request is not set on update.Acceptance message body.")
+	s.Contains(err.Error(), "not found")
 	// New normal (but transient) WT will be created but not returned.
 
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
@@ -1531,4 +1715,187 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
  10 WorkflowTaskStarted
  11 WorkflowTaskCompleted
  12 WorkflowExecutionCompleted`, events)
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_ConvertSpeculativeWorkflowTaskToNormal_BecauseOfBufferedSignal() {
+	id := "integration-update-workflow-test-8"
+	wt := "integration-update-workflow-test-8-type"
+	tq := "integration-update-workflow-test-8-task-queue"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    uuid.New(),
+		Namespace:    s.namespace,
+		WorkflowId:   id,
+		WorkflowType: workflowType,
+		TaskQueue:    taskQueue,
+	}
+
+	startResp, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      startResp.GetRunId(),
+	}
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Completes first WT with update unrelated command.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: "activity_type_1"},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					ScheduleToCloseTimeout: timestamp.DurationPtr(10 * time.Hour),
+				}},
+			}}, nil
+		case 2:
+			// Speculative WT, with update.Request message.
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted`, history)
+			// Send signal which will be buffered. This will persist MS and speculative WT must be converted to normal.
+			err = s.sendSignal(s.namespace, we, "SignalName", payloads.EncodeString("signal_data"), "worker_identity")
+			s.NoError(err)
+			return nil, nil
+		case 3:
+			s.EqualHistory(`
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionSignaled
+ 10 WorkflowTaskScheduled
+ 11 WorkflowTaskStarted`, history)
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("done"),
+				}},
+			}}, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		case 2:
+			updRequestMsg := task.Messages[0]
+			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+
+			s.Equal(payloads.EncodeString("update args"), updRequest.GetInput().GetArgs())
+			s.Equal("update_handler", updRequest.GetInput().GetName())
+			s.EqualValues(6, updRequestMsg.GetEventId())
+
+			// Update is rejected but corresponding speculative WT will be in the history anyway, because it was converted to normal due to buffered signal.
+			return []*protocolpb.Message{
+				{
+					Id:                 uuid.New(),
+					ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+					SequencingId:       nil,
+					Body: marshalAny(s, &updatepb.Rejection{
+						RejectedRequestMessageId:         updRequestMsg.GetId(),
+						RejectedRequestSequencingEventId: updRequestMsg.GetEventId(),
+						RejectedRequest:                  updRequest,
+						Failure: &failurepb.Failure{
+							Message:     "update rejected",
+							FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{}},
+						},
+					}),
+				},
+			}, nil
+		case 3:
+			return nil, nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Start activity using existing workflow task.
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(err)
+
+	type UpdateResult struct {
+		Response *workflowservice.UpdateWorkflowExecutionResponse
+		Err      error
+	}
+	updateResultCh := make(chan UpdateResult)
+	updateWorkflowFn := func() {
+		updateResponse, err1 := s.engine.UpdateWorkflowExecution(NewContext(), &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.namespace,
+			WorkflowExecution: we,
+			Request: &updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: uuid.New()},
+				Input: &updatepb.Input{
+					Name: "update_handler",
+					Args: payloads.EncodeString("update args"),
+				},
+			},
+		})
+		s.NoError(err1)
+		updateResultCh <- UpdateResult{Response: updateResponse, Err: err1}
+	}
+	go updateWorkflowFn()
+	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
+
+	// Process update in workflow.
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	s.NoError(err)
+	updateResult := <-updateResultCh
+	s.NoError(updateResult.Err)
+	s.Equal("update rejected", updateResult.Response.GetOutcome().GetFailure().GetMessage())
+	s.EqualValues(0, updateResp.ResetHistoryEventId)
+
+	// Complete workflow.
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	s.NoError(err)
+	s.NotNil(completeWorkflowResp)
+	s.Nil(completeWorkflowResp.GetWorkflowTask())
+	s.EqualValues(0, completeWorkflowResp.ResetHistoryEventId)
+
+	s.Equal(3, wtHandlerCalls)
+	s.Equal(3, msgHandlerCalls)
+
+	events := s.getHistory(s.namespace, we)
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionSignaled
+ 10 WorkflowTaskScheduled
+ 11 WorkflowTaskStarted
+ 12 WorkflowTaskCompleted
+ 13 WorkflowExecutionCompleted`, events)
 }
