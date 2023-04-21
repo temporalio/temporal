@@ -145,7 +145,7 @@ func (r *RegistryImpl) ValidateIncomingMessages(messages []*protocolpb.Message) 
 
 	// Valid message sequences:
 	//  pending -> reject
-	//	pending -> accept
+	//  pending -> accept
 	//  accept -> complete
 
 	// make a shallow copy of updates for validation so that it does not alter the state which will be used
