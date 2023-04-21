@@ -29,6 +29,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -36,10 +37,13 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -47,6 +51,7 @@ func Invoke(
 	req *historyservice.DescribeWorkflowExecutionRequest,
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	persistenceVisibilityMgr manager.VisibilityManager,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -63,6 +68,7 @@ func Invoke(
 			req.Request.Execution.WorkflowId,
 			req.Request.Execution.RunId,
 		),
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -97,6 +103,7 @@ func Invoke(
 			AutoResetPoints:      executionInfo.AutoResetPoints,
 			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,
+			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
 		},
 	}
 
@@ -177,7 +184,7 @@ func Invoke(
 		}
 	}
 
-	if pendingWorkflowTask, ok := mutableState.GetPendingWorkflowTask(); ok {
+	if pendingWorkflowTask := mutableState.GetPendingWorkflowTask(); pendingWorkflowTask != nil {
 		result.PendingWorkflowTask = &workflowpb.PendingWorkflowTaskInfo{
 			State:                 enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
 			ScheduledTime:         pendingWorkflowTask.ScheduledTime,
@@ -189,6 +196,20 @@ func Invoke(
 			result.PendingWorkflowTask.StartedTime = pendingWorkflowTask.StartedTime
 		}
 	}
+
+	relocatableAttributes, err := workflow.RelocatableAttributesFetcherProvider(persistenceVisibilityMgr).Fetch(ctx, mutableState)
+	if err != nil {
+		shard.GetLogger().Error(
+			"Failed to fetch relocatable attributes",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(executionInfo.WorkflowId),
+			tag.WorkflowRunID(executionState.RunId),
+			tag.Error(err),
+		)
+		return nil, serviceerror.NewInternal("Failed to fetch memo and search attributes")
+	}
+	result.WorkflowExecutionInfo.Memo = relocatableAttributes.Memo
+	result.WorkflowExecutionInfo.SearchAttributes = relocatableAttributes.SearchAttributes
 
 	return result, nil
 }

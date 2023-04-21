@@ -48,8 +48,8 @@ type (
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		clientBean                       client.Bean
 		logger                           log.Logger
-		metricsClient                    metrics.Client
-		hostInfo                         *membership.HostInfo
+		metricsHandler                   metrics.Handler
+		hostInfo                         membership.HostInfo
 		serviceResolver                  membership.ServiceResolver
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 
@@ -67,8 +67,8 @@ func NewReplicator(
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 	logger log.Logger,
-	metricsClient metrics.Client,
-	hostInfo *membership.HostInfo,
+	metricsHandler metrics.Handler,
+	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor,
@@ -83,7 +83,7 @@ func NewReplicator(
 		namespaceProcessors:              make(map[string]*namespaceReplicationMessageProcessor),
 		clientBean:                       clientBean,
 		logger:                           log.With(logger, tag.ComponentReplicator),
-		metricsClient:                    metricsClient,
+		metricsHandler:                   metricsHandler,
 		namespaceReplicationQueue:        namespaceReplicationQueue,
 	}
 }
@@ -151,7 +151,7 @@ func (r *Replicator) listenToClusterMetadataChange() {
 						clusterName,
 						log.With(r.logger, tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
 						remoteAdminClient,
-						r.metricsClient,
+						r.metricsHandler,
 						r.namespaceReplicationTaskExecutor,
 						r.hostInfo,
 						r.serviceResolver,

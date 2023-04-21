@@ -36,13 +36,15 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -54,7 +56,7 @@ type (
 			lastMessageID int64,
 			pageSize int,
 			pageToken []byte,
-		) ([]*replicationspb.ReplicationTask, []byte, error)
+		) ([]*replicationspb.ReplicationTask, []*replicationspb.ReplicationTaskInfo, []byte, error)
 		PurgeMessages(
 			ctx context.Context,
 			sourceCluster string,
@@ -73,8 +75,8 @@ type (
 		taskExecutorsLock    sync.Mutex
 		taskExecutors        map[string]TaskExecutor
 		shard                shard.Context
-		deleteManager        workflow.DeleteManager
-		workflowCache        workflow.Cache
+		deleteManager        deletemanager.DeleteManager
+		workflowCache        wcache.Cache
 		resender             xdc.NDCHistoryResender
 		taskExecutorProvider TaskExecutorProvider
 		logger               log.Logger
@@ -83,8 +85,8 @@ type (
 
 func NewLazyDLQHandler(
 	shard shard.Context,
-	deleteManager workflow.DeleteManager,
-	workflowCache workflow.Cache,
+	deleteManager deletemanager.DeleteManager,
+	workflowCache wcache.Cache,
 	clientBean client.Bean,
 	taskExecutorProvider TaskExecutorProvider,
 ) DLQHandler {
@@ -100,8 +102,8 @@ func NewLazyDLQHandler(
 
 func newDLQHandler(
 	shard shard.Context,
-	deleteManager workflow.DeleteManager,
-	workflowCache workflow.Cache,
+	deleteManager deletemanager.DeleteManager,
+	workflowCache wcache.Cache,
 	clientBean client.Bean,
 	taskExecutors map[string]TaskExecutor,
 	taskExecutorProvider TaskExecutorProvider,
@@ -138,16 +140,16 @@ func (r *dlqHandlerImpl) GetMessages(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationspb.ReplicationTask, []byte, error) {
+) ([]*replicationspb.ReplicationTask, []*replicationspb.ReplicationTaskInfo, []byte, error) {
 
-	tasks, _, token, err := r.readMessagesWithAckLevel(
+	taskList, taskInfoList, _, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
 		lastMessageID,
 		pageSize,
 		pageToken,
 	)
-	return tasks, token, err
+	return taskList, taskInfoList, token, err
 }
 
 func (r *dlqHandlerImpl) PurgeMessages(
@@ -191,7 +193,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 	pageToken []byte,
 ) ([]byte, error) {
 
-	replicationTasks, ackLevel, token, err := r.readMessagesWithAckLevel(
+	replicationTasks, _, ackLevel, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
 		lastMessageID,
@@ -208,7 +210,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 	}
 
 	for _, task := range replicationTasks {
-		if _, err := taskExecutor.Execute(
+		if err := taskExecutor.Execute(
 			ctx,
 			task,
 			true,
@@ -249,13 +251,14 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
-) ([]*replicationspb.ReplicationTask, int64, []byte, error) {
+) ([]*replicationspb.ReplicationTask, []*replicationspb.ReplicationTaskInfo, int64, []byte, error) {
 
 	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(ctx, &persistence.GetReplicationTasksFromDLQRequest{
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
+			ReaderID:            common.DefaultQueueReaderID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			BatchSize:           pageSize,
@@ -264,13 +267,13 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 		SourceClusterName: sourceCluster,
 	})
 	if err != nil {
-		return nil, ackLevel, nil, err
+		return nil, nil, ackLevel, nil, err
 	}
 	pageToken = resp.NextPageToken
 
 	remoteAdminClient, err := r.shard.GetRemoteAdminClient(sourceCluster)
 	if err != nil {
-		return nil, ackLevel, nil, err
+		return nil, nil, ackLevel, nil, err
 	}
 	taskInfo := make([]*replicationspb.ReplicationTaskInfo, 0, len(resp.Tasks))
 	for _, task := range resp.Tasks {
@@ -317,7 +320,7 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	}
 
 	if len(taskInfo) == 0 {
-		return nil, ackLevel, pageToken, nil
+		return nil, nil, ackLevel, pageToken, nil
 	}
 
 	dlqResponse, err := remoteAdminClient.GetDLQReplicationMessages(
@@ -327,10 +330,10 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 		},
 	)
 	if err != nil {
-		return nil, ackLevel, nil, err
+		return nil, nil, ackLevel, nil, err
 	}
 
-	return dlqResponse.ReplicationTasks, ackLevel, pageToken, nil
+	return dlqResponse.ReplicationTasks, taskInfo, ackLevel, pageToken, nil
 }
 
 func (r *dlqHandlerImpl) getOrCreateTaskExecutor(ctx context.Context, clusterName string) (TaskExecutor, error) {
@@ -339,15 +342,10 @@ func (r *dlqHandlerImpl) getOrCreateTaskExecutor(ctx context.Context, clusterNam
 	if executor, ok := r.taskExecutors[clusterName]; ok {
 		return executor, nil
 	}
-	engine, err := r.shard.GetEngine(ctx)
-	if err != nil {
-		return nil, err
-	}
 	taskExecutor := r.taskExecutorProvider(TaskExecutorParams{
 		RemoteCluster:   clusterName,
 		Shard:           r.shard,
 		HistoryResender: r.resender,
-		HistoryEngine:   engine,
 		DeleteManager:   r.deleteManager,
 		WorkflowCache:   r.workflowCache,
 	})

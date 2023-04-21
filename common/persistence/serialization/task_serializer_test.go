@@ -156,7 +156,9 @@ func (s *taskSerializerSuite) TestTransferCloseTask() {
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 	}
+	s.assertEqualTasks(closeTask)
 
+	closeTask.CanSkipVisibilityArchival = true
 	s.assertEqualTasks(closeTask)
 }
 
@@ -255,7 +257,8 @@ func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
 		Version:             rand.Int63(),
 		BranchToken:         []byte{123},
 	}
-
+	s.assertEqualTasks(workflowCleanupTimer)
+	workflowCleanupTimer.WorkflowDataAlreadyArchived = true
 	s.assertEqualTasks(workflowCleanupTimer)
 }
 
@@ -351,6 +354,19 @@ func (s *taskSerializerSuite) TestDeleteExecutionTask() {
 	}
 
 	s.assertEqualTasks(replicateHistoryTask)
+}
+
+func (s *taskSerializerSuite) TestArchiveExecutionTask() {
+	task := &tasks.ArchiveExecutionTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
+	}
+	s.Assert().Equal(tasks.CategoryArchival, task.GetCategory())
+	s.Assert().Equal(enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
+
+	s.assertEqualTasks(task)
 }
 
 func (s *taskSerializerSuite) assertEqualTasks(

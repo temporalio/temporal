@@ -38,6 +38,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
@@ -48,11 +49,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -98,11 +101,10 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
 		tests.NewDynamicConfig(),
 	)
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
@@ -110,7 +112,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.workflowResetter = NewWorkflowResetter(
 		s.mockShard,
-		workflow.NewCache(s.mockShard),
+		wcache.NewCache(s.mockShard),
 		s.logger,
 	)
 	s.workflowResetter.newStateRebuilder = func() StateRebuilder {
@@ -135,15 +137,23 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentReleaseCalled := false
 	currentContext := workflow.NewMockContext(s.controller)
 	currentMutableState := workflow.NewMockMutableState(s.controller)
-	var currentReleaseFn workflow.ReleaseCacheFunc = func(error) { currentReleaseCalled = true }
+	var currentReleaseFn wcache.ReleaseCacheFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
+	currentMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	currentEventsSize := int64(2333)
 	currentNewEventsSize := int64(3444)
 	currentMutation := &persistence.WorkflowMutation{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{
+				BranchToken: []byte{1, 2, 3},
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 234, Version: 0},
+				},
+			}),
+		},
 	}
 	currentEventsSeq := []*persistence.WorkflowEvents{{
 		NamespaceID: s.namespaceID.String(),
@@ -161,15 +171,23 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	resetReleaseCalled := false
 	resetContext := workflow.NewMockContext(s.controller)
 	resetMutableState := workflow.NewMockMutableState(s.controller)
-	var tarGetReleaseFn workflow.ReleaseCacheFunc = func(error) { resetReleaseCalled = true }
+	var tarGetReleaseFn wcache.ReleaseCacheFunc = func(error) { resetReleaseCalled = true }
 	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
 	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
 	resetWorkflow.EXPECT().GetReleaseFn().Return(tarGetReleaseFn).AnyTimes()
 
+	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	resetEventsSize := int64(1444)
 	resetNewEventsSize := int64(4321)
 	resetSnapshot := &persistence.WorkflowSnapshot{
-		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{
+				BranchToken: []byte{1, 2, 3},
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 123, Version: 0},
+				},
+			}),
+		},
 	}
 	resetEventsSeq := []*persistence.WorkflowEvents{{
 		NamespaceID: s.namespaceID.String(),
@@ -181,30 +199,20 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		}},
 	}}
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
-		gomock.Any(),
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
-	resetMutableState.EXPECT().GetNamespaceEntry().Return(namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info:   &persistencespb.NamespaceInfo{},
-			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: "active-cluster-name",
-			},
-		},
-		IsGlobalNamespace: false,
-	}))
 	resetContext.EXPECT().GetHistorySize().Return(resetEventsSize).AnyTimes()
 	resetContext.EXPECT().SetHistorySize(resetEventsSize + resetNewEventsSize)
 
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
+		int64(0),
 		currentMutation,
 		currentEventsSeq,
+		convert.Int64Ptr(0),
 		resetSnapshot,
 		resetEventsSeq,
-		"active-cluster-name",
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
 
 	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentMutation, currentEventsSeq, resetWorkflow)
@@ -221,7 +229,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	currentReleaseCalled := false
 	currentContext := workflow.NewMockContext(s.controller)
 	currentMutableState := workflow.NewMockMutableState(s.controller)
-	var currentReleaseFn workflow.ReleaseCacheFunc = func(error) { currentReleaseCalled = true }
+	var currentReleaseFn wcache.ReleaseCacheFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
@@ -235,7 +243,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetReleaseCalled := false
 	resetContext := workflow.NewMockContext(s.controller)
 	resetMutableState := workflow.NewMockMutableState(s.controller)
-	var tarGetReleaseFn workflow.ReleaseCacheFunc = func(error) { resetReleaseCalled = true }
+	var tarGetReleaseFn wcache.ReleaseCacheFunc = func(error) { resetReleaseCalled = true }
 	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
 	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
 	resetWorkflow.EXPECT().GetReleaseFn().Return(tarGetReleaseFn).AnyTimes()
@@ -253,12 +261,10 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		}},
 	}}
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
-		gomock.Any(),
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
 	resetContext.EXPECT().GetHistorySize().Return(int64(123)).AnyTimes()
 	resetContext.EXPECT().CreateWorkflowExecution(
-		gomock.Any(),
 		gomock.Any(),
 		persistence.CreateWorkflowModeUpdateCurrent,
 		s.currentRunID,
@@ -293,6 +299,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		ShardID:         shardID,
+		NamespaceID:     s.namespaceID.String(),
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	s.mockStateRebuilder.EXPECT().Rebuild(
@@ -314,6 +321,11 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		resetBranchToken,
 		resetRequestID,
 	).Return(resetMutableState, resetHistorySize, nil)
+	resetMutableState.EXPECT().SetBaseWorkflow(
+		s.baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+	)
 
 	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
 		ctx,
@@ -339,7 +351,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_NoWorkflowTask() {
 	resetReason := "some random reset reason"
 
 	mutableState := workflow.NewMockMutableState(s.controller)
-	mutableState.EXPECT().GetPendingWorkflowTask().Return(nil, false).AnyTimes()
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(nil).AnyTimes()
 
 	err := s.workflowResetter.failWorkflowTask(
 		mutableState,
@@ -375,7 +387,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		RequestID:        workflowTaskSchedule.RequestID,
 		TaskQueue:        workflowTaskSchedule.TaskQueue,
 	}
-	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule, true).AnyTimes()
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule).AnyTimes()
 	mutableState.EXPECT().AddWorkflowTaskStartedEvent(
 		workflowTaskSchedule.ScheduledEventID,
 		workflowTaskSchedule.RequestID,
@@ -383,8 +395,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		consts.IdentityHistoryService,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTaskStart.ScheduledEventID,
-		workflowTaskStart.StartedEventID,
+		workflowTaskStart,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
@@ -422,10 +433,9 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 	}
-	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTask, true).AnyTimes()
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTask).AnyTimes()
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
@@ -502,6 +512,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		ShardID:         shardID,
+		NamespaceID:     s.namespaceID.String(),
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	newBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
@@ -523,10 +534,9 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState := workflow.NewMockMutableState(s.controller)
 
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true)
+	mutableState.EXPECT().GetStartedWorkflowTask().Return(workflowTask)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,
@@ -693,14 +703,14 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	}, nil)
 
 	resetContext := workflow.NewMockContext(s.controller)
-	resetContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
-	resetContext.EXPECT().Unlock(workflow.CallerTypeAPI)
+	resetContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
+	resetContext.EXPECT().Unlock(workflow.LockPriorityHigh)
 	resetMutableState := workflow.NewMockMutableState(s.controller)
 	resetContext.EXPECT().LoadMutableState(gomock.Any()).Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
 	resetContextCacheKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID)
-	_, _ = s.workflowResetter.historyCache.(*workflow.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
+	_, _ = s.workflowResetter.workflowCache.(*wcache.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 

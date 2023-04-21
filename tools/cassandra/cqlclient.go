@@ -26,15 +26,15 @@ package cassandra
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/gocql/gocql"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -45,7 +45,7 @@ type (
 		datacenter string
 		keyspace   string
 		timeout    time.Duration
-		session    gocql.Session
+		session    commongocql.Session
 		logger     log.Logger
 	}
 	// CQLClientConfig contains the configuration for cql client
@@ -64,8 +64,6 @@ type (
 		AddressTranslator        *config.CassandraAddressTranslator
 	}
 )
-
-var errGetSchemaVersion = errors.New("unable to get current schema version from cassandra")
 
 const (
 	defaultTimeout = 30 // Timeout in seconds
@@ -111,7 +109,12 @@ func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 	cassandraConfig.ConnectTimeout = time.Duration(cfg.Timeout) * time.Second
 
 	logger.Info("Validating connection to cassandra cluster.")
-	session, err := gocql.NewSession(*cassandraConfig, resolver.NewNoopResolver(), logger)
+	session, err := commongocql.NewSession(
+		func() (*gocql.ClusterConfig, error) {
+			return commongocql.NewCassandraCluster(*cassandraConfig, resolver.NewNoopResolver())
+		},
+		logger,
+	)
 	if err != nil {
 		logger.Error("Connection validation failed.", tag.Error(err))
 		return nil, err
@@ -190,12 +193,13 @@ func (client *cqlClient) ReadSchemaVersion() (string, error) {
 
 	iter := query.Iter()
 	var version string
-	if !iter.Scan(&version) {
-		iter.Close()
-		return "", errGetSchemaVersion
+	success := iter.Scan(&version)
+	err := iter.Close()
+	if err == nil && !success {
+		err = fmt.Errorf("no schema version found for keyspace %q", client.keyspace)
 	}
-	if err := iter.Close(); err != nil {
-		return "", err
+	if err != nil {
+		return "", fmt.Errorf("unable to get current schema version from Cassandra: %w", err)
 	}
 	return version, nil
 }

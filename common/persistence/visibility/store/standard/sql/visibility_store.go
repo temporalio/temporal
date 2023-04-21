@@ -80,6 +80,12 @@ func (s *visibilityStore) GetName() string {
 	return s.sqlStore.GetName()
 }
 
+func (s *visibilityStore) GetIndexName() string {
+	// GetIndexName is used to get cluster metadata, which in verstions < v1.20
+	// were stored in an empty string key.
+	return ""
+}
+
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,

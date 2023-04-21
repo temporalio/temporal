@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 var (
@@ -50,7 +51,7 @@ type (
 	Workflow interface {
 		GetContext() workflow.Context
 		GetMutableState() workflow.MutableState
-		GetReleaseFn() workflow.ReleaseCacheFunc
+		GetReleaseFn() wcache.ReleaseCacheFunc
 		GetVectorClock() (int64, int64, error)
 		HappensAfter(that Workflow) (bool, error)
 		Revive() error
@@ -65,7 +66,7 @@ type (
 		ctx          context.Context
 		context      workflow.Context
 		mutableState workflow.MutableState
-		releaseFn    workflow.ReleaseCacheFunc
+		releaseFn    wcache.ReleaseCacheFunc
 	}
 )
 
@@ -75,7 +76,7 @@ func NewWorkflow(
 	clusterMetadata cluster.Metadata,
 	context workflow.Context,
 	mutableState workflow.MutableState,
-	releaseFn workflow.ReleaseCacheFunc,
+	releaseFn wcache.ReleaseCacheFunc,
 ) *WorkflowImpl {
 
 	return &WorkflowImpl{
@@ -97,7 +98,7 @@ func (r *WorkflowImpl) GetMutableState() workflow.MutableState {
 	return r.mutableState
 }
 
-func (r *WorkflowImpl) GetReleaseFn() workflow.ReleaseCacheFunc {
+func (r *WorkflowImpl) GetReleaseFn() wcache.ReleaseCacheFunc {
 	return r.releaseFn
 }
 
@@ -145,7 +146,7 @@ func (r *WorkflowImpl) Revive() error {
 
 	// workflow is in zombie state, need to set the state correctly accordingly
 	state = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
-	if r.mutableState.HasProcessedOrPendingWorkflowTask() {
+	if r.mutableState.HadOrHasWorkflowTask() {
 		state = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	}
 	return r.mutableState.UpdateWorkflowStateStatus(
@@ -231,14 +232,13 @@ func (r *WorkflowImpl) failWorkflowTask(
 		return err
 	}
 
-	workflowTask, ok := r.mutableState.GetInFlightWorkflowTask()
-	if !ok {
+	workflowTask := r.mutableState.GetStartedWorkflowTask()
+	if workflowTask == nil {
 		return nil
 	}
 
 	if _, err := r.mutableState.AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

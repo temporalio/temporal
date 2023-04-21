@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -51,7 +52,8 @@ type (
 		PersistenceNamespaceMaxQPS PersistenceNamespaceMaxQps
 		EnablePriorityRateLimiting EnablePriorityRateLimiting
 		ClusterName                ClusterName
-		MetricsClient              metrics.Client
+		ServiceName                primitives.ServiceName
+		MetricsHandler             metrics.Handler
 		Logger                     log.Logger
 	}
 
@@ -90,7 +92,7 @@ func FactoryProvider(
 		requestRatelimiter,
 		serialization.NewSerializer(),
 		string(params.ClusterName),
-		params.MetricsClient,
+		params.MetricsHandler,
 		params.Logger,
 	)
 }

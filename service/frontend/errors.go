@@ -75,6 +75,19 @@ var (
 	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
 	errUnableDeleteSystemNamespace                        = serviceerror.NewInvalidArgument("Unable to delete system namespace.")
 	errBatchJobIDNotSet                                   = serviceerror.NewInvalidArgument("JobId is not set on request.")
+	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
+	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
+	errBatchOperationNotSet                               = serviceerror.NewInvalidArgument("Batch operation is not set on request.")
+	errCronAndStartDelaySet                               = serviceerror.NewInvalidArgument("CronSchedule and WorkflowStartDelay may not be used together.")
+	errInvalidWorkflowStartDelaySeconds                   = serviceerror.NewInvalidArgument("An invalid WorkflowStartDelaySeconds is set on request.")
+	errRaceConditionAddingSearchAttributes                = serviceerror.NewUnavailable("Generated search attributes mapping unavailble.")
+
+	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
+	errUpdateInputNotSet      = serviceerror.NewInvalidArgument("Update input is not set on request.")
+	errUpdateNameNotSet       = serviceerror.NewInvalidArgument("Update name is not set on request.")
+	errUpdateIDTooLong        = serviceerror.NewInvalidArgument("UpdateId length exceeds limit.")
+	errUpdateRefNotSet        = serviceerror.NewInvalidArgument("UpdateRef is not set on request.")
+	errUpdateWaitPolicyNotSet = serviceerror.NewInvalidArgument("WaitPolicy is not set on request.")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 
@@ -91,9 +104,17 @@ var (
 	errInvalidRemoteClusterInfo                       = "Unable connect to remote cluster with invalid config: %v."
 	errUnableToStoreClusterInfo                       = "Unable to persist cluster info with error: %v."
 	errUnableToDeleteClusterInfo                      = "Unable to delete cluster info with error: %v."
+	errUnableToGetNamespaceInfoMessage                = "Unable to get namespace info with error: %v"
+	errUnableToCreateFrontendClientMessage            = "Unable to create frontend client with error: %v."
+	errTooManySearchAttributesMessage                 = "Unable to create search attributes: cannot have more than %d search attribute of type %s."
 
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
 
-	errBatchAPINotAllowed = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
+	errBatchAPINotAllowed                = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
+	errBatchOpsWorkflowFilterNotSet      = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are not set on request.")
+	errBatchOpsWorkflowFiltersNotAllowed = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are both set on request. Only one of them is allowed.")
+	errBatchOpsMaxWorkflowExecutionCount = serviceerror.NewInvalidArgument("Workflow executions count exceeded.")
+
+	errUpdateWorkflowExecutionAPINotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
 )

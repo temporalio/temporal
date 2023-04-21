@@ -26,8 +26,8 @@ package visibility
 
 import (
 	"context"
-	"strings"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -60,8 +60,25 @@ func (v *visibilityManagerDual) Close() {
 	v.secondaryVisibilityManager.Close()
 }
 
-func (v *visibilityManagerDual) GetName() string {
-	return strings.Join([]string{v.visibilityManager.GetName(), v.secondaryVisibilityManager.GetName()}, ",")
+func (v *visibilityManagerDual) GetReadStoreName(nsName namespace.Name) string {
+	return v.managerSelector.readManager(nsName).GetReadStoreName(nsName)
+}
+
+func (v *visibilityManagerDual) GetStoreNames() []string {
+	return append(v.visibilityManager.GetStoreNames(), v.secondaryVisibilityManager.GetStoreNames()...)
+}
+
+func (v *visibilityManagerDual) HasStoreName(stName string) bool {
+	for _, sn := range v.GetStoreNames() {
+		if sn == stName {
+			return true
+		}
+	}
+	return false
+}
+
+func (v *visibilityManagerDual) GetIndexName() string {
+	return v.visibilityManager.GetIndexName()
 }
 
 func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(

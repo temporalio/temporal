@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -66,7 +67,7 @@ const (
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
 
-	ioTimeout = 5 * time.Second
+	ioTimeout = 5 * time.Second * debug.TimeoutMultiplier
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
@@ -131,23 +132,23 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status            int32
-		taskQueueID       *taskQueueID
-		taskQueueKind     enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
-		config            *taskQueueConfig
-		db                *taskQueueDB
-		taskWriter        *taskWriter
-		taskReader        *taskReader // reads tasks from db and async matches it with poller
-		liveness          *liveness
-		taskGC            *taskGC
-		taskAckManager    ackManager   // tracks ackLevel for delivered messages
-		matcher           *TaskMatcher // for matching a task producer with a poller
-		namespaceRegistry namespace.Registry
-		logger            log.Logger
-		matchingClient    matchingservice.MatchingServiceClient
-		metricsClient     metrics.Client
-		namespace         namespace.Name
-		metricScope       metrics.Scope // namespace/taskqueue tagged metric scope
+		status               int32
+		taskQueueID          *taskQueueID
+		taskQueueKind        enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		config               *taskQueueConfig
+		db                   *taskQueueDB
+		taskWriter           *taskWriter
+		taskReader           *taskReader // reads tasks from db and async matches it with poller
+		liveness             *liveness
+		taskGC               *taskGC
+		taskAckManager       ackManager   // tracks ackLevel for delivered messages
+		matcher              *TaskMatcher // for matching a task producer with a poller
+		namespaceRegistry    namespace.Registry
+		logger               log.Logger
+		matchingClient       matchingservice.MatchingServiceClient
+		metricsHandler       metrics.Handler
+		namespace            namespace.Name
+		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -203,20 +204,20 @@ func newTaskQueueManager(
 
 	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
 	logger := log.With(e.logger,
-		tag.WorkflowTaskQueueName(taskQueue.name),
+		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
 		tag.WorkflowNamespace(nsName.String()))
-	metricsScope := metrics.GetPerTaskQueueScope(
-		e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
+	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
+		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType)),
 		nsName.String(),
-		taskQueue.name,
+		taskQueue.FullName(),
 		taskQueueKind,
-	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
+	)
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingClient,
-		metricsClient:        e.metricsClient,
+		metricsHandler:       e.metricsHandler,
 		taskQueueID:          taskQueue,
 		taskQueueKind:        taskQueueKind,
 		logger:               logger,
@@ -229,7 +230,7 @@ func newTaskQueueManager(
 		signalFatalProblem:   e.unloadTaskQueue,
 		clusterMeta:          clusterMeta,
 		namespace:            nsName,
-		metricScope:          metricsScope,
+		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),
 		metadataInitialFetch: future.NewFuture[struct{}](),
 		metadataPoller: metadataPoller{
@@ -252,7 +253,7 @@ func newTaskQueueManager(
 	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
 		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, taskQueue, taskQueueKind, e.matchingClient)
 	}
-	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.metricScope)
+	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
 		opt(tlMgr)
 	}
@@ -269,7 +270,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	}
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
-		c.metricScope.IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
+		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.GetMetricName()).Record(1)
 		c.signalFatalProblem(c)
 		return true
 	}
@@ -289,7 +290,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.taskReader.Start()
 	go c.fetchMetadataFromRootPartitionOnInit(context.TODO())
 	c.logger.Info("", tag.LifeCycleStarted)
-	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
+	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) Stop() {
@@ -308,7 +309,9 @@ func (c *taskQueueManagerImpl) Stop() {
 		ctx, cancel := c.newIOContext()
 		defer cancel()
 
-		c.db.UpdateState(ctx, ackLevel)
+		if err := c.db.UpdateState(ctx, ackLevel); err != nil {
+			c.logger.Error("Failed to update task queue state", tag.Error(err))
+		}
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.metadataPoller.Stop()
@@ -316,7 +319,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
-	c.metricScope.IncCounter(metrics.TaskQueueStoppedCounter)
+	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -344,7 +347,7 @@ func (c *taskQueueManagerImpl) AddTask(
 
 	if c.QueueID().IsRoot() && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
-		c.metricScope.IncCounter(metrics.NoRecentPollerTasksPerTaskQueueCounter)
+		c.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 	}
 
 	taskInfo := params.taskInfo
@@ -492,7 +495,7 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 			}
 			wg.Add(1)
 			go func(i int, tqt enumspb.TaskQueueType) {
-				tq := c.taskQueueID.mkName(i)
+				tq := c.taskQueueID.WithPartition(i).FullName()
 				_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
 					&matchingservice.InvalidateTaskQueueMetadataRequest{
 						NamespaceId:    c.taskQueueID.namespaceID.String(),
@@ -584,7 +587,7 @@ func (c *taskQueueManagerImpl) String() string {
 		buf.WriteString("Workflow")
 	}
 	rangeID := c.db.RangeID()
-	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.taskQueueID.name)
+	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.taskQueueID.FullName())
 	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
 	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
 	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
@@ -619,7 +622,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 			c.logger.Error("Persistent store operation failure",
 				tag.StoreOperationStopTaskQueue,
 				tag.Error(err),
-				tag.WorkflowTaskQueueName(c.taskQueueID.name),
+				tag.WorkflowTaskQueueName(c.taskQueueID.FullName()),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
 			c.signalFatalProblem(c)
 			return
@@ -745,7 +748,7 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	}
 	curHash := HashVersioningData(curDat)
 
-	rootTqName := c.taskQueueID.GetRoot()
+	rootTqName := c.taskQueueID.Root().FullName()
 	if len(curHash) == 0 {
 		// if we have no data, make sure we send a sigil value, so it's known we desire versioning data
 		curHash = []byte{0}

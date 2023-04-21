@@ -25,6 +25,7 @@
 package batcher
 
 import (
+	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
@@ -56,9 +57,10 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsClient metrics.Client
-		Logger        log.Logger
-		ClientFactory sdk.ClientFactory
+		MetricsHandler metrics.Handler
+		Logger         log.Logger
+		ClientFactory  sdk.ClientFactory
+		FrontendClient workflowservice.WorkflowServiceClient
 	}
 
 	fxResult struct {
@@ -92,7 +94,7 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 	}
 }
 
-func (s *workerComponent) Register(worker sdkworker.Worker, ns *namespace.Namespace) {
+func (s *workerComponent) Register(worker sdkworker.Worker, ns *namespace.Namespace, _ workercommon.RegistrationDetails) {
 	worker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	worker.RegisterActivity(s.activities(ns.Name(), ns.ID()))
 }

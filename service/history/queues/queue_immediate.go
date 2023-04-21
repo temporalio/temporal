@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/service/history/shard"
+	hshard "go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -51,17 +51,18 @@ type (
 )
 
 func NewImmediateQueue(
-	shard shard.Context,
+	shard hshard.Context,
 	category tasks.Category,
 	scheduler Scheduler,
+	rescheduler Rescheduler,
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
 	hostRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *immediateQueue {
-	paginationFnProvider := func(r Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(readerID int32, r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			ctx, cancel := newQueueIOContext()
 			defer cancel()
@@ -69,6 +70,7 @@ func NewImmediateQueue(
 			request := &persistence.GetHistoryTasksRequest{
 				ShardID:             shard.GetShardID(),
 				TaskCategory:        category,
+				ReaderID:            readerID,
 				InclusiveMinTaskKey: r.InclusiveMin,
 				ExclusiveMaxTaskKey: r.ExclusiveMax,
 				BatchSize:           options.BatchSize(),
@@ -90,10 +92,12 @@ func NewImmediateQueue(
 			category,
 			paginationFnProvider,
 			scheduler,
+			rescheduler,
 			priorityAssigner,
 			executor,
 			options,
 			hostRateLimiter,
+			NoopReaderCompletionFn,
 			logger,
 			metricsHandler,
 		),
@@ -135,7 +139,7 @@ func (p *immediateQueue) Stop() {
 	p.queueBase.Stop()
 }
 
-func (p *immediateQueue) NotifyNewTasks(_ string, tasks []tasks.Task) {
+func (p *immediateQueue) NotifyNewTasks(tasks []tasks.Task) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -146,13 +150,19 @@ func (p *immediateQueue) NotifyNewTasks(_ string, tasks []tasks.Task) {
 func (p *immediateQueue) processEventLoop() {
 	defer p.shutdownWG.Done()
 
-	pollTimer := time.NewTimer(backoff.JitDuration(
+	pollTimer := time.NewTimer(backoff.Jitter(
 		p.options.MaxPollInterval(),
 		p.options.MaxPollIntervalJitterCoefficient(),
 	))
 	defer pollTimer.Stop()
 
 	for {
+		select {
+		case <-p.shutdownCh:
+			return
+		default:
+		}
+
 		select {
 		case <-p.shutdownCh:
 			return
@@ -170,8 +180,7 @@ func (p *immediateQueue) processEventLoop() {
 
 func (p *immediateQueue) processPollTimer(pollTimer *time.Timer) {
 	p.processNewRange()
-
-	pollTimer.Reset(backoff.JitDuration(
+	pollTimer.Reset(backoff.Jitter(
 		p.options.MaxPollInterval(),
 		p.options.MaxPollIntervalJitterCoefficient(),
 	))

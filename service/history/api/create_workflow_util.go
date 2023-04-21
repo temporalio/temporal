@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -98,14 +99,30 @@ func NewWorkflowWithSignal(
 			return nil, err
 		}
 	}
-
+	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
 	// Generate first workflow task event if not child WF and no first workflow task backoff
-	if err := GenerateFirstWorkflowTask(
+	scheduledEventID, err := GenerateFirstWorkflowTask(
 		newMutableState,
 		startRequest.ParentExecutionInfo,
 		startEvent,
-	); err != nil {
+		requestEagerExecution,
+	)
+	if err != nil {
 		return nil, err
+	}
+
+	// If first workflow task should back off (e.g. cron or workflow retry) a workflow task will not be scheduled.
+	if requestEagerExecution && newMutableState.HasPendingWorkflowTask() {
+		_, _, err = newMutableState.AddWorkflowTaskStartedEvent(
+			scheduledEventID,
+			startRequest.StartRequest.RequestId,
+			startRequest.StartRequest.TaskQueue,
+			startRequest.StartRequest.Identity,
+		)
+		if err != nil {
+			// Unable to add WorkflowTaskStarted event to history
+			return nil, err
+		}
 	}
 
 	newWorkflowContext := workflow.NewContext(
@@ -117,7 +134,7 @@ func NewWorkflowWithSignal(
 		),
 		shard.GetLogger(),
 	)
-	return NewWorkflowContext(newWorkflowContext, workflow.NoopReleaseFn, newMutableState), nil
+	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
 }
 
 func CreateMutableState(
@@ -145,17 +162,13 @@ func GenerateFirstWorkflowTask(
 	mutableState workflow.MutableState,
 	parentInfo *workflowspb.ParentExecutionInfo,
 	startEvent *historypb.HistoryEvent,
-) error {
-
+	bypassTaskGeneration bool,
+) (int64, error) {
 	if parentInfo == nil {
 		// WorkflowTask is only created when it is not a Child Workflow and no backoff is needed
-		if err := mutableState.AddFirstWorkflowTaskScheduled(
-			startEvent,
-		); err != nil {
-			return err
-		}
+		return mutableState.AddFirstWorkflowTaskScheduled(nil, startEvent, bypassTaskGeneration)
 	}
-	return nil
+	return 0, nil
 }
 
 func NewWorkflowVersionCheck(
@@ -170,10 +183,11 @@ func NewWorkflowVersionCheck(
 	if prevLastWriteVersion > newMutableState.GetCurrentVersion() {
 		clusterMetadata := shard.GetClusterMetadata()
 		namespaceEntry := newMutableState.GetNamespaceEntry()
+		clusterName := clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion)
 		return serviceerror.NewNamespaceNotActive(
 			namespaceEntry.Name().String(),
 			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
+			clusterName,
 		)
 	}
 	return nil
@@ -200,15 +214,15 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(operation)),
+		interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.CommandTypeTag(operation)),
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
 		return err
 	}
 
-	scope := interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(operation))
-	scope.RecordDistribution(metrics.MemoSize, workflowMemoSize)
+	handler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.CommandTypeTag(operation))
+	handler.Histogram(metrics.MemoSize.GetMetricName(), metrics.MemoSize.GetMetricUnit()).Record(int64(workflowMemoSize))
 	if err := common.CheckEventBlobSizeLimit(
 		workflowMemoSize,
 		config.MemoSizeLimitWarn(namespaceName),
@@ -216,7 +230,7 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		scope,
+		handler,
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
@@ -270,7 +284,6 @@ func ValidateStartWorkflowExecutionRequest(
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
 		return err
 	}
-
 	if err := ValidateStart(
 		ctx,
 		shard,
@@ -288,9 +301,9 @@ func ValidateStartWorkflowExecutionRequest(
 
 func OverrideStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
-	metricsScope int,
+	operation string,
 	shard shard.Context,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 ) {
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
@@ -303,10 +316,11 @@ func OverrideStartWorkflowExecutionRequest(
 	)
 	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
 		request.WorkflowRunTimeout = timestamp.DurationPtr(workflowRunTimeout)
-		metricsClient.Scope(
-			metricsScope,
+		metricsHandler.Counter(metrics.WorkflowRunTimeoutOverrideCount.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowRunTimeoutOverrideCount)
+		)
 	}
 
 	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
@@ -317,9 +331,10 @@ func OverrideStartWorkflowExecutionRequest(
 	)
 	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
 		request.WorkflowTaskTimeout = timestamp.DurationPtr(workflowTaskStartToCloseTimeout)
-		metricsClient.Scope(
-			metricsScope,
+		metricsHandler.Counter(metrics.WorkflowTaskTimeoutOverrideCount.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowTaskTimeoutOverrideCount)
+		)
 	}
 }

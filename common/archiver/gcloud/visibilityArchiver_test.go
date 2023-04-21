@@ -34,6 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/common/searchattribute"
 
@@ -47,16 +49,19 @@ import (
 )
 
 const (
-	testWorkflowTypeName    = "test-workflow-type"
-	exampleVisibilityRecord = `{"namespaceId":"test-namespace-id","namespace":"test-namespace","workflowId":"test-workflow-id","runId":"test-run-id","workflowTypeName":"test-workflow-type","startTime":"2020-02-05T09:56:14.804475Z","closeTime":"2020-02-05T09:56:15.946478Z","status":"Completed","historyLength":36,"memo":null,"searchAttributes":null,"historyArchivalUri":"gs://my-bucket-cad/temporal_archival/development"}`
+	testWorkflowTypeName     = "test-workflow-type"
+	exampleVisibilityRecord  = `{"namespaceId":"test-namespace-id","namespace":"test-namespace","workflowId":"test-workflow-id","runId":"test-run-id","workflowTypeName":"test-workflow-type","startTime":"2020-02-05T09:56:14.804475Z","closeTime":"2020-02-05T09:56:15.946478Z","status":"Completed","historyLength":36,"memo":null,"searchAttributes":null,"historyArchivalUri":"gs://my-bucket-cad/temporal_archival/development"}`
+	exampleVisibilityRecord2 = `{"namespaceId":"test-namespace-id","namespace":"test-namespace",
+"workflowId":"test-workflow-id2","runId":"test-run-id","workflowTypeName":"test-workflow-type",
+"startTime":"2020-02-05T09:56:14.804475Z","closeTime":"2020-02-05T09:56:15.946478Z","status":"Completed","historyLength":36,"memo":null,"searchAttributes":null,"historyArchivalUri":"gs://my-bucket-cad/temporal_archival/development"}`
 )
 
 func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NoopClient,
+		Logger:         log.NewNoopLogger(),
+		MetricsHandler: metrics.NoopMetricsHandler,
 	}
 	s.expectedVisibilityRecords = []*archiverspb.VisibilityRecord{
 		{
@@ -228,9 +233,11 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidToken() {
 	mockParser := NewMockQueryParser(s.controller)
 	startTime, _ := time.Parse(time.RFC3339, "2019-10-04T11:00:00+00:00")
 	closeTime := startTime.Add(time.Hour)
+	precision := PrecisionDay
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime: closeTime,
-		startTime: startTime,
+		closeTime:       closeTime,
+		startTime:       startTime,
+		searchPrecision: &precision,
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -257,7 +264,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	s.NoError(err)
 
 	mockParser := NewMockQueryParser(s.controller)
-	dayPrecision := string("Day")
+	dayPrecision := "Day"
 	closeTime, _ := time.Parse(time.RFC3339, "2019-10-04T11:00:00+00:00")
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       closeTime,
@@ -338,4 +345,123 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
 	s.NoError(err)
 	s.Equal(ei, response.Executions[0])
+}
+
+func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_InvalidNamespace() {
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
+	s.NoError(err)
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
+	arc := newVisibilityArchiver(s.container, storageWrapper)
+	req := &archiver.QueryVisibilityRequest{
+		NamespaceID:   "",
+		PageSize:      1,
+		NextPageToken: nil,
+		Query:         "",
+	}
+	_, err = arc.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap)
+
+	var svcErr *serviceerror.InvalidArgument
+
+	s.ErrorAs(err, &svcErr)
+}
+
+func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_ZeroPageSize() {
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
+	s.NoError(err)
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
+	arc := newVisibilityArchiver(s.container, storageWrapper)
+
+	req := &archiver.QueryVisibilityRequest{
+		NamespaceID:   testNamespaceID,
+		PageSize:      0,
+		NextPageToken: nil,
+		Query:         "",
+	}
+	_, err = arc.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap)
+
+	var svcErr *serviceerror.InvalidArgument
+
+	s.ErrorAs(err, &svcErr)
+}
+
+func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
+	s.NoError(err)
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(true, nil).Times(2)
+	storageWrapper.EXPECT().QueryWithFilters(
+		gomock.Any(),
+		URI,
+		gomock.Any(),
+		1,
+		0,
+		gomock.Any(),
+	).Return(
+		[]string{"closeTimeout_2020-02-05T09:56:14Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility"},
+		false,
+		1,
+		nil,
+	)
+	storageWrapper.EXPECT().QueryWithFilters(
+		gomock.Any(),
+		URI,
+		gomock.Any(),
+		1,
+		1,
+		gomock.Any(),
+	).Return(
+		[]string{"closeTimeout_2020-02-05T09:56:14Z_test-workflow-id2_MobileOnlyWorkflow::processMobileOnly_test-run" +
+			"-id.visibility"},
+		true,
+		2,
+		nil,
+	)
+	storageWrapper.EXPECT().Get(
+		gomock.Any(),
+		URI,
+		"test-namespace-id/closeTimeout_2020-02-05T09:56:14Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility",
+	).Return([]byte(exampleVisibilityRecord), nil)
+	storageWrapper.EXPECT().Get(gomock.Any(), URI,
+		"test-namespace-id/closeTimeout_2020-02-05T09:56:14Z_test-workflow-id2_MobileOnlyWorkflow"+
+			"::processMobileOnly_test-run-id.visibility").Return([]byte(exampleVisibilityRecord2), nil)
+
+	arc := newVisibilityArchiver(s.container, storageWrapper)
+
+	response := &archiver.QueryVisibilityResponse{
+		Executions:    nil,
+		NextPageToken: nil,
+	}
+
+	limit := 10
+	executions := make(map[string]*workflow.WorkflowExecutionInfo, limit)
+
+	numPages := 2
+	for i := 0; i < numPages; i++ {
+		req := &archiver.QueryVisibilityRequest{
+			NamespaceID:   testNamespaceID,
+			PageSize:      1,
+			NextPageToken: response.NextPageToken,
+			Query:         "",
+		}
+		response, err = arc.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap)
+		s.NoError(err)
+		s.NotNil(response)
+		s.Len(response.Executions, 1)
+
+		s.Equal(
+			i == numPages-1,
+			response.NextPageToken == nil,
+			"should have no next page token on the last iteration",
+		)
+
+		for _, execution := range response.Executions {
+			key := execution.Execution.GetWorkflowId() +
+				"/" + execution.Execution.GetRunId() +
+				"/" + execution.CloseTime.String()
+			executions[key] = execution
+		}
+	}
+	s.Len(executions, 2, "there should be exactly 2 unique executions")
 }

@@ -31,6 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
@@ -43,7 +45,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/configs"
-	"golang.org/x/exp/maps"
 )
 
 const (
@@ -118,7 +119,6 @@ func NewTaskFetcherFactory(
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 ) TaskFetcherFactory {
-
 	return &taskFetcherFactoryImpl{
 		clusterMetadata: clusterMetadata,
 		clientBean:      clientBean,
@@ -356,7 +356,7 @@ func (f *replicationTaskFetcherWorker) Stop() {
 
 // fetchTasks collects getReplicationTasks request from shards and send out aggregated request to source frontend.
 func (f *replicationTaskFetcherWorker) fetchTasks() {
-	timer := time.NewTimer(backoff.JitDuration(
+	timer := time.NewTimer(backoff.Jitter(
 		f.config.ReplicationTaskFetcherAggregationInterval(),
 		f.config.ReplicationTaskFetcherTimerJitterCoefficient(),
 	))
@@ -371,12 +371,12 @@ func (f *replicationTaskFetcherWorker) fetchTasks() {
 			// When timer fires, we collect all the requests we have so far and attempt to send them to remote.
 			err := f.getMessages()
 			if err != nil {
-				timer.Reset(backoff.JitDuration(
+				timer.Reset(backoff.Jitter(
 					f.config.ReplicationTaskFetcherErrorRetryWait(),
 					f.config.ReplicationTaskFetcherTimerJitterCoefficient(),
 				))
 			} else {
-				timer.Reset(backoff.JitDuration(
+				timer.Reset(backoff.Jitter(
 					f.config.ReplicationTaskFetcherAggregationInterval(),
 					f.config.ReplicationTaskFetcherTimerJitterCoefficient(),
 				))
@@ -419,7 +419,7 @@ func (f *replicationTaskFetcherWorker) getMessages() error {
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(fetchTaskRequestTimeout)
 	defer cancel()
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 
 	request := &adminservice.GetReplicationMessagesRequest{
 		Tokens:      tokens,

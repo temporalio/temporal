@@ -50,7 +50,7 @@ func newQuery(
 }
 
 func (q *query) Exec() (retError error) {
-	defer func() { q.handleError(retError) }()
+	defer func() { q.session.handleError(retError) }()
 
 	return q.gocqlQuery.Exec()
 }
@@ -58,7 +58,7 @@ func (q *query) Exec() (retError error) {
 func (q *query) Scan(
 	dest ...interface{},
 ) (retError error) {
-	defer func() { q.handleError(retError) }()
+	defer func() { q.session.handleError(retError) }()
 
 	return q.gocqlQuery.Scan(dest...)
 }
@@ -66,7 +66,7 @@ func (q *query) Scan(
 func (q *query) ScanCAS(
 	dest ...interface{},
 ) (_ bool, retError error) {
-	defer func() { q.handleError(retError) }()
+	defer func() { q.session.handleError(retError) }()
 
 	return q.gocqlQuery.ScanCAS(dest...)
 }
@@ -74,7 +74,7 @@ func (q *query) ScanCAS(
 func (q *query) MapScan(
 	m map[string]interface{},
 ) (retError error) {
-	defer func() { q.handleError(retError) }()
+	defer func() { q.session.handleError(retError) }()
 
 	return q.gocqlQuery.MapScan(m)
 }
@@ -82,14 +82,14 @@ func (q *query) MapScan(
 func (q *query) MapScanCAS(
 	dest map[string]interface{},
 ) (_ bool, retError error) {
-	defer func() { q.handleError(retError) }()
+	defer func() { q.session.handleError(retError) }()
 
 	return q.gocqlQuery.MapScanCAS(dest)
 }
 
 func (q *query) Iter() Iter {
 	iter := q.gocqlQuery.Iter()
-	return iter
+	return newIter(q.session, iter)
 }
 
 func (q *query) PageSize(n int) Query {
@@ -123,15 +123,4 @@ func (q *query) WithContext(ctx context.Context) Query {
 func (q *query) Bind(v ...interface{}) Query {
 	q.gocqlQuery.Bind(v...)
 	return newQuery(q.session, q.gocqlQuery)
-}
-
-func (q *query) handleError(
-	err error,
-) {
-	switch err {
-	case gocql.ErrNoConnections:
-		q.session.refresh()
-	default:
-		// noop
-	}
 }

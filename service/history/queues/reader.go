@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -60,6 +61,7 @@ type (
 		CompactSlices(SlicePredicate)
 		ShrinkSlices()
 
+		Notify()
 		Pause(time.Duration)
 	}
 
@@ -75,6 +77,8 @@ type (
 
 	SlicePredicate func(s Slice) bool
 
+	ReaderCompletionFn func(readerID int32)
+
 	ReaderImpl struct {
 		sync.Mutex
 
@@ -85,8 +89,9 @@ type (
 		timeSource     clock.TimeSource
 		ratelimiter    quotas.RequestRateLimiter
 		monitor        Monitor
+		completionFn   ReaderCompletionFn
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 
 		status     int32
 		shutdownCh chan struct{}
@@ -99,8 +104,14 @@ type (
 		throttleTimer *time.Timer
 		retrier       backoff.Retrier
 
-		rateLimiterRequest quotas.Request
+		rateLimitContext       context.Context
+		rateLimitContextCancel context.CancelFunc
+		rateLimiterRequest     quotas.Request
 	}
+)
+
+var (
+	NoopReaderCompletionFn = func(_ int32) {}
 )
 
 func NewReader(
@@ -112,8 +123,9 @@ func NewReader(
 	timeSource clock.TimeSource,
 	ratelimiter quotas.RequestRateLimiter,
 	monitor Monitor,
+	completionFn ReaderCompletionFn,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *ReaderImpl {
 
 	sliceList := list.New()
@@ -122,6 +134,7 @@ func NewReader(
 	}
 	monitor.SetSliceCount(readerID, len(slices))
 
+	rateLimitContext, rateLimitContextCancel := context.WithCancel(context.Background())
 	return &ReaderImpl{
 		readerID:       readerID,
 		options:        options,
@@ -130,6 +143,7 @@ func NewReader(
 		timeSource:     timeSource,
 		ratelimiter:    ratelimiter,
 		monitor:        monitor,
+		completionFn:   completionFn,
 		logger:         log.With(logger, tag.QueueReaderID(readerID)),
 		metricsHandler: metricsHandler,
 
@@ -145,7 +159,9 @@ func NewReader(
 			backoff.SystemClock,
 		),
 
-		rateLimiterRequest: newReaderRequest(readerID),
+		rateLimitContext:       rateLimitContext,
+		rateLimitContextCancel: rateLimitContextCancel,
+		rateLimiterRequest:     newReaderRequest(readerID),
 	}
 }
 
@@ -178,6 +194,7 @@ func (r *ReaderImpl) Stop() {
 	r.monitor.RemoveReader(r.readerID)
 
 	close(r.shutdownCh)
+	r.rateLimitContextCancel()
 	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
 		r.logger.Warn("queue reader shutdown timed out waiting for event loop", tag.LifeCycleStopTimedout)
 	}
@@ -232,6 +249,10 @@ func (r *ReaderImpl) SplitSlices(splitter SliceSplitter) {
 }
 
 func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
+	if len(incomingSlices) == 0 {
+		return
+	}
+
 	validateSlicesOrderedDisjoint(incomingSlices)
 
 	r.Lock()
@@ -362,6 +383,18 @@ func (r *ReaderImpl) ShrinkSlices() {
 	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
 }
 
+func (r *ReaderImpl) Notify() {
+	r.Lock()
+	defer r.Unlock()
+
+	if r.throttleTimer != nil {
+		r.throttleTimer.Stop()
+		r.throttleTimer = nil
+	}
+
+	r.notify()
+}
+
 func (r *ReaderImpl) Pause(duration time.Duration) {
 	r.Lock()
 	defer r.Unlock()
@@ -389,6 +422,13 @@ func (r *ReaderImpl) eventLoop() {
 	}()
 
 	for {
+		// prioritize shutdown
+		select {
+		case <-r.shutdownCh:
+			return
+		default:
+		}
+
 		select {
 		case <-r.shutdownCh:
 			return
@@ -399,7 +439,14 @@ func (r *ReaderImpl) eventLoop() {
 }
 
 func (r *ReaderImpl) loadAndSubmitTasks() {
-	_ = r.ratelimiter.Wait(context.Background(), r.rateLimiterRequest)
+	if err := r.ratelimiter.Wait(r.rateLimitContext, r.rateLimiterRequest); err != nil {
+		if r.rateLimitContext.Err() != nil {
+			return
+		}
+
+		// this should never happen
+		r.logger.Error("Queue reader rate limiter burst size is smaller than required token count")
+	}
 
 	r.Lock()
 	defer r.Unlock()
@@ -413,6 +460,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	}
 
 	if r.nextReadSlice == nil {
+		r.completionFn(r.readerID)
 		return
 	}
 
@@ -443,7 +491,11 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 
 	if r.nextReadSlice = r.nextReadSlice.Next(); r.nextReadSlice != nil {
 		r.notify()
+		return
 	}
+
+	// no more task to load, trigger completion callback
+	r.completionFn(r.readerID)
 }
 
 func (r *ReaderImpl) resetNextReadSliceLocked() {
@@ -457,7 +509,11 @@ func (r *ReaderImpl) resetNextReadSliceLocked() {
 
 	if r.nextReadSlice != nil {
 		r.notify()
+		return
 	}
+
+	// no more task to load, trigger completion callback
+	r.completionFn(r.readerID)
 }
 
 func (r *ReaderImpl) notify() {
@@ -471,8 +527,9 @@ func (r *ReaderImpl) submit(
 	executable Executable,
 ) {
 	now := r.timeSource.Now()
-	// Please check the comment in queue_scheduled.go for why adding 1ms to the fire time.
-	if fireTime := executable.GetKey().FireTime.Add(scheduledTaskPrecision); now.Before(fireTime) {
+	// Persistence layer may lose precision when persisting the task, which essentially move
+	// task fire time forward. Need to account for that when submitting the task.
+	if fireTime := executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision); now.Before(fireTime) {
 		r.rescheduler.Add(executable, fireTime)
 		return
 	}

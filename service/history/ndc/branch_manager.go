@@ -41,6 +41,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (
@@ -169,7 +170,7 @@ func (r *BranchMgrImpl) flushBufferedEvents(
 	// check whether there are buffered events, if so, flush it
 	// NOTE: buffered events does not show in version history or next event id
 	if !r.mutableState.HasBufferedEvents() {
-		if r.mutableState.HasTransientWorkflowTask() {
+		if r.mutableState.HasStartedWorkflowTask() && r.mutableState.IsTransientWorkflowTask() {
 			if err := r.mutableState.ClearTransientWorkflowTask(); err != nil {
 				return nil, 0, err
 			}
@@ -184,7 +185,7 @@ func (r *BranchMgrImpl) flushBufferedEvents(
 		r.clusterMetadata,
 		r.context,
 		r.mutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 	if err := targetWorkflow.FlushBufferedEvents(); err != nil {
 		return nil, 0, err
@@ -192,7 +193,6 @@ func (r *BranchMgrImpl) flushBufferedEvents(
 	// the workflow must be updated as active, to send out replication tasks
 	if err := targetWorkflow.context.UpdateWorkflowExecutionAsActive(
 		ctx,
-		r.shard.GetTimeSource().Now(),
 	); err != nil {
 		return nil, 0, err
 	}
@@ -255,6 +255,7 @@ func (r *BranchMgrImpl) createNewBranch(
 		ForkNodeID:      baseBranchLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),
 		ShardID:         shardID,
+		NamespaceID:     namespaceID,
 	})
 	if err != nil {
 		return 0, err

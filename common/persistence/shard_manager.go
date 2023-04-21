@@ -84,7 +84,7 @@ func (m *shardManagerImpl) GetOrCreateShard(
 	if err != nil {
 		return nil, err
 	}
-	shardInfo, err := m.serializer.ShardInfoFromBlob(internalResp.ShardInfo, m.shardStore.GetClusterName())
+	shardInfo, err := m.serializer.ShardInfoFromBlob(internalResp.ShardInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +107,7 @@ func (m *shardManagerImpl) UpdateShard(
 	internalRequest := &InternalUpdateShardRequest{
 		ShardID:         request.ShardInfo.GetShardId(),
 		RangeID:         request.ShardInfo.GetRangeId(),
+		Owner:           request.ShardInfo.GetOwner(),
 		ShardInfo:       shardInfoBlob,
 		PreviousRangeID: request.PreviousRangeID,
 	}

@@ -25,7 +25,7 @@
 package resource
 
 import (
-	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"os"
@@ -33,6 +33,7 @@ import (
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -48,17 +49,19 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/deadlock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/membership/ringpop"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
@@ -67,14 +70,11 @@ import (
 )
 
 type (
-	SnTaggedLogger       log.Logger
-	ThrottledLogger      log.Logger
 	ThrottledLoggerRpsFn quotas.RateFn
 	NamespaceLogger      log.Logger
-	ServiceName          string
 	HostName             string
 	InstanceID           string
-	ServiceNames         map[string]struct{}
+	ServiceNames         map[primitives.ServiceName]struct{}
 
 	MatchingRawClient matchingservice.MatchingServiceClient
 	MatchingClient    matchingservice.MatchingServiceClient
@@ -82,9 +82,9 @@ type (
 	RuntimeMetricsReporterParams struct {
 		fx.In
 
-		Provider   metrics.MetricsHandler
-		Logger     SnTaggedLogger
-		InstanceID InstanceID `optional:"true"`
+		MetricHandler metrics.Handler
+		Logger        log.SnTaggedLogger
+		InstanceID    InstanceID `optional:"true"`
 	}
 )
 
@@ -93,14 +93,18 @@ type (
 // See LifetimeHooksModule for detail
 var Module = fx.Options(
 	persistenceClient.Module,
-	fx.Provide(SnTaggedLoggerProvider),
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
+	fx.Provide(SearchAttributeMapperProviderProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
 	namespace.RegistryLifetimeHooksModule,
+	fx.Provide(fx.Annotate(
+		func(p namespace.Registry) common.Pingable { return p },
+		fx.ResultTags(`group:"deadlockDetectorRoots"`),
+	)),
 	fx.Provide(serialization.NewSerializer),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
@@ -117,28 +121,29 @@ var Module = fx.Options(
 	membership.GRPCResolverModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
-	fx.Provide(MetricsClientProvider),
+	fx.Provide(health.NewServer),
+	deadlock.Module,
+	config.Module,
 )
 
 var DefaultOptions = fx.Options(
-	fx.Provide(MembershipMonitorProvider),
+	ringpop.Module,
 	fx.Provide(RPCFactoryProvider),
 	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(SdkClientFactoryProvider),
-	fx.Provide(SdkWorkerFactoryProvider),
 	fx.Provide(DCRedirectionPolicyProvider),
 )
 
-func SnTaggedLoggerProvider(logger log.Logger, sn ServiceName) SnTaggedLogger {
-	return log.With(logger, tag.Service(string(sn)))
+func DefaultSnTaggedLoggerProvider(logger log.Logger, sn primitives.ServiceName) log.SnTaggedLogger {
+	return log.With(logger, tag.Service(sn))
 }
 
 func ThrottledLoggerProvider(
-	logger SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	fn ThrottledLoggerRpsFn,
-) ThrottledLogger {
+) log.ThrottledLogger {
 	return log.NewThrottledLogger(
 		logger,
 		quotas.RateFn(fn),
@@ -156,6 +161,20 @@ func HostNameProvider() (HostName, error) {
 
 func TimeSourceProvider() clock.TimeSource {
 	return clock.NewRealTimeSource()
+}
+
+func SearchAttributeMapperProviderProvider(
+	saMapper searchattribute.Mapper,
+	namespaceRegistry namespace.Registry,
+	searchAttributeProvider searchattribute.Provider,
+	persistenceConfig *config.Persistence,
+) searchattribute.MapperProvider {
+	return searchattribute.NewMapperProvider(
+		saMapper,
+		namespaceRegistry,
+		searchAttributeProvider,
+		persistenceConfig.IsSQLVisibilityStore(),
+	)
 }
 
 func SearchAttributeProviderProvider(
@@ -181,8 +200,8 @@ func SearchAttributeManagerProvider(
 }
 
 func NamespaceRegistryProvider(
-	logger SnTaggedLogger,
-	metricsClient metrics.Client,
+	logger log.SnTaggedLogger,
+	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -191,7 +210,7 @@ func NamespaceRegistryProvider(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 }
@@ -200,16 +219,16 @@ func ClientFactoryProvider(
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	dynamicCollection *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
-	logger SnTaggedLogger,
-	throttledLogger ThrottledLogger,
+	logger log.SnTaggedLogger,
+	throttledLogger log.ThrottledLogger,
 ) client.Factory {
 	return factoryProvider.NewFactory(
 		rpcFactory,
 		membershipMonitor,
-		metricsClient,
+		metricsHandler,
 		dynamicCollection,
 		persistenceConfig.NumHistoryShards,
 		logger,
@@ -227,58 +246,6 @@ func ClientBeanProvider(
 	)
 }
 
-func MembershipMonitorProvider(
-	lc fx.Lifecycle,
-	clusterMetadataManager persistence.ClusterMetadataManager,
-	logger SnTaggedLogger,
-	cfg *config.Config,
-	svcName ServiceName,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	dc *dynamicconfig.Collection,
-) (membership.Monitor, error) {
-	servicePortMap := make(map[string]int)
-	for sn, sc := range cfg.Services {
-		servicePortMap[sn] = sc.RPC.GRPCPort
-	}
-
-	rpcConfig := cfg.Services[string(svcName)].RPC
-
-	factory, err := ringpop.NewRingpopFactory(
-		&cfg.Global.Membership,
-		string(svcName),
-		servicePortMap,
-		logger,
-		clusterMetadataManager,
-		&rpcConfig,
-		tlsConfigProvider,
-		dc,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	monitor, err := factory.GetMembershipMonitor()
-	if err != nil {
-		return nil, err
-	}
-
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				monitor.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				monitor.Stop()
-				factory.CloseTChannel()
-				return nil
-			},
-		},
-	)
-
-	return monitor, nil
-}
-
 func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
 	frontendRawClient := clientBean.GetFrontendClient()
 	return frontend.NewRetryableClient(
@@ -292,7 +259,7 @@ func RuntimeMetricsReporterProvider(
 	params RuntimeMetricsReporterParams,
 ) *metrics.RuntimeMetricsReporter {
 	return metrics.NewRuntimeMetricsReporter(
-		params.Provider,
+		params.MetricHandler,
 		time.Minute,
 		params.Logger,
 		string(params.InstanceID),
@@ -300,34 +267,34 @@ func RuntimeMetricsReporterProvider(
 }
 
 func VisibilityBootstrapContainerProvider(
-	logger SnTaggedLogger,
-	metricsClient metrics.Client,
+	logger log.SnTaggedLogger,
+	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 ) *archiver.VisibilityBootstrapContainer {
 	return &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
-		MetricsClient:   metricsClient,
+		MetricsHandler:  metricsHandler,
 		ClusterMetadata: clusterMetadata,
 	}
 }
 
 func HistoryBootstrapContainerProvider(
-	logger SnTaggedLogger,
-	metricsClient metrics.Client,
+	logger log.SnTaggedLogger,
+	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 	executionManager persistence.ExecutionManager,
 ) *archiver.HistoryBootstrapContainer {
 	return &archiver.HistoryBootstrapContainer{
 		ExecutionManager: executionManager,
 		Logger:           logger,
-		MetricsClient:    metricsClient,
+		MetricsHandler:   metricsHandler,
 		ClusterMetadata:  clusterMetadata,
 	}
 }
 
 func RegisterBootstrapContainer(
 	archiverProvider provider.ArchiverProvider,
-	serviceName ServiceName,
+	serviceName primitives.ServiceName,
 	visibilityArchiverBootstrapContainer *archiver.VisibilityBootstrapContainer,
 	historyArchiverBootstrapContainer *archiver.HistoryBootstrapContainer,
 ) error {
@@ -363,12 +330,6 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 	)
 }
 
-// TODO: rework to depend on...
-func MetricsClientProvider(logger log.Logger, serviceName ServiceName, provider metrics.MetricsHandler) metrics.Client {
-	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
-	return metrics.NewClient(provider, serviceIdx)
-}
-
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
 	persistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 	return &persistenceConfig
@@ -392,30 +353,22 @@ func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
 func SdkClientFactoryProvider(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	metricsHandler metrics.MetricsHandler,
-	logger SnTaggedLogger,
+	metricsHandler metrics.Handler,
+	logger log.SnTaggedLogger,
 	resolver membership.GRPCResolver,
+	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
-	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
+	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
-		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
+		return nil, err
 	}
-
-	hostPort := cfg.PublicClient.HostPort
-	if hostPort == "" {
-		hostPort = resolver.MakeURL(common.FrontendServiceName)
-	}
-
 	return sdk.NewClientFactory(
-		hostPort,
-		tlsFrontendConfig,
+		frontendURL,
+		frontendTLSConfig,
 		metricsHandler,
 		logger,
+		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
 	), nil
-}
-
-func SdkWorkerFactoryProvider() sdk.WorkerFactory {
-	return sdk.NewWorkerFactory()
 }
 
 func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {
@@ -424,27 +377,73 @@ func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy 
 
 func RPCFactoryProvider(
 	cfg *config.Config,
-	svcName ServiceName,
+	svcName primitives.ServiceName,
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	dc *dynamicconfig.Collection,
 	resolver membership.GRPCResolver,
 	traceInterceptor telemetry.ClientTraceInterceptor,
-) common.RPCFactory {
+) (common.RPCFactory, error) {
 	svcCfg := cfg.Services[string(svcName)]
-	hostPort := cfg.PublicClient.HostPort
-	if hostPort == "" {
-		hostPort = resolver.MakeURL(common.FrontendServiceName)
+	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
+	if err != nil {
+		return nil, err
 	}
 	return rpc.NewFactory(
 		&svcCfg.RPC,
-		string(svcName),
+		svcName,
 		logger,
 		tlsConfigProvider,
-		dc,
-		hostPort,
+		frontendURL,
+		frontendTLSConfig,
 		[]grpc.UnaryClientInterceptor{
 			grpc.UnaryClientInterceptor(traceInterceptor),
 		},
-	)
+	), nil
+}
+
+func getFrontendConnectionDetails(
+	cfg *config.Config,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	resolver membership.GRPCResolver,
+) (string, *tls.Config, error) {
+	// To simplify the static config, we switch default values based on whether the config
+	// defines an "internal-frontend" service. The default for TLS config can be overridden
+	// with publicClient.forceTLSConfig, and the default for hostPort can be overridden by
+	// explicitly setting hostPort to "membership://internal-frontend" or
+	// "membership://frontend".
+	_, hasIFE := cfg.Services[string(primitives.InternalFrontendService)]
+
+	forceTLS := cfg.PublicClient.ForceTLSConfig
+	if forceTLS == config.ForceTLSConfigAuto {
+		if hasIFE {
+			forceTLS = config.ForceTLSConfigInternode
+		} else {
+			forceTLS = config.ForceTLSConfigFrontend
+		}
+	}
+
+	var frontendTLSConfig *tls.Config
+	var err error
+	switch forceTLS {
+	case config.ForceTLSConfigInternode:
+		frontendTLSConfig, err = tlsConfigProvider.GetInternodeClientConfig()
+	case config.ForceTLSConfigFrontend:
+		frontendTLSConfig, err = tlsConfigProvider.GetFrontendClientConfig()
+	default:
+		err = fmt.Errorf("invalid forceTLSConfig")
+	}
+	if err != nil {
+		return "", nil, fmt.Errorf("unable to load TLS configuration: %w", err)
+	}
+
+	frontendURL := cfg.PublicClient.HostPort
+	if frontendURL == "" {
+		if hasIFE {
+			frontendURL = resolver.MakeURL(primitives.InternalFrontendService)
+		} else {
+			frontendURL = resolver.MakeURL(primitives.FrontendService)
+		}
+	}
+
+	return frontendURL, frontendTLSConfig, nil
 }

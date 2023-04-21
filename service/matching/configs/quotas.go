@@ -30,19 +30,19 @@ import (
 
 var (
 	APIToPriority = map[string]int{
-		"AddActivityTask":             0,
-		"AddWorkflowTask":             0,
-		"CancelOutstandingPoll":       0,
-		"DescribeTaskQueue":           0,
-		"ListTaskQueuePartitions":     0,
-		"PollActivityTaskQueue":       0,
-		"PollWorkflowTaskQueue":       0,
-		"QueryWorkflow":               0,
-		"RespondQueryTaskCompleted":   0,
-		"GetWorkerBuildIdOrdering":    0,
-		"UpdateWorkerBuildIdOrdering": 0,
-		"InvalidateTaskQueueMetadata": 0,
-		"GetTaskQueueMetadata":        0,
+		"AddActivityTask":                  0,
+		"AddWorkflowTask":                  0,
+		"CancelOutstandingPoll":            0,
+		"DescribeTaskQueue":                0,
+		"ListTaskQueuePartitions":          0,
+		"PollActivityTaskQueue":            0,
+		"PollWorkflowTaskQueue":            0,
+		"QueryWorkflow":                    0,
+		"RespondQueryTaskCompleted":        0,
+		"GetWorkerBuildIdCompatibility":    0,
+		"UpdateWorkerBuildIdCompatibility": 0,
+		"InvalidateTaskQueueMetadata":      0,
+		"GetTaskQueueMetadata":             0,
 	}
 
 	APIPrioritiesOrdered = []int{0}
@@ -51,9 +51,9 @@ var (
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDefaultIncomingRateLimiter(rateFn)
+		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
 		if priority, ok := APIToPriority[req.API]; ok {

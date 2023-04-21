@@ -26,7 +26,7 @@ package interceptor
 
 import "strings"
 
-func splitMethodName(
+func SplitMethodName(
 	fullMethodName string,
 ) (string, string) {
 	fullMethodName = strings.TrimPrefix(fullMethodName, "/") // remove leading slash

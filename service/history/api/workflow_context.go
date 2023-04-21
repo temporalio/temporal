@@ -25,22 +25,16 @@
 package api
 
 import (
-	"context"
-
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type WorkflowContext interface {
 	GetContext() workflow.Context
 	GetMutableState() workflow.MutableState
-	ReloadMutableState(context.Context) (workflow.MutableState, error)
-	GetReleaseFn() workflow.ReleaseCacheFunc
-
-	GetNamespaceID() namespace.ID
-	GetWorkflowID() string
-	GetRunID() string
+	GetReleaseFn() wcache.ReleaseCacheFunc
 
 	GetNamespaceEntry() *namespace.Namespace
 	GetWorkflowKey() definition.WorkflowKey
@@ -49,7 +43,7 @@ type WorkflowContext interface {
 type WorkflowContextImpl struct {
 	context      workflow.Context
 	mutableState workflow.MutableState
-	releaseFn    workflow.ReleaseCacheFunc
+	releaseFn    wcache.ReleaseCacheFunc
 }
 
 type UpdateWorkflowAction struct {
@@ -72,7 +66,7 @@ var _ WorkflowContext = (*WorkflowContextImpl)(nil)
 
 func NewWorkflowContext(
 	context workflow.Context,
-	releaseFn workflow.ReleaseCacheFunc,
+	releaseFn wcache.ReleaseCacheFunc,
 	mutableState workflow.MutableState,
 ) *WorkflowContextImpl {
 
@@ -91,32 +85,8 @@ func (w *WorkflowContextImpl) GetMutableState() workflow.MutableState {
 	return w.mutableState
 }
 
-func (w *WorkflowContextImpl) ReloadMutableState(
-	ctx context.Context,
-) (workflow.MutableState, error) {
-	w.context.Clear()
-	mutableState, err := w.context.LoadMutableState(ctx)
-	if err != nil {
-		return nil, err
-	}
-	w.mutableState = mutableState
-	return mutableState, nil
-}
-
-func (w *WorkflowContextImpl) GetReleaseFn() workflow.ReleaseCacheFunc {
+func (w *WorkflowContextImpl) GetReleaseFn() wcache.ReleaseCacheFunc {
 	return w.releaseFn
-}
-
-func (w *WorkflowContextImpl) GetNamespaceID() namespace.ID {
-	return w.context.GetNamespaceID()
-}
-
-func (w *WorkflowContextImpl) GetWorkflowID() string {
-	return w.context.GetWorkflowID()
-}
-
-func (w *WorkflowContextImpl) GetRunID() string {
-	return w.context.GetRunID()
 }
 
 func (w *WorkflowContextImpl) GetNamespaceEntry() *namespace.Namespace {
@@ -124,9 +94,5 @@ func (w *WorkflowContextImpl) GetNamespaceEntry() *namespace.Namespace {
 }
 
 func (w *WorkflowContextImpl) GetWorkflowKey() definition.WorkflowKey {
-	return definition.NewWorkflowKey(
-		w.context.GetNamespaceID().String(),
-		w.context.GetWorkflowID(),
-		w.context.GetRunID(),
-	)
+	return w.context.GetWorkflowKey()
 }

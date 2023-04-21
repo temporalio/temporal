@@ -36,61 +36,61 @@ import (
 // https://github.com/temporalio/sdk-go/blob/master/internal/common/metrics/handler.go
 // and adapted to depend on golang.org/x/exp/event
 type (
-	// MetricsHandler represents the main dependency for instrumentation
-	MetricsHandler interface {
+	// Handler is a wrapper around a metrics client
+	Handler interface {
 		// WithTags creates a new MetricProvder with provided []Tag
 		// Tags are merged with registered Tags from the source MetricsHandler
-		WithTags(...Tag) MetricsHandler
+		WithTags(...Tag) Handler
 
 		// Counter obtains a counter for the given name and MetricOptions.
-		Counter(string) CounterMetric
+		Counter(string) CounterIface
 
 		// Gauge obtains a gauge for the given name and MetricOptions.
-		Gauge(string) GaugeMetric
+		Gauge(string) GaugeIface
 
 		// Timer obtains a timer for the given name and MetricOptions.
-		Timer(string) TimerMetric
+		Timer(string) TimerIface
 
 		// Histogram obtains a histogram for the given name and MetricOptions.
-		Histogram(string, MetricUnit) HistogramMetric
+		Histogram(string, MetricUnit) HistogramIface
 
 		Stop(log.Logger)
 	}
 
-	// CounterMetric is an ever-increasing counter.
-	CounterMetric interface {
+	// CounterIface is an ever-increasing counter.
+	CounterIface interface {
 		// Record increments the counter value.
 		// Tags provided are merged with the source MetricsHandler
 		Record(int64, ...Tag)
 	}
-	// GaugeMetric can be set to any float and repesents a latest value instrument.
-	GaugeMetric interface {
+	// GaugeIface can be set to any float and repesents a latest value instrument.
+	GaugeIface interface {
 		// Record updates the gauge value.
 		// Tags provided are merged with the source MetricsHandler
 		Record(float64, ...Tag)
 	}
 
-	// TimerMetric records time durations.
-	TimerMetric interface {
+	// TimerIface records time durations.
+	TimerIface interface {
 		// Record sets the timer value.
 		// Tags provided are merged with the source MetricsHandler
 		Record(time.Duration, ...Tag)
 	}
 
-	// HistogramMetric records a distribution of values.
-	HistogramMetric interface {
+	// HistogramIface records a distribution of values.
+	HistogramIface interface {
 		// Record adds a value to the distribution
 		// Tags provided are merged with the source MetricsHandler
 		Record(int64, ...Tag)
 	}
 
-	CounterMetricFunc   func(int64, ...Tag)
-	GaugeMetricFunc     func(float64, ...Tag)
-	TimerMetricFunc     func(time.Duration, ...Tag)
-	HistogramMetricFunc func(int64, ...Tag)
+	CounterFunc   func(int64, ...Tag)
+	GaugeFunc     func(float64, ...Tag)
+	TimerFunc     func(time.Duration, ...Tag)
+	HistogramFunc func(int64, ...Tag)
 )
 
-func (c CounterMetricFunc) Record(v int64, tags ...Tag)       { c(v, tags...) }
-func (c GaugeMetricFunc) Record(v float64, tags ...Tag)       { c(v, tags...) }
-func (c TimerMetricFunc) Record(v time.Duration, tags ...Tag) { c(v, tags...) }
-func (c HistogramMetricFunc) Record(v int64, tags ...Tag)     { c(v, tags...) }
+func (c CounterFunc) Record(v int64, tags ...Tag)       { c(v, tags...) }
+func (c GaugeFunc) Record(v float64, tags ...Tag)       { c(v, tags...) }
+func (c TimerFunc) Record(v time.Duration, tags ...Tag) { c(v, tags...) }
+func (c HistogramFunc) Record(v int64, tags ...Tag)     { c(v, tags...) }

@@ -35,9 +35,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -53,6 +56,12 @@ type (
 			closeEvent *historypb.HistoryEvent,
 			deleteAfterClose bool,
 		) error
+		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
+		// This task is used to delete the history events of the workflow execution after the retention period expires.
+		// If workflowDataAlreadyArchived is true, then the workflow data is already archived,
+		// so we can delete the history immediately. Otherwise, we need to archive the history first before we can
+		// safely delete it.
+		GenerateDeleteHistoryEventTask(closeTime time.Time, workflowDataAlreadyArchived bool) error
 		GenerateDeleteExecutionTask() (*tasks.DeleteExecutionTask, error)
 		GenerateRecordWorkflowStartedTasks(
 			startEvent *historypb.HistoryEvent,
@@ -62,6 +71,7 @@ type (
 		) error
 		GenerateScheduleWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
+			generateTimeoutTaskOnly bool,
 		) error
 		GenerateStartWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
@@ -90,7 +100,6 @@ type (
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
-			branchToken []byte,
 			events []*historypb.HistoryEvent,
 		) error
 		GenerateMigrationTasks() (tasks.Task, error)
@@ -99,6 +108,8 @@ type (
 	TaskGeneratorImpl struct {
 		namespaceRegistry namespace.Registry
 		mutableState      MutableState
+		config            *configs.Config
+		archivalMetadata  archiver.ArchivalMetadata
 	}
 )
 
@@ -109,10 +120,14 @@ var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
 	mutableState MutableState,
+	config *configs.Config,
+	archivalMetadata archiver.ArchivalMetadata,
 ) *TaskGeneratorImpl {
 	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
 		mutableState:      mutableState,
+		config:            config,
+		archivalMetadata:  archivalMetadata,
 	}
 }
 
@@ -127,13 +142,14 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 		return nil
 	}
 
-	r.mutableState.AddTasks(&tasks.WorkflowTimeoutTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: workflowRunExpirationTime,
-		Version:             startVersion,
-	})
-
+	if r.mutableState.IsWorkflowExecutionRunning() {
+		r.mutableState.AddTasks(&tasks.WorkflowTimeoutTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: workflowRunExpirationTime,
+			Version:             startVersion,
+		})
+	}
 	return nil
 }
 
@@ -143,30 +159,15 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 ) error {
 
 	currentVersion := r.mutableState.GetCurrentVersion()
-	executionInfo := r.mutableState.GetExecutionInfo()
 
-	retention := defaultWorkflowRetention
-	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
-	switch err.(type) {
-	case nil:
-		retention = namespaceEntry.Retention()
-	case *serviceerror.NamespaceNotFound:
-		// namespace is not accessible, use default value above
-	default:
-		return err
+	closeExecutionTask := &tasks.CloseExecutionTask{
+		// TaskID, Visiblitytimestamp is set by shard
+		WorkflowKey:      r.mutableState.GetWorkflowKey(),
+		Version:          currentVersion,
+		DeleteAfterClose: deleteAfterClose,
 	}
-	branchToken, err := r.mutableState.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
-
 	closeTasks := []tasks.Task{
-		&tasks.CloseExecutionTask{
-			// TaskID, Visiblitytimestamp is set by shard
-			WorkflowKey:      r.mutableState.GetWorkflowKey(),
-			Version:          currentVersion,
-			DeleteAfterClose: deleteAfterClose,
-		},
+		closeExecutionTask,
 	}
 
 	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.
@@ -185,24 +186,94 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 		// or execution info in mutable state. For immediate task, visibility timestamp
 		// should always be when the task is generated so that task_latency_queue/load
 		// truly measures only task processing/loading latency.
-		closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
 		closeTasks = append(closeTasks,
 			&tasks.CloseExecutionVisibilityTask{
 				// TaskID, VisibilityTimestamp is set by shard
 				WorkflowKey: r.mutableState.GetWorkflowKey(),
 				Version:     currentVersion,
 			},
-			&tasks.DeleteHistoryEventTask{
-				// TaskID is set by shard
-				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: closeTime.Add(retention),
-				Version:             currentVersion,
-				BranchToken:         branchToken,
-			},
 		)
+		if r.archivalQueueEnabled() {
+			retention, err := r.getRetention()
+			if err != nil {
+				return err
+			}
+			// We schedule the archival task for a random time in the near future to avoid sending a surge of tasks
+			// to the archival system at the same time
+
+			delay := backoff.FullJitter(r.config.ArchivalProcessorArchiveDelay())
+			if delay > retention {
+				delay = retention
+			}
+			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
+			archiveTime := closeEvent.GetEventTime().Add(delay)
+
+			// We can skip visibility archival in the close execution task if we are using the durable archival flow.
+			// The visibility archival will be handled by the archival queue.
+			closeExecutionTask.CanSkipVisibilityArchival = true
+			task := &tasks.ArchiveExecutionTask{
+				// TaskID is set by the shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: archiveTime,
+				Version:             currentVersion,
+			}
+			closeTasks = append(closeTasks, task)
+		} else {
+			closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
+			if err := r.GenerateDeleteHistoryEventTask(closeTime, false); err != nil {
+				return err
+			}
+		}
 	}
 
 	r.mutableState.AddTasks(closeTasks...)
+	return nil
+}
+
+// getRetention returns the retention period for this task generator's workflow execution.
+// The retention period represents how long the workflow data should exist in primary storage after the workflow closes.
+// If the workflow namespace is not found, the default retention period is returned.
+// This method returns an error when the GetNamespaceByID call fails with anything other than
+// serviceerror.NamespaceNotFound.
+func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
+	retention := defaultWorkflowRetention
+	executionInfo := r.mutableState.GetExecutionInfo()
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
+	switch err.(type) {
+	case nil:
+		retention = namespaceEntry.Retention()
+	case *serviceerror.NamespaceNotFound:
+		// namespace is not accessible, use default value above
+	default:
+		return 0, err
+	}
+	return retention, nil
+}
+
+// GenerateDeleteHistoryEventTask adds a task to delete all history events for a workflow execution.
+// This method only adds the task to the mutable state object in memory; it does not write the task to the database.
+// You must call shard.Context#AddTasks to notify the history engine of this task.
+func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time, workflowDataAlreadyArchived bool) error {
+	retention, err := r.getRetention()
+	if err != nil {
+		return err
+	}
+	currentVersion := r.mutableState.GetCurrentVersion()
+	branchToken, err := r.mutableState.GetCurrentBranchToken()
+	if err != nil {
+		return err
+	}
+
+	retentionJitterDuration := backoff.FullJitter(r.config.RetentionTimerJitterDuration())
+	deleteTime := closeTime.Add(retention).Add(retentionJitterDuration)
+	r.mutableState.AddTasks(&tasks.DeleteHistoryEventTask{
+		// TaskID is set by shard
+		WorkflowKey:                 r.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp:         deleteTime,
+		Version:                     currentVersion,
+		BranchToken:                 branchToken,
+		WorkflowDataAlreadyArchived: workflowDataAlreadyArchived,
+	})
 	return nil
 }
 
@@ -232,7 +303,7 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
+		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
 	}
 
 	r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
@@ -262,22 +333,15 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
+	generateTimeoutTaskOnly bool, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching.
 ) error {
 
-	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
+	workflowTask := r.mutableState.GetWorkflowTaskByID(
 		workflowTaskScheduledEventID,
 	)
-	if !ok {
+	if workflowTask == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
-
-	r.mutableState.AddTasks(&tasks.WorkflowTask{
-		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:      r.mutableState.GetWorkflowKey(),
-		TaskQueue:        workflowTask.TaskQueue.GetName(),
-		ScheduledEventID: workflowTask.ScheduledEventID,
-		Version:          workflowTask.Version,
-	})
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
 		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)
@@ -294,6 +358,18 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		})
 	}
 
+	if generateTimeoutTaskOnly {
+		return nil
+	}
+
+	r.mutableState.AddTasks(&tasks.WorkflowTask{
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:      r.mutableState.GetWorkflowKey(),
+		TaskQueue:        workflowTask.TaskQueue.GetName(),
+		ScheduledEventID: workflowTask.ScheduledEventID,
+		Version:          workflowTask.Version,
+	})
+
 	return nil
 }
 
@@ -301,11 +377,11 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
 ) error {
 
-	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
+	workflowTask := r.mutableState.GetWorkflowTaskByID(
 		workflowTaskScheduledEventID,
 	)
-	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduledEventID))
+	if workflowTask == nil {
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
 	startedTime := timestamp.TimeValue(workflowTask.StartedTime)
@@ -499,9 +575,12 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 }
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
-	branchToken []byte,
 	events []*historypb.HistoryEvent,
 ) error {
+	if len(events) == 0 {
+		return nil
+	}
+
 	firstEvent := events[0]
 	lastEvent := events[len(events)-1]
 	if firstEvent.GetVersion() != lastEvent.GetVersion() {
@@ -569,4 +648,18 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 	}
 
 	return namespace.ID(r.mutableState.GetExecutionInfo().NamespaceId), nil
+}
+
+// archivalQueueEnabled returns true if archival is enabled for either history or visibility, and the archival queue
+// itself is also enabled.
+// For both history and visibility, we check that archival is enabled for both the cluster and the namespace.
+func (r *TaskGeneratorImpl) archivalQueueEnabled() bool {
+	if !r.config.DurableArchivalEnabled() {
+		return false
+	}
+	namespaceEntry := r.mutableState.GetNamespaceEntry()
+	return r.archivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival() &&
+		namespaceEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED ||
+		r.archivalMetadata.GetVisibilityConfig().ClusterConfiguredForArchival() &&
+			namespaceEntry.VisibilityArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
 }

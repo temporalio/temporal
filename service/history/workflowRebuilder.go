@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflowResetter_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflowRebuilder_mock.go
 
 package history
 
@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -63,7 +64,7 @@ var _ workflowRebuilder = (*workflowRebuilderImpl)(nil)
 
 func NewWorkflowRebuilder(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *workflowRebuilderImpl {
 	return &workflowRebuilderImpl{
@@ -84,6 +85,7 @@ func (r *workflowRebuilderImpl) rebuild(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		workflowKey,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -155,9 +157,7 @@ func (r *workflowRebuilderImpl) persistToDB(
 	mutableState workflow.MutableState,
 	historySize int64,
 ) error {
-	now := r.shard.GetTimeSource().Now()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyPassive,
 	)
 	if err != nil {
@@ -173,7 +173,6 @@ func (r *workflowRebuilderImpl) persistToDB(
 	if err := r.transaction.SetWorkflowExecution(
 		ctx,
 		resetWorkflowSnapshot,
-		mutableState.GetNamespaceEntry().ActiveClusterName(),
 	); err != nil {
 		return err
 	}

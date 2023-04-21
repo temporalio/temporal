@@ -32,6 +32,7 @@ import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
+import "temporal/api/protocol/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
@@ -65,6 +66,7 @@ message PollWorkflowTaskQueueResponse {
     google.protobuf.Timestamp scheduled_time = 15 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp started_time = 16 [(gogoproto.stdtime) = true];
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 17;
+    repeated temporal.api.protocol.v1.Message messages = 18;
 }
 
 message PollActivityTaskQueueRequest {
@@ -184,21 +186,21 @@ message ListTaskQueuePartitionsResponse {
 }
 
 // (-- api-linter: core::0134::request-mask-required=disabled
-//     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest doesn't follow Google API format --)
+//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibilityRequest doesn't follow Google API format --)
 // (-- api-linter: core::0134::request-resource-required=disabled
-//     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest RPC doesn't follow Google API format. --)
-message UpdateWorkerBuildIdOrderingRequest {
+//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibilityRequest RPC doesn't follow Google API format. --)
+message UpdateWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.UpdateWorkerBuildIdOrderingRequest request = 2;
+    temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest request = 2;
 }
-message UpdateWorkerBuildIdOrderingResponse {}
+message UpdateWorkerBuildIdCompatibilityResponse {}
 
-message GetWorkerBuildIdOrderingRequest {
+message GetWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.GetWorkerBuildIdOrderingRequest request = 2;
+    temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest request = 2;
 }
-message GetWorkerBuildIdOrderingResponse {
-    temporal.api.workflowservice.v1.GetWorkerBuildIdOrderingResponse response = 1;
+message GetWorkerBuildIdCompatibilityResponse {
+    temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse response = 1;
 }
 
 message InvalidateTaskQueueMetadataRequest {

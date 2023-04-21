@@ -595,3 +595,18 @@ func (mr *MockIntegrationTestsClientMockRecorder) IndexPutTemplate(ctx, template
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexPutTemplate", reflect.TypeOf((*MockIntegrationTestsClient)(nil).IndexPutTemplate), ctx, templateName, bodyString)
 }
+
+// PutMapping mocks base method.
+func (m *MockIntegrationTestsClient) PutMapping(ctx context.Context, index string, mapping map[string]v1.IndexedValueType) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PutMapping", ctx, index, mapping)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PutMapping indicates an expected call of PutMapping.
+func (mr *MockIntegrationTestsClientMockRecorder) PutMapping(ctx, index, mapping interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockIntegrationTestsClient)(nil).PutMapping), ctx, index, mapping)
+}

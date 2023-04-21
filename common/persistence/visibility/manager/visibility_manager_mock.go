@@ -33,6 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	namespace "go.temporal.io/server/common/namespace"
 )
 
 // MockVisibilityManager is a mock of VisibilityManager interface.
@@ -99,18 +100,46 @@ func (mr *MockVisibilityManagerMockRecorder) DeleteWorkflowExecution(ctx, reques
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockVisibilityManager)(nil).DeleteWorkflowExecution), ctx, request)
 }
 
-// GetName mocks base method.
-func (m *MockVisibilityManager) GetName() string {
+// GetIndexName mocks base method.
+func (m *MockVisibilityManager) GetIndexName() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetName")
+	ret := m.ctrl.Call(m, "GetIndexName")
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// GetName indicates an expected call of GetName.
-func (mr *MockVisibilityManagerMockRecorder) GetName() *gomock.Call {
+// GetIndexName indicates an expected call of GetIndexName.
+func (mr *MockVisibilityManagerMockRecorder) GetIndexName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockVisibilityManager)(nil).GetName))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIndexName", reflect.TypeOf((*MockVisibilityManager)(nil).GetIndexName))
+}
+
+// GetReadStoreName mocks base method.
+func (m *MockVisibilityManager) GetReadStoreName(nsName namespace.Name) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReadStoreName", nsName)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetReadStoreName indicates an expected call of GetReadStoreName.
+func (mr *MockVisibilityManagerMockRecorder) GetReadStoreName(nsName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReadStoreName", reflect.TypeOf((*MockVisibilityManager)(nil).GetReadStoreName), nsName)
+}
+
+// GetStoreNames mocks base method.
+func (m *MockVisibilityManager) GetStoreNames() []string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStoreNames")
+	ret0, _ := ret[0].([]string)
+	return ret0
+}
+
+// GetStoreNames indicates an expected call of GetStoreNames.
+func (mr *MockVisibilityManagerMockRecorder) GetStoreNames() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStoreNames", reflect.TypeOf((*MockVisibilityManager)(nil).GetStoreNames))
 }
 
 // GetWorkflowExecution mocks base method.
@@ -126,6 +155,20 @@ func (m *MockVisibilityManager) GetWorkflowExecution(ctx context.Context, reques
 func (mr *MockVisibilityManagerMockRecorder) GetWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockVisibilityManager)(nil).GetWorkflowExecution), ctx, request)
+}
+
+// HasStoreName mocks base method.
+func (m *MockVisibilityManager) HasStoreName(stName string) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasStoreName", stName)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasStoreName indicates an expected call of HasStoreName.
+func (mr *MockVisibilityManagerMockRecorder) HasStoreName(stName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStoreName", reflect.TypeOf((*MockVisibilityManager)(nil).HasStoreName), stName)
 }
 
 // ListClosedWorkflowExecutions mocks base method.

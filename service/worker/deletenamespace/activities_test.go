@@ -44,7 +44,7 @@ func Test_GenerateDeletedNamespaceNameActivity(t *testing.T) {
 
 	a := &activities{
 		metadataManager: metadataManager,
-		metricsClient:   metrics.NoopClient,
+		metricsHandler:  metrics.NoopMetricsHandler,
 		logger:          log.NewNoopLogger(),
 	}
 

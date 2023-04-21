@@ -29,6 +29,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/searchattribute"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -59,6 +60,8 @@ const (
 	BatchTypeCancel = "cancel"
 	// BatchTypeSignal is batch type for signaling workflows
 	BatchTypeSignal = "signal"
+	// BatchTypeDelete is batch type for deleting workflows
+	BatchTypeDelete = "delete"
 )
 
 var (
@@ -85,15 +88,21 @@ type (
 		Input      *commonpb.Payloads
 	}
 
+	// DeleteParams is the parameters for deleting workflow
+	DeleteParams struct {
+	}
+
 	// BatchParams is the parameters for batch operation workflow
 	BatchParams struct {
 		// Target namespace to execute batch operation
 		Namespace string
 		// To get the target workflows for processing
 		Query string
+		// Target workflows for processing
+		Executions []*commonpb.WorkflowExecution
 		// Reason for the operation
 		Reason string
-		// Supporting: signal,cancel,terminate
+		// Supporting: signal,cancel,terminate,delete
 		BatchType string
 
 		// Below are all optional
@@ -103,6 +112,8 @@ type (
 		CancelParams CancelParams
 		// SignalParams is params only for BatchTypeSignal
 		SignalParams SignalParams
+		// DeleteParams is params only for BatchTypeDelete
+		DeleteParams DeleteParams
 		// RPS of processing. Default to DefaultRPS
 		// This is moving to dynamic config.
 		// TODO: Remove it from BatchParams after 1.19+
@@ -198,8 +209,11 @@ func validateParams(params BatchParams) error {
 	if params.BatchType == "" ||
 		params.Reason == "" ||
 		params.Namespace == "" ||
-		params.Query == "" {
-		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query")
+		(params.Query == "" && len(params.Executions) == 0) {
+		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
+	}
+	if len(params.Query) > 0 && len(params.Executions) > 0 {
+		return fmt.Errorf("batch query and executions are mutually exclusive")
 	}
 	switch params.BatchType {
 	case BatchTypeSignal:
@@ -207,7 +221,7 @@ func validateParams(params BatchParams) error {
 			return fmt.Errorf("must provide signal name")
 		}
 		return nil
-	case BatchTypeCancel, BatchTypeTerminate:
+	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete:
 		return nil
 	default:
 		return fmt.Errorf("not supported batch type: %v", params.BatchType)

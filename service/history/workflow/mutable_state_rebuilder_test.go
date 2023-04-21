@@ -39,6 +39,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -48,7 +49,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/events"
@@ -109,11 +109,10 @@ func (s *stateBuilderSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
 		tests.NewDynamicConfig(),
 	)
 
@@ -158,8 +157,8 @@ func (s *stateBuilderSuite) mockUpdateVersion(events ...*historypb.HistoryEvent)
 	s.mockMutableState.EXPECT().SetHistoryBuilder(NewImmutableHistoryBuilder(events))
 }
 
-func (s *stateBuilderSuite) toHistory(events ...*historypb.HistoryEvent) []*historypb.HistoryEvent {
-	return events
+func (s *stateBuilderSuite) toHistory(eventss ...*historypb.HistoryEvent) [][]*historypb.HistoryEvent {
+	return [][]*historypb.HistoryEvent{eventss}
 }
 
 // workflow operations
@@ -520,6 +519,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	).Return(nil)
 	s.mockTaskGeneratorForNew.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		newRunWorkflowTaskEvent.GetEventId(),
+		false,
 	).Return(nil)
 	s.mockTaskGeneratorForNew.EXPECT().GenerateActivityTimerTasks().Return(nil)
 	s.mockTaskGeneratorForNew.EXPECT().GenerateUserTimerTasks().Return(nil)
@@ -756,14 +756,16 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 		WorkflowTaskTimeout: &timeout,
 		TaskQueue:           taskqueue,
 		Attempt:             workflowTaskAttempt,
+		Type:                enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	}
 	s.executionInfo.TaskQueue = taskqueue.GetName()
 	s.mockMutableState.EXPECT().ReplicateWorkflowTaskScheduledEvent(
-		event.GetVersion(), event.GetEventId(), taskqueue, &timeout, workflowTaskAttempt, event.GetEventTime(), event.GetEventTime(),
+		event.GetVersion(), event.GetEventId(), taskqueue, &timeout, workflowTaskAttempt, event.GetEventTime(), event.GetEventTime(), enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	).Return(wt, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		wt.ScheduledEventID,
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -808,6 +810,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	}
 	s.mockMutableState.EXPECT().ReplicateWorkflowTaskStartedEvent(
 		(*WorkflowTaskInfo)(nil), event.GetVersion(), scheduledEventID, event.GetEventId(), workflowTaskRequestID, timestamp.TimeValue(event.GetEventTime()),
+		false, gomock.Any(),
 	).Return(wt, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateStartWorkflowTaskTasks(
@@ -857,6 +860,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskTimedOut() {
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		newScheduledEventID,
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -901,6 +905,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		newScheduledEventID,
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 

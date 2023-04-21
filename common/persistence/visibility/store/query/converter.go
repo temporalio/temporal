@@ -357,11 +357,11 @@ func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error)
 		return nil, wrapConverterError("unable to convert left part of 'between' expression", err)
 	}
 
-	fromValue, err := parseSqlValue(sqlparser.String(rangeCond.From))
+	fromValue, err := ParseSqlValue(sqlparser.String(rangeCond.From))
 	if err != nil {
 		return nil, err
 	}
-	toValue, err := parseSqlValue(sqlparser.String(rangeCond.To))
+	toValue, err := ParseSqlValue(sqlparser.String(rangeCond.To))
 	if err != nil {
 		return nil, err
 	}
@@ -420,12 +420,18 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 
 	colName, err := convertColName(c.fnInterceptor, comparisonExpr.Left, FieldNameFilter)
 	if err != nil {
-		return nil, wrapConverterError("unable to convert left part of comparison expression", err)
+		return nil, wrapConverterError(
+			fmt.Sprintf("unable to convert left side of %q", sqlparser.String(expr)),
+			err,
+		)
 	}
 
 	colValue, err := convertComparisonExprValue(comparisonExpr.Right)
 	if err != nil {
-		return nil, wrapConverterError("unable to convert right part of comparison expression", err)
+		return nil, wrapConverterError(
+			fmt.Sprintf("unable to convert right side of %q", sqlparser.String(expr)),
+			err,
+		)
 	}
 
 	if comparisonExpr.Operator == "like" || comparisonExpr.Operator == "not like" {
@@ -478,7 +484,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		v, err := parseSqlValue(sqlparser.String(e))
+		v, err := ParseSqlValue(sqlparser.String(e))
 		if err != nil {
 			return nil, err
 		}
@@ -502,7 +508,11 @@ func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	case *sqlparser.FuncExpr:
 		return nil, NewConverterError("%s: nested func", NotSupportedErrMessage)
 	case *sqlparser.ColName:
-		return nil, NewConverterError("%s: column name on the right side of comparison expression", NotSupportedErrMessage)
+		return nil, NewConverterError(
+			"%s: column name on the right side of comparison expression (did you forget to quote %q?)",
+			NotSupportedErrMessage,
+			sqlparser.String(expr),
+		)
 	default:
 		return nil, NewConverterError("%s: unexpected value type %T", InvalidExpressionErrMessage, expr)
 	}
@@ -520,7 +530,7 @@ func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query,
 	return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
 }
 
-func parseSqlValue(sqlValue string) (interface{}, error) {
+func ParseSqlValue(sqlValue string) (interface{}, error) {
 	if sqlValue == "" {
 		return "", nil
 	}

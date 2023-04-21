@@ -57,9 +57,16 @@ func (m *SqlStore) GetName() string {
 	return m.Db.PluginName()
 }
 
+func (m *SqlStore) GetDbName() string {
+	return m.Db.DbName()
+}
+
 func (m *SqlStore) Close() {
 	if m.Db != nil {
-		m.Db.Close()
+		err := m.Db.Close()
+		if err != nil {
+			m.logger.Error("Error closing SQL database", tag.Error(err))
+		}
 	}
 }
 

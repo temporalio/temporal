@@ -48,7 +48,7 @@ type (
 		HistoryClient     historyservice.HistoryServiceClient
 		FrontendClient    workflowservice.WorkflowServiceClient
 		Logger            log.Logger
-		MetricsClient     metrics.Client
+		MetricsHandler    metrics.Handler
 	}
 
 	fxResult struct {
@@ -93,6 +93,6 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		historyClient:     wc.HistoryClient,
 		frontendClient:    wc.FrontendClient,
 		logger:            wc.Logger,
-		metricsClient:     wc.MetricsClient,
+		metricsHandler:    wc.MetricsHandler,
 	}
 }

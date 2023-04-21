@@ -25,14 +25,18 @@
 package namespace
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/exp/maps"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -67,6 +71,13 @@ type (
 		isGlobalNamespace           bool
 		failoverNotificationVersion int64
 		notificationVersion         int64
+
+		customSearchAttributesMapper CustomSearchAttributesMapper
+	}
+
+	CustomSearchAttributesMapper struct {
+		fieldToAlias map[string]string
+		aliasToField map[string]string
 	}
 )
 
@@ -89,6 +100,10 @@ func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
 		isGlobalNamespace:           record.IsGlobalNamespace,
 		failoverNotificationVersion: record.Namespace.FailoverNotificationVersion,
 		notificationVersion:         record.NotificationVersion,
+		customSearchAttributesMapper: CustomSearchAttributesMapper{
+			fieldToAlias: record.Namespace.Config.CustomSearchAttributeAliases,
+			aliasToField: util.InverseMap(record.Namespace.Config.CustomSearchAttributeAliases),
+		},
 	}
 }
 
@@ -114,8 +129,8 @@ func (ns *Namespace) Clone(ms ...Mutation) *Namespace {
 
 // VisibilityArchivalState observes the visibility archive configuration (state
 // and URI) for this namespace.
-func (ns *Namespace) VisibilityArchivalState() ArchivalState {
-	return ArchivalState{
+func (ns *Namespace) VisibilityArchivalState() ArchivalConfigState {
+	return ArchivalConfigState{
 		State: ns.config.VisibilityArchivalState,
 		URI:   ns.config.VisibilityArchivalUri,
 	}
@@ -123,8 +138,8 @@ func (ns *Namespace) VisibilityArchivalState() ArchivalState {
 
 // HistoryArchivalState observes the history archive configuration (state and
 // URI) for this namespace.
-func (ns *Namespace) HistoryArchivalState() ArchivalState {
-	return ArchivalState{
+func (ns *Namespace) HistoryArchivalState() ArchivalConfigState {
+	return ArchivalConfigState{
 		State: ns.config.HistoryArchivalState,
 		URI:   ns.config.HistoryArchivalUri,
 	}
@@ -175,6 +190,16 @@ func (ns *Namespace) ClusterNames() []string {
 	out := make([]string, len(ns.replicationConfig.Clusters))
 	copy(out, ns.replicationConfig.Clusters)
 	return out
+}
+
+// IsOnCluster returns true is namespace is registered on cluster otherwise false.
+func (ns *Namespace) IsOnCluster(clusterName string) bool {
+	for _, namespaceCluster := range ns.replicationConfig.Clusters {
+		if namespaceCluster == clusterName {
+			return true
+		}
+	}
+	return false
 }
 
 // ConfigVersion return the namespace config version
@@ -231,21 +256,6 @@ func (ns *Namespace) GetCustomData(key string) string {
 	return ns.info.Data[key]
 }
 
-// Len return length
-func (t Namespaces) Len() int {
-	return len(t)
-}
-
-// Swap implements sort.Interface.
-func (t Namespaces) Swap(i, j int) {
-	t[i], t[j] = t[j], t[i]
-}
-
-// Less implements sort.Interface
-func (t Namespaces) Less(i, j int) bool {
-	return t[i].notificationVersion < t[j].notificationVersion
-}
-
 // Retention returns retention duration for this namespace.
 func (ns *Namespace) Retention() time.Duration {
 	if ns.config.Retention == nil {
@@ -253,6 +263,10 @@ func (ns *Namespace) Retention() time.Duration {
 	}
 
 	return *ns.config.Retention
+}
+
+func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper {
+	return ns.customSearchAttributesMapper
 }
 
 // Error returns the reason associated with this bad binary.
@@ -294,4 +308,28 @@ func (n Name) String() string {
 
 func (n Name) IsEmpty() bool {
 	return n == EmptyName
+}
+
+func (m *CustomSearchAttributesMapper) GetAlias(fieldName string, namespace string) (string, error) {
+	alias, ok := m.fieldToAlias[fieldName]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(
+			fmt.Sprintf("Namespace %s has no mapping defined for field name %s", namespace, fieldName),
+		)
+	}
+	return alias, nil
+}
+
+func (m *CustomSearchAttributesMapper) GetFieldName(alias string, namespace string) (string, error) {
+	fieldName, ok := m.aliasToField[alias]
+	if !ok {
+		return "", serviceerror.NewInvalidArgument(
+			fmt.Sprintf("Namespace %s has no mapping defined for search attribute %s", namespace, alias),
+		)
+	}
+	return fieldName, nil
+}
+
+func (m *CustomSearchAttributesMapper) FieldToAliasMap() map[string]string {
+	return maps.Clone(m.fieldToAlias)
 }

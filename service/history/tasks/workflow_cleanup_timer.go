@@ -36,10 +36,12 @@ var _ Task = (*DeleteHistoryEventTask)(nil)
 type (
 	DeleteHistoryEventTask struct {
 		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
-		BranchToken         []byte
+		VisibilityTimestamp         time.Time
+		TaskID                      int64
+		Version                     int64
+		BranchToken                 []byte
+		WorkflowDataAlreadyArchived bool
+		ProcessStage                DeleteWorkflowExecutionStage
 	}
 )
 

@@ -72,13 +72,13 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	_, methodName := splitMethodName(info.FullMethod)
+	_, methodName := SplitMethodName(info.FullMethod)
 	token, ok := ni.tokens[methodName]
 	if !ok {
 		token = NamespaceRateLimitDefaultToken
 	}
 
-	namespace := GetNamespace(ni.namespaceRegistry, req)
+	namespace := MustGetNamespaceName(ni.namespaceRegistry, req)
 	if !ni.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,

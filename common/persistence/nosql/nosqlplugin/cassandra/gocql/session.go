@@ -28,15 +28,14 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/gocql/gocql"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/resolver"
 )
 
 var _ Session = (*session)(nil)
@@ -47,11 +46,10 @@ const (
 
 type (
 	session struct {
-		status       int32
-		config       config.Cassandra
-		resolver     resolver.ServiceResolver
-		atomic.Value // *gocql.Session
-		logger       log.Logger
+		status               int32
+		newClusterConfigFunc func() (*gocql.ClusterConfig, error)
+		atomic.Value         // *gocql.Session
+		logger               log.Logger
 
 		sync.Mutex
 		sessionInitTime time.Time
@@ -59,21 +57,19 @@ type (
 )
 
 func NewSession(
-	config config.Cassandra,
-	resolver resolver.ServiceResolver,
+	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
 	logger log.Logger,
 ) (*session, error) {
 
-	gocqlSession, err := initSession(config, resolver)
+	gocqlSession, err := initSession(newClusterConfigFunc)
 	if err != nil {
 		return nil, err
 	}
 
 	session := &session{
-		status:   common.DaemonStatusStarted,
-		config:   config,
-		resolver: resolver,
-		logger:   logger,
+		status:               common.DaemonStatusStarted,
+		newClusterConfigFunc: newClusterConfigFunc,
+		logger:               logger,
 
 		sessionInitTime: time.Now().UTC(),
 	}
@@ -90,13 +86,13 @@ func (s *session) refresh() {
 	defer s.Unlock()
 
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
-		s.logger.Warn("too soon to refresh cql session")
+		s.logger.Warn("gocql wrapper: too soon to refresh gocql session")
 		return
 	}
 
-	newSession, err := initSession(s.config, s.resolver)
+	newSession, err := initSession(s.newClusterConfigFunc)
 	if err != nil {
-		s.logger.Error("unable to refresh cql session", tag.Error(err))
+		s.logger.Error("gocql wrapper: unable to refresh gocql session", tag.Error(err))
 		return
 	}
 
@@ -104,14 +100,13 @@ func (s *session) refresh() {
 	oldSession := s.Value.Load().(*gocql.Session)
 	s.Value.Store(newSession)
 	go oldSession.Close()
-	s.logger.Warn("successfully refreshed cql session")
+	s.logger.Warn("gocql wrapper: successfully refreshed gocql session")
 }
 
 func initSession(
-	config config.Cassandra,
-	resolver resolver.ServiceResolver,
+	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
 ) (*gocql.Session, error) {
-	cluster, err := NewCassandraCluster(config, resolver)
+	cluster, err := newClusterConfigFunc()
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +182,10 @@ func (s *session) handleError(
 	err error,
 ) {
 	switch err {
-	case gocql.ErrNoConnections:
+	case gocql.ErrNoConnections,
+		gocql.ErrSessionClosed,
+		gocql.ErrConnectionClosed,
+		syscall.ECONNRESET:
 		s.refresh()
 	default:
 		// noop

@@ -27,10 +27,24 @@ package sqlplugin
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+	"reflect"
+	"strings"
 	"time"
+
+	"github.com/iancoleman/strcase"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
+	// VisibilitySearchAttributes represents the search attributes json
+	// in executions_visibility table
+	VisibilitySearchAttributes map[string]interface{}
+
 	// VisibilityRow represents a row in executions_visibility table
 	VisibilityRow struct {
 		NamespaceID      string
@@ -42,9 +56,11 @@ type (
 		Status           int32
 		CloseTime        *time.Time
 		HistoryLength    *int64
+		HistorySizeBytes *int64
 		Memo             []byte
 		Encoding         string
 		TaskQueue        string
+		SearchAttributes *VisibilitySearchAttributes
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that
@@ -58,6 +74,9 @@ type (
 		MinTime          *time.Time
 		MaxTime          *time.Time
 		PageSize         *int
+
+		Query     string
+		QueryArgs []interface{}
 	}
 
 	VisibilityGetFilter struct {
@@ -87,5 +106,149 @@ type (
 		SelectFromVisibility(ctx context.Context, filter VisibilitySelectFilter) ([]VisibilityRow, error)
 		GetFromVisibility(ctx context.Context, filter VisibilityGetFilter) (*VisibilityRow, error)
 		DeleteFromVisibility(ctx context.Context, filter VisibilityDeleteFilter) (sql.Result, error)
+		CountFromVisibility(ctx context.Context, filter VisibilitySelectFilter) (int64, error)
 	}
 )
+
+var _ sql.Scanner = (*VisibilitySearchAttributes)(nil)
+var _ driver.Valuer = (*VisibilitySearchAttributes)(nil)
+
+var DbFields = getDbFields()
+
+func (vsa *VisibilitySearchAttributes) Scan(src interface{}) error {
+	if src == nil {
+		return nil
+	}
+	switch v := src.(type) {
+	case []byte:
+		return json.Unmarshal(v, &vsa)
+	case string:
+		return json.Unmarshal([]byte(v), &vsa)
+	default:
+		return fmt.Errorf("unsupported type for VisibilitySearchAttributes: %T", v)
+	}
+}
+
+func (vsa VisibilitySearchAttributes) Value() (driver.Value, error) {
+	if vsa == nil {
+		return nil, nil
+	}
+	return json.Marshal(vsa)
+}
+
+func getDbFields() []string {
+	t := reflect.TypeOf(VisibilityRow{})
+	dbFields := make([]string, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		dbFields[i] = f.Tag.Get("db")
+		if dbFields[i] == "" {
+			dbFields[i] = strcase.ToSnake(f.Name)
+		}
+	}
+	return dbFields
+}
+
+// TODO (rodrigozhou): deprecate with standard visibility code.
+// GenerateSelectQuery generates the SELECT query based on the fields of VisibilitySelectFilter
+// for backward compatibility of any use case using old format (eg: unit test).
+// It will be removed after all use cases change to use query converter.
+func GenerateSelectQuery(
+	filter *VisibilitySelectFilter,
+	convertToDbDateTime func(time.Time) time.Time,
+) error {
+	whereClauses := make([]string, 0, 10)
+	queryArgs := make([]interface{}, 0, 10)
+
+	whereClauses = append(
+		whereClauses,
+		fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+	)
+	queryArgs = append(queryArgs, filter.NamespaceID)
+
+	if filter.WorkflowID != nil {
+		whereClauses = append(
+			whereClauses,
+			fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.WorkflowID)),
+		)
+		queryArgs = append(queryArgs, *filter.WorkflowID)
+	}
+
+	if filter.WorkflowTypeName != nil {
+		whereClauses = append(
+			whereClauses,
+			fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.WorkflowType)),
+		)
+		queryArgs = append(queryArgs, *filter.WorkflowTypeName)
+	}
+
+	timeAttr := searchattribute.StartTime
+	if filter.Status != int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
+		timeAttr = searchattribute.CloseTime
+	}
+	if filter.Status == int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED) {
+		whereClauses = append(
+			whereClauses,
+			fmt.Sprintf("%s != ?", searchattribute.GetSqlDbColName(searchattribute.ExecutionStatus)),
+		)
+		queryArgs = append(queryArgs, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	} else {
+		whereClauses = append(
+			whereClauses,
+			fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.ExecutionStatus)),
+		)
+		queryArgs = append(queryArgs, filter.Status)
+	}
+
+	switch {
+	case filter.RunID != nil && filter.MinTime == nil && filter.Status != 1:
+		whereClauses = append(
+			whereClauses,
+			fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.RunID)),
+		)
+		queryArgs = append(
+			queryArgs,
+			*filter.RunID,
+			1, // page size arg
+		)
+	case filter.RunID != nil && filter.MinTime != nil && filter.MaxTime != nil && filter.PageSize != nil:
+		// pagination filters
+		*filter.MinTime = convertToDbDateTime(*filter.MinTime)
+		*filter.MaxTime = convertToDbDateTime(*filter.MaxTime)
+		whereClauses = append(
+			whereClauses,
+			fmt.Sprintf("%s >= ?", searchattribute.GetSqlDbColName(timeAttr)),
+			fmt.Sprintf("%s <= ?", searchattribute.GetSqlDbColName(timeAttr)),
+			fmt.Sprintf(
+				"((%s = ? AND %s > ?) OR %s < ?)",
+				searchattribute.GetSqlDbColName(timeAttr),
+				searchattribute.GetSqlDbColName(searchattribute.RunID),
+				searchattribute.GetSqlDbColName(timeAttr),
+			),
+		)
+		queryArgs = append(
+			queryArgs,
+			*filter.MinTime,
+			*filter.MaxTime,
+			*filter.MaxTime,
+			*filter.RunID,
+			*filter.MaxTime,
+			*filter.PageSize,
+		)
+	default:
+		return fmt.Errorf("invalid query filter")
+	}
+
+	filter.Query = fmt.Sprintf(
+		`SELECT %s FROM executions_visibility
+		WHERE %s
+		ORDER BY %s DESC, %s
+		LIMIT ?`,
+		strings.Join(DbFields, ", "),
+		strings.Join(whereClauses, " AND "),
+		searchattribute.GetSqlDbColName(timeAttr),
+		searchattribute.GetSqlDbColName(searchattribute.RunID),
+	)
+	filter.QueryArgs = queryArgs
+	return nil
+}

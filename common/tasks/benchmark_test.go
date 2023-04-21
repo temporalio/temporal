@@ -30,7 +30,11 @@ import (
 	"testing"
 
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -59,11 +63,18 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Sequential(b *testing.B) {
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
-			TaskChannelKeyFn: func(nt *noopTask) int { return rand.Intn(4) },
-			ChannelWeightFn:  func(key int) int { return channelKeyToWeight[key] },
+			TaskChannelKeyFn:            func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelWeightFn:             func(key int) int { return channelKeyToWeight[key] },
+			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", "") },
+			TaskChannelMetricTagsFn:     func(key int) []metrics.Tag { return nil },
+			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
+			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(false),
 		},
 		Scheduler[*noopTask](&noopScheduler{}),
+		quotas.NoopRequestRateLimiter,
+		clock.NewRealTimeSource(),
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -85,11 +96,18 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
-			TaskChannelKeyFn: func(nt *noopTask) int { return rand.Intn(4) },
-			ChannelWeightFn:  func(key int) int { return channelKeyToWeight[key] },
+			TaskChannelKeyFn:            func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelWeightFn:             func(key int) int { return channelKeyToWeight[key] },
+			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", "") },
+			TaskChannelMetricTagsFn:     func(key int) []metrics.Tag { return nil },
+			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
+			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(false),
 		},
 		Scheduler[*noopTask](&noopScheduler{}),
+		quotas.NoopRequestRateLimiter,
+		clock.NewRealTimeSource(),
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -117,6 +135,7 @@ func (n *noopTask) Execute() error                   { panic("implement me") }
 func (n *noopTask) HandleErr(err error) error        { panic("implement me") }
 func (n *noopTask) IsRetryableError(err error) bool  { panic("implement me") }
 func (n *noopTask) RetryPolicy() backoff.RetryPolicy { panic("implement me") }
+func (n *noopTask) Abort()                           { panic("implement me") }
 func (n *noopTask) Cancel()                          { panic("implement me") }
 func (n *noopTask) Ack()                             { n.Done() }
 func (n *noopTask) Nack(err error)                   { panic("implement me") }

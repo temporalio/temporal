@@ -27,8 +27,10 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"golang.org/x/exp/slices"
@@ -38,11 +40,13 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	schedspb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -72,20 +76,24 @@ const (
 	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
 
-	invalidDuration time.Duration = -1
+	rateLimitedErrorType = "RateLimited"
 )
 
 type (
 	scheduler struct {
 		schedspb.StartScheduleArgs
 
-		ctx    workflow.Context
-		a      *activities
-		logger sdklog.Logger
+		ctx     workflow.Context
+		a       *activities
+		logger  sdklog.Logger
+		metrics sdkclient.MetricsHandler
 
 		cspec *CompiledSpec
 
 		tweakables tweakablePolicies
+
+		currentTimer         workflow.Future
+		currentTimerDeadline time.Time
 
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
@@ -108,15 +116,21 @@ type (
 		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
 		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
 		IterationsBeforeContinueAsNew     int
+		SleepWhilePaused                  bool // If true, don't set timers while paused/out of actions
+		// MaxBufferSize limits the number of buffered starts. This also limits the number of
+		// workflows that can be backfilled at once (since they all have to fit in the buffer).
+		MaxBufferSize  int
+		AllowZeroSleep bool // Whether to allow a zero-length timer. Used for workflow compatibility.
+		ReuseTimer     bool // Whether to reuse timer. Used for workflow compatibility.
 	}
 )
 
 var (
 	defaultLocalActivityOptions = workflow.LocalActivityOptions{
-		// This applies to poll, cancel, and terminate. Start workflow overrides this.
+		// This applies to watch, cancel, and terminate. Start workflow overrides this.
 		ScheduleToCloseTimeout: 1 * time.Hour,
-		// We're using the default workflow task timeout of 10s, so limit local activities to 5s.
-		// We might do up to two per workflow task (cancel previous and start new workflow).
+		// Each local activity is one or a few local RPCs.
+		// Currently this is applied manually, see https://github.com/temporalio/sdk-go/issues/1066
 		StartToCloseTimeout: 5 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
@@ -137,6 +151,10 @@ var (
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
 		IterationsBeforeContinueAsNew:     500,
+		SleepWhilePaused:                  true,
+		MaxBufferSize:                     1000,
+		AllowZeroSleep:                    true,
+		ReuseTimer:                        true,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -147,16 +165,15 @@ func SchedulerWorkflow(ctx workflow.Context, args *schedspb.StartScheduleArgs) e
 		StartScheduleArgs: *args,
 		ctx:               ctx,
 		a:                 nil,
-		logger:            sdklog.With(workflow.GetLogger(ctx), "schedule-id", args.State.ScheduleId),
+		logger:            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.State.Namespace, "schedule-id", args.State.ScheduleId),
+		metrics:           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.State.Namespace}),
 	}
 	return scheduler.run()
 }
 
 func (s *scheduler) run() error {
-	s.logger.Info("Schedule starting", "schedule", s.Schedule)
-
-	s.ensureFields()
 	s.updateTweakables()
+	s.ensureFields()
 	s.compileSpec()
 
 	if err := workflow.SetQueryHandler(s.ctx, QueryNameDescribe, s.handleDescribeQuery); err != nil {
@@ -167,7 +184,13 @@ func (s *scheduler) run() error {
 	}
 
 	if s.State.LastProcessedTime == nil {
-		s.logger.Debug("Initializing internal state")
+		// log these as json since it's more readable than the Go representation
+		var m jsonpb.Marshaler
+		var specJson, policiesJson strings.Builder
+		_ = m.Marshal(&specJson, s.Schedule.Spec)
+		_ = m.Marshal(&policiesJson, s.Schedule.Policies)
+		s.logger.Info("Starting schedule", "spec", specJson.String(), "policies", policiesJson.String())
+
 		s.State.LastProcessedTime = timestamp.TimePtr(s.now())
 		s.State.ConflictToken = InitialConflictToken
 		s.Info.CreateTime = s.State.LastProcessedTime
@@ -186,7 +209,7 @@ func (s *scheduler) run() error {
 			s.logger.Warn("Time went backwards", "from", t1, "to", t2)
 			t2 = t1
 		}
-		nextSleep := s.processTimeRange(
+		nextWakeup := s.processTimeRange(
 			t1, t2,
 			// resolve this to the schedule's policy as late as possible
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
@@ -197,9 +220,10 @@ func (s *scheduler) run() error {
 		scheduleChanged := s.processSignals()
 		if scheduleChanged {
 			// need to calculate sleep again
-			nextSleep = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false)
+			nextWakeup = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false)
 		}
 		// try starting workflows in the buffer
+		//nolint:revive
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
@@ -207,13 +231,13 @@ func (s *scheduler) run() error {
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
 		// 3. a workflow that we were watching finished
-		s.sleep(nextSleep)
+		s.sleep(nextWakeup)
 		s.updateTweakables()
 	}
 
 	// Any watcher activities will get cancelled automatically if running.
 
-	s.logger.Info("Schedule doing continue-as-new")
+	s.logger.Debug("Schedule doing continue-as-new")
 	return workflow.NewContinueAsNewError(s.ctx, WorkflowType, &s.StartScheduleArgs)
 }
 
@@ -230,8 +254,11 @@ func (s *scheduler) ensureFields() {
 	if s.Schedule.Policies == nil {
 		s.Schedule.Policies = &schedpb.SchedulePolicies{}
 	}
-	// set default so it shows up in describe output
+
+	// set defaults eagerly so they show up in describe output
 	s.Schedule.Policies.OverlapPolicy = s.resolveOverlapPolicy(s.Schedule.Policies.OverlapPolicy)
+	s.Schedule.Policies.CatchupWindow = timestamp.DurationPtr(s.getCatchupWindow())
+
 	if s.Schedule.State == nil {
 		s.Schedule.State = &schedpb.ScheduleState{}
 	}
@@ -246,7 +273,9 @@ func (s *scheduler) ensureFields() {
 func (s *scheduler) compileSpec() {
 	cspec, err := NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
-		s.logger.Error("Invalid schedule", "error", err)
+		if s.logger != nil {
+			s.logger.Error("Invalid schedule", "error", err)
+		}
 		s.Info.InvalidScheduleError = err.Error()
 		s.cspec = nil
 	} else {
@@ -277,7 +306,7 @@ func (s *scheduler) now() time.Time {
 }
 
 func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
-	s.logger.Info("Schedule patch", "patch", patch.String())
+	s.logger.Debug("Schedule patch", "patch", patch.String())
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
 		now := s.now()
@@ -309,11 +338,11 @@ func (s *scheduler) processTimeRange(
 	t1, t2 time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
-) time.Duration {
-	s.logger.Debug("processTimeRange", "t1", t1, "t2", t2, "overlapPolicy", overlapPolicy, "manual", manual)
+) time.Time {
+	s.logger.Debug("processTimeRange", "t1", t1, "t2", t2, "overlap-policy", overlapPolicy, "manual", manual)
 
 	if s.cspec == nil {
-		return invalidDuration
+		return time.Time{}
 	}
 
 	catchupWindow := s.getCatchupWindow()
@@ -322,23 +351,22 @@ func (s *scheduler) processTimeRange(
 		// Run this logic in a SideEffect so that we can fix bugs there without breaking
 		// existing schedule workflows.
 		var next getNextTimeResult
-		workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
 			return s.cspec.getNextTime(t1)
-		}).Get(&next)
+		}).Get(&next))
 		t1 = next.Next
-		if t1.IsZero() {
-			return invalidDuration
-		} else if t1.After(t2) {
-			return t1.Sub(t2)
+		if t1.IsZero() || t1.After(t2) {
+			return t1
+		}
+		// Peek at paused/remaining actions state and don't bother if we're not going to
+		// take an action now. (Don't count as missed catchup window either.)
+		if !s.canTakeScheduledAction(manual, false) {
+			continue
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
+			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.GetMetricName()).Inc(1)
 			s.Info.MissedCatchupWindow++
-			continue
-		}
-		// Peek at paused/remaining actions state and don't even bother adding
-		// to buffer if we're not going to take an action now.
-		if !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
@@ -370,7 +398,7 @@ func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
 	return false
 }
 
-func (s *scheduler) sleep(nextSleep time.Duration) {
+func (s *scheduler) sleep(nextWakeup time.Time) {
 	sel := workflow.NewSelector(s.ctx)
 
 	upCh := workflow.GetSignalChannel(s.ctx, SignalNameUpdate)
@@ -386,16 +414,41 @@ func (s *scheduler) sleep(nextSleep time.Duration) {
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
 
-	if nextSleep != invalidDuration {
-		tmr := workflow.NewTimer(s.ctx, nextSleep)
-		sel.AddFuture(tmr, func(_ workflow.Future) {})
+	// if we're paused or out of actions, we don't need to wake up until we get an update
+	if s.tweakables.SleepWhilePaused && !s.canTakeScheduledAction(false, false) {
+		nextWakeup = time.Time{}
+	}
+
+	if !nextWakeup.IsZero() {
+		sleepTime := nextWakeup.Sub(s.now())
+		// A previous version of this workflow passed around sleep duration instead of wakeup time,
+		// which means it always set a timer even in cases where sleepTime comes out negative. For
+		// compatibility, we have to continue setting a positive timer in those cases. The value
+		// doesn't have to match, though.
+		if !s.tweakables.AllowZeroSleep && sleepTime <= 0 {
+			sleepTime = time.Second
+		}
+		// A previous version of this workflow always created a new timer here, which is wasteful.
+		// We can reuse a previous timer if we have the same deadline and it didn't fire yet.
+		if s.tweakables.ReuseTimer {
+			if s.currentTimer == nil || !s.currentTimerDeadline.Equal(nextWakeup) {
+				s.currentTimer = workflow.NewTimer(s.ctx, sleepTime)
+				s.currentTimerDeadline = nextWakeup
+			}
+			sel.AddFuture(s.currentTimer, func(_ workflow.Future) {
+				s.currentTimer = nil
+			})
+		} else {
+			tmr := workflow.NewTimer(s.ctx, sleepTime)
+			sel.AddFuture(tmr, func(_ workflow.Future) {})
+		}
 	}
 
 	if s.watchingFuture != nil {
 		sel.AddFuture(s.watchingFuture, s.wfWatcherReturned)
 	}
 
-	s.logger.Debug("sleeping", "nextSleep", nextSleep, "watching", s.watchingFuture != nil)
+	s.logger.Debug("sleeping", "next-wakeup", nextWakeup, "watching", s.watchingFuture != nil)
 	sel.Select(s.ctx)
 	for sel.HasPending() {
 		sel.Select(s.ctx)
@@ -441,10 +494,10 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 		s.Schedule.State.Paused = true
 		if res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {
 			s.Schedule.State.Notes = fmt.Sprintf("paused due to workflow failure: %s: %s", id, res.GetFailure().GetMessage())
-			s.logger.Info("paused due to workflow failure", "workflow", id, "message", res.GetFailure().GetMessage())
+			s.logger.Debug("paused due to workflow failure", "workflow", id, "message", res.GetFailure().GetMessage())
 		} else if res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT {
 			s.Schedule.State.Notes = fmt.Sprintf("paused due to workflow timeout: %s", id)
-			s.logger.Info("paused due to workflow timeout", "workflow", id)
+			s.logger.Debug("paused due to workflow timeout", "workflow", id)
 		}
 		s.incSeqNo()
 	}
@@ -458,7 +511,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 		s.State.ContinuedFailure = res.GetFailure()
 	}
 
-	s.logger.Info("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure)
+	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure)
 }
 
 func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
@@ -467,7 +520,7 @@ func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 		return
 	}
 
-	s.logger.Info("Schedule update", "new-schedule", req.Schedule.String())
+	s.logger.Debug("Schedule update", "new-schedule", req.Schedule.String())
 
 	s.Schedule.Spec = req.Schedule.GetSpec()
 	s.Schedule.Action = req.Schedule.GetAction()
@@ -505,6 +558,8 @@ func (s *scheduler) processSignals() bool {
 }
 
 func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
+	// Note that `s` may be a fake scheduler used to compute list info at creation time.
+
 	if s.cspec == nil {
 		return nil
 	}
@@ -523,11 +578,13 @@ func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
 }
 
 func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
-	s.Info.FutureActionTimes = s.getFutureActionTimes(s.tweakables.FutureActionCount)
+	// this is a query handler, don't modify s.Info directly
+	infoCopy := *s.Info
+	infoCopy.FutureActionTimes = s.getFutureActionTimes(s.tweakables.FutureActionCount)
 
 	return &schedspb.DescribeResponse{
 		Schedule:      s.Schedule,
-		Info:          s.Info,
+		Info:          &infoCopy,
 		ConflictToken: s.State.ConflictToken,
 	}, nil
 }
@@ -558,6 +615,9 @@ func (s *scheduler) incSeqNo() {
 }
 
 func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
+	// Note that `s` may be a fake scheduler used to compute list info at creation time, before
+	// the first workflow task. This function and anything it calls should not use s.ctx.
+
 	// make shallow copy
 	spec := *s.Schedule.Spec
 	// clear fields that are too large/not useful for the list view
@@ -650,7 +710,12 @@ func (s *scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPo
 }
 
 func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
-	s.logger.Debug("addStart", "nominal", nominalTime, "actual", actualTime, "overlapPolicy", overlapPolicy, "manual", manual)
+	s.logger.Debug("addStart", "start-time", nominalTime, "actual-start-time", actualTime, "overlap-policy", overlapPolicy, "manual", manual)
+	if s.tweakables.MaxBufferSize > 0 && len(s.State.BufferedStarts) >= s.tweakables.MaxBufferSize {
+		s.logger.Warn("Buffer too large", "start-time", nominalTime, "overlap-policy", overlapPolicy, "manual", manual)
+		s.metrics.Counter(metrics.ScheduleBufferOverruns.GetMetricName()).Inc(1)
+		return
+	}
 	s.State.BufferedStarts = append(s.State.BufferedStarts, &schedspb.BufferedStart{
 		NominalTime:   timestamp.TimePtr(nominalTime),
 		ActualTime:    timestamp.TimePtr(actualTime),
@@ -663,8 +728,10 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 }
 
 // processBuffer should return true if there might be more work to do right now.
+//
+//nolint:revive
 func (s *scheduler) processBuffer() bool {
-	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.State.NeedRefresh)
+	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "need-refresh", s.State.NeedRefresh)
 
 	// TODO: consider doing this always and removing needRefresh? we only end up here without
 	// needRefresh in the case of update, or patch without an immediate run, so it's not much
@@ -703,14 +770,18 @@ func (s *scheduler) processBuffer() bool {
 			continue
 		}
 		result, err := s.startWorkflow(start, req)
+		metricsWithTag := s.metrics.WithTags(map[string]string{
+			metrics.ScheduleActionTypeTag: metrics.ScheduleActionStartWorkflow})
 		if err != nil {
 			s.logger.Error("Failed to start workflow", "error", err)
+			metricsWithTag.Counter(metrics.ScheduleActionErrors.GetMetricName()).Inc(1)
 			// TODO: we could put this back in the buffer and retry (after a delay) up until
 			// the catchup window. of course, it's unlikely that this workflow would be making
 			// progress while we're unable to start a new one, so maybe it's not that valuable.
 			tryAgain = true
 			continue
 		}
+		metricsWithTag.Counter(metrics.ScheduleActionSuccess.GetMetricName()).Inc(1)
 		s.recordAction(result)
 	}
 
@@ -777,9 +848,7 @@ func (s *scheduler) startWorkflow(
 	ctx := workflow.WithLocalActivityOptions(s.ctx, options)
 
 	req := &schedspb.StartWorkflowRequest{
-		NamespaceId: s.State.NamespaceId,
 		Request: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                s.State.Namespace,
 			WorkflowId:               workflowID,
 			WorkflowType:             newWorkflow.WorkflowType,
 			TaskQueue:                newWorkflow.TaskQueue,
@@ -794,24 +863,35 @@ func (s *scheduler) startWorkflow(
 			Memo:                     newWorkflow.Memo,
 			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),
 			Header:                   newWorkflow.Header,
+			LastCompletionResult:     s.State.LastCompletionResult,
+			ContinuedFailure:         s.State.ContinuedFailure,
 		},
-		LastCompletionResult: s.State.LastCompletionResult,
-		ContinuedFailure:     s.State.ContinuedFailure,
 	}
-	var res schedspb.StartWorkflowResponse
-	err := workflow.ExecuteLocalActivity(ctx, s.a.StartWorkflow, req).Get(s.ctx, &res)
-	if err != nil {
-		return nil, err
-	}
+	for {
+		var res schedspb.StartWorkflowResponse
+		err := workflow.ExecuteLocalActivity(ctx, s.a.StartWorkflow, req).Get(s.ctx, &res)
 
-	return &schedpb.ScheduleActionResult{
-		ScheduleTime: start.ActualTime,
-		ActualTime:   res.RealStartTime,
-		StartWorkflowResult: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      res.RunId,
-		},
-	}, nil
+		var appErr *temporal.ApplicationError
+		var details rateLimitedDetails
+		if errors.As(err, &appErr) && appErr.Type() == rateLimitedErrorType && appErr.Details(&details) == nil {
+			s.metrics.Counter(metrics.ScheduleRateLimited.GetMetricName()).Inc(1)
+			workflow.Sleep(s.ctx, details.Delay)
+			req.CompletedRateLimitSleep = true // only use rate limiter once
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		return &schedpb.ScheduleActionResult{
+			ScheduleTime: start.ActualTime,
+			ActualTime:   res.RealStartTime,
+			StartWorkflowResult: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      res.RunId,
+			},
+		}, nil
+	}
 }
 
 func (s *scheduler) identity() string {
@@ -839,8 +919,6 @@ func (s *scheduler) refreshWorkflows(executions []*commonpb.WorkflowExecution) {
 	futures := make([]workflow.Future, len(executions))
 	for i, ex := range executions {
 		req := &schedspb.WatchWorkflowRequest{
-			Namespace:   s.State.Namespace,
-			NamespaceId: s.State.NamespaceId,
 			// Note: do not send runid here so that we always get the latest one
 			Execution:           &commonpb.WorkflowExecution{WorkflowId: ex.WorkflowId},
 			FirstExecutionRunId: ex.RunId,
@@ -868,8 +946,6 @@ func (s *scheduler) startLongPollWatcher(ex *commonpb.WorkflowExecution) {
 		HeartbeatTimeout: 65 * time.Second,
 	})
 	req := &schedspb.WatchWorkflowRequest{
-		Namespace:   s.State.Namespace,
-		NamespaceId: s.State.NamespaceId,
 		// Note: do not send runid here so that we always get the latest one
 		Execution:           &commonpb.WorkflowExecution{WorkflowId: ex.WorkflowId},
 		FirstExecutionRunId: ex.RunId,
@@ -882,48 +958,68 @@ func (s *scheduler) startLongPollWatcher(ex *commonpb.WorkflowExecution) {
 func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
 	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
 	areq := &schedspb.CancelWorkflowRequest{
-		NamespaceId: s.State.NamespaceId,
-		Namespace:   s.State.Namespace,
-		RequestId:   s.newUUIDString(),
-		Identity:    s.identity(),
-		Execution:   ex,
-		Reason:      "cancelled by schedule overlap policy",
+		RequestId: s.newUUIDString(),
+		Identity:  s.identity(),
+		Execution: ex,
+		Reason:    "cancelled by schedule overlap policy",
 	}
 	err := workflow.ExecuteLocalActivity(ctx, s.a.CancelWorkflow, areq).Get(s.ctx, nil)
 	if err != nil {
 		s.logger.Error("cancel workflow failed", "workflow", ex.WorkflowId, "error", err)
+		s.metrics.Counter(metrics.ScheduleCancelWorkflowErrors.GetMetricName()).Inc(1)
 	}
 	// Note: the local activity has completed (or failed) here but the workflow might take time
 	// to close since a cancel is only a request.
+	// If this failed, that's okay, we'll try it again the next time we try to take an action.
 }
 
 func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
 	areq := &schedspb.TerminateWorkflowRequest{
-		NamespaceId: s.State.NamespaceId,
-		Namespace:   s.State.Namespace,
-		RequestId:   s.newUUIDString(),
-		Identity:    s.identity(),
-		Execution:   ex,
-		Reason:      "terminated by schedule overlap policy",
+		RequestId: s.newUUIDString(),
+		Identity:  s.identity(),
+		Execution: ex,
+		Reason:    "terminated by schedule overlap policy",
 	}
 	err := workflow.ExecuteLocalActivity(ctx, s.a.TerminateWorkflow, areq).Get(s.ctx, nil)
 	if err != nil {
 		s.logger.Error("terminate workflow failed", "workflow", ex.WorkflowId, "error", err)
+		s.metrics.Counter(metrics.ScheduleTerminateWorkflowErrors.GetMetricName()).Inc(1)
 	}
+	// Note: the local activity has completed (or failed) here but we'll still wait until we
+	// observe the workflow close (with a watcher) to start the next one.
+	// If this failed, that's okay, we'll try it again the next time we try to take an action.
 }
 
 func (s *scheduler) newUUIDString() string {
 	if len(s.uuidBatch) == 0 {
-		workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
 			out := make([]string, 10)
 			for i := range out {
 				out[i] = uuid.NewString()
 			}
 			return out
-		}).Get(&s.uuidBatch)
+		}).Get(&s.uuidBatch))
 	}
 	next := s.uuidBatch[0]
 	s.uuidBatch = s.uuidBatch[1:]
 	return next
+}
+
+func panicIfErr(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time) *schedpb.ScheduleListInfo {
+	// note that this does not take into account InitialPatch
+	fakeScheduler := &scheduler{
+		StartScheduleArgs: *args,
+		tweakables:        currentTweakablePolicies,
+	}
+	fakeScheduler.ensureFields()
+	fakeScheduler.compileSpec()
+	fakeScheduler.State.LastProcessedTime = timestamp.TimePtr(now)
+	return fakeScheduler.getListInfo()
 }

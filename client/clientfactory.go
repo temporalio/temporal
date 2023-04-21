@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 )
 
 type (
@@ -51,8 +53,8 @@ type (
 	Factory interface {
 		NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error)
 		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matchingservice.MatchingServiceClient, error)
-		NewRemoteFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) workflowservice.WorkflowServiceClient
-		NewLocalFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (workflowservice.WorkflowServiceClient, error)
+		NewRemoteFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient)
+		NewLocalFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
 		NewRemoteAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient
 		NewLocalAdminClientWithTimeout(timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
 	}
@@ -62,7 +64,7 @@ type (
 		NewFactory(
 			rpcFactory common.RPCFactory,
 			monitor membership.Monitor,
-			metricsClient metrics.Client,
+			metricsHandler metrics.Handler,
 			dc *dynamicconfig.Collection,
 			numberOfHistoryShards int32,
 			logger log.Logger,
@@ -76,7 +78,7 @@ type (
 	rpcClientFactory struct {
 		rpcFactory            common.RPCFactory
 		monitor               membership.Monitor
-		metricsClient         metrics.Client
+		metricsHandler        metrics.Handler
 		dynConfig             *dynamicconfig.Collection
 		numberOfHistoryShards int32
 		logger                log.Logger
@@ -100,7 +102,7 @@ func NewFactoryProvider() FactoryProvider {
 func (p *factoryProviderImpl) NewFactory(
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	dc *dynamicconfig.Collection,
 	numberOfHistoryShards int32,
 	logger log.Logger,
@@ -109,7 +111,7 @@ func (p *factoryProviderImpl) NewFactory(
 	return &rpcClientFactory{
 		rpcFactory:            rpcFactory,
 		monitor:               monitor,
-		metricsClient:         metricsClient,
+		metricsHandler:        metricsHandler,
 		dynConfig:             dc,
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
@@ -118,7 +120,7 @@ func (p *factoryProviderImpl) NewFactory(
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error) {
-	resolver, err := cf.monitor.GetResolver(common.HistoryServiceName)
+	resolver, err := cf.monitor.GetResolver(primitives.HistoryService)
 	if err != nil {
 		return nil, err
 	}
@@ -130,8 +132,8 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	}
 	clientCache := common.NewClientCache(keyResolver, clientProvider)
 	client := history.NewClient(cf.numberOfHistoryShards, timeout, clientCache, cf.logger)
-	if cf.metricsClient != nil {
-		client = history.NewMetricClient(client, cf.metricsClient, cf.logger, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = history.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
 }
@@ -141,7 +143,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (matchingservice.MatchingServiceClient, error) {
-	resolver, err := cf.monitor.GetResolver(common.MatchingServiceName)
+	resolver, err := cf.monitor.GetResolver(primitives.MatchingService)
 	if err != nil {
 		return nil, err
 	}
@@ -156,11 +158,10 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		longPollTimeout,
 		common.NewClientCache(keyResolver, clientProvider),
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
-		cf.dynConfig.GetBoolProperty(dynamicconfig.MatchingUseOldRouting, true),
 	)
 
-	if cf.metricsClient != nil {
-		client = matching.NewMetricClient(client, cf.metricsClient, cf.logger, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = matching.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
 
@@ -170,19 +171,19 @@ func (cf *rpcClientFactory) NewRemoteFrontendClientWithTimeout(
 	rpcAddress string,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
-) workflowservice.WorkflowServiceClient {
+) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient) {
 	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress)
 	client := workflowservice.NewWorkflowServiceClient(connection)
-	return cf.newFrontendClient(client, timeout, longPollTimeout)
+	return connection, cf.newFrontendClient(client, timeout, longPollTimeout)
 }
 
 func (cf *rpcClientFactory) NewLocalFrontendClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
-) (workflowservice.WorkflowServiceClient, error) {
+) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error) {
 	connection := cf.rpcFactory.CreateLocalFrontendGRPCConnection()
 	client := workflowservice.NewWorkflowServiceClient(connection)
-	return cf.newFrontendClient(client, timeout, longPollTimeout), nil
+	return connection, cf.newFrontendClient(client, timeout, longPollTimeout), nil
 }
 
 func (cf *rpcClientFactory) NewRemoteAdminClientWithTimeout(
@@ -210,8 +211,8 @@ func (cf *rpcClientFactory) newAdminClient(
 	longPollTimeout time.Duration,
 ) adminservice.AdminServiceClient {
 	client = admin.NewClient(timeout, longPollTimeout, client)
-	if cf.metricsClient != nil {
-		client = admin.NewMetricClient(client, cf.metricsClient, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = admin.NewMetricClient(client, cf.metricsHandler, cf.throttledLogger)
 	}
 	return client
 }
@@ -222,8 +223,8 @@ func (cf *rpcClientFactory) newFrontendClient(
 	longPollTimeout time.Duration,
 ) workflowservice.WorkflowServiceClient {
 	client = frontend.NewClient(timeout, longPollTimeout, client)
-	if cf.metricsClient != nil {
-		client = frontend.NewMetricClient(client, cf.metricsClient, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = frontend.NewMetricClient(client, cf.metricsHandler, cf.throttledLogger)
 	}
 	return client
 }

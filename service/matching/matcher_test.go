@@ -70,7 +70,9 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	t.taskQueue = newTestTaskQueueID(namespace.ID(uuid.New()), taskQueuePartitionPrefix+"tl0/1", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	n := mustFromBaseName("tl0").WithPartition(1)
+	t.taskQueue = newTestTaskQueueID(namespace.ID(uuid.New()), n.FullName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	tlCfg := newTaskQueueConfig(t.taskQueue, cfg, "test-namespace")
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
@@ -80,11 +82,11 @@ func (t *MatcherTestSuite) SetupTest() {
 	}
 	t.cfg = tlCfg
 	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, t.client)
-	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopScope)
+	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
 
-	rootTaskQueue := newTestTaskQueueID(t.taskQueue.namespaceID, t.taskQueue.Parent(20), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rootTaskQueue := newTestTaskQueueID(t.taskQueue.namespaceID, mustParent(t.taskQueue.Name, 20).FullName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	rootTaskqueueCfg := newTaskQueueConfig(rootTaskQueue, cfg, "test-namespace")
-	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, metrics.NoopScope)
+	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, metrics.NoopMetricsHandler)
 }
 
 func (t *MatcherTestSuite) TearDownTest() {
@@ -187,8 +189,8 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.NotNil(req)
 	t.NoError(err)
 	t.True(remoteSyncMatch)
-	t.Equal(t.taskQueue.name, req.GetForwardedSource())
-	t.Equal(t.taskQueue.Parent(20), req.GetTaskQueue().GetName())
+	t.Equal(t.taskQueue.FullName(), req.GetForwardedSource())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestSyncMatchFailure() {
@@ -277,7 +279,8 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 			task.forwardedFrom = req.GetForwardedSource()
 			close(pollSigC)
 			time.Sleep(10 * time.Millisecond)
-			t.rootMatcher.OfferQuery(ctx, task)
+			_, err := t.rootMatcher.OfferQuery(ctx, task)
+			t.Assert().NoError(err)
 		},
 	).Return(&matchingservice.QueryWorkflowResponse{QueryResult: payloads.EncodeString("answer")}, nil)
 
@@ -292,8 +295,8 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 	err = payloads.Decode(result.GetQueryResult(), &answer)
 	t.NoError(err)
 	t.Equal("answer", answer)
-	t.Equal(t.taskQueue.name, req.GetForwardedSource())
-	t.Equal(t.taskQueue.Parent(20), req.GetTaskQueue().GetName())
+	t.Equal(t.taskQueue.FullName(), req.GetForwardedSource())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
@@ -386,7 +389,8 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-		t.matcher.Poll(ctx)
+		_, err := t.matcher.Poll(ctx)
+		t.Assert().NoError(err)
 		cancel()
 	}()
 
@@ -423,8 +427,8 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	t.NoError(err)
 	t.True(remoteSyncMatch)
 	t.True(taskCompleted)
-	t.Equal(t.taskQueue.name, req.GetForwardedSource())
-	t.Equal(t.taskQueue.Parent(20), req.GetTaskQueue().GetName())
+	t.Equal(t.taskQueue.FullName(), req.GetForwardedSource())
+	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), req.GetTaskQueue().GetName())
 }
 
 func (t *MatcherTestSuite) TestRemotePoll() {

@@ -73,31 +73,51 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+			Owner:   "test-shard-owner",
 		},
 		tests.NewDynamicConfig(),
 	)
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
+	scheduler := NewPriorityScheduler(
+		PrioritySchedulerOptions{
+			WorkerCount:                 dynamicconfig.GetIntPropertyFn(10),
+			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
+			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(true),
+		},
+		NewSchedulerRateLimiter(
+			s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
+			s.mockShard.GetConfig().TaskSchedulerMaxQPS,
+			s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
+			s.mockShard.GetConfig().PersistenceMaxQPS,
+		),
+		s.mockShard.GetTimeSource(),
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	rescheduler := NewRescheduler(
+		scheduler,
+		s.mockShard.GetTimeSource(),
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,
 		tasks.CategoryTimer,
-		NewFIFOScheduler(
-			FIFOSchedulerOptions{
-				WorkerCount: dynamicconfig.GetIntPropertyFn(10),
-				QueueSize:   100,
-			},
-			log.NewTestLogger(),
-		),
+		scheduler,
+		rescheduler,
 		nil,
 		nil,
 		testQueueOptions,
-		nil,
+		NewReaderPriorityRateLimiter(
+			func() float64 { return 10 },
+			1,
+		),
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
@@ -136,8 +156,6 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 	for _, key := range testTaskKeys {
 		mockTask := tasks.NewMockTask(s.controller)
 		mockTask.EXPECT().GetKey().Return(key).AnyTimes()
-		mockTask.EXPECT().GetVisibilityTime().Return(key.FireTime).Times(1)
-		mockTask.EXPECT().SetVisibilityTime(key.FireTime.Truncate(scheduledTaskPrecision)).Times(1)
 		mockTasks = append(mockTasks, mockTask)
 
 		if r.ContainsKey(key) {
@@ -151,8 +169,9 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryTimer,
+		ReaderID:            DefaultReaderId,
 		InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
-		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(scheduledTaskPrecision), 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0),
 		BatchSize:           testQueueOptions.BatchSize(),
 		NextPageToken:       currentPageToken,
 	}).Return(&persistence.GetHistoryTasksResponse{
@@ -160,7 +179,7 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 		NextPageToken: nextPageToken,
 	}, nil).Times(1)
 
-	paginationFn := paginationFnProvider(r)
+	paginationFn := paginationFnProvider(DefaultReaderId, r)
 	loadedTasks, actualNextPageToken, err := paginationFn(currentPageToken)
 	s.NoError(err)
 	for _, task := range loadedTasks {
@@ -184,7 +203,7 @@ func (s *scheduledQueueSuite) TestLookAheadTask_HasLookAheadTask() {
 
 	timerGate.SetCurrentTime(lookAheadTask.GetKey().FireTime)
 	select {
-	case <-s.scheduledQueue.timerGate.FireChan():
+	case <-s.scheduledQueue.timerGate.FireCh():
 	default:
 		s.Fail("timer gate should fire when look ahead task is due")
 	}
@@ -201,7 +220,7 @@ func (s *scheduledQueueSuite) TestLookAheadTask_NoLookAheadTask() {
 		(1 + testQueueOptions.MaxPollIntervalJitterCoefficient()) * float64(testQueueOptions.MaxPollInterval()),
 	)))
 	select {
-	case <-s.scheduledQueue.timerGate.FireChan():
+	case <-s.scheduledQueue.timerGate.FireCh():
 	default:
 		s.Fail("timer gate should fire at the end of look ahead window")
 	}
@@ -216,29 +235,22 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 		predicates.Universal[tasks.Task](),
 	)
 
+	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
+		ShardID:      s.mockShard.GetShardID(),
+		ShardOwner:   s.mockShard.GetOwner(),
+		TaskCategory: tasks.CategoryTimer,
+		ReaderID:     lookAheadReaderID,
+	}).Return(nil).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("some random error")).Times(1)
 	s.scheduledQueue.lookAheadTask()
 
 	timerGate.SetCurrentTime(s.scheduledQueue.nonReadableScope.Range.InclusiveMin.FireTime)
 	select {
-	case <-s.scheduledQueue.timerGate.FireChan():
+	case <-s.scheduledQueue.timerGate.FireCh():
 	default:
 		s.Fail("timer gate should fire when time reaches look ahead range")
 	}
-}
-
-func (s *scheduledQueueSuite) TestProcessNewRange_LookAheadPerformed() {
-	timerGate := timer.NewRemoteGate()
-	s.scheduledQueue.timerGate = timerGate
-
-	// test if look ahead if performed after processing new range
-	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetHistoryTasksResponse{
-		Tasks:         []tasks.Task{},
-		NextPageToken: nil,
-	}, nil).Times(1)
-
-	s.scheduledQueue.processNewRange()
 }
 
 func (s *scheduledQueueSuite) setupLookAheadMock(
@@ -258,9 +270,16 @@ func (s *scheduledQueueSuite) setupLookAheadMock(
 		loadedTasks = append(loadedTasks, lookAheadTask)
 	}
 
+	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
+		ShardID:      s.mockShard.GetShardID(),
+		ShardOwner:   s.mockShard.GetOwner(),
+		TaskCategory: tasks.CategoryTimer,
+		ReaderID:     lookAheadReaderID,
+	}).Return(nil).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
 		s.Equal(s.mockShard.GetShardID(), request.ShardID)
 		s.Equal(tasks.CategoryTimer, request.TaskCategory)
+		s.Equal(int32(DefaultReaderId), request.ReaderID)
 		s.Equal(lookAheadRange.InclusiveMin, request.InclusiveMinTaskKey)
 		s.Equal(1, request.BatchSize)
 		s.Nil(request.NextPageToken)

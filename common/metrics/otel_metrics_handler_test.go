@@ -34,11 +34,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
-	"go.opentelemetry.io/otel/sdk/metric/metrictest"
-	"go.opentelemetry.io/otel/sdk/metric/number"
+	"go.opentelemetry.io/otel/metric/unit"
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/aggregation"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"go.temporal.io/server/common/log"
+)
+
+var (
+	minLatency = float64(1248)
+	maxLatency = float64(5255)
+	testBytes  = float64(1234567)
 )
 
 type testProvider struct {
@@ -53,113 +60,169 @@ func (t *testProvider) Stop(log.Logger) {}
 
 func TestMeter(t *testing.T) {
 	ctx := context.Background()
-	mp, exp := metrictest.NewTestMeterProvider()
-	p := NewOtelMetricsHandler(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")}, defaultConfig)
+	rdr := sdkmetrics.NewManualReader()
+	provider := sdkmetrics.NewMeterProvider(
+		sdkmetrics.WithReader(rdr),
+		sdkmetrics.WithView(
+			sdkmetrics.NewView(
+				sdkmetrics.Instrument{
+					Kind: sdkmetrics.InstrumentKindHistogram,
+					Unit: unit.Bytes,
+				},
+				sdkmetrics.Stream{
+					Aggregation: aggregation.ExplicitBucketHistogram{
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries[string(unit.Bytes)],
+					},
+				},
+			),
+			sdkmetrics.NewView(
+				sdkmetrics.Instrument{
+					Kind: sdkmetrics.InstrumentKindHistogram,
+					Unit: unit.Dimensionless,
+				},
+				sdkmetrics.Stream{
+					Aggregation: aggregation.ExplicitBucketHistogram{
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries[string(unit.Dimensionless)],
+					},
+				},
+			),
+			sdkmetrics.NewView(
+				sdkmetrics.Instrument{
+					Kind: sdkmetrics.InstrumentKindHistogram,
+					Unit: unit.Milliseconds,
+				},
+				sdkmetrics.Stream{
+					Aggregation: aggregation.ExplicitBucketHistogram{
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries[string(unit.Milliseconds)],
+					},
+				},
+			),
+		),
+	)
+	p := NewOtelMetricsHandler(log.NewTestLogger(), &testProvider{meter: provider.Meter("test")}, defaultConfig)
 	recordMetrics(p)
 
-	err := exp.Collect(ctx)
+	got, err := rdr.Collect(ctx)
 	assert.Nil(t, err)
 
-	//lint:ignore SA1019 TODO: fix later
-	lib := metrictest.Library{InstrumentationName: "test"}
-	got := exp.Records
+	want := []metricdata.Metrics{
+		{
+			Name: "hits",
+			Data: metricdata.Sum[int64]{
+				DataPoints: []metricdata.DataPoint[int64]{
+					{
+						Value: 8,
+					},
+				},
+				Temporality: metricdata.CumulativeTemporality,
+				IsMonotonic: true,
+			},
+		},
+		{
+			Name: "hits-tagged",
+			Data: metricdata.Sum[int64]{
+				DataPoints: []metricdata.DataPoint[int64]{
+					{
+						Attributes: attribute.NewSet(attribute.String("taskqueue", "__sticky__")),
+						Value:      11,
+					},
+				},
+				Temporality: metricdata.CumulativeTemporality,
+				IsMonotonic: true,
+			},
+		},
+		{
+			Name: "hits-tagged-excluded",
+			Data: metricdata.Sum[int64]{
+				DataPoints: []metricdata.DataPoint[int64]{
+					{
 
-	want := []metrictest.ExportRecord{
-		{
-			InstrumentName:         "hits",
-			Sum:                    number.NewInt64Number(8),
-			Attributes:             nil,
-			InstrumentationLibrary: lib,
-			AggregationKind:        aggregation.SumKind,
-			NumberKind:             number.Int64Kind,
+						Attributes: attribute.NewSet(attribute.String("taskqueue", tagExcludedValue)),
+						Value:      14,
+					},
+				},
+				Temporality: metricdata.CumulativeTemporality,
+				IsMonotonic: true,
+			},
 		},
 		{
-			InstrumentName: "hits-tagged",
-			Sum:            number.NewInt64Number(11),
-			Attributes: []attribute.KeyValue{
-				{
-					Key:   attribute.Key("taskqueue"),
-					Value: attribute.StringValue("__sticky__"),
+			Name: "latency",
+			Data: metricdata.Histogram{
+				DataPoints: []metricdata.HistogramDataPoint{
+					{
+						Count:        2,
+						BucketCounts: []uint64{0, 0, 0, 1, 1, 0},
+						Min:          metricdata.NewExtrema(minLatency),
+						Max:          metricdata.NewExtrema(maxLatency),
+						Sum:          6503,
+					},
+				},
+				Temporality: metricdata.CumulativeTemporality,
+			},
+			Unit: unit.Milliseconds,
+		},
+		{
+			Name: "temp",
+			Data: metricdata.Gauge[float64]{
+				DataPoints: []metricdata.DataPoint[float64]{
+					{
+						Attributes: attribute.NewSet(attribute.String("location", "Mare Imbrium")),
+						Value:      100,
+					},
 				},
 			},
-			InstrumentationLibrary: lib,
-			AggregationKind:        aggregation.SumKind,
-			NumberKind:             number.Int64Kind,
 		},
 		{
-			InstrumentName: "hits-tagged-excluded",
-			Sum:            number.NewInt64Number(14),
-			Attributes: []attribute.KeyValue{
-				{
-					Key:   attribute.Key("taskqueue"),
-					Value: attribute.StringValue(tagExcludedValue),
+			Name: "transmission",
+			Data: metricdata.Histogram{
+				DataPoints: []metricdata.HistogramDataPoint{
+					{
+						Count:        1,
+						BucketCounts: []uint64{0, 0, 1},
+						Min:          metricdata.NewExtrema(testBytes),
+						Max:          metricdata.NewExtrema(testBytes),
+						Sum:          testBytes,
+					},
 				},
+				Temporality: metricdata.CumulativeTemporality,
 			},
-			InstrumentationLibrary: lib,
-			AggregationKind:        aggregation.SumKind,
-			NumberKind:             number.Int64Kind,
-		},
-		{
-			InstrumentName:         "latency",
-			Sum:                    number.NewInt64Number(6503),
-			Count:                  2,
-			Attributes:             nil,
-			InstrumentationLibrary: lib,
-			AggregationKind:        aggregation.HistogramKind,
-			NumberKind:             number.Int64Kind,
-			Histogram: aggregation.Buckets{
-				Counts: []uint64{1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			},
-		},
-		{
-			InstrumentName: "temp",
-			Sum:            number.NewFloat64Number(-100),
-			Attributes: []attribute.KeyValue{
-				{
-					Key:   attribute.Key("location"),
-					Value: attribute.StringValue("Mare Imbrium"),
-				},
-			},
-			InstrumentationLibrary: lib,
-			AggregationKind:        aggregation.SumKind,
-			NumberKind:             number.Float64Kind,
-		},
-		{
-			InstrumentName:         "transmission",
-			InstrumentationLibrary: lib,
-			Sum:                    number.NewInt64Number(1234567),
-			Count:                  1,
-			AggregationKind:        aggregation.HistogramKind,
-			Histogram: aggregation.Buckets{
-				Counts: []uint64{0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
-			},
+			Unit: unit.Bytes,
 		},
 	}
-
-	if diff := cmp.Diff(want, got, cmp.Comparer(valuesEqual), cmpopts.SortSlices(func(x, y metrictest.ExportRecord) bool {
-		return x.InstrumentName < y.InstrumentName
-	}), cmpopts.IgnoreFields(aggregation.Buckets{}, "Boundaries")); diff != "" {
+	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,
+		cmp.Comparer(func(e1, e2 metricdata.Extrema) bool {
+			v1, ok1 := e1.Value()
+			v2, ok2 := e2.Value()
+			return ok1 && ok2 && v1 == v2
+		}),
+		cmp.Comparer(func(a1, a2 attribute.Set) bool {
+			return a1.Equals(&a2)
+		}),
+		cmpopts.SortSlices(func(x, y metricdata.Metrics) bool {
+			return x.Name < y.Name
+		}),
+		cmpopts.IgnoreFields(metricdata.DataPoint[int64]{}, "StartTime", "Time"),
+		cmpopts.IgnoreFields(metricdata.DataPoint[float64]{}, "StartTime", "Time"),
+		cmpopts.IgnoreFields(metricdata.HistogramDataPoint{}, "StartTime", "Time", "Bounds"),
+	); diff != "" {
 		t.Errorf("mismatch (-want, got):\n%s", diff)
 	}
 }
 
-func valuesEqual(v1, v2 attribute.Value) bool {
-	return v1.AsInterface() == v2.AsInterface()
-}
+func recordMetrics(mp Handler) {
+	hitsCounter := mp.Counter("hits")
+	gauge := mp.Gauge("temp")
 
-func recordMetrics(mp MetricsHandler) {
-	c := mp.Counter("hits")
-	g := mp.Gauge("temp")
-	d := mp.Timer("latency")
-	h := mp.Histogram("transmission", Bytes)
-	t := mp.Counter("hits-tagged")
-	e := mp.Counter("hits-tagged-excluded")
+	timer := mp.Timer("latency")
+	histogram := mp.Histogram("transmission", Bytes)
+	hitsTaggedCounter := mp.Counter("hits-tagged")
+	hitsTaggedExcludedCounter := mp.Counter("hits-tagged-excluded")
 
-	c.Record(8)
-	g.Record(-100, StringTag("location", "Mare Imbrium"))
-	d.Record(1248 * time.Millisecond)
-	d.Record(5255 * time.Millisecond)
-	h.Record(1234567)
-	t.Record(11, TaskQueueTag("__sticky__"))
-	e.Record(14, TaskQueueTag("filtered"))
+	hitsCounter.Record(8)
+	gauge.Record(100, StringTag("location", "Mare Imbrium"))
+	timer.Record(time.Duration(minLatency) * time.Millisecond)
+	timer.Record(time.Duration(maxLatency) * time.Millisecond)
+	histogram.Record(int64(testBytes))
+	hitsTaggedCounter.Record(11, TaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, TaskQueueTag("filtered"))
 }

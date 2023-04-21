@@ -43,11 +43,13 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -61,12 +63,12 @@ type (
 
 func newTimerQueueStandbyTaskExecutor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
-	workflowDeleteManager workflow.DeleteManager,
+	workflowCache wcache.Cache,
+	workflowDeleteManager deletemanager.DeleteManager,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricProvider metrics.Handler,
 	clusterName string,
 	config *configs.Config,
 ) queues.Executor {
@@ -237,7 +239,6 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, nil
 		}
 
-		now := t.getStandbyClusterTime()
 		// we need to handcraft some of the variables
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
@@ -245,7 +246,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, err
 		}
 
-		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx, now)
+		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx)
 		return nil, err
 	}
 
@@ -274,9 +275,9 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
-		if !ok {
-			return nil, nil
+		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
+		if err != nil {
+			return nil, err
 		}
 
 		if activityInfo.Attempt > task.Attempt {
@@ -317,14 +318,14 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 	}
 
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		workflowTask, isPending := mutableState.GetWorkflowTaskInfo(timerTask.EventID)
-		if !isPending {
+		workflowTask := mutableState.GetWorkflowTaskByID(timerTask.EventID)
+		if workflowTask == nil {
 			return nil, nil
 		}
 
-		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
-		if !ok {
-			return nil, nil
+		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
+		if err != nil {
+			return nil, err
 		}
 
 		return getHistoryResendInfo(mutableState)
@@ -350,7 +351,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	timerTask *tasks.WorkflowBackoffTimerTask,
 ) error {
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		if mutableState.HasProcessedOrPendingWorkflowTask() {
+		if mutableState.HadOrHasWorkflowTask() {
 			// if there is one workflow task already been processed
 			// or has pending workflow task, meaning workflow has already running
 			return nil, nil
@@ -396,9 +397,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
-		if !ok {
-			return nil, nil
+		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
+		if err != nil {
+			return nil, err
 		}
 
 		return getHistoryResendInfo(mutableState)
@@ -457,7 +458,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -507,9 +508,10 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
+	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskScope))
+	scope.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	startTime := time.Now()
+	defer func() { scope.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {

@@ -42,6 +42,8 @@ const (
 var (
 	// ErrTaskDiscarded is the error indicating that the standby timer / transfer task is pending for too long and discarded.
 	ErrTaskDiscarded = errors.New("passive task pending for too long")
+	// ErrTaskVersionMismatch is an error indicating the task is discarded due to version mismatch.
+	ErrTaskVersionMismatch = errors.New("task discarded due to version mismatch")
 	// ErrTaskRetry is the error indicating that the standby timer / transfer task should be retried since condition in mutable state is not met.
 	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
 	// ErrDependencyTaskNotCompleted is the error returned when a task this task depends on is not completed yet
@@ -88,6 +90,10 @@ var (
 	ErrWorkflowNotReady = serviceerror.NewWorkflowNotReady("Workflow state is not ready to handle the request.")
 	// ErrWorkflowTaskNotScheduled is error indicating workflow task is not scheduled yet.
 	ErrWorkflowTaskNotScheduled = serviceerror.NewWorkflowNotReady("Workflow task is not scheduled yet.")
+	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
+	ErrNamespaceHandover = common.ErrNamespaceHandover
+	// ErrWorkflowTaskStateInconsistent is error indicating workflow task state is inconsistent, for example there was no workflow task scheduled but buffered events are present.
+	ErrWorkflowTaskStateInconsistent = serviceerror.NewUnavailable("Workflow task state is inconsistent.")
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API

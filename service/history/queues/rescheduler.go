@@ -61,7 +61,7 @@ type (
 		// Reschedule triggers an immediate reschedule for provided namespace
 		// ignoring executable's reschedule time.
 		// Used by namespace failover logic
-		Reschedule(namespaceIDs map[string]struct{})
+		Reschedule(namespaceID string)
 
 		// Len returns the total number of task executables waiting to be rescheduled.
 		Len() int
@@ -76,7 +76,7 @@ type (
 		scheduler      Scheduler
 		timeSource     clock.TimeSource
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 
 		status     int32
 		shutdownCh chan struct{}
@@ -95,7 +95,7 @@ func NewRescheduler(
 	scheduler Scheduler,
 	timeSource clock.TimeSource,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *reschedulerImpl {
 	return &reschedulerImpl{
 		scheduler:      scheduler,
@@ -159,7 +159,7 @@ func (r *reschedulerImpl) Add(
 }
 
 func (r *reschedulerImpl) Reschedule(
-	namespaceIDs map[string]struct{},
+	namespaceID string,
 ) {
 	r.Lock()
 	defer r.Unlock()
@@ -167,7 +167,7 @@ func (r *reschedulerImpl) Reschedule(
 	now := r.timeSource.Now()
 	updatedRescheduleTime := false
 	for key, pq := range r.pqMap {
-		if _, ok := namespaceIDs[key.NamespaceID]; !ok {
+		if key.NamespaceID != namespaceID {
 			continue
 		}
 
@@ -198,7 +198,7 @@ func (r *reschedulerImpl) Len() int {
 func (r *reschedulerImpl) rescheduleLoop() {
 	defer r.shutdownWG.Done()
 
-	cleanupTimer := time.NewTimer(backoff.JitDuration(
+	cleanupTimer := time.NewTimer(backoff.Jitter(
 		reschedulerPQCleanupDuration,
 		reschedulerPQCleanupJitterCoefficient,
 	))
@@ -209,11 +209,11 @@ func (r *reschedulerImpl) rescheduleLoop() {
 		case <-r.shutdownCh:
 			r.drain()
 			return
-		case <-r.timerGate.FireChan():
+		case <-r.timerGate.FireCh():
 			r.reschedule()
 		case <-cleanupTimer.C:
 			r.cleanupPQ()
-			cleanupTimer.Reset(backoff.JitDuration(
+			cleanupTimer.Reset(backoff.Jitter(
 				reschedulerPQCleanupDuration,
 				reschedulerPQCleanupJitterCoefficient,
 			))
@@ -226,7 +226,7 @@ func (r *reschedulerImpl) reschedule() {
 	r.Lock()
 	defer r.Unlock()
 
-	r.metricsHandler.Histogram(TaskReschedulerPendingTasks, metrics.Dimensionless).Record(int64(r.numExecutables))
+	r.metricsHandler.Histogram(metrics.TaskReschedulerPendingTasks.GetMetricName(), metrics.TaskReschedulerPendingTasks.GetMetricUnit()).Record(int64(r.numExecutables))
 
 	now := r.timeSource.Now()
 	for _, pq := range r.pqMap {

@@ -28,6 +28,7 @@ import (
 	"context"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
@@ -129,19 +130,19 @@ func (a *interceptor) Interceptor(
 			namespace = requestWithNamespace.GetNamespace()
 		}
 
-		scope := a.getMetricsScope(metrics.AuthorizationScope, namespace)
+		handler := a.getMetricsHandler(metrics.AuthorizationScope, namespace)
 		result, err := a.authorize(ctx, claims, &CallTarget{
 			Namespace: namespace,
 			APIName:   info.FullMethod,
 			Request:   req,
-		}, scope)
+		}, handler)
 		if err != nil {
-			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
+			handler.Counter(metrics.ServiceErrAuthorizeFailedCounter.GetMetricName()).Record(1)
 			a.logAuthError(err)
 			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
 		if result.Decision != DecisionAllow {
-			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
+			handler.Counter(metrics.ServiceErrUnauthorizedCounter.GetMetricName()).Record(1)
 			// if a reason is included in the result, include it in the error message
 			if result.Reason != "" {
 				return nil, serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
@@ -152,9 +153,15 @@ func (a *interceptor) Interceptor(
 	return handler(ctx, req)
 }
 
-func (a *interceptor) authorize(ctx context.Context, claims *Claims, callTarget *CallTarget, scope metrics.Scope) (Result, error) {
-	sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
-	defer sw.Stop()
+func (a *interceptor) authorize(
+	ctx context.Context,
+	claims *Claims,
+	callTarget *CallTarget,
+	metricsHandler metrics.Handler) (Result, error) {
+	startTime := time.Now().UTC()
+	defer func() {
+		metricsHandler.Timer(metrics.ServiceAuthorizationLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 	return a.authorizer.Authorize(ctx, claims, callTarget)
 }
 
@@ -165,7 +172,7 @@ func (a *interceptor) logAuthError(err error) {
 type interceptor struct {
 	authorizer     Authorizer
 	claimMapper    ClaimMapper
-	metricsClient  metrics.Client
+	metricsHandler metrics.Handler
 	logger         log.Logger
 	audienceGetter JWTAudienceMapper
 }
@@ -174,31 +181,31 @@ type interceptor struct {
 func NewAuthorizationInterceptor(
 	claimMapper ClaimMapper,
 	authorizer Authorizer,
-	metrics metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	audienceGetter JWTAudienceMapper,
 ) grpc.UnaryServerInterceptor {
 	return (&interceptor{
 		claimMapper:    claimMapper,
 		authorizer:     authorizer,
-		metricsClient:  metrics,
+		metricsHandler: metricsHandler,
 		logger:         logger,
 		audienceGetter: audienceGetter,
 	}).Interceptor
 }
 
-// getMetricsScope return metrics scope with namespace tag
-func (a *interceptor) getMetricsScope(
-	scope int,
+// getMetricsHandler return metrics handler with namespace tag
+func (a *interceptor) getMetricsHandler(
+	operation string,
 	namespace string,
-) metrics.Scope {
-	var metricsScope metrics.Scope
+) metrics.Handler {
+	var metricsHandler metrics.Handler
 	if namespace != "" {
-		metricsScope = a.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
+		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(namespace))
 	} else {
-		metricsScope = a.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
+		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceUnknownTag())
 	}
-	return metricsScope
+	return metricsHandler
 }
 
 func TLSInfoFormContext(ctx context.Context) *credentials.TLSInfo {

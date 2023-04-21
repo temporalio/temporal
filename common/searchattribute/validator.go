@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 )
 
@@ -39,33 +40,41 @@ type (
 	// Validator is used to validate search attributes
 	Validator struct {
 		searchAttributesProvider          Provider
-		searchAttributesMapper            Mapper
+		searchAttributesMapperProvider    MapperProvider
 		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
+		indexName                         string
+
+		// allowList allows list of values when it's not keyword list type.
+		allowList bool
 	}
 )
 
 // NewValidator create Validator
 func NewValidator(
 	searchAttributesProvider Provider,
-	searchAttributesMapper Mapper,
+	searchAttributesMapperProvider MapperProvider,
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	indexName string,
+	allowList bool,
 ) *Validator {
 	return &Validator{
 		searchAttributesProvider:          searchAttributesProvider,
-		searchAttributesMapper:            searchAttributesMapper,
+		searchAttributesMapperProvider:    searchAttributesMapperProvider,
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
+		indexName:                         indexName,
+		allowList:                         allowList,
 	}
 }
 
 // Validate search attributes are valid for writing.
 // The search attributes must be unaliased before calling validation.
-func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string, indexName string) error {
+func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string) error {
 	if searchAttributes == nil {
 		return nil
 	}
@@ -81,7 +90,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		)
 	}
 
-	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(indexName, false)
+	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(v.indexName, false)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(
 			fmt.Sprintf("unable to get search attributes from cluster metadata: %v", err),
@@ -112,7 +121,8 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			)
 		}
 
-		if _, err = DecodeValue(saPayload, saType); err != nil {
+		_, err = DecodeValue(saPayload, saType, v.allowList)
+		if err != nil {
 			var invalidValue interface{}
 			if err = payload.Decode(saPayload, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
@@ -178,9 +188,15 @@ func (v *Validator) validationError(msg string, saFieldName string, namespace st
 	return serviceerror.NewInvalidArgument(fmt.Sprintf(msg, saAlias))
 }
 
-func (v *Validator) getAlias(saFieldName string, namespace string) (string, error) {
-	if IsMappable(saFieldName) && v.searchAttributesMapper != nil {
-		return v.searchAttributesMapper.GetAlias(saFieldName, namespace)
+func (v *Validator) getAlias(saFieldName string, namespaceName string) (string, error) {
+	if IsMappable(saFieldName) {
+		mapper, err := v.searchAttributesMapperProvider.GetMapper(namespace.Name(namespaceName))
+		if err != nil {
+			return "", err
+		}
+		if mapper != nil {
+			return mapper.GetAlias(saFieldName, namespaceName)
+		}
 	}
 	return saFieldName, nil
 }

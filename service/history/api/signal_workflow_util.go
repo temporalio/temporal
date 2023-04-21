@@ -64,7 +64,7 @@ func ValidateSignal(
 		namespaceName,
 		workflowID,
 		runID,
-		interceptor.MetricsScope(ctx, shard.GetLogger()).Tagged(
+		interceptor.GetMetricsHandlerFromContext(ctx, shard.GetLogger()).WithTags(
 			metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()),
 		),
 		shard.GetThrottledLogger(),

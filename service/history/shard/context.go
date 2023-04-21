@@ -55,6 +55,7 @@ type (
 	// Context represents a history engine shard
 	Context interface {
 		GetShardID() int32
+		GetOwner() string
 		GetExecutionManager() persistence.ExecutionManager
 		GetNamespaceRegistry() namespace.Registry
 		GetClusterMetadata() cluster.Metadata
@@ -62,8 +63,7 @@ type (
 		GetEventsCache() events.Cache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
-		GetMetricsClient() metrics.Client
-		GetMetricsHandler() metrics.MetricsHandler
+		GetMetricsHandler() metrics.Handler
 		GetTimeSource() clock.TimeSource
 
 		GetEngine(ctx context.Context) (Engine, error)
@@ -75,22 +75,17 @@ type (
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)
 
-		// TODO: remove cluster and singleProcessorMode parameter after deprecating old task procesing logic
-		// In multi-cursor world, there's only one maxReadLevel for scheduled queue for all clusters.
-		GetQueueExclusiveHighReadWatermark(category tasks.Category, cluster string, singleProcessorMode bool) tasks.Key
+		GetImmediateQueueExclusiveHighReadWatermark() tasks.Key
+		UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error)
 		GetQueueAckLevel(category tasks.Category) tasks.Key
 		UpdateQueueAckLevel(category tasks.Category, ackLevel tasks.Key) error
 		GetQueueClusterAckLevel(category tasks.Category, cluster string) tasks.Key
 		UpdateQueueClusterAckLevel(category tasks.Category, cluster string, ackLevel tasks.Key) error
 		GetQueueState(category tasks.Category) (*persistencespb.QueueState, bool)
-		UpdateQueueState(category tasks.Category, state *persistencespb.QueueState) error
+		SetQueueState(category tasks.Category, state *persistencespb.QueueState) error
 
 		GetReplicatorDLQAckLevel(sourceCluster string) int64
 		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
-
-		UpdateFailoverLevel(category tasks.Category, failoverID string, level persistence.FailoverLevel) error
-		DeleteFailoverLevel(category tasks.Category, failoverID string) error
-		GetAllFailoverLevels(category tasks.Category) map[string]persistence.FailoverLevel
 
 		UpdateRemoteClusterInfo(cluster string, ackTaskID int64, ackTimestamp time.Time)
 
@@ -102,9 +97,10 @@ type (
 
 		GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error)
 
-		GetNamespaceNotificationVersion() int64
+		// TODO: deprecate UpdateNamespaceNotificationVersion in v1.21 and remove
+		// NamespaceNotificationVersion from shardInfo proto blob
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
-		UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace, maxRepTaskID int64)
+		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
 
@@ -115,16 +111,16 @@ type (
 		SetWorkflowExecution(ctx context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error)
 		GetCurrentExecution(ctx context.Context, request *persistence.GetCurrentExecutionRequest) (*persistence.GetCurrentExecutionResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error)
-		// DeleteWorkflowExecution deletes workflow execution, current workflow execution, and add task to delete visibility.
+		// DeleteWorkflowExecution add task to delete visibility, current workflow execution, and deletes workflow execution.
 		// If branchToken != nil, then delete history also, otherwise leave history.
-		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime *time.Time, closeTime *time.Time, closeExecutionVisibilityTaskID int64) error
+		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime *time.Time, closeTime *time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error
 
 		GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error)
 		GetHistoryClient() historyservice.HistoryServiceClient
 		GetPayloadSerializer() serialization.Serializer
 
 		GetSearchAttributesProvider() searchattribute.Provider
-		GetSearchAttributesMapper() searchattribute.Mapper
+		GetSearchAttributesMapperProvider() searchattribute.MapperProvider
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
 		Unload()

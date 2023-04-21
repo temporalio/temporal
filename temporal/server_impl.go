@@ -30,6 +30,7 @@ import (
 	"sync"
 
 	"go.uber.org/fx"
+	"go.uber.org/multierr"
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -39,6 +40,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -63,7 +65,7 @@ var ServerFxImplModule = fx.Options(
 	fx.Provide(func(src *ServerImpl) Server { return src }),
 )
 
-// NewServer returns a new instance of server that serves one or many services.
+// NewServerFxImpl returns a new instance of server that serves one or many services.
 func NewServerFxImpl(
 	opts *serverOptions,
 	logger log.Logger,
@@ -95,8 +97,10 @@ func (s *ServerImpl) Start() error {
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
 
+	ctx := context.TODO()
+
 	if err := initSystemNamespaces(
-		context.TODO(),
+		ctx,
 		&s.persistenceConfig,
 		s.clusterMetadata.CurrentClusterName,
 		s.so.persistenceServiceResolver,
@@ -107,30 +111,22 @@ func (s *ServerImpl) Start() error {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
-	var wg sync.WaitGroup
-	for _, svcMeta := range s.servicesMetadata {
-		wg.Add(1)
-		go func(svcMeta *ServicesMetadata) {
-			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
-			defer cancelFunc()
-			svcMeta.App.Start(timeoutCtx)
-			wg.Done()
-		}(svcMeta)
+	if err := s.startServices(); err != nil {
+		return err
 	}
-	wg.Wait()
 
 	if s.so.blockingStart {
 		// If s.so.interruptCh is nil this will wait forever.
 		interruptSignal := <-s.so.interruptCh
 		s.logger.Info("Received interrupt signal, stopping the server.", tag.Value(interruptSignal))
-		s.Stop()
+		return s.Stop()
 	}
 
 	return nil
 }
 
 // Stop stops the server.
-func (s *ServerImpl) Stop() {
+func (s *ServerImpl) Stop() error {
 	var wg sync.WaitGroup
 	wg.Add(len(s.servicesMetadata))
 	close(s.stoppedCh)
@@ -144,9 +140,44 @@ func (s *ServerImpl) Stop() {
 
 	wg.Wait()
 
-	if s.so.metricProvider != nil {
-		s.so.metricProvider.Stop(s.logger)
+	if s.so.metricHandler != nil {
+		s.so.metricHandler.Stop(s.logger)
 	}
+	return nil
+}
+
+func (s *ServerImpl) startServices() error {
+	// The membership join time may exceed the configured max join duration.
+	// Double the service start timeout to make sure there is enough time for start logic.
+	timeout := util.Max(serviceStartTimeout, 2*s.so.config.Global.Membership.MaxJoinDuration)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	results := make(chan startServiceResult, len(s.servicesMetadata))
+	for _, svcMeta := range s.servicesMetadata {
+		go func(svcMeta *ServicesMetadata) {
+			err := svcMeta.App.Start(ctx)
+			results <- startServiceResult{
+				svc: svcMeta,
+				err: err,
+			}
+		}(svcMeta)
+	}
+	return s.readResults(results)
+}
+
+func (s *ServerImpl) readResults(results chan startServiceResult) (err error) {
+	for i := 0; i < len(s.servicesMetadata); i++ {
+		r := <-results
+		if r.err != nil {
+			err = multierr.Combine(err, fmt.Errorf("failed to start service %v: %w", r.svc.ServiceName, r.err))
+		}
+	}
+	return
+}
+
+type startServiceResult struct {
+	svc *ServicesMetadata
+	err error
 }
 
 func initSystemNamespaces(
@@ -174,7 +205,7 @@ func initSystemNamespaces(
 		PersistenceNamespaceMaxQPS: nil,
 		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(currentClusterName),
-		MetricsClient:              nil,
+		MetricsHandler:             nil,
 		Logger:                     logger,
 	})
 	defer factory.Close()

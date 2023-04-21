@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/server/common"
 )
 
 // MockMetadata is a mock of Metadata interface.
@@ -153,6 +154,20 @@ func (m *MockMetadata) GetNextFailoverVersion(arg0 string, arg1 int64) int64 {
 func (mr *MockMetadataMockRecorder) GetNextFailoverVersion(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextFailoverVersion", reflect.TypeOf((*MockMetadata)(nil).GetNextFailoverVersion), arg0, arg1)
+}
+
+// GetPingChecks mocks base method.
+func (m *MockMetadata) GetPingChecks() []common.PingCheck {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPingChecks")
+	ret0, _ := ret[0].([]common.PingCheck)
+	return ret0
+}
+
+// GetPingChecks indicates an expected call of GetPingChecks.
+func (mr *MockMetadataMockRecorder) GetPingChecks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPingChecks", reflect.TypeOf((*MockMetadata)(nil).GetPingChecks))
 }
 
 // IsGlobalNamespaceEnabled mocks base method.

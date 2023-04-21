@@ -36,37 +36,39 @@ type (
 		CreateWorkflowExecution(
 			ctx context.Context,
 			createMode persistence.CreateWorkflowMode,
+			newWorkflowFailoverVersion int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
-			clusterName string,
 		) (int64, error)
 
 		ConflictResolveWorkflowExecution(
 			ctx context.Context,
 			conflictResolveMode persistence.ConflictResolveWorkflowMode,
+			resetWorkflowFailoverVersion int64,
 			resetWorkflowSnapshot *persistence.WorkflowSnapshot,
 			resetWorkflowEventsSeq []*persistence.WorkflowEvents,
+			newWorkflowFailoverVersion *int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+			currentWorkflowFailoverVersion *int64,
 			currentWorkflowMutation *persistence.WorkflowMutation,
 			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
-			clusterName string,
 		) (int64, int64, int64, error)
 
 		UpdateWorkflowExecution(
 			ctx context.Context,
 			updateMode persistence.UpdateWorkflowMode,
+			currentWorkflowFailoverVersion int64,
 			currentWorkflowMutation *persistence.WorkflowMutation,
 			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+			newWorkflowFailoverVersion *int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
-			clusterName string,
 		) (int64, int64, error)
 
 		SetWorkflowExecution(
 			ctx context.Context,
 			workflowSnapshot *persistence.WorkflowSnapshot,
-			clusterName string,
 		) error
 	}
 )

@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -43,12 +44,12 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -95,11 +96,10 @@ func (s *mutableStateSuite) SetupTest() {
 	s.mockConfig = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 0,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
 		s.mockConfig,
 	)
 	// set the checksum probabilities to 100% for exercising during test
@@ -161,10 +161,13 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+
+	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
+	s.NotNil(newWorkflowTask)
+
 	_, err := s.mutableState.AddWorkflowTaskTimedOutEvent(
-		newWorkflowTaskScheduleEvent.GetEventId(),
-		newWorkflowTaskStartedEvent.GetEventId(),
+		newWorkflowTask,
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.BufferEventSize())
@@ -181,11 +184,13 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 		runID,
 	)
 
-	newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+	newWorkflowTaskScheduleEvent, _ := s.prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version, runID)
+
+	newWorkflowTask := s.mutableState.GetWorkflowTaskByID(newWorkflowTaskScheduleEvent.GetEventId())
+	s.NotNil(newWorkflowTask)
 
 	_, err := s.mutableState.AddWorkflowTaskFailedEvent(
-		newWorkflowTaskScheduleEvent.GetEventId(),
-		newWorkflowTaskStartedEvent.GetEventId(),
+		newWorkflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 		failure.NewServerFailure("some random workflow task failure details", false),
 		"some random workflow task failure identity",
@@ -204,7 +209,7 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name: "closeTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), TransactionPolicyPassive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -215,7 +220,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -225,7 +230,7 @@ func (s *mutableStateSuite) TestChecksum() {
 	}
 
 	loadErrorsFunc := func() int64 {
-		counter := s.testScope.Snapshot().Counters()["test.mutable_state_checksum_mismatch+namespace=all,operation=WorkflowContext,service_name=history"]
+		counter := s.testScope.Snapshot().Counters()["test.mutable_state_checksum_mismatch+operation=WorkflowContext,service_name=history"]
 		if counter != nil {
 			return counter.Value()
 		}
@@ -320,6 +325,55 @@ func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 	s.False(s.mutableState.shouldInvalidateCheckum())
 }
 
+func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
+	// set ContinueAsNew min interval to 5s
+	s.mockConfig.ContinueAsNewMinInterval = func(namespace string) time.Duration {
+		return 5 * time.Second
+	}
+
+	// with no backoff, verify min backoff is in [3s, 5s]
+	minBackoff := s.mutableState.ContinueAsNewMinBackoff(nil)
+	s.NotNil(minBackoff)
+	s.True(*minBackoff >= 3*time.Second)
+	s.True(*minBackoff <= 5*time.Second)
+
+	// with 2s backoff, verify min backoff is in [3s, 5s]
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(timestamp.DurationPtr(time.Second * 2))
+	s.NotNil(minBackoff)
+	s.True(*minBackoff >= 3*time.Second)
+	s.True(*minBackoff <= 5*time.Second)
+
+	// with 6s backoff, verify min backoff unchanged
+	backoff := timestamp.DurationPtr(time.Second * 6)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(backoff)
+	s.NotNil(minBackoff)
+	s.True(minBackoff == backoff)
+
+	// set start time to be 3s ago
+	s.mutableState.executionInfo.StartTime = timestamp.TimePtr(time.Now().Add(-time.Second * 3))
+	// with no backoff, verify min backoff is in [0, 2s]
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil)
+	s.NotNil(minBackoff)
+	s.True(*minBackoff >= 0)
+	s.True(*minBackoff <= 2*time.Second, "%v\n", *minBackoff)
+
+	// with 2s backoff, verify min backoff not changed
+	backoff = timestamp.DurationPtr(time.Second * 2)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(backoff)
+	s.True(minBackoff == backoff)
+
+	// set start time to be 5s ago
+	s.mutableState.executionInfo.StartTime = timestamp.TimePtr(time.Now().Add(-time.Second * 5))
+	// with no backoff, verify backoff unchanged (no backoff needed)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil)
+	s.Nil(minBackoff)
+
+	// with 2s backoff, verify backoff unchanged
+	backoff = timestamp.DurationPtr(time.Second * 2)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(backoff)
+	s.True(minBackoff == backoff)
+}
+
 func (s *mutableStateSuite) TestEventReapplied() {
 	runID := uuid.New()
 	eventID := int64(1)
@@ -357,7 +411,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChan
 	})
 	s.NoError(err)
 
-	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc(), enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
 	s.NotNil(wt)
 
@@ -388,7 +442,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	})
 	s.NoError(err)
 
-	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc(), enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
 	s.NotNil(wt)
 
@@ -534,6 +588,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		nil,
 		nil,
+		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -544,6 +599,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowTaskStartedEvent.GetEventId(),
 		workflowTaskStartedEvent.GetWorkflowTaskStartedEventAttributes().GetRequestId(),
 		timestamp.TimeValue(workflowTaskStartedEvent.GetEventTime()),
+		false,
+		123678,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -585,6 +642,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt(),
 		nil,
 		nil,
+		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -595,6 +653,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskStartedEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetWorkflowTaskStartedEventAttributes().GetRequestId(),
 		timestamp.TimeValue(newWorkflowTaskStartedEvent.GetEventTime()),
+		false,
+		123678,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -603,7 +663,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent,
 		newWorkflowTaskStartedEvent,
 	}))
-	_, _, err = s.mutableState.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyPassive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
 	s.NoError(err)
 
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent
@@ -645,6 +705,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		WorkflowTaskStartedEventId:     102,
 		WorkflowTaskTimeout:            timestamp.DurationFromSeconds(100),
 		WorkflowTaskAttempt:            1,
+		WorkflowTaskType:               enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 		VersionHistories: &historyspb.VersionHistories{
 			Histories: []*historyspb.VersionHistory{
 				{
@@ -775,4 +836,149 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 	s.Assert().Equal(now, *ai.StartedTime)
 	s.Assert().Equal(requestID, ai.RequestId)
 	s.Assert().Nil(ai.LastHeartbeatDetails)
+}
+
+func (s *mutableStateSuite) TestTotalEntitiesCount() {
+	namespaceEntry := s.newNamespaceCacheEntry()
+	mutableState := TestLocalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		namespaceEntry,
+		s.logger,
+		uuid.New(),
+	)
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// scheduling, starting & completing workflow task is omitted here
+
+	workflowTaskCompletedEventID := int64(4)
+	_, _, err := mutableState.AddActivityTaskScheduledEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{},
+		false,
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		uuid.New(),
+		&commandpb.StartChildWorkflowExecutionCommandAttributes{},
+		namespace.ID(uuid.New()),
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddTimerStartedEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.StartTimerCommandAttributes{},
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		uuid.New(),
+		&commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{},
+		namespace.ID(uuid.New()),
+	)
+	s.NoError(err)
+
+	_, _, err = mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
+		workflowTaskCompletedEventID,
+		uuid.New(),
+		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			},
+		},
+		namespace.ID(uuid.New()),
+	)
+	s.NoError(err)
+
+	_, err = mutableState.AddWorkflowExecutionSignaled(
+		"signalName",
+		&commonpb.Payloads{},
+		"identity",
+		&commonpb.Header{},
+	)
+	s.NoError(err)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
+		namespaceEntry.IsGlobalNamespace(),
+		mutableState.GetCurrentVersion(),
+	).Return(cluster.TestCurrentClusterName)
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
+
+	mutation, _, err := mutableState.CloseTransactionAsMutation(
+		TransactionPolicyActive,
+	)
+	s.NoError(err)
+
+	s.Equal(int64(1), mutation.ExecutionInfo.ActivityCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.ChildExecutionCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.UserTimerCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.RequestCancelExternalCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.SignalExternalCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.SignalCount)
+}
+
+func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
+	testCases := []struct {
+		name                 string
+		enableBufferedEvents bool
+		closeTxFunc          func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error)
+	}{
+		{
+			name: "CloseTransactionAsSnapshot",
+			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyPassive)
+				if err != nil {
+					return nil, err
+				}
+				return snapshot.ExecutionInfo, err
+			},
+		},
+		{
+			name:                 "CloseTransactionAsMutation",
+			enableBufferedEvents: true,
+			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			dbState := s.buildWorkflowMutableState()
+			if !tc.enableBufferedEvents {
+				dbState.BufferedEvents = nil
+			}
+
+			var err error
+			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.NoError(err)
+
+			s.mutableState.executionInfo.WorkflowTaskScheduledEventId = s.mutableState.GetNextEventID()
+			s.mutableState.executionInfo.WorkflowTaskStartedEventId = s.mutableState.GetNextEventID() + 1
+
+			// Normal WT is persisted as is.
+			execInfo, err := tc.closeTxFunc(s.mutableState)
+			s.Nil(err)
+			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, execInfo.WorkflowTaskType)
+			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskScheduledEventId)
+			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskStartedEventId)
+
+			s.mutableState.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+
+			// Speculative WT is converted to normal.
+			execInfo, err = tc.closeTxFunc(s.mutableState)
+			s.Nil(err)
+			s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, execInfo.WorkflowTaskType)
+			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskScheduledEventId)
+			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskStartedEventId)
+		})
+	}
 }

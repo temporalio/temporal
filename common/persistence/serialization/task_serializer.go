@@ -61,6 +61,8 @@ func (s *TaskSerializer) SerializeTask(
 		return s.serializeVisibilityTask(task)
 	case tasks.CategoryIDReplication:
 		return s.serializeReplicationTask(task)
+	case tasks.CategoryIDArchival:
+		return s.serializeArchivalTask(task)
 	default:
 		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
 	}
@@ -79,6 +81,8 @@ func (s *TaskSerializer) DeserializeTask(
 		return s.deserializeVisibilityTasks(blob)
 	case tasks.CategoryIDReplication:
 		return s.deserializeReplicationTasks(blob)
+	case tasks.CategoryIDArchival:
+		return s.deserializeArchivalTasks(blob)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
 	}
@@ -300,6 +304,42 @@ func (s *TaskSerializer) deserializeReplicationTasks(
 	return replication, nil
 }
 
+func (s *TaskSerializer) serializeArchivalTask(
+	task tasks.Task,
+) (commonpb.DataBlob, error) {
+	var archivalTaskInfo *persistencespb.ArchivalTaskInfo
+	switch task := task.(type) {
+	case *tasks.ArchiveExecutionTask:
+		archivalTaskInfo = s.archiveExecutionTaskToProto(task)
+	default:
+		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf(
+			"Unknown archival task type while serializing: %v", task))
+	}
+
+	blob, err := ArchivalTaskInfoToBlob(archivalTaskInfo)
+	if err != nil {
+		return commonpb.DataBlob{}, err
+	}
+	return blob, nil
+}
+
+func (s *TaskSerializer) deserializeArchivalTasks(
+	blob commonpb.DataBlob,
+) (tasks.Task, error) {
+	archivalTask, err := ArchivalTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+	if err != nil {
+		return nil, err
+	}
+	var task tasks.Task
+	switch archivalTask.TaskType {
+	case enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION:
+		task = s.archiveExecutionTaskFromProto(archivalTask)
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown archival task type while deserializing: %v", task))
+	}
+	return task, nil
+}
+
 func (s *TaskSerializer) transferActivityTaskToProto(
 	activityTask *tasks.ActivityTask,
 ) *persistencespb.TransferTaskInfo {
@@ -510,22 +550,35 @@ func (s *TaskSerializer) transferCloseTaskToProto(
 		TaskId:                  closeTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(closeTask.VisibilityTimestamp),
 		DeleteAfterClose:        closeTask.DeleteAfterClose,
+		TaskDetails: &persistencespb.TransferTaskInfo_CloseExecutionTaskDetails_{
+			CloseExecutionTaskDetails: &persistencespb.TransferTaskInfo_CloseExecutionTaskDetails{
+				CanSkipVisibilityArchival: closeTask.CanSkipVisibilityArchival,
+			},
+		},
 	}
 }
 
 func (s *TaskSerializer) transferCloseTaskFromProto(
 	closeTask *persistencespb.TransferTaskInfo,
 ) *tasks.CloseExecutionTask {
+	canSkipVisibilityArchival := false
+	closeExecutionTaskDetails := closeTask.GetCloseExecutionTaskDetails()
+	if closeExecutionTaskDetails != nil {
+		canSkipVisibilityArchival = closeExecutionTaskDetails.CanSkipVisibilityArchival
+	}
 	return &tasks.CloseExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			closeTask.NamespaceId,
 			closeTask.WorkflowId,
 			closeTask.RunId,
 		),
-		VisibilityTimestamp: *closeTask.VisibilityTime,
-		TaskID:              closeTask.TaskId,
-		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteAfterClose,
+		VisibilityTimestamp:       *closeTask.VisibilityTime,
+		TaskID:                    closeTask.TaskId,
+		Version:                   closeTask.Version,
+		DeleteAfterClose:          closeTask.DeleteAfterClose,
+		CanSkipVisibilityArchival: canSkipVisibilityArchival,
+		// Delete workflow task process stage is not persisted. It is only for in memory retries.
+		DeleteProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
 }
 
@@ -590,6 +643,8 @@ func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
 		VisibilityTimestamp: *deleteExecutionTask.VisibilityTime,
 		TaskID:              deleteExecutionTask.TaskId,
 		Version:             deleteExecutionTask.Version,
+		// Delete workflow task process stage is not persisted. It is only for in memory retries.
+		ProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
 }
 
@@ -817,6 +872,7 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskToProto(
 		TaskId:              workflowCleanupTimer.TaskID,
 		VisibilityTime:      &workflowCleanupTimer.VisibilityTimestamp,
 		BranchToken:         workflowCleanupTimer.BranchToken,
+		AlreadyArchived:     workflowCleanupTimer.WorkflowDataAlreadyArchived,
 	}
 }
 
@@ -829,10 +885,13 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskFromProto(
 			workflowCleanupTimer.WorkflowId,
 			workflowCleanupTimer.RunId,
 		),
-		VisibilityTimestamp: *workflowCleanupTimer.VisibilityTime,
-		TaskID:              workflowCleanupTimer.TaskId,
-		Version:             workflowCleanupTimer.Version,
-		BranchToken:         workflowCleanupTimer.BranchToken,
+		VisibilityTimestamp:         *workflowCleanupTimer.VisibilityTime,
+		TaskID:                      workflowCleanupTimer.TaskId,
+		Version:                     workflowCleanupTimer.Version,
+		BranchToken:                 workflowCleanupTimer.BranchToken,
+		WorkflowDataAlreadyArchived: workflowCleanupTimer.AlreadyArchived,
+		// Delete workflow task process stage is not persisted. It is only for in memory retries.
+		ProcessStage: tasks.DeleteWorkflowExecutionStageNone,
 	}
 }
 
@@ -1038,6 +1097,39 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 		BranchToken:         historyTask.BranchToken,
 		NewRunBranchToken:   historyTask.NewRunBranchToken,
 		NewRunID:            historyTask.NewRunId,
+	}
+}
+
+func (s *TaskSerializer) archiveExecutionTaskToProto(
+	archiveExecutionTask *tasks.ArchiveExecutionTask,
+) *persistencespb.ArchivalTaskInfo {
+	return &persistencespb.ArchivalTaskInfo{
+		NamespaceId:    archiveExecutionTask.WorkflowKey.NamespaceID,
+		WorkflowId:     archiveExecutionTask.WorkflowKey.WorkflowID,
+		RunId:          archiveExecutionTask.WorkflowKey.RunID,
+		TaskType:       enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION,
+		TaskId:         archiveExecutionTask.TaskID,
+		Version:        archiveExecutionTask.Version,
+		VisibilityTime: &archiveExecutionTask.VisibilityTimestamp,
+	}
+}
+
+func (s *TaskSerializer) archiveExecutionTaskFromProto(
+	archivalTaskInfo *persistencespb.ArchivalTaskInfo,
+) *tasks.ArchiveExecutionTask {
+	visibilityTimestamp := time.Unix(0, 0)
+	if archivalTaskInfo.VisibilityTime != nil {
+		visibilityTimestamp = *archivalTaskInfo.VisibilityTime
+	}
+	return &tasks.ArchiveExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			archivalTaskInfo.NamespaceId,
+			archivalTaskInfo.WorkflowId,
+			archivalTaskInfo.RunId,
+		),
+		VisibilityTimestamp: visibilityTimestamp,
+		TaskID:              archivalTaskInfo.TaskId,
+		Version:             archivalTaskInfo.Version,
 	}
 }
 

@@ -25,20 +25,23 @@
 package interceptor
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (
-	nameepaceSuite struct {
+	namespaceSuite struct {
 		suite.Suite
 		*require.Assertions
 	}
@@ -70,20 +73,20 @@ var (
 	}
 )
 
-func TestNameepaceSuite(t *testing.T) {
-	s := new(nameepaceSuite)
+func TestNamespaceSuite(t *testing.T) {
+	s := new(namespaceSuite)
 	suite.Run(t, s)
 }
 
-func (s *nameepaceSuite) SetupTest() {
+func (s *namespaceSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *nameepaceSuite) TearDownTest() {
+func (s *namespaceSuite) TearDownTest() {
 
 }
 
-func (s *nameepaceSuite) TestFrontendAPIMetrics() {
+func (s *namespaceSuite) TestFrontendAPIMetrics() {
 	namespaceNameGetter := reflect.TypeOf((*NamespaceNameGetter)(nil)).Elem()
 
 	var service workflowservice.WorkflowServiceServer
@@ -108,7 +111,7 @@ func (s *nameepaceSuite) TestFrontendAPIMetrics() {
 	}
 }
 
-func (s *nameepaceSuite) TestMatchingAPIMetrics() {
+func (s *namespaceSuite) TestMatchingAPIMetrics() {
 	namespaceIDGetter := reflect.TypeOf((*NamespaceIDGetter)(nil)).Elem()
 
 	var service matchingservice.MatchingServiceServer
@@ -133,7 +136,7 @@ func (s *nameepaceSuite) TestMatchingAPIMetrics() {
 	}
 }
 
-func (s *nameepaceSuite) TestHistoryAPIMetrics() {
+func (s *namespaceSuite) TestHistoryAPIMetrics() {
 	namespaceIDGetter := reflect.TypeOf((*NamespaceIDGetter)(nil)).Elem()
 
 	var service historyservice.HistoryServiceServer
@@ -155,5 +158,39 @@ func (s *nameepaceSuite) TestHistoryAPIMetrics() {
 		if !request.Implements(namespaceIDGetter) {
 			s.Fail(fmt.Sprintf("API: %v not implementing NamespaceIDGetter", methodName))
 		}
+	}
+}
+
+func (s *namespaceSuite) TestGetNamespace() {
+	register := namespace.NewMockRegistry(gomock.NewController(s.T()))
+	register.EXPECT().GetNamespace(namespace.Name("exist")).Return(nil, nil)
+	register.EXPECT().GetNamespace(namespace.Name("nonexist")).Return(nil, errors.New("not found"))
+	register.EXPECT().GetNamespaceName(namespace.ID("exist")).Return(namespace.Name("exist"), nil)
+	register.EXPECT().GetNamespaceName(namespace.ID("nonexist")).Return(namespace.EmptyName, errors.New("not found"))
+	testCases := []struct {
+		method        interface{}
+		namespaceName namespace.Name
+	}{
+		{
+			&workflowservice.DescribeNamespaceRequest{Namespace: "exist"},
+			namespace.Name("exist"),
+		},
+		{
+			&workflowservice.DescribeNamespaceRequest{Namespace: "nonexist"},
+			namespace.EmptyName,
+		},
+		{
+			&historyservice.DescribeMutableStateRequest{NamespaceId: "exist"},
+			namespace.Name("exist"),
+		},
+		{
+			&historyservice.DescribeMutableStateRequest{NamespaceId: "nonexist"},
+			namespace.EmptyName,
+		},
+	}
+
+	for _, testCase := range testCases {
+		extractedNamespace := MustGetNamespaceName(register, testCase.method)
+		s.Equal(testCase.namespaceName, extractedNamespace)
 	}
 }

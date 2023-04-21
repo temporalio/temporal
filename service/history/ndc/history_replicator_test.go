@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -66,7 +67,7 @@ type (
 		controller            *gomock.Controller
 		mockShard             *shard.ContextTest
 		mockEventCache        *events.MockCache
-		mockHistoryCache      *workflow.MockCache
+		mockWorkflowCache     *wcache.MockCache
 		mockNamespaceCache    *namespace.MockRegistry
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient
 		mockExecutionManager  *persistence.MockExecutionManager
@@ -93,17 +94,16 @@ func (s *historyReplicatorSuite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 10,
-				RangeId: 1,
-			}},
+		&persistencespb.ShardInfo{
+			ShardId: 10,
+			RangeId: 1,
+		},
 		tests.NewDynamicConfig(),
 	)
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
-	s.mockHistoryCache = workflow.NewMockCache(s.controller)
+	s.mockWorkflowCache = wcache.NewMockCache(s.controller)
 	s.mockEventCache = s.mockShard.MockEventsCache
 	s.mockRemoteAdminClient = s.mockShard.Resource.RemoteAdminClient
 	eventReapplier := NewMockEventsReapplier(s.controller)
@@ -114,7 +114,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.now = time.Now().UTC()
 	s.historyReplicator = NewHistoryReplicator(
 		s.mockShard,
-		s.mockHistoryCache,
+		s.mockWorkflowCache,
 		eventReapplier,
 		s.logger,
 		serialization.NewSerializer(),
@@ -173,14 +173,13 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		RunId:      s.runID,
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	s.mockHistoryCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		namespace.ID(namespaceID),
 		we,
-		workflow.CallerTypeTask,
-	).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+		workflow.LockPriorityLow,
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
-		gomock.Any(),
 		gomock.Any(),
 		persistence.CreateWorkflowModeBrandNew,
 		"",
@@ -189,12 +188,6 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		gomock.Any(),
 		[]*persistence.WorkflowEvents{},
 	).Return(nil)
-	s.mockExecutionManager.EXPECT().ParseHistoryBranchInfo(gomock.Any(), gomock.Any()).Return(&persistence.ParseHistoryBranchInfoResponse{
-		BranchInfo: branchInfo,
-	}, nil)
-	s.mockExecutionManager.EXPECT().UpdateHistoryBranchInfo(gomock.Any(), gomock.Any()).Return(&persistence.UpdateHistoryBranchInfoResponse{
-		BranchToken: historyBranch.GetData(),
-	}, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: namespaceName},
 		nil,
@@ -282,14 +275,13 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		RunId:      s.runID,
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	s.mockHistoryCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		namespace.ID(namespaceID),
 		we,
-		workflow.CallerTypeTask,
-	).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+		workflow.LockPriorityLow,
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
-		gomock.Any(),
 		gomock.Any(),
 		persistence.CreateWorkflowModeBrandNew,
 		"",
@@ -357,12 +349,6 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		},
 		nil,
 	)
-	s.mockExecutionManager.EXPECT().ParseHistoryBranchInfo(gomock.Any(), gomock.Any()).Return(&persistence.ParseHistoryBranchInfoResponse{
-		BranchInfo: branchInfo,
-	}, nil)
-	s.mockExecutionManager.EXPECT().UpdateHistoryBranchInfo(gomock.Any(), gomock.Any()).Return(&persistence.UpdateHistoryBranchInfoResponse{
-		BranchToken: historyBranch.GetData(),
-	}, nil).AnyTimes()
 	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History: []*historypb.History{
 			{

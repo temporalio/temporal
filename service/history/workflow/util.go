@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
@@ -47,8 +48,7 @@ func failWorkflowTask(
 ) error {
 
 	if _, err := mutableState.AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduledEventID,
-		workflowTask.StartedEventID,
+		workflowTask,
 		workflowTaskFailureCause,
 		nil,
 		consts.IdentityHistoryService,
@@ -72,7 +72,7 @@ func ScheduleWorkflowTask(
 		return nil
 	}
 
-	_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
+	_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
 	}
@@ -87,7 +87,7 @@ func RetryWorkflow(
 	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (MutableState, error) {
 
-	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
 		if err := failWorkflowTask(
 			mutableState,
 			workflowTask,
@@ -117,7 +117,7 @@ func TimeoutWorkflow(
 	continuedRunID string,
 ) error {
 
-	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
 		if err := failWorkflowTask(
 			mutableState,
 			workflowTask,
@@ -144,7 +144,7 @@ func TerminateWorkflow(
 	deleteAfterTerminate bool,
 ) error {
 
-	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
+	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
 		if err := failWorkflowTask(
 			mutableState,
 			workflowTask,

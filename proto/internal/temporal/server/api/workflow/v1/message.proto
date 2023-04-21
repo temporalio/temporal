@@ -36,3 +36,9 @@ message ParentExecutionInfo {
     temporal.server.api.clock.v1.VectorClock clock = 5;
     int64 initiated_version = 6;
 }
+
+message BaseExecutionInfo {
+    string run_id = 1;
+    int64 lowest_common_ancestor_event_id = 2;
+    int64 lowest_common_ancestor_event_version = 3;
+}

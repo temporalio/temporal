@@ -26,7 +26,6 @@ package reclaimresources
 
 import (
 	"context"
-	"strings"
 
 	"go.temporal.io/sdk/activity"
 
@@ -36,7 +35,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
@@ -44,7 +47,7 @@ type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
-		metricsClient     metrics.Client
+		metricsHandler    metrics.Handler
 		logger            log.Logger
 	}
 )
@@ -52,18 +55,24 @@ type (
 func NewActivities(
 	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{
 		visibilityManager: visibilityManager,
 		metadataManager:   metadataManager,
-		metricsClient:     metricsClient,
+		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.ReclaimResourcesWorkflowScope)),
 		logger:            logger,
 	}
 }
-func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, error) {
-	return strings.Contains(a.visibilityManager.GetName(), "elasticsearch"), nil
+
+func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context, nsName namespace.Name) (bool, error) {
+	switch a.visibilityManager.GetReadStoreName(nsName) {
+	case elasticsearch.PersistenceName, mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func (a *Activities) CountExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (int64, error) {
@@ -75,7 +84,7 @@ func (a *Activities) CountExecutionsAdvVisibilityActivity(ctx context.Context, n
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.CountExecutionsFailuresCount)
+		a.metricsHandler.Counter(metrics.CountExecutionsFailuresCount.GetMetricName()).Record(1)
 		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return 0, err
 	}
@@ -97,7 +106,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.CountExecutionsFailuresCount)
+		a.metricsHandler.Counter(metrics.CountExecutionsFailuresCount.GetMetricName()).Record(1)
 		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -109,7 +118,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 		if activity.HasHeartbeatDetails(ctx) && activityInfo.Attempt > 7 {
 			var previousAttemptCount int
 			if err := activity.GetHeartbeatDetails(ctx, &previousAttemptCount); err != nil {
-				a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.CountExecutionsFailuresCount)
+				a.metricsHandler.Counter(metrics.CountExecutionsFailuresCount.GetMetricName()).Record(1)
 				a.logger.Error("Unable to get previous heartbeat details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 				return err
 			}
@@ -150,7 +159,7 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+		a.metricsHandler.Counter(metrics.ListExecutionsFailuresCount.GetMetricName()).Record(1)
 		a.logger.Error("Unable to count workflow executions using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -173,12 +182,12 @@ func (a *Activities) DeleteNamespaceActivity(ctx context.Context, nsID namespace
 
 	err := a.metadataManager.DeleteNamespaceByName(ctx, deleteNamespaceRequest)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsHandler.Counter(metrics.DeleteNamespaceFailuresCount.GetMetricName()).Record(1)
 		a.logger.Error("Unable to delete namespace from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
 
-	a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceSuccessCount)
+	a.metricsHandler.Counter(metrics.DeleteNamespaceSuccessCount.GetMetricName()).Record(1)
 	a.logger.Info("Namespace is deleted.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespaceID(nsID.String()))
 	return nil
 }

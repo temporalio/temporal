@@ -97,9 +97,6 @@ namespaceDefaults:
       state: "enabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
-publicClient:
-  hostPort: "localhost:7233"
-
 dynamicConfigClient:
   filepath: "./config/dynamicconfig/development-cass.yaml"
   pollInterval: "10s"

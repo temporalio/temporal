@@ -25,94 +25,8 @@
 package queues
 
 import (
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
-)
-
-// TODO: Following is a copy of existing metrics scope and name definition
-// for using the new MetricsHandler interface. We should probably move them
-// to a common place once all the metrics refactoring work is done.
-
-// Metric names
-const (
-	TaskRequests = "task_requests"
-
-	TaskFailures                    = "task_errors"
-	TaskDiscarded                   = "task_errors_discarded"
-	TaskSkipped                     = "task_skipped"
-	TaskAttempt                     = "task_attempt"
-	TaskStandbyRetryCounter         = "task_errors_standby_retry_counter"
-	TaskWorkflowBusyCounter         = "task_errors_workflow_busy"
-	TaskNotActiveCounter            = "task_errors_not_active_counter"
-	TaskThrottledCounter            = "task_errors_throttled"
-	TaskLoadLatency                 = "task_latency_load"                     // latency from task generation to task loading (persistence scheduleToStart)
-	TaskScheduleLatency             = "task_latency_schedule"                 // latency from task submission to in-memory queue to processing (in-memory scheduleToStart)
-	TaskProcessingLatency           = "task_latency_processing"               // latency for processing task one time
-	TaskNoUserProcessingLatency     = "task_latency_processing_nouserlatency" // same as TaskProcessingLatency, but excludes workflow lock latency
-	TaskLatency                     = "task_latency"                          // task in-memory latency across multiple attempts
-	TaskNoUserLatency               = "task_latency_nouserlatency"            // same as TaskLatency, but excludes workflow lock latency
-	TaskQueueLatency                = "task_latency_queue"                    // task e2e latency
-	TaskNoUserQueueLatency          = "task_latency_queue_nouserlatency"      // same as TaskQueueLatency, but excludes workflow lock latency
-	TaskUserLatency                 = "task_latency_userlatency"              // workflow lock latency across multiple attempts
-	TaskReschedulerPendingTasks     = "task_rescheduler_pending_tasks"
-	TasksDependencyTaskNotCompleted = "task_dependency_task_not_completed"
-
-	TaskBatchCompleteCounter    = "task_batch_complete_counter"
-	NewTimerNotifyCounter       = "new_timer_notifications"
-	AckLevelUpdateCounter       = "ack_level_update"
-	AckLevelUpdateFailedCounter = "ack_level_update_failed"
-	PendingTasksCounter         = "pending_tasks"
-
-	QueueScheduleLatency      = "queue_latency_schedule" // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram = "queue_reader_count"
-	QueueSliceCountHistogram  = "queue_slice_count"
-	QueueActionCounter        = "queue_actions"
-)
-
-// Operation tag value for queue processors
-const (
-	OperationTimerQueueProcessor           = "TimerQueueProcessor"
-	OperationTimerActiveQueueProcessor     = "TimerActiveQueueProcessor"
-	OperationTimerStandbyQueueProcessor    = "TimerStandbyQueueProcessor"
-	OperationTransferQueueProcessor        = "TransferQueueProcessor"
-	OperationTransferActiveQueueProcessor  = "TransferActiveQueueProcessor"
-	OperationTransferStandbyQueueProcessor = "TransferStandbyQueueProcessor"
-	OperationVisibilityQueueProcessor      = "VisibilityQueueProcessor"
-)
-
-// Task type tag value for active and standby tasks
-const (
-	TaskTypeTransferActiveTaskActivity             = "TransferActiveTaskActivity"
-	TaskTypeTransferActiveTaskWorkflowTask         = "TransferActiveTaskWorkflowTask"
-	TaskTypeTransferActiveTaskCloseExecution       = "TransferActiveTaskCloseExecution"
-	TaskTypeTransferActiveTaskCancelExecution      = "TransferActiveTaskCancelExecution"
-	TaskTypeTransferActiveTaskSignalExecution      = "TransferActiveTaskSignalExecution"
-	TaskTypeTransferActiveTaskStartChildExecution  = "TransferActiveTaskStartChildExecution"
-	TaskTypeTransferActiveTaskResetWorkflow        = "TransferActiveTaskResetWorkflow"
-	TaskTypeTransferStandbyTaskActivity            = "TransferStandbyTaskActivity"
-	TaskTypeTransferStandbyTaskWorkflowTask        = "TransferStandbyTaskWorkflowTask"
-	TaskTypeTransferStandbyTaskCloseExecution      = "TransferStandbyTaskCloseExecution"
-	TaskTypeTransferStandbyTaskCancelExecution     = "TransferStandbyTaskCancelExecution"
-	TaskTypeTransferStandbyTaskSignalExecution     = "TransferStandbyTaskSignalExecution"
-	TaskTypeTransferStandbyTaskStartChildExecution = "TransferStandbyTaskStartChildExecution"
-	TaskTypeTransferStandbyTaskResetWorkflow       = "TransferStandbyTaskResetWorkflow"
-	TaskTypeVisibilityTaskStartExecution           = "VisibilityTaskStartExecution"
-	TaskTypeVisibilityTaskUpsertExecution          = "VisibilityTaskUpsertExecution"
-	TaskTypeVisibilityTaskCloseExecution           = "VisibilityTaskCloseExecution"
-	TaskTypeVisibilityTaskDeleteExecution          = "VisibilityTaskDeleteExecution"
-	TaskTypeTimerActiveTaskActivityTimeout         = "TimerActiveTaskActivityTimeout"
-	TaskTypeTimerActiveTaskWorkflowTaskTimeout     = "TimerActiveTaskWorkflowTaskTimeout"
-	TaskTypeTimerActiveTaskUserTimer               = "TimerActiveTaskUserTimer"
-	TaskTypeTimerActiveTaskWorkflowTimeout         = "TimerActiveTaskWorkflowTimeout"
-	TaskTypeTimerActiveTaskActivityRetryTimer      = "TimerActiveTaskActivityRetryTimer"
-	TaskTypeTimerActiveTaskWorkflowBackoffTimer    = "TimerActiveTaskWorkflowBackoffTimer"
-	TaskTypeTimerActiveTaskDeleteHistoryEvent      = "TimerActiveTaskDeleteHistoryEvent"
-	TaskTypeTimerStandbyTaskActivityTimeout        = "TimerStandbyTaskActivityTimeout"
-	TaskTypeTimerStandbyTaskWorkflowTaskTimeout    = "TimerStandbyTaskWorkflowTaskTimeout"
-	TaskTypeTimerStandbyTaskUserTimer              = "TimerStandbyTaskUserTimer"
-	TaskTypeTimerStandbyTaskWorkflowTimeout        = "TimerStandbyTaskWorkflowTimeout"
-	TaskTypeTimerStandbyTaskActivityRetryTimer     = "TimerStandbyTaskActivityRetryTimer"
-	TaskTypeTimerStandbyTaskWorkflowBackoffTimer   = "TimerStandbyTaskWorkflowBackoffTimer"
-	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
 )
 
 func GetActiveTransferTaskTypeTagValue(
@@ -120,19 +34,19 @@ func GetActiveTransferTaskTypeTagValue(
 ) string {
 	switch task.(type) {
 	case *tasks.ActivityTask:
-		return TaskTypeTransferActiveTaskActivity
+		return metrics.TaskTypeTransferActiveTaskActivity
 	case *tasks.WorkflowTask:
-		return TaskTypeTransferActiveTaskWorkflowTask
+		return metrics.TaskTypeTransferActiveTaskWorkflowTask
 	case *tasks.CloseExecutionTask:
-		return TaskTypeTransferActiveTaskCloseExecution
+		return metrics.TaskTypeTransferActiveTaskCloseExecution
 	case *tasks.CancelExecutionTask:
-		return TaskTypeTransferActiveTaskCancelExecution
+		return metrics.TaskTypeTransferActiveTaskCancelExecution
 	case *tasks.SignalExecutionTask:
-		return TaskTypeTransferActiveTaskSignalExecution
+		return metrics.TaskTypeTransferActiveTaskSignalExecution
 	case *tasks.StartChildExecutionTask:
-		return TaskTypeTransferActiveTaskStartChildExecution
+		return metrics.TaskTypeTransferActiveTaskStartChildExecution
 	case *tasks.ResetWorkflowTask:
-		return TaskTypeTransferActiveTaskResetWorkflow
+		return metrics.TaskTypeTransferActiveTaskResetWorkflow
 	default:
 		return ""
 	}
@@ -143,19 +57,19 @@ func GetStandbyTransferTaskTypeTagValue(
 ) string {
 	switch task.(type) {
 	case *tasks.ActivityTask:
-		return TaskTypeTransferStandbyTaskActivity
+		return metrics.TaskTypeTransferStandbyTaskActivity
 	case *tasks.WorkflowTask:
-		return TaskTypeTransferStandbyTaskWorkflowTask
+		return metrics.TaskTypeTransferStandbyTaskWorkflowTask
 	case *tasks.CloseExecutionTask:
-		return TaskTypeTransferStandbyTaskCloseExecution
+		return metrics.TaskTypeTransferStandbyTaskCloseExecution
 	case *tasks.CancelExecutionTask:
-		return TaskTypeTransferStandbyTaskCancelExecution
+		return metrics.TaskTypeTransferStandbyTaskCancelExecution
 	case *tasks.SignalExecutionTask:
-		return TaskTypeTransferStandbyTaskSignalExecution
+		return metrics.TaskTypeTransferStandbyTaskSignalExecution
 	case *tasks.StartChildExecutionTask:
-		return TaskTypeTransferStandbyTaskStartChildExecution
+		return metrics.TaskTypeTransferStandbyTaskStartChildExecution
 	case *tasks.ResetWorkflowTask:
-		return TaskTypeTransferStandbyTaskResetWorkflow
+		return metrics.TaskTypeTransferStandbyTaskResetWorkflow
 	default:
 		return ""
 	}
@@ -166,19 +80,19 @@ func GetActiveTimerTaskTypeTagValue(
 ) string {
 	switch task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
-		return TaskTypeTimerActiveTaskWorkflowTaskTimeout
+		return metrics.TaskTypeTimerActiveTaskWorkflowTaskTimeout
 	case *tasks.ActivityTimeoutTask:
-		return TaskTypeTimerActiveTaskActivityTimeout
+		return metrics.TaskTypeTimerActiveTaskActivityTimeout
 	case *tasks.UserTimerTask:
-		return TaskTypeTimerActiveTaskUserTimer
+		return metrics.TaskTypeTimerActiveTaskUserTimer
 	case *tasks.WorkflowTimeoutTask:
-		return TaskTypeTimerActiveTaskWorkflowTimeout
+		return metrics.TaskTypeTimerActiveTaskWorkflowTimeout
 	case *tasks.DeleteHistoryEventTask:
-		return TaskTypeTimerActiveTaskDeleteHistoryEvent
+		return metrics.TaskTypeTimerActiveTaskDeleteHistoryEvent
 	case *tasks.ActivityRetryTimerTask:
-		return TaskTypeTimerActiveTaskActivityRetryTimer
+		return metrics.TaskTypeTimerActiveTaskActivityRetryTimer
 	case *tasks.WorkflowBackoffTimerTask:
-		return TaskTypeTimerActiveTaskWorkflowBackoffTimer
+		return metrics.TaskTypeTimerActiveTaskWorkflowBackoffTimer
 	default:
 		return ""
 	}
@@ -189,19 +103,19 @@ func GetStandbyTimerTaskTypeTagValue(
 ) string {
 	switch task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
-		return TaskTypeTimerStandbyTaskWorkflowTaskTimeout
+		return metrics.TaskTypeTimerStandbyTaskWorkflowTaskTimeout
 	case *tasks.ActivityTimeoutTask:
-		return TaskTypeTimerStandbyTaskActivityTimeout
+		return metrics.TaskTypeTimerStandbyTaskActivityTimeout
 	case *tasks.UserTimerTask:
-		return TaskTypeTimerStandbyTaskUserTimer
+		return metrics.TaskTypeTimerStandbyTaskUserTimer
 	case *tasks.WorkflowTimeoutTask:
-		return TaskTypeTimerStandbyTaskWorkflowTimeout
+		return metrics.TaskTypeTimerStandbyTaskWorkflowTimeout
 	case *tasks.DeleteHistoryEventTask:
-		return TaskTypeTimerStandbyTaskDeleteHistoryEvent
+		return metrics.TaskTypeTimerStandbyTaskDeleteHistoryEvent
 	case *tasks.ActivityRetryTimerTask:
-		return TaskTypeTimerStandbyTaskActivityRetryTimer
+		return metrics.TaskTypeTimerStandbyTaskActivityRetryTimer
 	case *tasks.WorkflowBackoffTimerTask:
-		return TaskTypeTimerStandbyTaskWorkflowBackoffTimer
+		return metrics.TaskTypeTimerStandbyTaskWorkflowBackoffTimer
 	default:
 		return ""
 	}
@@ -212,14 +126,49 @@ func GetVisibilityTaskTypeTagValue(
 ) string {
 	switch task.(type) {
 	case *tasks.StartExecutionVisibilityTask:
-		return TaskTypeVisibilityTaskStartExecution
+		return metrics.TaskTypeVisibilityTaskStartExecution
 	case *tasks.UpsertExecutionVisibilityTask:
-		return TaskTypeVisibilityTaskUpsertExecution
+		return metrics.TaskTypeVisibilityTaskUpsertExecution
 	case *tasks.CloseExecutionVisibilityTask:
-		return TaskTypeVisibilityTaskCloseExecution
+		return metrics.TaskTypeVisibilityTaskCloseExecution
 	case *tasks.DeleteExecutionVisibilityTask:
-		return TaskTypeVisibilityTaskDeleteExecution
+		return metrics.TaskTypeVisibilityTaskDeleteExecution
 	default:
 		return ""
+	}
+}
+
+func GetArchivalTaskTypeTagValue(
+	task tasks.Task,
+) string {
+	switch task.(type) {
+	case *tasks.ArchiveExecutionTask:
+		return metrics.TaskTypeArchivalTaskArchiveExecution
+	default:
+		return ""
+	}
+}
+
+func getTaskTypeTagValue(
+	task tasks.Task,
+	isActive bool,
+) string {
+	switch task.GetCategory() {
+	case tasks.CategoryTransfer:
+		if isActive {
+			return GetActiveTransferTaskTypeTagValue(task)
+		}
+		return GetStandbyTransferTaskTypeTagValue(task)
+	case tasks.CategoryTimer:
+		if isActive {
+			return GetActiveTimerTaskTypeTagValue(task)
+		}
+		return GetStandbyTimerTaskTypeTagValue(task)
+	case tasks.CategoryVisibility:
+		return GetVisibilityTaskTypeTagValue(task)
+	case tasks.CategoryArchival:
+		return GetArchivalTaskTypeTagValue(task)
+	default:
+		return task.GetType().String()
 	}
 }

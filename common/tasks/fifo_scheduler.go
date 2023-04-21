@@ -54,8 +54,7 @@ type (
 		status  int32
 		options *FIFOSchedulerOptions
 
-		monitor Monitor[T]
-		logger  log.Logger
+		logger log.Logger
 
 		tasksChan        chan T
 		shutdownChan     chan struct{}
@@ -66,7 +65,6 @@ type (
 
 // NewFIFOScheduler creates a new FIFOScheduler
 func NewFIFOScheduler[T Task](
-	scheduleMoniter Monitor[T],
 	options *FIFOSchedulerOptions,
 	logger log.Logger,
 ) *FIFOScheduler[T] {
@@ -74,8 +72,7 @@ func NewFIFOScheduler[T Task](
 		status:  common.DaemonStatusInitialized,
 		options: options,
 
-		monitor: scheduleMoniter,
-		logger:  logger,
+		logger: logger,
 
 		tasksChan:    make(chan T, options.QueueSize),
 		shutdownChan: make(chan struct{}),
@@ -91,7 +88,6 @@ func (f *FIFOScheduler[T]) Start() {
 		return
 	}
 
-	f.monitor.Start()
 	f.startWorkers(f.options.WorkerCount())
 
 	f.shutdownWG.Add(1)
@@ -112,8 +108,6 @@ func (f *FIFOScheduler[T]) Stop() {
 	close(f.shutdownChan)
 	// must be called after the close of the shutdownChan
 	f.drainTasks()
-
-	f.monitor.Stop()
 
 	go func() {
 		if success := common.AwaitWaitGroup(&f.shutdownWG, time.Minute); !success {
@@ -145,7 +139,7 @@ func (f *FIFOScheduler[T]) TrySubmit(task T) bool {
 func (f *FIFOScheduler[T]) workerMonitor() {
 	defer f.shutdownWG.Done()
 
-	timer := time.NewTimer(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
+	timer := time.NewTimer(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
 	defer timer.Stop()
 
 	for {
@@ -154,7 +148,7 @@ func (f *FIFOScheduler[T]) workerMonitor() {
 			f.stopWorkers(len(f.workerShutdownCh))
 			return
 		case <-timer.C:
-			timer.Reset(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
+			timer.Reset(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
 
 			targetWorkerNum := f.options.WorkerCount()
 			currentWorkerNum := len(f.workerShutdownCh)
@@ -207,6 +201,12 @@ func (f *FIFOScheduler[T]) processTask(
 		}
 
 		select {
+		case <-shutdownCh:
+			return
+		default:
+		}
+
+		select {
 		case task := <-f.tasksChan:
 			f.executeTask(task)
 
@@ -219,8 +219,6 @@ func (f *FIFOScheduler[T]) processTask(
 func (f *FIFOScheduler[T]) executeTask(
 	task T,
 ) {
-	f.monitor.RecordStart(task)
-
 	operation := func() error {
 		if err := task.Execute(); err != nil {
 			return task.HandleErr(err)
@@ -234,7 +232,7 @@ func (f *FIFOScheduler[T]) executeTask(
 
 	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
 		if f.isStopped() {
-			task.Reschedule()
+			task.Abort()
 			return
 		}
 
@@ -250,7 +248,7 @@ LoopDrain:
 	for {
 		select {
 		case task := <-f.tasksChan:
-			task.Reschedule()
+			task.Abort()
 		default:
 			break LoopDrain
 		}

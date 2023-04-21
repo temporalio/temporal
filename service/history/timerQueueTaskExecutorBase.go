@@ -39,33 +39,36 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
+
+var errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
 
 type (
 	timerQueueTaskExecutorBase struct {
 		currentClusterName string
 		shard              shard.Context
 		registry           namespace.Registry
-		deleteManager      workflow.DeleteManager
-		cache              workflow.Cache
+		deleteManager      deletemanager.DeleteManager
+		cache              wcache.Cache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
-		metricProvider     metrics.MetricsHandler
-		metricsClient      metrics.Client
+		metricHandler      metrics.Handler
 		config             *configs.Config
 	}
 )
 
 func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
-	workflowCache workflow.Cache,
-	deleteManager workflow.DeleteManager,
+	workflowCache wcache.Cache,
+	deleteManager deletemanager.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.Handler,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
@@ -76,8 +79,7 @@ func newTimerQueueTaskExecutorBase(
 		deleteManager:      deleteManager,
 		logger:             logger,
 		matchingClient:     matchingClient,
-		metricProvider:     metricProvider,
-		metricsClient:      shard.GetMetricsClient(),
+		metricHandler:      metricHandler,
 		config:             config,
 	}
 }
@@ -98,14 +100,14 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricHandler, t.logger)
 	switch err.(type) {
 	case nil:
 		if mutableState == nil {
@@ -130,24 +132,29 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	if ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); !ok {
-		return nil
+	if err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
+		return err
 	}
 
+	// We should only archive if it is enabled, and the data wasn't already archived. If WorkflowDataAlreadyArchived
+	// flag is set to true, then the data was already archived, so we can skip it.
+	archiveIfEnabled := !task.WorkflowDataAlreadyArchived
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		weContext,
 		mutableState,
+		archiveIfEnabled,
+		&task.ProcessStage, // Pass stage by reference to update it inside delete manager.
 	)
 }
 
 func getWorkflowExecutionContextForTask(
 	ctx context.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	task tasks.Task,
-) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+) (workflow.Context, wcache.ReleaseCacheFunc, error) {
 	namespaceID, execution := getTaskNamespaceIDAndWorkflowExecution(task)
 	return getWorkflowExecutionContext(
 		ctx,
@@ -159,10 +166,10 @@ func getWorkflowExecutionContextForTask(
 
 func getWorkflowExecutionContext(
 	ctx context.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
-) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+) (workflow.Context, wcache.ReleaseCacheFunc, error) {
 	ctx, cancel := context.WithTimeout(ctx, taskGetExecutionTimeout)
 	defer cancel()
 
@@ -170,7 +177,7 @@ func getWorkflowExecutionContext(
 		ctx,
 		namespaceID,
 		execution,
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if common.IsContextDeadlineExceededErr(err) {
 		err = consts.ErrWorkflowBusy

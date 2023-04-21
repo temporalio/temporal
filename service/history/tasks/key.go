@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	DefaultFireTime         = time.Unix(0, 0)
+	DefaultFireTime         = time.Unix(0, 0).UTC()
 	defaultFireTimeUnixNano = DefaultFireTime.UnixNano()
 )
 

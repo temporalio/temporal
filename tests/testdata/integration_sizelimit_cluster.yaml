@@ -1,0 +1,12 @@
+enablearchival: false
+clusterno: 0
+historyconfig:
+  numhistoryshards: 4
+  numhistoryhosts: 1
+  historycountlimiterror: 20
+  historycountlimitwarn: 10
+  blobsizelimiterror: 100
+  blobsizelimitwarn: 1
+workerconfig:
+  enablearchiver: false
+  enablereplicator: false

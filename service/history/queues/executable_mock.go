@@ -64,6 +64,18 @@ func (m *MockExecutable) EXPECT() *MockExecutableMockRecorder {
 	return m.recorder
 }
 
+// Abort mocks base method.
+func (m *MockExecutable) Abort() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Abort")
+}
+
+// Abort indicates an expected call of Abort.
+func (mr *MockExecutableMockRecorder) Abort() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Abort", reflect.TypeOf((*MockExecutable)(nil).Abort))
+}
+
 // Ack mocks base method.
 func (m *MockExecutable) Ack() {
 	m.ctrl.T.Helper()
@@ -372,18 +384,6 @@ func (m *MockExecutable) SetTaskID(id int64) {
 func (mr *MockExecutableMockRecorder) SetTaskID(id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTaskID", reflect.TypeOf((*MockExecutable)(nil).SetTaskID), id)
-}
-
-// SetVersion mocks base method.
-func (m *MockExecutable) SetVersion(version int64) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetVersion", version)
-}
-
-// SetVersion indicates an expected call of SetVersion.
-func (mr *MockExecutableMockRecorder) SetVersion(version interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVersion", reflect.TypeOf((*MockExecutable)(nil).SetVersion), version)
 }
 
 // SetVisibilityTime mocks base method.

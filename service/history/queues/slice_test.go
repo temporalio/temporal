@@ -69,9 +69,9 @@ func (s *sliceSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
+		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, metrics.NoopMetricsHandler)
 	}
-	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
+	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
 		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
@@ -425,7 +425,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 
 	numTasks := 20
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 
 			mockTasks := make([]tasks.Task, 0, numTasks)
@@ -475,7 +475,7 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 
 	numTasks := 20
 	loadErr := true
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			if loadErr {
 				loadErr = false
@@ -515,7 +515,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 
 	numTasks := 20
 	loadErr := false
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			defer func() {
 				loadErr = !loadErr

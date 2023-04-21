@@ -84,8 +84,6 @@ message DescribeResponse {
 }
 
 message WatchWorkflowRequest {
-    string namespace = 1;
-    string namespace_id = 2;
     // Note: this will be sent to the activity with empty execution.run_id, and
     // the run id that we started in first_execution_run_id.
     temporal.api.common.v1.WorkflowExecution execution = 3;
@@ -102,11 +100,9 @@ message WatchWorkflowResponse {
 }
 
 message StartWorkflowRequest {
-    string namespace_id = 1;
     temporal.api.workflowservice.v1.StartWorkflowExecutionRequest request = 2;
-    reserved 3;
-    temporal.api.common.v1.Payloads last_completion_result = 4;
-    temporal.api.failure.v1.Failure continued_failure = 5;
+    reserved 3, 4, 5;
+    bool completed_rate_limit_sleep = 6;
 }
 
 message StartWorkflowResponse {
@@ -115,8 +111,6 @@ message StartWorkflowResponse {
 }
 
 message CancelWorkflowRequest {
-    string namespace = 1;
-    string namespace_id = 2;
     string request_id = 3;
     string identity = 4;
     // Note: run id in execution is first execution run id
@@ -125,8 +119,6 @@ message CancelWorkflowRequest {
 }
 
 message TerminateWorkflowRequest {
-    string namespace = 1;
-    string namespace_id = 2;
     string request_id = 3;
     string identity = 4;
     // Note: run id in execution is first execution run id

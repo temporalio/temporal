@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/instrument"
 	otelunit "go.opentelemetry.io/otel/metric/unit"
 
@@ -45,7 +46,7 @@ type otelMetricsHandler struct {
 	excludeTags excludeTags
 }
 
-var _ MetricsHandler = (*otelMetricsHandler)(nil)
+var _ Handler = (*otelMetricsHandler)(nil)
 
 func NewOtelMetricsHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConfig) *otelMetricsHandler {
 	return &otelMetricsHandler{
@@ -57,7 +58,7 @@ func NewOtelMetricsHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConf
 
 // WithTags creates a new MetricProvder with provided []Tag
 // Tags are merged with registered Tags from the source MetricsHandler
-func (omp *otelMetricsHandler) WithTags(tags ...Tag) MetricsHandler {
+func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
 	return &otelMetricsHandler{
 		provider:    omp.provider,
 		excludeTags: omp.excludeTags,
@@ -66,49 +67,55 @@ func (omp *otelMetricsHandler) WithTags(tags ...Tag) MetricsHandler {
 }
 
 // Counter obtains a counter for the given name and MetricOptions.
-func (omp *otelMetricsHandler) Counter(counter string) CounterMetric {
-	c, err := omp.provider.GetMeter().SyncInt64().Counter(counter)
+func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
+	c, err := omp.provider.GetMeter().Int64Counter(counter)
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", counter), tag.Error(err))
 	}
 
-	return CounterMetricFunc(func(i int64, t ...Tag) {
+	return CounterFunc(func(i int64, t ...Tag) {
 		c.Add(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 	})
 }
 
 // Gauge obtains a gauge for the given name and MetricOptions.
-func (omp *otelMetricsHandler) Gauge(gauge string) GaugeMetric {
-	c, err := omp.provider.GetMeter().SyncFloat64().UpDownCounter(gauge)
+func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
+	c, err := omp.provider.GetMeter().Float64ObservableGauge(gauge)
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 	}
 
-	return GaugeMetricFunc(func(i float64, t ...Tag) {
-		c.Add(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+	return GaugeFunc(func(i float64, t ...Tag) {
+		_, err = omp.provider.GetMeter().RegisterCallback(func(ctx context.Context, o metric.Observer) error {
+			o.ObserveFloat64(c, i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+			return nil
+		}, c)
+		if err != nil {
+			omp.l.Fatal("error setting callback metric update", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+		}
 	})
 }
 
 // Timer obtains a timer for the given name and MetricOptions.
-func (omp *otelMetricsHandler) Timer(timer string) TimerMetric {
-	c, err := omp.provider.GetMeter().SyncInt64().Histogram(timer, instrument.WithUnit(otelunit.Unit(Milliseconds)))
+func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
+	c, err := omp.provider.GetMeter().Int64Histogram(timer, instrument.WithUnit(otelunit.Unit(Milliseconds)))
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
 	}
 
-	return TimerMetricFunc(func(i time.Duration, t ...Tag) {
+	return TimerFunc(func(i time.Duration, t ...Tag) {
 		c.Record(context.Background(), i.Milliseconds(), tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 	})
 }
 
 // Histogram obtains a histogram for the given name and MetricOptions.
-func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramMetric {
-	c, err := omp.provider.GetMeter().SyncInt64().Histogram(histogram, instrument.WithUnit(otelunit.Unit(unit)))
+func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
+	c, err := omp.provider.GetMeter().Int64Histogram(histogram, instrument.WithUnit(otelunit.Unit(unit)))
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
 	}
 
-	return CounterMetricFunc(func(i int64, t ...Tag) {
+	return CounterFunc(func(i int64, t ...Tag) {
 		c.Record(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 	})
 }

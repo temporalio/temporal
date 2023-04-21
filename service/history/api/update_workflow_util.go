@@ -28,6 +28,7 @@ import (
 	"context"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -48,6 +49,7 @@ func GetAndUpdateWorkflowWithNew(
 		reqClock,
 		consistencyCheckFn,
 		workflowKey,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -80,6 +82,7 @@ func UpdateWorkflowWithNew(
 		if !mutableState.HasPendingWorkflowTask() {
 			if _, err := mutableState.AddWorkflowTaskScheduledEvent(
 				false,
+				enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 			); err != nil {
 				return err
 			}
@@ -102,15 +105,11 @@ func UpdateWorkflowWithNew(
 
 		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
-			shard.GetTimeSource().Now(),
 			newContext,
 			newMutableState,
 		)
 	} else {
-		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
-			ctx,
-			shard.GetTimeSource().Now(),
-		)
+		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(ctx)
 	}
 
 	return updateErr

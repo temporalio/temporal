@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -62,7 +63,7 @@ func SignalWithStartWorkflow(
 		); err != nil {
 			return "", err
 		}
-		return currentWorkflowContext.GetRunID(), nil
+		return currentWorkflowContext.GetWorkflowKey().RunID, nil
 	}
 
 	return startAndSignalWorkflow(
@@ -85,6 +86,7 @@ func startAndSignalWorkflow(
 ) (string, error) {
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
+	// TODO(bergundy): Support eager workflow task
 	newWorkflowContext, err := api.NewWorkflowWithSignal(
 		ctx,
 		shard,
@@ -153,7 +155,7 @@ func startAndSignalWorkflowActionFn(
 		currentExecutionState.RunId,
 		currentExecutionState.State,
 		currentExecutionState.Status,
-		currentWorkflowContext.GetWorkflowID(),
+		currentWorkflowContext.GetWorkflowKey().WorkflowID,
 		newRunID,
 		workflowIDReusePolicy,
 	)
@@ -205,9 +207,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	newWorkflowContext api.WorkflowContext,
 	requestID string,
 ) (string, error) {
-	now := shard.GetTimeSource().Now()
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowContext.GetMutableState().CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {
@@ -230,7 +230,6 @@ func startAndSignalWithoutCurrentWorkflow(
 	}
 	err = newWorkflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -240,7 +239,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	)
 	switch failedErr := err.(type) {
 	case nil:
-		return newWorkflowContext.GetRunID(), nil
+		return newWorkflowContext.GetWorkflowKey().RunID, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
 		if failedErr.RequestID == requestID {
 			return failedErr.RunID, nil
@@ -286,7 +285,7 @@ func signalWorkflow(
 
 	// Create a transfer task to schedule a workflow task
 	if !mutableState.HasPendingWorkflowTask() {
-		_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
+		_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 		if err != nil {
 			return err
 		}
@@ -296,7 +295,6 @@ func signalWorkflow(
 	// the history and try the operation again.
 	if err := workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
 		ctx,
-		shard.GetTimeSource().Now(),
 	); err != nil {
 		return err
 	}

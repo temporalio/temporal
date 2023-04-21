@@ -83,12 +83,14 @@ func (s *metadataSuite) SetupTest() {
 			Enabled:                true,
 			InitialFailoverVersion: int64(1),
 			RPCAddress:             uuid.New(),
+			ShardCount:             1,
 			version:                1,
 		},
 		s.secondClusterName: {
 			Enabled:                true,
 			InitialFailoverVersion: int64(4),
 			RPCAddress:             uuid.New(),
+			ShardCount:             2,
 			version:                1,
 		},
 	}
@@ -127,8 +129,14 @@ func (s *metadataSuite) Test_IsVersionFromSameCluster() {
 }
 
 func (s *metadataSuite) Test_ClusterNameForFailoverVersion() {
-	s.Equal(s.clusterName, s.metadata.ClusterNameForFailoverVersion(true, 101))
-	s.Equal(s.secondClusterName, s.metadata.ClusterNameForFailoverVersion(true, 204))
+	clusterName := s.metadata.ClusterNameForFailoverVersion(true, 101)
+	s.Equal(s.clusterName, clusterName)
+
+	clusterName2 := s.metadata.ClusterNameForFailoverVersion(true, 204)
+	s.Equal(s.secondClusterName, clusterName2)
+
+	clusterName3 := s.metadata.ClusterNameForFailoverVersion(true, 217)
+	s.Equal(unknownClusterNamePrefix+"17", clusterName3)
 }
 
 func (s *metadataSuite) Test_RegisterMetadataChangeCallback() {
@@ -168,6 +176,7 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 						ClusterName:            s.clusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
+						HistoryShardCount:      1,
 						ClusterAddress:         uuid.New(),
 					},
 					Version: 1,
@@ -177,6 +186,7 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 						ClusterName:            id,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 2,
+						HistoryShardCount:      2,
 						ClusterAddress:         uuid.New(),
 					},
 					Version: 2,
@@ -201,6 +211,7 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 						ClusterName:            s.clusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 1,
+						HistoryShardCount:      1,
 						ClusterAddress:         uuid.New(),
 					},
 					Version: 1,
@@ -219,6 +230,7 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 						ClusterName:            newClusterName,
 						IsConnectionEnabled:    true,
 						InitialFailoverVersion: 2,
+						HistoryShardCount:      2,
 						ClusterAddress:         uuid.New(),
 					},
 					Version: 2,

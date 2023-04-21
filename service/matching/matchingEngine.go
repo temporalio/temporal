@@ -94,7 +94,7 @@ type (
 		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
-		metricsClient        metrics.Client
+		metricsHandler       metrics.Handler
 		taskQueuesLock       sync.RWMutex                     // locks mutation of taskQueues
 		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
 		taskQueueCount       map[taskQueueCounterKey]int      // per-namespace task queue counter
@@ -129,7 +129,7 @@ func NewEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
@@ -143,7 +143,7 @@ func NewEngine(
 		taskQueues:           make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:       make(map[taskQueueCounterKey]int),
 		logger:               log.With(logger, tag.ComponentMatchingEngine),
-		metricsClient:        metricsClient,
+		metricsHandler:       metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
 		matchingClient:       matchingClient,
 		config:               config,
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
@@ -377,7 +377,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
+		e.emitForwardedSourceStats(hCtx.metricsHandler, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -399,10 +399,10 @@ pollLoop:
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
-			isStickyEnabled := false
-			if len(mutableStateResp.StickyTaskQueue.GetName()) != 0 {
-				isStickyEnabled = true
-			}
+			// A non-sticky poll may get task for a workflow that has sticky still set in its mutable state after
+			// their sticky worker is dead for longer than 10s. In such case, we should set this to false so that
+			// frontend returns full history.
+			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 			resp := &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId:     mutableStateResp.PreviousStartedEventId,
 				NextEventId:                mutableStateResp.NextEventId,
@@ -413,7 +413,7 @@ pollLoop:
 				StartedEventId:             common.EmptyEventID,
 				Attempt:                    1,
 			}
-			return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
+			return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.metricsHandler), nil
 		}
 
 		resp, err := e.recordWorkflowTaskStarted(hCtx.Context, request, task)
@@ -437,12 +437,17 @@ pollLoop:
 				task.finish(nil)
 			default:
 				task.finish(err)
+				if err.Error() == common.ErrNamespaceHandover.Error() {
+					// do not keep polling new tasks when namespace is in handover state
+					// as record start request will be rejected by history service
+					return nil, err
+				}
 			}
 
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
+		return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.metricsHandler), nil
 	}
 }
 
@@ -488,7 +493,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
+		e.emitForwardedSourceStats(hCtx.metricsHandler, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -515,12 +520,17 @@ pollLoop:
 				task.finish(nil)
 			default:
 				task.finish(err)
+				if err.Error() == common.ErrNamespaceHandover.Error() {
+					// do not keep polling new tasks when namespace is in handover state
+					// as record start request will be rejected by history service
+					return nil, err
+				}
 			}
 
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollActivityTaskQueueResponse(task, resp, hCtx.scope), nil
+		return e.createPollActivityTaskQueueResponse(task, resp, hCtx.metricsHandler), nil
 	}
 }
 
@@ -592,7 +602,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 ) error {
 	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
-		hCtx.scope.IncCounter(metrics.RespondQueryTaskFailedPerTaskQueueCounter)
+		hCtx.metricsHandler.Counter(metrics.RespondQueryTaskFailedPerTaskQueueCounter.GetMetricName()).Record(1)
 		return err
 	}
 	return nil
@@ -696,10 +706,10 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 	return partitionHostInfo, nil
 }
 
-func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
+func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	hCtx *handlerContext,
-	req *matchingservice.UpdateWorkerBuildIdOrderingRequest,
-) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
+) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -711,18 +721,18 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
 		return nil, err
 	}
 	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) error {
-		return UpdateVersionsGraph(data, req.GetRequest(), e.config.MaxVersionGraphSize())
+		return UpdateVersionSets(data, req.GetRequest(), e.config.MaxVersionGraphSize())
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.UpdateWorkerBuildIdOrderingResponse{}, nil
+	return &matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil
 }
 
-func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
+func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	hCtx *handlerContext,
-	req *matchingservice.GetWorkerBuildIdOrderingRequest,
-) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+	req *matchingservice.GetWorkerBuildIdCompatibilityRequest,
+) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -732,19 +742,19 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
 		}
 		return nil, err
 	}
 	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
 		}
 		return nil, err
 	}
-	return &matchingservice.GetWorkerBuildIdOrderingResponse{
-		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxDepth())),
+	return &matchingservice.GetWorkerBuildIdCompatibilityResponse{
+		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxSets())),
 	}, nil
 }
 
@@ -825,18 +835,10 @@ func (e *matchingEngineImpl) getAllPartitions(
 	if err != nil {
 		return partitionKeys, err
 	}
-	rootPartition := taskQueueID.GetRoot()
 
-	partitionKeys = append(partitionKeys, rootPartition)
-
-	nWritePartitions := e.config.NumTaskqueueWritePartitions
-	n := nWritePartitions(namespace.String(), rootPartition, taskQueueType)
-	if n <= 0 {
-		return partitionKeys, nil
-	}
-
-	for i := 1; i < n; i++ {
-		partitionKeys = append(partitionKeys, fmt.Sprintf("%v%v/%v", taskQueuePartitionPrefix, rootPartition, i))
+	n := e.config.NumTaskqueueWritePartitions(namespace.String(), taskQueueID.BaseNameString(), taskQueueType)
+	for i := 0; i < n; i++ {
+		partitionKeys = append(partitionKeys, taskQueueID.WithPartition(i).FullName())
 	}
 
 	return partitionKeys, nil
@@ -881,19 +883,19 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, 
 		namespace = nsEntry.Name()
 	}
 
-	e.metricsClient.Scope(
-		metrics.MatchingEngineScope,
+	e.metricsHandler.Gauge(metrics.LoadedTaskQueueGauge.GetMetricName()).Record(
+		float64(taskQueueCount),
 		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
 		metrics.QueueTypeTag(countKey.queueType.String()),
-	).UpdateGauge(metrics.LoadedTaskQueueGauge, float64(taskQueueCount))
+	)
 }
 
 // Populate the workflow task response based on context and scheduled/started events.
 func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordWorkflowTaskStartedResponse,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 ) *matchingservice.PollWorkflowTaskQueueResponse {
 
 	var serializedToken []byte
@@ -918,7 +920,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
 			ct := timestamp.TimeValue(task.event.Data.CreateTime)
-			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
+			metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(ct))
 		}
 	}
 
@@ -938,7 +940,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 ) *matchingservice.PollActivityTaskQueueResponse {
 
 	scheduledEvent := historyResponse.ScheduledEvent
@@ -951,7 +953,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	}
 	if task.responseC == nil {
 		ct := timestamp.TimeValue(task.event.Data.CreateTime)
-		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
+		metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(ct))
 	}
 
 	taskToken := &tokenspb.Task{
@@ -1026,20 +1028,20 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 }
 
 func (e *matchingEngineImpl) emitForwardedSourceStats(
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	isTaskForwarded bool,
 	pollForwardedSource string,
 ) {
 	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
-		scope.IncCounter(metrics.RemoteToRemoteMatchPerTaskQueueCounter)
+		metricsHandler.Counter(metrics.RemoteToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	case isTaskForwarded:
-		scope.IncCounter(metrics.RemoteToLocalMatchPerTaskQueueCounter)
+		metricsHandler.Counter(metrics.RemoteToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	case isPollForwarded:
-		scope.IncCounter(metrics.LocalToRemoteMatchPerTaskQueueCounter)
+		metricsHandler.Counter(metrics.LocalToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	default:
-		scope.IncCounter(metrics.LocalToLocalMatchPerTaskQueueCounter)
+		metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	}
 }
 

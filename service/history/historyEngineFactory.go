@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/api"
@@ -37,7 +38,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -51,13 +52,14 @@ type (
 		EventNotifier                   events.Notifier
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
-		NewCacheFn                      workflow.NewCacheFn
+		NewCacheFn                      wcache.NewCacheFn
 		ArchivalClient                  archiver.Client
 		EventSerializer                 serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
 		TracerProvider                  trace.TracerProvider
+		PersistenceVisibilityMgr        manager.VisibilityManager
 	}
 
 	historyEngineFactory struct {
@@ -86,5 +88,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ReplicationTaskExecutorProvider,
 		workflowConsistencyChecker,
 		f.TracerProvider,
+		f.PersistenceVisibilityMgr,
 	)
 }

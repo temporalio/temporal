@@ -24,19 +24,46 @@
 
 package visibility
 
+import (
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+)
+
 const (
-	// AdvancedVisibilityWritingModeOff means do not write to advanced visibility store
-	AdvancedVisibilityWritingModeOff = "off"
-	// AdvancedVisibilityWritingModeOn means only write to advanced visibility store
-	AdvancedVisibilityWritingModeOn = "on"
-	// AdvancedVisibilityWritingModeDual means write to both normal visibility and advanced visibility store
-	AdvancedVisibilityWritingModeDual = "dual"
+	// SecondaryVisibilityWritingModeOff means do not write to advanced visibility store
+	SecondaryVisibilityWritingModeOff = "off"
+	// SecondaryVisibilityWritingModeOn means only write to advanced visibility store
+	SecondaryVisibilityWritingModeOn = "on"
+	// SecondaryVisibilityWritingModeDual means write to both normal visibility and advanced visibility store
+	SecondaryVisibilityWritingModeDual = "dual"
 )
 
 // DefaultAdvancedVisibilityWritingMode returns default advancedVisibilityWritingMode based on whether related config exists in static config file.
 func DefaultAdvancedVisibilityWritingMode(advancedVisibilityConfigExist bool) string {
 	if advancedVisibilityConfigExist {
-		return AdvancedVisibilityWritingModeOn
+		return SecondaryVisibilityWritingModeOn
 	}
-	return AdvancedVisibilityWritingModeOff
+	return SecondaryVisibilityWritingModeOff
+}
+
+func AllowListForValidation(storeNames []string) bool {
+	if len(storeNames) == 0 {
+		return false
+	}
+
+	if len(storeNames) > 1 {
+		// If more than one store is configured then it means that dual visibility is enabled.
+		// Dual visibility is used for migration to advanced, don't allow list of values because it will be removed soon.
+		return false
+	}
+
+	switch storeNames[0] {
+	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+		// Advanced visibility with SQL DB don't support list of values
+		return false
+	default:
+		// Otherwise, enable for backward compatibility.
+		return true
+	}
 }

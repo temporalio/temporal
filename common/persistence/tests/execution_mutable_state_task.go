@@ -39,9 +39,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -55,6 +58,7 @@ type (
 
 		ShardID     int32
 		RangeID     int64
+		Owner       string
 		WorkflowKey definition.WorkflowKey
 
 		ShardManager     p.ShardManager
@@ -73,6 +77,15 @@ type (
 var (
 	fakeImmediateTaskCategory = tasks.NewCategory(1234, tasks.CategoryTypeImmediate, "fake-immediate")
 	fakeScheduledTaskCategory = tasks.NewCategory(2345, tasks.CategoryTypeScheduled, "fake-scheduled")
+
+	taskCategories = []tasks.Category{
+		tasks.CategoryTransfer,
+		tasks.CategoryTimer,
+		tasks.CategoryReplication,
+		tasks.CategoryVisibility,
+		fakeImmediateTaskCategory,
+		fakeScheduledTaskCategory,
+	}
 )
 
 func NewExecutionMutableStateTaskSuite(
@@ -95,32 +108,33 @@ func NewExecutionMutableStateTaskSuite(
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),
-		Logger:  logger,
-		ShardID: 1,
+		Logger: logger,
 	}
 }
 
 func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
+	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
-	s.ShardID = 1 + s.ShardID
+	s.ShardID++
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID: s.ShardID,
 		InitialShardInfo: &persistencespb.ShardInfo{
 			ShardId: s.ShardID,
 			RangeId: 1,
+			Owner:   "test-shard-owner",
 		},
 	})
 	s.NoError(err)
 	previousRangeID := resp.ShardInfo.RangeId
-	resp.ShardInfo.RangeId += 1
+	resp.ShardInfo.RangeId++
 	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
 		ShardInfo:       resp.ShardInfo,
 		PreviousRangeID: previousRangeID,
 	})
 	s.NoError(err)
 	s.RangeID = resp.ShardInfo.RangeId
+	s.Owner = resp.ShardInfo.Owner
 
 	s.WorkflowKey = definition.NewWorkflowKey(
 		uuid.New().String(),
@@ -128,6 +142,15 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 		uuid.New().String(),
 	)
 
+	for _, category := range taskCategories {
+		err := s.ExecutionManager.RegisterHistoryTaskReader(s.Ctx, &p.RegisterHistoryTaskReaderRequest{
+			ShardID:      s.ShardID,
+			ShardOwner:   s.Owner,
+			TaskCategory: category,
+			ReaderID:     common.DefaultQueueReaderID,
+		})
+		s.NoError(err)
+	}
 }
 
 func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
@@ -148,7 +171,33 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 	})
 	s.NoError(err)
 
+	for _, category := range taskCategories {
+		s.ExecutionManager.UnregisterHistoryTaskReader(s.Ctx, &p.UnregisterHistoryTaskReaderRequest{
+			ShardID:      s.ShardID,
+			ShardOwner:   s.Owner,
+			TaskCategory: category,
+			ReaderID:     common.DefaultQueueReaderID,
+		})
+	}
+
 	s.Cancel()
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteImmediateTask_Single() {
+	immediateTasks := s.AddRandomTasks(
+		fakeImmediateTaskCategory,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			fakeTask := tasks.NewFakeTask(
+				workflowKey,
+				fakeImmediateTaskCategory,
+				visibilityTimestamp,
+			)
+			fakeTask.SetTaskID(taskID)
+			return fakeTask
+		},
+	)
+	s.GetAndCompleteHistoryTask(fakeImmediateTaskCategory, immediateTasks[0])
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_Multiple() {
@@ -193,6 +242,23 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_M
 	s.Empty(loadedTasks)
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteScheduledTask_Single() {
+	scheduledTasks := s.AddRandomTasks(
+		fakeScheduledTaskCategory,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			fakeTask := tasks.NewFakeTask(
+				workflowKey,
+				fakeScheduledTaskCategory,
+				visibilityTimestamp,
+			)
+			fakeTask.SetTaskID(taskID)
+			return fakeTask
+		},
+	)
+	s.GetAndCompleteHistoryTask(fakeScheduledTaskCategory, scheduledTasks[0])
+}
+
 func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_Multiple() {
 	numTasks := 20
 	scheduledTasks := s.AddRandomTasks(
@@ -235,6 +301,21 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_M
 	s.Empty(loadedTasks)
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteTransferTask_Single() {
+	transferTasks := s.AddRandomTasks(
+		tasks.CategoryTransfer,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.ActivityTask{
+				WorkflowKey:         workflowKey,
+				TaskID:              taskID,
+				VisibilityTimestamp: visibilityTimestamp,
+			}
+		},
+	)
+	s.GetAndCompleteHistoryTask(tasks.CategoryTransfer, transferTasks[0])
+}
+
 func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
 	numTasks := 20
 	transferTasks := s.AddRandomTasks(
@@ -257,6 +338,21 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
 		rand.Intn(len(transferTasks)*2)+1,
 	)
 	s.Equal(transferTasks, loadedTasks)
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteTimerTask_Single() {
+	timerTasks := s.AddRandomTasks(
+		tasks.CategoryTimer,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.UserTimerTask{
+				WorkflowKey:         workflowKey,
+				TaskID:              taskID,
+				VisibilityTimestamp: visibilityTimestamp,
+			}
+		},
+	)
+	s.GetAndCompleteHistoryTask(tasks.CategoryTimer, timerTasks[0])
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetTimerTasks_Multiple() {
@@ -283,6 +379,21 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTimerTasks_Multiple() {
 	s.Equal(timerTasks, loadedTasks)
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteReplicationTask_Single() {
+	replicationTasks := s.AddRandomTasks(
+		tasks.CategoryReplication,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.HistoryReplicationTask{
+				WorkflowKey:         workflowKey,
+				TaskID:              taskID,
+				VisibilityTimestamp: visibilityTimestamp,
+			}
+		},
+	)
+	s.GetAndCompleteHistoryTask(tasks.CategoryReplication, replicationTasks[0])
+}
+
 func (s *ExecutionMutableStateTaskSuite) TestAddGetReplicationTasks_Multiple() {
 	numTasks := 20
 	replicationTasks := s.AddRandomTasks(
@@ -305,6 +416,21 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetReplicationTasks_Multiple() {
 		rand.Intn(len(replicationTasks)*2)+1,
 	)
 	s.Equal(replicationTasks, loadedTasks)
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteVisibilityTask_Single() {
+	visibilityTasks := s.AddRandomTasks(
+		tasks.CategoryVisibility,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.StartExecutionVisibilityTask{
+				WorkflowKey:         workflowKey,
+				TaskID:              taskID,
+				VisibilityTimestamp: visibilityTimestamp,
+			}
+		},
+	)
+	s.GetAndCompleteHistoryTask(tasks.CategoryVisibility, visibilityTasks[0])
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetVisibilityTasks_Multiple() {
@@ -331,6 +457,107 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetVisibilityTasks_Multiple() {
 	s.Equal(visibilityTasks, loadedTasks)
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
+	now := time.Now().Truncate(p.ScheduledTaskMinPrecision)
+	timerTasks := []tasks.Task{
+		&tasks.UserTimerTask{
+			WorkflowKey:         s.WorkflowKey,
+			TaskID:              100,
+			VisibilityTimestamp: now.Add(time.Nanosecond * 10),
+		},
+		&tasks.UserTimerTask{
+			WorkflowKey:         s.WorkflowKey,
+			TaskID:              50,
+			VisibilityTimestamp: now.Add(time.Nanosecond * 20),
+		},
+	}
+
+	err := s.ExecutionManager.AddHistoryTasks(s.Ctx, &p.AddHistoryTasksRequest{
+		ShardID:     s.ShardID,
+		RangeID:     s.RangeID,
+		NamespaceID: s.WorkflowKey.NamespaceID,
+		WorkflowID:  s.WorkflowKey.WorkflowID,
+		RunID:       s.WorkflowKey.RunID,
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryTimer: timerTasks,
+		},
+	})
+	s.NoError(err)
+
+	// due to persistence layer precision loss,
+	// two tasks can be returned in either order,
+	// but must be ordered in terms of tasks.Key
+	loadedTasks := s.PaginateTasks(
+		tasks.CategoryTimer,
+		tasks.NewKey(now, 0),
+		tasks.NewKey(now.Add(time.Second), 0),
+		10,
+	)
+	s.Len(loadedTasks, 2)
+	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
+	now := time.Now().Truncate(p.ScheduledTaskMinPrecision)
+	scheduledTasks := []tasks.Task{
+		tasks.NewFakeTask(
+			s.WorkflowKey,
+			fakeScheduledTaskCategory,
+			now.Add(time.Nanosecond*10),
+		),
+		tasks.NewFakeTask(
+			s.WorkflowKey,
+			fakeScheduledTaskCategory,
+			now.Add(time.Nanosecond*20),
+		),
+	}
+	scheduledTasks[0].SetTaskID(100)
+	scheduledTasks[1].SetTaskID(50)
+
+	err := s.ExecutionManager.AddHistoryTasks(s.Ctx, &p.AddHistoryTasksRequest{
+		ShardID:     s.ShardID,
+		RangeID:     s.RangeID,
+		NamespaceID: s.WorkflowKey.NamespaceID,
+		WorkflowID:  s.WorkflowKey.WorkflowID,
+		RunID:       s.WorkflowKey.RunID,
+		Tasks: map[tasks.Category][]tasks.Task{
+			fakeScheduledTaskCategory: scheduledTasks,
+		},
+	})
+	s.NoError(err)
+
+	// due to persistence layer precision loss,
+	// two tasks can be returned in either order,
+	// but must be ordered in terms of tasks.Key
+	loadedTasks := s.PaginateTasks(
+		fakeScheduledTaskCategory,
+		tasks.NewKey(now, 0),
+		tasks.NewKey(now.Add(time.Second), 0),
+		10,
+	)
+	s.Len(loadedTasks, 2)
+	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
+
+	err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		TaskCategory:        fakeScheduledTaskCategory,
+		InclusiveMinTaskKey: tasks.NewKey(now, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
+	})
+	s.NoError(err)
+
+	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		TaskCategory:        fakeScheduledTaskCategory,
+		ReaderID:            common.DefaultQueueReaderID,
+		InclusiveMinTaskKey: tasks.NewKey(now, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
+		BatchSize:           10,
+	})
+	s.NoError(err)
+	s.Empty(response.Tasks)
+}
+
 func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 	category tasks.Category,
 	numTasks int,
@@ -340,6 +567,7 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 	now := time.Now().UTC()
 	randomTasks := make([]tasks.Task, 0, numTasks)
 	for i := 0; i != numTasks; i++ {
+		now = now.Truncate(p.ScheduledTaskMinPrecision)
 		randomTasks = append(randomTasks, newTaskFn(s.WorkflowKey, currentTaskID, now))
 		currentTaskID += rand.Int63n(100) + 1
 		now = now.Add(time.Duration(rand.Int63n(1000_000_000)) + time.Millisecond)
@@ -369,6 +597,7 @@ func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	request := &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        category,
+		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: inclusiveMinTaskKey,
 		ExclusiveMaxTaskKey: exclusiveMaxTaskKey,
 		BatchSize:           batchSize,
@@ -418,6 +647,35 @@ func (s *ExecutionMutableStateTaskSuite) RandomPaginateRange(
 	return createdTasks[firstTaskIdx:nextTaskIdx], inclusiveMinTaskKey, exclusiveMaxTaskKey
 }
 
+func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
+	category tasks.Category,
+	task tasks.Task,
+) {
+	key := task.GetKey()
+	var minKey, maxKey tasks.Key
+	if category.Type() == tasks.CategoryTypeImmediate {
+		minKey = key
+		maxKey = minKey.Next()
+	} else {
+		minKey = tasks.NewKey(key.FireTime, 0)
+		maxKey = tasks.NewKey(key.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0)
+	}
+
+	historyTasks := s.PaginateTasks(category, minKey, maxKey, 1)
+	s.Len(historyTasks, 1)
+	s.Equal(task, historyTasks[0])
+
+	err := s.ExecutionManager.CompleteHistoryTask(s.Ctx, &p.CompleteHistoryTaskRequest{
+		ShardID:      s.ShardID,
+		TaskCategory: category,
+		TaskKey:      key,
+	})
+	s.NoError(err)
+
+	historyTasks = s.PaginateTasks(category, minKey, maxKey, 1)
+	s.Empty(historyTasks)
+}
+
 func newTestSerializer(
 	serializer serialization.Serializer,
 ) serialization.Serializer {
@@ -455,11 +713,9 @@ func (s *testSerializer) DeserializeTask(
 	category tasks.Category,
 	blob commonpb.DataBlob,
 ) (tasks.Task, error) {
-	switch category.ID() {
-	case tasks.CategoryIDTransfer,
-		tasks.CategoryIDTimer,
-		tasks.CategoryIDVisibility,
-		tasks.CategoryIDReplication:
+	categoryID := category.ID()
+	if categoryID != fakeImmediateTaskCategory.ID() &&
+		categoryID != fakeScheduledTaskCategory.ID() {
 		return s.Serializer.DeserializeTask(category, blob)
 	}
 

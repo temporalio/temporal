@@ -157,7 +157,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 ) error {
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyPassive,
 	)
 	if err != nil {
@@ -175,7 +174,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		}
 		return targetWorkflow.GetContext().CreateWorkflowExecution(
 			ctx,
-			now,
 			createMode,
 			prevRunID,
 			prevLastWriteVersion,
@@ -191,7 +189,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	prevLastWriteVersion := int64(0)
 	return targetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -224,7 +221,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	currentWorkflow = nil
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		now,
 		targetWorkflowPolicy,
 	)
 	if err != nil {
@@ -243,7 +239,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	prevLastWriteVersion := int64(0)
 	err = targetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -281,7 +276,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 
 	return currentWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetWorkflow.GetContext(),
 		targetWorkflow.GetMutableState(),

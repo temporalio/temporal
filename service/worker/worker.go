@@ -81,7 +81,7 @@ func (wm *workerManager) Start() {
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 	}
 	sdkClient := wm.sdkClientFactory.GetSystemClient()
-	defaultWorker := sdkworker.New(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
+	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
 	wm.workers = []sdkworker.Worker{defaultWorker}
 
 	for _, wc := range wm.workerComponents {
@@ -91,14 +91,16 @@ func (wm *workerManager) Start() {
 			wc.Register(defaultWorker)
 		} else {
 			// this worker component requires a dedicated worker
-			dedicatedWorker := sdkworker.New(sdkClient, workerOptions.TaskQueue, workerOptions.Options)
+			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, workerOptions.TaskQueue, workerOptions.Options)
 			wc.Register(dedicatedWorker)
 			wm.workers = append(wm.workers, dedicatedWorker)
 		}
 	}
 
 	for _, w := range wm.workers {
-		w.Start()
+		if err := w.Start(); err != nil {
+			wm.logger.Fatal("Unable to start worker", tag.Error(err))
+		}
 	}
 
 	wm.logger.Info("", tag.ComponentWorkerManager, tag.LifeCycleStarted)

@@ -26,6 +26,7 @@ package s3store
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -107,19 +108,19 @@ func (v *visibilityArchiver) Archive(
 	request *archiverspb.VisibilityRecord,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.NamespaceTag(request.Namespace))
+	handler := v.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.VisibilityArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	startTime := time.Now().UTC()
 	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
 	archiveFailReason := ""
 	defer func() {
-		sw.Stop()
+		handler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveTransientErrorCount)
+				handler.Counter(metrics.VisibilityArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 			} else {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount)
+				handler.Counter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount.GetMetricName()).Record(1)
 				logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
@@ -128,7 +129,7 @@ func (v *visibilityArchiver) Archive(
 		}
 	}()
 
-	if err := softValidateURI(URI); err != nil {
+	if err := SoftValidateURI(URI); err != nil {
 		archiveFailReason = archiver.ErrReasonInvalidURI
 		return err
 	}
@@ -138,7 +139,7 @@ func (v *visibilityArchiver) Archive(
 		return err
 	}
 
-	encodedVisibilityRecord, err := encode(request)
+	encodedVisibilityRecord, err := Encode(request)
 	if err != nil {
 		archiveFailReason = errEncodeVisibilityRecord
 		return err
@@ -147,12 +148,12 @@ func (v *visibilityArchiver) Archive(
 	// Upload archive to all indexes
 	for _, element := range indexes {
 		key := constructTimestampIndex(URI.Path(), request.GetNamespaceId(), element.primaryIndex, element.primaryIndexValue, element.secondaryIndex, element.secondaryIndexTimestamp, request.GetRunId())
-		if err := upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
+		if err := Upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
 			archiveFailReason = errWriteKey
 			return err
 		}
 	}
-	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
+	handler.Counter(metrics.VisibilityArchiveSuccessCount.GetMetricName()).Record(1)
 	return nil
 }
 func createIndexesToArchive(request *archiverspb.VisibilityRecord) []indexToArchive {
@@ -171,12 +172,16 @@ func (v *visibilityArchiver) Query(
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
 
-	if err := softValidateURI(URI); err != nil {
+	if err := SoftValidateURI(URI); err != nil {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
 	}
 
 	if err := archiver.ValidateQueryRequest(request); err != nil {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidQueryVisibilityRequest.Error())
+	}
+
+	if strings.TrimSpace(request.Query) == "" {
+		return v.queryAll(ctx, URI, request, saTypeMap)
 	}
 
 	parsedQuery, err := v.queryParser.Parse(request.Query)
@@ -197,34 +202,84 @@ func (v *visibilityArchiver) Query(
 	)
 }
 
+// queryAll returns all workflow executions in the archive.
+func (v *visibilityArchiver) queryAll(
+	ctx context.Context,
+	uri archiver.URI,
+	request *archiver.QueryVisibilityRequest,
+	saTypeMap searchattribute.NameTypeMap,
+) (*archiver.QueryVisibilityResponse, error) {
+	return v.queryPrefix(ctx, uri, &queryVisibilityRequest{
+		namespaceID:   request.NamespaceID,
+		pageSize:      request.PageSize,
+		nextPageToken: request.NextPageToken,
+		parsedQuery:   &parsedQuery{},
+	}, saTypeMap, constructVisibilitySearchPrefix(uri.Path(), request.NamespaceID))
+}
+
 func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
-	ctx, cancel := ensureContextTimeout(ctx)
-	defer cancel()
-	var token *string
-	if request.nextPageToken != nil {
-		token = deserializeQueryVisibilityToken(request.nextPageToken)
-	}
 	primaryIndex := primaryIndexKeyWorkflowTypeName
 	primaryIndexValue := request.parsedQuery.workflowTypeName
 	if request.parsedQuery.workflowID != nil {
 		primaryIndex = primaryIndexKeyWorkflowID
 		primaryIndexValue = request.parsedQuery.workflowID
 	}
-	var prefix = constructVisibilitySearchPrefix(URI.Path(), request.namespaceID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout) + "/"
+
+	prefix := constructIndexedVisibilitySearchPrefix(
+		URI.Path(),
+		request.namespaceID,
+		primaryIndex,
+		*primaryIndexValue,
+		secondaryIndexKeyCloseTimeout,
+	) + "/"
 	if request.parsedQuery.closeTime != nil {
-		prefix = constructTimeBasedSearchKey(URI.Path(), request.namespaceID, primaryIndex, *primaryIndexValue, secondaryIndexKeyCloseTimeout, *request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(
+			URI.Path(),
+			request.namespaceID,
+			primaryIndex,
+			*primaryIndexValue,
+			secondaryIndexKeyCloseTimeout,
+			*request.parsedQuery.closeTime,
+			*request.parsedQuery.searchPrecision,
+		)
 	}
 	if request.parsedQuery.startTime != nil {
-		prefix = constructTimeBasedSearchKey(URI.Path(), request.namespaceID, primaryIndex, *primaryIndexValue, secondaryIndexKeyStartTimeout, *request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(
+			URI.Path(),
+			request.namespaceID,
+			primaryIndex,
+			*primaryIndexValue,
+			secondaryIndexKeyStartTimeout,
+			*request.parsedQuery.startTime,
+			*request.parsedQuery.searchPrecision,
+		)
 	}
 
+	return v.queryPrefix(ctx, URI, request, saTypeMap, prefix)
+}
+
+func (v *visibilityArchiver) queryPrefix(
+	ctx context.Context,
+	uri archiver.URI,
+	request *queryVisibilityRequest,
+	saTypeMap searchattribute.NameTypeMap,
+	prefix string,
+) (*archiver.QueryVisibilityResponse, error) {
+	ctx, cancel := ensureContextTimeout(ctx)
+	defer cancel()
+
+	var token *string
+
+	if request.nextPageToken != nil {
+		token = deserializeQueryVisibilityToken(request.nextPageToken)
+	}
 	results, err := v.s3cli.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
-		Bucket:            aws.String(URI.Hostname()),
+		Bucket:            aws.String(uri.Hostname()),
 		Prefix:            aws.String(prefix),
 		MaxKeys:           aws.Int64(int64(request.pageSize)),
 		ContinuationToken: token,
@@ -244,7 +299,7 @@ func (v *visibilityArchiver) query(
 		response.NextPageToken = serializeQueryVisibilityToken(*results.NextContinuationToken)
 	}
 	for _, item := range results.Contents {
-		encodedRecord, err := download(ctx, v.s3cli, URI, *item.Key)
+		encodedRecord, err := Download(ctx, v.s3cli, uri, *item.Key)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(err.Error())
 		}
@@ -263,9 +318,9 @@ func (v *visibilityArchiver) query(
 }
 
 func (v *visibilityArchiver) ValidateURI(URI archiver.URI) error {
-	err := softValidateURI(URI)
+	err := SoftValidateURI(URI)
 	if err != nil {
 		return err
 	}
-	return bucketExists(context.TODO(), v.s3cli, URI)
+	return BucketExists(context.TODO(), v.s3cli, URI)
 }

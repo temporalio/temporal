@@ -35,7 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
+	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -61,17 +61,24 @@ type (
 		enableCrossNamespaceCommands    dynamicconfig.BoolPropertyFn
 	}
 
-	workflowSizeChecker struct {
-		blobSizeLimitWarn  int
-		blobSizeLimitError int
+	workflowSizeLimits struct {
+		blobSizeLimitWarn              int
+		blobSizeLimitError             int
+		memoSizeLimitWarn              int
+		memoSizeLimitError             int
+		numPendingChildExecutionsLimit int
+		numPendingActivitiesLimit      int
+		numPendingSignalsLimit         int
+		numPendingCancelsRequestLimit  int
+	}
 
-		memoSizeLimitWarn  int
-		memoSizeLimitError int
+	workflowSizeChecker struct {
+		workflowSizeLimits
 
 		mutableState              workflow.MutableState
 		searchAttributesValidator *searchattribute.Validator
 		executionStats            *persistencespb.ExecutionStats
-		metricsScope              metrics.Scope
+		metricsHandler            metrics.Handler
 		logger                    log.Logger
 	}
 )
@@ -97,25 +104,19 @@ func newCommandAttrValidator(
 }
 
 func newWorkflowSizeChecker(
-	blobSizeLimitWarn int,
-	blobSizeLimitError int,
-	memoSizeLimitWarn int,
-	memoSizeLimitError int,
+	limits workflowSizeLimits,
 	mutableState workflow.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
-	metricsScope metrics.Scope,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *workflowSizeChecker {
 	return &workflowSizeChecker{
-		blobSizeLimitWarn:         blobSizeLimitWarn,
-		blobSizeLimitError:        blobSizeLimitError,
-		memoSizeLimitWarn:         memoSizeLimitWarn,
-		memoSizeLimitError:        memoSizeLimitError,
+		workflowSizeLimits:        limits,
 		mutableState:              mutableState,
 		searchAttributesValidator: searchAttributesValidator,
 		executionStats:            executionStats,
-		metricsScope:              metricsScope,
+		metricsHandler:            metricsHandler,
 		logger:                    logger,
 	}
 }
@@ -135,7 +136,7 @@ func (c *workflowSizeChecker) checkIfPayloadSizeExceedsLimit(
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
 		executionState.RunId,
-		c.metricsScope.Tagged(commandTypeTag),
+		c.metricsHandler.WithTags(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
@@ -150,7 +151,9 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 	commandTypeTag metrics.Tag,
 	message string,
 ) error {
-	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.MemoSize, memo.Size())
+	c.metricsHandler.Histogram(metrics.MemoSize.GetMetricName(), metrics.MemoSize.GetMetricUnit()).Record(
+		int64(memo.Size()),
+		commandTypeTag)
 
 	executionInfo := c.mutableState.GetExecutionInfo()
 	executionState := c.mutableState.GetExecutionState()
@@ -161,7 +164,7 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
 		executionState.RunId,
-		c.metricsScope.Tagged(commandTypeTag),
+		c.metricsHandler.WithTags(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
@@ -171,15 +174,93 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 	return nil
 }
 
+func withinLimit(value int, limit int) bool {
+	if limit <= 0 {
+		// limit not defined
+		return true
+	}
+	return value < limit
+}
+
+func (c *workflowSizeChecker) checkCountConstraint(
+	numPending int,
+	errLimit int,
+	metricName string,
+	resourceName string,
+) error {
+	key := c.mutableState.GetWorkflowKey()
+	logger := log.With(
+		c.logger,
+		tag.WorkflowNamespaceID(key.NamespaceID),
+		tag.WorkflowID(key.WorkflowID),
+		tag.WorkflowRunID(key.RunID),
+	)
+
+	if withinLimit(numPending, errLimit) {
+		return nil
+	}
+	c.metricsHandler.Counter(metricName).Record(1)
+	err := fmt.Errorf(
+		"the number of %s, %d, has reached the per-workflow limit of %d",
+		resourceName,
+		numPending,
+		errLimit,
+	)
+	logger.Error(err.Error(), tag.Error(err))
+	return err
+}
+
+const (
+	PendingChildWorkflowExecutionsDescription = "pending child workflow executions"
+	PendingActivitiesDescription              = "pending activities"
+	PendingCancelRequestsDescription          = "pending requests to cancel external workflows"
+	PendingSignalsDescription                 = "pending signals to external workflows"
+)
+
+func (c *workflowSizeChecker) checkIfNumChildWorkflowsExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingChildExecutionInfos()),
+		c.numPendingChildExecutionsLimit,
+		metrics.TooManyPendingChildWorkflows.GetMetricName(),
+		PendingChildWorkflowExecutionsDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumPendingActivitiesExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingActivityInfos()),
+		c.numPendingActivitiesLimit,
+		metrics.TooManyPendingActivities.GetMetricName(),
+		PendingActivitiesDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumPendingCancelRequestsExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingRequestCancelExternalInfos()),
+		c.numPendingCancelsRequestLimit,
+		metrics.TooManyPendingCancelRequests.GetMetricName(),
+		PendingCancelRequestsDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumPendingSignalsExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingSignalExternalInfos()),
+		c.numPendingSignalsLimit,
+		metrics.TooManyPendingSignalsToExternalWorkflows.GetMetricName(),
+		PendingSignalsDescription,
+	)
+}
+
 func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
 	searchAttributes *commonpb.SearchAttributes,
 	namespace namespace.Name,
 	commandTypeTag metrics.Tag,
 ) error {
-	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(
-		metrics.SearchAttributesSize,
-		searchAttributes.Size(),
-	)
+	c.metricsHandler.Histogram(metrics.SearchAttributesSize.GetMetricName(), metrics.SearchAttributesSize.GetMetricUnit()).Record(
+		int64(searchAttributes.Size()),
+		commandTypeTag)
 	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace.String())
 	if err != nil {
 		c.logger.Warn(
@@ -465,10 +546,87 @@ func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 
+// TODO (alex-update): Move this to messageValidator
+func (v *commandAttrValidator) validateWorkflowExecutionUpdateAcceptanceMessage(
+	_ namespace.ID,
+	protocolInstanceID string,
+	updAcceptance *updatepb.Acceptance,
+) (enumspb.WorkflowTaskFailedCause, error) {
+	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
+
+	if updAcceptance == nil {
+		return failedCause, serviceerror.NewInvalidArgument("Message body of type update.Acceptance is not set.")
+	}
+	if updAcceptance.GetAcceptedRequest() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("accepted_request is not set on update.Acceptance message body.")
+	}
+	if updAcceptance.GetAcceptedRequest().GetMeta() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("meta is not set on accepted_request of message body.")
+	}
+	if updAcceptance.GetAcceptedRequest().GetMeta().GetUpdateId() == "" {
+		return failedCause, serviceerror.NewInvalidArgument("update_id is not set on accepted_request of message body.")
+	}
+	if updAcceptance.GetAcceptedRequest().GetMeta().GetUpdateId() != protocolInstanceID {
+		return failedCause, serviceerror.NewInvalidArgument("update_id of accepted_request of message body is not equal to protocol_instance_id of the message.")
+	}
+
+	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
+}
+
+// TODO (alex-update): Move this to messageValidator.
+func (v *commandAttrValidator) validateWorkflowExecutionUpdateResponseMessage(
+	_ namespace.ID,
+	protocolInstanceID string,
+	updResponse *updatepb.Response,
+) (enumspb.WorkflowTaskFailedCause, error) {
+
+	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
+
+	if updResponse == nil {
+		return failedCause, serviceerror.NewInvalidArgument("Message body of type update.Response is not set.")
+	}
+	if updResponse.GetMeta() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("meta is not set on message body of update.Response type.")
+	}
+	if updResponse.GetMeta().GetUpdateId() == "" {
+		return failedCause, serviceerror.NewInvalidArgument("update_id is not set on message body of update.Response type.")
+	}
+	if updResponse.GetMeta().GetUpdateId() != protocolInstanceID {
+		return failedCause, serviceerror.NewInvalidArgument("update_id of message body of update.Response type is not equal to protocol_instance_id of the message.")
+	}
+
+	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
+}
+
+// TODO (alex-update): Move this to messageValidator.
+func (v *commandAttrValidator) validateWorkflowExecutionUpdateRejectionMessage(
+	_ namespace.ID,
+	protocolInstanceID string,
+	updRejection *updatepb.Rejection,
+) (enumspb.WorkflowTaskFailedCause, error) {
+	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
+
+	if updRejection == nil {
+		return failedCause, serviceerror.NewInvalidArgument("Message body of type update.Rejection is not set.")
+	}
+	if updRejection.GetRejectedRequest() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("rejected_request is not set on update.Rejection message body.")
+	}
+	if updRejection.GetRejectedRequest().GetMeta() == nil {
+		return failedCause, serviceerror.NewInvalidArgument("meta is not set on rejected_request of message body.")
+	}
+	if updRejection.GetRejectedRequest().GetMeta().GetUpdateId() == "" {
+		return failedCause, serviceerror.NewInvalidArgument("update_id is not set on rejected_request of message body.")
+	}
+	if updRejection.GetRejectedRequest().GetMeta().GetUpdateId() != protocolInstanceID {
+		return failedCause, serviceerror.NewInvalidArgument("update_id of rejected_request of message body is not equal to protocol_instance_id of the message.")
+	}
+	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
+}
+
 func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 	namespace namespace.Name,
 	attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
-	visibilityIndexName string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES
@@ -481,7 +639,7 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 	if len(attributes.GetSearchAttributes().GetIndexedFields()) == 0 {
 		return failedCause, serviceerror.NewInvalidArgument("IndexedFields is empty on command.")
 	}
-	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String(), visibilityIndexName); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
 		return failedCause, err
 	}
 
@@ -518,7 +676,6 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	namespace namespace.Name,
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
-	visibilityIndexName string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES
@@ -562,9 +719,30 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.DefaultWorkflowTaskTimeout))
 	}
 
-	if err = v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String(), visibilityIndexName); err != nil {
+	attributes.WorkflowRunTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowRunTimeout(
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			timestamp.DurationValue(executionInfo.GetWorkflowExecutionTimeout()),
+		),
+	)
+
+	attributes.WorkflowTaskTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowTaskTimeout(
+			namespace.String(),
+			timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()),
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			v.config.DefaultWorkflowTaskTimeout,
+		),
+	)
+
+	if err := v.validateWorkflowRetryPolicy(namespace, attributes.RetryPolicy); err != nil {
+		return failedCause, err
+	}
+
+	if err = v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
 		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err
 	}
+
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 
@@ -575,7 +753,6 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	parentInfo *persistencespb.WorkflowExecutionInfo,
 	defaultWorkflowTaskTimeoutFn dynamicconfig.DurationPropertyFnWithNamespaceFilter,
-	visibilityIndexName string,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES
@@ -622,7 +799,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
 	}
 
-	if err := v.validateWorkflowRetryPolicy(attributes); err != nil {
+	if err := v.validateWorkflowRetryPolicy(namespace.Name(attributes.GetNamespace()), attributes.RetryPolicy); err != nil {
 		return failedCause, err
 	}
 
@@ -630,7 +807,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, err
 	}
 
-	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String(), visibilityIndexName); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String()); err != nil {
 		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err
 	}
 
@@ -708,17 +885,18 @@ func (v *commandAttrValidator) validateActivityRetryPolicy(
 }
 
 func (v *commandAttrValidator) validateWorkflowRetryPolicy(
-	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
+	namespaceName namespace.Name,
+	retryPolicy *commonpb.RetryPolicy,
 ) error {
-	if attributes.RetryPolicy == nil {
+	if retryPolicy == nil {
 		// By default, if the user does not explicitly set a retry policy for a Child Workflow, do not perform any retries.
 		return nil
 	}
 
 	// Otherwise, for any unset fields on the retry policy, set with defaults
-	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(attributes.GetNamespace()))
-	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultWorkflowRetrySettings)
-	return common.ValidateRetryPolicy(attributes.RetryPolicy)
+	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultWorkflowRetrySettings(namespaceName.String()))
+	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
+	return common.ValidateRetryPolicy(retryPolicy)
 }
 
 func (v *commandAttrValidator) validateCrossNamespaceCall(
@@ -794,7 +972,8 @@ func (v *commandAttrValidator) validateCommandSequence(
 			enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:
+			enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES,
+			enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE:
 			// noop
 		case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,

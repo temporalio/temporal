@@ -36,3 +36,5 @@
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
 #  - value: true
+system.enableEagerWorkflowStart:
+  - value: true

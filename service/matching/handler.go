@@ -30,9 +30,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -50,7 +48,7 @@ type (
 	Handler struct {
 		engine            Engine
 		config            *Config
-		metricsClient     metrics.Client
+		metricsHandler    metrics.Handler
 		logger            log.Logger
 		startWG           sync.WaitGroup
 		throttledLogger   log.Logger
@@ -75,13 +73,13 @@ func NewHandler(
 	historyClient historyservice.HistoryServiceClient,
 	matchingRawClient matchingservice.MatchingServiceClient,
 	matchingServiceResolver membership.ServiceResolver,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 		engine: NewEngine(
@@ -90,7 +88,7 @@ func NewHandler(
 			matchingRawClient, // Use non retry client inside matching
 			config,
 			logger,
-			metricsClient,
+			metricsHandler,
 			namespaceRegistry,
 			matchingServiceResolver,
 			clusterMetadata,
@@ -114,39 +112,18 @@ func (h *Handler) Stop() {
 	h.engine.Stop()
 }
 
-// Check is from: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	h.logger.Debug("Matching service health check endpoint (gRPC) reached.")
-
-	h.startWG.Wait()
-
-	if request.Service != serviceName {
-		return &healthpb.HealthCheckResponse{
-			Status: healthpb.HealthCheckResponse_SERVICE_UNKNOWN,
-		}, nil
-	}
-
-	hs := &healthpb.HealthCheckResponse{
-		Status: healthpb.HealthCheckResponse_SERVING,
-	}
-	return hs, nil
-}
-func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
-	return serviceerror.NewUnimplemented("Watch is not implemented.")
-}
-
 func (h *Handler) newHandlerContext(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	taskQueue *taskqueuepb.TaskQueue,
-	scope int,
+	operation string,
 ) *handlerContext {
 	return newHandlerContext(
 		ctx,
 		h.namespaceName(namespaceID),
 		taskQueue,
-		h.metricsClient,
-		scope,
+		h.metricsHandler,
+		operation,
 		h.logger,
 	)
 }
@@ -171,7 +148,7 @@ func (h *Handler) AddActivityTask(
 
 	syncMatch, err := h.engine.AddActivityTask(hCtx, request)
 	if syncMatch {
-		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskQueue, time.Since(startT))
+		hCtx.metricsHandler.Timer(metrics.SyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(startT))
 	}
 
 	return &matchingservice.AddActivityTaskResponse{}, err
@@ -197,7 +174,7 @@ func (h *Handler) AddWorkflowTask(
 
 	syncMatch, err := h.engine.AddWorkflowTask(hCtx, request)
 	if syncMatch {
-		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskQueue, time.Since(startT))
+		hCtx.metricsHandler.Timer(metrics.SyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(startT))
 	}
 	return &matchingservice.AddWorkflowTaskResponse{}, err
 }
@@ -342,7 +319,7 @@ func (h *Handler) ListTaskQueuePartitions(
 		ctx,
 		namespace.Name(request.GetNamespace()),
 		request.GetTaskQueue(),
-		h.metricsClient,
+		h.metricsHandler,
 		metrics.MatchingListTaskQueuePartitionsScope,
 		h.logger,
 	)
@@ -351,11 +328,11 @@ func (h *Handler) ListTaskQueuePartitions(
 	return response, err
 }
 
-// UpdateWorkerBuildIdOrdering allows changing the worker versioning graph for a task queue
-func (h *Handler) UpdateWorkerBuildIdOrdering(
+// UpdateWorkerBuildIdCompatibility allows changing the worker versioning graph for a task queue
+func (h *Handler) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.UpdateWorkerBuildIdOrderingRequest,
-) (_ *matchingservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+	request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
+) (_ *matchingservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -364,17 +341,17 @@ func (h *Handler) UpdateWorkerBuildIdOrdering(
 			Name: request.Request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingUpdateWorkerBuildIdOrderingScope,
+		metrics.MatchingUpdateWorkerBuildIdCompatibilityScope,
 	)
 
-	return h.engine.UpdateWorkerBuildIdOrdering(hCtx, request)
+	return h.engine.UpdateWorkerBuildIdCompatibility(hCtx, request)
 }
 
-// GetWorkerBuildIdOrdering fetches the worker versioning graph for a task queue
-func (h *Handler) GetWorkerBuildIdOrdering(
+// GetWorkerBuildIdCompatibility fetches the worker versioning graph for a task queue
+func (h *Handler) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.GetWorkerBuildIdOrderingRequest,
-) (_ *matchingservice.GetWorkerBuildIdOrderingResponse, retError error) {
+	request *matchingservice.GetWorkerBuildIdCompatibilityRequest,
+) (_ *matchingservice.GetWorkerBuildIdCompatibilityResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -383,10 +360,10 @@ func (h *Handler) GetWorkerBuildIdOrdering(
 			Name: request.Request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingGetWorkerBuildIdOrderingScope,
+		metrics.MatchingGetWorkerBuildIdCompatibilityScope,
 	)
 
-	return h.engine.GetWorkerBuildIdOrdering(hCtx, request)
+	return h.engine.GetWorkerBuildIdCompatibility(hCtx, request)
 }
 
 // InvalidateTaskQueueMetadata notifies a task queue that some data has changed, and should be invalidated/refreshed
@@ -435,10 +412,11 @@ func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 }
 
 func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId namespace.ID) {
-	hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
-	h.metricsClient.
-		Scope(metrics.MatchingAddWorkflowTaskScope).
-		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId).String())).
-		Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).
-		IncCounter(metrics.MatchingClientForwardedCounter)
+	hCtx.metricsHandler.Counter(metrics.ForwardedPerTaskQueueCounter.GetMetricName()).Record(1)
+	h.metricsHandler.Counter(metrics.MatchingClientForwardedCounter.GetMetricName()).
+		Record(
+			1,
+			metrics.OperationTag(metrics.MatchingAddWorkflowTaskScope),
+			metrics.NamespaceTag(h.namespaceName(namespaceId).String()),
+			metrics.ServiceRoleTag(metrics.MatchingRoleTagValue))
 }

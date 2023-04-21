@@ -30,6 +30,7 @@ import (
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -52,11 +54,13 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/cache"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 )
 
@@ -64,6 +68,8 @@ var Module = fx.Options(
 	resource.Module,
 	workflow.Module,
 	shard.Module,
+	cache.Module,
+	archival.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(RetryableInterceptorProvider),
@@ -88,11 +94,12 @@ func ServiceProvider(
 	serviceConfig *configs.Config,
 	visibilityMgr manager.VisibilityManager,
 	handler *Handler,
-	logger resource.SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
+	healthServer *health.Server,
 ) *Service {
 	return NewService(
 		grpcServerOptions,
@@ -104,37 +111,39 @@ func ServiceProvider(
 		membershipMonitor,
 		metricsHandler,
 		faultInjectionDataStoreFactory,
+		healthServer,
 	)
 }
 
 func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
-	return membershipMonitor.GetResolver(common.HistoryServiceName)
+	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
 func HandlerProvider(args NewHandlerArgs) *Handler {
 	handler := &Handler{
-		status:                        common.DaemonStatusInitialized,
-		config:                        args.Config,
-		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
-		logger:                        args.Logger,
-		throttledLogger:               args.ThrottledLogger,
-		persistenceExecutionManager:   args.PersistenceExecutionManager,
-		persistenceShardManager:       args.PersistenceShardManager,
-		persistenceVisibilityManager:  args.PersistenceVisibilityManager,
-		historyServiceResolver:        args.HistoryServiceResolver,
-		metricsClient:                 args.MetricsClient,
-		payloadSerializer:             args.PayloadSerializer,
-		timeSource:                    args.TimeSource,
-		namespaceRegistry:             args.NamespaceRegistry,
-		saProvider:                    args.SaProvider,
-		saMapper:                      args.SaMapper,
-		clusterMetadata:               args.ClusterMetadata,
-		archivalMetadata:              args.ArchivalMetadata,
-		hostInfoProvider:              args.HostInfoProvider,
-		controller:                    args.ShardController,
-		eventNotifier:                 args.EventNotifier,
+		status:                       common.DaemonStatusInitialized,
+		config:                       args.Config,
+		tokenSerializer:              common.NewProtoTaskTokenSerializer(),
+		logger:                       args.Logger,
+		throttledLogger:              args.ThrottledLogger,
+		persistenceExecutionManager:  args.PersistenceExecutionManager,
+		persistenceShardManager:      args.PersistenceShardManager,
+		persistenceVisibilityManager: args.PersistenceVisibilityManager,
+		historyServiceResolver:       args.HistoryServiceResolver,
+		metricsHandler:               args.MetricsHandler,
+		payloadSerializer:            args.PayloadSerializer,
+		timeSource:                   args.TimeSource,
+		namespaceRegistry:            args.NamespaceRegistry,
+		saProvider:                   args.SaProvider,
+		clusterMetadata:              args.ClusterMetadata,
+		archivalMetadata:             args.ArchivalMetadata,
+		hostInfoProvider:             args.HostInfoProvider,
+		controller:                   args.ShardController,
+		eventNotifier:                args.EventNotifier,
+		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
+
 		replicationTaskFetcherFactory: args.ReplicationTaskFetcherFactory,
-		tracer:                        args.TracerProvider.Tracer(consts.LibraryName),
+		streamReceiverMonitor:         args.StreamReceiverMonitor,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -158,7 +167,7 @@ func ConfigProvider(
 	return configs.NewConfig(dc,
 		persistenceConfig.NumHistoryShards,
 		persistenceConfig.AdvancedVisibilityConfigExist(),
-		esConfig.GetVisibilityIndex())
+	)
 }
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.ThrottledLoggerRpsFn {
@@ -175,12 +184,11 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
-		metricsClient,
-		metrics.HistoryAPIMetricsScopes(),
+		metricsHandler,
 		logger,
 	)
 }
@@ -220,14 +228,14 @@ func PersistenceRateLimitingParamsProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	persistenceConfig *config.Persistence,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceConfig *configs.Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
@@ -238,29 +246,29 @@ func VisibilityManagerProvider(
 		esClient,
 		esProcessorConfig,
 		saProvider,
-		searchAttributesMapper,
+		searchAttributesMapperProvider,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
+		serviceConfig.EnableReadVisibilityFromES,
 		serviceConfig.AdvancedVisibilityWritingMode,
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
+		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
-		dynamicconfig.GetBoolPropertyFn(false), // history visibility never read
-		metricsClient,
+		serviceConfig.VisibilityDisableOrderByClause,
+		metricsHandler,
 		logger,
 	)
 }
 
 func EventNotifierProvider(
 	timeSource clock.TimeSource,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 ) events.Notifier {
 	return events.NewNotifier(
 		timeSource,
-		metricsClient,
+		metricsHandler,
 		config.GetShardID,
 	)
 }
@@ -269,11 +277,11 @@ func ArchivalClientProvider(
 	archiverProvider provider.ArchiverProvider,
 	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 ) warchiver.Client {
 	return warchiver.NewClient(
-		metricsClient,
+		metricsHandler,
 		logger,
 		sdkClientFactory,
 		config.NumArchiveSystemWorkflows,

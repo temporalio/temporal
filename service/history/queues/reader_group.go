@@ -25,6 +25,8 @@
 package queues
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -32,6 +34,12 @@ import (
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/tasks"
+)
+
+var (
+	errReaderGroupStopped = errors.New("queue reader group already stopped")
 )
 
 type (
@@ -40,7 +48,11 @@ type (
 	ReaderGroup struct {
 		sync.Mutex
 
-		initializer ReaderInitializer
+		shardID          int32
+		shardOwner       string
+		category         tasks.Category
+		initializer      ReaderInitializer
+		executionManager persistence.ExecutionManager
 
 		status    int32
 		readerMap map[int32]Reader
@@ -48,12 +60,21 @@ type (
 )
 
 func NewReaderGroup(
+	shardID int32,
+	shardOwner string,
+	category tasks.Category,
 	initializer ReaderInitializer,
+	executionManager persistence.ExecutionManager,
 ) *ReaderGroup {
 	return &ReaderGroup{
-		initializer: initializer,
-		status:      common.DaemonStatusInitialized,
-		readerMap:   make(map[int32]Reader),
+		shardID:          shardID,
+		shardOwner:       shardOwner,
+		category:         category,
+		initializer:      initializer,
+		executionManager: executionManager,
+
+		status:    common.DaemonStatusInitialized,
+		readerMap: make(map[int32]Reader),
 	}
 }
 
@@ -78,8 +99,26 @@ func (g *ReaderGroup) Stop() {
 	g.Lock()
 	defer g.Unlock()
 
-	for _, reader := range g.readerMap {
-		reader.Stop()
+	// Stop() method is protected by g.status, so g.readerMap will never be nil here
+	for readerID := range g.readerMap {
+		g.removeReaderLocked(readerID)
+	}
+
+	// This guarantee no new reader can be created/registered after Stop() returns
+	// also all registered readers will be unregistered.
+	g.readerMap = nil
+}
+
+func (g *ReaderGroup) ForEach(f func(int32, Reader)) {
+	g.Lock()
+	defer g.Unlock()
+
+	if g.readerMap == nil {
+		return
+	}
+
+	for readerID, reader := range g.readerMap {
+		f(readerID, reader)
 	}
 }
 
@@ -93,41 +132,96 @@ func (g *ReaderGroup) Readers() map[int32]Reader {
 	return readerMapCopy
 }
 
+func (g *ReaderGroup) GetOrCreateReader(readerID int32) (Reader, error) {
+	g.Lock()
+	defer g.Unlock()
+
+	reader, ok := g.getReaderByIDLocked(readerID)
+	if ok {
+		return reader, nil
+	}
+
+	return g.newReaderLocked(readerID)
+}
+
 func (g *ReaderGroup) ReaderByID(readerID int32) (Reader, bool) {
 	g.Lock()
 	defer g.Unlock()
+
+	return g.getReaderByIDLocked(readerID)
+}
+
+func (g *ReaderGroup) getReaderByIDLocked(readerID int32) (Reader, bool) {
+	if g.readerMap == nil {
+		return nil, false
+	}
 
 	reader, ok := g.readerMap[readerID]
 	return reader, ok
 }
 
-func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
-	reader := g.initializer(readerID, slices)
-
+func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) (Reader, error) {
 	g.Lock()
 	defer g.Unlock()
+
+	return g.newReaderLocked(readerID, slices...)
+}
+
+func (g *ReaderGroup) newReaderLocked(readerID int32, slices ...Slice) (Reader, error) {
+	reader := g.initializer(readerID, slices)
+
+	if g.readerMap == nil {
+		return nil, errReaderGroupStopped
+	}
 
 	if _, ok := g.readerMap[readerID]; ok {
 		panic(fmt.Sprintf("reader with ID %v already exists", readerID))
 	}
 
 	g.readerMap[readerID] = reader
+	err := g.executionManager.RegisterHistoryTaskReader(context.Background(), &persistence.RegisterHistoryTaskReaderRequest{
+		ShardID:      g.shardID,
+		ShardOwner:   g.shardOwner,
+		TaskCategory: g.category,
+		ReaderID:     readerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to register history task reader: %w", err)
+	}
 	if g.isStarted() {
 		reader.Start()
 	}
-	return reader
+	return reader, nil
 }
 
 func (g *ReaderGroup) RemoveReader(readerID int32) {
 	g.Lock()
 	defer g.Unlock()
 
+	g.removeReaderLocked(readerID)
+}
+
+func (g *ReaderGroup) removeReaderLocked(readerID int32) {
+	if g.readerMap == nil {
+		return
+	}
+
 	reader, ok := g.readerMap[readerID]
 	if !ok {
 		return
 	}
 
+	// NOTE: reader.Stop() does not guarantee reader won't issue new read requests
+	// But it's very unlikely as it waits for 1min.
+	// If UnregisterHistoryTaskReader requires no more read requests after the call
+	// we need to wait for the separate reader goroutine to complete.
 	reader.Stop()
+	g.executionManager.UnregisterHistoryTaskReader(context.Background(), &persistence.UnregisterHistoryTaskReaderRequest{
+		ShardID:      g.shardID,
+		ShardOwner:   g.shardOwner,
+		TaskCategory: g.category,
+		ReaderID:     readerID,
+	})
 	delete(g.readerMap, readerID)
 }
 

@@ -55,6 +55,7 @@ var (
 		"RemoveSignalMutableState":               0,
 		"RemoveTask":                             0,
 		"ReplicateEventsV2":                      0,
+		"ReplicateWorkflowState":                 0,
 		"RequestCancelWorkflowExecution":         0,
 		"ResetStickyTaskQueue":                   0,
 		"ResetWorkflowExecution":                 0,
@@ -74,7 +75,8 @@ var (
 		"GenerateLastHistoryReplicationTasks":    0,
 		"GetReplicationStatus":                   0,
 		"DeleteWorkflowVisibilityRecord":         0,
-		"UpdateWorkflow":                         0,
+		"UpdateWorkflowExecution":                0,
+		"StreamWorkflowReplicationMessages":      0,
 	}
 
 	APIPrioritiesOrdered = []int{0}
@@ -83,9 +85,9 @@ var (
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDefaultIncomingRateLimiter(rateFn)
+		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
 		if priority, ok := APIToPriority[req.API]; ok {

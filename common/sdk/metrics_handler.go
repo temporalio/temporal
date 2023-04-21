@@ -34,28 +34,28 @@ import (
 
 type (
 	MetricsHandler struct {
-		provider metrics.MetricsHandler
+		provider metrics.Handler
 	}
 
 	metricsCounter struct {
 		name     string
-		provider metrics.MetricsHandler
+		provider metrics.Handler
 	}
 
 	metricsGauge struct {
 		name     string
-		provider metrics.MetricsHandler
+		provider metrics.Handler
 	}
 
 	metricsTimer struct {
 		name     string
-		provider metrics.MetricsHandler
+		provider metrics.Handler
 	}
 )
 
 var _ sdkclient.MetricsHandler = &MetricsHandler{}
 
-func NewMetricsHandler(provider metrics.MetricsHandler) *MetricsHandler {
+func NewMetricsHandler(provider metrics.Handler) *MetricsHandler {
 	return &MetricsHandler{provider: provider}
 }
 

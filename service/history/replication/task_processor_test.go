@@ -54,7 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -67,7 +67,7 @@ type (
 		*require.Assertions
 
 		controller                  *gomock.Controller
-		mockResource                *resource.Test
+		mockResource                *resourcetest.Test
 		mockShard                   *shard.ContextTest
 		mockEngine                  *shard.MockEngine
 		mockNamespaceCache          *namespace.MockRegistry
@@ -111,15 +111,13 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.shardID = rand.Int31()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: s.shardID,
-				RangeId: 1,
-				QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-					tasks.CategoryReplication.ID(): {
-						ClusterAckLevel: map[string]int64{
-							cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
-						},
+		&persistencespb.ShardInfo{
+			ShardId: s.shardID,
+			RangeId: 1,
+			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+				tasks.CategoryReplication.ID(): {
+					ClusterAckLevel: map[string]int64{
+						cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
 					},
 				},
 			},
@@ -145,9 +143,10 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	metricsClient := metrics.NoopClient
+	metricsClient := metrics.NoopMetricsHandler
 
 	s.replicationTaskProcessor = NewTaskProcessor(
+		s.shardID,
 		s.mockShard,
 		s.mockEngine,
 		s.config,
@@ -204,7 +203,7 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(0, nil)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
 	s.NoError(err)
 }
@@ -243,9 +242,21 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(0, nil)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
 	err = s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
 	s.NoError(err)
+}
+
+func (s *taskProcessorSuite) TestHandleReplicationTask_Panic() {
+	task := &replicationspb.ReplicationTask{}
+
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).DoAndReturn(
+		func(_ context.Context, _ *replicationspb.ReplicationTask, _ bool) error {
+			panic("test replication task panic")
+		},
+	)
+	err := s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
+	s.Error(err)
 }
 
 func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {

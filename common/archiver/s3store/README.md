@@ -71,36 +71,8 @@ s3://<bucket-name>/<namespace-id>/
 ```
 
 ## Using localstack for local development
-1. Install awscli from [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html)
+1. Install awscli from [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 2. Install localstack from [here](https://github.com/localstack/localstack#installing)
 3. Launch localstack with `SERVICES=s3 localstack start`
-4. Create a bucket using `aws --endpoint-url=http://localhost:4572 s3 mb s3://temporal-development` 
-5. Configure archival and namespaceDefaults with the following configuration
-```
-archival:
-  history:
-    state: "enabled"
-    enableRead: true
-    provider:
-      s3store:
-        region: "us-east-1"
-        endpoint: "http://127.0.0.1:4572"
-        s3ForcePathStyle: true
-  visibility:
-    state: "enabled"
-    enableRead: true
-    provider:
-      s3store:
-        region: "us-east-1"
-        endpoint: "http://127.0.0.1:4572"
-        s3ForcePathStyle: true
-
-namespaceDefaults:
-  archival:
-    history:
-      state: "enabled"
-      URI: "s3://temporal-development"
-    visibility:
-      state: "enabled"
-      URI: "s3://temporal-development"
-```
+4. Create a bucket using `aws --endpoint-url=http://localhost:4566 s3 mb s3://temporal-development` 
+5. Launch the server with the localstack s3 environment config`--env development-cass-s3 start`

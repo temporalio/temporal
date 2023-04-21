@@ -35,9 +35,7 @@ type (
 	Queue interface {
 		common.Daemon
 		Category() tasks.Category
-		NotifyNewTasks(clusterName string, tasks []tasks.Task)
-		FailoverNamespace(namespaceIDs map[string]struct{})
-		LockTaskProcessing()
-		UnlockTaskProcessing()
+		NotifyNewTasks(tasks []tasks.Task)
+		FailoverNamespace(namespaceID string)
 	}
 )

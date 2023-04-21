@@ -50,6 +50,7 @@ const (
 	CategoryIDTimer       = int32(enumsspb.TASK_CATEGORY_TIMER)
 	CategoryIDReplication = int32(enumsspb.TASK_CATEGORY_REPLICATION)
 	CategoryIDVisibility  = int32(enumsspb.TASK_CATEGORY_VISIBILITY)
+	CategoryIDArchival    = int32(enumsspb.TASK_CATEGORY_ARCHIVAL)
 )
 
 const (
@@ -63,6 +64,7 @@ const (
 	CategoryNameTimer       = "timer"
 	CategoryNameReplication = "replication"
 	CategoryNameVisibility  = "visibility"
+	CategoryNameArchival    = "archival"
 )
 
 var (
@@ -88,6 +90,12 @@ var (
 		id:    CategoryIDVisibility,
 		cType: CategoryTypeImmediate,
 		name:  CategoryNameVisibility,
+	}
+
+	CategoryArchival = Category{
+		id:    CategoryIDArchival,
+		cType: CategoryTypeScheduled,
+		name:  CategoryNameArchival,
 	}
 )
 
@@ -135,6 +143,14 @@ func GetCategories() map[int32]Category {
 	categories.RLock()
 	defer categories.RUnlock()
 	return maps.Clone(categories.m)
+}
+
+// RemoveCategory removes a registered Category.
+// This should only be used for testing.
+func RemoveCategory(id int32) {
+	categories.Lock()
+	defer categories.Unlock()
+	delete(categories.m, id)
 }
 
 // GetCategoryByID returns a registered Category with the same ID

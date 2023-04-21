@@ -54,7 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -74,15 +75,16 @@ type (
 		mockTxProcessor         *queues.MockQueue
 		mockTimerProcessor      *queues.MockQueue
 		mockVisibilityProcessor *queues.MockQueue
+		mockArchivalProcessor   *queues.MockQueue
 		mockNamespaceCache      *namespace.MockRegistry
 		mockMatchingClient      *matchingservicemock.MockMatchingServiceClient
 		mockClusterMetadata     *cluster.MockMetadata
 
 		mockHistoryEngine *historyEngineImpl
-		mockDeleteManager *workflow.MockDeleteManager
+		mockDeleteManager *deletemanager.MockDeleteManager
 		mockExecutionMgr  *persistence.MockExecutionManager
 
-		workflowCache                workflow.Cache
+		workflowCache                wcache.Cache
 		logger                       log.Logger
 		namespaceID                  namespace.ID
 		namespaceEntry               *namespace.Namespace
@@ -114,21 +116,22 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockTxProcessor = queues.NewMockQueue(s.controller)
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
+	s.mockArchivalProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
-	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockArchivalProcessor.EXPECT().Category().Return(tasks.CategoryArchival).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	config := tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
-		&persistence.ShardInfoWithFailover{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: 1,
-				RangeId: 1,
-			},
+		&persistencespb.ShardInfo{
+			ShardId: 1,
+			RangeId: 1,
 		},
 		config,
 		s.timeSource,
@@ -141,7 +144,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetExecutionManager(),
 		false,
 		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsClient(),
+		s.mockShard.GetMetricsHandler(),
 	))
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -151,15 +154,16 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	// ack manager will use the namespace information
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(tests.Version, tests.Version).Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
-	s.workflowCache = workflow.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
-	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
+	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
@@ -167,12 +171,13 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
+		metricsHandler:     s.mockShard.GetMetricsHandler(),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
+			s.mockArchivalProcessor.Category():   s.mockArchivalProcessor,
 		},
 	}
 	s.mockShard.SetEngineForTesting(h)
@@ -182,22 +187,6 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard,
 		s.workflowCache,
 		s.mockDeleteManager,
-		newTimerQueueActiveProcessor(
-			s.mockShard,
-			s.workflowCache,
-			nil,
-			nil,
-			s.mockDeleteManager,
-			s.mockMatchingClient,
-			newTaskAllocator(s.mockShard),
-			s.mockShard.Resource.ClientBean,
-			quotas.NewDefaultOutgoingRateLimiter(
-				func() float64 { return float64(config.TimerProcessorMaxPollRPS()) },
-			),
-			s.logger,
-			metrics.NoopMetricsHandler,
-			false,
-		),
 		s.logger,
 		metrics.NoopMetricsHandler,
 		config,
@@ -243,7 +232,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	timerID := "timer"
 	timerTimeout := 2 * time.Second
@@ -313,7 +302,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	timerID := "timer"
 	timerTimeout := 2 * time.Second
@@ -377,7 +366,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskqueue := "taskqueue"
 	activityID := "activity"
@@ -456,7 +445,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	identity := "identity"
 	taskqueue := "taskqueue"
@@ -537,7 +526,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	identity := "identity"
 	taskqueue := "taskqueue"
@@ -630,7 +619,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskqueue := "taskqueue"
 	activityID := "activity"
@@ -716,7 +705,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	identity := "identity"
 	taskqueue := "taskqueue"
@@ -805,7 +794,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	identity := "identity"
 	taskqueue := "taskqueue"
@@ -912,8 +901,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 	_, _, err = s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(err)
 
-	workflowTask, ok := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
-	s.True(ok)
+	workflowTask := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
+	s.NotNil(workflowTask)
 	s.True(workflowTask.ScheduledEventID != common.EmptyEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedEventID)
 	s.Equal(int32(2), workflowTask.Attempt)
@@ -1010,8 +999,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 	_, _, err = s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(err)
 
-	workflowTask, ok := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
-	s.True(ok)
+	workflowTask := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetPendingWorkflowTask()
+	s.NotNil(workflowTask)
 	s.True(workflowTask.ScheduledEventID != common.EmptyEventID)
 	s.Equal(common.EmptyEventID, workflowTask.StartedEventID)
 	s.Equal(int32(1), workflowTask.Attempt)
@@ -1044,7 +1033,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	timerTask := &tasks.WorkflowBackoffTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1095,7 +1084,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskqueue := "taskqueue"
 	activityID := "activity"
@@ -1184,7 +1173,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	identity := "identity"
 	taskqueue := "taskqueue"
@@ -1261,7 +1250,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	startEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = startEvent.GetEventId()
-	completionEvent := addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	completionEvent := addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	timerTask := &tasks.WorkflowTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1321,7 +1310,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Retry() {
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	startEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = startEvent.GetEventId()
-	completionEvent := addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	completionEvent := addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	timerTask := &tasks.WorkflowTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1378,7 +1367,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Cron() {
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	startEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = startEvent.GetEventId()
-	completionEvent := addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	completionEvent := addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	timerTask := &tasks.WorkflowTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1434,7 +1423,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_WorkflowExpired(
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	startEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = startEvent.GetEventId()
-	completionEvent := addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	completionEvent := addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	timerTask := &tasks.WorkflowTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1478,7 +1467,7 @@ func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 	workflowID string,
 	runID string,
 ) workflow.MutableState {
-	return s.workflowCache.(*workflow.CacheImpl).Get(
+	return s.workflowCache.(*wcache.CacheImpl).Get(
 		definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 	).(*workflow.ContextImpl).MutableState
 }
@@ -1489,16 +1478,14 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 	return queues.NewExecutable(
 		queues.DefaultReaderId,
 		task,
-		nil,
 		s.timerQueueActiveTaskExecutor,
 		nil,
 		nil,
 		queues.NewNoopPriorityAssigner(),
 		s.mockShard.GetTimeSource(),
-		nil,
+		s.mockNamespaceCache,
+		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
-		nil,
-		nil,
 	)
 }

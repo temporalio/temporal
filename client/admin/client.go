@@ -31,16 +31,19 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/debug"
 )
 
 var _ adminservice.AdminServiceClient = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = 10 * time.Second
+	DefaultTimeout = 10 * time.Second * debug.TimeoutMultiplier
 	// DefaultLargeTimeout is the default timeout used to make calls
-	DefaultLargeTimeout = time.Minute
+	DefaultLargeTimeout = time.Minute * debug.TimeoutMultiplier
 )
 
 type clientImpl struct {
@@ -71,4 +74,12 @@ func (c *clientImpl) createContextWithLargeTimeout(parent context.Context) (cont
 		return context.WithTimeout(context.Background(), c.largeTimeout)
 	}
 	return context.WithTimeout(parent, c.largeTimeout)
+}
+
+func (c *clientImpl) StreamWorkflowReplicationMessages(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (adminservice.AdminService_StreamWorkflowReplicationMessagesClient, error) {
+	// do not use createContext function, let caller manage stream API lifecycle
+	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
 }

@@ -29,11 +29,10 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/searchattribute"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -94,16 +94,16 @@ func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, con
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
 func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.VisibilityRecord, opts ...archiver.ArchiveOption) (err error) {
-	scope := v.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
+	handler := v.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	startTime := time.Now().UTC()
 	defer func() {
-		sw.Stop()
+		handler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveTransientErrorCount)
+				handler.Counter(metrics.VisibilityArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
 			} else {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount)
+				handler.Counter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount.GetMetricName()).Record(1)
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
 				}
@@ -147,7 +147,7 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		return errRetryable
 	}
 
-	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
+	handler.Counter(metrics.VisibilityArchiveSuccessCount.GetMetricName()).Record(1)
 	return nil
 }
 
@@ -169,6 +169,10 @@ func (v *visibilityArchiver) Query(
 
 	if err := archiver.ValidateQueryRequest(request); err != nil {
 		return nil, &serviceerror.InvalidArgument{Message: archiver.ErrInvalidQueryVisibilityRequest.Error()}
+	}
+
+	if strings.TrimSpace(request.Query) == "" {
+		return v.queryAll(ctx, URI, request, saTypeMap)
 	}
 
 	parsedQuery, err := v.queryParser.Parse(request.Query)
@@ -195,26 +199,51 @@ func (v *visibilityArchiver) Query(
 
 func (v *visibilityArchiver) query(
 	ctx context.Context,
-	URI archiver.URI,
+	uri archiver.URI,
 	request *queryVisibilityRequest,
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
-
-	token := new(queryVisibilityToken)
-	if request.nextPageToken != nil {
-		var err error
-		token, err = deserializeQueryVisibilityToken(request.nextPageToken)
-		if err != nil {
-			return nil, &serviceerror.InvalidArgument{Message: archiver.ErrNextPageTokenCorrupted.Error()}
-		}
-	}
-
-	var prefix = constructVisibilityFilenamePrefix(request.namespaceID, indexKeyCloseTimeout)
+	prefix := constructVisibilityFilenamePrefix(request.namespaceID, indexKeyCloseTimeout)
 	if !request.parsedQuery.closeTime.IsZero() {
-		prefix = constructTimeBasedSearchKey(request.namespaceID, indexKeyCloseTimeout, request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(
+			request.namespaceID,
+			indexKeyCloseTimeout,
+			request.parsedQuery.closeTime,
+			*request.parsedQuery.searchPrecision,
+		)
 	}
+
 	if !request.parsedQuery.startTime.IsZero() {
-		prefix = constructTimeBasedSearchKey(request.namespaceID, indexKeyStartTimeout, request.parsedQuery.startTime, *request.parsedQuery.searchPrecision)
+		prefix = constructTimeBasedSearchKey(
+			request.namespaceID,
+			indexKeyStartTimeout,
+			request.parsedQuery.startTime,
+			*request.parsedQuery.searchPrecision,
+		)
+	}
+
+	return v.queryPrefix(ctx, uri, request, saTypeMap, prefix)
+}
+
+func (v *visibilityArchiver) queryAll(
+	ctx context.Context,
+	URI archiver.URI,
+	request *archiver.QueryVisibilityRequest,
+	saTypeMap searchattribute.NameTypeMap,
+) (*archiver.QueryVisibilityResponse, error) {
+
+	return v.queryPrefix(ctx, URI, &queryVisibilityRequest{
+		namespaceID:   request.NamespaceID,
+		pageSize:      request.PageSize,
+		nextPageToken: request.NextPageToken,
+		parsedQuery:   &parsedQuery{},
+	}, saTypeMap, request.NamespaceID)
+}
+
+func (v *visibilityArchiver) queryPrefix(ctx context.Context, uri archiver.URI, request *queryVisibilityRequest, saTypeMap searchattribute.NameTypeMap, prefix string) (*archiver.QueryVisibilityResponse, error) {
+	token, err := v.parseToken(request.nextPageToken)
+	if err != nil {
+		return nil, err
 	}
 
 	filters := make([]connector.Precondition, 0)
@@ -230,14 +259,14 @@ func (v *visibilityArchiver) query(
 		filters = append(filters, newWorkflowIDPrecondition(hash(*request.parsedQuery.workflowType)))
 	}
 
-	filenames, completed, currentCursorPos, err := v.gcloudStorage.QueryWithFilters(ctx, URI, prefix, request.pageSize, token.Offset, filters)
+	filenames, completed, currentCursorPos, err := v.gcloudStorage.QueryWithFilters(ctx, uri, prefix, request.pageSize, token.Offset, filters)
 	if err != nil {
 		return nil, &serviceerror.InvalidArgument{Message: err.Error()}
 	}
 
 	response := &archiver.QueryVisibilityResponse{}
 	for _, file := range filenames {
-		encodedRecord, err := v.gcloudStorage.Get(ctx, URI, fmt.Sprintf("%s/%s", request.namespaceID, filepath.Base(file)))
+		encodedRecord, err := v.gcloudStorage.Get(ctx, uri, fmt.Sprintf("%s/%s", request.namespaceID, filepath.Base(file)))
 		if err != nil {
 			return nil, &serviceerror.InvalidArgument{Message: err.Error()}
 		}
@@ -266,6 +295,18 @@ func (v *visibilityArchiver) query(
 	}
 
 	return response, nil
+}
+
+func (v *visibilityArchiver) parseToken(nextPageToken []byte) (*queryVisibilityToken, error) {
+	token := new(queryVisibilityToken)
+	if nextPageToken != nil {
+		var err error
+		token, err = deserializeQueryVisibilityToken(nextPageToken)
+		if err != nil {
+			return nil, &serviceerror.InvalidArgument{Message: archiver.ErrNextPageTokenCorrupted.Error()}
+		}
+	}
+	return token, nil
 }
 
 // ValidateURI is used to define what a valid URI for an implementation is.

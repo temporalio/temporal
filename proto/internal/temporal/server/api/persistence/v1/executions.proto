@@ -37,8 +37,10 @@ import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
+import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
+import "temporal/server/api/workflow/v1/message.proto";
 
 // shard column
 message ShardInfo {
@@ -87,6 +89,8 @@ message WorkflowExecutionInfo {
     int64 last_workflow_task_started_event_id = 19;
     google.protobuf.Timestamp start_time = 20 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp last_update_time = 21 [(gogoproto.stdtime) = true];
+
+    // Workflow task fields.
     int64 workflow_task_version = 22;
     int64 workflow_task_scheduled_event_id = 23;
     int64 workflow_task_started_event_id = 24;
@@ -94,9 +98,13 @@ message WorkflowExecutionInfo {
     int32 workflow_task_attempt = 26;
     google.protobuf.Timestamp workflow_task_started_time = 27 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp workflow_task_scheduled_time = 28 [(gogoproto.stdtime) = true];
-    bool cancel_requested = 29;
     google.protobuf.Timestamp workflow_task_original_scheduled_time = 30 [(gogoproto.stdtime) = true];
     string workflow_task_request_id = 31;
+    temporal.server.api.enums.v1.WorkflowTaskType workflow_task_type = 68;
+    bool workflow_task_suggest_continue_as_new = 69;
+    int64 workflow_task_history_size_bytes = 70;
+
+    bool cancel_requested = 29;
     string cancel_request_id = 32;
     string sticky_task_queue = 33;
     // (-- api-linter: core::0140::prepositions=disabled
@@ -114,6 +122,11 @@ message WorkflowExecutionInfo {
     reserved 44;
     reserved 45;
     int64 signal_count = 46;
+    int64 activity_count = 71;
+    int64 child_execution_count = 72;
+    int64 user_timer_count = 73;
+    int64 request_cancel_external_count = 74;
+    int64 signal_external_count = 75;
     reserved 47;
     reserved 48;
     reserved 49;
@@ -139,6 +152,8 @@ message WorkflowExecutionInfo {
     // Used to check if visibility close task is processed before deleting the workflow execution.
     int64 close_visibility_task_id = 65;
     google.protobuf.Timestamp close_time = 66 [(gogoproto.stdtime) = true];
+    bool close_visibility_task_completed = 67;
+    temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
 }
 
 message ExecutionStats {
@@ -172,6 +187,14 @@ message TransferTaskInfo {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "after" is used to indicate sequence of actions. --)
     bool delete_after_close = 15;
+    message CloseExecutionTaskDetails {
+        // can_skip_visibility_archival is set to true when we can guarantee that visibility records will be archived
+        // by some other task, so this task doesn't need to worry about it.
+        bool can_skip_visibility_archival = 1;
+    }
+    oneof task_details {
+        CloseExecutionTaskDetails close_execution_task_details = 16;
+    }
 }
 
 // replication column
@@ -223,6 +246,19 @@ message TimerTaskInfo {
     int64 task_id = 10;
     google.protobuf.Timestamp visibility_time = 11 [(gogoproto.stdtime) = true];
     bytes branch_token = 12;
+    // If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
+    bool already_archived = 13;
+}
+
+
+message ArchivalTaskInfo {
+    int64 task_id = 1;
+    string namespace_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
+    temporal.server.api.enums.v1.TaskType task_type = 5;
+    int64 version = 6;
+    google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
 }
 
 // activity_map column

@@ -32,7 +32,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,6 +48,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -74,16 +76,18 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -107,7 +111,7 @@ type (
 		replicationProcessorMgr    common.Daemon
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
-		metricsClient              metrics.Client
+		metricsHandler             metrics.Handler
 		logger                     log.Logger
 		throttledLogger            log.Logger
 		config                     *configs.Config
@@ -118,8 +122,9 @@ type (
 		matchingClient             matchingservice.MatchingServiceClient
 		rawMatchingClient          matchingservice.MatchingServiceClient
 		replicationDLQHandler      replication.DLQHandler
+		persistenceVisibilityMgr   manager.VisibilityManager
 		searchAttributesValidator  *searchattribute.Validator
-		workflowDeleteManager      workflow.DeleteManager
+		workflowDeleteManager      deletemanager.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		tracer                     trace.Tracer
@@ -135,7 +140,7 @@ func NewEngineWithShardContext(
 	eventNotifier events.Notifier,
 	config *configs.Config,
 	rawMatchingClient matchingservice.MatchingServiceClient,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,
@@ -143,18 +148,20 @@ func NewEngineWithShardContext(
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tracerProvider trace.TracerProvider,
+	persistenceVisibilityMgr manager.VisibilityManager,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 
-	workflowDeleteManager := workflow.NewDeleteManager(
+	workflowDeleteManager := deletemanager.NewDeleteManager(
 		shard,
 		workflowCache,
 		config,
 		archivalClient,
 		shard.GetTimeSource(),
+		persistenceVisibilityMgr,
 	)
 
 	historyEngImpl := &historyEngineImpl{
@@ -167,12 +174,13 @@ func NewEngineWithShardContext(
 		tokenSerializer:            common.NewProtoTaskTokenSerializer(),
 		logger:                     log.With(logger, tag.ComponentHistoryEngine),
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
-		metricsClient:              shard.GetMetricsClient(),
+		metricsHandler:             shard.GetMetricsHandler(),
 		eventNotifier:              eventNotifier,
 		config:                     config,
 		sdkClientFactory:           sdkClientFactory,
 		matchingClient:             matchingClient,
 		rawMatchingClient:          rawMatchingClient,
+		persistenceVisibilityMgr:   persistenceVisibilityMgr,
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
@@ -181,11 +189,11 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
 	for _, factory := range queueProcessorFactories {
-		processor := factory.CreateQueue(shard, historyEngImpl, workflowCache)
+		processor := factory.CreateQueue(shard, workflowCache)
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsHandler(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
@@ -220,10 +228,12 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
 		shard.GetSearchAttributesProvider(),
-		shard.GetSearchAttributesMapper(),
+		shard.GetSearchAttributesMapperProvider(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
+		persistenceVisibilityMgr.GetIndexName(),
+		visibility.AllowListForValidation(persistenceVisibilityMgr.GetStoreNames()),
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
@@ -263,20 +273,12 @@ func (e *historyEngineImpl) Start() {
 	e.logger.Info("", tag.LifeCycleStarting)
 	defer e.logger.Info("", tag.LifeCycleStarted)
 
+	e.registerNamespaceStateChangeCallback()
+
 	for _, queueProcessor := range e.queueProcessors {
 		queueProcessor.Start()
 	}
 	e.replicationProcessorMgr.Start()
-
-	// failover callback will try to create a failover queue processor to scan all inflight tasks
-	// if domain needs to be failovered. However, in the multicursor queue logic, the scan range
-	// can't be retrieved before the processor is started. If failover callback is registered
-	// before queue processor is started, it may result in a deadline as to create the failover queue,
-	// queue processor need to be started.
-	//
-	// Ideally, when both timer and transfer queues enabled single cursor mode, we don't have to register
-	// the callback. However, currently namespace migration is relying on the callback to UpdateHandoverNamespaces
-	e.registerNamespaceFailoverCallback()
 }
 
 // Stop the service.
@@ -296,119 +298,36 @@ func (e *historyEngineImpl) Stop() {
 		queueProcessor.Stop()
 	}
 	e.replicationProcessorMgr.Stop()
+	if e.replicationAckMgr != nil {
+		e.replicationAckMgr.Close()
+	}
 	// unset the failover callback
-	e.shard.GetNamespaceRegistry().UnregisterNamespaceChangeCallback(e)
+	e.shard.GetNamespaceRegistry().UnregisterStateChangeCallback(e)
 }
 
-func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
+func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 
-	// NOTE: READ BEFORE MODIFICATION
-	//
-	// Tasks, e.g. transfer tasks and timer tasks, are created when holding the shard lock
-	// meaning tasks -> release of shard lock
-	//
-	// Namespace change notification follows the following steps, order matters
-	// 1. lock all task processing.
-	// 2. namespace changes visible to everyone (Note: lock of task processing prevents task processing logic seeing the namespace changes).
-	// 3. failover min and max task levels are calculated, then update to shard.
-	// 4. failover start & task processing unlock & shard namespace version notification update. (order does not matter for this discussion)
-	//
-	// The above guarantees that task created during the failover will be processed.
-	// If the task is created after namespace change:
-	// 		then active processor will handle it. (simple case)
-	// If the task is created before namespace change:
-	//		task -> release of shard lock
-	//		failover min / max task levels calculated & updated to shard (using shard lock) -> failover start
-	// above 2 guarantees that failover start is after persistence of the task.
-
-	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *namespace.Namespace, action func()) {
-		namespaceFailoverNotificationVersion := nextNamespace.FailoverNotificationVersion()
-		namespaceActiveCluster := nextNamespace.ActiveClusterName()
-
-		// +1 in the following check as the version in shard is max notification version +1.
-		// Need to run action() when namespaceFailoverNotificationVersion+1 == shardNotificationVersion
-		// as we don't know if the failover queue execution for that notification version is
-		// completed or not.
-		//
-		// NOTE: theoretically we need to get rid of the check on shardNotificationVersion, as
-		// we have no idea if the failover queue for any notification version below that is completed
-		// or not. However, removing that will cause more load upon shard reload.
-		// So here assume failover queue processor for notification version < X-1 is completed if
-		// shard notification version is X.
-
-		if nextNamespace.IsGlobalNamespace() &&
-			nextNamespace.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
-			namespaceFailoverNotificationVersion+1 >= shardNotificationVersion &&
-			namespaceActiveCluster == e.currentClusterName {
-			action()
+	e.shard.GetNamespaceRegistry().RegisterStateChangeCallback(e, func(ns *namespace.Namespace, deletedFromDb bool) {
+		if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
+			e.shard.UpdateHandoverNamespace(ns, deletedFromDb)
 		}
-	}
 
-	// first set the failover callback
-	e.shard.GetNamespaceRegistry().RegisterNamespaceChangeCallback(
-		e,
-		0, /* always want callback so UpdateHandoverNamespaces() can be called after shard reload */
-		func() {
+		if deletedFromDb {
+			return
+		}
+
+		if ns.IsGlobalNamespace() &&
+			ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+			ns.ActiveClusterName() == e.currentClusterName {
+
 			for _, queueProcessor := range e.queueProcessors {
-				queueProcessor.LockTaskProcessing()
+				queueProcessor.FailoverNamespace(ns.ID().String())
 			}
-		},
-		func(prevNamespaces []*namespace.Namespace, nextNamespaces []*namespace.Namespace) {
-			defer func() {
-				for _, queueProcessor := range e.queueProcessors {
-					queueProcessor.UnlockTaskProcessing()
-				}
-			}()
+		}
 
-			if len(nextNamespaces) == 0 {
-				return
-			}
-
-			if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-				maxTaskID, _ := e.replicationAckMgr.GetMaxTaskInfo()
-				e.shard.UpdateHandoverNamespaces(nextNamespaces, maxTaskID)
-			}
-
-			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
-			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
-
-			// 1. We can't return when newNotificationVersion == shardNotificationVersion
-			// since we don't know if the previous failover queue processing has finished or not
-			// 2. We can return when newNotificationVersion < shardNotificationVersion. But the check
-			// is basically the same as the check in failover predicate. Because
-			// failoverNotificationVersion + 1 <= NotificationVersion + 1 = newNotificationVersion,
-			// there's no notification version can make
-			// newNotificationVersion < shardNotificationVersion and
-			// failoverNotificationVersion + 1 >= shardNotificationVersion are true at the same time
-			// Meaning if the check decides to return, no namespace will pass the failover predicate.
-
-			failoverNamespaceIDs := map[string]struct{}{}
-			for _, nextNamespace := range nextNamespaces {
-				failoverPredicate(shardNotificationVersion, nextNamespace, func() {
-					failoverNamespaceIDs[nextNamespace.ID().String()] = struct{}{}
-				})
-			}
-
-			if len(failoverNamespaceIDs) > 0 {
-				e.logger.Info("Namespace Failover Start.", tag.WorkflowNamespaceIDs(failoverNamespaceIDs))
-
-				for _, queueProcessor := range e.queueProcessors {
-					queueProcessor.FailoverNamespace(failoverNamespaceIDs)
-				}
-
-				// the fake tasks will not be actually used, we just need to make sure
-				// its length > 0 and has correct timestamp, to trigger a db scan
-				now := e.shard.GetTimeSource().Now()
-				fakeTasks := make(map[tasks.Category][]tasks.Task)
-				for category := range e.queueProcessors {
-					fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
-				}
-				e.NotifyNewTasks(e.currentClusterName, fakeTasks)
-			}
-
-			_ = e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
-		},
-	)
+		// for backward compatibility
+		_ = e.shard.UpdateNamespaceNotificationVersion(ns.NotificationVersion() + 1)
+	})
 }
 
 // StartWorkflowExecution starts a workflow execution
@@ -417,7 +336,16 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-	return startworkflow.Invoke(ctx, startRequest, e.shard, e.workflowConsistencyChecker)
+	starter, err := startworkflow.NewStarter(
+		e.shard,
+		e.workflowConsistencyChecker,
+		e.tokenSerializer,
+		startRequest,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return starter.Invoke(ctx)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
@@ -498,7 +426,13 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DescribeWorkflowExecutionRequest,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
-	return describeworkflow.Invoke(ctx, request, e.shard, e.workflowConsistencyChecker)
+	return describeworkflow.Invoke(
+		ctx,
+		request,
+		e.shard,
+		e.workflowConsistencyChecker,
+		e.persistenceVisibilityMgr,
+	)
 }
 
 func (e *historyEngineImpl) RecordActivityTaskStarted(
@@ -606,11 +540,12 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	return signalwithstartworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
-func (h *historyEngineImpl) UpdateWorkflow(
+func (e *historyEngineImpl) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *historyservice.UpdateWorkflowRequest,
-) (*historyservice.UpdateWorkflowResponse, error) {
-	return nil, serviceerror.NewUnimplemented("UpdateWorkflow is not supported on this server")
+	req *historyservice.UpdateWorkflowExecutionRequest,
+) (*historyservice.UpdateWorkflowExecutionResponse, error) {
+
+	return updateworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker, e.matchingClient)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
@@ -681,7 +616,7 @@ func (e *historyEngineImpl) SyncShardStatus(
 	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
 	e.shard.SetCurrentTime(clusterName, now)
 	for _, processor := range e.queueProcessors {
-		processor.NotifyNewTasks(clusterName, []tasks.Task{})
+		processor.NotifyNewTasks([]tasks.Task{})
 	}
 	return nil
 }
@@ -711,7 +646,6 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 }
 
 func (e *historyEngineImpl) NotifyNewTasks(
-	clusterName string,
 	newTasks map[tasks.Category][]tasks.Task,
 ) {
 	for category, tasksByCategory := range newTasks {
@@ -725,7 +659,7 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		}
 
 		if len(tasksByCategory) > 0 {
-			e.queueProcessors[category].NotifyNewTasks(clusterName, tasksByCategory)
+			e.queueProcessors[category].NotifyNewTasks(tasksByCategory)
 		}
 	}
 }
@@ -738,6 +672,29 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 	return replicationapi.GetTasks(ctx, e.shard, e.replicationAckMgr, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
+}
+
+func (e *historyEngineImpl) SubscribeReplicationNotification() (<-chan struct{}, string) {
+	return e.replicationAckMgr.SubscribeNotification()
+}
+
+func (e *historyEngineImpl) UnsubscribeReplicationNotification(subscriberID string) {
+	e.replicationAckMgr.UnsubscribeNotification(subscriberID)
+}
+
+func (e *historyEngineImpl) ConvertReplicationTask(
+	ctx context.Context,
+	task tasks.Task,
+) (*replicationspb.ReplicationTask, error) {
+	return e.replicationAckMgr.ConvertTask(ctx, task)
+}
+func (e *historyEngineImpl) GetReplicationTasksIter(
+	ctx context.Context,
+	pollingCluster string,
+	minInclusiveTaskID int64,
+	maxExclusiveTaskID int64,
+) (collection.Iterator[tasks.Task], error) {
+	return e.replicationAckMgr.GetReplicationTasksIter(ctx, pollingCluster, minInclusiveTaskID, maxExclusiveTaskID)
 }
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(

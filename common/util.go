@@ -37,7 +37,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -144,9 +143,14 @@ var (
 	// ErrMemoSizeExceedsLimit is error for memo size exceeds limit
 	ErrMemoSizeExceedsLimit = serviceerror.NewInvalidArgument("Memo size exceeds limit.")
 	// ErrContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
-	ErrContextTimeoutTooShort = serviceerror.NewInvalidArgument("Context timeout is too short.")
+	ErrContextTimeoutTooShort = serviceerror.NewFailedPrecondition("Context timeout is too short.")
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = serviceerror.NewInvalidArgument("Context timeout is not set.")
+)
+
+var (
+	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
+	ErrNamespaceHandover = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -335,6 +339,10 @@ func IsServiceClientTransientError(err error) bool {
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
+	if err.Error() == ErrNamespaceHandover.Error() {
+		return false
+	}
+
 	switch err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.Unavailable:
@@ -361,6 +369,12 @@ func IsResourceExhausted(err error) bool {
 	return false
 }
 
+// IsInternalError checks if the error is an internal error.
+func IsInternalError(err error) bool {
+	var internalErr *serviceerror.Internal
+	return errors.As(err, &internalErr)
+}
+
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
 func WorkflowIDToHistoryShard(
 	namespaceID string,
@@ -372,11 +386,52 @@ func WorkflowIDToHistoryShard(
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
-// PrettyPrintHistory prints history in human readable format
-func PrettyPrintHistory(history *historypb.History, logger log.Logger) {
-	fmt.Println("************** History *******************")
-	fmt.Println(proto.MarshalTextString(history))
-	fmt.Println("******************************************")
+func MapShardID(
+	sourceShardCount int32,
+	targetShardCount int32,
+	sourceShardID int32,
+) []int32 {
+	if sourceShardCount%targetShardCount != 0 && targetShardCount%sourceShardCount != 0 {
+		panic(fmt.Sprintf("cannot map shard ID between source & target shard count: %v vs %v",
+			sourceShardCount, targetShardCount))
+	}
+
+	sourceShardID -= 1
+	if sourceShardCount < targetShardCount {
+		// one to many
+		// 0-3
+		// 0-15
+		// 0 -> 0, 4, 8, 12
+		// 1 -> 1, 5, 9, 13
+		// 2 -> 2, 6, 10, 14
+		// 3 -> 3, 7, 11, 15
+		// 4x
+		ratio := targetShardCount / sourceShardCount
+		targetShardIDs := make([]int32, ratio)
+		for i := range targetShardIDs {
+			targetShardIDs[i] = sourceShardID + int32(i)*ratio + 1
+		}
+		return targetShardIDs
+	} else if sourceShardCount > targetShardCount {
+		// many to one
+		return []int32{(sourceShardID % targetShardCount) + 1}
+	} else {
+		return []int32{sourceShardID + 1}
+	}
+}
+
+func PrettyPrint[T proto.Message](msgs []T, header ...string) {
+	var sb strings.Builder
+	_, _ = sb.WriteString("==========================================================================\n")
+	for _, h := range header {
+		_, _ = sb.WriteString(h)
+		_, _ = sb.WriteString("\n")
+	}
+	_, _ = sb.WriteString("--------------------------------------------------------------------------\n")
+	for _, m := range msgs {
+		_ = proto.MarshalText(&sb, m)
+	}
+	fmt.Print(sb.String())
 }
 
 // IsValidContext checks that the thrift context is not expired on cancelled.
@@ -427,6 +482,7 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		ScheduledTime:              historyResponse.ScheduledTime,
 		StartedTime:                historyResponse.StartedTime,
 		Queries:                    historyResponse.Queries,
+		Messages:                   historyResponse.Messages,
 	}
 
 	return matchingResp
@@ -538,7 +594,11 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 	return defaultSettings
 }
 
-// CreateHistoryStartWorkflowRequest create a start workflow request for history
+// CreateHistoryStartWorkflowRequest create a start workflow request for history.
+// Note: this mutates startRequest by unsetting the fields ContinuedFailure and
+// LastCompletionResult (these should only be set on workflows created by the scheduler
+// worker).
+// Assumes startRequest is valid. See frontend workflow_handler for detailed validation logic.
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
@@ -552,15 +612,24 @@ func CreateHistoryStartWorkflowRequest(
 		Attempt:                  1,
 		ParentExecutionInfo:      parentExecutionInfo,
 		FirstWorkflowTaskBackoff: backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now),
+		ContinuedFailure:         startRequest.ContinuedFailure,
+		LastCompletionResult:     startRequest.LastCompletionResult,
 	}
+	startRequest.ContinuedFailure = nil
+	startRequest.LastCompletionResult = nil
 
 	if timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()) > 0 {
 		deadline := now.Add(timestamp.DurationValue(startRequest.GetWorkflowExecutionTimeout()))
 		histRequest.WorkflowExecutionExpirationTime = timestamp.TimePtr(deadline.Round(time.Millisecond))
 	}
 
+	// CronSchedule and WorkflowStartDelay should not both be set on the same request
 	if len(startRequest.CronSchedule) != 0 {
 		histRequest.ContinueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
+	}
+
+	if timestamp.DurationValue(startRequest.GetWorkflowStartDelay()) > 0 {
+		histRequest.FirstWorkflowTaskBackoff = startRequest.GetWorkflowStartDelay()
 	}
 
 	return histRequest
@@ -575,13 +644,12 @@ func CheckEventBlobSizeLimit(
 	namespace string,
 	workflowID string,
 	runID string,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	blobSizeViolationOperationTag tag.ZapTag,
 ) error {
 
-	scope.RecordDistribution(metrics.EventBlobSize, actualSize)
-
+	metricsHandler.Histogram(metrics.EventBlobSize.GetMetricName(), metrics.EventBlobSize.GetMetricUnit()).Record(int64(actualSize))
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",

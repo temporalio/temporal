@@ -33,57 +33,63 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
-
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 const (
-	taskTimeout             = time.Second * 3
-	taskGetExecutionTimeout = time.Second
+	taskTimeout             = time.Second * 3 * debug.TimeoutMultiplier
+	taskGetExecutionTimeout = time.Second * debug.TimeoutMultiplier
 	taskHistoryOpTimeout    = 20 * time.Second
 )
+
+var errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
 
 type (
 	transferQueueTaskExecutorBase struct {
 		currentClusterName       string
 		shard                    shard.Context
 		registry                 namespace.Registry
-		cache                    workflow.Cache
+		cache                    wcache.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
-		metricProvider           metrics.MetricsHandler
-		metricsClient            metrics.Client
+		metricHandler            metrics.Handler
 		historyClient            historyservice.HistoryServiceClient
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
-		workflowDeleteManager    workflow.DeleteManager
+		visibilityManager        manager.VisibilityManager
+		workflowDeleteManager    deletemanager.DeleteManager
 	}
 )
 
 func newTransferQueueTaskExecutorBase(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.Handler,
 	matchingClient matchingservice.MatchingServiceClient,
+	visibilityManager manager.VisibilityManager,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
 		currentClusterName:       shard.GetClusterMetadata().GetCurrentClusterName(),
@@ -92,18 +98,19 @@ func newTransferQueueTaskExecutorBase(
 		cache:                    workflowCache,
 		archivalClient:           archivalClient,
 		logger:                   logger,
-		metricProvider:           metricProvider,
-		metricsClient:            shard.GetMetricsClient(),
+		metricHandler:            metricHandler,
 		historyClient:            shard.GetHistoryClient(),
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
-		workflowDeleteManager: workflow.NewDeleteManager(
+		visibilityManager:        visibilityManager,
+		workflowDeleteManager: deletemanager.NewDeleteManager(
 			shard,
 			workflowCache,
 			shard.GetConfig(),
 			archivalClient,
 			shard.GetTimeSource(),
+			visibilityManager,
 		),
 	}
 }
@@ -192,7 +199,7 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 	ctx, cancel := context.WithTimeout(ctx, t.config.TransferProcessorVisibilityArchivalTimeLimit())
 	defer cancel()
 
-	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.config.DefaultVisibilityIndexName, false)
+	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.visibilityManager.GetIndexName(), false)
 	if err != nil {
 		return err
 	}
@@ -220,7 +227,7 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 			HistoryURI:       namespaceEntry.HistoryArchivalState().URI,
 			Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
 		},
-		CallerService:        common.HistoryServiceName,
+		CallerService:        string(primitives.HistoryService),
 		AttemptArchiveInline: true, // archive visibility inline by default
 	})
 
@@ -232,11 +239,16 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	task *tasks.DeleteExecutionTask,
 	ensureNoPendingCloseTask bool,
 ) error {
-	return t.deleteExecution(ctx, task, false, ensureNoPendingCloseTask)
+	return t.deleteExecution(ctx, task, false, ensureNoPendingCloseTask, &task.ProcessStage)
 }
 
-func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, task tasks.Task,
-	forceDeleteFromOpenVisibility bool, ensureNoPendingCloseTask bool) (retError error) {
+func (t *transferQueueTaskExecutorBase) deleteExecution(
+	ctx context.Context,
+	task tasks.Task,
+	forceDeleteFromOpenVisibility bool,
+	ensureNoPendingCloseTask bool,
+	stage *tasks.DeleteWorkflowExecutionStage,
+) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -249,14 +261,14 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -285,9 +297,9 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		if err != nil {
 			return err
 		}
-		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
-		if !ok {
-			return nil
+		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -298,6 +310,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		weCtx,
 		mutableState,
 		forceDeleteFromOpenVisibility,
+		stage,
 	)
 }
 
@@ -307,16 +320,14 @@ func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.
 	if closeTransferTaskId == 0 {
 		return false
 	}
-	currentClusterName := t.shard.GetClusterMetadata().GetCurrentClusterName()
 	// check if close execution transfer task is completed
 	transferQueueState, ok := t.shard.GetQueueState(tasks.CategoryTransfer)
 	if !ok {
-		// Use cluster ack level for transfer queue ack level because it gets updated more often.
-		transferQueueAckLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, currentClusterName).TaskID
+		transferQueueAckLevel := t.shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID
 		return closeTransferTaskId > transferQueueAckLevel
 	}
 	fakeCloseTransferTask := &tasks.CloseExecutionTask{
-		WorkflowKey: definition.NewWorkflowKey(weCtx.GetNamespaceID().String(), weCtx.GetWorkflowID(), weCtx.GetRunID()),
+		WorkflowKey: weCtx.GetWorkflowKey(),
 		TaskID:      closeTransferTaskId,
 	}
 	return !queues.IsTaskAcked(fakeCloseTransferTask, transferQueueState)

@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -38,13 +37,14 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -60,10 +60,10 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -77,53 +77,55 @@ type (
 	Handler struct {
 		status int32
 
-		tokenSerializer               common.TaskTokenSerializer
-		startWG                       sync.WaitGroup
-		config                        *configs.Config
-		eventNotifier                 events.Notifier
+		tokenSerializer              common.TaskTokenSerializer
+		startWG                      sync.WaitGroup
+		config                       *configs.Config
+		eventNotifier                events.Notifier
+		logger                       log.Logger
+		throttledLogger              log.Logger
+		persistenceExecutionManager  persistence.ExecutionManager
+		persistenceShardManager      persistence.ShardManager
+		persistenceVisibilityManager manager.VisibilityManager
+		historyServiceResolver       membership.ServiceResolver
+		metricsHandler               metrics.Handler
+		payloadSerializer            serialization.Serializer
+		timeSource                   clock.TimeSource
+		namespaceRegistry            namespace.Registry
+		saProvider                   searchattribute.Provider
+		clusterMetadata              cluster.Metadata
+		archivalMetadata             archiver.ArchivalMetadata
+		hostInfoProvider             membership.HostInfoProvider
+		controller                   shard.Controller
+		tracer                       trace.Tracer
+
 		replicationTaskFetcherFactory replication.TaskFetcherFactory
-		logger                        log.Logger
-		throttledLogger               log.Logger
-		persistenceExecutionManager   persistence.ExecutionManager
-		persistenceShardManager       persistence.ShardManager
-		persistenceVisibilityManager  manager.VisibilityManager
-		historyServiceResolver        membership.ServiceResolver
-		metricsClient                 metrics.Client
-		payloadSerializer             serialization.Serializer
-		timeSource                    clock.TimeSource
-		namespaceRegistry             namespace.Registry
-		saProvider                    searchattribute.Provider
-		saMapper                      searchattribute.Mapper
-		clusterMetadata               cluster.Metadata
-		archivalMetadata              archiver.ArchivalMetadata
-		hostInfoProvider              membership.HostInfoProvider
-		controller                    shard.Controller
-		tracer                        trace.Tracer
+		streamReceiverMonitor         replication.StreamReceiverMonitor
 	}
 
 	NewHandlerArgs struct {
 		fx.In
 
-		Config                        *configs.Config
-		Logger                        resource.SnTaggedLogger
-		ThrottledLogger               resource.ThrottledLogger
-		PersistenceExecutionManager   persistence.ExecutionManager
-		PersistenceShardManager       persistence.ShardManager
-		PersistenceVisibilityManager  manager.VisibilityManager
-		HistoryServiceResolver        membership.ServiceResolver
-		MetricsClient                 metrics.Client
-		PayloadSerializer             serialization.Serializer
-		TimeSource                    clock.TimeSource
-		NamespaceRegistry             namespace.Registry
-		SaProvider                    searchattribute.Provider
-		SaMapper                      searchattribute.Mapper
-		ClusterMetadata               cluster.Metadata
-		ArchivalMetadata              archiver.ArchivalMetadata
-		HostInfoProvider              membership.HostInfoProvider
-		ShardController               shard.Controller
-		EventNotifier                 events.Notifier
+		Config                       *configs.Config
+		Logger                       log.SnTaggedLogger
+		ThrottledLogger              log.ThrottledLogger
+		PersistenceExecutionManager  persistence.ExecutionManager
+		PersistenceShardManager      persistence.ShardManager
+		PersistenceVisibilityManager manager.VisibilityManager
+		HistoryServiceResolver       membership.ServiceResolver
+		MetricsHandler               metrics.Handler
+		PayloadSerializer            serialization.Serializer
+		TimeSource                   clock.TimeSource
+		NamespaceRegistry            namespace.Registry
+		SaProvider                   searchattribute.Provider
+		ClusterMetadata              cluster.Metadata
+		ArchivalMetadata             archiver.ArchivalMetadata
+		HostInfoProvider             membership.HostInfoProvider
+		ShardController              shard.Controller
+		EventNotifier                events.Notifier
+		TracerProvider               trace.TracerProvider
+
 		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
-		TracerProvider                trace.TracerProvider
+		StreamReceiverMonitor         replication.StreamReceiverMonitor
 	}
 )
 
@@ -159,7 +161,7 @@ func (h *Handler) Start() {
 	}
 
 	h.replicationTaskFetcherFactory.Start()
-
+	h.streamReceiverMonitor.Start()
 	// events notifier must starts before controller
 	h.eventNotifier.Start()
 	h.controller.Start()
@@ -177,6 +179,7 @@ func (h *Handler) Stop() {
 		return
 	}
 
+	h.streamReceiverMonitor.Stop()
 	h.replicationTaskFetcherFactory.Stop()
 	h.controller.Stop()
 	h.eventNotifier.Stop()
@@ -184,27 +187,6 @@ func (h *Handler) Stop() {
 
 func (h *Handler) isStopped() bool {
 	return atomic.LoadInt32(&h.status) == common.DaemonStatusStopped
-}
-
-// Check is from: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	h.logger.Debug("History service health check endpoint (gRPC) reached.")
-
-	h.startWG.Wait()
-
-	if request.Service != serviceName {
-		return &healthpb.HealthCheckResponse{
-			Status: healthpb.HealthCheckResponse_SERVICE_UNKNOWN,
-		}, nil
-	}
-
-	hs := &healthpb.HealthCheckResponse{
-		Status: healthpb.HealthCheckResponse_SERVING,
-	}
-	return hs, nil
-}
-func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
-	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
@@ -543,6 +525,7 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+
 	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -552,9 +535,11 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
-	if err != nil {
-		return nil, h.convertError(err)
+	if response.Clock == nil {
+		response.Clock, err = shardContext.NewVectorClock()
+		if err != nil {
+			return nil, h.convertError(err)
+		}
 	}
 	return response, nil
 }
@@ -1323,6 +1308,38 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 	return &historyservice.ReplicateEventsV2Response{}, nil
 }
 
+// ReplicateWorkflowState is called by processor to replicate workflow state for passive namespaces
+func (h *Handler) ReplicateWorkflowState(
+	ctx context.Context,
+	request *historyservice.ReplicateWorkflowStateRequest,
+) (_ *historyservice.ReplicateWorkflowStateResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetWorkflowState().GetExecutionInfo().GetNamespaceId()),
+		request.GetWorkflowState().GetExecutionInfo().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	err = engine.ReplicateWorkflowState(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.ReplicateWorkflowStateResponse{}, nil
+}
+
 // SyncShardStatus is called by processor to sync history shard information from another cluster
 func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) (_ *historyservice.SyncShardStatusResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
@@ -1777,16 +1794,15 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
-		return nil, h.convertError(errNamespaceNotSet)
+		return nil, errNamespaceNotSet
 	}
 
 	if request.Execution == nil {
-		return nil, h.convertError(errWorkflowExecutionNotSet)
+		return nil, errWorkflowExecutionNotSet
 	}
 
-	// if using cass visibility, then either start or close time should be non-nilv
-	cassVisBackend := strings.Contains(h.persistenceVisibilityManager.GetName(), cassandra.CassandraPersistenceName)
-	if cassVisBackend && request.WorkflowStartTime == nil && request.WorkflowCloseTime == nil {
+	// If at least one visibility store is Cassandra, then either start or close time should be non-nil.
+	if h.persistenceVisibilityManager.HasStoreName(cassandra.CassandraPersistenceName) && request.WorkflowStartTime == nil && request.WorkflowCloseTime == nil {
 		return nil, &serviceerror.InvalidArgument{Message: "workflow start and close time not specified when deleting cassandra based visibility record"}
 	}
 
@@ -1796,8 +1812,6 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	// delete) again to delete again if this happens.
 	// For ES implementation, we used max int64 as the TaskID (version) to make sure deletion is
 	// the last operation applied for this workflow
-	fmt.Println("history DeleteWorkflowVisibilityRecord ")
-
 	err := h.persistenceVisibilityManager.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  request.Execution.GetWorkflowId(),
@@ -1807,16 +1821,16 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		CloseTime:   request.GetWorkflowCloseTime(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, h.convertError(err)
 	}
 
 	return &historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil
 }
 
-func (h *Handler) UpdateWorkflow(
+func (h *Handler) UpdateWorkflowExecution(
 	ctx context.Context,
-	request *historyservice.UpdateWorkflowRequest,
-) (_ *historyservice.UpdateWorkflowResponse, retError error) {
+	request *historyservice.UpdateWorkflowExecutionRequest,
+) (_ *historyservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
@@ -1837,7 +1851,39 @@ func (h *Handler) UpdateWorkflow(
 		return nil, h.convertError(err)
 	}
 
-	return engine.UpdateWorkflow(ctx, request)
+	return engine.UpdateWorkflowExecution(ctx, request)
+}
+
+func (h *Handler) StreamWorkflowReplicationMessages(
+	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
+) (retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return errShuttingDown
+	}
+
+	ctxMetadata, ok := metadata.FromIncomingContext(server.Context())
+	if !ok {
+		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
+	}
+	sourceClusterShardID, targetClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	if err != nil {
+		return err
+	}
+	if targetClusterShardID.ClusterName != h.clusterMetadata.GetCurrentClusterName() {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"wrong cluster: target: %v, current: %v",
+			targetClusterShardID.ClusterName,
+			h.clusterMetadata.GetCurrentClusterName(),
+		))
+	}
+	shardContext, err := h.controller.GetShardByID(targetClusterShardID.ShardID)
+	if err != nil {
+		return err
+	}
+	return replicationapi.StreamReplicationTasks(server, shardContext, sourceClusterShardID, targetClusterShardID)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
@@ -1851,6 +1897,8 @@ func (h *Handler) convertError(err error) error {
 			return serviceerrors.NewShardOwnershipLost(ownerInfo.GetAddress(), hostInfo.GetAddress())
 		}
 		return serviceerrors.NewShardOwnershipLost("", hostInfo.GetAddress())
+	case *persistence.AppendHistoryTimeoutError:
+		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.WorkflowConditionFailedError:
 		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:

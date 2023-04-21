@@ -33,7 +33,9 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -44,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 // NOTE: terminology
@@ -126,9 +129,8 @@ type (
 		) error
 		backfillWorkflow(
 			ctx context.Context,
-			now time.Time,
 			targetWorkflow Workflow,
-			targetWorkflowEvents *persistence.WorkflowEvents,
+			targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
 		) error
 
 		checkWorkflowExists(
@@ -153,11 +155,11 @@ type (
 	transactionMgrImpl struct {
 		shard             shard.Context
 		namespaceRegistry namespace.Registry
-		historyCache      workflow.Cache
+		workflowCache     wcache.Cache
 		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
 		serializer        serialization.Serializer
-		metricsClient     metrics.Client
+		metricsHandler    metrics.Handler
 		workflowResetter  WorkflowResetter
 		eventsReapplier   EventsReapplier
 		logger            log.Logger
@@ -171,7 +173,7 @@ var _ transactionMgr = (*transactionMgrImpl)(nil)
 
 func newTransactionMgr(
 	shard shard.Context,
-	historyCache workflow.Cache,
+	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	logger log.Logger,
 ) *transactionMgrImpl {
@@ -179,14 +181,14 @@ func newTransactionMgr(
 	transactionMgr := &transactionMgrImpl{
 		shard:             shard,
 		namespaceRegistry: shard.GetNamespaceRegistry(),
-		historyCache:      historyCache,
+		workflowCache:     workflowCache,
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionManager:  shard.GetExecutionManager(),
 		serializer:        shard.GetPayloadSerializer(),
-		metricsClient:     shard.GetMetricsClient(),
+		metricsHandler:    shard.GetMetricsHandler(),
 		workflowResetter: NewWorkflowResetter(
 			shard,
-			historyCache,
+			workflowCache,
 			logger,
 		),
 		eventsReapplier: eventsReapplier,
@@ -232,9 +234,8 @@ func (r *transactionMgrImpl) updateWorkflow(
 
 func (r *transactionMgrImpl) backfillWorkflow(
 	ctx context.Context,
-	now time.Time,
 	targetWorkflow Workflow,
-	targetWorkflowEvents *persistence.WorkflowEvents,
+	targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
 ) (retError error) {
 
 	defer func() {
@@ -248,7 +249,7 @@ func (r *transactionMgrImpl) backfillWorkflow(
 
 	if _, err := targetWorkflow.GetContext().PersistWorkflowEvents(
 		ctx,
-		targetWorkflowEvents,
+		targetWorkflowEventsSlice...,
 	); err != nil {
 		return err
 	}
@@ -256,7 +257,7 @@ func (r *transactionMgrImpl) backfillWorkflow(
 	updateMode, transactionPolicy, err := r.backfillWorkflowEventsReapply(
 		ctx,
 		targetWorkflow,
-		targetWorkflowEvents,
+		targetWorkflowEventsSlice...,
 	)
 	if err != nil {
 		return err
@@ -264,7 +265,6 @@ func (r *transactionMgrImpl) backfillWorkflow(
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		updateMode,
 		nil,
 		nil,
@@ -276,7 +276,7 @@ func (r *transactionMgrImpl) backfillWorkflow(
 func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	ctx context.Context,
 	targetWorkflow Workflow,
-	targetWorkflowEvents *persistence.WorkflowEvents,
+	targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
 ) (persistence.UpdateWorkflowMode, workflow.TransactionPolicy, error) {
 
 	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, targetWorkflow)
@@ -297,12 +297,17 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 
 	// case 1
 	if isCurrentWorkflow && isActiveCluster {
+		var totalEvents []*historypb.HistoryEvent
+		for _, events := range targetWorkflowEventsSlice {
+			totalEvents = append(totalEvents, events.Events...)
+		}
+
 		// case 1.a
 		if isWorkflowRunning {
 			if _, err := r.eventsReapplier.ReapplyEvents(
 				ctx,
 				targetWorkflow.GetMutableState(),
-				targetWorkflowEvents.Events,
+				totalEvents,
 				targetWorkflow.GetMutableState().GetExecutionState().GetRunId(),
 			); err != nil {
 				return 0, workflow.TransactionPolicyActive, err
@@ -318,7 +323,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.New()
-		baseRebuildLastEventID := baseMutableState.GetPreviousStartedEventID()
+		baseRebuildLastEventID := baseMutableState.GetLastWorkflowTaskStartedEventID()
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 		if err != nil {
@@ -344,7 +349,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			uuid.New(),
 			targetWorkflow,
 			EventsReapplicationResetWorkflowReason,
-			targetWorkflowEvents.Events,
+			totalEvents,
 			enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 		)
 		switch err.(type) {
@@ -365,7 +370,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	// case 2
 	//  find the current & active workflow to reapply
 	if err := targetWorkflow.GetContext().ReapplyEvents(
-		[]*persistence.WorkflowEvents{targetWorkflowEvents},
+		targetWorkflowEventsSlice,
 	); err != nil {
 		return 0, workflow.TransactionPolicyActive, err
 	}
@@ -436,14 +441,14 @@ func (r *transactionMgrImpl) loadWorkflow(
 ) (Workflow, error) {
 
 	// we need to check the current workflow execution
-	weContext, release, err := r.historyCache.GetOrCreateWorkflowExecution(
+	weContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err

@@ -9,9 +9,9 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-tests update-tools shell-check check proto go-generate gomodtidy ensure-no-changes
+ci-build: bins build-tests ci-update-tools shell-check copyright-check proto go-generate gomodtidy ensure-no-changes
 
-# Delete all build artefacts.
+# Delete all build artifacts
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
@@ -59,9 +59,6 @@ endef
 
 TEST_TIMEOUT := 20m
 
-INTEG_TEST_ROOT        := ./host
-INTEG_TEST_XDC_ROOT    := ./host/xdc
-INTEG_TEST_NDC_ROOT    := ./host/ndc
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -72,55 +69,64 @@ PROTO_OUT := api
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
-# TODO (jeremy): Replace below with build tags and `go test ./...` for targets
-TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
-INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
-UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
-# go.opentelemetry.io/otel/sdk/metric@v0.31.0 - there are breaking changes in v0.32.0.
+TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
+FUNCTIONAL_TEST_ROOT          := ./tests
+FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
+FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
+DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
+DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
+INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT)
+UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)%,$(TEST_DIRS))
+
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
 	github.com/go-sql-driver/mysql@v1.5.0 \
-	go.opentelemetry.io/otel/sdk/metric@v0.31.0 \
 	github.com/urfave/cli/v2@v2.4.0
 
 # Code coverage output files.
-COVER_ROOT                 := ./.coverage
-UNIT_COVER_PROFILE         := $(COVER_ROOT)/unit_coverprofile.out
-INTEG_COVER_PROFILE        := $(COVER_ROOT)/integ_$(PERSISTENCE_DRIVER)_coverprofile.out
-INTEG_XDC_COVER_PROFILE    := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
-INTEG_NDC_COVER_PROFILE    := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
-SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary.out
+COVER_ROOT                      := ./.coverage
+UNIT_COVER_PROFILE              := $(COVER_ROOT)/unit_coverprofile.out
+INTEGRATION_COVER_PROFILE       := $(COVER_ROOT)/integration_coverprofile.out
+DB_TOOL_COVER_PROFILE           := $(COVER_ROOT)/db_tool_coverprofile.out
+FUNCTIONAL_COVER_PROFILE        := $(COVER_ROOT)/functional_$(PERSISTENCE_DRIVER)_coverprofile.out
+FUNCTIONAL_XDC_COVER_PROFILE    := $(COVER_ROOT)/functional_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
+FUNCTIONAL_NDC_COVER_PROFILE    := $(COVER_ROOT)/functional_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
+SUMMARY_COVER_PROFILE           := $(COVER_ROOT)/summary.out
 
 # DB
 SQL_USER ?= temporal
 SQL_PASSWORD ?= temporal
 
-# Need the following option to have integration tests count towards coverage. godoc below:
+# Need the following option to have integration and functional tests count towards coverage. godoc below:
 # -coverpkg pkg1,pkg2,pkg3
 #   Apply coverage analysis in each test to the given list of packages.
 #   The default is for each test to analyze only the package being tested.
 #   Packages are specified as import paths.
-INTEG_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..."
-
+INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/...,$(MODULE_ROOT)/tools/..."
+FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/...,$(MODULE_ROOT)/tools/..."
 ##### Tools #####
-update-checkers:
-	@printf $(COLOR) "Install/update check tools..."
-	@go install golang.org/x/lint/golint@latest
+update-goimports:
+	@printf $(COLOR) "Install/update goimports..."
 	@go install golang.org/x/tools/cmd/goimports@latest
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.3.2
-	@go install github.com/kisielk/errcheck@v1.6.1
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.32.3
-	@go install github.com/bufbuild/buf/cmd/buf@v1.6.0
+
+update-linters:
+	@printf $(COLOR) "Install/update linters..."
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.2
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	@go install github.com/golang/mock/mockgen@v1.6.0
+	@go install github.com/golang/mock/mockgen@v1.7.0-rc.1
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
 	@go install -modfile build/go.mod github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+update-proto-linters:
+	@printf $(COLOR) "Install/update proto linters..."
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.32.3
+	@go install github.com/bufbuild/buf/cmd/buf@v1.6.0
 
 update-tctl:
 	@printf $(COLOR) "Install/update tctl..."
@@ -130,7 +136,10 @@ update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
-update-tools: update-checkers update-mockgen update-proto-plugins
+update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters
+
+# update-linters is not included because in CI linters are run by github actions.
+ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters
 
 ##### Proto #####
 $(PROTO_OUT):
@@ -207,6 +216,10 @@ temporal-sql-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-sql-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-sql-tool ./cmd/tools/sql
 
+temporal-server-debug: $(ALL_SRC)
+	@printf $(COLOR) "Build temporal-server-debug with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	CGO_ENABLED=$(CGO_ENABLED) go build -tags TEMPORAL_DEBUG -o temporal-server-debug ./cmd/server
+
 ##### Checks #####
 copyright-check:
 	@printf $(COLOR) "Check license header..."
@@ -217,28 +230,8 @@ copyright:
 	@go run ./cmd/tools/copyright/licensegen.go
 
 lint:
-	@printf $(COLOR) "Run linter..."
-	@golint ./...
-
-vet:
-	@printf $(COLOR) "Run go vet..."
-	@go vet ./... || true
-
-goimports-check:
-	@printf $(COLOR) "Run goimports checks..."
-	@GO_IMPORTS_OUTPUT=$$(goimports -l .); if [ -n "$${GO_IMPORTS_OUTPUT}" ]; then echo "$${GO_IMPORTS_OUTPUT}" && echo "Please run 'make goimports'" && exit 1; fi
-
-goimports:
-	@printf $(COLOR) "Run goimports..."
-	@goimports -w .
-
-staticcheck:
-	@printf $(COLOR) "Run staticcheck..."
-	@staticcheck ./...
-
-errcheck:
-	@printf $(COLOR) "Run errcheck..."
-	@errcheck ./... || true
+	@printf $(COLOR) "Run linters..."
+	@golangci-lint run --verbose --timeout 10m --fix=false --new-from-rev=HEAD~ --config=.golangci.yml
 
 api-linter:
 	@printf $(COLOR) "Run api-linter..."
@@ -260,7 +253,7 @@ shell-check:
 	@printf $(COLOR) "Run shellcheck for script files..."
 	@shellcheck $(ALL_SCRIPTS)
 
-check: copyright-check goimports-check lint vet staticcheck errcheck
+check: copyright-check lint shell-check
 
 ##### Tests #####
 clean-test-results:
@@ -269,34 +262,35 @@ clean-test-results:
 
 build-tests:
 	@printf $(COLOR) "Build tests..."
-	@go test -exec="true" -count=0 -tags=esintegration $(TEST_DIRS)
+	@go test -exec="true" -count=0 $(TEST_DIRS)
 
-unit-test:
+unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
-	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS),\
-		@go test $(UNIT_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log \
-	$(NEWLINE))
+	@go test $(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
-	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
-		@go test $(INTEG_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log \
-	$(NEWLINE))
-# Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
+	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-integration-with-fault-injection-test: clean-test-results
+functional-test: clean-test-results
+	@printf $(COLOR) "Run functional tests..."
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+# Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+	@! grep -q "^--- FAIL" test.log
+
+functional-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
-		@go test $(INTEG_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log \
-	$(NEWLINE))
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-test: unit-test integration-test integration-with-fault-injection-test
+test: unit-test integration-test functional-test functional-with-fault-injection-test
 
 ##### Coverage #####
 $(COVER_ROOT):
@@ -305,23 +299,23 @@ $(COVER_ROOT):
 unit-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run unit tests with coverage..."
 	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
-	$(foreach UNIT_TEST_DIR,$(patsubst ./%/,%,$(UNIT_TEST_DIRS)),\
-		@mkdir -p $(COVER_ROOT)/$(UNIT_TEST_DIR); \
-		go test ./$(UNIT_TEST_DIR) -timeout=$(TEST_TIMEOUT) -race -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
-		grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) || true \
-	$(NEWLINE))
+	@go test ./$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(UNIT_COVER_PROFILE) || exit 1;
 
 integration-test-coverage: $(COVER_ROOT)
-	@printf $(COLOR) "Run integration tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(INTEG_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_COVER_PROFILE)
+	@printf $(COLOR) "Run integration tests with coverage..."
+	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(INTEGRATION_COVER_PROFILE)
 
-integration-test-xdc-coverage: $(COVER_ROOT)
-	@printf $(COLOR) "Run integration test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_XDC_COVER_PROFILE)
+functional-test-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_COVER_PROFILE)
 
-integration-test-ndc-coverage: $(COVER_ROOT)
-	@printf $(COLOR) "Run integration test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(INTEG_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)
+functional-test-xdc-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_XDC_COVER_PROFILE)
+
+functional-test-ndc-coverage: $(COVER_ROOT)
+	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_NDC_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
@@ -365,6 +359,17 @@ install-schema-mysql: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) update-schema -d ./schema/mysql/v57/visibility/versioned
 
+install-schema-mysql8: temporal-sql-tool
+	@printf $(COLOR) "Install MySQL schema..."
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(TEMPORAL_DB) update-schema -d ./schema/mysql/v8/temporal/versioned
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) drop  -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) --db $(VISIBILITY_DB) update-schema -d ./schema/mysql/v8/visibility/versioned
+
 install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) drop -f
@@ -376,6 +381,17 @@ install-schema-postgresql: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v96/visibility/versioned
 
+install-schema-postgresql12: temporal-sql-tool
+	@printf $(COLOR) "Install Postgres schema..."
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) setup -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(TEMPORAL_DB) update-schema -d ./schema/postgresql/v12/temporal/versioned
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v12/visibility/versioned
+
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
 	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
@@ -383,32 +399,35 @@ install-schema-es:
 # No --fail here because create index is not idempotent operation.
 	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev" --write-out "\n"
 
-install-schema-cdc: temporal-cassandra-tool
+install-schema-xdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Install Cassandra schema (active)..."
-	./temporal-cassandra-tool drop -k temporal_active -f
-	./temporal-cassandra-tool create -k temporal_active --rf 1
-	./temporal-cassandra-tool -k temporal_active setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_active update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_cluster_a -f
+	./temporal-cassandra-tool create -k temporal_cluster_a --rf 1
+	./temporal-cassandra-tool -k temporal_cluster_a setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_cluster_a update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR)  "Install Cassandra schema (standby)..."
-	./temporal-cassandra-tool drop -k temporal_standby -f
-	./temporal-cassandra-tool create -k temporal_standby --rf 1
-	./temporal-cassandra-tool -k temporal_standby setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_standby update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_cluster_b -f
+	./temporal-cassandra-tool create -k temporal_cluster_b --rf 1
+	./temporal-cassandra-tool -k temporal_cluster_b setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_cluster_b update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR)  "Install Cassandra schema (other)..."
-	./temporal-cassandra-tool drop -k temporal_other -f
-	./temporal-cassandra-tool create -k temporal_other --rf 1
-	./temporal-cassandra-tool -k temporal_other setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_cluster_c -f
+	./temporal-cassandra-tool create -k temporal_cluster_c --rf 1
+	./temporal-cassandra-tool -k temporal_cluster_c setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_cluster_c update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR) "Install Elasticsearch schemas..."
 	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
 	curl --fail -X PUT "http://127.0.0.1:9200/_template/temporal_visibility_v1_template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
 # No --fail here because create index is not idempotent operation.
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_active" --write-out "\n"
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_standby" --write-out "\n"
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_other" --write-out "\n"
+	curl -X DELETE http://localhost:9200/temporal_visibility_v1_dev_cluster_a
+	curl -X DELETE http://localhost:9200/temporal_visibility_v1_dev_cluster_b
+	curl -X DELETE http://localhost:9200/temporal_visibility_v1_dev_cluster_c
+	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_cluster_a" --write-out "\n"
+	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_cluster_b" --write-out "\n"
+	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_cluster_c" --write-out "\n"
 
 ##### Run server #####
 DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml
@@ -434,23 +453,29 @@ start-es: temporal-server
 start-mysql: temporal-server
 	./temporal-server --env development-mysql --allow-no-auth start
 
+start-mysql8: temporal-server
+	./temporal-server --env development-mysql8 --allow-no-auth start
+
 start-mysql-es: temporal-server
 	./temporal-server --env development-mysql-es --allow-no-auth start
 
 start-postgres: temporal-server
 	./temporal-server --env development-postgres --allow-no-auth start
 
+start-postgres12: temporal-server
+	./temporal-server --env development-postgres12 --allow-no-auth start
+
 start-sqlite: temporal-server
 	./temporal-server --env development-sqlite --allow-no-auth start
 
-start-cdc-active: temporal-server
-	./temporal-server --env development-active --allow-no-auth start
+start-xdc-cluster-a: temporal-server
+	./temporal-server --env development-cluster-a --allow-no-auth start
 
-start-cdc-standby: temporal-server
-	./temporal-server --env development-standby --allow-no-auth start
+start-xdc-cluster-b: temporal-server
+	./temporal-server --env development-cluster-b --allow-no-auth start
 
-start-cdc-other: temporal-server
-	./temporal-server --env development-other --allow-no-auth start
+start-xdc-cluster-c: temporal-server
+	./temporal-server --env development-cluster-c --allow-no-auth start
 
 ##### Grafana #####
 update-dashboards:

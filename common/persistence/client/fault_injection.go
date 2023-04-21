@@ -71,6 +71,7 @@ type (
 	}
 
 	FaultInjectionExecutionStore struct {
+		persistence.HistoryBranchUtilImpl
 		baseExecutionStore persistence.ExecutionStore
 		ErrorGenerator     ErrorGenerator
 	}
@@ -141,16 +142,22 @@ func (d *FaultInjectionDataStoreFactory) UpdateRate(rate float64) {
 	d.Queue.UpdateRate(rate)
 	d.ClusterMDStore.UpdateRate(rate)
 }
-
 func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
 	if d.TaskStore == nil {
 		baseFactory, err := d.baseFactory.NewTaskStore()
 		if err != nil {
 			return nil, err
 		}
-		d.TaskStore, err = NewFaultInjectionTaskStore(d.ErrorGenerator.Rate(), baseFactory)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.TaskStoreName]; ok {
+			d.TaskStore = &FaultInjectionTaskStore{
+				baseTaskStore:  baseFactory,
+				ErrorGenerator: NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.TaskStore, err = NewFaultInjectionTaskStore(d.ErrorGenerator.Rate(), baseFactory)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return d.TaskStore, nil
@@ -162,9 +169,16 @@ func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore
 		if err != nil {
 			return nil, err
 		}
-		d.ShardStore, err = NewFaultInjectionShardStore(d.ErrorGenerator.Rate(), baseFactory)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.ShardStoreName]; ok {
+			d.ShardStore = &FaultInjectionShardStore{
+				baseShardStore: baseFactory,
+				ErrorGenerator: NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.ShardStore, err = NewFaultInjectionShardStore(d.ErrorGenerator.Rate(), baseFactory)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return d.ShardStore, nil
@@ -176,9 +190,16 @@ func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.Metadat
 		if err != nil {
 			return nil, err
 		}
-		d.MetadataStore, err = NewFaultInjectionMetadataStore(d.ErrorGenerator.Rate(), baseStore)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.MetadataStoreName]; ok {
+			d.MetadataStore = &FaultInjectionMetadataStore{
+				baseMetadataStore: baseStore,
+				ErrorGenerator:    NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.MetadataStore, err = NewFaultInjectionMetadataStore(d.ErrorGenerator.Rate(), baseStore)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return d.MetadataStore, nil
@@ -190,9 +211,16 @@ func (d *FaultInjectionDataStoreFactory) NewExecutionStore() (persistence.Execut
 		if err != nil {
 			return nil, err
 		}
-		d.ExecutionStore, err = NewFaultInjectionExecutionStore(d.ErrorGenerator.Rate(), baseStore)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.ExecutionStoreName]; ok {
+			d.ExecutionStore = &FaultInjectionExecutionStore{
+				baseExecutionStore: baseStore,
+				ErrorGenerator:     NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.ExecutionStore, err = NewFaultInjectionExecutionStore(d.ErrorGenerator.Rate(), baseStore)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 	}
@@ -205,11 +233,17 @@ func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueTyp
 		if err != nil {
 			return baseQueue, err
 		}
-		d.Queue, err = NewFaultInjectionQueue(d.ErrorGenerator.Rate(), baseQueue)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.QueueName]; ok {
+			d.Queue = &FaultInjectionQueue{
+				baseQueue:      baseQueue,
+				ErrorGenerator: NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.Queue, err = NewFaultInjectionQueue(d.ErrorGenerator.Rate(), baseQueue)
+			if err != nil {
+				return nil, err
+			}
 		}
-
 	}
 	return d.Queue, nil
 }
@@ -220,9 +254,16 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 		if err != nil {
 			return nil, err
 		}
-		d.ClusterMDStore, err = NewFaultInjectionClusterMetadataStore(d.ErrorGenerator.Rate(), baseStore)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.ClusterMDStoreName]; ok {
+			d.ClusterMDStore = &FaultInjectionClusterMetadataStore{
+				baseCMStore:    baseStore,
+				ErrorGenerator: NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.ClusterMDStore, err = NewFaultInjectionClusterMetadataStore(d.ErrorGenerator.Rate(), baseStore)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 	}
@@ -497,6 +538,30 @@ func (e *FaultInjectionExecutionStore) ListConcreteExecutions(
 	return e.baseExecutionStore.ListConcreteExecutions(ctx, request)
 }
 
+func (e *FaultInjectionExecutionStore) RegisterHistoryTaskReader(
+	ctx context.Context,
+	request *persistence.RegisterHistoryTaskReaderRequest,
+) error {
+	// hint methods don't actually hint DB, so don't inject any failure
+	return e.baseExecutionStore.RegisterHistoryTaskReader(ctx, request)
+}
+
+func (e *FaultInjectionExecutionStore) UnregisterHistoryTaskReader(
+	ctx context.Context,
+	request *persistence.UnregisterHistoryTaskReaderRequest,
+) {
+	// hint methods don't actually hint DB, so don't inject any failure
+	e.baseExecutionStore.UnregisterHistoryTaskReader(ctx, request)
+}
+
+func (e *FaultInjectionExecutionStore) UpdateHistoryTaskReaderProgress(
+	ctx context.Context,
+	request *persistence.UpdateHistoryTaskReaderProgressRequest,
+) {
+	// hint methods don't actually hint DB, so don't inject any failure
+	e.baseExecutionStore.UpdateHistoryTaskReaderProgress(ctx, request)
+}
+
 func (e *FaultInjectionExecutionStore) AddHistoryTasks(
 	ctx context.Context,
 	request *persistence.InternalAddHistoryTasksRequest,
@@ -505,16 +570,6 @@ func (e *FaultInjectionExecutionStore) AddHistoryTasks(
 		return err
 	}
 	return e.baseExecutionStore.AddHistoryTasks(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) GetHistoryTask(
-	ctx context.Context,
-	request *persistence.GetHistoryTaskRequest,
-) (*persistence.InternalGetHistoryTaskResponse, error) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.GetHistoryTask(ctx, request)
 }
 
 func (e *FaultInjectionExecutionStore) GetHistoryTasks(
@@ -590,6 +645,16 @@ func (e *FaultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 	return e.baseExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 }
 
+func (e *FaultInjectionExecutionStore) InsertHistoryTree(
+	ctx context.Context,
+	request *persistence.InternalInsertHistoryTreeRequest,
+) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.InsertHistoryTree(ctx, request)
+}
+
 func (e *FaultInjectionExecutionStore) AppendHistoryNodes(
 	ctx context.Context,
 	request *persistence.InternalAppendHistoryNodesRequest,
@@ -608,36 +673,6 @@ func (e *FaultInjectionExecutionStore) DeleteHistoryNodes(
 		return err
 	}
 	return e.baseExecutionStore.DeleteHistoryNodes(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) ParseHistoryBranchInfo(
-	ctx context.Context,
-	request *persistence.ParseHistoryBranchInfoRequest,
-) (*persistence.ParseHistoryBranchInfoResponse, error) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.ParseHistoryBranchInfo(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) UpdateHistoryBranchInfo(
-	ctx context.Context,
-	request *persistence.UpdateHistoryBranchInfoRequest,
-) (*persistence.UpdateHistoryBranchInfoResponse, error) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.UpdateHistoryBranchInfo(ctx, request)
-}
-
-func (e *FaultInjectionExecutionStore) NewHistoryBranch(
-	ctx context.Context,
-	request *persistence.NewHistoryBranchRequest,
-) (*persistence.NewHistoryBranchResponse, error) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.NewHistoryBranch(ctx, request)
 }
 
 func (e *FaultInjectionExecutionStore) ReadHistoryBranch(

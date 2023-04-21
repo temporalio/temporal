@@ -26,22 +26,23 @@ package history
 
 import (
 	"context"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 var _ historyservice.HistoryServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
 	client          historyservice.HistoryServiceClient
-	metricsClient   metrics.Client
+	metricsHandler  metrics.Handler
 	logger          log.Logger
 	throttledLogger log.Logger
 }
@@ -49,32 +50,44 @@ type metricClient struct {
 // NewMetricClient creates a new instance of historyservice.HistoryServiceClient that emits metrics
 func NewMetricClient(
 	client historyservice.HistoryServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	throttledLogger log.Logger,
 ) historyservice.HistoryServiceClient {
 	return &metricClient{
 		client:          client,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 	}
 }
 
+func (c *metricClient) StreamWorkflowReplicationMessages(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (_ historyservice.HistoryService_StreamWorkflowReplicationMessagesClient, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientStreamWorkflowReplicationMessagesScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.StreamWorkflowReplicationMessages(ctx, opts...)
+}
+
 func (c *metricClient) startMetricsRecording(
 	ctx context.Context,
-	metricScope int,
-) (metrics.Scope, metrics.Stopwatch) {
+	operation string,
+) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
-	scope := c.metricsClient.Scope(metricScope, metrics.NamespaceTag(caller))
-	scope.IncCounter(metrics.ClientRequests)
-	stopwatch := scope.StartTimer(metrics.ClientLatency)
-	return scope, stopwatch
+	metricsHandler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.HistoryRoleTagValue))
+	metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	return metricsHandler, time.Now().UTC()
 }
 
 func (c *metricClient) finishMetricsRecording(
-	scope metrics.Scope,
-	stopwatch metrics.Stopwatch,
+	metricsHandler metrics.Handler,
+	startTime time.Time,
 	err error,
 ) {
 	if err != nil {
@@ -85,13 +98,12 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
 			*serviceerror.WorkflowNotReady,
-			*serviceerror.WorkflowExecutionAlreadyStarted,
-			*serviceerrors.TaskAlreadyStarted:
+			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:
 			c.throttledLogger.Info("history client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
+		metricsHandler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	stopwatch.Stop()
+	metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
 }

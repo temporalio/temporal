@@ -24,41 +24,30 @@
 
 package membership
 
-// HostInfo is a type that contains the info about a temporal host
-type HostInfo struct {
-	addr   string // ip:port
-	labels map[string]string
+// HostInfo represents the host of a Temporal service.
+type HostInfo interface {
+	// Identity returns the unique identifier of the host.
+	// This may be the same as the address.
+	Identity() string
+	// GetAddress returns the socket address of the host (i.e. <ip>:<port>).
+	// This must be a valid gRPC address.
+	GetAddress() string
 }
 
-// NewHostInfo creates a new HostInfo instance
-func NewHostInfo(addr string, labels map[string]string) *HostInfo {
-	if labels == nil {
-		labels = make(map[string]string)
-	}
-	return &HostInfo{
-		addr:   addr,
-		labels: labels,
-	}
+// NewHostInfoFromAddress creates a new HostInfo instance from a socket address.
+func NewHostInfoFromAddress(address string) HostInfo {
+	return hostAddress(address)
 }
 
-// GetAddress returns the ip:port address
-func (hi *HostInfo) GetAddress() string {
-	return hi.addr
+// hostAddress is a HostInfo implementation that uses a string as the address and identity.
+type hostAddress string
+
+// GetAddress returns the value of the hostAddress.
+func (a hostAddress) GetAddress() string {
+	return string(a)
 }
 
-// Identity implements ringpop's Membership interface
-func (hi *HostInfo) Identity() string {
-	// for now we just use the address as the identity
-	return hi.addr
-}
-
-// Label implements ringpop's Membership interface
-func (hi *HostInfo) Label(key string) (value string, has bool) {
-	value, has = hi.labels[key]
-	return
-}
-
-// SetLabel sets the label.
-func (hi *HostInfo) SetLabel(key string, value string) {
-	hi.labels[key] = value
+// Identity returns the value of the hostAddress.
+func (a hostAddress) Identity() string {
+	return string(a)
 }

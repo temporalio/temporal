@@ -30,6 +30,7 @@ package workflow
 
 import (
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	history "go.temporal.io/api/history/v1"
@@ -144,18 +145,32 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteExecutionTask() *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeleteExecutionTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeleteExecutionTask))
 }
 
-// GenerateHistoryReplicationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(branchToken []byte, events []*history.HistoryEvent) error {
+// GenerateDeleteHistoryEventTask mocks base method.
+func (m *MockTaskGenerator) GenerateDeleteHistoryEventTask(closeTime time.Time, workflowDataAlreadyArchived bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", branchToken, events)
+	ret := m.ctrl.Call(m, "GenerateDeleteHistoryEventTask", closeTime, workflowDataAlreadyArchived)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateDeleteHistoryEventTask indicates an expected call of GenerateDeleteHistoryEventTask.
+func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteHistoryEventTask(closeTime, workflowDataAlreadyArchived interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeleteHistoryEventTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeleteHistoryEventTask), closeTime, workflowDataAlreadyArchived)
+}
+
+// GenerateHistoryReplicationTasks mocks base method.
+func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(events []*history.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", events)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateHistoryReplicationTasks indicates an expected call of GenerateHistoryReplicationTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(branchToken, events interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(events interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateHistoryReplicationTasks), branchToken, events)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateHistoryReplicationTasks), events)
 }
 
 // GenerateMigrationTasks mocks base method.
@@ -202,17 +217,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateRequestCancelExternalTasks(even
 }
 
 // GenerateScheduleWorkflowTaskTasks mocks base method.
-func (m *MockTaskGenerator) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID int64) error {
+func (m *MockTaskGenerator) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID int64, generateTimeoutTaskOnly bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateScheduleWorkflowTaskTasks", workflowTaskScheduledEventID)
+	ret := m.ctrl.Call(m, "GenerateScheduleWorkflowTaskTasks", workflowTaskScheduledEventID, generateTimeoutTaskOnly)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateScheduleWorkflowTaskTasks indicates an expected call of GenerateScheduleWorkflowTaskTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID, generateTimeoutTaskOnly interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateScheduleWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateScheduleWorkflowTaskTasks), workflowTaskScheduledEventID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateScheduleWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateScheduleWorkflowTaskTasks), workflowTaskScheduledEventID, generateTimeoutTaskOnly)
 }
 
 // GenerateSignalExternalTasks mocks base method.

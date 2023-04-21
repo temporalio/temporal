@@ -31,9 +31,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -61,14 +61,16 @@ type (
 		executionManager persistence.ExecutionManager
 		registry         namespace.Registry
 		historyClient    historyservice.HistoryServiceClient
-		metrics          metrics.Client
+		adminClient      adminservice.AdminServiceClient
+		metricsHandler   metrics.Handler
 		logger           log.Logger
 		scavenger        *Scavenger
 
-		ctx                         context.Context
-		rateLimiter                 quotas.RateLimiter
-		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
-		paginationToken             []byte
+		ctx                           context.Context
+		rateLimiter                   quotas.RateLimiter
+		executionDataDurationBuffer   dynamicconfig.DurationPropertyFn
+		enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn
+		paginationToken               []byte
 	}
 )
 
@@ -79,42 +81,49 @@ func newTask(
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
-	metrics metrics.Client,
+	adminClient adminservice.AdminServiceClient,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
+	enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn,
 ) executor.Task {
 	return &task{
 		shardID:          shardID,
 		executionManager: executionManager,
 		registry:         registry,
 		historyClient:    historyClient,
+		adminClient:      adminClient,
 
-		metrics:   metrics,
-		logger:    logger,
-		scavenger: scavenger,
+		metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope)),
+		logger:         logger,
+		scavenger:      scavenger,
 
-		ctx:                         ctx,
-		rateLimiter:                 rateLimiter,
-		executionDataDurationBuffer: executionDataDurationBuffer,
+		ctx:                           ctx,
+		rateLimiter:                   rateLimiter,
+		executionDataDurationBuffer:   executionDataDurationBuffer,
+		enableHistoryEventIDValidator: enableHistoryEventIDValidator,
 	}
 }
 
 // Run runs the task
 func (t *task) Run() executor.TaskStatus {
-	time.Sleep(backoff.JitDuration(
+	time.Sleep(backoff.Jitter(
 		taskStartupDelayRatio*time.Duration(t.scavenger.numHistoryShards),
 		taskStartupDelayRandomizationRatio,
 	))
 
 	iter := collection.NewPagingIteratorWithToken(t.getPaginationFn(), t.paginationToken)
+	var retryTask bool
 	for iter.HasNext() {
 		_ = t.rateLimiter.Wait(t.ctx)
 		record, err := iter.Next()
 		if err != nil {
+			t.metricsHandler.Counter(metrics.ScavengerValidationSkipsCount.GetMetricName()).Record(1)
+			// continue validation process and retry after all workflow records has been iterated.
 			t.logger.Error("unable to paginate concrete execution", tag.ShardID(t.shardID), tag.Error(err))
-			return executor.TaskStatusDefer
+			retryTask = true
 		}
 
 		mutableState := &MutableState{WorkflowMutableState: record}
@@ -122,14 +131,25 @@ func (t *task) Run() executor.TaskStatus {
 		printValidationResult(
 			mutableState,
 			results,
-			t.metrics,
+			t.metricsHandler,
 			t.logger,
 		)
 		err = t.handleFailures(mutableState, results)
 		if err != nil {
-			t.logger.Error("unable to process failure result", tag.ShardID(t.shardID), tag.Error(err))
-			return executor.TaskStatusDefer
+			// continue validation process and retry after all workflow records has been iterated.
+			executionInfo := mutableState.GetExecutionInfo()
+			t.metricsHandler.Counter(metrics.ScavengerValidationSkipsCount.GetMetricName()).Record(1)
+			t.logger.Error("unable to process failure result",
+				tag.ShardID(t.shardID),
+				tag.Error(err),
+				tag.WorkflowNamespaceID(executionInfo.GetNamespaceId()),
+				tag.WorkflowID(executionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()))
+			retryTask = true
 		}
+	}
+	if retryTask {
+		return executor.TaskStatusDefer
 	}
 	return executor.TaskStatusDone
 }
@@ -164,19 +184,26 @@ func (t *task) validate(
 		results = append(results, validationResults...)
 	}
 
-	if validationResults, err := NewHistoryEventIDValidator(
-		t.shardID,
-		t.executionManager,
-	).Validate(t.ctx, mutableState); err != nil {
-		t.logger.Error("unable to validate history event ID being contiguous",
-			tag.ShardID(t.shardID),
-			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
-			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
-			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-			tag.Error(err),
-		)
-	} else {
-		results = append(results, validationResults...)
+	// Fail fast if the mutable is corrupted, no need to validate history.
+	if len(results) > 0 {
+		return results
+	}
+
+	if t.enableHistoryEventIDValidator() {
+		if validationResults, err := NewHistoryEventIDValidator(
+			t.shardID,
+			t.executionManager,
+		).Validate(t.ctx, mutableState); err != nil {
+			t.logger.Error("unable to validate history event ID being contiguous",
+				tag.ShardID(t.shardID),
+				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
+				tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
+				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+				tag.Error(err),
+			)
+		} else {
+			results = append(results, validationResults...)
+		}
 	}
 
 	return results
@@ -208,14 +235,25 @@ func (t *task) handleFailures(
 		case mutableStateRetentionFailureType:
 			executionInfo := mutableState.GetExecutionInfo()
 			runID := mutableState.GetExecutionState().GetRunId()
-			_, err := t.historyClient.DeleteWorkflowExecution(t.ctx, &historyservice.DeleteWorkflowExecutionRequest{
-				NamespaceId: executionInfo.GetNamespaceId(),
-				WorkflowExecution: &commonpb.WorkflowExecution{
+			ns, err := t.registry.GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
+			switch err.(type) {
+			case *serviceerror.NotFound,
+				*serviceerror.NamespaceNotFound:
+				t.logger.Error("Garbage data in DB after namespace is deleted", tag.WorkflowNamespaceID(executionInfo.GetNamespaceId()))
+				// We cannot do much in this case. It just ignores this error.
+				return nil
+			case nil:
+				// continue to delete
+			default:
+				return err
+			}
+
+			_, err = t.adminClient.DeleteWorkflowExecution(t.ctx, &adminservice.DeleteWorkflowExecutionRequest{
+				Namespace: ns.Name().String(),
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: executionInfo.GetWorkflowId(),
 					RunId:      runID,
 				},
-				WorkflowVersion:    common.EmptyVersion,
-				ClosedWorkflowOnly: true,
 			})
 			switch err.(type) {
 			case *serviceerror.NotFound,
@@ -237,25 +275,18 @@ func (t *task) handleFailures(
 func printValidationResult(
 	mutableState *MutableState,
 	results []MutableStateValidationResult,
-	metricClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
-
-	metricsScope := metricClient.Scope(metrics.ExecutionsScavengerScope).Tagged(
-		metrics.FailureTag(""),
-	)
-	metricsScope.IncCounter(metrics.ScavengerValidationRequestsCount)
+	metricsHandler.Counter(metrics.ScavengerValidationRequestsCount.GetMetricName()).Record(1)
 	if len(results) == 0 {
 		return
 	}
 
-	metricsScope.IncCounter(metrics.ScavengerValidationFailuresCount)
+	metricsHandler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1)
 	for _, result := range results {
-		metricsScope.Tagged(
-			metrics.FailureTag(result.failureType),
-		).IncCounter(metrics.ScavengerValidationFailuresCount)
-
-		logger.Error(
+		metricsHandler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1, metrics.FailureTag(result.failureType))
+		logger.Info(
 			"validation failed for execution.",
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
 			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),

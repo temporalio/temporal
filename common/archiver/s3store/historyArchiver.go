@@ -127,16 +127,16 @@ func (h *historyArchiver) Archive(
 	request *archiver.ArchiveHistoryRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	scope := h.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
+	handler := h.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	startTime := time.Now().UTC()
 	defer func() {
-		sw.Stop()
+		handler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
 		if err != nil {
 			if common.IsPersistenceTransientError(err) || isRetryableError(err) {
-				scope.IncCounter(metrics.HistoryArchiverArchiveTransientErrorCount)
+				handler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
 			} else {
-				scope.IncCounter(metrics.HistoryArchiverArchiveNonRetryableErrorCount)
+				handler.Counter(metrics.HistoryArchiverArchiveNonRetryableErrorCount.GetMetricName()).Record(1)
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
 				}
@@ -146,7 +146,7 @@ func (h *historyArchiver) Archive(
 
 	logger := archiver.TagLoggerWithArchiveHistoryRequestAndURI(h.container.Logger, request, URI.String())
 
-	if err := softValidateURI(URI); err != nil {
+	if err := SoftValidateURI(URI); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonInvalidURI), tag.Error(err))
 		return err
 	}
@@ -169,7 +169,7 @@ func (h *historyArchiver) Archive(
 				// this may happen even in the middle of iterating history as two archival signals
 				// can be processed concurrently.
 				logger.Info(archiver.ArchiveSkippedInfoMsg)
-				scope.IncCounter(metrics.HistoryArchiverDuplicateArchivalsCount)
+				handler.Counter(metrics.HistoryArchiverDuplicateArchivalsCount.GetMetricName()).Record(1)
 				return nil
 			}
 
@@ -195,7 +195,7 @@ func (h *historyArchiver) Archive(
 		}
 		key := constructHistoryKey(URI.Path(), request.NamespaceID, request.WorkflowID, request.RunID, request.CloseFailoverVersion, progress.BatchIdx)
 
-		exists, err := keyExists(ctx, h.s3cli, URI, key)
+		exists, err := KeyExists(ctx, h.s3cli, URI, key)
 		if err != nil {
 			if isRetryableError(err) {
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
@@ -206,9 +206,9 @@ func (h *historyArchiver) Archive(
 		}
 		blobSize := int64(binary.Size(encodedHistoryBlob))
 		if exists {
-			scope.IncCounter(metrics.HistoryArchiverBlobExistsCount)
+			handler.Counter(metrics.HistoryArchiverBlobExistsCount.GetMetricName()).Record(1)
 		} else {
-			if err := upload(ctx, h.s3cli, URI, key, encodedHistoryBlob); err != nil {
+			if err := Upload(ctx, h.s3cli, URI, key, encodedHistoryBlob); err != nil {
 				if isRetryableError(err) {
 					logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
 				} else {
@@ -217,7 +217,7 @@ func (h *historyArchiver) Archive(
 				return err
 			}
 			progress.uploadedSize += blobSize
-			scope.RecordDistribution(metrics.HistoryArchiverBlobSize, int(blobSize))
+			handler.Histogram(metrics.HistoryArchiverBlobSize.GetMetricName(), metrics.HistoryArchiverBlobSize.GetMetricUnit()).Record(blobSize)
 		}
 
 		progress.historySize += blobSize
@@ -225,9 +225,9 @@ func (h *historyArchiver) Archive(
 		saveHistoryIteratorState(ctx, featureCatalog, historyIterator, &progress)
 	}
 
-	scope.RecordDistribution(metrics.HistoryArchiverTotalUploadSize, int(progress.uploadedSize))
-	scope.RecordDistribution(metrics.HistoryArchiverHistorySize, int(progress.historySize))
-	scope.IncCounter(metrics.HistoryArchiverArchiveSuccessCount)
+	handler.Histogram(metrics.HistoryArchiverTotalUploadSize.GetMetricName(), metrics.HistoryArchiverTotalUploadSize.GetMetricUnit()).Record(progress.uploadedSize)
+	handler.Histogram(metrics.HistoryArchiverHistorySize.GetMetricName(), metrics.HistoryArchiverHistorySize.GetMetricUnit()).Record(progress.historySize)
+	handler.Counter(metrics.HistoryArchiverArchiveSuccessCount.GetMetricName()).Record(1)
 	return nil
 }
 
@@ -270,7 +270,7 @@ func (h *historyArchiver) Get(
 	URI archiver.URI,
 	request *archiver.GetHistoryRequest,
 ) (*archiver.GetHistoryResponse, error) {
-	if err := softValidateURI(URI); err != nil {
+	if err := SoftValidateURI(URI); err != nil {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
 	}
 
@@ -312,7 +312,7 @@ func (h *historyArchiver) Get(
 		}
 		key := constructHistoryKey(URI.Path(), request.NamespaceID, request.WorkflowID, request.RunID, token.CloseFailoverVersion, token.BatchIdx)
 
-		encodedRecord, err := download(ctx, h.s3cli, URI, key)
+		encodedRecord, err := Download(ctx, h.s3cli, URI, key)
 		if err != nil {
 			if isRetryableError(err) {
 				return nil, serviceerror.NewUnavailable(err.Error())
@@ -343,7 +343,7 @@ func (h *historyArchiver) Get(
 	}
 
 	if isTruncated {
-		nextToken, err := serializeToken(token)
+		nextToken, err := SerializeToken(token)
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}
@@ -354,11 +354,11 @@ func (h *historyArchiver) Get(
 }
 
 func (h *historyArchiver) ValidateURI(URI archiver.URI) error {
-	err := softValidateURI(URI)
+	err := SoftValidateURI(URI)
 	if err != nil {
 		return err
 	}
-	return bucketExists(context.TODO(), h.s3cli, URI)
+	return BucketExists(context.TODO(), h.s3cli, URI)
 }
 
 func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.URI, request *archiver.GetHistoryRequest) (*int64, error) {

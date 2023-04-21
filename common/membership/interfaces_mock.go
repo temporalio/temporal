@@ -29,9 +29,11 @@
 package membership
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	primitives "go.temporal.io/server/common/primitives"
 )
 
 // MockMonitor is a mock of Monitor interface.
@@ -57,20 +59,6 @@ func (m *MockMonitor) EXPECT() *MockMonitorMockRecorder {
 	return m.recorder
 }
 
-// AddListener mocks base method.
-func (m *MockMonitor) AddListener(service, name string, notifyChannel chan<- *ChangedEvent) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddListener", service, name, notifyChannel)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddListener indicates an expected call of AddListener.
-func (mr *MockMonitorMockRecorder) AddListener(service, name, notifyChannel interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddListener", reflect.TypeOf((*MockMonitor)(nil).AddListener), service, name, notifyChannel)
-}
-
 // EvictSelf mocks base method.
 func (m *MockMonitor) EvictSelf() error {
 	m.ctrl.T.Helper()
@@ -83,21 +71,6 @@ func (m *MockMonitor) EvictSelf() error {
 func (mr *MockMonitorMockRecorder) EvictSelf() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvictSelf", reflect.TypeOf((*MockMonitor)(nil).EvictSelf))
-}
-
-// GetMemberCount mocks base method.
-func (m *MockMonitor) GetMemberCount(role string) (int, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMemberCount", role)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetMemberCount indicates an expected call of GetMemberCount.
-func (mr *MockMonitorMockRecorder) GetMemberCount(role interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMemberCount", reflect.TypeOf((*MockMonitor)(nil).GetMemberCount), role)
 }
 
 // GetReachableMembers mocks base method.
@@ -116,7 +89,7 @@ func (mr *MockMonitorMockRecorder) GetReachableMembers() *gomock.Call {
 }
 
 // GetResolver mocks base method.
-func (m *MockMonitor) GetResolver(service string) (ServiceResolver, error) {
+func (m *MockMonitor) GetResolver(service primitives.ServiceName) (ServiceResolver, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetResolver", service)
 	ret0, _ := ret[0].(ServiceResolver)
@@ -130,64 +103,25 @@ func (mr *MockMonitorMockRecorder) GetResolver(service interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResolver", reflect.TypeOf((*MockMonitor)(nil).GetResolver), service)
 }
 
-// Lookup mocks base method.
-func (m *MockMonitor) Lookup(service, key string) (*HostInfo, error) {
+// WaitUntilInitialized mocks base method.
+func (m *MockMonitor) WaitUntilInitialized(arg0 context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Lookup", service, key)
-	ret0, _ := ret[0].(*HostInfo)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Lookup indicates an expected call of Lookup.
-func (mr *MockMonitorMockRecorder) Lookup(service, key interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lookup", reflect.TypeOf((*MockMonitor)(nil).Lookup), service, key)
-}
-
-// RemoveListener mocks base method.
-func (m *MockMonitor) RemoveListener(service, name string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveListener", service, name)
+	ret := m.ctrl.Call(m, "WaitUntilInitialized", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// RemoveListener indicates an expected call of RemoveListener.
-func (mr *MockMonitorMockRecorder) RemoveListener(service, name interface{}) *gomock.Call {
+// WaitUntilInitialized indicates an expected call of WaitUntilInitialized.
+func (mr *MockMonitorMockRecorder) WaitUntilInitialized(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveListener", reflect.TypeOf((*MockMonitor)(nil).RemoveListener), service, name)
-}
-
-// Start mocks base method.
-func (m *MockMonitor) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockMonitorMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockMonitor)(nil).Start))
-}
-
-// Stop mocks base method.
-func (m *MockMonitor) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop.
-func (mr *MockMonitorMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockMonitor)(nil).Stop))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilInitialized", reflect.TypeOf((*MockMonitor)(nil).WaitUntilInitialized), arg0)
 }
 
 // WhoAmI mocks base method.
-func (m *MockMonitor) WhoAmI() (*HostInfo, error) {
+func (m *MockMonitor) WhoAmI() (HostInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WhoAmI")
-	ret0, _ := ret[0].(*HostInfo)
+	ret0, _ := ret[0].(HostInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -236,10 +170,10 @@ func (mr *MockServiceResolverMockRecorder) AddListener(name, notifyChannel inter
 }
 
 // Lookup mocks base method.
-func (m *MockServiceResolver) Lookup(key string) (*HostInfo, error) {
+func (m *MockServiceResolver) Lookup(key string) (HostInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Lookup", key)
-	ret0, _ := ret[0].(*HostInfo)
+	ret0, _ := ret[0].(HostInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -265,10 +199,10 @@ func (mr *MockServiceResolverMockRecorder) MemberCount() *gomock.Call {
 }
 
 // Members mocks base method.
-func (m *MockServiceResolver) Members() []*HostInfo {
+func (m *MockServiceResolver) Members() []HostInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Members")
-	ret0, _ := ret[0].([]*HostInfo)
+	ret0, _ := ret[0].([]HostInfo)
 	return ret0
 }
 
@@ -328,10 +262,10 @@ func (m *MockHostInfoProvider) EXPECT() *MockHostInfoProviderMockRecorder {
 }
 
 // HostInfo mocks base method.
-func (m *MockHostInfoProvider) HostInfo() *HostInfo {
+func (m *MockHostInfoProvider) HostInfo() HostInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HostInfo")
-	ret0, _ := ret[0].(*HostInfo)
+	ret0, _ := ret[0].(HostInfo)
 	return ret0
 }
 

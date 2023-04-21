@@ -42,8 +42,10 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -51,43 +53,47 @@ type (
 		activityDeps
 		namespace   namespace.Name
 		namespaceID namespace.ID
+		// Rate limiter for start workflow requests. Note that the scope is all schedules in
+		// this namespace on this worker.
+		startWorkflowRateLimiter quotas.RateLimiter
 	}
 
 	errFollow string
+
+	rateLimitedDetails struct {
+		Delay time.Duration
+	}
 )
 
 var (
-	errTryAgain          = errors.New("try again")
-	errWrongChain        = errors.New("found running workflow with wrong FirstExecutionRunId")
-	errNoEvents          = errors.New("GetEvents didn't return any events")
-	errNoAttrs           = errors.New("last event did not have correct attrs")
-	errNamespaceMismatch = errors.New("namespace mismatch")
+	errTryAgain   = errors.New("try again")
+	errWrongChain = errors.New("found running workflow with wrong FirstExecutionRunId")
+	errNoEvents   = errors.New("GetEvents didn't return any events")
+	errNoAttrs    = errors.New("last event did not have correct attrs")
+	errBlocked    = errors.New("rate limiter doesn't allow any progress")
 )
 
 func (e errFollow) Error() string { return string(e) }
 
-func (a *activities) checkNamespace(namespace, namespaceID string) error {
-	if namespace != a.namespace.String() || namespaceID != a.namespaceID.String() {
-		return errNamespaceMismatch
-	}
-	return nil
-}
-
 func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
-	if err := a.checkNamespace(req.Request.Namespace, req.NamespaceId); err != nil {
-		return nil, err
+	if !req.CompletedRateLimitSleep {
+		reservation := a.startWorkflowRateLimiter.Reserve()
+		if !reservation.OK() {
+			return nil, translateError(errBlocked, "StartWorkflowExecution")
+		}
+		delay := reservation.Delay()
+		if delay > 1*time.Second {
+			// for a long sleep, ask the workflow to do it in workflow logic
+			return nil, temporal.NewNonRetryableApplicationError(
+				rateLimitedErrorType, rateLimitedErrorType, nil, rateLimitedDetails{Delay: delay})
+		}
+		// short sleep can be done in-line
+		time.Sleep(delay)
 	}
 
-	request := common.CreateHistoryStartWorkflowRequest(
-		req.NamespaceId,
-		req.Request,
-		nil,
-		time.Now().UTC(),
-	)
-	request.LastCompletionResult = req.LastCompletionResult
-	request.ContinuedFailure = req.ContinuedFailure
+	req.Request.Namespace = a.namespace.String()
 
-	res, err := a.HistoryClient.StartWorkflowExecution(ctx, request)
+	res, err := a.FrontendClient.StartWorkflowExecution(ctx, req.Request)
 	if err != nil {
 		return nil, translateError(err, "StartWorkflowExecution")
 	}
@@ -118,7 +124,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 	// the desired chain or not). if we have to follow (unlikely), we'll end up
 	// back here with non-empty RunId.
 	pollReq := &historyservice.PollMutableStateRequest{
-		NamespaceId: req.NamespaceId,
+		NamespaceId: a.namespaceID.String(),
 		Execution:   req.Execution,
 	}
 	if req.LongPoll {
@@ -133,6 +139,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 			// just turn this into a success, with unspecified status
 			return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED}, nil
 		}
+		a.Logger.Error("error from PollMutableState", tag.Error(err), tag.WorkflowID(req.Execution.WorkflowId))
 		return nil, err
 	}
 
@@ -166,7 +173,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 
 	// get last event from history
 	histReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:              req.Namespace,
+		Namespace:              a.namespace.String(),
 		Execution:              req.Execution,
 		MaximumPageSize:        1,
 		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
@@ -175,11 +182,13 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 	histRes, err := a.FrontendClient.GetWorkflowExecutionHistory(ctx, histReq)
 
 	if err != nil {
+		a.Logger.Error("error from GetWorkflowExecutionHistory", tag.Error(err), tag.WorkflowID(req.Execution.WorkflowId))
 		return nil, err
 	}
 
 	events := histRes.GetHistory().GetEvents()
 	if len(events) < 1 {
+		a.Logger.Error("GetWorkflowExecutionHistory returned no events", tag.WorkflowID(req.Execution.WorkflowId))
 		return nil, errNoEvents
 	}
 	lastEvent := events[0]
@@ -224,8 +233,13 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 }
 
 func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
-	if err := a.checkNamespace(req.Namespace, req.NamespaceId); err != nil {
-		return nil, err
+	if !req.LongPoll {
+		// Go SDK currently doesn't set context timeout based on local activity
+		// StartToCloseTimeout if ScheduleToCloseTimeout is set, so add a timeout here.
+		// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+		defer cancel()
 	}
 
 	for ctx.Err() == nil {
@@ -233,7 +247,7 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkf
 		res, err := a.tryWatchWorkflow(ctx, req)
 		// long poll should return before our deadline, but even if it doesn't,
 		// we can still try again within the same activity
-		if err == errTryAgain || common.IsContextDeadlineExceededErr(err) {
+		if req.LongPoll && (err == errTryAgain || common.IsContextDeadlineExceededErr(err)) {
 			continue
 		}
 		if newRunID, ok := err.(errFollow); ok {
@@ -242,18 +256,19 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkf
 		}
 		return res, translateError(err, "WatchWorkflow")
 	}
-	return nil, ctx.Err()
+	return nil, translateError(ctx.Err(), "WatchWorkflow")
 }
 
 func (a *activities) CancelWorkflow(ctx context.Context, req *schedspb.CancelWorkflowRequest) error {
-	if err := a.checkNamespace(req.Namespace, req.NamespaceId); err != nil {
-		return err
-	}
+	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+	defer cancel()
 
 	rreq := &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: req.NamespaceId,
+		NamespaceId: a.namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-			Namespace: req.Namespace,
+			Namespace: a.namespace.String(),
 			// only set WorkflowId so we cancel the latest, but restricted by FirstExecutionRunId
 			WorkflowExecution:   &commonpb.WorkflowExecution{WorkflowId: req.Execution.WorkflowId},
 			Identity:            req.Identity,
@@ -268,14 +283,15 @@ func (a *activities) CancelWorkflow(ctx context.Context, req *schedspb.CancelWor
 }
 
 func (a *activities) TerminateWorkflow(ctx context.Context, req *schedspb.TerminateWorkflowRequest) error {
-	if err := a.checkNamespace(req.Namespace, req.NamespaceId); err != nil {
-		return err
-	}
+	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+	defer cancel()
 
 	rreq := &historyservice.TerminateWorkflowExecutionRequest{
-		NamespaceId: req.NamespaceId,
+		NamespaceId: a.namespaceID.String(),
 		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace: req.Namespace,
+			Namespace: a.namespace.String(),
 			// only set WorkflowId so we cancel the latest, but restricted by FirstExecutionRunId
 			WorkflowExecution:   &commonpb.WorkflowExecution{WorkflowId: req.Execution.WorkflowId},
 			Reason:              req.Reason,
@@ -297,7 +313,7 @@ func translateError(err error, msgPrefix string) error {
 		return nil
 	}
 	message := fmt.Sprintf("%s: %s", msgPrefix, err.Error())
-	if common.IsServiceTransientError(err) {
+	if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
 		return temporal.NewApplicationErrorWithCause(message, errType(err), err)
 	}
 	return temporal.NewNonRetryableApplicationError(message, errType(err), err)
