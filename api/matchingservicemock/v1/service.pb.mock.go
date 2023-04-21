@@ -140,24 +140,24 @@ func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueue(ctx, in inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeTaskQueue), varargs...)
 }
 
-// GetTaskQueueMetadata mocks base method.
-func (m *MockMatchingServiceClient) GetTaskQueueMetadata(ctx context.Context, in *matchingservice.GetTaskQueueMetadataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+// GetTaskQueueUserData mocks base method.
+func (m *MockMatchingServiceClient) GetTaskQueueUserData(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "GetTaskQueueMetadata", varargs...)
-	ret0, _ := ret[0].(*matchingservice.GetTaskQueueMetadataResponse)
+	ret := m.ctrl.Call(m, "GetTaskQueueUserData", varargs...)
+	ret0, _ := ret[0].(*matchingservice.GetTaskQueueUserDataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetTaskQueueMetadata indicates an expected call of GetTaskQueueMetadata.
-func (mr *MockMatchingServiceClientMockRecorder) GetTaskQueueMetadata(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// GetTaskQueueUserData indicates an expected call of GetTaskQueueUserData.
+func (mr *MockMatchingServiceClientMockRecorder) GetTaskQueueUserData(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetTaskQueueMetadata), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetTaskQueueUserData), varargs...)
 }
 
 // GetWorkerBuildIdCompatibility mocks base method.
@@ -180,24 +180,24 @@ func (mr *MockMatchingServiceClientMockRecorder) GetWorkerBuildIdCompatibility(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerBuildIdCompatibility), varargs...)
 }
 
-// InvalidateTaskQueueMetadata mocks base method.
-func (m *MockMatchingServiceClient) InvalidateTaskQueueMetadata(ctx context.Context, in *matchingservice.InvalidateTaskQueueMetadataRequest, opts ...grpc.CallOption) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+// InvalidateTaskQueueUserData mocks base method.
+func (m *MockMatchingServiceClient) InvalidateTaskQueueUserData(ctx context.Context, in *matchingservice.InvalidateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "InvalidateTaskQueueMetadata", varargs...)
-	ret0, _ := ret[0].(*matchingservice.InvalidateTaskQueueMetadataResponse)
+	ret := m.ctrl.Call(m, "InvalidateTaskQueueUserData", varargs...)
+	ret0, _ := ret[0].(*matchingservice.InvalidateTaskQueueUserDataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// InvalidateTaskQueueMetadata indicates an expected call of InvalidateTaskQueueMetadata.
-func (mr *MockMatchingServiceClientMockRecorder) InvalidateTaskQueueMetadata(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// InvalidateTaskQueueUserData indicates an expected call of InvalidateTaskQueueUserData.
+func (mr *MockMatchingServiceClientMockRecorder) InvalidateTaskQueueUserData(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvalidateTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceClient)(nil).InvalidateTaskQueueMetadata), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvalidateTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).InvalidateTaskQueueUserData), varargs...)
 }
 
 // ListTaskQueuePartitions mocks base method.
@@ -403,19 +403,19 @@ func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueue(arg0, arg1 in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeTaskQueue), arg0, arg1)
 }
 
-// GetTaskQueueMetadata mocks base method.
-func (m *MockMatchingServiceServer) GetTaskQueueMetadata(arg0 context.Context, arg1 *matchingservice.GetTaskQueueMetadataRequest) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+// GetTaskQueueUserData mocks base method.
+func (m *MockMatchingServiceServer) GetTaskQueueUserData(arg0 context.Context, arg1 *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTaskQueueMetadata", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.GetTaskQueueMetadataResponse)
+	ret := m.ctrl.Call(m, "GetTaskQueueUserData", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.GetTaskQueueUserDataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetTaskQueueMetadata indicates an expected call of GetTaskQueueMetadata.
-func (mr *MockMatchingServiceServerMockRecorder) GetTaskQueueMetadata(arg0, arg1 interface{}) *gomock.Call {
+// GetTaskQueueUserData indicates an expected call of GetTaskQueueUserData.
+func (mr *MockMatchingServiceServerMockRecorder) GetTaskQueueUserData(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetTaskQueueMetadata), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetTaskQueueUserData), arg0, arg1)
 }
 
 // GetWorkerBuildIdCompatibility mocks base method.
@@ -433,19 +433,19 @@ func (mr *MockMatchingServiceServerMockRecorder) GetWorkerBuildIdCompatibility(a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerBuildIdCompatibility), arg0, arg1)
 }
 
-// InvalidateTaskQueueMetadata mocks base method.
-func (m *MockMatchingServiceServer) InvalidateTaskQueueMetadata(arg0 context.Context, arg1 *matchingservice.InvalidateTaskQueueMetadataRequest) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+// InvalidateTaskQueueUserData mocks base method.
+func (m *MockMatchingServiceServer) InvalidateTaskQueueUserData(arg0 context.Context, arg1 *matchingservice.InvalidateTaskQueueUserDataRequest) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InvalidateTaskQueueMetadata", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.InvalidateTaskQueueMetadataResponse)
+	ret := m.ctrl.Call(m, "InvalidateTaskQueueUserData", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.InvalidateTaskQueueUserDataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// InvalidateTaskQueueMetadata indicates an expected call of InvalidateTaskQueueMetadata.
-func (mr *MockMatchingServiceServerMockRecorder) InvalidateTaskQueueMetadata(arg0, arg1 interface{}) *gomock.Call {
+// InvalidateTaskQueueUserData indicates an expected call of InvalidateTaskQueueUserData.
+func (mr *MockMatchingServiceServerMockRecorder) InvalidateTaskQueueUserData(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvalidateTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceServer)(nil).InvalidateTaskQueueMetadata), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvalidateTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).InvalidateTaskQueueUserData), arg0, arg1)
 }
 
 // ListTaskQueuePartitions mocks base method.
