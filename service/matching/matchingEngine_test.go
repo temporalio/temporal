@@ -1928,7 +1928,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NotNil(res)
 
 	// Set a long list of versions
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
 		id := fmt.Sprintf("%d", i)
 		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
@@ -1944,11 +1944,11 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		s.NotNil(res)
 	}
 	// Make a long compat-versions chain
-	for i := 0; i < 10; i++ {
-		id := fmt.Sprintf("99.%d", i)
-		prevCompat := fmt.Sprintf("99.%d", i-1)
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("9.%d", i)
+		prevCompat := fmt.Sprintf("9.%d", i-1)
 		if i == 0 {
-			prevCompat = "99"
+			prevCompat = "9"
 		}
 		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
@@ -1981,9 +1981,9 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	majorSets := res.GetResponse().GetMajorVersionSets()
 	curDefault := majorSets[len(majorSets)-1]
 	s.NotNil(curDefault)
-	s.Equal("99", curDefault.GetBuildIds()[0])
+	s.Equal("9", curDefault.GetBuildIds()[0])
 	lastNode := curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
-	s.Equal("99.9", lastNode)
+	s.Equal("9.99", lastNode)
 	s.Equal("0", majorSets[0].GetBuildIds()[0])
 
 	// Ensure depth limiting works
@@ -1998,9 +1998,9 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NoError(err)
 	majorSets = res.GetResponse().GetMajorVersionSets()
 	curDefault = majorSets[len(majorSets)-1]
-	s.Equal("99", curDefault.GetBuildIds()[0])
+	s.Equal("9", curDefault.GetBuildIds()[0])
 	lastNode = curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
-	s.Equal("99.9", lastNode)
+	s.Equal("9.99", lastNode)
 	s.Equal(1, len(majorSets))
 
 	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(s.handlerContext, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
@@ -2013,7 +2013,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	})
 	s.NoError(err)
 	majorSets = res.GetResponse().GetMajorVersionSets()
-	s.Equal("95", majorSets[0].GetBuildIds()[0])
+	s.Equal("5", majorSets[0].GetBuildIds()[0])
 }
 
 func (s *matchingEngineSuite) TestActivityQueueMetadataInvalidate() {
