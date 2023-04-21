@@ -84,3 +84,9 @@ message TaskQueueUserData {
 
     // For future use: description, rate limits, manual partition control, etc...
 }
+
+// Simple wrapper that includes a TaskQueueUserData and its storage version.
+message VersionedTaskQueueUserData {
+    TaskQueueUserData data = 1;
+    int64 version = 2;
+}

@@ -43,7 +43,7 @@ type (
 		ListTaskQueuePartitions(hCtx *handlerContext, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error)
 		UpdateWorkerBuildIdCompatibility(ctx *handlerContext, request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error)
 		GetWorkerBuildIdCompatibility(ctx *handlerContext, request *matchingservice.GetWorkerBuildIdCompatibilityRequest) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error)
-		InvalidateTaskQueueMetadata(ctx *handlerContext, request *matchingservice.InvalidateTaskQueueMetadataRequest) (*matchingservice.InvalidateTaskQueueMetadataResponse, error)
-		GetTaskQueueMetadata(ctx *handlerContext, request *matchingservice.GetTaskQueueMetadataRequest) (*matchingservice.GetTaskQueueMetadataResponse, error)
+		InvalidateTaskQueueUserData(ctx *handlerContext, request *matchingservice.InvalidateTaskQueueUserDataRequest) (*matchingservice.InvalidateTaskQueueUserDataResponse, error)
+		GetTaskQueueUserData(ctx *handlerContext, request *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 	}
 )

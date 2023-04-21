@@ -33,22 +33,34 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockpb "go.temporal.io/server/api/clock/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 )
 
-func mkNewSet(id string) *taskqueuepb.CompatibleVersionSet {
-	return &taskqueuepb.CompatibleVersionSet{
-		BuildIds: []string{id},
+func mkNewSet(id string, clock clockpb.HybridLogicalClock) *persistencepb.CompatibleVersionSet {
+	return &persistencepb.CompatibleVersionSet{
+		SetIds:                 []string{id},
+		BuildIds:               []*persistencepb.BuildID{{Id: id, State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
+		DefaultUpdateTimestamp: &clock,
 	}
 }
 
-func mkInitialData(numSets int) *persistencepb.VersioningData {
-	sets := make([]*taskqueuepb.CompatibleVersionSet, numSets)
+func mkInitialData(numSets int, clock clockpb.HybridLogicalClock) *persistencepb.VersioningData {
+	sets := make([]*persistencepb.CompatibleVersionSet, numSets)
 	for i := 0; i < numSets; i++ {
-		sets[i] = mkNewSet(fmt.Sprintf("%v", i))
+		sets[i] = mkNewSet(fmt.Sprintf("%v", i), clock)
 	}
 	return &persistencepb.VersioningData{
-		VersionSets: sets,
+		VersionSets:            sets,
+		DefaultUpdateTimestamp: &clock,
+	}
+}
+
+func mkUserData(numSets int) *persistencepb.TaskQueueUserData {
+	clock := zeroHLC(1)
+	return &persistencepb.TaskQueueUserData{
+		Clock:          &clock,
+		VersioningData: mkInitialData(numSets, clock),
 	}
 }
 
@@ -85,215 +97,422 @@ func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdCompatibility
 	}
 }
 
+func assertClockGreater(t *testing.T, clock1 clockpb.HybridLogicalClock, clock2 clockpb.HybridLogicalClock) {
+	if clock1.Version == clock2.Version {
+		assert.GreaterOrEqual(t, clock1.WallClock, clock2.WallClock)
+	} else {
+		assert.Equal(t, clock1.WallClock, clock2.WallClock)
+	}
+	assert.Equal(t, clock1.ClusterId, clock2.ClusterId)
+}
+
 func TestNewDefaultUpdate(t *testing.T) {
-	data := mkInitialData(2)
+	clock := zeroHLC(1)
+	initialData := mkInitialData(2, clock)
 
 	req := mkNewDefReq("2")
-	err := UpdateVersionSets(data, req, 0)
+	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
 	assert.NoError(t, err)
+	assertClockGreater(t, nextClock, clock)
+	assert.Equal(t, mkInitialData(2, clock), initialData)
 
-	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "2", curd.BuildIds[0])
-	assert.Equal(t, "1", data.VersionSets[1].BuildIds[0])
-	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
+	expected := &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &nextClock,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds:                 []string{"0"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
+				DefaultUpdateTimestamp: &clock,
+			},
+			{
+				SetIds:                 []string{"1"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
+				DefaultUpdateTimestamp: &clock,
+			},
+			{
+				SetIds:                 []string{"2"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock}},
+				DefaultUpdateTimestamp: &nextClock,
+			},
+		},
+	}
+	assert.Equal(t, expected, updatedData)
 
-	asResp := ToBuildIdOrderingResponse(data, 0)
+	asResp := ToBuildIdOrderingResponse(updatedData, 0)
 	assert.Equal(t, "2", asResp.MajorVersionSets[2].BuildIds[0])
 }
 
-func TestNewDefaultGraphUpdateOfEmptyGraph(t *testing.T) {
-	data := &persistencepb.VersioningData{}
+func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
+	clock := zeroHLC(1)
+	initialData := mkInitialData(0, clock)
 
 	req := mkNewDefReq("1")
-	err := UpdateVersionSets(data, req, 0)
+	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
 	assert.NoError(t, err)
+	assertClockGreater(t, nextClock, clock)
+	assert.Equal(t, mkInitialData(0, clock), initialData)
 
-	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "1", curd.BuildIds[0])
-	assert.Equal(t, 1, len(data.VersionSets))
+	expected := &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &nextClock,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds:                 []string{"1"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock}},
+				DefaultUpdateTimestamp: &nextClock,
+			},
+		},
+	}
+	assert.Equal(t, expected, updatedData)
 }
 
-func TestNewDefaultGraphUpdateCompatWithCurDefault(t *testing.T) {
-	data := mkInitialData(2)
+func TestNewDefaultSetUpdateCompatWithCurDefault(t *testing.T) {
+	clock := zeroHLC(1)
+	initialData := mkInitialData(2, clock)
 
 	req := mkNewCompatReq("1.1", "1", true)
-	err := UpdateVersionSets(data, req, 0)
+	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
 	assert.NoError(t, err)
+	assertClockGreater(t, nextClock, clock)
+	assert.Equal(t, mkInitialData(2, clock), initialData)
 
-	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "1.1", curd.BuildIds[1])
-	assert.Equal(t, "1", curd.BuildIds[0])
-	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
+	expected := &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &nextClock,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds:                 []string{"0"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
+				DefaultUpdateTimestamp: &clock,
+			},
+			{
+				SetIds: []string{"1"},
+				BuildIds: []*persistencepb.BuildID{
+					{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
+					{Id: "1.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock},
+				},
+				DefaultUpdateTimestamp: &nextClock,
+			},
+		},
+	}
+	assert.Equal(t, expected, updatedData)
 }
 
-func TestNewDefaultGraphUpdateCompatWithNonDefaultSet(t *testing.T) {
-	data := mkInitialData(2)
+func TestNewDefaultSetUpdateCompatWithNonDefaultSet(t *testing.T) {
+	clock := zeroHLC(1)
+	initialData := mkInitialData(2, clock)
 
 	req := mkNewCompatReq("0.1", "0", true)
-	err := UpdateVersionSets(data, req, 0)
+	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
 	assert.NoError(t, err)
+	assertClockGreater(t, nextClock, clock)
+	assert.Equal(t, mkInitialData(2, clock), initialData)
 
-	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "0.1", curd.BuildIds[1])
-	assert.Equal(t, "0", curd.BuildIds[0])
-	assert.Equal(t, "1", data.VersionSets[0].BuildIds[0])
+	expected := &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &nextClock,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds:                 []string{"1"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
+				DefaultUpdateTimestamp: &clock,
+			},
+			{
+				SetIds: []string{"0"},
+				BuildIds: []*persistencepb.BuildID{
+					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
+					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock},
+				},
+				DefaultUpdateTimestamp: &nextClock,
+			},
+		},
+	}
+	assert.Equal(t, expected, updatedData)
 }
 
 func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
-	data := mkInitialData(3)
+	clock := zeroHLC(1)
+	initialData := mkInitialData(2, clock)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	err := UpdateVersionSets(data, req, 0)
+	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
 	assert.NoError(t, err)
+	assertClockGreater(t, nextClock, clock)
+	assert.Equal(t, mkInitialData(2, clock), initialData)
 
-	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "2", curd.BuildIds[0])
-	assert.Equal(t, "0.1", data.VersionSets[0].BuildIds[1])
-	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
+	expected := &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &clock,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds: []string{"0"},
+				BuildIds: []*persistencepb.BuildID{
+					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
+					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock},
+				},
+				DefaultUpdateTimestamp: &nextClock,
+			},
+			{
+				SetIds:                 []string{"1"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
+				DefaultUpdateTimestamp: &clock,
+			},
+		},
+	}
 
-	asResp := ToBuildIdOrderingResponse(data, 0)
+	assert.Equal(t, expected, updatedData)
+	asResp := ToBuildIdOrderingResponse(updatedData, 0)
 	assert.Equal(t, "0.1", asResp.MajorVersionSets[0].BuildIds[1])
 }
 
-func TestNewCompatibleWithNonDefaultGraphUpdate(t *testing.T) {
-	data := mkInitialData(2)
+func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
+	clock0 := zeroHLC(1)
+	data := mkInitialData(2, clock0)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	err := UpdateVersionSets(data, req, 0)
+	clock1, data, err := UpdateVersionSets(clock0, data, req, 0, 0)
 	assert.NoError(t, err)
 
 	req = mkNewCompatReq("0.2", "0.1", false)
-	err = UpdateVersionSets(data, req, 0)
+	clock2, data, err := UpdateVersionSets(clock1, data, req, 0, 0)
 	assert.NoError(t, err)
 
-	curd := data.VersionSets[len(data.VersionSets)-1]
-	assert.Equal(t, "1", curd.BuildIds[0])
-	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
-	assert.Equal(t, "0.1", data.VersionSets[0].BuildIds[1])
-	assert.Equal(t, "0.2", data.VersionSets[0].BuildIds[2])
+	expected := &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &clock0,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds: []string{"0"},
+				BuildIds: []*persistencepb.BuildID{
+					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
+					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock1},
+					{Id: "0.2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
+				},
+				DefaultUpdateTimestamp: &clock2,
+			},
+			{
+				SetIds:                 []string{"1"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
+				DefaultUpdateTimestamp: &clock0,
+			},
+		},
+	}
 
+	assert.Equal(t, expected, data)
 	// Ensure setting a compatible version which targets a non-leaf compat version ends up without a branch
 	req = mkNewCompatReq("0.3", "0.1", false)
-	err = UpdateVersionSets(data, req, 0)
+	clock3, data, err := UpdateVersionSets(clock2, data, req, 0, 0)
 	assert.NoError(t, err)
 
-	assert.Equal(t, "1", curd.BuildIds[0])
-	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
-	assert.Equal(t, "0.1", data.VersionSets[0].BuildIds[1])
-	assert.Equal(t, "0.2", data.VersionSets[0].BuildIds[2])
-	assert.Equal(t, "0.3", data.VersionSets[0].BuildIds[3])
+	expected = &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &clock0,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds: []string{"0"},
+				BuildIds: []*persistencepb.BuildID{
+					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
+					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock1},
+					{Id: "0.2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
+					{Id: "0.3", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock3},
+				},
+				DefaultUpdateTimestamp: &clock3,
+			},
+			{
+				SetIds:                 []string{"1"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
+				DefaultUpdateTimestamp: &clock0,
+			},
+		},
+	}
+
+	assert.Equal(t, expected, data)
 }
 
 func TestCompatibleTargetsNotFound(t *testing.T) {
-	data := mkInitialData(1)
+	clock := zeroHLC(1)
+	data := mkInitialData(1, clock)
 
 	req := mkNewCompatReq("1.1", "1", false)
-	err := UpdateVersionSets(data, req, 0)
+	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
 }
 
 func TestMakeExistingSetDefault(t *testing.T) {
-	data := mkInitialData(4)
+	clock0 := zeroHLC(1)
+	data := mkInitialData(3, clock0)
 
-	req := mkExistingDefault("2")
-	err := UpdateVersionSets(data, req, 0)
-
+	req := mkExistingDefault("1")
+	clock1, data, err := UpdateVersionSets(clock0, data, req, 0, 0)
 	assert.NoError(t, err)
-	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
-	assert.Equal(t, "1", data.VersionSets[1].BuildIds[0])
-	assert.Equal(t, "3", data.VersionSets[2].BuildIds[0])
-	assert.Equal(t, "2", data.VersionSets[3].BuildIds[0])
 
+	expected := &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &clock1,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds: []string{"0"},
+				BuildIds: []*persistencepb.BuildID{
+					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
+				},
+				DefaultUpdateTimestamp: &clock0,
+			},
+			{
+				SetIds:                 []string{"2"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
+				DefaultUpdateTimestamp: &clock0,
+			},
+			{
+				SetIds:                 []string{"1"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
+				DefaultUpdateTimestamp: &clock0,
+			},
+		},
+	}
+
+	assert.Equal(t, expected, data)
 	// Add a compatible version to a set and then make that set the default via the compatible version
-	req = mkNewCompatReq("1.1", "1", true)
+	req = mkNewCompatReq("0.1", "0", true)
 
-	err = UpdateVersionSets(data, req, 0)
+	clock2, data, err := UpdateVersionSets(clock1, data, req, 0, 0)
 	assert.NoError(t, err)
-	assert.Equal(t, "0", data.VersionSets[0].BuildIds[0])
-	assert.Equal(t, "3", data.VersionSets[1].BuildIds[0])
-	assert.Equal(t, "2", data.VersionSets[2].BuildIds[0])
-	assert.Equal(t, "1", data.VersionSets[3].BuildIds[0])
+
+	expected = &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &clock2,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds:                 []string{"2"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
+				DefaultUpdateTimestamp: &clock0,
+			},
+			{
+				SetIds:                 []string{"1"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
+				DefaultUpdateTimestamp: &clock0,
+			},
+			{
+				SetIds: []string{"0"},
+				BuildIds: []*persistencepb.BuildID{
+					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
+					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
+				},
+				DefaultUpdateTimestamp: &clock2,
+			},
+		},
+	}
+	assert.Equal(t, expected, data)
 }
 
 func TestSayVersionIsCompatWithDifferentSetThanItsAlreadyCompatWithNotAllowed(t *testing.T) {
-	data := mkInitialData(3)
+	clock := zeroHLC(1)
+	data := mkInitialData(3, clock)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	err := UpdateVersionSets(data, req, 0)
+	_, data, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.NoError(t, err)
 
 	req = mkNewCompatReq("0.1", "1", false)
-	err = UpdateVersionSets(data, req, 0)
+	_, _, err = UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
 
-func TestLimitsMaxSize(t *testing.T) {
-	data := &persistencepb.VersioningData{}
-	maxSize := 10
+func TestLimitsMaxSets(t *testing.T) {
+	clock := zeroHLC(1)
+	maxSets := 10
+	data := mkInitialData(maxSets, clock)
 
-	for i := 0; i < 20; i++ {
-		id := fmt.Sprintf("%d", i)
-		req := mkNewDefReq(id)
-		err := UpdateVersionSets(data, req, maxSize)
-		assert.NoError(t, err)
-	}
+	req := mkNewDefReq("10")
+	_, _, err := UpdateVersionSets(clock, data, req, maxSets, 0)
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.FailedPrecondition{}, err)
+}
 
-	for i := 0; i < len(data.VersionSets); i++ {
-		assert.Equal(t, fmt.Sprintf("%d", i+10), data.VersionSets[i].BuildIds[0])
-	}
+func TestLimitsMaxBuildIDs(t *testing.T) {
+	clock := zeroHLC(1)
+	maxBuildIDs := 10
+	data := mkInitialData(maxBuildIDs, clock)
+
+	req := mkNewDefReq("10")
+	_, _, err := UpdateVersionSets(clock, data, req, 0, maxBuildIDs)
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.FailedPrecondition{}, err)
 }
 
 func TestPromoteWithinVersion(t *testing.T) {
-	data := mkInitialData(3)
+	clock0 := zeroHLC(1)
+	data := mkInitialData(2, clock0)
 
-	for i := 1; i <= 5; i++ {
-		req := mkNewCompatReq(fmt.Sprintf("0.%d", i), "0", false)
-		err := UpdateVersionSets(data, req, 0)
-		assert.NoError(t, err)
-	}
-
-	req := mkPromoteInSet("0.1")
-	err := UpdateVersionSets(data, req, 0)
+	req := mkNewCompatReq("0.1", "0", false)
+	clock1, data, err := UpdateVersionSets(clock0, data, req, 0, 0)
+	assert.NoError(t, err)
+	req = mkNewCompatReq("0.2", "0", false)
+	clock2, data, err := UpdateVersionSets(clock1, data, req, 0, 0)
+	assert.NoError(t, err)
+	req = mkPromoteInSet("0.1")
+	clock3, data, err := UpdateVersionSets(clock2, data, req, 0, 0)
 	assert.NoError(t, err)
 
-	curd := data.VersionSets[0].BuildIds[len(data.VersionSets[0].BuildIds)-1]
-	assert.Equal(t, "0.1", curd)
+	expected := &persistencepb.VersioningData{
+		DefaultUpdateTimestamp: &clock0,
+		VersionSets: []*persistencepb.CompatibleVersionSet{
+			{
+				SetIds: []string{"0"},
+				BuildIds: []*persistencepb.BuildID{
+					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
+					{Id: "0.2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
+					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock1},
+				},
+				DefaultUpdateTimestamp: &clock3,
+			},
+			{
+				SetIds:                 []string{"1"},
+				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
+				DefaultUpdateTimestamp: &clock0,
+			},
+		},
+	}
+	assert.Equal(t, expected, data)
 }
 
 func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
-	data := mkInitialData(3)
+	clock := zeroHLC(1)
+	data := mkInitialData(3, clock)
 
 	req := mkNewDefReq("0")
-	err := UpdateVersionSets(data, req, 0)
+	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
 
 func TestAddAlreadyExtantVersionToAnotherSetErrors(t *testing.T) {
-	data := mkInitialData(3)
+	clock := zeroHLC(1)
+	data := mkInitialData(3, clock)
 
 	req := mkNewCompatReq("0", "1", false)
-	err := UpdateVersionSets(data, req, 0)
+	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
 
 func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
-	data := mkInitialData(3)
+	clock := zeroHLC(1)
+	data := mkInitialData(3, clock)
 
 	req := mkExistingDefault("crab boi")
-	err := UpdateVersionSets(data, req, 0)
+	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
 }
 
 func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
-	data := mkInitialData(3)
+	clock := zeroHLC(1)
+	data := mkInitialData(3, clock)
 
 	req := mkPromoteInSet("i'd rather be writing rust ;)")
-	err := UpdateVersionSets(data, req, 0)
+	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
+}
+
+func TestToBuildIdOrderingResponseTrimsResponse(t *testing.T) {
+	clock := zeroHLC(1)
+	data := mkInitialData(3, clock)
+	actual := ToBuildIdOrderingResponse(data, 2)
+	expected := []*taskqueuepb.CompatibleVersionSet{{BuildIds: []string{"1"}}, {BuildIds: []string{"2"}}}
+	assert.Equal(t, expected, actual.MajorVersionSets)
 }

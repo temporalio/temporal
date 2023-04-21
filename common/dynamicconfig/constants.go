@@ -148,9 +148,14 @@ const (
 	// WorkerBuildIdSizeLimit is the byte length limit for a worker build id as used in the rpc methods for updating
 	// the version graph for a task queue
 	WorkerBuildIdSizeLimit = "limit.workerBuildIdSize"
-	// VersionGraphNodeLimit is the max number of nodes allowed in the version graph for a task queue. Update requests
-	// which would cause the graph size to exceed this number will result in the oldest versions being dropped.
-	VersionGraphNodeLimit = "limit.versionGraphNodeSize"
+	// VersionCompatibleSetLimitPerQueue is the max number of compatible sets allowed in the versioning data for a task
+	// queue. Update requests which would cause the versioning data to exceed this number will fail with a
+	// FailedPrecondition error.
+	VersionCompatibleSetLimitPerQueue = "limit.versionCompatibleSetLimitPerQueue"
+	// VersionBuildIDLimitPerQueue is the max number of build IDs allowed to be defined in the versioning data for a
+	// task queue. Update requests which would cause the versioning data to exceed this number will fail with a
+	// FailedPrecondition error.
+	VersionBuildIDLimitPerQueue = "limit.versionBuildIDLimitPerQueue"
 
 	// keys for frontend
 
@@ -331,8 +336,8 @@ const (
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
-	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
-	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
+	// MatchingUserDataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
+	MatchingUserDataPollFrequency = "matching.userDataPollFrequency"
 
 	// keys for history
 
