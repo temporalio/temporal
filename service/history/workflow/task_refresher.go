@@ -268,6 +268,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 	// workflowTask only scheduled
 	return taskGenerator.GenerateScheduleWorkflowTaskTasks(
 		workflowTask.ScheduledEventID,
+		false,
 	)
 }
 
