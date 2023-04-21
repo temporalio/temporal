@@ -69,7 +69,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
-	sw "go.temporal.io/server/service/worker"
+	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests"
 )
@@ -2619,7 +2619,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	workflowID4 := "force-replication-wf-4"
 	run4, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID4,
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          workercommon.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
@@ -2634,7 +2634,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	workflowID5 := "namespace-handover-wf-5"
 	run5, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID5,
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          workercommon.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "namespace-handover", migration.NamespaceHandoverParams{
 		Namespace:              namespace,
@@ -2761,7 +2761,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	forceReplicationWorkflowID := "force-replication-wf"
 	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 forceReplicationWorkflowID,
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          workercommon.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
@@ -2900,7 +2900,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	forceReplicationWorkflowID := "force-replication-wf"
 	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 forceReplicationWorkflowID,
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          workercommon.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
