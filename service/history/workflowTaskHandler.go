@@ -260,10 +260,7 @@ func (handler *workflowTaskHandlerImpl) handleMessages(
 		return nil
 	}
 
-	if err := handler.attrValidator.validateMessages(
-		messages,
-		updateRegistry,
-	); err != nil {
+	if err := updateRegistry.ValidateIncomingMessages(messages); err != nil {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 	}
 

@@ -140,12 +140,16 @@ func (r *RegistryImpl) CreateOutgoingMessages(startedEventID int64) ([]*protocol
 }
 
 func (r *RegistryImpl) ValidateIncomingMessages(messages []*protocolpb.Message) error {
-	r.Lock()
-	defer r.Unlock()
+	r.RLock()
+	defer r.RUnlock()
 
-	// make a copy of updates for validation so that it does not alter the state which will be used
+	// Valid message sequences:
+	//  pending -> reject
+	//	pending -> accept
+	//  accept -> complete
+
+	// make a shallow copy of updates for validation so that it does not alter the state which will be used
 	// by a retry of failed workflow task
-
 	updates := make(map[string]*Update, len(r.updates))
 	for k, v := range r.updates {
 		updates[k] = &Update{
@@ -153,7 +157,7 @@ func (r *RegistryImpl) ValidateIncomingMessages(messages []*protocolpb.Message) 
 			request:            v.request,
 			messageID:          v.messageID,
 			protocolInstanceID: v.protocolInstanceID,
-			out:                nil, // we don't need it for validation
+			outcome:            nil, // we don't need it for validation
 		}
 	}
 
@@ -172,7 +176,7 @@ func (r *RegistryImpl) ProcessIncomingMessages(messages []*protocolpb.Message) e
 
 	// notify result to caller
 	for _, upd := range closedUpdates {
-		upd.notifyResult()
+		upd.notify()
 	}
 	return nil
 }
@@ -183,38 +187,40 @@ func processIncomingMessages(updates map[string]*Update, messages []*protocolpb.
 		instanceId := message.GetProtocolInstanceId()
 		upd, ok := updates[instanceId]
 		if !ok {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: update %v not found", instanceId))
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: update %s not found", instanceId))
+		}
+
+		if message.GetBody() == nil {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: message %s has empty body", instanceId))
 		}
 
 		if types.Is(message.GetBody(), (*updatepb.Acceptance)(nil)) {
 			if upd.state != statePending {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to accept update %v, invalid state: %v", instanceId, stateToString(upd.state)))
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to accept update %s, current state: %s", instanceId, upd.state))
 			}
 			upd.accept()
-		}
-
-		if types.Is(message.GetBody(), (*updatepb.Response)(nil)) {
+		} else if types.Is(message.GetBody(), (*updatepb.Response)(nil)) {
 			if upd.state != stateAccepted {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to complete update %v, invalid state: %v", instanceId, stateToString(upd.state)))
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to complete update %s, current state: %s", instanceId, upd.state))
 			}
 			var response updatepb.Response
 			if err := types.UnmarshalAny(message.GetBody(), &response); err != nil {
 				return nil, err
 			}
-			upd.setOutcome(response.GetOutcome())
+			upd.complete(response.GetOutcome())
 			closedUpdates = append(closedUpdates, upd)
-		}
-
-		if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
-			if upd.state != statePending && upd.state != stateAccepted {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to reject update %v, invalid state: %v", instanceId, stateToString(upd.state)))
+		} else if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
+			if upd.state != statePending {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to reject update %s, current state: %s", instanceId, upd.state))
 			}
 			var rejection updatepb.Rejection
 			if err := types.UnmarshalAny(message.GetBody(), &rejection); err != nil {
 				return nil, err
 			}
-			upd.setFailure(rejection.GetFailure())
+			upd.reject(rejection.GetFailure())
 			closedUpdates = append(closedUpdates, upd)
+		} else {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown message type: %s", message.GetBody().GetTypeUrl()))
 		}
 	}
 	return closedUpdates, nil

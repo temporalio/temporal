@@ -29,18 +29,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
-	"go.temporal.io/server/service/history/workflow/update"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -1000,54 +995,4 @@ func (v *commandAttrValidator) commandTypes(
 		result[index] = command.GetCommandType().String()
 	}
 	return result
-}
-
-// TODO (alex-update): move to messageValidator and dedicated package.
-func (v *commandAttrValidator) validateMessages(
-	messages []*protocolpb.Message,
-	updateRegistry update.Registry,
-) error {
-	if err := updateRegistry.ValidateIncomingMessages(messages); err != nil {
-		return err
-	}
-	// TODO? Do we still need below validation logic?
-
-	// Validates messages:
-	// 1. Sequence: Response message for the same protocol_instance_id must go after Acceptance.
-	// 2. Rejection can't be paired with Response or Acceptance.
-	// 3. Only Acceptance, Response,and Rejection messages are allowed.
-
-	seenAcceptance := make(map[string]struct{})
-	seenRejection := make(map[string]struct{})
-	seenResponse := make(map[string]struct{})
-	const messageSequence = "invalid message sequence for %s: %s message must be before %s message"
-	const messagePairing = "invalid message pairing for %s: %s message is not allowed because %s message was already received"
-	for _, message := range messages {
-		//nolint:revive // early-return
-		if types.Is(message.GetBody(), (*updatepb.Acceptance)(nil)) {
-			if _, ok := seenResponse[message.GetProtocolInstanceId()]; ok {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf(messageSequence, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Acceptance)(nil)), proto.MessageName((*updatepb.Response)(nil))))
-			}
-			if _, ok := seenRejection[message.GetProtocolInstanceId()]; ok {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf(messagePairing, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Acceptance)(nil)), proto.MessageName((*updatepb.Rejection)(nil))))
-			}
-			seenAcceptance[message.GetProtocolInstanceId()] = struct{}{}
-		} else if types.Is(message.GetBody(), (*updatepb.Response)(nil)) {
-			if _, ok := seenRejection[message.GetProtocolInstanceId()]; ok {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf(messagePairing, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Response)(nil)), proto.MessageName((*updatepb.Rejection)(nil))))
-			}
-			seenResponse[message.GetProtocolInstanceId()] = struct{}{}
-		} else if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
-			if _, ok := seenAcceptance[message.GetProtocolInstanceId()]; ok {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf(messagePairing, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Rejection)(nil)), proto.MessageName((*updatepb.Acceptance)(nil))))
-			}
-			if _, ok := seenResponse[message.GetProtocolInstanceId()]; ok {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf(messagePairing, message.GetProtocolInstanceId(), proto.MessageName((*updatepb.Rejection)(nil)), proto.MessageName((*updatepb.Response)(nil))))
-			}
-			seenRejection[message.GetProtocolInstanceId()] = struct{}{}
-		} else {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown message type: %v", message.GetBody().GetTypeUrl()))
-		}
-	}
-	return nil
 }
