@@ -528,6 +528,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		if err = workflowTaskHandler.handleMessages(
 			ctx,
 			request.Messages,
+			weContext.UpdateRegistry(),
 		); err != nil {
 			return nil, err
 		}

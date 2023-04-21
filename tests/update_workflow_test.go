@@ -259,6 +259,190 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstWorkflowTask_AcceptComplete()
  15 WorkflowExecutionCompleted`, events)
 }
 
+func (s *integrationSuite) TestUpdateWorkflow_ValidateMessages() {
+	id := "integration-update-workflow-validate-message-id"
+	wt := "integration-update-workflow-validate-message-wt"
+	tq := "integration-update-workflow-validate-message-tq"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+
+	testCases := []struct {
+		Name                     string
+		RespondWorkflowTaskError string
+		MessageFn                func(reqMsg *protocolpb.Message) []*protocolpb.Message
+	}{
+		{
+			Name:                     "update-id-not-found",
+			RespondWorkflowTaskError: "not found",
+			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: "bogus-update-id",
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest,
+						}),
+					},
+				}
+			},
+		},
+		{
+			Name:                     "complete-without-accept",
+			RespondWorkflowTaskError: "current state: pending",
+			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Response{
+							Meta: updRequest.GetMeta(),
+							Outcome: &updatepb.Outcome{
+								Value: &updatepb.Outcome_Success{
+									Success: payloads.EncodeString("update success"),
+								},
+							},
+						}),
+					},
+				}
+			},
+		},
+		{
+			Name:                     "accept-twice",
+			RespondWorkflowTaskError: "current state: accepted",
+			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest,
+						}),
+					},
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest,
+						}),
+					},
+				}
+			},
+		},
+		{
+			Name:                     "success-case",
+			RespondWorkflowTaskError: "",
+			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
+				return []*protocolpb.Message{
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Acceptance{
+							AcceptedRequestMessageId:         reqMsg.GetId(),
+							AcceptedRequestSequencingEventId: reqMsg.GetEventId(),
+							AcceptedRequest:                  updRequest,
+						}),
+					},
+					{
+						Id:                 uuid.New(),
+						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+						SequencingId:       nil,
+						Body: marshalAny(s, &updatepb.Response{
+							Meta: updRequest.GetMeta(),
+							Outcome: &updatepb.Outcome{
+								Value: &updatepb.Outcome_Success{
+									Success: payloads.EncodeString("update success"),
+								},
+							},
+						}),
+					},
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.Name, func(t *testing.T) {
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:    uuid.New(),
+				Namespace:    s.namespace,
+				WorkflowId:   id + tc.Name,
+				WorkflowType: workflowType,
+				TaskQueue:    taskQueue,
+			}
+
+			startResp, err := s.engine.StartWorkflowExecution(NewContext(), request)
+			s.NoError(err)
+
+			we := &commonpb.WorkflowExecution{
+				WorkflowId: id + tc.Name,
+				RunId:      startResp.GetRunId(),
+			}
+
+			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+				return nil, nil
+			}
+
+			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+				updRequestMsg := task.Messages[0]
+				return tc.MessageFn(updRequestMsg), nil
+			}
+
+			poller := &TaskPoller{
+				Engine:              s.engine,
+				Namespace:           s.namespace,
+				TaskQueue:           taskQueue,
+				WorkflowTaskHandler: wtHandler,
+				MessageHandler:      msgHandler,
+				Logger:              s.Logger,
+				T:                   s.T(),
+			}
+
+			updateWorkflowFn := func() {
+				_, _ = s.engine.UpdateWorkflowExecution(NewContext(), &workflowservice.UpdateWorkflowExecutionRequest{
+					Namespace: s.namespace,
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: we.GetWorkflowId(),
+						RunId:      we.GetRunId(),
+					},
+					Request: &updatepb.Request{
+						Meta:  &updatepb.Meta{UpdateId: uuid.New()},
+						Input: &updatepb.Input{Name: "update_handler", Args: payloads.EncodeString("update args")},
+					},
+				})
+			}
+			go updateWorkflowFn()
+
+			// Process update in workflow.
+			_, _, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, false, nil)
+			if len(tc.RespondWorkflowTaskError) > 0 {
+				// respond workflow task should return error
+				s.Error(err, "RespondWorkflowTaskCompleted should return an error contains`%v`", tc.RespondWorkflowTaskError)
+				s.Contains(err.Error(), tc.RespondWorkflowTaskError)
+			} else {
+				s.NoError(err)
+			}
+
+		})
+	}
+
+}
+
 func (s *integrationSuite) TestUpdateWorkflow_NewWorkflowTask_AcceptComplete() {
 	id := "integration-update-workflow-test-2"
 	wt := "integration-update-workflow-test-2-type"
@@ -1493,7 +1677,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 	// Try to accept update in workflow: get malformed response.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Error(err)
-	s.Equal(err.Error(), "BadUpdateWorkflowExecutionMessage: accepted_request is not set on update.Acceptance message body.")
+	s.Contains(err.Error(), "not found")
 	// New normal (but transient) WT will be created but not returned.
 
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
