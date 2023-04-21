@@ -46,7 +46,7 @@ func ToBuildIdOrderingResponse(data *persistence.VersioningData, maxSets int) *w
 		numSets = maxSets
 	}
 	versionSets := make([]*taskqueue.CompatibleVersionSet, numSets)
-	for i := 0; i < numSets; i++ {
+	for i := range versionSets {
 		set := data.GetVersionSets()[i+lenSets-numSets]
 		buildIds := make([]string, len(set.GetBuildIds()))
 		for j, version := range set.GetBuildIds() {

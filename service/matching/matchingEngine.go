@@ -830,10 +830,9 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 			resp.UserData = userData
 		}
 		if userData.Version < version {
-			e.logger.Error("Non-root partition requested task queue user data for version greater than known version")
-			// TODO: When would this happen? Likely due to ownership transfer of the root partition.
-			// Do we go to the store and reload the user data?
-			// How should we inform the caller when this happens?
+			// This is highly unlikely but may happen due to an edge case in during ownership transfer.
+			// We rely on periodic refresh and client retries in this case to let the system eventually self-heal.
+			return nil, serviceerror.NewFailedPrecondition("Non-root partition requested task queue user data for version greater than known version")
 		}
 	}
 	return resp, nil

@@ -154,7 +154,11 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			return err
 		}
 		db.rangeID = initialRangeID
-		return nil
+		_, err = db.getUserDataLocked(ctx)
+		if errors.Is(err, errUserDataNotPresentOnPartition) {
+			return nil
+		}
+		return err
 
 	default:
 		return err
@@ -306,7 +310,7 @@ func (db *taskQueueDB) getUserDataLocked(
 
 		response, err := db.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
 			NamespaceID: db.namespaceID.String(),
-			TaskQueue:   db.taskQueue.FullName(),
+			TaskQueue:   db.taskQueue.BaseNameString(),
 		})
 		if err != nil {
 			var notFoundError *serviceerror.NotFound
