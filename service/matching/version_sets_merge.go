@@ -76,14 +76,9 @@ type buildIDInfo struct {
 	madeDefaultAt        hlc.Clock
 }
 
-// MergeVersioningData merges two VersioningData structs.
-// If a build ID appears in both data structures, the merged structure will include that latest status and timestamp.
-// If a build ID appears in different sets in the different structures, those sets will be merged.
-// The merged data's per set default and global default will be set according to the latest timestamps in the sources.
-func MergeVersioningData(a *persistencepb.VersioningData, b *persistencepb.VersioningData) *persistencepb.VersioningData {
+func collectBuildIDInfo(sets []*persistencepb.CompatibleVersionSet) map[string]buildIDInfo {
 	buildIDToInfo := make(map[string]buildIDInfo, 0)
-	// Collect information about each build ID from both sources
-	for _, set := range append(a.VersionSets, b.VersionSets...) {
+	for _, set := range sets {
 		lastIdx := len(set.BuildIds) - 1
 		for setIdx, buildID := range set.BuildIds {
 			if info, found := buildIDToInfo[buildID.Id]; found {
@@ -119,10 +114,13 @@ func MergeVersioningData(a *persistencepb.VersioningData, b *persistencepb.Versi
 			}
 		}
 	}
-	// Build the merged compatible sets using collected build ID information
-	mergedSets := make([]*persistencepb.CompatibleVersionSet, 0)
+	return buildIDToInfo
+}
+
+func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []string) []*persistencepb.CompatibleVersionSet {
+	sets := make([]*persistencepb.CompatibleVersionSet, 0)
 	for id, info := range buildIDToInfo {
-		set := findSetWithSetIDs(mergedSets, info.setIDs)
+		set := findSetWithSetIDs(sets, info.setIDs)
 		if set == nil {
 			defaultTimestamp := hlc.Zero(0)
 			set = &persistencepb.CompatibleVersionSet{
@@ -130,7 +128,7 @@ func MergeVersioningData(a *persistencepb.VersioningData, b *persistencepb.Versi
 				BuildIds:               make([]*persistencepb.BuildID, 0),
 				DefaultUpdateTimestamp: &defaultTimestamp,
 			}
-			mergedSets = append(mergedSets, set)
+			sets = append(sets, set)
 		} else {
 			set.SetIds = mergeSetIDs(set.SetIds, info.setIDs)
 		}
@@ -159,16 +157,15 @@ func MergeVersioningData(a *persistencepb.VersioningData, b *persistencepb.Versi
 			set.BuildIds = append(set.BuildIds, buildID)
 		}
 	}
-	maxDefaultTimestamp := hlc.Max(*b.DefaultUpdateTimestamp, *a.DefaultUpdateTimestamp)
-
 	// Sort the sets based on their default update timestamp, ensuring the default set comes last
-	defaultSetIds := a.VersionSets[len(a.VersionSets)-1].SetIds
-	if hlc.Equal(maxDefaultTimestamp, *b.DefaultUpdateTimestamp) {
-		defaultSetIds = b.VersionSets[len(b.VersionSets)-1].SetIds
-	}
-	sort.Slice(mergedSets, func(i, j int) bool {
-		si := mergedSets[i]
-		sj := mergedSets[j]
+	sortSets(sets, defaultSetIds)
+	return sets
+}
+
+func sortSets(sets []*persistencepb.CompatibleVersionSet, defaultSetIds []string) {
+	sort.Slice(sets, func(i, j int) bool {
+		si := sets[i]
+		sj := sets[j]
 		if setContainsSetIDs(si, defaultSetIds) {
 			return false
 		}
@@ -177,9 +174,28 @@ func MergeVersioningData(a *persistencepb.VersioningData, b *persistencepb.Versi
 		}
 		return hlc.Less(*si.DefaultUpdateTimestamp, *sj.DefaultUpdateTimestamp)
 	})
+}
+
+// MergeVersioningData merges two VersioningData structs.
+// If a build ID appears in both data structures, the merged structure will include that latest status and timestamp.
+// If a build ID appears in different sets in the different structures, those sets will be merged.
+// The merged data's per set default and global default will be set according to the latest timestamps in the sources.
+func MergeVersioningData(a *persistencepb.VersioningData, b *persistencepb.VersioningData) *persistencepb.VersioningData {
+	// Collect information about each build ID from both sources
+	buildIDToInfo := collectBuildIDInfo(append(a.VersionSets, b.VersionSets...))
+
+	maxDefaultTimestamp := hlc.Max(*b.DefaultUpdateTimestamp, *a.DefaultUpdateTimestamp)
+
+	defaultSetIds := a.VersionSets[len(a.VersionSets)-1].SetIds
+	if hlc.Equal(maxDefaultTimestamp, *b.DefaultUpdateTimestamp) {
+		defaultSetIds = b.VersionSets[len(b.VersionSets)-1].SetIds
+	}
+
+	// Build the merged compatible sets using collected build ID information
+	sets := intoVersionSets(buildIDToInfo, defaultSetIds)
 
 	return &persistencepb.VersioningData{
-		VersionSets:            mergedSets,
+		VersionSets:            sets,
 		DefaultUpdateTimestamp: &maxDefaultTimestamp,
 	}
 }
