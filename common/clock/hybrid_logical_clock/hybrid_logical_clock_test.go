@@ -2,17 +2,23 @@ package hybrid_logical_clock
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	commonclock "go.temporal.io/server/common/clock"
 )
 
 func Test_Next_ReturnsGreaterClock(t *testing.T) {
 	t0 := Zero(1)
+	timesource := commonclock.NewEventTimeSource()
+
 	// Same wallclock
-	t1 := next(t0, 0)
+	timesource.Update(time.Unix(0, 0).UTC())
+	t1 := Next(t0, timesource)
 	assert.Equal(t, Compare(t0, t1), 1)
 	// Greater wallclock
-	t2 := next(t1, 1)
+	timesource.Update(time.Unix(0, 1).UTC())
+	t2 := Next(t1, timesource)
 	assert.Equal(t, Compare(t1, t2), 1)
 }
 

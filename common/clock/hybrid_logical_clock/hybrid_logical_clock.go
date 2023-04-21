@@ -2,9 +2,9 @@ package hybrid_logical_clock
 
 import (
 	"errors"
-	"time"
 
 	clockpb "go.temporal.io/server/api/clock/v1"
+	commonclock "go.temporal.io/server/common/clock"
 )
 
 var ErrClocksEqual = errors.New("HybridLogicalClocks are equal")
@@ -14,12 +14,8 @@ type Clock = clockpb.HybridLogicalClock
 // Next generates the next clock timestamp given the current clock.
 // HybridLogicalClock requires the previous clock to ensure that time doesn't move backwards and the next clock is
 // monotonically increasing.
-func Next(clock Clock) Clock {
-	wallclock := time.Now().UnixMilli()
-	return next(clock, wallclock)
-}
-
-func next(clock Clock, wallclock int64) Clock {
+func Next(clock Clock, source commonclock.TimeSource) Clock {
+	wallclock := source.Now().UnixMilli()
 	// Ensure time does not move backwards
 	if wallclock < clock.GetWallClock() {
 		wallclock = clock.GetWallClock()

@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	clockpb "go.temporal.io/server/api/clock/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
+	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
 
@@ -98,19 +99,14 @@ func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdCompatibility
 	}
 }
 
-// Asserts that clock1 is greater than clock2
-func assertClockGreater(t *testing.T, clock1 clockpb.HybridLogicalClock, clock2 clockpb.HybridLogicalClock) {
-	assert.True(t, hlc.Greater(clock1, clock2))
-}
-
 func TestNewDefaultUpdate(t *testing.T) {
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(2, clock)
 
 	req := mkNewDefReq("2")
-	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	updatedData, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
 	assert.NoError(t, err)
-	assertClockGreater(t, nextClock, clock)
 	assert.Equal(t, mkInitialData(2, clock), initialData)
 
 	expected := &persistencepb.VersioningData{
@@ -144,9 +140,9 @@ func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
 	initialData := mkInitialData(0, clock)
 
 	req := mkNewDefReq("1")
-	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	updatedData, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
 	assert.NoError(t, err)
-	assertClockGreater(t, nextClock, clock)
 	assert.Equal(t, mkInitialData(0, clock), initialData)
 
 	expected := &persistencepb.VersioningData{
@@ -167,9 +163,9 @@ func TestNewDefaultSetUpdateCompatWithCurDefault(t *testing.T) {
 	initialData := mkInitialData(2, clock)
 
 	req := mkNewCompatReq("1.1", "1", true)
-	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	updatedData, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
 	assert.NoError(t, err)
-	assertClockGreater(t, nextClock, clock)
 	assert.Equal(t, mkInitialData(2, clock), initialData)
 
 	expected := &persistencepb.VersioningData{
@@ -198,9 +194,9 @@ func TestNewDefaultSetUpdateCompatWithNonDefaultSet(t *testing.T) {
 	initialData := mkInitialData(2, clock)
 
 	req := mkNewCompatReq("0.1", "0", true)
-	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	updatedData, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
 	assert.NoError(t, err)
-	assertClockGreater(t, nextClock, clock)
 	assert.Equal(t, mkInitialData(2, clock), initialData)
 
 	expected := &persistencepb.VersioningData{
@@ -229,9 +225,9 @@ func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
 	initialData := mkInitialData(2, clock)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	nextClock, updatedData, err := UpdateVersionSets(clock, initialData, req, 0, 0)
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	updatedData, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
 	assert.NoError(t, err)
-	assertClockGreater(t, nextClock, clock)
 	assert.Equal(t, mkInitialData(2, clock), initialData)
 
 	expected := &persistencepb.VersioningData{
@@ -263,11 +259,13 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 	data := mkInitialData(2, clock0)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	clock1, data, err := UpdateVersionSets(clock0, data, req, 0, 0)
+	clock1 := hlc.Next(clock0, commonclock.NewRealTimeSource())
+	data, err := UpdateVersionSets(clock1, data, req, 0, 0)
 	assert.NoError(t, err)
 
 	req = mkNewCompatReq("0.2", "0.1", false)
-	clock2, data, err := UpdateVersionSets(clock1, data, req, 0, 0)
+	clock2 := hlc.Next(clock1, commonclock.NewRealTimeSource())
+	data, err = UpdateVersionSets(clock2, data, req, 0, 0)
 	assert.NoError(t, err)
 
 	expected := &persistencepb.VersioningData{
@@ -293,7 +291,8 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 	assert.Equal(t, expected, data)
 	// Ensure setting a compatible version which targets a non-leaf compat version ends up without a branch
 	req = mkNewCompatReq("0.3", "0.1", false)
-	clock3, data, err := UpdateVersionSets(clock2, data, req, 0, 0)
+	clock3 := hlc.Next(clock1, commonclock.NewRealTimeSource())
+	data, err = UpdateVersionSets(clock3, data, req, 0, 0)
 	assert.NoError(t, err)
 
 	expected = &persistencepb.VersioningData{
@@ -325,7 +324,8 @@ func TestCompatibleTargetsNotFound(t *testing.T) {
 	data := mkInitialData(1, clock)
 
 	req := mkNewCompatReq("1.1", "1", false)
-	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	_, err := UpdateVersionSets(nextClock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
 }
@@ -335,7 +335,8 @@ func TestMakeExistingSetDefault(t *testing.T) {
 	data := mkInitialData(3, clock0)
 
 	req := mkExistingDefault("1")
-	clock1, data, err := UpdateVersionSets(clock0, data, req, 0, 0)
+	clock1 := hlc.Next(clock0, commonclock.NewRealTimeSource())
+	data, err := UpdateVersionSets(clock1, data, req, 0, 0)
 	assert.NoError(t, err)
 
 	expected := &persistencepb.VersioningData{
@@ -365,7 +366,8 @@ func TestMakeExistingSetDefault(t *testing.T) {
 	// Add a compatible version to a set and then make that set the default via the compatible version
 	req = mkNewCompatReq("0.1", "0", true)
 
-	clock2, data, err := UpdateVersionSets(clock1, data, req, 0, 0)
+	clock2 := hlc.Next(clock1, commonclock.NewRealTimeSource())
+	data, err = UpdateVersionSets(clock2, data, req, 0, 0)
 	assert.NoError(t, err)
 
 	expected = &persistencepb.VersioningData{
@@ -399,11 +401,11 @@ func TestSayVersionIsCompatWithDifferentSetThanItsAlreadyCompatWithNotAllowed(t 
 	data := mkInitialData(3, clock)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	_, data, err := UpdateVersionSets(clock, data, req, 0, 0)
+	data, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.NoError(t, err)
 
 	req = mkNewCompatReq("0.1", "1", false)
-	_, _, err = UpdateVersionSets(clock, data, req, 0, 0)
+	_, err = UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
@@ -414,7 +416,7 @@ func TestLimitsMaxSets(t *testing.T) {
 	data := mkInitialData(maxSets, clock)
 
 	req := mkNewDefReq("10")
-	_, _, err := UpdateVersionSets(clock, data, req, maxSets, 0)
+	_, err := UpdateVersionSets(clock, data, req, maxSets, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.FailedPrecondition{}, err)
 }
@@ -425,7 +427,7 @@ func TestLimitsMaxBuildIDs(t *testing.T) {
 	data := mkInitialData(maxBuildIDs, clock)
 
 	req := mkNewDefReq("10")
-	_, _, err := UpdateVersionSets(clock, data, req, 0, maxBuildIDs)
+	_, err := UpdateVersionSets(clock, data, req, 0, maxBuildIDs)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.FailedPrecondition{}, err)
 }
@@ -435,13 +437,16 @@ func TestPromoteWithinVersion(t *testing.T) {
 	data := mkInitialData(2, clock0)
 
 	req := mkNewCompatReq("0.1", "0", false)
-	clock1, data, err := UpdateVersionSets(clock0, data, req, 0, 0)
+	clock1 := hlc.Next(clock0, commonclock.NewRealTimeSource())
+	data, err := UpdateVersionSets(clock1, data, req, 0, 0)
 	assert.NoError(t, err)
 	req = mkNewCompatReq("0.2", "0", false)
-	clock2, data, err := UpdateVersionSets(clock1, data, req, 0, 0)
+	clock2 := hlc.Next(clock1, commonclock.NewRealTimeSource())
+	data, err = UpdateVersionSets(clock2, data, req, 0, 0)
 	assert.NoError(t, err)
 	req = mkPromoteInSet("0.1")
-	clock3, data, err := UpdateVersionSets(clock2, data, req, 0, 0)
+	clock3 := hlc.Next(clock2, commonclock.NewRealTimeSource())
+	data, err = UpdateVersionSets(clock3, data, req, 0, 0)
 	assert.NoError(t, err)
 
 	expected := &persistencepb.VersioningData{
@@ -471,7 +476,7 @@ func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
 	data := mkInitialData(3, clock)
 
 	req := mkNewDefReq("0")
-	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
+	_, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
@@ -481,7 +486,7 @@ func TestAddAlreadyExtantVersionToAnotherSetErrors(t *testing.T) {
 	data := mkInitialData(3, clock)
 
 	req := mkNewCompatReq("0", "1", false)
-	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
+	_, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
@@ -491,7 +496,7 @@ func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
 	data := mkInitialData(3, clock)
 
 	req := mkExistingDefault("crab boi")
-	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
+	_, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
 }
@@ -501,7 +506,7 @@ func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
 	data := mkInitialData(3, clock)
 
 	req := mkPromoteInSet("i'd rather be writing rust ;)")
-	_, _, err := UpdateVersionSets(clock, data, req, 0, 0)
+	_, err := UpdateVersionSets(clock, data, req, 0, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
 }

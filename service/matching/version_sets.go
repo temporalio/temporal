@@ -116,16 +116,15 @@ func checkLimits(g *persistence.VersioningData, maxSets, maxBuildIDs int) error 
 // Deletions are performed by a background process which verifies build IDs are no longer in use and safe to delete (not yet implemented).
 //
 // Update may fail with FailedPrecondition if it would cause exceeding the supplied limits.
-func UpdateVersionSets(clock hlc.Clock, data *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIDs int) (hlc.Clock, *persistence.VersioningData, error) {
-	clock = hlc.Next(clock)
+func UpdateVersionSets(clock hlc.Clock, data *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIDs int) (*persistence.VersioningData, error) {
 	data, err := updateImpl(clock, data, req)
 	if err != nil {
-		return clock, nil, err
+		return nil, err
 	}
 	if err := checkLimits(data, maxSets, maxBuildIDs); err != nil {
-		return clock, nil, err
+		return nil, err
 	}
-	return clock, data, nil
+	return data, nil
 }
 
 //nolint:revive // cyclomatic complexity

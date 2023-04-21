@@ -45,6 +45,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -104,6 +105,7 @@ type (
 		namespaceRegistry    namespace.Registry
 		keyResolver          membership.ServiceResolver
 		clusterMeta          cluster.Metadata
+		timeSource           clock.TimeSource
 	}
 )
 
@@ -151,6 +153,7 @@ func NewEngine(
 		namespaceRegistry:    namespaceRegistry,
 		keyResolver:          resolver,
 		clusterMeta:          clusterMeta,
+		timeSource:           clock.NewRealTimeSource(), // No need to mock this at the moment
 	}
 }
 
@@ -727,9 +730,9 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
 			clock = &tmp
 		}
-
-		updatedClock, versioningData, err := UpdateVersionSets(
-			*clock,
+		updatedClock := hlc.Next(*clock, e.timeSource)
+		versioningData, err := UpdateVersionSets(
+			updatedClock,
 			data.GetVersioningData(),
 			req.GetRequest(),
 			e.config.VersionCompatibleSetLimitPerQueue(),
