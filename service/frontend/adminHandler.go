@@ -87,8 +87,8 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
+	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 const (
@@ -305,7 +305,7 @@ func (adh *AdminHandler) addSearchAttributesElasticsearch(
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
-			TaskQueue: worker.DefaultWorkerTaskQueue,
+			TaskQueue: workercommon.DefaultWorkerTaskQueue,
 			ID:        addsearchattributes.WorkflowName,
 		},
 		addsearchattributes.WorkflowName,
