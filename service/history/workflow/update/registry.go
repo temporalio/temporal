@@ -181,6 +181,7 @@ func (r *RegistryImpl) ProcessIncomingMessages(messages []*protocolpb.Message) e
 	return nil
 }
 
+//nolint:revive // cognitive complexity
 func processIncomingMessages(updates map[string]*Update, messages []*protocolpb.Message) ([]*Update, error) {
 	var closedUpdates []*Update
 	for _, message := range messages {

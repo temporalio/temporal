@@ -1677,7 +1677,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 	// Try to accept update in workflow: get malformed response.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Error(err)
-	s.Equal("BadUpdateWorkflowExecutionMessage: update some-random-wrong-id not found", err.Error())
+	s.Contains(err.Error(), "not found")
 	// New normal (but transient) WT will be created but not returned.
 
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.

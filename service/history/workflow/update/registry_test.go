@@ -57,7 +57,6 @@ func (s *updateSuite) TestValidateMessages() {
 
 	reg := NewRegistry()
 	upd1, _, _ := reg.Add(&updatepb.Request{Meta: &updatepb.Meta{UpdateId: "update-1"}})
-	//upd2, _, removeFn2 := reg.Add(&updatepb.Request{})
 
 	testCases := []struct {
 		Name     string
