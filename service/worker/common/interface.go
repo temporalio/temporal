@@ -44,8 +44,6 @@ type (
 	DedicatedWorkerOptions struct {
 		// TaskQueue is optional
 		TaskQueue string
-		// How many worker nodes should run a worker per namespace
-		NumWorkers int
 		// Other worker options
 		Options sdkworker.Options
 	}

@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -158,6 +159,11 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 }
 
 func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) error {
+	// override the default caller type defined in activity background context
+	// and use the highest priority caller type for checking handover state
+	// since during handover state namespace has no availability
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(waitRequest.Namespace, headers.CallerTypeAPI, ""))
+
 	for {
 		done, err := a.checkHandoverOnce(ctx, waitRequest)
 		if err != nil {
@@ -257,6 +263,11 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey d
 }
 
 func (a *activities) UpdateNamespaceState(ctx context.Context, req updateStateRequest) error {
+	// override the default caller type defined in activity background context
+	// and use the highest priority caller type for updating namespace
+	// since during handover state namespace has no availability
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(req.Namespace, headers.CallerTypeAPI, ""))
+
 	descResp, err := a.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Namespace: req.Namespace,
 	})
@@ -330,6 +341,16 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 			startIndex = finishedIndex + 1 // start from next one
 		}
 	}
+
+	nsName, err := a.namespaceRegistry.GetNamespaceName(namespace.ID(request.NamespaceID))
+	if err != nil {
+		a.logger.Error("Failed to get namespace name when generating replication task",
+			tag.WorkflowNamespaceID(request.NamespaceID),
+			tag.Error(err),
+		)
+		nsName = namespace.EmptyName
+	}
+	ctx = headers.SetCallerName(ctx, nsName.String())
 
 	for i := startIndex; i < len(request.Executions); i++ {
 		if err := rateLimiter.Wait(ctx); err != nil {

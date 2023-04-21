@@ -25,6 +25,8 @@
 package migration
 
 import (
+	"context"
+
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -32,6 +34,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -81,8 +84,12 @@ func (wc *replicationWorkerComponent) Register(worker sdkworker.Worker) {
 }
 
 func (wc *replicationWorkerComponent) DedicatedWorkerOptions() *workercommon.DedicatedWorkerOptions {
-	// use default worker
-	return nil
+	return &workercommon.DedicatedWorkerOptions{
+		TaskQueue: workercommon.DefaultWorkerTaskQueue,
+		Options: sdkworker.Options{
+			BackgroundActivityContext: headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo),
+		},
+	}
 }
 
 func (wc *replicationWorkerComponent) activities() *activities {
