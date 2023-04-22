@@ -292,7 +292,13 @@ func (ti *TelemetryInterceptor) handleError(
 	//	*serviceerror.Unavailable:
 	default:
 		metricsHandler.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
-		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
+
+		// TODO: do this with a proper type comparison
+		skipLog := err.Error() == "Shutting down"
+
+		if !skipLog {
+			ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
+		}
 	}
 }
 
