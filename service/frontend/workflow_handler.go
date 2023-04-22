@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -125,6 +126,9 @@ type (
 		healthServer                    *health.Server
 		overrides                       *Overrides
 		membershipMonitor               membership.Monitor
+
+		currentPolls     map[context.Context]context.CancelFunc
+		currentPollsLock sync.Mutex
 	}
 )
 
@@ -194,6 +198,7 @@ func NewWorkflowHandler(
 		healthServer:      healthServer,
 		overrides:         NewOverrides(),
 		membershipMonitor: membershipMonitor,
+		currentPolls:      make(map[context.Context]context.CancelFunc),
 	}
 
 	return handler
@@ -225,10 +230,32 @@ func (wh *WorkflowHandler) Stop() {
 	) {
 		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
+	// cause current polls to return immediately
+	wh.currentPollsLock.Lock()
+	for _, cancel := range wh.currentPolls {
+		cancel()
+	}
+	wh.currentPollsLock.Unlock()
 }
 
 func (wh *WorkflowHandler) isStopped() bool {
 	return atomic.LoadInt32(&wh.status) == common.DaemonStatusStopped
+}
+
+func (wh *WorkflowHandler) cancelOnShutdown(origCtx context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(origCtx)
+
+	wh.currentPollsLock.Lock()
+	wh.currentPolls[ctx] = cancel
+	wh.currentPollsLock.Unlock()
+
+	remove := func() {
+		cancel()
+		wh.currentPollsLock.Lock()
+		delete(wh.currentPolls, ctx)
+		wh.currentPollsLock.Unlock()
+	}
+	return ctx, remove
 }
 
 // GetConfig return config
@@ -855,6 +882,10 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	callTime := time.Now().UTC()
 
 	if request == nil {
@@ -893,13 +924,21 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 	}
 
+	pollCtx, removeCancelOnShutdown := wh.cancelOnShutdown(ctx)
+	defer removeCancelOnShutdown()
+
 	pollerID := uuid.New()
-	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(pollCtx, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollerId:    pollerID,
 		PollRequest: request,
 	})
 	if err != nil {
+		// check pollCtx directly to see if we got cancelled due to shutdown
+		if pollCtx.Err() != nil {
+			return nil, errShuttingDown
+		}
+		// note: use ctx here, not pollCtx
 		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
@@ -1089,6 +1128,10 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *workflowservice.PollActivityTaskQueueRequest) (_ *workflowservice.PollActivityTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	callTime := time.Now().UTC()
 
 	if request == nil {
@@ -1120,13 +1163,22 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return &workflowservice.PollActivityTaskQueueResponse{}, nil
 	}
 
+	pollCtx, removeCancelOnShutdown := wh.cancelOnShutdown(ctx)
+	defer removeCancelOnShutdown()
+
 	pollerID := uuid.New()
-	matchingResponse, err := wh.matchingClient.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+	matchingResponse, err := wh.matchingClient.PollActivityTaskQueue(pollCtx, &matchingservice.PollActivityTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollerId:    pollerID,
 		PollRequest: request,
 	})
+
 	if err != nil {
+		// check pollCtx directly to see if we got cancelled due to shutdown
+		if pollCtx.Err() != nil {
+			return nil, errShuttingDown
+		}
+		// note: use ctx here, not pollCtx
 		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
@@ -2726,12 +2778,19 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		return nil, err
 	}
 
+	queryCtx, removeCancelOnShutdown := wh.cancelOnShutdown(ctx)
+	defer removeCancelOnShutdown()
+
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	}
-	hResponse, err := wh.historyClient.QueryWorkflow(ctx, req)
+	hResponse, err := wh.historyClient.QueryWorkflow(queryCtx, req)
 	if err != nil {
+		// check queryCtx directly to see if we got cancelled due to shutdown
+		if queryCtx.Err() != nil {
+			return nil, errShuttingDown
+		}
 		return nil, err
 	}
 	return hResponse.GetResponse(), nil
