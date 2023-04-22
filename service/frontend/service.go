@@ -356,8 +356,8 @@ func (s *Service) Stop() {
 	logger.Info("ShutdownHandler: Draining traffic")
 	time.Sleep(requestDrainTime)
 
-	// TODO: Change this to GracefulStop when integration tests are refactored.
-	s.server.Stop()
+	logger.Info("ShutdownHandler: Stopping gRPC server")
+	s.server.GracefulStop()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(logger)
