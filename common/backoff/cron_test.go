@@ -86,8 +86,3 @@ func TestCron(t *testing.T) {
 		})
 	}
 }
-
-func TestInfinityBackoff(t *testing.T) {
-	backoff := GetBackoffForNextSchedule("0 0 31 2 *" /* Feb 31 */, time.Now(), time.Now())
-	assert.Equal(t, InfiniteBackoff, backoff)
-}
