@@ -312,7 +312,7 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 		s.Run(tc.name, func() {
 			ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Minute)
 			defer cancel()
-			s.mockMatchingClient.EXPECT().PollWorkflowTaskQueue(ctx, gomock.Any()).Return(
+			s.mockMatchingClient.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).Return(
 				&matchingservice.PollWorkflowTaskQueueResponse{
 					NextEventId: int64(len(baseEvents) + 1),
 					WorkflowExecution: &commonpb.WorkflowExecution{
