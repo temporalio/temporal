@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	repicationpb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -48,10 +49,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller    *gomock.Controller
-		taskTracker   *MockExecutableTaskTracker
-		stream        *mockStream
-		taskScheduler *mockScheduler
+		controller      *gomock.Controller
+		clusterMetadata *cluster.MockMetadata
+		taskTracker     *MockExecutableTaskTracker
+		stream          *mockStream
+		taskScheduler   *mockScheduler
 
 		streamReceiver *StreamReceiver
 	}
@@ -82,6 +84,7 @@ func (s *streamReceiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.taskTracker = NewMockExecutableTaskTracker(s.controller)
 	s.stream = &mockStream{
 		requests: nil,
@@ -93,12 +96,25 @@ func (s *streamReceiverSuite) SetupTest() {
 
 	s.streamReceiver = NewStreamReceiver(
 		ProcessToolBox{
-			TaskScheduler: s.taskScheduler,
-			Logger:        log.NewTestLogger(),
+			ClusterMetadata: s.clusterMetadata,
+			TaskScheduler:   s.taskScheduler,
+			Logger:          log.NewTestLogger(),
 		},
-		NewClusterShardKey(uuid.NewString(), rand.Int31()),
-		NewClusterShardKey(uuid.NewString(), rand.Int31()),
+		NewClusterShardKey(rand.Int31(), rand.Int31()),
+		NewClusterShardKey(rand.Int31(), rand.Int31()),
 	)
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(
+		map[string]cluster.ClusterInformation{
+			uuid.New().String(): {
+				Enabled:                true,
+				InitialFailoverVersion: int64(s.streamReceiver.clientShardKey.ClusterID),
+			},
+			uuid.New().String(): {
+				Enabled:                true,
+				InitialFailoverVersion: int64(s.streamReceiver.serverShardKey.ClusterID),
+			},
+		},
+	).AnyTimes()
 	s.streamReceiver.taskTracker = s.taskTracker
 }
 
