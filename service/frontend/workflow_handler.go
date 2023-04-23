@@ -4276,15 +4276,26 @@ func (wh *WorkflowHandler) getHistoryReverse(
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
-
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
-		BranchToken:            branchToken,
-		MaxEventID:             nextEventID,
-		LastFirstTransactionID: lastFirstTxnID,
-		PageSize:               int(pageSize),
-		NextPageToken:          nextPageToken,
-		ShardID:                shardID,
-	})
+	for {
+		response, err := wh.historyClient.ReadHistoryBranchReverse(ctx, &historyservice.ReadHistoryBranchReverseRequest{
+			NamespaceId:            namespaceID.String(),
+			ShardId:                shardID,
+			BranchToken:            branchToken,
+			MaxEventId:             nextEventID,
+			LastFirstTransactionId: lastFirstTxnID,
+			PageSize:               int64(pageSize),
+			NextPageToken:          nextPageToken,
+		})
+		if err != nil {
+			break
+		}
+		historyEvents = append(historyEvents, response.HistoryEvents...)
+		size += int(response.Size_)
+		nextPageToken = response.NextPageToken
+		if len(historyEvents) >= int(pageSize) || len(response.NextPageToken) == 0 {
+			break
+		}
+	}
 
 	switch err.(type) {
 	case nil:

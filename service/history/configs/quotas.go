@@ -78,6 +78,7 @@ var (
 		"UpdateWorkflowExecution":                0,
 		"StreamWorkflowReplicationMessages":      0,
 		"ReadHistoryBranch":                      0,
+		"ReadHistoryBranchReverse":               0,
 	}
 
 	APIPrioritiesOrdered = []int{0}

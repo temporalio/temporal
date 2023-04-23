@@ -290,6 +290,12 @@ service HistoryService {
     rpc ReadHistoryBranch(ReadHistoryBranchRequest) returns (ReadHistoryBranchResponse) {
     }
 
+    // (-- api-linter: core::0131::synonyms=disabled
+    //     aip.dev/not-precedent:  --)
+    // ReadHistoryBranchReverse returns history node data for a branch in reverse
+    rpc ReadHistoryBranchReverse(ReadHistoryBranchReverseRequest) returns (ReadHistoryBranchReverseResponse) {
+    }
+
     rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
     }
 }
