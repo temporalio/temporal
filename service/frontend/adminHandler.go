@@ -948,15 +948,16 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		execution.GetWorkflowId(),
 		adh.numberOfHistoryShards,
 	)
-	rawHistoryResponse, err := adh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+	rawHistoryResponse, err := adh.historyClient.ReadRawHistoryBranch(ctx, &historyservice.ReadRawHistoryBranchRequest{
+		NamespaceId: ns.ID().String(),
+		ShardId:     shardID,
 		BranchToken: targetVersionHistory.GetBranchToken(),
 		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
 		// ReadRawHistoryBranch is inclusive exclusive.
-		MinEventID:    pageToken.GetStartEventId() + 1,
-		MaxEventID:    pageToken.GetEndEventId(),
-		PageSize:      pageSize,
+		MinEventId:    pageToken.GetStartEventId() + 1,
+		MaxEventId:    pageToken.GetEndEventId(),
+		PageSize:      int64(pageSize),
 		NextPageToken: pageToken.PersistenceToken,
-		ShardID:       shardID,
 	})
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
@@ -972,18 +973,18 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	}
 
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
-	size := rawHistoryResponse.Size
+	size := rawHistoryResponse.Size_
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
 	adh.metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(
-		int64(size),
+		size,
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope))
 	taggedMetricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
 		VersionHistory: targetVersionHistory,
-		HistoryNodeIds: rawHistoryResponse.NodeIDs,
+		HistoryNodeIds: rawHistoryResponse.NodeIds,
 	}
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil

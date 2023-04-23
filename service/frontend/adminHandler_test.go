@@ -267,11 +267,10 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 		VersionHistories:   versionHistories,
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
-
-	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+	s.mockHistoryClient.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&historyservice.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{},
 		NextPageToken:     []byte{},
-		Size:              0,
+		Size_:             0,
 	}, nil)
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{

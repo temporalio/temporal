@@ -1659,17 +1659,18 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTra
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
-	s.mockExecutionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryClient.EXPECT().ReadRawHistoryBranch(gomock.Any(), &historyservice.ReadRawHistoryBranchRequest{
+		NamespaceId:   namespaceID.String(),
+		ShardId:       shardID,
 		BranchToken:   branchToken,
-		MinEventID:    1,
-		MaxEventID:    5,
+		MinEventId:    1,
+		MaxEventId:    5,
 		PageSize:      10,
 		NextPageToken: persistenceToken,
-		ShardID:       shardID,
-	}).Return(&persistence.ReadRawHistoryBranchResponse{
+	}).Return(&historyservice.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{historyBlob1, historyBlob2},
 		NextPageToken:     []byte{},
-		Size:              1,
+		Size_:             1,
 	}, nil).Times(1)
 
 	resp, err := wh.GetWorkflowExecutionHistory(context.Background(), req)

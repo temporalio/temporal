@@ -4123,13 +4123,14 @@ func (wh *WorkflowHandler) getRawHistory(
 	var rawHistory []*commonpb.DataBlob
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 
-	resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+	resp, err := wh.historyClient.ReadRawHistoryBranch(ctx, &historyservice.ReadRawHistoryBranchRequest{
+		NamespaceId:   namespaceID.String(),
+		ShardId:       shardID,
 		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      int(pageSize),
+		MinEventId:    firstEventID,
+		MaxEventId:    nextEventID,
+		PageSize:      int64(pageSize),
 		NextPageToken: nextPageToken,
-		ShardID:       shardID,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -4203,7 +4204,7 @@ func (wh *WorkflowHandler) getHistory(
 		historyEvents = append(historyEvents, response.HistoryEvents...)
 		size += int(response.Size_)
 		nextPageToken = response.NextPageToken
-		if len(historyEvents) >= int(pageSize) || len(response.NextPageToken) == 0 {
+		if len(historyEvents) >= int(pageSize) || len(nextPageToken) == 0 {
 			break
 		}
 	}

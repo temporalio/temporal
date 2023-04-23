@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/readhistorybranch"
 	"go.temporal.io/server/service/history/api/readhistorybranchreverse"
+	"go.temporal.io/server/service/history/api/readrawhistorybranch"
 	"go.temporal.io/server/service/history/api/reapplyevents"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
@@ -791,4 +792,11 @@ func (e *historyEngineImpl) ReadHistoryBranchReverse(
 	request *historyservice.ReadHistoryBranchReverseRequest,
 ) (_ *historyservice.ReadHistoryBranchReverseResponse, retError error) {
 	return readhistorybranchreverse.Invoke(ctx, request, e.shard)
+}
+
+func (e *historyEngineImpl) ReadRawHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadRawHistoryBranchRequest,
+) (_ *historyservice.ReadRawHistoryBranchResponse, retError error) {
+	return readrawhistorybranch.Invoke(ctx, request, e.shard)
 }

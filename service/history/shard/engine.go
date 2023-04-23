@@ -90,6 +90,7 @@ type (
 		UpdateWorkflowExecution(ctx context.Context, request *historyservice.UpdateWorkflowExecutionRequest) (*historyservice.UpdateWorkflowExecutionResponse, error)
 		ReadHistoryBranch(ctx context.Context, request *historyservice.ReadHistoryBranchRequest) (*historyservice.ReadHistoryBranchResponse, error)
 		ReadHistoryBranchReverse(ctx context.Context, request *historyservice.ReadHistoryBranchReverseRequest) (*historyservice.ReadHistoryBranchReverseResponse, error)
+		ReadRawHistoryBranch(ctx context.Context, request *historyservice.ReadRawHistoryBranchRequest) (*historyservice.ReadRawHistoryBranchResponse, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)

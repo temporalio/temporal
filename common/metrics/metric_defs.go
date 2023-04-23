@@ -443,6 +443,8 @@ const (
 	HistoryClientReadHistoryBranchScope = "HistoryClientReadHistoryBranch"
 	// HistoryClientReadHistoryBranchReverseScope tracks RPC calls to history service
 	HistoryClientReadHistoryBranchReverseScope = "HistoryClientReadHistoryBranchReverse"
+	// HistoryClientReadRawHistoryBranchScope tracks RPC calls to history service
+	HistoryClientReadRawHistoryBranchScope = "HistoryClientReadRawHistoryBranch"
 )
 
 // Matching Client Operations
