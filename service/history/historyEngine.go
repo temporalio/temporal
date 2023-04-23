@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/deletehistorybranch"
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
@@ -807,4 +808,11 @@ func (e *historyEngineImpl) TrimHistoryBranch(
 	request *historyservice.TrimHistoryBranchRequest,
 ) (_ *historyservice.TrimHistoryBranchResponse, retError error) {
 	return trimhistorybranch.Invoke(ctx, request, e.shard)
+}
+
+func (e *historyEngineImpl) DeleteHistoryBranch(
+	ctx context.Context,
+	request *historyservice.DeleteHistoryBranchRequest,
+) (_ *historyservice.DeleteHistoryBranchResponse, retError error) {
+	return deletehistorybranch.Invoke(ctx, request, e.shard)
 }

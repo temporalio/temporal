@@ -81,6 +81,7 @@ var (
 		"ReadHistoryBranchReverse":               0,
 		"ReadRawHistoryBranch":                   0,
 		"TrimHistoryBranch":                      0,
+		"DeleteHistoryBranch":                    0,
 	}
 
 	APIPrioritiesOrdered = []int{0}

@@ -306,6 +306,10 @@ service HistoryService {
     rpc TrimHistoryBranch(TrimHistoryBranchRequest) returns (TrimHistoryBranchResponse) {
     }
 
+    // DeleteHistoryBranch deletes history branch
+    rpc DeleteHistoryBranch(DeleteHistoryBranchRequest) returns (DeleteHistoryBranchResponse) {
+    }
+
     rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
     }
 }

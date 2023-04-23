@@ -698,6 +698,15 @@ message TrimHistoryBranchRequest {
 message TrimHistoryBranchResponse {
 }
 
+message DeleteHistoryBranchRequest {
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    bytes branch_token = 3;
+}
+
+message DeleteHistoryBranchResponse {
+}
+
 message StreamWorkflowReplicationMessagesRequest {
     oneof attributes {
         temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 1;
