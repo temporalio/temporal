@@ -284,6 +284,12 @@ service HistoryService {
     rpc UpdateWorkflowExecution(UpdateWorkflowExecutionRequest) returns (UpdateWorkflowExecutionResponse) {
     }
 
+    // (-- api-linter: core::0131::synonyms=disabled
+    //     aip.dev/not-precedent:  --)
+    // ReadHistoryBranch returns history node data for a branch
+    rpc ReadHistoryBranch(ReadHistoryBranchRequest) returns (ReadHistoryBranchResponse) {
+    }
+
     rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
     }
 }

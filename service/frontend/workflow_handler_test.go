@@ -282,8 +282,8 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(ns, nil).AnyTimes()
 
 	// History read will return a base set of non-transient events from baseEvents above
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).
-		Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: baseEvents}, nil).
+	s.mockHistoryClient.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).
+		Return(&historyservice.ReadHistoryBranchResponse{HistoryEvents: baseEvents}, nil).
 		AnyTimes()
 
 	pollRequest := workflowservice.PollWorkflowTaskQueueRequest{
@@ -1435,15 +1435,16 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		RunId:      "rid",
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
-	req := &persistence.ReadHistoryBranchRequest{
+	req := &historyservice.ReadHistoryBranchRequest{
+		NamespaceId:   namespaceID.String(),
+		ShardId:       shardID,
 		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
+		MinEventId:    firstEventID,
+		MaxEventId:    nextEventID,
 		PageSize:      2,
 		NextPageToken: []byte{},
-		ShardID:       shardID,
 	}
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), req).Return(&persistence.ReadHistoryBranchResponse{
+	s.mockHistoryClient.EXPECT().ReadHistoryBranch(gomock.Any(), req).Return(&historyservice.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   int64(100),
@@ -1465,7 +1466,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 			},
 		},
 		NextPageToken: []byte{},
-		Size:          1,
+		Size_:         1,
 	}, nil)
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
@@ -1534,14 +1535,15 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	}, nil).Times(2)
 
 	// GetWorkflowExecutionHistory will request the last event
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+	s.mockHistoryClient.EXPECT().ReadHistoryBranch(gomock.Any(), &historyservice.ReadHistoryBranchRequest{
+		NamespaceId:   namespaceID.String(),
+		ShardId:       shardID,
 		BranchToken:   branchToken,
-		MinEventID:    5,
-		MaxEventID:    6,
+		MinEventId:    5,
+		MaxEventId:    6,
 		PageSize:      10,
 		NextPageToken: nil,
-		ShardID:       shardID,
-	}).Return(&persistence.ReadHistoryBranchResponse{
+	}).Return(&historyservice.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   int64(5),
@@ -1557,7 +1559,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 			},
 		},
 		NextPageToken: []byte{},
-		Size:          1,
+		Size_:         1,
 	}, nil).Times(2)
 
 	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()

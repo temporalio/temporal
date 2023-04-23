@@ -439,6 +439,8 @@ const (
 	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
 	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientStreamWorkflowReplicationMessagesScope = "HistoryClientStreamWorkflowReplicationMessages"
+	// HistoryClientReadHistoryBranchScope tracks RPC calls to history service
+	HistoryClientReadHistoryBranchScope = "HistoryClientReadHistoryBranch"
 )
 
 // Matching Client Operations

@@ -638,6 +638,22 @@ message UpdateWorkflowExecutionResponse {
     temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse response = 1;
 }
 
+message ReadHistoryBranchRequest {
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    bytes branch_token = 3;
+    int64 min_event_id = 4;
+    int64 max_event_id = 5;
+    int64 page_size = 6;
+    bytes next_page_token = 7;
+}
+
+message ReadHistoryBranchResponse {
+    repeated temporal.api.history.v1.HistoryEvent history_events = 1;
+    bytes next_page_token = 2;
+    int64 size = 3;
+}
+
 message StreamWorkflowReplicationMessagesRequest {
     oneof attributes {
         temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 1;

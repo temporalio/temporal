@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
 	"go.temporal.io/server/service/history/api/queryworkflow"
+	"go.temporal.io/server/service/history/api/readhistorybranch"
 	"go.temporal.io/server/service/history/api/reapplyevents"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
@@ -775,4 +776,11 @@ func (e *historyEngineImpl) GetReplicationStatus(
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 	return replicationapi.GetStatus(ctx, request, e.shard, e.replicationAckMgr)
+}
+
+func (e *historyEngineImpl) ReadHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadHistoryBranchRequest,
+) (_ *historyservice.ReadHistoryBranchResponse, retError error) {
+	return readhistorybranch.Invoke(ctx, request, e.shard)
 }

@@ -33,30 +33,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-// ReadFullPageEvents reads a full page of history events from ExecutionManager. Due to storage format of V2 History
-// it is not guaranteed that pageSize amount of data is returned. Function returns the list of history events, the size
-// of data read, the next page token, and an error if present.
-func ReadFullPageEvents(
-	ctx context.Context,
-	executionMgr ExecutionManager,
-	req *ReadHistoryBranchRequest,
-) ([]*historypb.HistoryEvent, int, []byte, error) {
-	var historyEvents []*historypb.HistoryEvent
-	size := 0
-	for {
-		response, err := executionMgr.ReadHistoryBranch(ctx, req)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		historyEvents = append(historyEvents, response.HistoryEvents...)
-		size += response.Size
-		if len(historyEvents) >= req.PageSize || len(response.NextPageToken) == 0 {
-			return historyEvents, size, response.NextPageToken, nil
-		}
-		req.NextPageToken = response.NextPageToken
-	}
-}
-
 // ReadFullPageEventsByBatch reads a full page of history events by batch from ExecutionManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history batches, the size
 // of data read, the next page token, and an error if present.

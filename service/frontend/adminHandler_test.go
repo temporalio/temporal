@@ -1410,13 +1410,14 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacke
 	)
 	closeTime := time.Now()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		ShardID:     shardID,
+	s.mockHistoryClient.EXPECT().ReadHistoryBranch(gomock.Any(), &historyservice.ReadHistoryBranchRequest{
+		NamespaceId: s.namespaceID.String(),
+		ShardId:     shardID,
 		BranchToken: branchToken,
-		MinEventID:  mutableState.ExecutionInfo.CompletionEventBatchId,
-		MaxEventID:  mutableState.NextEventId,
+		MinEventId:  mutableState.ExecutionInfo.CompletionEventBatchId,
+		MaxEventId:  mutableState.NextEventId,
 		PageSize:    1,
-	}).Return(&persistence.ReadHistoryBranchResponse{
+	}).Return(&historyservice.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   10,

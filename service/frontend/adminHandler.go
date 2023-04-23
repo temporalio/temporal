@@ -1696,7 +1696,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 			} else if executionInfo.GetCloseTime() != nil {
 				closeTime = executionInfo.GetCloseTime()
 			} else {
-				completionEvent, err := adh.getWorkflowCompletionEvent(ctx, shardID, resp.State)
+				completionEvent, err := adh.getWorkflowCompletionEvent(ctx, namespaceID, shardID, resp.State)
 				if err != nil {
 					warnMsg := "Unable to load workflow completion event, will skip deleting visibility record"
 					adh.logger.Warn(warnMsg, tag.Error(err))
@@ -1743,8 +1743,9 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 	}
 
 	for _, branchToken := range branchTokens {
-		if err := adh.persistenceExecutionManager.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-			ShardID:     shardID,
+		if _, err := adh.historyClient.DeleteHistoryBranch(ctx, &historyservice.DeleteHistoryBranchRequest{
+			NamespaceId: namespaceID.String(),
+			ShardId:     shardID,
 			BranchToken: branchToken,
 		}); err != nil {
 			warnMsg := "Failed to delete history branch, skip"
@@ -1913,6 +1914,7 @@ func (adh *AdminHandler) startRequestProfile(operation string) (metrics.Handler,
 
 func (adh *AdminHandler) getWorkflowCompletionEvent(
 	ctx context.Context,
+	namespaceID namespace.ID,
 	shardID int32,
 	mutableState *persistencespb.WorkflowMutableState,
 ) (*historypb.HistoryEvent, error) {
@@ -1928,11 +1930,12 @@ func (adh *AdminHandler) getWorkflowCompletionEvent(
 		return nil, err
 	}
 
-	resp, err := adh.persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		ShardID:     shardID,
+	resp, err := adh.historyClient.ReadHistoryBranch(ctx, &historyservice.ReadHistoryBranchRequest{
+		NamespaceId: namespaceID.String(),
+		ShardId:     shardID,
 		BranchToken: currentVersionHistory.GetBranchToken(),
-		MinEventID:  executionInfo.CompletionEventBatchId,
-		MaxEventID:  completionEventID + 1,
+		MinEventId:  executionInfo.CompletionEventBatchId,
+		MaxEventId:  completionEventID + 1,
 		PageSize:    1,
 	})
 	if err != nil {
