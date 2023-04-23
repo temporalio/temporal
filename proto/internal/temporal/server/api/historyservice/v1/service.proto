@@ -302,6 +302,10 @@ service HistoryService {
     rpc ReadRawHistoryBranch(ReadRawHistoryBranchRequest) returns (ReadRawHistoryBranchResponse) {
     }
 
+    // TrimHistoryBranch trims history node data for a branch
+    rpc TrimHistoryBranch(TrimHistoryBranchRequest) returns (TrimHistoryBranchResponse) {
+    }
+
     rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
     }
 }

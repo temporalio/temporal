@@ -4891,11 +4891,12 @@ func (wh *WorkflowHandler) trimHistoryNode(
 		return // abort
 	}
 
-	_, err = wh.persistenceExecutionManager.TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{
-		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, wh.config.NumHistoryShards),
+	_, err = wh.historyClient.TrimHistoryBranch(ctx, &historyservice.TrimHistoryBranchRequest{
+		NamespaceId:   namespaceID,
+		ShardId:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, wh.config.NumHistoryShards),
 		BranchToken:   response.CurrentBranchToken,
-		NodeID:        response.GetLastFirstEventId(),
-		TransactionID: response.GetLastFirstEventTxnId(),
+		NodeId:        response.GetLastFirstEventId(),
+		TransactionId: response.GetLastFirstEventTxnId(),
 	})
 	if err != nil {
 		// best effort

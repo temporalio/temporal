@@ -1562,7 +1562,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 		Size_:         1,
 	}, nil).Times(2)
 
-	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 
 	wh := s.getWorkflowHandler(s.newConfig())

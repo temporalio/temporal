@@ -79,6 +79,7 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/trimhistorybranch"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
@@ -799,4 +800,11 @@ func (e *historyEngineImpl) ReadRawHistoryBranch(
 	request *historyservice.ReadRawHistoryBranchRequest,
 ) (_ *historyservice.ReadRawHistoryBranchResponse, retError error) {
 	return readrawhistorybranch.Invoke(ctx, request, e.shard)
+}
+
+func (e *historyEngineImpl) TrimHistoryBranch(
+	ctx context.Context,
+	request *historyservice.TrimHistoryBranchRequest,
+) (_ *historyservice.TrimHistoryBranchResponse, retError error) {
+	return trimhistorybranch.Invoke(ctx, request, e.shard)
 }

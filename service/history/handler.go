@@ -1876,7 +1876,6 @@ func (h *Handler) ReadHistoryBranch(
 	}
 
 	return engine.ReadHistoryBranch(ctx, request)
-
 }
 
 func (h *Handler) ReadHistoryBranchReverse(
@@ -1925,6 +1924,30 @@ func (h *Handler) ReadRawHistoryBranch(
 	}
 
 	return engine.ReadRawHistoryBranch(ctx, request)
+}
+
+func (h *Handler) TrimHistoryBranch(
+	ctx context.Context,
+	request *historyservice.TrimHistoryBranchRequest,
+) (_ *historyservice.TrimHistoryBranchResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByID(request.ShardId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.TrimHistoryBranch(ctx, request)
 }
 
 func (h *Handler) StreamWorkflowReplicationMessages(

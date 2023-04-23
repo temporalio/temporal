@@ -687,6 +687,17 @@ message ReadRawHistoryBranchResponse {
     int64 size = 4;
 }
 
+message TrimHistoryBranchRequest {
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    bytes branch_token = 3;
+    int64 node_id = 4;
+    int64 transaction_id = 5;
+}
+
+message TrimHistoryBranchResponse {
+}
+
 message StreamWorkflowReplicationMessagesRequest {
     oneof attributes {
         temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 1;
