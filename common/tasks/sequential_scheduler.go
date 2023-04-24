@@ -280,21 +280,6 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 	}
 }
 
-func (s *SequentialScheduler[T]) processTasks(queue SequentialTaskQueue[T]) {
-	if !queue.IsEmpty() {
-		s.executeTask(queue)
-	} else {
-		deleted := s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
-			return value.(SequentialTaskQueue[T]).IsEmpty()
-		})
-		if deleted {
-			return
-		}
-		// if deletion failed, meaning that task queue is offered with new task
-		// continue execution
-	}
-}
-
 // TODO: change this function to process all available tasks in the queue.
 func (s *SequentialScheduler[T]) executeTask(queue SequentialTaskQueue[T]) {
 	task := queue.Remove()
