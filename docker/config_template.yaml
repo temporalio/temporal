@@ -7,7 +7,7 @@ persistence:
     defaultStore: default
     {{- $es := default .Env.ENABLE_ES "false" | lower -}}
     {{- if eq $es "true" }}
-    advancedVisibilityStore: es-visibility
+    visibilityStore: es-visibility
     {{- else }}
     visibilityStore: visibility
     {{- end }}
