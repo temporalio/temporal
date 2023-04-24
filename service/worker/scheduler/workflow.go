@@ -357,17 +357,18 @@ func (s *scheduler) processTimeRange(
 		return next
 	}
 
+	// Peek at paused/remaining actions state and don't bother if we're not going to
+	// take an action now. (Don't count as missed catchup window either.)
+	// Skip over entire time range if paused or no actions can be taken
+	if !s.canTakeScheduledAction(manual, false) {
+		return getNextTime(t2).Next
+	}
+
 	for {
 		next := getNextTime(t1)
 		t1 = next.Next
 		if t1.IsZero() || t1.After(t2) {
 			return t1
-		}
-		// Peek at paused/remaining actions state and don't bother if we're not going to
-		// take an action now. (Don't count as missed catchup window either.)
-		// Skip over entire time range if paused or no actions can be taken
-		if !s.canTakeScheduledAction(manual, false) {
-			return getNextTime(t2).Next
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
