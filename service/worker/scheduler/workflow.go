@@ -347,21 +347,27 @@ func (s *scheduler) processTimeRange(
 
 	catchupWindow := s.getCatchupWindow()
 
-	for {
+	getNextTime := func(after time.Time) getNextTimeResult {
 		// Run this logic in a SideEffect so that we can fix bugs there without breaking
 		// existing schedule workflows.
 		var next getNextTimeResult
 		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-			return s.cspec.getNextTime(t1)
+			return s.cspec.getNextTime(after)
 		}).Get(&next))
+		return next
+	}
+
+	for {
+		next := getNextTime(t1)
 		t1 = next.Next
 		if t1.IsZero() || t1.After(t2) {
 			return t1
 		}
 		// Peek at paused/remaining actions state and don't bother if we're not going to
 		// take an action now. (Don't count as missed catchup window either.)
+		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
-			continue
+			return getNextTime(t2).Next
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
