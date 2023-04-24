@@ -145,7 +145,7 @@ func (s *SequentialScheduler[T]) Submit(task T) {
 	// need to dispatch this task set
 	select {
 	case <-s.shutdownChan:
-		task.Cancel()
+		task.Abort()
 	case s.queueChan <- queue:
 		if s.isStopped() {
 			s.drainTasks()
@@ -257,8 +257,7 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 	for {
 		select {
 		case <-s.shutdownChan:
-			// Put queue back to the queue channel
-			s.queueChan <- queue
+			s.drainTasks()
 			return
 		case <-workerShutdownCh:
 			// Put queue back to the queue channel
@@ -296,7 +295,7 @@ func (s *SequentialScheduler[T]) executeTask(queue SequentialTaskQueue[T]) {
 	}
 	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
 		if s.isStopped() {
-			task.Cancel()
+			task.Abort()
 			return
 		}
 
@@ -312,12 +311,8 @@ LoopDrainQueue:
 	for {
 		select {
 		case queue := <-s.queueChan:
-			for queue.Len() > 0 {
-				queueSize := queue.Len()
-				if queueSize > 0 {
-					// TODO: double check the replication task reschedule function
-					queue.Remove().Cancel()
-				}
+			for !queue.IsEmpty() {
+				queue.Remove().Abort()
 			}
 			s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
 				return value.(SequentialTaskQueue[T]).IsEmpty()

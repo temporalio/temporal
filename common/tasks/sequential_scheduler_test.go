@@ -26,12 +26,10 @@ package tasks
 
 import (
 	"errors"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -118,7 +116,7 @@ func (s *sequentialSchedulerSuite) TestSubmitProcess_Stopped_Submission() {
 	mockTask.EXPECT().Ack().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
 	// if task get drained
-	mockTask.EXPECT().Cancel().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
+	mockTask.EXPECT().Abort().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
 	s.scheduler.Submit(mockTask)
 
@@ -138,7 +136,7 @@ func (s *sequentialSchedulerSuite) TestSubmitProcess_Stopped_FailExecution() {
 		return err
 	}).Times(1)
 	mockTask.EXPECT().IsRetryableError(executionErr).Return(true).MaxTimes(1)
-	mockTask.EXPECT().Cancel().Do(func() { testWaitGroup.Done() }).Times(1)
+	mockTask.EXPECT().Abort().Do(func() { testWaitGroup.Done() }).Times(1)
 
 	s.scheduler.Submit(mockTask)
 
@@ -220,12 +218,7 @@ func (s *sequentialSchedulerSuite) TestStartStopWorkers() {
 
 func (s *sequentialSchedulerSuite) newTestProcessor() *SequentialScheduler[*MockTask] {
 	hashFn := func(key interface{}) uint32 {
-		queue, ok := key.(SequentialTaskQueue[*MockTask])
-		if !ok {
-			return 0
-		}
-		qid := queue.ID().(int)
-		return farm.Fingerprint32([]byte(strconv.Itoa(qid)))
+		return 1
 	}
 	factory := func(task *MockTask) SequentialTaskQueue[*MockTask] {
 		return newTestSequentialTaskQueue[*MockTask](1, 3000)
