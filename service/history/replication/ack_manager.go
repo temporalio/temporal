@@ -97,7 +97,7 @@ type (
 		maxTaskID                  *int64
 		maxTaskVisibilityTimestamp *time.Time
 		sanityCheckTime            time.Time
-		registeredQueueReaders     map[int32]struct{}
+		registeredQueueReaders     map[int64]struct{}
 
 		subscriberLock sync.Mutex
 		subscribers    map[string]chan struct{}
@@ -141,7 +141,7 @@ func NewAckManager(
 
 		maxTaskID:              nil,
 		sanityCheckTime:        time.Time{},
-		registeredQueueReaders: make(map[int32]struct{}),
+		registeredQueueReaders: make(map[int64]struct{}),
 
 		subscribers: make(map[string]chan struct{}),
 	}
@@ -380,7 +380,7 @@ func (p *ackMgrImpl) getTasks(
 
 func (p *ackMgrImpl) getReplicationTasksFn(
 	ctx context.Context,
-	readerID int32,
+	readerID int64,
 	minTaskID int64,
 	maxTaskID int64,
 	batchSize int,
@@ -444,10 +444,10 @@ func (p *ackMgrImpl) taskIDsRange(
 func (p *ackMgrImpl) clusterToReaderID(
 	ctx context.Context,
 	pollingCluster string,
-) (int32, error) {
+) (int64, error) {
 	// TODO: need different readerID for different remote clusters
 	// e.g. use cluster's initial failover version
-	readerID := int32(common.DefaultQueueReaderID)
+	readerID := common.DefaultQueueReaderID
 
 	p.Lock()
 	defer p.Unlock()
@@ -551,7 +551,7 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 	if err != nil {
 		return nil, err
 	}
-	return collection.NewPagingIterator[tasks.Task](func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+	return collection.NewPagingIterator(func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 			ShardID:             p.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,

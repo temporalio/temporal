@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/util"
 )
@@ -59,15 +60,11 @@ type Config struct {
 	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 
-	StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-	StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ESIndexMaxResultWindow                    dynamicconfig.IntPropertyFn
-	VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+	VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HistoryMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                                    dynamicconfig.IntPropertyFn
@@ -170,7 +167,12 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadFromES bool) *Config {
+func NewConfig(
+	dc *dynamicconfig.Collection,
+	numHistoryShards int32,
+	visibilityStoreConfigExist bool,
+	enableReadFromES bool,
+) *Config {
 	return &Config{
 		NumHistoryShards:                      numHistoryShards,
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
@@ -178,15 +180,11 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceNamespaceMaxQPS, 0),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
 
-		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
-		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
-		AdvancedVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
-		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
-		VisibilityMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
-		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
-		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
-		ESIndexMaxResultWindow:                    dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
-		VisibilityDisableOrderByClause:            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, false),
+		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, enableReadFromES),
+		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, enableReadFromES),
+		VisibilityMaxPageSize:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
+		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, enableReadFromES),
+		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, false),
 
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),

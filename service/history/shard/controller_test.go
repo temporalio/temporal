@@ -936,14 +936,14 @@ func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
 			},
 		},
 		tasks.CategoryTimer.ID(): {
-			ReaderStates: make(map[int32]*persistencespb.QueueReaderState),
+			ReaderStates: make(map[int64]*persistencespb.QueueReaderState),
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				FireTime: timestamp.TimeNowPtrUtc(),
 				TaskId:   rand.Int63(),
 			},
 		},
 		tasks.CategoryReplication.ID(): {
-			ReaderStates: map[int32]*persistencespb.QueueReaderState{
+			ReaderStates: map[int64]*persistencespb.QueueReaderState{
 				0: {
 					Scopes: []*persistencespb.QueueSliceScope{
 						{

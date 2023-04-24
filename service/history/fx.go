@@ -42,9 +42,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -167,22 +164,11 @@ func ConfigProvider(
 	persistenceConfig config.Persistence,
 	esConfig *esclient.Config,
 ) *configs.Config {
-	indexName := ""
-	if persistenceConfig.StandardVisibilityConfigExist() {
-		storeConfig := persistenceConfig.DataStores[persistenceConfig.VisibilityStore]
-		if storeConfig.SQL != nil {
-			switch storeConfig.SQL.PluginName {
-			case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
-				indexName = storeConfig.SQL.DatabaseName
-			}
-		}
-	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
-		indexName = esConfig.GetVisibilityIndex()
-	}
-	return configs.NewConfig(dc,
+	return configs.NewConfig(
+		dc,
 		persistenceConfig.NumHistoryShards,
+		persistenceConfig.StandardVisibilityConfigExist(),
 		persistenceConfig.AdvancedVisibilityConfigExist(),
-		indexName,
 	)
 }
 
@@ -248,7 +234,6 @@ func VisibilityManagerProvider(
 	persistenceConfig *config.Persistence,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceConfig *configs.Config,
-	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -257,20 +242,14 @@ func VisibilityManagerProvider(
 	return visibility.NewManager(
 		*persistenceConfig,
 		persistenceServiceResolver,
-		esConfig.GetVisibilityIndex(),
-		esConfig.GetSecondaryVisibilityIndex(),
 		esClient,
 		esProcessorConfig,
 		saProvider,
 		searchAttributesMapperProvider,
-		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
-		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.EnableReadVisibilityFromES,
-		serviceConfig.AdvancedVisibilityWritingMode,
-		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
-		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
+		serviceConfig.VisibilityPersistenceMaxReadQPS,
+		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.EnableReadFromSecondaryVisibility,
+		serviceConfig.SecondaryVisibilityWritingMode,
 		serviceConfig.VisibilityDisableOrderByClause,
 		metricsHandler,
 		logger,

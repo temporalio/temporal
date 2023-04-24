@@ -39,10 +39,6 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
-const (
-	sendStatusInterval = 1 * time.Second
-)
-
 type (
 	ClusterShardKey struct {
 		ClusterName string
@@ -60,11 +56,12 @@ type (
 		status         int32
 		sourceShardKey ClusterShardKey
 		targetShardKey ClusterShardKey
-		shutdownChan   channel.ShutdownOnce
 		taskTracker    ExecutableTaskTracker
+		shutdownChan   channel.ShutdownOnce
 
 		sync.Mutex
-		stream Stream
+		streamCreationTime time.Time
+		stream             Stream
 	}
 )
 
@@ -90,13 +87,15 @@ func NewStreamReceiver(
 		status:         common.DaemonStatusInitialized,
 		sourceShardKey: sourceShardKey,
 		targetShardKey: targetShardKey,
+		taskTracker:    taskTracker,
 		shutdownChan:   channel.NewShutdownOnce(),
+
+		streamCreationTime: time.Now().UTC(),
 		stream: newStream(
 			processToolBox,
 			sourceShardKey,
 			targetShardKey,
 		),
-		taskTracker: taskTracker,
 	}
 }
 
@@ -128,22 +127,24 @@ func (r *StreamReceiver) Stop() {
 
 	r.shutdownChan.Shutdown()
 	r.stream.Close()
+	r.taskTracker.Cancel()
 
 	r.Logger.Info("StreamReceiver shutting down.")
 }
 
 func (r *StreamReceiver) IsValid() bool {
-	return atomic.LoadInt32(&r.status) != common.DaemonStatusStopped
+	return atomic.LoadInt32(&r.status) == common.DaemonStatusStarted
 }
 
 func (r *StreamReceiver) sendEventLoop() {
 	defer r.Stop()
-	ticker := time.NewTicker(sendStatusInterval)
-	defer ticker.Stop()
+	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
+	defer timer.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-timer.C:
+			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
 			r.Lock()
 			stream := r.stream
 			r.Unlock()
@@ -159,12 +160,22 @@ func (r *StreamReceiver) recvEventLoop() {
 
 	for !r.shutdownChan.IsShutdown() {
 		r.Lock()
+		streamCreationTime := r.streamCreationTime
 		stream := r.stream
 		r.Unlock()
+
 		_ = r.processMessages(stream)
+		delay := streamCreationTime.Add(r.Config.ReplicationStreamMinReconnectDuration()).Sub(time.Now().UTC())
+		if delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-r.shutdownChan.Channel():
+			}
+		}
 
 		r.Lock()
-		r.stream = newStream( // TODO add exp backoff
+		r.streamCreationTime = time.Now().UTC()
+		r.stream = newStream(
 			r.ProcessToolBox,
 			r.sourceShardKey,
 			r.targetShardKey,

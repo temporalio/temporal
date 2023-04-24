@@ -39,7 +39,7 @@ import (
 func ToPersistenceQueueState(
 	queueState *queueState,
 ) *persistencespb.QueueState {
-	readerStates := make(map[int32]*persistencespb.QueueReaderState)
+	readerStates := make(map[int64]*persistencespb.QueueReaderState)
 	for id, scopes := range queueState.readerScopes {
 		persistenceScopes := make([]*persistencespb.QueueSliceScope, 0, len(scopes))
 		for _, scope := range scopes {
@@ -59,7 +59,7 @@ func ToPersistenceQueueState(
 func FromPersistenceQueueState(
 	state *persistencespb.QueueState,
 ) *queueState {
-	readerScopes := make(map[int32][]Scope, len(state.ReaderStates))
+	readerScopes := make(map[int64][]Scope, len(state.ReaderStates))
 	for id, persistenceReaderState := range state.ReaderStates {
 		scopes := make([]Scope, 0, len(persistenceReaderState.Scopes))
 		for _, persistenceScope := range persistenceReaderState.Scopes {

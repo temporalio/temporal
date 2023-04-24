@@ -41,6 +41,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	repicationpb "go.temporal.io/server/api/replication/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/payloads"
@@ -75,6 +76,8 @@ type (
 		// not merely log an error
 		*require.Assertions
 		suite.Suite
+
+		controller *gomock.Controller
 		active     *tests.TestCluster
 		generator  test.Generator
 		serializer serialization.Serializer
@@ -115,20 +118,35 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	clusterConfigs[0].WorkerConfig = &tests.WorkerConfig{}
 	clusterConfigs[1].WorkerConfig = &tests.WorkerConfig{}
 
+	s.controller = gomock.NewController(s.T())
+	mockStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
+	mockStreamClient.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
+	mockStreamClient.EXPECT().Recv().Return(&adminservice.StreamWorkflowReplicationMessagesResponse{
+		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
+			Messages: &repicationpb.WorkflowReplicationMessages{
+				ReplicationTasks: []*repicationpb.ReplicationTask{},
+				LastTaskId:       100,
+				LastTaskTime:     timestamp.TimePtr(time.Unix(0, 100)),
+			},
+		},
+	}, nil).AnyTimes()
+
 	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 
 	s.standByTaskID = 0
-	s.mockAdminClient = make(map[string]adminservice.AdminServiceClient)
-	controller := gomock.NewController(s.T())
-	mockStandbyClient := adminservicemock.NewMockAdminServiceClient(controller)
+	mockStandbyClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockStandbyClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).DoAndReturn(s.GetReplicationMessagesMock).AnyTimes()
-	mockOtherClient := adminservicemock.NewMockAdminServiceClient(controller)
+	mockStandbyClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(mockStreamClient, nil).AnyTimes()
+	mockOtherClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&adminservice.GetReplicationMessagesResponse{
 			ShardMessages: make(map[int32]*replicationspb.ReplicationMessages),
 		}, nil).AnyTimes()
-	s.mockAdminClient["standby"] = mockStandbyClient
-	s.mockAdminClient["other"] = mockOtherClient
+	mockOtherClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(mockStreamClient, nil).AnyTimes()
+	s.mockAdminClient = map[string]adminservice.AdminServiceClient{
+		"standby": mockStandbyClient,
+		"other":   mockOtherClient,
+	}
 	clusterConfigs[0].MockAdminClient = s.mockAdminClient
 
 	cluster, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
@@ -185,6 +203,7 @@ func (s *nDCIntegrationTestSuite) TearDownSuite() {
 	if s.generator != nil {
 		s.generator.Reset()
 	}
+	s.controller.Finish()
 	s.NoError(s.active.TearDownCluster())
 }
 

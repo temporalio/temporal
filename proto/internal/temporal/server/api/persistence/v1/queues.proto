@@ -32,7 +32,7 @@ message QueueAckLevel {
 }
 
 message QueueState {
-    map<int32, QueueReaderState> reader_states = 1;
+    map<int64, QueueReaderState> reader_states = 1;
     TaskKey exclusive_reader_high_watermark = 2;
 }
 

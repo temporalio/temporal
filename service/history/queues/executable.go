@@ -117,7 +117,7 @@ type (
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 
-		readerID               int32
+		readerID               int64
 		loadTime               time.Time
 		scheduledTime          time.Time
 		userLatency            time.Duration
@@ -130,7 +130,7 @@ type (
 )
 
 func NewExecutable(
-	readerID int32,
+	readerID int64,
 	task tasks.Task,
 	executor Executor,
 	scheduler Scheduler,
@@ -170,7 +170,7 @@ func NewExecutable(
 
 func (e *executableImpl) Execute() (retErr error) {
 	e.Lock()
-	if e.state == ctasks.TaskStateCancelled {
+	if e.state != ctasks.TaskStatePending {
 		e.Unlock()
 		return nil
 	}
@@ -325,7 +325,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 func (e *executableImpl) IsRetryableError(err error) bool {
 	// this determines if the executable should be retried when hold the worker goroutine
 
-	if e.State() == ctasks.TaskStateCancelled {
+	if e.State() != ctasks.TaskStatePending {
 		return false
 	}
 
@@ -360,6 +360,15 @@ func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
 	return schedulerRetryPolicy
 }
 
+func (e *executableImpl) Abort() {
+	e.Lock()
+	defer e.Unlock()
+
+	if e.state == ctasks.TaskStatePending {
+		e.state = ctasks.TaskStateAborted
+	}
+}
+
 func (e *executableImpl) Cancel() {
 	e.Lock()
 	defer e.Unlock()
@@ -373,7 +382,7 @@ func (e *executableImpl) Ack() {
 	e.Lock()
 	defer e.Unlock()
 
-	if e.state == ctasks.TaskStateCancelled {
+	if e.state != ctasks.TaskStatePending {
 		return
 	}
 
@@ -393,7 +402,8 @@ func (e *executableImpl) Ack() {
 }
 
 func (e *executableImpl) Nack(err error) {
-	if e.State() == ctasks.TaskStateCancelled {
+	state := e.State()
+	if state != ctasks.TaskStatePending {
 		return
 	}
 
@@ -414,7 +424,8 @@ func (e *executableImpl) Nack(err error) {
 }
 
 func (e *executableImpl) Reschedule() {
-	if e.State() == ctasks.TaskStateCancelled {
+	state := e.State()
+	if state != ctasks.TaskStatePending {
 		return
 	}
 

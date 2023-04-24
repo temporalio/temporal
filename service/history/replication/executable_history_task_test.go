@@ -154,6 +154,7 @@ func (s *executableHistoryTaskSuite) TearDownTest() {
 }
 
 func (s *executableHistoryTaskSuite) TestExecute_Process() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -181,7 +182,15 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 	s.NoError(err)
 }
 
-func (s *executableHistoryTaskSuite) TestExecute_Skip() {
+func (s *executableHistoryTaskSuite) TestExecute_Skip_TerminalState() {
+	s.executableTask.EXPECT().TerminalState().Return(true)
+
+	err := s.task.Execute()
+	s.NoError(err)
+}
+
+func (s *executableHistoryTaskSuite) TestExecute_Skip_Namespace() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
@@ -191,6 +200,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Skip() {
 }
 
 func (s *executableHistoryTaskSuite) TestExecute_Err() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	err := errors.New("OwO")
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		"", false, err,
@@ -200,6 +210,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Err() {
 }
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()

@@ -60,6 +60,18 @@ func (m *MockTrackableExecutableTask) EXPECT() *MockTrackableExecutableTaskMockR
 	return m.recorder
 }
 
+// Abort mocks base method.
+func (m *MockTrackableExecutableTask) Abort() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Abort")
+}
+
+// Abort indicates an expected call of Abort.
+func (mr *MockTrackableExecutableTaskMockRecorder) Abort() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Abort", reflect.TypeOf((*MockTrackableExecutableTask)(nil).Abort))
+}
+
 // Ack mocks base method.
 func (m *MockTrackableExecutableTask) Ack() {
 	m.ctrl.T.Helper()
@@ -241,6 +253,18 @@ func NewMockExecutableTaskTracker(ctrl *gomock.Controller) *MockExecutableTaskTr
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockExecutableTaskTracker) EXPECT() *MockExecutableTaskTrackerMockRecorder {
 	return m.recorder
+}
+
+// Cancel mocks base method.
+func (m *MockExecutableTaskTracker) Cancel() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Cancel")
+}
+
+// Cancel indicates an expected call of Cancel.
+func (mr *MockExecutableTaskTrackerMockRecorder) Cancel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cancel", reflect.TypeOf((*MockExecutableTaskTracker)(nil).Cancel))
 }
 
 // LowWatermark mocks base method.

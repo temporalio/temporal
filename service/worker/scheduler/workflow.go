@@ -92,6 +92,9 @@ type (
 
 		tweakables tweakablePolicies
 
+		currentTimer         workflow.Future
+		currentTimerDeadline time.Time
+
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
@@ -118,6 +121,7 @@ type (
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
 		MaxBufferSize  int
 		AllowZeroSleep bool // Whether to allow a zero-length timer. Used for workflow compatibility.
+		ReuseTimer     bool // Whether to reuse timer. Used for workflow compatibility.
 	}
 )
 
@@ -150,6 +154,7 @@ var (
 		SleepWhilePaused:                  true,
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
+		ReuseTimer:                        true,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -353,15 +358,15 @@ func (s *scheduler) processTimeRange(
 		if t1.IsZero() || t1.After(t2) {
 			return t1
 		}
+		// Peek at paused/remaining actions state and don't bother if we're not going to
+		// take an action now. (Don't count as missed catchup window either.)
+		if !s.canTakeScheduledAction(manual, false) {
+			continue
+		}
 		if !manual && t2.Sub(t1) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
 			s.metrics.Counter(metrics.ScheduleMissedCatchupWindow.GetMetricName()).Inc(1)
 			s.Info.MissedCatchupWindow++
-			continue
-		}
-		// Peek at paused/remaining actions state and don't even bother adding
-		// to buffer if we're not going to take an action now.
-		if !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
@@ -423,8 +428,20 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 		if !s.tweakables.AllowZeroSleep && sleepTime <= 0 {
 			sleepTime = time.Second
 		}
-		tmr := workflow.NewTimer(s.ctx, sleepTime)
-		sel.AddFuture(tmr, func(_ workflow.Future) {})
+		// A previous version of this workflow always created a new timer here, which is wasteful.
+		// We can reuse a previous timer if we have the same deadline and it didn't fire yet.
+		if s.tweakables.ReuseTimer {
+			if s.currentTimer == nil || !s.currentTimerDeadline.Equal(nextWakeup) {
+				s.currentTimer = workflow.NewTimer(s.ctx, sleepTime)
+				s.currentTimerDeadline = nextWakeup
+			}
+			sel.AddFuture(s.currentTimer, func(_ workflow.Future) {
+				s.currentTimer = nil
+			})
+		} else {
+			tmr := workflow.NewTimer(s.ctx, sleepTime)
+			sel.AddFuture(tmr, func(_ workflow.Future) {})
+		}
 	}
 
 	if s.watchingFuture != nil {
@@ -995,7 +1012,7 @@ func panicIfErr(err error) {
 	}
 }
 
-func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs) *schedpb.ScheduleListInfo {
+func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time) *schedpb.ScheduleListInfo {
 	// note that this does not take into account InitialPatch
 	fakeScheduler := &scheduler{
 		StartScheduleArgs: *args,
@@ -1003,5 +1020,6 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs) *schedpb.Schedul
 	}
 	fakeScheduler.ensureFields()
 	fakeScheduler.compileSpec()
+	fakeScheduler.State.LastProcessedTime = timestamp.TimePtr(now)
 	return fakeScheduler.getListInfo()
 }
