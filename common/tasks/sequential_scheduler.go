@@ -280,6 +280,21 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 	}
 }
 
+func (s *SequentialScheduler[T]) processTasks(queue SequentialTaskQueue[T]) {
+	if !queue.IsEmpty() {
+		s.executeTask(queue)
+	} else {
+		deleted := s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
+			return value.(SequentialTaskQueue[T]).IsEmpty()
+		})
+		if deleted {
+			return
+		}
+		// if deletion failed, meaning that task queue is offered with new task
+		// continue execution
+	}
+}
+
 // TODO: change this function to process all available tasks in the queue.
 func (s *SequentialScheduler[T]) executeTask(queue SequentialTaskQueue[T]) {
 	task := queue.Remove()
@@ -306,21 +321,24 @@ func (s *SequentialScheduler[T]) executeTask(queue SequentialTaskQueue[T]) {
 }
 
 func (s *SequentialScheduler[T]) drainTasks() {
-LoopDrainQueue:
+LoopDrainQueues:
 	for {
 		select {
 		case queue := <-s.queueChan:
-			deleteQueue := false
-			for !deleteQueue {
+		LoopDrainSingleQueue:
+			for {
 				for !queue.IsEmpty() {
 					queue.Remove().Abort()
 				}
-				deleteQueue = s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
+				deleted := s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
 					return value.(SequentialTaskQueue[T]).IsEmpty()
 				})
+				if deleted {
+					break LoopDrainSingleQueue
+				}
 			}
 		default:
-			break LoopDrainQueue
+			break LoopDrainQueues
 		}
 	}
 }
