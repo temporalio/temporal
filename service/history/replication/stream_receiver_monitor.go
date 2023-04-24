@@ -146,7 +146,8 @@ func (m *StreamReceiverMonitorImpl) generateStreamKeys() map[ClusterShardKeyPair
 
 	sourceClusterName := m.ClusterMetadata.GetCurrentClusterName()
 	targetClusterNames := make(map[string]struct{})
-	for clusterName, clusterInfo := range m.ClusterMetadata.GetAllClusterInfo() {
+	clusterInfo := m.ClusterMetadata.GetAllClusterInfo()
+	for clusterName, clusterInfo := range clusterInfo {
 		if !clusterInfo.Enabled || clusterName == sourceClusterName {
 			continue
 		}
@@ -155,13 +156,20 @@ func (m *StreamReceiverMonitorImpl) generateStreamKeys() map[ClusterShardKeyPair
 	streamKeys := make(map[ClusterShardKeyPair]struct{})
 	for _, shardID := range m.ShardController.ShardIDs() {
 		for targetClusterName := range targetClusterNames {
+			// NOTE:
+			//  source: client side of the replication stream, this is actually the receiver of replication tasks
+			//  target: server side of the replication stream, this is actually the sender of replication tasks
 			sourceShardID := shardID
-			// TODO src shards !necessary= target shards, add conversion fn here
-			targetShardID := shardID
-			streamKeys[ClusterShardKeyPair{
-				Source: NewClusterShardKey(sourceClusterName, sourceShardID),
-				Target: NewClusterShardKey(targetClusterName, targetShardID),
-			}] = struct{}{}
+			for _, targetShardID := range common.MapShardID(
+				clusterInfo[sourceClusterName].ShardCount,
+				clusterInfo[targetClusterName].ShardCount,
+				sourceShardID,
+			) {
+				streamKeys[ClusterShardKeyPair{
+					Source: NewClusterShardKey(sourceClusterName, sourceShardID),
+					Target: NewClusterShardKey(targetClusterName, targetShardID),
+				}] = struct{}{}
+			}
 		}
 	}
 	return streamKeys
