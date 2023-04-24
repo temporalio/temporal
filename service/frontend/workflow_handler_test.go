@@ -1428,6 +1428,97 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	namespaceID := namespace.ID(uuid.New())
 	namespaceName := namespace.Name("test-namespace")
 	firstEventID := int64(100)
+	nextEventID := int64(103)
+	branchToken := []byte{1}
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wid",
+		RunId:      "rid",
+	}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
+	req1 := &historyservice.ReadHistoryBranchRequest{
+		NamespaceId:   namespaceID.String(),
+		ShardId:       shardID,
+		BranchToken:   branchToken,
+		MinEventId:    firstEventID,
+		MaxEventId:    nextEventID,
+		PageSize:      3,
+		NextPageToken: []byte{},
+	}
+	s.mockHistoryClient.EXPECT().ReadHistoryBranch(gomock.Any(), req1).Return(&historyservice.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(100),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			{
+				EventId:   int64(101),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"TemporalChangeVersion": payload.EncodeString("random-data"),
+							},
+						},
+					},
+				},
+			},
+		},
+		NextPageToken: []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+		Size_:         2,
+	}, nil)
+	req2 := &historyservice.ReadHistoryBranchRequest{
+		NamespaceId:   namespaceID.String(),
+		ShardId:       shardID,
+		BranchToken:   branchToken,
+		MinEventId:    firstEventID,
+		MaxEventId:    nextEventID,
+		PageSize:      3,
+		NextPageToken: []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+	}
+	s.mockHistoryClient.EXPECT().ReadHistoryBranch(gomock.Any(), req2).Return(&historyservice.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(102),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+			},
+		},
+		NextPageToken: []byte{},
+		Size_:         1,
+	}, nil)
+
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(namespaceName).
+		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
+
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	history, token, err := wh.getHistory(
+		context.Background(),
+		metrics.NoopMetricsHandler,
+		namespaceID,
+		namespaceName,
+		we,
+		firstEventID,
+		nextEventID,
+		3,
+		[]byte{},
+		nil,
+		branchToken,
+	)
+	s.NoError(err)
+	s.NotNil(history)
+	s.Equal([]byte{}, token)
+
+	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasForCustomKeywordField"].GetMetadata()["type"])
+	s.EqualValues(`"random-data"`, history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
+}
+
+func (s *workflowHandlerSuite) TestGetHistoryError() {
+	namespaceID := namespace.ID(uuid.New())
+	namespaceName := namespace.Name("test-namespace")
+	firstEventID := int64(100)
 	nextEventID := int64(102)
 	branchToken := []byte{1}
 	we := commonpb.WorkflowExecution{
@@ -1441,15 +1532,74 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		BranchToken:   branchToken,
 		MinEventId:    firstEventID,
 		MaxEventId:    nextEventID,
-		PageSize:      2,
+		PageSize:      3,
 		NextPageToken: []byte{},
 	}
-	s.mockHistoryClient.EXPECT().ReadHistoryBranch(gomock.Any(), req).Return(&historyservice.ReadHistoryBranchResponse{
+	s.mockHistoryClient.EXPECT().ReadHistoryBranch(gomock.Any(), req).Return(nil, serviceerror.NewDataLoss("test"))
+
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	_, _, err := wh.getHistory(
+		context.Background(),
+		metrics.NoopMetricsHandler,
+		namespaceID,
+		namespaceName,
+		we,
+		firstEventID,
+		nextEventID,
+		3,
+		[]byte{},
+		nil,
+		branchToken,
+	)
+	s.Error(err)
+}
+
+func (s *workflowHandlerSuite) TestGetHistoryReverse() {
+	namespaceID := namespace.ID(uuid.New())
+	namespaceName := namespace.Name("test-namespace")
+	nextEventID := int64(103)
+	lastFirstTxnID := int64(1000)
+	branchToken := []byte{1}
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wid",
+		RunId:      "rid",
+	}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
+	req1 := &historyservice.ReadHistoryBranchReverseRequest{
+		NamespaceId:            namespaceID.String(),
+		ShardId:                shardID,
+		BranchToken:            branchToken,
+		MaxEventId:             nextEventID,
+		LastFirstTransactionId: lastFirstTxnID,
+		PageSize:               3,
+		NextPageToken:          []byte{},
+	}
+	s.mockHistoryClient.EXPECT().ReadHistoryBranchReverse(gomock.Any(), req1).Return(&historyservice.ReadHistoryBranchReverseResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   int64(100),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+			},
+			{
+				EventId:   int64(101),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			},
+		},
+		NextPageToken: []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+		Size_:         2,
+	}, nil)
+	req2 := &historyservice.ReadHistoryBranchReverseRequest{
+		NamespaceId:            namespaceID.String(),
+		ShardId:                shardID,
+		BranchToken:            branchToken,
+		MaxEventId:             nextEventID,
+		LastFirstTransactionId: lastFirstTxnID,
+		PageSize:               3,
+		NextPageToken:          []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+	}
+	s.mockHistoryClient.EXPECT().ReadHistoryBranchReverse(gomock.Any(), req2).Return(&historyservice.ReadHistoryBranchReverseResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   int64(101),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
@@ -1475,25 +1625,64 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	history, token, err := wh.getHistory(
+	history, token, eventId, err := wh.getHistoryReverse(
 		context.Background(),
 		metrics.NoopMetricsHandler,
 		namespaceID,
 		namespaceName,
 		we,
-		firstEventID,
 		nextEventID,
-		2,
+		lastFirstTxnID,
+		3,
 		[]byte{},
-		nil,
 		branchToken,
 	)
 	s.NoError(err)
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
+	s.Equal(int64(100), eventId)
 
-	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasForCustomKeywordField"].GetMetadata()["type"])
-	s.EqualValues(`"random-data"`, history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
+	s.EqualValues("Keyword", history.Events[2].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasForCustomKeywordField"].GetMetadata()["type"])
+	s.EqualValues(`"random-data"`, history.Events[2].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
+}
+
+func (s *workflowHandlerSuite) TestGetHistoryReverseError() {
+	namespaceID := namespace.ID(uuid.New())
+	namespaceName := namespace.Name("test-namespace")
+	nextEventID := int64(102)
+	lastFirstTxnID := int64(1000)
+	branchToken := []byte{1}
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wid",
+		RunId:      "rid",
+	}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
+	req := &historyservice.ReadHistoryBranchReverseRequest{
+		NamespaceId:            namespaceID.String(),
+		ShardId:                shardID,
+		BranchToken:            branchToken,
+		MaxEventId:             nextEventID,
+		LastFirstTransactionId: lastFirstTxnID,
+		PageSize:               2,
+		NextPageToken:          []byte{},
+	}
+	s.mockHistoryClient.EXPECT().ReadHistoryBranchReverse(gomock.Any(), req).Return(nil, serviceerror.NewDataLoss("test"))
+
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	_, _, _, err := wh.getHistoryReverse(
+		context.Background(),
+		metrics.NoopMetricsHandler,
+		namespaceID,
+		namespaceName,
+		we,
+		nextEventID,
+		lastFirstTxnID,
+		2,
+		[]byte{},
+		branchToken,
+	)
+	s.Error(err)
 }
 
 func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
