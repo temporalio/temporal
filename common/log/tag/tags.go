@@ -551,8 +551,8 @@ func ShardQueueAcks(categoryName string, ackLevel interface{}) ZapTag {
 // task queue processor
 
 // QueueReaderID returns tag for queue readerID
-func QueueReaderID(readerID int32) ZapTag {
-	return NewInt32("queue-reader-id", readerID)
+func QueueReaderID(readerID int64) ZapTag {
+	return NewInt64("queue-reader-id", readerID)
 }
 
 // QueueAlert returns tag for queue alert

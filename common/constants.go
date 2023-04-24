@@ -100,5 +100,5 @@ const (
 
 const (
 	// DefaultQueueReaderID is the default readerID when loading history tasks
-	DefaultQueueReaderID = 0
+	DefaultQueueReaderID int64 = 0
 )

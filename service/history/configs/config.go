@@ -37,8 +37,7 @@ import (
 
 // Config represents configuration for history service
 type Config struct {
-	NumberOfShards             int32
-	DefaultVisibilityIndexName string
+	NumberOfShards int32
 
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
 
@@ -306,10 +305,9 @@ const (
 )
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisibilityConfigExist bool, defaultVisibilityIndex string) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisibilityConfigExist bool) *Config {
 	cfg := &Config{
-		NumberOfShards:             numberOfShards,
-		DefaultVisibilityIndexName: defaultVisibilityIndex,
+		NumberOfShards: numberOfShards,
 
 		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
 

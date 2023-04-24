@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Code generated: TODO put <- here to avoid linter, this file need to be rewritten
+
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_rebuilder_mock.go
 
 package workflow
@@ -52,7 +54,7 @@ type (
 			namespaceID namespace.ID,
 			requestID string,
 			execution commonpb.WorkflowExecution,
-			history []*historypb.HistoryEvent,
+			history [][]*historypb.HistoryEvent,
 			newRunHistory []*historypb.HistoryEvent,
 		) (MutableState, error)
 	}
@@ -94,6 +96,36 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	namespaceID namespace.ID,
 	requestID string,
 	execution commonpb.WorkflowExecution,
+	history [][]*historypb.HistoryEvent,
+	newRunHistory []*historypb.HistoryEvent,
+) (MutableState, error) {
+	for i := 0; i < len(history)-1; i++ {
+		_, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[i], nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+	newMutableState, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[len(history)-1], newRunHistory)
+	if err != nil {
+		return nil, err
+	}
+	// must generate the activity timer / user timer at the very end
+	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
+	if err := taskGenerator.GenerateActivityTimerTasks(); err != nil {
+		return nil, err
+	}
+	if err := taskGenerator.GenerateUserTimerTasks(); err != nil {
+		return nil, err
+	}
+	b.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder(history...))
+	return newMutableState, nil
+}
+
+func (b *MutableStateRebuilderImpl) applyEvents(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	requestID string,
+	execution commonpb.WorkflowExecution,
 	history []*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
 ) (MutableState, error) {
@@ -108,8 +140,8 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 	// need to clear the stickiness since workflow turned to passive
 	b.mutableState.ClearStickyness()
-
 	executionInfo := b.mutableState.GetExecutionInfo()
+	executionInfo.LastFirstEventId = firstEvent.GetEventId()
 
 	for _, event := range history {
 		// NOTE: stateRebuilder is also being used in the active side
@@ -203,6 +235,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			// NOTE: at the beginning of the loop, stickyness is cleared
 			if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 				workflowTask.ScheduledEventID,
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -255,6 +288,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					workflowTask.ScheduledEventID,
+					false,
 				); err != nil {
 					return nil, err
 				}
@@ -277,6 +311,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					workflowTask.ScheduledEventID,
+					false,
 				); err != nil {
 					return nil, err
 				}
@@ -616,7 +651,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 					namespaceID,
 					uuid.New(),
 					newExecution,
-					newRunHistory,
+					[][]*historypb.HistoryEvent{newRunHistory},
 					nil,
 				)
 				if err != nil {
@@ -656,18 +691,5 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
 		}
 	}
-
-	// must generate the activity timer / user timer at the very end
-	if err := taskGenerator.GenerateActivityTimerTasks(); err != nil {
-		return nil, err
-	}
-	if err := taskGenerator.GenerateUserTimerTasks(); err != nil {
-		return nil, err
-	}
-
-	executionInfo.LastFirstEventId = firstEvent.GetEventId()
-
-	b.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder(history))
-
 	return newRunMutableState, nil
 }

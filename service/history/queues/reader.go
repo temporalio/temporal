@@ -77,12 +77,12 @@ type (
 
 	SlicePredicate func(s Slice) bool
 
-	ReaderCompletionFn func(readerID int32)
+	ReaderCompletionFn func(readerID int64)
 
 	ReaderImpl struct {
 		sync.Mutex
 
-		readerID       int32
+		readerID       int64
 		options        *ReaderOptions
 		scheduler      Scheduler
 		rescheduler    Rescheduler
@@ -111,11 +111,11 @@ type (
 )
 
 var (
-	NoopReaderCompletionFn = func(_ int32) {}
+	NoopReaderCompletionFn = func(_ int64) {}
 )
 
 func NewReader(
-	readerID int32,
+	readerID int64,
 	slices []Slice,
 	options *ReaderOptions,
 	scheduler Scheduler,

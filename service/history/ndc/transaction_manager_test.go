@@ -142,7 +142,6 @@ func (s *transactionMgrSuite) TestUpdateWorkflow() {
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open() {
 	ctx := context.Background()
-	now := time.Now().UTC()
 	releaseCalled := false
 	runID := uuid.New()
 
@@ -172,14 +171,13 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(), persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyActive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
-	err := s.transactionMgr.backfillWorkflow(ctx, now, targetWorkflow, workflowEvents)
+	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
 }
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed() {
 	ctx := context.Background()
-	now := time.Now().UTC()
 
 	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
@@ -250,14 +248,13 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		gomock.Any(), persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
-	err := s.transactionMgr.backfillWorkflow(ctx, now, targetWorkflow, workflowEvents)
+	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
 }
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetFailed() {
 	ctx := context.Background()
-	now := time.Now().UTC()
 
 	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
@@ -328,14 +325,14 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		gomock.Any(), persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
-	err := s.transactionMgr.backfillWorkflow(ctx, now, targetWorkflow, workflowEvents)
+	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
 }
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open() {
 	ctx := context.Background()
-	now := time.Now().UTC()
+
 	releaseCalled := false
 
 	targetWorkflow := NewMockWorkflow(s.controller)
@@ -362,14 +359,13 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open(
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(), persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
-	err := s.transactionMgr.backfillWorkflow(ctx, now, targetWorkflow, workflowEvents)
+	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
 }
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Closed() {
 	ctx := context.Background()
-	now := time.Now().UTC()
 
 	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
@@ -413,14 +409,13 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Close
 		gomock.Any(), persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
-	err := s.transactionMgr.backfillWorkflow(ctx, now, targetWorkflow, workflowEvents)
+	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
 }
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
 	ctx := context.Background()
-	now := time.Now().UTC()
 
 	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
@@ -470,14 +465,13 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(), persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
-	err := s.transactionMgr.backfillWorkflow(ctx, now, targetWorkflow, workflowEvents)
+	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
 }
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() {
 	ctx := context.Background()
-	now := time.Now().UTC()
 
 	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
@@ -527,7 +521,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(), persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
-	err := s.transactionMgr.backfillWorkflow(ctx, now, targetWorkflow, workflowEvents)
+	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
 }
