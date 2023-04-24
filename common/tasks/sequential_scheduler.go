@@ -310,14 +310,14 @@ LoopDrainQueue:
 	for {
 		select {
 		case queue := <-s.queueChan:
-			for !queue.IsEmpty() {
-				queue.Remove().Abort()
-			}
-			deleted := s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
-				return value.(SequentialTaskQueue[T]).IsEmpty()
-			})
-			if deleted {
-				return
+			deleteQueue := false
+			for !deleteQueue {
+				for !queue.IsEmpty() {
+					queue.Remove().Abort()
+				}
+				deleteQueue = s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
+					return value.(SequentialTaskQueue[T]).IsEmpty()
+				})
 			}
 		default:
 			break LoopDrainQueue
