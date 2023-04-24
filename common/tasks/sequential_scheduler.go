@@ -264,8 +264,7 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 			s.queueChan <- queue
 			return
 		default:
-			queueSize := queue.Len()
-			if queueSize > 0 {
+			if !queue.IsEmpty() {
 				s.executeTask(queue)
 			} else {
 				deleted := s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
@@ -314,9 +313,12 @@ LoopDrainQueue:
 			for !queue.IsEmpty() {
 				queue.Remove().Abort()
 			}
-			s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
+			deleted := s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
 				return value.(SequentialTaskQueue[T]).IsEmpty()
 			})
+			if deleted {
+				return
+			}
 		default:
 			break LoopDrainQueue
 		}
