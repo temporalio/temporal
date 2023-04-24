@@ -145,6 +145,7 @@ func (s *SequentialScheduler[T]) Submit(task T) {
 	// need to dispatch this task set
 	select {
 	case <-s.shutdownChan:
+		task.Cancel()
 	case s.queueChan <- queue:
 		if s.isStopped() {
 			s.drainTasks()
@@ -256,6 +257,8 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 	for {
 		select {
 		case <-s.shutdownChan:
+			// Put queue back to the queue channel
+			s.queueChan <- queue
 			return
 		case <-workerShutdownCh:
 			// Put queue back to the queue channel
