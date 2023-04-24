@@ -241,6 +241,7 @@ func (s *SequentialScheduler[T]) pollTaskQueue(workerShutdownCh <-chan struct{})
 	for {
 		select {
 		case <-s.shutdownChan:
+			s.drainTasks()
 			return
 		case <-workerShutdownCh:
 			return
