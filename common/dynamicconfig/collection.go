@@ -406,6 +406,11 @@ func (c *Collection) GetTaskQueuePartitionsProperty(key Key) IntPropertyFnWithTa
 	return c.GetIntPropertyFilteredByTaskQueueInfo(key, defaultNumTaskQueuePartitions)
 }
 
+func (c *Collection) HasKey(key Key) bool {
+	cvs := c.client.GetValue(key)
+	return len(cvs) > 0
+}
+
 func findMatch(cvs, defaultCVs []ConstrainedValue, precedence []Constraints) (any, error) {
 	if len(cvs)+len(defaultCVs) == 0 {
 		return nil, errKeyNotPresent

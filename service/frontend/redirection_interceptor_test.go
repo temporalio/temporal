@@ -87,6 +87,7 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 		NewConfig(
 			dynamicconfig.NewNoopCollection(),
 			1,
+			true,
 			false,
 		),
 		s.namespaceCache,
