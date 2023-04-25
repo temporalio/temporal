@@ -67,7 +67,7 @@ type (
 
 var (
 	errUserDataNotPresentOnPartition = errors.New("user data is only present on root workflow partition")
-	errVersioningDataNoMutateNonRoot = errors.New("can only mutate versioning data on root workflow task queue")
+	errUserDataNoMutateNonRoot       = errors.New("can only mutate user data on root workflow task queue")
 )
 
 // newTaskQueueDB returns an instance of an object that represents
@@ -304,7 +304,7 @@ func (db *taskQueueDB) getUserDataLocked(
 	ctx context.Context,
 ) (*persistencespb.VersionedTaskQueueUserData, error) {
 	if db.userData == nil {
-		if !db.taskQueue.IsRoot() || db.taskQueue.taskType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		if !db.taskQueue.OwnsUserData() {
 			return nil, errUserDataNotPresentOnPartition
 		}
 
@@ -332,8 +332,8 @@ func (db *taskQueueDB) getUserDataLocked(
 //
 // On success returns a pointer to the updated data, which must *not* be mutated.
 func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) (*persistencespb.VersionedTaskQueueUserData, error) {
-	if !db.taskQueue.IsRoot() || db.taskQueue.taskType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-		return nil, errVersioningDataNoMutateNonRoot
+	if !db.taskQueue.OwnsUserData() {
+		return nil, errUserDataNoMutateNonRoot
 	}
 	db.Lock()
 	defer db.Unlock()
