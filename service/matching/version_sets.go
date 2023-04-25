@@ -293,7 +293,7 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 	if caps.BuildId != set.BuildIds[len(set.BuildIds)-1].Id {
 		return "", errNewerBuildFound
 	}
-	return minSetID(set), nil
+	return getSetID(set), nil
 }
 
 func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb.WorkerVersionStamp) (string, error) {
@@ -315,16 +315,16 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb
 		}
 		set = data.VersionSets[setIdx]
 	}
-	return minSetID(set), nil
+	return getSetID(set), nil
 }
 
-// FIXME: is it correct to use this?
-func minSetID(set *persistencespb.CompatibleVersionSet) string {
-	minID := set.SetIds[0]
-	for _, id := range set.SetIds[1:] {
-		if id < minID {
-			minID = id
-		}
-	}
-	return minID
+func getSetID(set *persistencespb.CompatibleVersionSet) string {
+	// We want Add and Poll requests for the same set to converge on a single id so we can
+	// match them, but we don't have a single id for a set in the general case: in rare cases
+	// we may have multiple ids (due to failovers). We can do this by picking an arbitrary id
+	// in the set, e.g. the first. If the versioning data changes in any way, we'll re-resolve
+	// the set id, so this choice only has to be consistent within one version of the
+	// versioning data. (For correct handling of spooled tasks in Add, this does need to be an
+	// actual set id, not an arbitrary string.)
+	return set.SetIds[0]
 }
