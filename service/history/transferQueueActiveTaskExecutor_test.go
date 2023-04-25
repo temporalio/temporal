@@ -2499,7 +2499,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
-		WorkerVersionStamp:     nil, // FIXME: test with something here?
+		WorkerVersionStamp:     nil, // TODO(dnr): test with something here?
 	}
 }
 
