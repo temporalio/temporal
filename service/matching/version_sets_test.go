@@ -41,7 +41,7 @@ import (
 
 func mkNewSet(id string, clock clockpb.HybridLogicalClock) *persistencepb.CompatibleVersionSet {
 	return &persistencepb.CompatibleVersionSet{
-		SetIds:                 []string{id},
+		SetIds:                 []string{hashBuildID(id)},
 		BuildIds:               []*persistencepb.BuildID{{Id: id, State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
 		DefaultUpdateTimestamp: &clock,
 	}
@@ -113,17 +113,17 @@ func TestNewDefaultUpdate(t *testing.T) {
 		DefaultUpdateTimestamp: &nextClock,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds:                 []string{"0"},
+				SetIds:                 []string{hashBuildID("0")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
 				DefaultUpdateTimestamp: &clock,
 			},
 			{
-				SetIds:                 []string{"1"},
+				SetIds:                 []string{hashBuildID("1")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
 				DefaultUpdateTimestamp: &clock,
 			},
 			{
-				SetIds:                 []string{"2"},
+				SetIds:                 []string{hashBuildID("2")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock}},
 				DefaultUpdateTimestamp: &nextClock,
 			},
@@ -149,7 +149,7 @@ func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
 		DefaultUpdateTimestamp: &nextClock,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds:                 []string{"1"},
+				SetIds:                 []string{hashBuildID("1")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock}},
 				DefaultUpdateTimestamp: &nextClock,
 			},
@@ -172,12 +172,12 @@ func TestNewDefaultSetUpdateCompatWithCurDefault(t *testing.T) {
 		DefaultUpdateTimestamp: &nextClock,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds:                 []string{"0"},
+				SetIds:                 []string{hashBuildID("0")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
 				DefaultUpdateTimestamp: &clock,
 			},
 			{
-				SetIds: []string{"1"},
+				SetIds: []string{hashBuildID("1")},
 				BuildIds: []*persistencepb.BuildID{
 					{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
 					{Id: "1.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock},
@@ -203,12 +203,12 @@ func TestNewDefaultSetUpdateCompatWithNonDefaultSet(t *testing.T) {
 		DefaultUpdateTimestamp: &nextClock,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds:                 []string{"1"},
+				SetIds:                 []string{hashBuildID("1")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
 				DefaultUpdateTimestamp: &clock,
 			},
 			{
-				SetIds: []string{"0"},
+				SetIds: []string{hashBuildID("0")},
 				BuildIds: []*persistencepb.BuildID{
 					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
 					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock},
@@ -234,7 +234,7 @@ func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
 		DefaultUpdateTimestamp: &clock,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds: []string{"0"},
+				SetIds: []string{hashBuildID("0")},
 				BuildIds: []*persistencepb.BuildID{
 					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
 					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock},
@@ -242,7 +242,7 @@ func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
 				DefaultUpdateTimestamp: &nextClock,
 			},
 			{
-				SetIds:                 []string{"1"},
+				SetIds:                 []string{hashBuildID("1")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
 				DefaultUpdateTimestamp: &clock,
 			},
@@ -272,7 +272,7 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 		DefaultUpdateTimestamp: &clock0,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds: []string{"0"},
+				SetIds: []string{hashBuildID("0")},
 				BuildIds: []*persistencepb.BuildID{
 					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
 					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock1},
@@ -281,7 +281,7 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 				DefaultUpdateTimestamp: &clock2,
 			},
 			{
-				SetIds:                 []string{"1"},
+				SetIds:                 []string{hashBuildID("1")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
 				DefaultUpdateTimestamp: &clock0,
 			},
@@ -299,7 +299,7 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 		DefaultUpdateTimestamp: &clock0,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds: []string{"0"},
+				SetIds: []string{hashBuildID("0")},
 				BuildIds: []*persistencepb.BuildID{
 					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
 					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock1},
@@ -309,7 +309,7 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 				DefaultUpdateTimestamp: &clock3,
 			},
 			{
-				SetIds:                 []string{"1"},
+				SetIds:                 []string{hashBuildID("1")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
 				DefaultUpdateTimestamp: &clock0,
 			},
@@ -343,19 +343,19 @@ func TestMakeExistingSetDefault(t *testing.T) {
 		DefaultUpdateTimestamp: &clock1,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds: []string{"0"},
+				SetIds: []string{hashBuildID("0")},
 				BuildIds: []*persistencepb.BuildID{
 					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
 				},
 				DefaultUpdateTimestamp: &clock0,
 			},
 			{
-				SetIds:                 []string{"2"},
+				SetIds:                 []string{hashBuildID("2")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
 				DefaultUpdateTimestamp: &clock0,
 			},
 			{
-				SetIds:                 []string{"1"},
+				SetIds:                 []string{hashBuildID("1")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
 				DefaultUpdateTimestamp: &clock0,
 			},
@@ -374,17 +374,17 @@ func TestMakeExistingSetDefault(t *testing.T) {
 		DefaultUpdateTimestamp: &clock2,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds:                 []string{"2"},
+				SetIds:                 []string{hashBuildID("2")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
 				DefaultUpdateTimestamp: &clock0,
 			},
 			{
-				SetIds:                 []string{"1"},
+				SetIds:                 []string{hashBuildID("1")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
 				DefaultUpdateTimestamp: &clock0,
 			},
 			{
-				SetIds: []string{"0"},
+				SetIds: []string{hashBuildID("0")},
 				BuildIds: []*persistencepb.BuildID{
 					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
 					{Id: "0.1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
@@ -453,7 +453,7 @@ func TestPromoteWithinVersion(t *testing.T) {
 		DefaultUpdateTimestamp: &clock0,
 		VersionSets: []*persistencepb.CompatibleVersionSet{
 			{
-				SetIds: []string{"0"},
+				SetIds: []string{hashBuildID("0")},
 				BuildIds: []*persistencepb.BuildID{
 					{Id: "0", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
 					{Id: "0.2", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
@@ -462,7 +462,7 @@ func TestPromoteWithinVersion(t *testing.T) {
 				DefaultUpdateTimestamp: &clock3,
 			},
 			{
-				SetIds:                 []string{"1"},
+				SetIds:                 []string{hashBuildID("1")},
 				BuildIds:               []*persistencepb.BuildID{{Id: "1", State: persistencepb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
 				DefaultUpdateTimestamp: &clock0,
 			},

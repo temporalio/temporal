@@ -1,8 +1,9 @@
 {
-    "CurrVersion": "1.10",
-    "MinCompatibleVersion": "1.0",
-    "Description": "add storage for update records",
-    "SchemaUpdateCqlFiles": [
-        "update_info_maps_table.sql"
-    ]
+  "CurrVersion": "1.10",
+  "MinCompatibleVersion": "1.0",
+  "Description": "add storage for update records and create task_queue_user_data table",
+  "SchemaUpdateCqlFiles": [
+    "update_info_maps_table.sql",
+    "task_queue_user_data.sql"
+  ]
 }
