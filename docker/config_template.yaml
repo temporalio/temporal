@@ -185,6 +185,10 @@ persistence:
                 password: "{{ default .Env.ES_PWD "" }}"
                 indices:
                     visibility: "{{ default .Env.ES_VIS_INDEX "temporal_visibility_v1_dev" }}"
+                    {{- $es_sec_vis_index := default .Env.ES_SEC_VIS_INDEX "" -}}
+                    {{- if ne $es_sec_vis_index "" }}
+                    secondary_visibility: "{{ $es_sec_vis_index }}"
+                    {{- end }}
         {{- end }}
 
 global:
