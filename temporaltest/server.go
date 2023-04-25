@@ -45,6 +45,8 @@ import (
 
 // A TestServer is a Temporal server listening on a system-chosen port on the
 // local loopback interface, for use in end-to-end tests.
+//
+// Methods on TestServer are not safe for concurrent use.
 type TestServer struct {
 	server               *temporalite.LiteServer
 	defaultTestNamespace string
