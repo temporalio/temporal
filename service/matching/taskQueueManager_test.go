@@ -33,9 +33,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/matchingservicemock/v1"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,6 +40,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -290,7 +289,7 @@ func TestReaderSignaling(t *testing.T) {
 func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, chan interface{}) {
 	out := make(chan interface{}, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
-		task, err := tqm.GetTask(ctx, &rpsInf)
+		task, err := tqm.GetTask(ctx, &pollMetadata{ratePerSecond: &rpsInf})
 		if task == nil {
 			out <- err
 			return nil
@@ -385,7 +384,7 @@ func TestDescribeTaskQueue(t *testing.T) {
 	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndId())
 
 	// Add a poller and complete all tasks
-	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), nil)
+	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &pollMetadata{})
 	for i := int64(0); i < taskCount; i++ {
 		tlm.taskAckManager.completeTask(startTaskID + i)
 	}
@@ -396,7 +395,7 @@ func TestDescribeTaskQueue(t *testing.T) {
 	require.NotEmpty(t, descResp.Pollers[0].GetLastAccessTime())
 
 	rps := 5.0
-	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &rps)
+	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &pollMetadata{ratePerSecond: &rps})
 	descResp = tlm.DescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 1, len(descResp.GetPollers()))
 	require.Equal(t, PollerIdentity, descResp.Pollers[0].GetIdentity())
@@ -426,7 +425,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	// Active poll-er
 	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
-	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
+	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), &pollMetadata{})
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
@@ -491,7 +490,7 @@ func TestAddTaskStandby(t *testing.T) {
 	require.False(t, syncMatch)
 }
 
-func TestTaskQueueSubParitionFetchesUserDataFromRootPartitionOnInit(t *testing.T) {
+func TestTaskQueuePartitionFetchesUserDataFromRootPartitionOnInit(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
@@ -529,7 +528,7 @@ func TestTaskQueueSubParitionFetchesUserDataFromRootPartitionOnInit(t *testing.T
 	subTq.Stop()
 }
 
-func TestTaskQueueSubParitionSendsLastKnownVersionOfUserDataWhenFetching(t *testing.T) {
+func TestTaskQueuePartitionSendsLastKnownVersionOfUserDataWhenFetching(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
@@ -734,9 +733,9 @@ func TestTaskQueueManagerWaitInitFailThenPass(t *testing.T) {
 	// call hasn't happened yet.
 	controller.Finish()
 	// Get the data and see it's set
-	dat, err := tq.GetUserData(ctx)
+	newData, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
-	require.Equal(t, versionedData, dat)
+	require.Equal(t, versionedData, newData)
 	tq.Stop()
 }
 
