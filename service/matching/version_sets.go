@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/persistence/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
@@ -135,11 +136,10 @@ func hashBuildID(buildID string) string {
 func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistencespb.VersioningData, error) {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
-	findRes := findVersion(existingData, targetedVersion)
-	targetSetIdx, versionInSetIdx := findRes.setIdx, findRes.indexInSet
+	targetSetIdx, versionInSetIdx := findVersion(existingData, targetedVersion)
 	numExistingSets := len(existingData.GetVersionSets())
-	modifiedData := persistencespb.VersioningData{
-		VersionSets:            make([]*persistencespb.CompatibleVersionSet, numExistingSets),
+	modifiedData := persistence.VersioningData{
+		VersionSets:            make([]*persistencespb.CompatibleVersionSet, len(existingData.GetVersionSets())),
 		DefaultUpdateTimestamp: existingData.GetDefaultUpdateTimestamp(),
 	}
 	copy(modifiedData.VersionSets, existingData.GetVersionSets())
@@ -164,7 +164,7 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 		makeDefaultSet(&modifiedData, len(modifiedData.VersionSets)-1, &timestamp)
 	} else if addNew := req.GetAddNewCompatibleBuildId(); addNew != nil {
 		compatVer := addNew.GetExistingCompatibleBuildId()
-		compatSetIdx := findVersion(&modifiedData, compatVer).setIdx
+		compatSetIdx, _ := findVersion(&modifiedData, compatVer)
 		if compatSetIdx == -1 {
 			return nil, serviceerror.NewNotFound(
 				fmt.Sprintf("targeted compatible_version %v not found", compatVer))
@@ -242,28 +242,17 @@ func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatibilit
 	return req.GetAddNewBuildIdInNewDefaultSet()
 }
 
-type findVersionRes struct {
-	setIdx     int
-	indexInSet int
-}
-
 // Finds the version in the version sets, returning (set index, index within that set)
 // Returns -1, -1 if not found.
-func findVersion(data *persistencespb.VersioningData, buildID string) findVersionRes {
-	for setIx, set := range data.GetVersionSets() {
-		for versionIx, version := range set.GetBuildIds() {
+func findVersion(data *persistencespb.VersioningData, buildID string) (setIndex, indexInSet int) {
+	for setIndex, set := range data.GetVersionSets() {
+		for indexInSet, version := range set.GetBuildIds() {
 			if version.Id == buildID {
-				return findVersionRes{
-					setIdx:     setIx,
-					indexInSet: versionIx,
-				}
+				return setIndex, indexInSet
 			}
 		}
 	}
-	return findVersionRes{
-		setIdx:     -1,
-		indexInSet: -1,
-	}
+	return -1, -1
 }
 
 func makeDefaultSet(data *persistencespb.VersioningData, setIx int, timestamp *hlc.Clock) {
@@ -296,10 +285,11 @@ func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, version
 func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, error) {
 	// for poll, only the latest version in the compatible set can get tasks
 	// find the version set that this worker is in
-	set := lookupVersionSet(data, caps.BuildId)
-	if set == nil {
+	setIdx, _ := findVersion(data, caps.BuildId)
+	if setIdx < 0 {
 		return "", errBuildNotFound
 	}
+	set := data.VersionSets[setIdx]
 	if caps.BuildId != set.BuildIds[len(set.BuildIds)-1].Id {
 		return "", errNewerBuildFound
 	}
@@ -319,21 +309,13 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb
 		set = data.VersionSets[setLen-1]
 	} else {
 		// for add, any version in the compatible set maps to the set
-		set = lookupVersionSet(data, stamp.BuildId)
-		if set == nil {
+		setIdx, _ := findVersion(data, stamp.BuildId)
+		if setIdx < 0 {
 			return "", errBuildNotFound
 		}
+		set = data.VersionSets[setIdx]
 	}
 	return minSetID(set), nil
-}
-
-func lookupVersionSet(data *persistencespb.VersioningData, version string) *persistencespb.CompatibleVersionSet {
-	// FIXME: inline this?
-	res := findVersion(data, version)
-	if res.setIdx >= 0 {
-		return data.VersionSets[res.setIdx]
-	}
-	return nil
 }
 
 // FIXME: is it correct to use this?
