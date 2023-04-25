@@ -688,13 +688,13 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 			WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-				ScheduledEventId:   scheduledEventID,
-				StartedEventId:     startedEventID,
-				Identity:           testIdentity,
-				BinaryChecksum:     checksum,
-				WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "build_id_9"},
-				SdkMetadata:        sdkMetadata,
-				MeteringMetadata:   meteringMeta,
+				ScheduledEventId: scheduledEventID,
+				StartedEventId:   startedEventID,
+				Identity:         testIdentity,
+				BinaryChecksum:   checksum,
+				WorkerVersion:    &commonpb.WorkerVersionStamp{BuildId: "build_id_9"},
+				SdkMetadata:      sdkMetadata,
+				MeteringMetadata: meteringMeta,
 			},
 		},
 	}, event)
