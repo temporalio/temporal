@@ -30,11 +30,22 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+)
+
+var (
+	// TODO: go over error types, maybe not all should be invalid argument
+	errBuildNotFound                     = serviceerror.NewInvalidArgument("build id not found")
+	errNewerBuildFound                   = serviceerror.NewInvalidArgument("newer compatible build exists")
+	errEmptyVersioningData               = serviceerror.NewInvalidArgument("versioning data is empty")
+	errPollWithVersionOnUnversionedQueue = serviceerror.NewInvalidArgument("poll with version capabilities on unversioned queue")
+	errPollOnVersionedQueueWithNoVersion = serviceerror.NewInvalidArgument("poll on versioned queue with no version capabilities")
+	errVersionedTaskForUnversionedQueue  = serviceerror.NewInvalidArgument("got task with version stamp for unversioned queue")
 )
 
 // ToBuildIdOrderingResponse transforms the internal VersioningData representation to public representation.
@@ -280,4 +291,58 @@ func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, version
 		copy(setVersions[versionIx:], setVersions[versionIx+1:])
 		setVersions[len(setVersions)-1] = moveMe
 	}
+}
+
+func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, error) {
+	// for poll, only the latest version in the compatible set can get tasks
+	// find the version set that this worker is in
+	set := lookupVersionSet(data, caps.BuildId)
+	if set == nil {
+		return "", errBuildNotFound
+	}
+	if caps.BuildId != set.BuildIds[len(set.BuildIds)-1].Id {
+		return "", errNewerBuildFound
+	}
+	return minSetID(set), nil
+}
+
+func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb.WorkerVersionStamp) (string, error) {
+	var set *persistencespb.CompatibleVersionSet
+	if stamp == nil {
+		// if this is a new workflow, assign it to the latest version.
+		// (if it's an unversioned workflow that has already completed one or more tasks, then
+		// leave it on the unversioned one. that case is handled already before we get here.)
+		setLen := len(data.VersionSets)
+		if setLen == 0 || data.VersionSets[setLen-1] == nil {
+			return "", errEmptyVersioningData
+		}
+		set = data.VersionSets[setLen-1]
+	} else {
+		// for add, any version in the compatible set maps to the set
+		set = lookupVersionSet(data, stamp.BuildId)
+		if set == nil {
+			return "", errBuildNotFound
+		}
+	}
+	return minSetID(set), nil
+}
+
+func lookupVersionSet(data *persistencespb.VersioningData, version string) *persistencespb.CompatibleVersionSet {
+	// FIXME: inline this?
+	res := findVersion(data, version)
+	if res.setIdx >= 0 {
+		return data.VersionSets[res.setIdx]
+	}
+	return nil
+}
+
+// FIXME: is it correct to use this?
+func minSetID(set *persistencespb.CompatibleVersionSet) string {
+	minID := set.SetIds[0]
+	for _, id := range set.SetIds[1:] {
+		if id < minID {
+			minID = id
+		}
+	}
+	return minID
 }
