@@ -548,7 +548,7 @@ func (p taskRateLimitedPersistenceClient) GetTaskQueueUserData(
 	ctx context.Context,
 	request *GetTaskQueueUserDataRequest,
 ) (*GetTaskQueueUserDataResponse, error) {
-	if ok := allow(ctx, "GetTaskQueueUserData", p.rateLimiter); !ok {
+	if ok := allow(ctx, "GetTaskQueueUserData", CallerSegmentMissing, p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.GetTaskQueueUserData(ctx, request)
@@ -558,7 +558,7 @@ func (p taskRateLimitedPersistenceClient) UpdateTaskQueueUserData(
 	ctx context.Context,
 	request *UpdateTaskQueueUserDataRequest,
 ) error {
-	if ok := allow(ctx, "UpdateTaskQueueUserData", p.rateLimiter); !ok {
+	if ok := allow(ctx, "UpdateTaskQueueUserData", CallerSegmentMissing, p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 	return p.persistence.UpdateTaskQueueUserData(ctx, request)

@@ -256,9 +256,10 @@ func queryDirectlyThroughMatching(
 		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace()) {
 
 		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-			NamespaceId:  namespaceID,
-			QueryRequest: queryRequest,
-			TaskQueue:    msResp.GetStickyTaskQueue(),
+			NamespaceId:        namespaceID,
+			QueryRequest:       queryRequest,
+			TaskQueue:          msResp.GetStickyTaskQueue(),
+			WorkerVersionStamp: msResp.WorkerVersionStamp,
 		}
 
 		// using a clean new context in case customer provide a context which has
@@ -301,9 +302,10 @@ func queryDirectlyThroughMatching(
 	}
 
 	nonStickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-		NamespaceId:  namespaceID,
-		QueryRequest: queryRequest,
-		TaskQueue:    msResp.TaskQueue,
+		NamespaceId:        namespaceID,
+		QueryRequest:       queryRequest,
+		TaskQueue:          msResp.TaskQueue,
+		WorkerVersionStamp: msResp.WorkerVersionStamp,
 	}
 
 	nonStickyStartTime := time.Now().UTC()

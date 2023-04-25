@@ -156,6 +156,9 @@ message WorkflowExecutionInfo {
     google.protobuf.Timestamp close_time = 66 [(gogoproto.stdtime) = true];
     bool close_visibility_task_completed = 67;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
+    // If using build-id based versioning: version stamp of the last worker to process a
+    // workflow taks for this workflow.
+    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 78;
 }
 
 message ExecutionStats {
