@@ -41,12 +41,12 @@ import (
 
 type (
 	ClusterShardKey struct {
-		ClusterName string
-		ShardID     int32
+		ClusterID int32
+		ShardID   int32
 	}
 	ClusterShardKeyPair struct {
-		Source ClusterShardKey
-		Target ClusterShardKey
+		Client ClusterShardKey
+		Server ClusterShardKey
 	}
 
 	Stream         BiDirectionStream[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse]
@@ -54,8 +54,8 @@ type (
 		ProcessToolBox
 
 		status         int32
-		sourceShardKey ClusterShardKey
-		targetShardKey ClusterShardKey
+		clientShardKey ClusterShardKey
+		serverShardKey ClusterShardKey
 		taskTracker    ExecutableTaskTracker
 		shutdownChan   channel.ShutdownOnce
 
@@ -66,35 +66,35 @@ type (
 )
 
 func NewClusterShardKey(
-	ClusterName string,
+	ClusterID int32,
 	ClusterShardID int32,
 ) ClusterShardKey {
 	return ClusterShardKey{
-		ClusterName: ClusterName,
-		ShardID:     ClusterShardID,
+		ClusterID: ClusterID,
+		ShardID:   ClusterShardID,
 	}
 }
 
 func NewStreamReceiver(
 	processToolBox ProcessToolBox,
-	sourceShardKey ClusterShardKey,
-	targetShardKey ClusterShardKey,
+	clientShardKey ClusterShardKey,
+	serverShardKey ClusterShardKey,
 ) *StreamReceiver {
 	taskTracker := NewExecutableTaskTracker(processToolBox.Logger)
 	return &StreamReceiver{
 		ProcessToolBox: processToolBox,
 
 		status:         common.DaemonStatusInitialized,
-		sourceShardKey: sourceShardKey,
-		targetShardKey: targetShardKey,
+		clientShardKey: clientShardKey,
+		serverShardKey: serverShardKey,
 		taskTracker:    taskTracker,
 		shutdownChan:   channel.NewShutdownOnce(),
 
 		streamCreationTime: time.Now().UTC(),
 		stream: newStream(
 			processToolBox,
-			sourceShardKey,
-			targetShardKey,
+			clientShardKey,
+			serverShardKey,
 		),
 	}
 }
@@ -177,8 +177,8 @@ func (r *StreamReceiver) recvEventLoop() {
 		r.streamCreationTime = time.Now().UTC()
 		r.stream = newStream(
 			r.ProcessToolBox,
-			r.sourceShardKey,
-			r.targetShardKey,
+			r.clientShardKey,
+			r.serverShardKey,
 		)
 		r.Unlock()
 	}
@@ -206,6 +206,12 @@ func (r *StreamReceiver) ackMessage(
 func (r *StreamReceiver) processMessages(
 	stream Stream,
 ) error {
+	allClusterInfo := r.ClusterMetadata.GetAllClusterInfo()
+	clusterName, err := clusterIDToClusterName(allClusterInfo, r.serverShardKey.ClusterID)
+	if err != nil {
+		return err
+	}
+
 	streamRespChen, err := stream.Recv()
 	if err != nil {
 		r.Logger.Error("StreamReceiver unable to recv message, err", tag.Error(err))
@@ -217,7 +223,7 @@ func (r *StreamReceiver) processMessages(
 			return streamResp.Err
 		}
 		tasks := r.ConvertTasks(
-			r.targetShardKey.ClusterName, // data come from target
+			clusterName,
 			streamResp.Resp.GetMessages().ReplicationTasks...,
 		)
 		highWatermark := streamResp.Resp.GetMessages().LastTaskId
@@ -236,13 +242,13 @@ func (r *StreamReceiver) processMessages(
 
 func newStream(
 	processToolBox ProcessToolBox,
-	sourceShardKey ClusterShardKey,
-	targetShardKey ClusterShardKey,
+	clientShardKey ClusterShardKey,
+	serverShardKey ClusterShardKey,
 ) Stream {
 	var clientProvider BiDirectionStreamClientProvider[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse] = &streamClientProvider{
 		processToolBox: processToolBox,
-		sourceShardKey: sourceShardKey,
-		targetShardKey: targetShardKey,
+		clientShardKey: clientShardKey,
+		serverShardKey: serverShardKey,
 	}
 	return NewBiDirectionStream(
 		clientProvider,
@@ -253,8 +259,8 @@ func newStream(
 
 type streamClientProvider struct {
 	processToolBox ProcessToolBox
-	sourceShardKey ClusterShardKey
-	targetShardKey ClusterShardKey
+	clientShardKey ClusterShardKey
+	serverShardKey ClusterShardKey
 }
 
 var _ BiDirectionStreamClientProvider[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse] = (*streamClientProvider)(nil)
@@ -262,7 +268,10 @@ var _ BiDirectionStreamClientProvider[*adminservice.StreamWorkflowReplicationMes
 func (p *streamClientProvider) Get(
 	ctx context.Context,
 ) (BiDirectionStreamClient[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse], error) {
-	return NewStreamBiDirectionStreamClientProvider(p.processToolBox.ClientBean).Get(ctx, p.sourceShardKey, p.targetShardKey)
+	return NewStreamBiDirectionStreamClientProvider(
+		p.processToolBox.ClusterMetadata,
+		p.processToolBox.ClientBean,
+	).Get(ctx, p.clientShardKey, p.serverShardKey)
 }
 
 type noopSchedulerMonitor struct {

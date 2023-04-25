@@ -1868,22 +1868,22 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	if !ok {
 		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
 	}
-	sourceClusterShardID, targetClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
 	if err != nil {
 		return err
 	}
-	if targetClusterShardID.ClusterName != h.clusterMetadata.GetCurrentClusterName() {
+	if serverClusterShardID.ClusterID != int32(h.clusterMetadata.GetClusterID()) {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf(
 			"wrong cluster: target: %v, current: %v",
-			targetClusterShardID.ClusterName,
-			h.clusterMetadata.GetCurrentClusterName(),
+			serverClusterShardID.ClusterID,
+			h.clusterMetadata.GetClusterID(),
 		))
 	}
-	shardContext, err := h.controller.GetShardByID(targetClusterShardID.ShardID)
+	shardContext, err := h.controller.GetShardByID(serverClusterShardID.ShardID)
 	if err != nil {
 		return err
 	}
-	return replicationapi.StreamReplicationTasks(server, shardContext, sourceClusterShardID, targetClusterShardID)
+	return replicationapi.StreamReplicationTasks(server, shardContext, clientClusterShardID, serverClusterShardID)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

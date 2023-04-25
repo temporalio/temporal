@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -87,12 +86,12 @@ func (s *streamSuite) SetupTest() {
 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.sourceClusterShardID = historyclient.ClusterShardID{
-		ClusterName: uuid.NewString(),
-		ShardID:     rand.Int31(),
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
 	}
 	s.targetClusterShardID = historyclient.ClusterShardID{
-		ClusterName: uuid.NewString(),
-		ShardID:     rand.Int31(),
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
 	}
 	s.shardContext.EXPECT().GetEngine(gomock.Any()).Return(s.historyEngine, nil).AnyTimes()
 }
@@ -109,11 +108,11 @@ func (s *streamSuite) TestRecvSyncReplicationState() {
 
 	s.shardContext.EXPECT().UpdateQueueClusterAckLevel(
 		tasks.CategoryReplication,
-		s.sourceClusterShardID.ClusterName,
+		string(s.sourceClusterShardID.ClusterID),
 		tasks.NewImmediateKey(replicationState.LastProcessedMessageId),
 	).Return(nil)
 	s.shardContext.EXPECT().UpdateRemoteClusterInfo(
-		s.sourceClusterShardID.ClusterName,
+		string(s.sourceClusterShardID.ClusterID),
 		replicationState.LastProcessedMessageId,
 		*replicationState.LastProcessedMessageTime,
 	)
@@ -127,7 +126,7 @@ func (s *streamSuite) TestSendCatchUp() {
 	endExclusiveWatermark := beginInclusiveWatermark + 1
 	s.shardContext.EXPECT().GetQueueClusterAckLevel(
 		tasks.CategoryReplication,
-		s.sourceClusterShardID.ClusterName,
+		string(s.sourceClusterShardID.ClusterID),
 	).Return(tasks.NewImmediateKey(beginInclusiveWatermark))
 	s.shardContext.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(
 		tasks.NewImmediateKey(endExclusiveWatermark),
@@ -140,7 +139,7 @@ func (s *streamSuite) TestSendCatchUp() {
 	)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		s.ctx,
-		s.sourceClusterShardID.ClusterName,
+		string(s.sourceClusterShardID.ClusterID),
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
@@ -183,13 +182,13 @@ func (s *streamSuite) TestSendLive() {
 	gomock.InOrder(
 		s.historyEngine.EXPECT().GetReplicationTasksIter(
 			s.ctx,
-			s.sourceClusterShardID.ClusterName,
+			string(s.sourceClusterShardID.ClusterID),
 			watermark0,
 			watermark1,
 		).Return(iter, nil),
 		s.historyEngine.EXPECT().GetReplicationTasksIter(
 			s.ctx,
-			s.sourceClusterShardID.ClusterName,
+			string(s.sourceClusterShardID.ClusterID),
 			watermark1,
 			watermark2,
 		).Return(iter, nil),
@@ -250,7 +249,7 @@ func (s *streamSuite) TestSendTasks_WithoutTasks() {
 	)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		s.ctx,
-		s.sourceClusterShardID.ClusterName,
+		string(s.sourceClusterShardID.ClusterID),
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
@@ -294,7 +293,7 @@ func (s *streamSuite) TestSendTasks_WithTasks() {
 	)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		s.ctx,
-		s.sourceClusterShardID.ClusterName,
+		string(s.sourceClusterShardID.ClusterID),
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
