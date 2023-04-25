@@ -135,6 +135,7 @@ func (n *noopTask) Execute() error                   { panic("implement me") }
 func (n *noopTask) HandleErr(err error) error        { panic("implement me") }
 func (n *noopTask) IsRetryableError(err error) bool  { panic("implement me") }
 func (n *noopTask) RetryPolicy() backoff.RetryPolicy { panic("implement me") }
+func (n *noopTask) Abort()                           { panic("implement me") }
 func (n *noopTask) Cancel()                          { panic("implement me") }
 func (n *noopTask) Ack()                             { n.Done() }
 func (n *noopTask) Nack(err error)                   { panic("implement me") }

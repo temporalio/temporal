@@ -63,6 +63,18 @@ func (m *MockExecutableTask) EXPECT() *MockExecutableTaskMockRecorder {
 	return m.recorder
 }
 
+// Abort mocks base method.
+func (m *MockExecutableTask) Abort() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Abort")
+}
+
+// Abort indicates an expected call of Abort.
+func (mr *MockExecutableTaskMockRecorder) Abort() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Abort", reflect.TypeOf((*MockExecutableTask)(nil).Abort))
+}
+
 // Ack mocks base method.
 func (m *MockExecutableTask) Ack() {
 	m.ctrl.T.Helper()

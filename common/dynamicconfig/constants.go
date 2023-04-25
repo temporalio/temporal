@@ -38,6 +38,7 @@ const (
 
 	// keys for system
 
+	// DEPRECATED: the following block of configs are deprecated and replaced by the next block of configs
 	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
 	StandardVisibilityPersistenceMaxReadQPS = "system.standardVisibilityPersistenceMaxReadQPS"
 	// StandardVisibilityPersistenceMaxWriteQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for write.
@@ -54,6 +55,15 @@ const (
 	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
 	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
 	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
+
+	// VisibilityPersistenceMaxReadQPS is the max QPC system host can query visibility DB for read.
+	VisibilityPersistenceMaxReadQPS = "system.visibilityPersistenceMaxReadQPS"
+	// VisibilityPersistenceMaxWriteQPS is the max QPC system host can query visibility DB for write.
+	VisibilityPersistenceMaxWriteQPS = "system.visibilityPersistenceMaxWriteQPS"
+	// EnableReadFromSecondaryVisibility is the config to enable read from secondary visibility
+	EnableReadFromSecondaryVisibility = "system.enableReadFromSecondaryVisibility"
+	// SecondaryVisibilityWritingMode is key for how to write to secondary visibility
+	SecondaryVisibilityWritingMode = "system.secondaryVisibilityWritingMode"
 	// VisibilityDisableOrderByClause is the config to disable ORDERY BY clause for Elasticsearch
 	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
 
@@ -105,6 +115,8 @@ const (
 	DeadlockInterval = "system.deadlock.Interval"
 	// How many extra goroutines can be created per root.
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
+	// Enable / disable worker versioning.
+	EnableWorkerVersioning = "system.workerVersioning.enable"
 
 	// keys for size limit
 
@@ -164,8 +176,6 @@ const (
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize = "frontend.visibilityMaxPageSize"
-	// FrontendESIndexMaxResultWindow is ElasticSearch index setting max_result_window
-	FrontendESIndexMaxResultWindow = "frontend.esIndexMaxResultWindow"
 	// FrontendHistoryMaxPageSize is default max size for GetWorkflowExecutionHistory in one page
 	FrontendHistoryMaxPageSize = "frontend.historyMaxPageSize"
 	// FrontendRPS is workflow rate limit per second

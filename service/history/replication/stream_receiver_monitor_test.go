@@ -87,8 +87,8 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 			Config: configs.NewConfig(
 				dynamicconfig.NewNoopCollection(),
 				1,
+				true,
 				false,
-				"",
 			),
 			ClientBean:     s.clientBean,
 			MetricsHandler: metrics.NoopMetricsHandler,

@@ -31,11 +31,12 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+var _ Action = (*actionSliceCount)(nil)
+
 type (
 	actionSliceCount struct {
-		attributes   *AlertAttributesSlicesCount
-		monitor      Monitor
-		completionFn actionCompletionFn
+		attributes *AlertAttributesSlicesCount
+		monitor    Monitor
 	}
 
 	compactCandidate struct {
@@ -47,21 +48,21 @@ type (
 func newSliceCountAction(
 	attributes *AlertAttributesSlicesCount,
 	monitor Monitor,
-	completionFn actionCompletionFn,
-) Action {
+) *actionSliceCount {
 	return &actionSliceCount{
-		attributes:   attributes,
-		monitor:      monitor,
-		completionFn: completionFn,
+		attributes: attributes,
+		monitor:    monitor,
 	}
 }
 
-func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
-	defer a.completionFn()
+func (a *actionSliceCount) Name() string {
+	return "slice-count"
+}
 
+func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
 	// first check if the alert is still valid
 	if a.monitor.GetTotalSliceCount() <= a.attributes.CriticalSliceCount {
-		return
+		return nil
 	}
 
 	// then try to shrink existing slices, which may reduce slice count
@@ -71,14 +72,14 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 	}
 	currentSliceCount := a.monitor.GetTotalSliceCount()
 	if currentSliceCount <= a.attributes.CriticalSliceCount {
-		return
+		return nil
 	}
 
 	// have to compact (force merge) slices to reduce slice count
 	preferredSliceCount := int(float64(a.attributes.CriticalSliceCount) * targetLoadFactor)
 
-	isDefaultReader := func(readerID int32) bool { return readerID == DefaultReaderId }
-	isNotDefaultReader := func(readerID int32) bool { return !isDefaultReader(readerID) }
+	isDefaultReader := func(readerID int64) bool { return readerID == DefaultReaderId }
+	isNotDefaultReader := func(readerID int64) bool { return !isDefaultReader(readerID) }
 	isUniversalPredicate := func(s Slice) bool { return tasks.IsUniverisalPredicate(s.Scope().Predicate) }
 	isNotUniversalPredicate := func(s Slice) bool { return !isUniversalPredicate(s) }
 
@@ -102,7 +103,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 		isNotUniversalPredicate,
 		preferredSliceCount,
 	) {
-		return
+		return nil
 	}
 
 	if a.findAndCompactCandidates(
@@ -111,7 +112,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 		isNotUniversalPredicate,
 		preferredSliceCount,
 	) {
-		return
+		return nil
 	}
 
 	if a.findAndCompactCandidates(
@@ -120,7 +121,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 		isUniversalPredicate,
 		a.attributes.CriticalSliceCount,
 	) {
-		return
+		return nil
 	}
 
 	a.findAndCompactCandidates(
@@ -129,11 +130,12 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 		isUniversalPredicate,
 		a.attributes.CriticalSliceCount,
 	)
+	return nil
 }
 
 func (a *actionSliceCount) findAndCompactCandidates(
-	readers map[int32]Reader,
-	readerPredicate func(int32) bool,
+	readers map[int64]Reader,
+	readerPredicate func(int64) bool,
 	slicePredicate SlicePredicate,
 	targetSliceCount int,
 ) bool {

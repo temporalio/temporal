@@ -50,6 +50,7 @@ import (
 const (
 	taskStatePending = int32(ctasks.TaskStatePending)
 
+	taskStateAborted   = int32(ctasks.TaskStateAborted)
 	taskStateCancelled = int32(ctasks.TaskStateCancelled)
 	taskStateAcked     = int32(ctasks.TaskStateAcked)
 	taskStateNacked    = int32(ctasks.TaskStateNacked)
@@ -73,6 +74,7 @@ type (
 		TaskCreationTime() time.Time
 		Ack()
 		Nack(err error)
+		Abort()
 		Cancel()
 		Reschedule()
 		IsRetryableError(err error) bool
@@ -161,6 +163,21 @@ func (e *ExecutableTaskImpl) Nack(err error) {
 	), tag.Error(err))
 	now := time.Now().UTC()
 	e.emitFinishMetrics(now)
+}
+
+func (e *ExecutableTaskImpl) Abort() {
+	if atomic.LoadInt32(&e.taskState) != taskStatePending {
+		return
+	}
+	if !atomic.CompareAndSwapInt32(&e.taskState, taskStatePending, taskStateAborted) {
+		e.Abort() // retry abort
+	}
+
+	e.Logger.Debug(fmt.Sprintf(
+		"replication task: %v encountered abort event",
+		e.taskID,
+	))
+	// should not emit metrics since abort means shutdown
 }
 
 func (e *ExecutableTaskImpl) Cancel() {

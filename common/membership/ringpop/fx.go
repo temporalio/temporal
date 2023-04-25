@@ -25,71 +25,31 @@
 package ringpop
 
 import (
-	"context"
-
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/rpc/encryption"
 )
 
-var Module = fx.Options(
-	fx.Provide(membershipMonitorProvider),
+// Module provides a membership.Monitor given the types in factoryParams. It also adds lifecycle hooks, so there's no
+// need to start or stop the monitor manually.
+var Module = fx.Provide(
+	provideMonitor,
 )
 
-func membershipMonitorProvider(
-	lc fx.Lifecycle,
-	clusterMetadataManager persistence.ClusterMetadataManager,
-	logger log.SnTaggedLogger,
-	cfg *config.Config,
-	svcName primitives.ServiceName,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	dc *dynamicconfig.Collection,
-) (membership.Monitor, error) {
-	servicePortMap := make(map[primitives.ServiceName]int)
-	for sn, sc := range cfg.Services {
-		servicePortMap[primitives.ServiceName(sn)] = sc.RPC.GRPCPort
-	}
-
-	rpcConfig := cfg.Services[string(svcName)].RPC
-
-	factory, err := newFactory(
-		&cfg.Global.Membership,
-		svcName,
-		servicePortMap,
-		logger,
-		clusterMetadataManager,
-		&rpcConfig,
-		tlsConfigProvider,
-		dc,
-	)
+func provideMonitor(lc fx.Lifecycle, params factoryParams) (membership.Monitor, error) {
+	f, err := newFactory(params)
 	if err != nil {
 		return nil, err
 	}
 
-	monitor, err := factory.getMonitor()
+	lc.Append(fx.StopHook(f.closeTChannel))
+
+	m, err := f.getMonitor()
 	if err != nil {
 		return nil, err
 	}
 
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				monitor.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				monitor.Stop()
-				factory.closeTChannel()
-				return nil
-			},
-		},
-	)
+	lc.Append(fx.StartStopHook(m.Start, m.Stop))
 
-	return monitor, nil
+	return m, nil
 }

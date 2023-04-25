@@ -235,7 +235,7 @@ func (r *StateRebuilderImpl) applyEvents(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		events,
+		[][]*historypb.HistoryEvent{events},
 		nil, // no new run history when rebuilding mutable state
 	)
 	if err != nil {
