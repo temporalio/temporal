@@ -25,13 +25,9 @@
 package hybrid_logical_clock
 
 import (
-	"errors"
-
 	clockpb "go.temporal.io/server/api/clock/v1"
 	commonclock "go.temporal.io/server/common/clock"
 )
-
-var ErrClocksEqual = errors.New("HybridLogicalClocks are equal")
 
 type Clock = clockpb.HybridLogicalClock
 

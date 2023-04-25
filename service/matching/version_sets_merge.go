@@ -48,7 +48,7 @@ func mergeSetIDs(a []string, b []string) []string {
 	return mergedSetIDs
 }
 
-// Merge and sort two sets of set IDs
+// Check if a set contains any of the given set IDs.
 func setContainsSetIDs(set *persistencepb.CompatibleVersionSet, ids []string) bool {
 	for _, needle := range ids {
 		for _, id := range set.SetIds {
