@@ -55,6 +55,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -148,6 +149,7 @@ func newMatchingEngine(
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,
 		clusterMeta:       cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		timeSource:        clock.NewRealTimeSource(),
 	}
 }
 
