@@ -27,12 +27,11 @@
 package temporaltest_test
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
-
-	"context"
-	"fmt"
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -191,7 +190,13 @@ func TestDefaultWorkerOptions(t *testing.T) {
 type denyAllClaimMapper struct{}
 
 func (denyAllClaimMapper) GetClaims(*authorization.AuthInfo) (*authorization.Claims, error) {
-	return nil, fmt.Errorf("no claims for you!")
+	// Return claims that have no permissions within the cluster.
+	return &authorization.Claims{
+		Subject:    "test-identity",
+		System:     authorization.RoleUndefined,
+		Namespaces: nil,
+		Extensions: nil,
+	}, nil
 }
 
 func TestBaseServerOptions(t *testing.T) {
