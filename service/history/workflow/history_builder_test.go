@@ -692,7 +692,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 				StartedEventId:     startedEventID,
 				Identity:           testIdentity,
 				BinaryChecksum:     checksum,
-				WorkerVersionSetId: &commonpb.WorkerVersionStamp{BuildId: "build_id_9"},
+				WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "build_id_9"},
 				SdkMetadata:        sdkMetadata,
 				MeteringMetadata:   meteringMeta,
 			},
