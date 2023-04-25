@@ -394,6 +394,33 @@ func TestMapShardID_ByNamespaceWorkflow_4And16(t *testing.T) {
 	require.True(t, found)
 }
 
+func TestMapShardID_1To4(t *testing.T) {
+	sourceShardCount := int32(1)
+	targetShardCount := int32(4)
+
+	targetShards := MapShardID(sourceShardCount, targetShardCount, 1)
+	require.Equal(t, []int32{
+		1, 2, 3, 4,
+	}, targetShards)
+}
+
+func TestMapShardID_4To1(t *testing.T) {
+	sourceShardCount := int32(4)
+	targetShardCount := int32(1)
+
+	targetShards := MapShardID(sourceShardCount, targetShardCount, 4)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 3)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 2)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 1)
+	require.Equal(t, []int32{1}, targetShards)
+}
+
 func TestMapShardID_4To16(t *testing.T) {
 	sourceShardCount := int32(4)
 	targetShardCount := int32(16)
