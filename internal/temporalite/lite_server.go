@@ -172,6 +172,9 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *portPr
 			Provider:   nil,
 		},
 	}
+	// TODO(dnr): Figure out why server fails to start when PublicClient is not set with error:
+	//            panic: Client must be created with client.Dial() or client.NewLazyClient()
+	//            See also: https://github.com/temporalio/temporal/pull/4026#discussion_r1149808018
 	serverConfig.PublicClient = config.PublicClient{
 		HostPort: fmt.Sprintf("%s:%d", localBroadcastAddress, cfg.FrontendPort),
 	}
