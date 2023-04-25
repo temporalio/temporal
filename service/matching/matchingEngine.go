@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -85,6 +86,11 @@ type (
 		namespaceID namespace.ID
 		taskType    enumspb.TaskQueueType
 		queueType   enumspb.TaskQueueKind
+	}
+
+	pollMetadata struct {
+		ratePerSecond             *float64
+		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 	}
 
 	matchingEngineImpl struct {
@@ -368,7 +374,10 @@ pollLoop:
 			return nil, err
 		}
 		taskQueueKind := request.TaskQueue.GetKind()
-		task, err := e.getTask(pollerCtx, taskQueue, nil, taskQueueKind)
+		pollMetadata := &pollMetadata{
+			workerVersionCapabilities: request.WorkerVersionCapabilities,
+		}
+		task, err := e.getTask(pollerCtx, taskQueue, taskQueueKind, pollMetadata)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -475,16 +484,18 @@ pollLoop:
 			return nil, err
 		}
 
-		var maxDispatch *float64
-		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
-			maxDispatch = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
-		}
 		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		taskQueueKind := request.TaskQueue.GetKind()
-		task, err := e.getTask(pollerCtx, taskQueue, maxDispatch, taskQueueKind)
+		pollMetadata := &pollMetadata{
+			workerVersionCapabilities: request.WorkerVersionCapabilities,
+		}
+		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
+			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
+		}
+		task, err := e.getTask(pollerCtx, taskQueue, taskQueueKind, pollMetadata)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -869,18 +880,17 @@ func (e *matchingEngineImpl) getAllPartitions(
 	return partitionKeys, nil
 }
 
-// Loads a task from persistence and wraps it in a task context
 func (e *matchingEngineImpl) getTask(
 	ctx context.Context,
 	taskQueue *taskQueueID,
-	maxDispatchPerSecond *float64,
 	taskQueueKind enumspb.TaskQueueKind,
+	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
 	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
 	if err != nil {
 		return nil, err
 	}
-	return tlMgr.GetTask(ctx, maxDispatchPerSecond)
+	return tlMgr.GetTask(ctx, pollMetadata)
 }
 
 func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
