@@ -221,7 +221,6 @@ func (c *pgQueryConverter) buildSelectStmt(
 	queryString string,
 	pageSize int,
 	token *pageToken,
-	orderByClause string,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
@@ -266,11 +265,13 @@ func (c *pgQueryConverter) buildSelectStmt(
 		`SELECT %s
 		FROM executions_visibility
 		WHERE %s
-		%s
+		ORDER BY %s DESC, %s DESC, %s
 		LIMIT ?`,
 		strings.Join(sqlplugin.DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
-		orderByClause,
+		sqlparser.String(c.getCoalesceCloseTimeExpr()),
+		searchattribute.GetSqlDbColName(searchattribute.StartTime),
+		searchattribute.GetSqlDbColName(searchattribute.RunID),
 	), queryArgs
 }
 

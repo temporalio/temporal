@@ -214,7 +214,6 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 	queryString string,
 	pageSize int,
 	token *pageToken,
-	orderByClause string,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
@@ -261,13 +260,15 @@ func (c *mysqlQueryConverter) buildSelectStmt(
 		LEFT JOIN custom_search_attributes
 		USING (%s, %s)
 		WHERE %s
-		%s
+		ORDER BY %s DESC, %s DESC, %s
 		LIMIT ?`,
 		strings.Join(addPrefix("ev.", sqlplugin.DbFields), ", "),
 		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
 		strings.Join(whereClauses, " AND "),
-		orderByClause,
+		sqlparser.String(c.getCoalesceCloseTimeExpr()),
+		searchattribute.GetSqlDbColName(searchattribute.StartTime),
+		searchattribute.GetSqlDbColName(searchattribute.RunID),
 	), queryArgs
 }
 
