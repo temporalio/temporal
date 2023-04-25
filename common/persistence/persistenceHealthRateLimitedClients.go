@@ -688,10 +688,10 @@ func (p *executionHealthRateLimitedPersistenceClient) GetHistoryTree(
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	defer p.healthSignals.RecordLatencyByShard(api, *request.ShardID)
+	defer p.healthSignals.RecordLatencyByShard(api, request.ShardID)
 	response, err := p.persistence.GetHistoryTree(ctx, request)
 	if err != nil {
-		p.healthSignals.RecordErrorByShard(api, *request.ShardID)
+		p.healthSignals.RecordErrorByShard(api, request.ShardID)
 	}
 	return response, err
 }
