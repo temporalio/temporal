@@ -1348,8 +1348,8 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 	return nil
 }
 
-func (e *MutableStateImpl) GetWorkerVersionStamp() *commonpb.WorkerVersionStamp {
-	return e.executionInfo.WorkerVersionStamp
+func (ms *MutableStateImpl) GetWorkerVersionStamp() *commonpb.WorkerVersionStamp {
+	return ms.executionInfo.WorkerVersionStamp
 }
 
 func (ms *MutableStateImpl) HasBufferedEvents() bool {
