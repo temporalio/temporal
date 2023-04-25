@@ -834,7 +834,7 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 		return data, nil
 	})
 	require.Error(t, err)
-	require.ErrorIs(t, err, errVersioningDataNoMutateNonRoot)
+	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
 
 	actTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0)
 	require.NoError(t, err)
@@ -845,5 +845,5 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 		return data, nil
 	})
 	require.Error(t, err)
-	require.ErrorIs(t, err, errVersioningDataNoMutateNonRoot)
+	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
 }
