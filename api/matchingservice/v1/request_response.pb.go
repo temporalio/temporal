@@ -549,7 +549,7 @@ type AddWorkflowTaskRequest struct {
 	ForwardedSource        string           `protobuf:"bytes,6,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
 	Source                 v16.TaskSource   `protobuf:"varint,7,opt,name=source,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"source,omitempty"`
 	Clock                  *v17.VectorClock `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
-	// If using build-id based versioning: version stamp of last worker to process a workflow
+	// If using build-id based versioning: version stamp of last worker to complete a workflow
 	// task for this workflow. Used to dispatch to correct worker in matching.
 	WorkerVersionStamp *v11.WorkerVersionStamp `protobuf:"bytes,10,opt,name=worker_version_stamp,json=workerVersionStamp,proto3" json:"worker_version_stamp,omitempty"`
 }
@@ -695,7 +695,7 @@ type AddActivityTaskRequest struct {
 	ForwardedSource        string           `protobuf:"bytes,7,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
 	Source                 v16.TaskSource   `protobuf:"varint,8,opt,name=source,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"source,omitempty"`
 	Clock                  *v17.VectorClock `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
-	// If using build-id based versioning: version stamp of last worker to process a workflow
+	// If using build-id based versioning: version stamp of last worker to complete a workflow
 	// task for this workflow. Used to dispatch to correct worker in matching.
 	WorkerVersionStamp *v11.WorkerVersionStamp `protobuf:"bytes,10,opt,name=worker_version_stamp,json=workerVersionStamp,proto3" json:"worker_version_stamp,omitempty"`
 }
@@ -835,7 +835,7 @@ type QueryWorkflowRequest struct {
 	TaskQueue       *v14.TaskQueue           `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	QueryRequest    *v1.QueryWorkflowRequest `protobuf:"bytes,3,opt,name=query_request,json=queryRequest,proto3" json:"query_request,omitempty"`
 	ForwardedSource string                   `protobuf:"bytes,4,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
-	// If using build-id based versioning: version stamp of last worker to process a workflow
+	// If using build-id based versioning: version stamp of last worker to complete a workflow
 	// task for this workflow. Used to dispatch to correct worker in matching.
 	WorkerVersionStamp *v11.WorkerVersionStamp `protobuf:"bytes,5,opt,name=worker_version_stamp,json=workerVersionStamp,proto3" json:"worker_version_stamp,omitempty"`
 }

@@ -327,7 +327,7 @@ type GetMutableStateResponse struct {
 	IsStickyTaskQueueEnabled              bool                        `protobuf:"varint,18,opt,name=is_sticky_task_queue_enabled,json=isStickyTaskQueueEnabled,proto3" json:"is_sticky_task_queue_enabled,omitempty"`
 	LastFirstEventTxnId                   int64                       `protobuf:"varint,19,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3" json:"last_first_event_txn_id,omitempty"`
 	FirstExecutionRunId                   string                      `protobuf:"bytes,20,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
-	// If using build-id based versioning: version stamp of last worker to process a workflow
+	// If using build-id based versioning: version stamp of last worker to complete a workflow
 	// task for this workflow.
 	WorkerVersionStamp *v14.WorkerVersionStamp `protobuf:"bytes,21,opt,name=worker_version_stamp,json=workerVersionStamp,proto3" json:"worker_version_stamp,omitempty"`
 }
