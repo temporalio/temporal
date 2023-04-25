@@ -51,7 +51,6 @@ type (
 			queryString string,
 			pageSize int,
 			token *pageToken,
-			orderByClause string,
 		) (string, []any)
 
 		buildCountStmt(namespaceID namespace.ID, queryString string) (string, []any)
@@ -139,7 +138,6 @@ func newQueryConverterInternal(
 func (c *QueryConverter) BuildSelectStmt(
 	pageSize int,
 	nextPageToken []byte,
-	orderByClause string,
 ) (*sqlplugin.VisibilitySelectFilter, error) {
 	token, err := deserializePageToken(nextPageToken)
 	if err != nil {
@@ -149,13 +147,11 @@ func (c *QueryConverter) BuildSelectStmt(
 	if err != nil {
 		return nil, err
 	}
-
 	queryString, queryArgs := c.buildSelectStmt(
 		c.namespaceID,
 		queryString,
 		pageSize,
 		token,
-		orderByClause,
 	)
 	return &sqlplugin.VisibilitySelectFilter{Query: queryString, QueryArgs: queryArgs}, nil
 }
@@ -595,13 +591,6 @@ func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 	return nil
 }
 
-func (c *QueryConverter) getDefaultOrderByClause() string {
-	return fmt.Sprintf("ORDER BY %s DESC, %s DESC, %s",
-		sqlparser.String(c.getCoalesceCloseTimeExpr()),
-		searchattribute.GetSqlDbColName(searchattribute.StartTime),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
-	)
-}
 func isSupportedOperator(supportedOperators []string, operator string) bool {
 	for _, op := range supportedOperators {
 		if operator == op {

@@ -201,6 +201,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	wh := s.getWorkflowHandler(config)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(testNamespace).Return("").AnyTimes()
 
 	// test list open by wid
 	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
@@ -1781,9 +1782,7 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 }
 
 func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
-	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	wh := s.getWorkflowHandler(config)
+	wh := s.getWorkflowHandler(s.newConfig())
 	now := timestamp.TimePtr(time.Now())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
@@ -1819,9 +1818,7 @@ func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
 }
 
 func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
-	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	wh := s.getWorkflowHandler(config)
+	wh := s.getWorkflowHandler(s.newConfig())
 	now := timestamp.TimePtr(time.Now())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
@@ -1858,10 +1855,9 @@ func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
 
 func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-
 	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(elasticsearch.PersistenceName).AnyTimes()
 
 	query := "WorkflowId = 'wid'"
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
@@ -1921,9 +1917,9 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 
 func (s *workflowHandlerSuite) TestScanWorkflowExecutions() {
 	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(elasticsearch.PersistenceName).AnyTimes()
 
 	query := "WorkflowId = 'wid'"
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
@@ -1982,9 +1978,7 @@ func (s *workflowHandlerSuite) TestScanWorkflowExecutions() {
 }
 
 func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
-	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	wh := s.getWorkflowHandler(config)
+	wh := s.getWorkflowHandler(s.newConfig())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 5}, nil)
@@ -2057,10 +2051,7 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 }
 
 func (s *workflowHandlerSuite) TestGetSystemInfo() {
-	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-
-	wh := s.getWorkflowHandler(config)
+	wh := s.getWorkflowHandler(s.newConfig())
 
 	resp, err := wh.GetSystemInfo(context.Background(), &workflowservice.GetSystemInfoRequest{})
 	s.NoError(err)
@@ -2626,6 +2617,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations() {
 	wh := s.getWorkflowHandler(config)
 	now := timestamp.TimePtr(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(testNamespace).Return("").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
@@ -2677,7 +2669,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, false)
+	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, true, false)
 }
 
 func updateRequest(
