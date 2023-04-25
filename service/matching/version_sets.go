@@ -28,6 +28,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"crypto/sha256"
+	"encoding/base64"
+
 	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
@@ -127,6 +130,13 @@ func UpdateVersionSets(clock hlc.Clock, data *persistence.VersioningData, req *w
 	return data, nil
 }
 
+func hashBuildID(buildID string) string {
+	bytes := []byte(buildID)
+	summed := sha256.Sum256(bytes)
+	// 20 base64 chars of entropy is enough for this case
+	return base64.URLEncoding.EncodeToString(summed[:])[:20]
+}
+
 //nolint:revive // cyclomatic complexity
 func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistence.VersioningData, error) {
 	// First find if the targeted version is already in the sets
@@ -146,7 +156,7 @@ func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, r
 		}
 
 		modifiedData.VersionSets = append(modifiedData.VersionSets, &persistence.CompatibleVersionSet{
-			SetIds:   []string{targetedVersion},
+			SetIds:   []string{hashBuildID(targetedVersion)},
 			BuildIds: []*persistence.BuildID{{Id: targetedVersion, State: persistence.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}},
 		})
 		makeVersionInSetDefault(&modifiedData, len(modifiedData.VersionSets)-1, 0, &timestamp)
