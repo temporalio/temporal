@@ -556,6 +556,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		workflowTask.StartedEventID,
 		request.Identity,
 		request.BinaryChecksum,
+		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
 	)
@@ -915,7 +916,9 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 	maxResetPoints int,
 ) error {
-	m.ms.executionInfo.LastWorkflowTaskStartedEventId = event.GetWorkflowTaskCompletedEventAttributes().GetStartedEventId()
+	attrs := event.GetWorkflowTaskCompletedEventAttributes()
+	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
+	m.ms.executionInfo.WorkerVersionStamp = attrs.GetWorkerVersion()
 	return m.ms.addBinaryCheckSumIfNotExists(event, maxResetPoints)
 }
 

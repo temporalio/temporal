@@ -252,6 +252,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	startedEventID int64,
 	identity string,
 	checksum string,
+	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
 ) *historypb.HistoryEvent {
@@ -262,6 +263,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 			StartedEventId:   startedEventID,
 			Identity:         identity,
 			BinaryChecksum:   checksum,
+			WorkerVersion:    workerVersionStamp,
 			SdkMetadata:      sdkMetadata,
 			MeteringMetadata: meteringMetadata,
 		},

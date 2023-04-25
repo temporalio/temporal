@@ -29,6 +29,7 @@ import (
 	"errors"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/common/log"
@@ -105,6 +106,7 @@ type (
 
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
+		workerVersionStamp                 *commonpb.WorkerVersionStamp
 	}
 
 	workflowTaskPostActionInfo struct {
@@ -112,6 +114,7 @@ type (
 
 		workflowTaskScheduleToStartTimeout int64
 		taskqueue                          taskqueuepb.TaskQueue
+		workerVersionStamp                 *commonpb.WorkerVersionStamp
 	}
 
 	startChildExecutionPostActionInfo struct {
@@ -149,6 +152,7 @@ func newActivityTaskPostActionInfo(
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
 	}, nil
 }
 
@@ -166,6 +170,7 @@ func newActivityRetryTimePostActionInfo(
 		historyResendInfo:                  resendInfo,
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
 	}, nil
 }
 
@@ -183,6 +188,7 @@ func newWorkflowTaskPostActionInfo(
 		historyResendInfo:                  resendInfo,
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
+		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
 	}, nil
 }
 

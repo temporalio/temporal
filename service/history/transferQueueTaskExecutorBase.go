@@ -119,6 +119,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx context.Context,
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout *time.Duration,
+	workerVersionStamp *commonpb.WorkerVersionStamp,
 ) error {
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -133,6 +134,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+		WorkerVersionStamp:     workerVersionStamp,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
@@ -148,6 +150,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	task *tasks.WorkflowTask,
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout *time.Duration,
+	workerVersionStamp *commonpb.WorkerVersionStamp,
 ) error {
 	_, err := t.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -159,6 +162,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+		WorkerVersionStamp:     workerVersionStamp,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
