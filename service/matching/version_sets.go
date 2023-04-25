@@ -27,7 +27,6 @@ package matching
 import (
 	"encoding/binary"
 	"fmt"
-	"strings"
 
 	"crypto/sha256"
 	"encoding/base64"
@@ -134,8 +133,8 @@ func UpdateVersionSets(clock hlc.Clock, data *persistence.VersioningData, req *w
 func hashBuildID(buildID string) string {
 	bytes := []byte(buildID)
 	summed := sha256.Sum256(bytes)
-	// We don't need the padding
-	return strings.ReplaceAll(base64.URLEncoding.EncodeToString(summed[:]), "=", "")
+	// 20 base64 chars of entropy is enough for this case
+	return base64.URLEncoding.EncodeToString(summed[:])[:20]
 }
 
 //nolint:revive // cyclomatic complexity
