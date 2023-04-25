@@ -34,6 +34,11 @@ type (
 	}
 )
 
+const (
+	operatorServicePrefix = "/temporal.api.operatorservice.v1.OperatorService/"
+	adminServicePrefix    = "/temporal.server.api.adminservice.v1.AdminService/"
+)
+
 var _ Authorizer = (*defaultAuthorizer)(nil)
 
 // NewDefaultAuthorizer creates a default authorizer
@@ -70,11 +75,22 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	if !found || role == RoleUndefined {
 		return resultDeny, nil
 	}
-	if role >= RoleWriter {
-		return resultAllow, nil
-	}
-	if role >= RoleReader && readOnlyNamespaceAPI {
-		return resultAllow, nil
+
+	// system service means admin / operator service
+	isSystemService := strings.HasPrefix(target.APIName, operatorServicePrefix) || strings.HasPrefix(target.APIName, adminServicePrefix)
+	if isSystemService {
+		// for system service APIs, only RoleAdmin of given namespace can access
+		if role >= RoleAdmin {
+			return resultAllow, nil
+		}
+	} else {
+		// for non system services
+		if role >= RoleWriter {
+			return resultAllow, nil
+		}
+		if role >= RoleReader && readOnlyNamespaceAPI {
+			return resultAllow, nil
+		}
 	}
 
 	return resultDeny, nil

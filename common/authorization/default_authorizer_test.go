@@ -37,10 +37,15 @@ import (
 )
 
 var (
-	claimsNone          = Claims{}
-	claimsNamespaceOnly = Claims{
+	claimsNone            = Claims{}
+	claimsNamespaceWriter = Claims{
 		Namespaces: map[string]Role{
 			testNamespace: RoleWriter,
+		},
+	}
+	claimsNamespaceAdmin = Claims{
+		Namespaces: map[string]Role{
+			testNamespace: RoleAdmin,
 		},
 	}
 	claimsSystemAdmin = Claims{
@@ -176,9 +181,19 @@ func (s *defaultAuthorizerSuite) TestSystemAdminListNamespaces() {
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
-func (s *defaultAuthorizerSuite) TestNamespaceOnly() {
+func (s *defaultAuthorizerSuite) TestNamespaceWriterOnWorkflowService() {
 	// don't need any system-level claims to do namespace-level apis
-	result, err := s.authorizer.Authorize(context.TODO(), &claimsNamespaceOnly, startWorkflowExecutionTarget)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsNamespaceWriter, startWorkflowExecutionTarget)
+	s.NoError(err)
+	s.Equal(DecisionAllow, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestNamespaceWriterOnSystemService() {
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsNamespaceWriter, adminAddSearchAttributeTarget)
+	s.NoError(err)
+	s.Equal(DecisionDeny, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestNamespaceAdminOnSystemService() {
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsNamespaceAdmin, adminAddSearchAttributeTarget)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
@@ -187,7 +202,7 @@ func (s *defaultAuthorizerSuite) TestHealthChecks() {
 	for _, claims := range []*Claims{
 		nil,
 		&claimsNone,
-		&claimsNamespaceOnly,
+		&claimsNamespaceWriter,
 	} {
 		for _, target := range []*CallTarget{
 			&targetGrpcHealthCheck,
