@@ -64,14 +64,17 @@ func newTaskQueueIDWithPartition(
 	}, nil
 }
 
-// To be used in a later versioning PR:
-// func newTaskQueueIDWithVersionSet(id *taskQueueID, versionSet string) *taskQueueID {
-// 	return &taskQueueID{
-// 		Name:        id.Name.WithVersionSet(versionSet),
-// 		namespaceID: id.namespaceID,
-// 		taskType:    id.taskType,
-// 	}
-// }
+func newTaskQueueIDWithVersionSet(id *taskQueueID, versionSet string) *taskQueueID {
+	return &taskQueueID{
+		Name:        id.Name.WithVersionSet(versionSet),
+		namespaceID: id.namespaceID,
+		taskType:    id.taskType,
+	}
+}
+
+func (tid *taskQueueID) OwnsUserData() bool {
+	return tid.IsRoot() && tid.VersionSet() == "" && tid.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW
+}
 
 func (tid *taskQueueID) String() string {
 	var b bytes.Buffer

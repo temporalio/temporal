@@ -466,7 +466,7 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
-// GetVersioningData returns the versioning data for the task queue if any. If this task queue is a sub-partition and
+// GetVersioningData returns the versioning data for the task queue if any. If this task queue is a non-root partition and
 // has no cached data, it will explicitly attempt a fetch from the root partition.
 func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error) {
 	data, err := c.db.GetUserData(ctx)
@@ -480,7 +480,7 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 }
 
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) error {
-	newDat, err := c.db.UpdateUserData(ctx, updateFn)
+	newData, err := c.db.UpdateUserData(ctx, updateFn)
 	c.signalIfFatal(err)
 	if err != nil {
 		return err
@@ -502,10 +502,10 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, updateFn func
 						NamespaceId:   c.taskQueueID.namespaceID.String(),
 						TaskQueue:     tq,
 						TaskQueueType: tqt,
-						UserData:      newDat,
+						UserData:      newData,
 					})
 				if err != nil {
-					c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
+					c.logger.Warn("Failed to notify partition of invalidated versioning data",
 						tag.WorkflowTaskQueueName(tq), tag.Error(err))
 				}
 				wg.Done()
@@ -518,9 +518,9 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, updateFn func
 
 func (c *taskQueueManagerImpl) InvalidateUserData(request *matchingservice.InvalidateTaskQueueUserDataRequest) error {
 	if request.GetUserData() != nil {
-		if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-			// Should never happen. Root partitions do not get their versioning data invalidated.
-			c.logger.Warn("A root workflow partition was told to invalidate its versioning data, this should not happen")
+		if c.taskQueueID.OwnsUserData() {
+			// Should never happen. Root partitions do not get their user data invalidated.
+			c.logger.Warn("A root workflow partition was told to invalidate its user data, this should not happen")
 			return nil
 		}
 		c.db.setUserDataForNonRootPartition(request.GetUserData())
@@ -738,7 +738,7 @@ func (c *taskQueueManagerImpl) fetchUserDataFromRootPartitionOnInit(ctx context.
 func (c *taskQueueManagerImpl) fetchUserDataFromRootPartition(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error) {
 	// Nothing to do if we are the root partition of a workflow queue, since we should own the data.
 	// (for versioning - any later added metadata may need to not abort so early)
-	if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+	if c.taskQueueID.OwnsUserData() {
 		return nil, nil
 	}
 
@@ -792,8 +792,8 @@ func (mp *metadataPoller) pollLoop() {
 		case <-ticker.C:
 			// In case the interval has changed
 			ticker.Reset(mp.pollIntervalCfgFn())
-			dat, err := mp.tqMgr.fetchUserDataFromRootPartition(context.TODO())
-			if dat == nil && err == nil {
+			data, err := mp.tqMgr.fetchUserDataFromRootPartition(context.TODO())
+			if data == nil && err == nil {
 				// Can stop polling since there is no versioning data. Loop will be restarted if we
 				// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
 				return
