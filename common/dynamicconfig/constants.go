@@ -115,6 +115,8 @@ const (
 	DeadlockInterval = "system.deadlock.Interval"
 	// How many extra goroutines can be created per root.
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
+	// Enable / disable worker versioning.
+	EnableWorkerVersioning = "system.workerVersioning.enable"
 
 	// keys for size limit
 

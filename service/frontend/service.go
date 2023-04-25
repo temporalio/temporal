@@ -164,6 +164,7 @@ type Config struct {
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	EnableUpdateWorkflowExecution dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkerVersioning        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -238,6 +239,7 @@ func NewConfig(
 		MaxExecutionCountBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace, 1000),
 
 		EnableUpdateWorkflowExecution: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
+		EnableWorkerVersioning:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableWorkerVersioning, false),
 	}
 }
 
