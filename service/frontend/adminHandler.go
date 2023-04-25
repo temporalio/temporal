@@ -390,7 +390,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 			CustomSearchAttributeAliases: upsertFieldToAliasMap,
 		},
 	})
-	if err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
+	if err != nil && err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
 		return errRaceConditionAddingSearchAttributes
 	}
 	return err
@@ -1970,7 +1970,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 			switch attr := req.GetAttributes().(type) {
 			case *adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
 				if err = sourceCluster.Send(&historyservice.StreamWorkflowReplicationMessagesRequest{
-					ShardId: req.ShardId,
 					Attributes: &historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 						SyncReplicationState: attr.SyncReplicationState,
 					},
@@ -1992,11 +1991,10 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				return err
 			}
 			switch attr := resp.GetAttributes().(type) {
-			case *historyservice.StreamWorkflowReplicationMessagesResponse_ReplicationMessages:
+			case *historyservice.StreamWorkflowReplicationMessagesResponse_Messages:
 				if err = targetCluster.Send(&adminservice.StreamWorkflowReplicationMessagesResponse{
-					ShardId: resp.ShardId,
-					Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_ReplicationMessages{
-						ReplicationMessages: attr.ReplicationMessages,
+					Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
+						Messages: attr.Messages,
 					},
 				}); err != nil {
 					return err

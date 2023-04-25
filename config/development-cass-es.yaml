@@ -4,8 +4,7 @@ log:
 
 persistence:
   defaultStore: cass-default
-  visibilityStore:
-  advancedVisibilityStore: es-visibility
+  visibilityStore: es-visibility
   numHistoryShards: 4
   datastores:
     cass-default:

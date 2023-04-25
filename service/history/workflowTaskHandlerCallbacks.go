@@ -163,7 +163,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 	ctx context.Context,
 	req *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-
 	namespaceEntry, err := api.GetActiveNamespace(handler.shard, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -226,6 +225,20 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
 			}
 
+			// Assuming a workflow is running on a sticky task queue by a workerA.
+			// After workerA is dead for more than 10s, matching will return StickyWorkerUnavailable error when history
+			// tries to push a new workflow task. When history sees that error, it will fall back to push the task to
+			// its original normal task queue without clear its stickiness to avoid an extra persistence write.
+			// We will clear the stickiness here when that task is delivered to another worker polling from normal queue.
+			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
+			// Sending down partial history will cost the worker an extra fetch to server for the full history.
+			if mutableState.IsStickyTaskQueueEnabled() &&
+				mutableState.TaskQueue().GetName() != req.PollRequest.TaskQueue.GetName() {
+				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
+				// and sticky queue never has partition, so it does not matter.
+				mutableState.ClearStickyness()
+			}
+
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
@@ -235,6 +248,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
 				return nil, err
+			}
+
+			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+				updateAction.Noop = true
 			}
 
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
@@ -365,6 +382,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			token.WorkflowId,
 			token.RunId,
 		),
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -510,6 +528,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		if err = workflowTaskHandler.handleMessages(
 			ctx,
 			request.Messages,
+			weContext.UpdateRegistry(),
 		); err != nil {
 			return nil, err
 		}
@@ -568,40 +587,38 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	} else if ms.IsWorkflowExecutionRunning() && hasPendingUpdates {
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 	}
-	createNewWorkflowTask := newWorkflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
 
-	var newWorkflowTaskScheduledEventID int64
-	if createNewWorkflowTask {
-		// TODO (alex-update): Need to support case when ReturnNewWorkflowTask=false and WT.Type=Speculative.
-		// In this case WT needs to be added directly to matching.
-		// Current implementation will create normal WT.
-		bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
-		if !bypassTaskGeneration {
-			// If task generation can't be bypassed workflow task must be of Normal type because Speculative workflow task always skip task generation.
-			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-		}
+	bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
+	// TODO (alex-update): Need to support case when ReturnNewWorkflowTask=false and WT.Type=Speculative.
+	// In this case WT needs to be added directly to matching.
+	// Current implementation will create normal WT.
+	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && !bypassTaskGeneration {
+		// If task generation can't be bypassed workflow task must be of Normal type because Speculative workflow task always skip task generation.
+		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+	}
 
-		var newWorkflowTask *workflow.WorkflowTaskInfo
-		var err error
+	var newWorkflowTask *workflow.WorkflowTaskInfo
+	// Speculative workflow task will be created after mutable state is persisted.
+	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
+		var newWTErr error
 		if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
-			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
+			newWorkflowTask, newWTErr = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
 				bypassTaskGeneration,
 				currentWorkflowTask.OriginalScheduledTime,
 				enumsspb.WORKFLOW_TASK_TYPE_NORMAL, // Heartbeat workflow task is always of Normal type.
 			)
 		} else {
-			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, newWorkflowTaskType)
+			newWorkflowTask, newWTErr = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, newWorkflowTaskType)
 		}
-		if err != nil {
-			return nil, err
+		if newWTErr != nil {
+			return nil, newWTErr
 		}
 
-		newWorkflowTaskScheduledEventID = newWorkflowTask.ScheduledEventID
 		// skip transfer task for workflow task if request asking to return new workflow task
 		if bypassTaskGeneration {
 			// start the new workflow task if request asked to do so
 			// TODO: replace the poll request
-			_, _, err := ms.AddWorkflowTaskStartedEvent(
+			_, newWorkflowTask, err = ms.AddWorkflowTaskStartedEvent(
 				newWorkflowTask.ScheduledEventID,
 				"request-from-RespondWorkflowTaskCompleted",
 				newWorkflowTask.TaskQueue,
@@ -619,7 +636,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newWorkflowExecutionState := newMutableState.GetExecutionState()
 		updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
-			handler.shard.GetTimeSource().Now(),
 			workflow.NewContext(
 				handler.shard,
 				definition.NewWorkflowKey(
@@ -632,7 +648,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			newMutableState,
 		)
 	} else {
-		updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx, handler.shard.GetTimeSource().Now())
+		// If completedEvent is not nil (which it means that WT wasn't speculative)
+		// OR new WT is normal, then mutable state is persisted.
+		// Otherwise, (both old and new WT are speculative) mutable state is updated in memory only but not persisted.
+		if completedEvent != nil || newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
+			updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx)
+		}
 	}
 
 	if updateErr != nil {
@@ -665,7 +686,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			}
 			if err := weContext.UpdateWorkflowExecutionAsActive(
 				ctx,
-				handler.shard.GetTimeSource().Now(),
 			); err != nil {
 				return nil, err
 			}
@@ -674,13 +694,30 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, updateErr
 	}
 
+	// Create speculative workflow task after mutable state is persisted.
+	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		newWorkflowTask, err = ms.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, newWorkflowTaskType)
+		if err != nil {
+			return nil, err
+		}
+		_, newWorkflowTask, err = ms.AddWorkflowTaskStartedEvent(
+			newWorkflowTask.ScheduledEventID,
+			"request-from-RespondWorkflowTaskCompleted",
+			newWorkflowTask.TaskQueue,
+			request.Identity,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Send update results to gRPC API callers.
 	err = weContext.UpdateRegistry().ProcessIncomingMessages(req.GetCompleteRequest().GetMessages())
 	if err != nil {
 		return nil, err
 	}
 
-	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), createNewWorkflowTask, namespaceEntry, workflowTaskHeartbeating)
+	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), newWorkflowTask != nil, namespaceEntry, workflowTaskHeartbeating)
 
 	if workflowTaskHeartbeatTimeout {
 		// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
@@ -692,9 +729,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
-	if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
-		workflowTask := ms.GetWorkflowTaskByID(newWorkflowTaskScheduledEventID)
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(), workflowTask, request.GetIdentity())
+	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(), newWorkflowTask, request.GetIdentity())
 		if err != nil {
 			return nil, err
 		}
@@ -737,6 +773,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 			req.WorkflowExecution.WorkflowId,
 			req.WorkflowExecution.RunId,
 		),
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err
@@ -774,7 +811,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	// before it was started.
 	response.ScheduledEventId = workflowTask.ScheduledEventID
 	response.StartedEventId = workflowTask.StartedEventID
-	response.StickyExecutionEnabled = ms.IsStickyTaskQueueEnabled()
+	if ms.IsStickyTaskQueueEnabled() {
+		response.StickyExecutionEnabled = true
+	}
 	response.NextEventId = ms.GetNextEventID()
 	response.Attempt = workflowTask.Attempt
 	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{

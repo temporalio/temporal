@@ -127,6 +127,7 @@ func (s *executableTaskSuite) TestCreationTime() {
 
 func (s *executableTaskSuite) TestAckStateAttempt() {
 	s.Equal(ctasks.TaskStatePending, s.task.State())
+	s.False(s.task.TerminalState())
 
 	s.task.Ack()
 	s.Equal(ctasks.TaskStateAcked, s.task.State())
@@ -135,16 +136,22 @@ func (s *executableTaskSuite) TestAckStateAttempt() {
 	s.task.Nack(nil)
 	s.Equal(ctasks.TaskStateAcked, s.task.State())
 	s.Equal(1, s.task.Attempt())
+	s.task.Abort()
+	s.Equal(ctasks.TaskStateAcked, s.task.State())
+	s.Equal(1, s.task.Attempt())
 	s.task.Cancel()
 	s.Equal(ctasks.TaskStateAcked, s.task.State())
 	s.Equal(1, s.task.Attempt())
 	s.task.Reschedule()
 	s.Equal(ctasks.TaskStateAcked, s.task.State())
 	s.Equal(1, s.task.Attempt())
+
+	s.True(s.task.TerminalState())
 }
 
 func (s *executableTaskSuite) TestNackStateAttempt() {
 	s.Equal(ctasks.TaskStatePending, s.task.State())
+	s.False(s.task.TerminalState())
 
 	s.task.Nack(nil)
 	s.Equal(ctasks.TaskStateNacked, s.task.State())
@@ -153,16 +160,46 @@ func (s *executableTaskSuite) TestNackStateAttempt() {
 	s.task.Ack()
 	s.Equal(ctasks.TaskStateNacked, s.task.State())
 	s.Equal(1, s.task.Attempt())
+	s.task.Abort()
+	s.Equal(ctasks.TaskStateNacked, s.task.State())
+	s.Equal(1, s.task.Attempt())
 	s.task.Cancel()
 	s.Equal(ctasks.TaskStateNacked, s.task.State())
 	s.Equal(1, s.task.Attempt())
 	s.task.Reschedule()
 	s.Equal(ctasks.TaskStateNacked, s.task.State())
 	s.Equal(1, s.task.Attempt())
+
+	s.True(s.task.TerminalState())
+}
+
+func (s *executableTaskSuite) TestAbortStateAttempt() {
+	s.Equal(ctasks.TaskStatePending, s.task.State())
+	s.False(s.task.TerminalState())
+
+	s.task.Abort()
+	s.Equal(ctasks.TaskStateAborted, s.task.State())
+	s.Equal(1, s.task.Attempt())
+
+	s.task.Ack()
+	s.Equal(ctasks.TaskStateAborted, s.task.State())
+	s.Equal(1, s.task.Attempt())
+	s.task.Nack(nil)
+	s.Equal(ctasks.TaskStateAborted, s.task.State())
+	s.Equal(1, s.task.Attempt())
+	s.task.Cancel()
+	s.Equal(ctasks.TaskStateAborted, s.task.State())
+	s.Equal(1, s.task.Attempt())
+	s.task.Reschedule()
+	s.Equal(ctasks.TaskStateAborted, s.task.State())
+	s.Equal(1, s.task.Attempt())
+
+	s.True(s.task.TerminalState())
 }
 
 func (s *executableTaskSuite) TestCancelStateAttempt() {
 	s.Equal(ctasks.TaskStatePending, s.task.State())
+	s.False(s.task.TerminalState())
 
 	s.task.Cancel()
 	s.Equal(ctasks.TaskStateCancelled, s.task.State())
@@ -174,14 +211,25 @@ func (s *executableTaskSuite) TestCancelStateAttempt() {
 	s.task.Nack(nil)
 	s.Equal(ctasks.TaskStateCancelled, s.task.State())
 	s.Equal(1, s.task.Attempt())
+	s.task.Abort()
+	s.Equal(ctasks.TaskStateCancelled, s.task.State())
+	s.Equal(1, s.task.Attempt())
+	s.task.Reschedule()
+	s.Equal(ctasks.TaskStateCancelled, s.task.State())
+	s.Equal(1, s.task.Attempt())
+
+	s.True(s.task.TerminalState())
 }
 
 func (s *executableTaskSuite) TestRescheduleStateAttempt() {
 	s.Equal(ctasks.TaskStatePending, s.task.State())
+	s.False(s.task.TerminalState())
 
 	s.task.Reschedule()
 	s.Equal(ctasks.TaskStatePending, s.task.State())
 	s.Equal(2, s.task.Attempt())
+
+	s.False(s.task.TerminalState())
 }
 
 func (s *executableTaskSuite) TestIsRetryableError() {

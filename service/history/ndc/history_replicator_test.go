@@ -177,10 +177,9 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		gomock.Any(),
 		namespace.ID(namespaceID),
 		we,
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
-		gomock.Any(),
 		gomock.Any(),
 		persistence.CreateWorkflowModeBrandNew,
 		"",
@@ -280,10 +279,9 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		gomock.Any(),
 		namespace.ID(namespaceID),
 		we,
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
-		gomock.Any(),
 		gomock.Any(),
 		persistence.CreateWorkflowModeBrandNew,
 		"",

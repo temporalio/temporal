@@ -148,7 +148,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetWorkflowVersion = currentMutableState.GetCurrentVersion()
 
 		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
-			r.shard.GetTimeSource().Now(),
 			workflow.TransactionPolicyActive,
 		)
 		if err != nil {
@@ -349,9 +348,7 @@ func (r *workflowResetterImpl) persistToDB(
 	resetWorkflow Workflow,
 ) error {
 
-	now := r.shard.GetTimeSource().Now()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {
@@ -389,7 +386,6 @@ func (r *workflowResetterImpl) persistToDB(
 
 	return resetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
@@ -454,6 +450,12 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	if err != nil {
 		return nil, err
 	}
+
+	resetMutableState.SetBaseWorkflow(
+		baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+	)
 
 	resetContext.SetHistorySize(resetHistorySize)
 	return NewWorkflow(
@@ -632,7 +634,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			workflow.CallerTypeAPI,
+			workflow.LockPriorityHigh,
 		)
 		if err != nil {
 			return 0, nil, err

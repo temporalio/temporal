@@ -645,6 +645,16 @@ func (e *FaultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 	return e.baseExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 }
 
+func (e *FaultInjectionExecutionStore) InsertHistoryTree(
+	ctx context.Context,
+	request *persistence.InternalInsertHistoryTreeRequest,
+) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.InsertHistoryTree(ctx, request)
+}
+
 func (e *FaultInjectionExecutionStore) AppendHistoryNodes(
 	ctx context.Context,
 	request *persistence.InternalAppendHistoryNodesRequest,

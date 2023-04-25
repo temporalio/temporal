@@ -22,19 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
-
-import (
-	"go.temporal.io/server/common"
-)
-
-type (
-	Monitor[T Task] interface {
-		common.Daemon
-
-		RecordStart(T)
-
-		// Add more methods here to monitor
-		// other task processing events
-	}
-)
+// Package nettest provides an in-memory socket, Pipe. It can be used in place of net.Dial and net.Listen for faster and
+// more hermetic tests.
+package nettest

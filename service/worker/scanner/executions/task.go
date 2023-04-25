@@ -66,10 +66,11 @@ type (
 		logger           log.Logger
 		scavenger        *Scavenger
 
-		ctx                         context.Context
-		rateLimiter                 quotas.RateLimiter
-		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
-		paginationToken             []byte
+		ctx                           context.Context
+		rateLimiter                   quotas.RateLimiter
+		executionDataDurationBuffer   dynamicconfig.DurationPropertyFn
+		enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn
+		paginationToken               []byte
 	}
 )
 
@@ -86,6 +87,7 @@ func newTask(
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
+	enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn,
 ) executor.Task {
 	return &task{
 		shardID:          shardID,
@@ -98,9 +100,10 @@ func newTask(
 		logger:         logger,
 		scavenger:      scavenger,
 
-		ctx:                         ctx,
-		rateLimiter:                 rateLimiter,
-		executionDataDurationBuffer: executionDataDurationBuffer,
+		ctx:                           ctx,
+		rateLimiter:                   rateLimiter,
+		executionDataDurationBuffer:   executionDataDurationBuffer,
+		enableHistoryEventIDValidator: enableHistoryEventIDValidator,
 	}
 }
 
@@ -186,19 +189,21 @@ func (t *task) validate(
 		return results
 	}
 
-	if validationResults, err := NewHistoryEventIDValidator(
-		t.shardID,
-		t.executionManager,
-	).Validate(t.ctx, mutableState); err != nil {
-		t.logger.Error("unable to validate history event ID being contiguous",
-			tag.ShardID(t.shardID),
-			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
-			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
-			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-			tag.Error(err),
-		)
-	} else {
-		results = append(results, validationResults...)
+	if t.enableHistoryEventIDValidator() {
+		if validationResults, err := NewHistoryEventIDValidator(
+			t.shardID,
+			t.executionManager,
+		).Validate(t.ctx, mutableState); err != nil {
+			t.logger.Error("unable to validate history event ID being contiguous",
+				tag.ShardID(t.shardID),
+				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
+				tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
+				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+				tag.Error(err),
+			)
+		} else {
+			results = append(results, validationResults...)
+		}
 	}
 
 	return results

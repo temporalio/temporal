@@ -199,7 +199,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		}},
 	}}
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
-		gomock.Any(),
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
 	resetContext.EXPECT().GetHistorySize().Return(resetEventsSize).AnyTimes()
@@ -262,12 +261,10 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		}},
 	}}
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
-		gomock.Any(),
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
 	resetContext.EXPECT().GetHistorySize().Return(int64(123)).AnyTimes()
 	resetContext.EXPECT().CreateWorkflowExecution(
-		gomock.Any(),
 		gomock.Any(),
 		persistence.CreateWorkflowModeUpdateCurrent,
 		s.currentRunID,
@@ -324,6 +321,11 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		resetBranchToken,
 		resetRequestID,
 	).Return(resetMutableState, resetHistorySize, nil)
+	resetMutableState.EXPECT().SetBaseWorkflow(
+		s.baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+	)
 
 	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
 		ctx,
@@ -701,8 +703,8 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	}, nil)
 
 	resetContext := workflow.NewMockContext(s.controller)
-	resetContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
-	resetContext.EXPECT().Unlock(workflow.CallerTypeAPI)
+	resetContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
+	resetContext.EXPECT().Unlock(workflow.LockPriorityHigh)
 	resetMutableState := workflow.NewMockMutableState(s.controller)
 	resetContext.EXPECT().LoadMutableState(gomock.Any()).Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()

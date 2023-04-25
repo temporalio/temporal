@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
@@ -54,9 +55,10 @@ type (
 
 		QueueFactoryBaseParams
 
-		ClientBean     client.Bean
-		ArchivalClient archiver.Client
-		MatchingClient resource.MatchingClient
+		ClientBean        client.Bean
+		ArchivalClient    archiver.Client
+		MatchingClient    resource.MatchingClient
+		VisibilityManager manager.VisibilityManager
 	}
 
 	timerQueueFactory struct {
@@ -94,7 +96,7 @@ func NewTimerQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					timerQueuePersistenceMaxRPSRatio,
 				),
-				params.Config.QueueMaxReaderCount(),
+				int64(params.Config.QueueMaxReaderCount()),
 			),
 		},
 	}
@@ -114,6 +116,7 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config,
 		f.ArchivalClient,
 		shard.GetTimeSource(),
+		f.VisibilityManager,
 	)
 
 	rescheduler := queues.NewRescheduler(

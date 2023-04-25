@@ -56,16 +56,17 @@ type (
 		numHistoryShards int32
 		activityContext  context.Context
 
-		executionManager            persistence.ExecutionManager
-		registry                    namespace.Registry
-		historyClient               historyservice.HistoryServiceClient
-		adminClient                 adminservice.AdminServiceClient
-		executor                    executor.Executor
-		rateLimiter                 quotas.RateLimiter
-		perShardQPS                 dynamicconfig.IntPropertyFn
-		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
-		metricsHandler              metrics.Handler
-		logger                      log.Logger
+		executionManager              persistence.ExecutionManager
+		registry                      namespace.Registry
+		historyClient                 historyservice.HistoryServiceClient
+		adminClient                   adminservice.AdminServiceClient
+		executor                      executor.Executor
+		rateLimiter                   quotas.RateLimiter
+		perShardQPS                   dynamicconfig.IntPropertyFn
+		executionDataDurationBuffer   dynamicconfig.DurationPropertyFn
+		enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn
+		metricsHandler                metrics.Handler
+		logger                        log.Logger
 
 		stopC  chan struct{}
 		stopWG sync.WaitGroup
@@ -89,6 +90,7 @@ func NewScavenger(
 	perShardQPS dynamicconfig.IntPropertyFn,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
 	executionTaskWorker dynamicconfig.IntPropertyFn,
+	enableHistoryEventIDValidator dynamicconfig.BoolPropertyFn,
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
@@ -112,10 +114,11 @@ func NewScavenger(
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(perHostQPS()) },
 		),
-		perShardQPS:                 perShardQPS,
-		executionDataDurationBuffer: executionDataDurationBuffer,
-		metricsHandler:              metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope)),
-		logger:                      logger,
+		perShardQPS:                   perShardQPS,
+		executionDataDurationBuffer:   executionDataDurationBuffer,
+		enableHistoryEventIDValidator: enableHistoryEventIDValidator,
+		metricsHandler:                metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope)),
+		logger:                        logger,
 
 		stopC: make(chan struct{}),
 	}
@@ -185,6 +188,7 @@ func (s *Scavenger) run() {
 				s.rateLimiter,
 			}),
 			s.executionDataDurationBuffer,
+			s.enableHistoryEventIDValidator,
 		))
 		if !submitted {
 			s.logger.Error("unable to submit task to executor", tag.ShardID(shardID))

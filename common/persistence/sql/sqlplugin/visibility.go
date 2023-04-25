@@ -56,6 +56,7 @@ type (
 		Status           int32
 		CloseTime        *time.Time
 		HistoryLength    *int64
+		HistorySizeBytes *int64
 		Memo             []byte
 		Encoding         string
 		TaskQueue        string

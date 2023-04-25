@@ -137,7 +137,13 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Nil(err)
 	s.Equal("1.2.3.4", cfg.BroadcastAddress)
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
-	f, err := newFactory(&cfg, "test", nil, log.NewNoopLogger(), nil, nil, nil, nil)
+
+	params := factoryParams{
+		Config:      &cfg,
+		ServiceName: "test",
+		Logger:      log.Logger(log.NewNoopLogger()),
+	}
+	f, err := newFactory(params)
 	s.Nil(err)
 	s.NotNil(f)
 }
@@ -153,16 +159,14 @@ func (s *RingpopSuite) TestInvalidBroadcastAddress() {
 		MaxJoinDuration:  time.Minute,
 		BroadcastAddress: "oopsie",
 	}
-	_, err := newFactory(
-		&cfg,
-		"test",
-		nil,
-		log.NewNoopLogger(),
-		nil,
-		nil,
-		nil,
-		nil,
-	)
+	logger := log.Logger(log.NewNoopLogger())
+	params := factoryParams{
+		Config:      &cfg,
+		ServiceName: "test",
+		Logger:      logger,
+	}
+	_, err := newFactory(params)
+
 	s.ErrorIs(err, errMalformedBroadcastAddress)
 	s.ErrorContains(err, "oopsie")
 }
@@ -175,14 +179,13 @@ func newTestRingpopFactory(
 	dc *dynamicconfig.Collection,
 ) *factory {
 	return &factory{
-		config:          nil,
-		serviceName:     serviceName,
-		servicePortMap:  nil,
-		logger:          logger,
-		metadataManager: nil,
-		rpcConfig:       rpcConfig,
-		tlsFactory:      tlsProvider,
-		dc:              dc,
+		factoryParams: factoryParams{
+			ServiceName: serviceName,
+			Logger:      logger,
+			RPCConfig:   rpcConfig,
+			TLSFactory:  tlsProvider,
+			DC:          dc,
+		},
 	}
 }
 
@@ -212,7 +215,7 @@ func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error
 	}
 
 	// Confirm that A's listener is actually using TLS
-	clientTLSConfig, err := serverB.tlsFactory.GetInternodeClientConfig()
+	clientTLSConfig, err := serverB.TLSFactory.GetInternodeClientConfig()
 	s.NoError(err)
 
 	conn, err := tls.Dial("tcp", hostPortA, clientTLSConfig)

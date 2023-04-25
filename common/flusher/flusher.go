@@ -37,6 +37,7 @@ type (
 	Flusher[T any] interface {
 		common.Daemon
 		Buffer(item T) future.Future[struct{}]
+		Flush()
 	}
 
 	FlushItem[T any] struct {

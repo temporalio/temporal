@@ -149,8 +149,8 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	cfg := configs.NewConfig(
 		dynamicconfig.NewNoopCollection(),
 		1,
+		true,
 		false,
-		"",
 	)
 	archivalMetadata := getArchivalMetadata(controller, c)
 	clusterMetadata := cluster.NewMockMetadata(controller)

@@ -4,8 +4,7 @@ log:
 
 persistence:
   defaultStore: postgres-default
-  visibilityStore: postgres-visibility
-  advancedVisibilityStore: es-visibility
+  visibilityStore: es-visibility
   numHistoryShards: 4
   datastores:
     postgres-default:
@@ -18,17 +17,6 @@ persistence:
         password: "temporal"
         maxConns: 20
         maxIdleConns: 20
-        maxConnLifetime: "1h"
-    postgres-visibility:
-      sql:
-        pluginName: "postgres"
-        databaseName: "temporal_visibility"
-        connectAddr: "127.0.0.1:5432"
-        connectProtocol: "tcp"
-        user: "temporal"
-        password: "temporal"
-        maxConns: 2
-        maxIdleConns: 2
         maxConnLifetime: "1h"
     es-visibility:
       elasticsearch:

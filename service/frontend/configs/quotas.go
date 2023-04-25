@@ -33,8 +33,11 @@ import (
 
 var (
 	ExecutionAPICountLimitOverride = map[string]int{
-		"PollActivityTaskQueue": 1,
-		"PollWorkflowTaskQueue": 1,
+		"PollActivityTaskQueue":       1,
+		"PollWorkflowTaskQueue":       1,
+		"QueryWorkflow":               1,
+		"UpdateWorkflowExecution":     1,
+		"GetWorkflowExecutionHistory": 1,
 	}
 
 	ExecutionAPIToPriority = map[string]int{

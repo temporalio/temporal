@@ -39,12 +39,13 @@ const (
 	clearSliceThrottleDuration = 10 * time.Second
 )
 
+var _ Action = (*actionQueuePendingTask)(nil)
+
 type (
 	actionQueuePendingTask struct {
 		attributes     *AlertAttributesQueuePendingTaskCount
 		monitor        Monitor
-		maxReaderCount int
-		completionFn   actionCompletionFn
+		maxReaderCount int64
 
 		// state of the action, used when running the action
 		tasksPerNamespace               map[namespace.ID]int
@@ -58,28 +59,28 @@ func newQueuePendingTaskAction(
 	attributes *AlertAttributesQueuePendingTaskCount,
 	monitor Monitor,
 	maxReaderCount int,
-	completionFn actionCompletionFn,
-) Action {
+) *actionQueuePendingTask {
 	return &actionQueuePendingTask{
 		attributes:     attributes,
 		monitor:        monitor,
-		maxReaderCount: maxReaderCount,
-		completionFn:   completionFn,
+		maxReaderCount: int64(maxReaderCount),
 	}
 }
 
-func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) {
-	defer a.completionFn()
+func (a *actionQueuePendingTask) Name() string {
+	return "queue-pending-task"
+}
 
+func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) error {
 	// first check if the alert is still valid
 	if a.monitor.GetTotalPendingTaskCount() <= a.attributes.CiriticalPendingTaskCount {
-		return
+		return nil
 	}
 
 	// then try to shrink existing slices, which may reduce pending task count
 	readers := readerGroup.Readers()
 	if a.tryShrinkSlice(readers) {
-		return
+		return nil
 	}
 
 	// have to unload pending tasks to reduce pending task count
@@ -88,11 +89,11 @@ func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) {
 	a.findSliceToClear(
 		int(float64(a.attributes.CiriticalPendingTaskCount) * targetLoadFactor),
 	)
-	a.splitAndClearSlice(readers, readerGroup)
+	return a.splitAndClearSlice(readers, readerGroup)
 }
 
 func (a *actionQueuePendingTask) tryShrinkSlice(
-	readers map[int32]Reader,
+	readers map[int64]Reader,
 ) bool {
 	for _, reader := range readers {
 		reader.ShrinkSlices()
@@ -108,7 +109,7 @@ func (a *actionQueuePendingTask) init() {
 }
 
 func (a *actionQueuePendingTask) gatherStatistics(
-	readers map[int32]Reader,
+	readers map[int64]Reader,
 ) {
 	// gather statistic for
 	// 1. total # of pending tasks per namespace
@@ -175,11 +176,15 @@ func (a *actionQueuePendingTask) findSliceToClear(
 }
 
 func (a *actionQueuePendingTask) splitAndClearSlice(
-	readers map[int32]Reader,
+	readers map[int64]Reader,
 	readerGroup *ReaderGroup,
-) {
+) error {
+	if err := a.ensureNewReaders(readers, readerGroup); err != nil {
+		return err
+	}
+
 	for readerID, reader := range readers {
-		if readerID == int32(a.maxReaderCount)-1 {
+		if readerID == int64(a.maxReaderCount)-1 {
 			// we can't do further split, have to clear entire slice
 			cleared := false
 			reader.ClearSlices(func(s Slice) bool {
@@ -216,17 +221,49 @@ func (a *actionQueuePendingTask) splitAndClearSlice(
 		}
 
 		nextReader, ok := readerGroup.ReaderByID(readerID + 1)
-		if ok {
-			nextReader.MergeSlices(splitSlices...)
-		} else {
-			nextReader = readerGroup.NewReader(readerID+1, splitSlices...)
+		if !ok {
+			// this should never happen, we already ensured all readers are created.
+			// we have no choice but to put those slices back
+			reader.MergeSlices(splitSlices...)
+			continue
 		}
+
+		nextReader.MergeSlices(splitSlices...)
 		nextReader.Pause(clearSliceThrottleDuration)
 	}
 
-	// it's likely that after a split, slice range can be shrinked
-	// as tasks blocking the min key from moving have been moved to another slice/reader
-	for _, reader := range readers {
-		reader.ShrinkSlices()
+	// ShrinkSlices will be triggered as part of checkpointing process
+	// see queueBase.handleAlert() and queueBase.checkpoint()
+	return nil
+}
+
+func (a *actionQueuePendingTask) ensureNewReaders(
+	readers map[int64]Reader,
+	readerGroup *ReaderGroup,
+) error {
+	for readerID, reader := range readers {
+		if readerID == a.maxReaderCount-1 {
+			// we won't perform split
+			continue
+		}
+
+		needNewReader := false
+		reader.WalkSlices(func(s Slice) {
+			// namespaceToClearPerSlice contains all the slices
+			// that needs to be split & cleared
+			_, ok := a.namespaceToClearPerSlice[s]
+			needNewReader = needNewReader || ok
+		})
+
+		if !needNewReader {
+			continue
+		}
+
+		_, err := readerGroup.GetOrCreateReader(readerID + 1)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }

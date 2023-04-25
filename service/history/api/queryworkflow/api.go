@@ -86,6 +86,7 @@ func Invoke(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		workflowKey,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -115,7 +116,7 @@ func Invoke(
 		return nil, consts.ErrWorkflowTaskNotScheduled
 	}
 
-	if mutableState.GetExecutionInfo().WorkflowTaskAttempt > 1 {
+	if mutableState.IsTransientWorkflowTask() {
 		// while workflow task is failing, the query to that workflow will also fail. Failing fast here to prevent wasting
 		// resources to load history for a query that will fail.
 		return nil, serviceerror.NewFailedPrecondition("Cannot query workflow due to Workflow Task in failed state.")

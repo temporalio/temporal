@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
@@ -75,6 +76,7 @@ func newTransferQueueStandbyTaskExecutor(
 	metricProvider metrics.Handler,
 	clusterName string,
 	matchingClient matchingservice.MatchingServiceClient,
+	visibilityManager manager.VisibilityManager,
 ) queues.Executor {
 	return &transferQueueStandbyTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -84,6 +86,7 @@ func newTransferQueueStandbyTaskExecutor(
 			logger,
 			metricProvider,
 			matchingClient,
+			visibilityManager,
 		),
 		clusterName:        clusterName,
 		nDCHistoryResender: nDCHistoryResender,

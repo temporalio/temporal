@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 )
@@ -42,6 +43,9 @@ import (
 var Module = fx.Options(
 	fx.Provide(ReplicationTaskFetcherFactoryProvider),
 	fx.Provide(ReplicationTaskExecutorProvider),
+	fx.Provide(ReplicationStreamSchedulerProvider),
+	fx.Provide(StreamReceiverMonitorProvider),
+	fx.Invoke(ReplicationStreamSchedulerLifetimeHooks),
 	fx.Provide(NDCHistoryResenderProvider),
 )
 
@@ -69,6 +73,46 @@ func ReplicationTaskExecutorProvider() TaskExecutorProvider {
 			params.WorkflowCache,
 		)
 	}
+}
+
+func ReplicationStreamSchedulerProvider(
+	config *configs.Config,
+	logger log.Logger,
+) ctasks.Scheduler[ctasks.Task] {
+	return ctasks.NewFIFOScheduler[ctasks.Task](
+		&ctasks.FIFOSchedulerOptions{
+			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
+			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
+		},
+		logger,
+	)
+}
+
+func ReplicationStreamSchedulerLifetimeHooks(
+	lc fx.Lifecycle,
+	scheduler ctasks.Scheduler[ctasks.Task],
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				scheduler.Start()
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				scheduler.Stop()
+				return nil
+			},
+		},
+	)
+}
+
+func StreamReceiverMonitorProvider(
+	processToolBox ProcessToolBox,
+) StreamReceiverMonitor {
+	return NewStreamReceiverMonitor(
+		processToolBox,
+		processToolBox.Config.EnableReplicationStream(),
+	)
 }
 
 func NDCHistoryResenderProvider(

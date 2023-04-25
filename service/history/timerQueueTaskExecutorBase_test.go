@@ -42,7 +42,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -130,7 +130,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 			mockWeCtx := workflow.NewMockContext(s.controller)
 			mockMutableState := workflow.NewMockMutableState(s.controller)
 
-			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.LockPriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 			mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 			mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
@@ -182,7 +182,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 			mockWeCtx := workflow.NewMockContext(s.controller)
 			mockMutableState := workflow.NewMockMutableState(s.controller)
 
-			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.LockPriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
 			mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 			mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)

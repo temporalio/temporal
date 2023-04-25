@@ -162,6 +162,7 @@ func GetMutableState(
 		nil,
 		BypassMutableStateConsistencyPredicate,
 		workflowKey,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err

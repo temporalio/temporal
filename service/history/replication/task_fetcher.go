@@ -119,7 +119,6 @@ func NewTaskFetcherFactory(
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 ) TaskFetcherFactory {
-
 	return &taskFetcherFactoryImpl{
 		clusterMetadata: clusterMetadata,
 		clientBean:      clientBean,

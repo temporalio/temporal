@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"github.com/gocql/gocql"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
 
 const (
@@ -54,6 +55,68 @@ func (c *Persistence) Validate() error {
 	if c.VisibilityStore != "" {
 		stores = append(stores, c.VisibilityStore)
 	}
+	if c.SecondaryVisibilityStore != "" {
+		stores = append(stores, c.SecondaryVisibilityStore)
+	}
+	if c.AdvancedVisibilityStore != "" {
+		stores = append(stores, c.AdvancedVisibilityStore)
+	}
+
+	// There are 3 config keys:
+	// - visibilityStore: can set any data store
+	// - secondaryVisibilityStore: can set any data store
+	// - advancedVisibilityStore: can only set elasticsearch data store
+	// If visibilityStore is set, then it's always the primary.
+	// If secondaryVisibilityStore is set, it's always the secondary.
+	//
+	// Valid dual visibility combinations (order: primary, secondary):
+	// - visibilityStore (standard),      secondaryVisibilityStore (any)
+	// - visibilityStore (standard),      advancedVisibilityStore (es)
+	// - visibilityStore (advanced sql),  secondaryVisibilityStore (advanced sql)
+	// - visibilityStore (es),            visibilityStore (es) [via elasticsearch.indices config]
+	// - advancedVisibilityStore (es),    advancedVisibilityStore (es) [via elasticsearch.indices config]
+	//
+	// Invalid dual visibility combinations:
+	// - visibilityStore (advanced sql),  secondaryVisibilityStore (standard, es)
+	// - visibilityStore (advanced sql),  advancedVisibilityStore (es)
+	// - visibilityStore (es),            secondaryVisibilityStore (any)
+	// - visibilityStore (es),            advancedVisibilityStore (es)
+	// - advancedVisibilityStore (es),    secondaryVisibilityStore (any)
+	//
+	// The validation for dual visibility pair (advanced sql, advanced sql) is in visibility factory
+	// due to circular dependency. This will be better after standard visibility is removed.
+
+	if c.VisibilityStore == "" && c.AdvancedVisibilityStore == "" {
+		return errors.New("persistence config: visibilityStore must be specified")
+	}
+	if c.SecondaryVisibilityStore != "" && c.AdvancedVisibilityStore != "" {
+		return errors.New(
+			"persistence config: cannot specify both secondaryVisibilityStore and " +
+				"advancedVisibilityStore",
+		)
+	}
+	if c.AdvancedVisibilityStore != "" && c.DataStores[c.AdvancedVisibilityStore].Elasticsearch == nil {
+		return fmt.Errorf(
+			"persistence config: advanced visibility datastore %q: missing elasticsearch config",
+			c.AdvancedVisibilityStore,
+		)
+	}
+	if c.DataStores[c.VisibilityStore].Elasticsearch != nil &&
+		(c.SecondaryVisibilityStore != "" || c.AdvancedVisibilityStore != "") {
+		return errors.New(
+			"persistence config: cannot set secondaryVisibilityStore or advancedVisibilityStore " +
+				"when visibilityStore is setting elasticsearch datastore",
+		)
+	}
+	if c.DataStores[c.SecondaryVisibilityStore].Elasticsearch.GetSecondaryVisibilityIndex() != "" {
+		return fmt.Errorf(
+			"persistence config: secondary visibility datastore %q: elasticsearch config: "+
+				"cannot set secondary_visibility",
+			c.SecondaryVisibilityStore,
+		)
+	}
+
+	cntEsConfigs := 0
 	for _, st := range stores {
 		ds, ok := c.DataStores[st]
 		if !ok {
@@ -62,10 +125,17 @@ func (c *Persistence) Validate() error {
 		if err := ds.Validate(); err != nil {
 			return fmt.Errorf("persistence config: datastore %q: %s", st, err.Error())
 		}
+		if ds.Elasticsearch != nil {
+			cntEsConfigs++
+		}
 	}
 
-	if err := c.validateAdvancedVisibility(); err != nil {
-		return err
+	if cntEsConfigs > 1 {
+		return fmt.Errorf(
+			"persistence config: cannot have more than one Elasticsearch visibility store config " +
+				"(use `elasticsearch.indices.secondary_visibility` config key if you need to set a " +
+				"secondary Elasticsearch visibility store)",
+		)
 	}
 
 	return nil
@@ -76,34 +146,75 @@ func (c *Persistence) StandardVisibilityConfigExist() bool {
 	return c.VisibilityStore != ""
 }
 
+// SecondaryVisibilityConfigExist returns whether user specified secondaryVisibilityStore in config
+func (c *Persistence) SecondaryVisibilityConfigExist() bool {
+	return c.SecondaryVisibilityStore != ""
+}
+
 // AdvancedVisibilityConfigExist returns whether user specified advancedVisibilityStore in config
 func (c *Persistence) AdvancedVisibilityConfigExist() bool {
 	return c.AdvancedVisibilityStore != ""
 }
 
 func (c *Persistence) IsSQLVisibilityStore() bool {
-	return c.StandardVisibilityConfigExist() && c.DataStores[c.VisibilityStore].SQL != nil
+	return (c.StandardVisibilityConfigExist() && c.DataStores[c.VisibilityStore].SQL != nil) ||
+		(c.SecondaryVisibilityConfigExist() && c.DataStores[c.SecondaryVisibilityStore].SQL != nil)
 }
 
-func (c *Persistence) validateAdvancedVisibility() error {
-	if !c.StandardVisibilityConfigExist() && !c.AdvancedVisibilityConfigExist() {
-		return errors.New("persistence config: one of visibilityStore or advancedVisibilityStore must be specified")
+func (c *Persistence) GetVisibilityStoreConfig() DataStore {
+	if c.VisibilityStore != "" {
+		return c.DataStores[c.VisibilityStore]
 	}
-
-	if !c.AdvancedVisibilityConfigExist() {
-		return nil
+	if c.AdvancedVisibilityStore != "" {
+		return c.DataStores[c.AdvancedVisibilityStore]
 	}
+	// Based on validation above, this should never happen.
+	return DataStore{}
+}
 
-	advancedVisibilityDataStore, ok := c.DataStores[c.AdvancedVisibilityStore]
-	if !ok {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing config", c.AdvancedVisibilityStore)
+func (c *Persistence) GetSecondaryVisibilityStoreConfig() DataStore {
+	if c.SecondaryVisibilityStore != "" {
+		return c.DataStores[c.SecondaryVisibilityStore]
 	}
-
-	if err := advancedVisibilityDataStore.Elasticsearch.Validate(c.AdvancedVisibilityStore); err != nil {
-		return err
+	if c.VisibilityStore != "" {
+		if c.AdvancedVisibilityStore != "" {
+			return c.DataStores[c.AdvancedVisibilityStore]
+		}
+		ds := c.DataStores[c.VisibilityStore]
+		if ds.Elasticsearch != nil && ds.Elasticsearch.GetSecondaryVisibilityIndex() != "" {
+			esConfig := *ds.Elasticsearch
+			esConfig.Indices = map[string]string{
+				client.VisibilityAppName: ds.Elasticsearch.GetSecondaryVisibilityIndex(),
+			}
+			ds.Elasticsearch = &esConfig
+			return ds
+		}
 	}
+	if c.AdvancedVisibilityStore != "" {
+		ds := c.DataStores[c.AdvancedVisibilityStore]
+		if ds.Elasticsearch != nil && ds.Elasticsearch.GetSecondaryVisibilityIndex() != "" {
+			esConfig := *ds.Elasticsearch
+			esConfig.Indices = map[string]string{
+				client.VisibilityAppName: ds.Elasticsearch.GetSecondaryVisibilityIndex(),
+			}
+			ds.Elasticsearch = &esConfig
+			return ds
+		}
+	}
+	return DataStore{}
+}
 
-	return nil
+func (ds *DataStore) GetIndexName() string {
+	switch {
+	case ds.SQL != nil:
+		return ds.SQL.DatabaseName
+	case ds.Cassandra != nil:
+		return ds.Cassandra.Keyspace
+	case ds.Elasticsearch != nil:
+		return ds.Elasticsearch.GetVisibilityIndex()
+	default:
+		return ""
+	}
 }
 
 // Validate validates the data store config
@@ -118,8 +229,14 @@ func (ds *DataStore) Validate() error {
 	if ds.CustomDataStoreConfig != nil {
 		storeConfigCount++
 	}
+	if ds.Elasticsearch != nil {
+		storeConfigCount++
+	}
 	if storeConfigCount != 1 {
-		return errors.New("must provide config for one and only one for DataStore of cassandra or sql or custom stores")
+		return errors.New(
+			"must provide config for one and only one datastore: " +
+				"elasticsearch, cassandra, sql or custom store",
+		)
 	}
 
 	if ds.SQL != nil && ds.SQL.TaskScanPartitions == 0 {
@@ -127,6 +244,11 @@ func (ds *DataStore) Validate() error {
 	}
 	if ds.Cassandra != nil {
 		if err := ds.Cassandra.validate(); err != nil {
+			return err
+		}
+	}
+	if ds.Elasticsearch != nil {
+		if err := ds.Elasticsearch.Validate(); err != nil {
 			return err
 		}
 	}

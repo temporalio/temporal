@@ -37,7 +37,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -45,29 +47,31 @@ type (
 	ProcessToolBox struct {
 		fx.In
 
+		Config             *configs.Config
 		ClusterMetadata    cluster.Metadata
 		ClientBean         client.Bean
 		ShardController    shard.Controller
 		NamespaceCache     namespace.Registry
 		NDCHistoryResender xdc.NDCHistoryResender
+		TaskScheduler      ctasks.Scheduler[ctasks.Task]
 		MetricsHandler     metrics.Handler
 		Logger             log.Logger
 	}
 )
 
 func (i *ProcessToolBox) ConvertTasks(
-	sourceClusterName string,
+	taskClusterName string,
 	replicationTasks ...*replicationspb.ReplicationTask,
 ) []TrackableExecutableTask {
 	tasks := make([]TrackableExecutableTask, len(replicationTasks))
-	for _, replicationTask := range replicationTasks {
-		tasks = append(tasks, i.convertOne(sourceClusterName, replicationTask))
+	for index, replicationTask := range replicationTasks {
+		tasks[index] = i.convertOne(taskClusterName, replicationTask)
 	}
 	return tasks
 }
 
 func (i *ProcessToolBox) convertOne(
-	sourceClusterName string,
+	taskClusterName string,
 	replicationTask *replicationspb.ReplicationTask,
 ) TrackableExecutableTask {
 	var taskCreationTime time.Time
@@ -96,7 +100,7 @@ func (i *ProcessToolBox) convertOne(
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			replicationTask.GetSyncActivityTaskAttributes(),
-			sourceClusterName,
+			taskClusterName,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		return NewExecutableWorkflowStateTask(
@@ -104,7 +108,7 @@ func (i *ProcessToolBox) convertOne(
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			replicationTask.GetSyncWorkflowStateTaskAttributes(),
-			sourceClusterName,
+			taskClusterName,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		return NewExecutableHistoryTask(
@@ -112,7 +116,7 @@ func (i *ProcessToolBox) convertOne(
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			replicationTask.GetHistoryTaskAttributes(),
-			sourceClusterName,
+			taskClusterName,
 		)
 	default:
 		i.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))

@@ -116,7 +116,7 @@ update-linters:
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	@go install github.com/golang/mock/mockgen@v1.6.0
+	@go install github.com/golang/mock/mockgen@v1.7.0-rc.1
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
@@ -399,32 +399,35 @@ install-schema-es:
 # No --fail here because create index is not idempotent operation.
 	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev" --write-out "\n"
 
-install-schema-cdc: temporal-cassandra-tool
+install-schema-xdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Install Cassandra schema (active)..."
-	./temporal-cassandra-tool drop -k temporal_active -f
-	./temporal-cassandra-tool create -k temporal_active --rf 1
-	./temporal-cassandra-tool -k temporal_active setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_active update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_cluster_a -f
+	./temporal-cassandra-tool create -k temporal_cluster_a --rf 1
+	./temporal-cassandra-tool -k temporal_cluster_a setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_cluster_a update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR)  "Install Cassandra schema (standby)..."
-	./temporal-cassandra-tool drop -k temporal_standby -f
-	./temporal-cassandra-tool create -k temporal_standby --rf 1
-	./temporal-cassandra-tool -k temporal_standby setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_standby update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_cluster_b -f
+	./temporal-cassandra-tool create -k temporal_cluster_b --rf 1
+	./temporal-cassandra-tool -k temporal_cluster_b setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_cluster_b update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR)  "Install Cassandra schema (other)..."
-	./temporal-cassandra-tool drop -k temporal_other -f
-	./temporal-cassandra-tool create -k temporal_other --rf 1
-	./temporal-cassandra-tool -k temporal_other setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k temporal_cluster_c -f
+	./temporal-cassandra-tool create -k temporal_cluster_c --rf 1
+	./temporal-cassandra-tool -k temporal_cluster_c setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_cluster_c update-schema -d ./schema/cassandra/temporal/versioned
 
 	@printf $(COLOR) "Install Elasticsearch schemas..."
 	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
 	curl --fail -X PUT "http://127.0.0.1:9200/_template/temporal_visibility_v1_template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
 # No --fail here because create index is not idempotent operation.
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_active" --write-out "\n"
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_standby" --write-out "\n"
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_other" --write-out "\n"
+	curl -X DELETE http://localhost:9200/temporal_visibility_v1_dev_cluster_a
+	curl -X DELETE http://localhost:9200/temporal_visibility_v1_dev_cluster_b
+	curl -X DELETE http://localhost:9200/temporal_visibility_v1_dev_cluster_c
+	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_cluster_a" --write-out "\n"
+	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_cluster_b" --write-out "\n"
+	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_cluster_c" --write-out "\n"
 
 ##### Run server #####
 DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml
@@ -465,14 +468,14 @@ start-postgres12: temporal-server
 start-sqlite: temporal-server
 	./temporal-server --env development-sqlite --allow-no-auth start
 
-start-cdc-active: temporal-server
-	./temporal-server --env development-active --allow-no-auth start
+start-xdc-cluster-a: temporal-server
+	./temporal-server --env development-cluster-a --allow-no-auth start
 
-start-cdc-standby: temporal-server
-	./temporal-server --env development-standby --allow-no-auth start
+start-xdc-cluster-b: temporal-server
+	./temporal-server --env development-cluster-b --allow-no-auth start
 
-start-cdc-other: temporal-server
-	./temporal-server --env development-other --allow-no-auth start
+start-xdc-cluster-c: temporal-server
+	./temporal-server --env development-cluster-c --allow-no-auth start
 
 ##### Grafana #####
 update-dashboards:

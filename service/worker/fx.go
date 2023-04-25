@@ -88,6 +88,7 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig,
+		persistenceConfig.StandardVisibilityConfigExist(),
 		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
@@ -97,7 +98,6 @@ func VisibilityManagerProvider(
 	metricsHandler metrics.Handler,
 	persistenceConfig *config.Persistence,
 	serviceConfig *Config,
-	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -106,20 +106,14 @@ func VisibilityManagerProvider(
 	return visibility.NewManager(
 		*persistenceConfig,
 		persistenceServiceResolver,
-		esConfig.GetVisibilityIndex(),
-		esConfig.GetSecondaryVisibilityIndex(),
 		esClient,
 		nil, // worker visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
-		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
-		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.EnableReadVisibilityFromES,
+		serviceConfig.VisibilityPersistenceMaxReadQPS,
+		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.EnableReadFromSecondaryVisibility,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // worker visibility never write
-		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
-		dynamicconfig.GetBoolPropertyFn(false), // worker visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		metricsHandler,
 		logger,

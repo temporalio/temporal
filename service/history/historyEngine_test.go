@@ -653,7 +653,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 		context.Background(),
 		tests.NamespaceID,
 		execution,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background())
@@ -4365,7 +4365,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 		context.Background(),
 		tests.NamespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background())
@@ -4720,7 +4720,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	wt2 := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt2.ScheduledEventID, tl, identity)
 	addTimerFiredEvent(ms, timerID)
-	_, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), workflow.TransactionPolicyActive)
+	_, _, err := ms.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
 	s.Nil(err)
 
 	wfMs := workflow.TestCloneToProto(ms)
@@ -5230,7 +5230,7 @@ func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we commonpb.
 		context.Background(),
 		tests.NamespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil

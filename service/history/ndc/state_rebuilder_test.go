@@ -158,7 +158,7 @@ func (s *stateRebuilderSuite) TestApplyEvents() {
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
-		events,
+		[][]*historypb.HistoryEvent{events},
 		[]*historypb.HistoryEvent(nil),
 	).Return(nil, nil)
 
