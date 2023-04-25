@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -145,7 +146,7 @@ func (m *StreamReceiverMonitorImpl) generateStreamKeys() map[ClusterShardKeyPair
 	allClusterInfo := m.ClusterMetadata.GetAllClusterInfo()
 
 	clientClusterID := int32(m.ClusterMetadata.GetClusterID())
-	serverClusterID := make(map[int32]struct{})
+	serverClusterIDs := make(map[int32]struct{})
 	clusterIDToShardCount := make(map[int32]int32)
 	for _, clusterInfo := range allClusterInfo {
 		clusterIDToShardCount[int32(clusterInfo.InitialFailoverVersion)] = clusterInfo.ShardCount
@@ -153,17 +154,21 @@ func (m *StreamReceiverMonitorImpl) generateStreamKeys() map[ClusterShardKeyPair
 		if !clusterInfo.Enabled || int32(clusterInfo.InitialFailoverVersion) == clientClusterID {
 			continue
 		}
-		serverClusterID[int32(clusterInfo.InitialFailoverVersion)] = struct{}{}
+		serverClusterIDs[int32(clusterInfo.InitialFailoverVersion)] = struct{}{}
 	}
 	streamKeys := make(map[ClusterShardKeyPair]struct{})
 	for _, shardID := range m.ShardController.ShardIDs() {
-		for serverClusterID := range serverClusterID {
+		for serverClusterID := range serverClusterIDs {
 			clientShardID := shardID
 			for _, serverShardID := range common.MapShardID(
-				clusterIDToShardCount[clientShardID],
+				clusterIDToShardCount[clientClusterID],
 				clusterIDToShardCount[serverClusterID],
 				clientShardID,
 			) {
+				m.Logger.Debug(fmt.Sprintf(
+					"cluster shard ID %v/%v -> cluster shard ID %v/%v",
+					clientClusterID, clientShardID, serverClusterID, serverShardID,
+				))
 				streamKeys[ClusterShardKeyPair{
 					Client: NewClusterShardKey(clientClusterID, clientShardID),
 					Server: NewClusterShardKey(serverClusterID, serverShardID),
