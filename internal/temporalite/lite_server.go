@@ -24,7 +24,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporal
+// Package temporalite contains high level helpers for setting up a SQLite based server.
+package temporalite
+
+// TODO(jlegrone): Refactor this package into one or more temporal.ServerOption types.
 
 import (
 	"context"
@@ -37,6 +40,7 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -45,6 +49,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/schema/sqlite"
+	"go.temporal.io/server/temporal"
 )
 
 const localBroadcastAddress = "127.0.0.1"
@@ -214,7 +219,7 @@ func (cfg *LiteServerConfig) validate() error {
 
 // LiteServer is a high level wrapper for Server that automatically configures a SQLite backend.
 type LiteServer struct {
-	internal         Server
+	internal         temporal.Server
 	frontendHostPort string
 }
 
@@ -225,7 +230,7 @@ type LiteServer struct {
 //
 // Always use BaseConfig instead of the WithConfig server option, as WithConfig overrides all
 // LiteServer specific settings.
-func NewLiteServer(liteConfig *LiteServerConfig, opts ...ServerOption) (*LiteServer, error) {
+func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) (*LiteServer, error) {
 	liteConfig.applyDefaults()
 	if err := liteConfig.validate(); err != nil {
 		return nil, err
@@ -273,12 +278,12 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...ServerOption) (*LiteSer
 		return nil, fmt.Errorf("unable to instantiate claim mapper: %w", err)
 	}
 
-	serverOpts := []ServerOption{
-		WithConfig(liteConfig.BaseConfig),
-		ForServices(DefaultServices),
-		WithLogger(liteConfig.Logger),
-		WithAuthorizer(authorizer),
-		WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {
+	serverOpts := []temporal.ServerOption{
+		temporal.WithConfig(liteConfig.BaseConfig),
+		temporal.ForServices(temporal.DefaultServices),
+		temporal.WithLogger(liteConfig.Logger),
+		temporal.WithAuthorizer(authorizer),
+		temporal.WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {
 			return claimMapper
 		}),
 	}
@@ -289,14 +294,14 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...ServerOption) (*LiteSer
 		if liteConfig.BaseConfig.DynamicConfigClient != nil {
 			return nil, fmt.Errorf("unable to have file-based dynamic config and individual dynamic config values")
 		}
-		serverOpts = append(serverOpts, WithDynamicConfigClient(liteConfig.DynamicConfig))
+		serverOpts = append(serverOpts, temporal.WithDynamicConfigClient(liteConfig.DynamicConfig))
 	}
 
 	if len(opts) > 0 {
 		serverOpts = append(serverOpts, opts...)
 	}
 
-	srv, err := NewServer(serverOpts...)
+	srv, err := temporal.NewServer(serverOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to instantiate server: %w", err)
 	}

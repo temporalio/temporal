@@ -28,25 +28,25 @@
 package temporaltest
 
 import (
+	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
-
-	"context"
-	"fmt"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/internal/temporalite"
 	"go.temporal.io/server/temporal"
 )
 
 // A TestServer is a Temporal server listening on a system-chosen port on the
 // local loopback interface, for use in end-to-end tests.
 type TestServer struct {
-	server               *temporal.LiteServer
+	server               *temporalite.LiteServer
 	defaultTestNamespace string
 	defaultClient        client.Client
 	clients              []client.Client
@@ -169,7 +169,7 @@ func NewServer(opts ...TestServerOption) *TestServer {
 		})
 	}
 
-	s, err := temporal.NewLiteServer(&temporal.LiteServerConfig{
+	s, err := temporalite.NewLiteServer(&temporalite.LiteServerConfig{
 		Namespaces: []string{ts.defaultTestNamespace},
 		Ephemeral:  true,
 		Logger:     log.NewNoopLogger(),
