@@ -973,6 +973,18 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
 
+	if request.UseVersioning && len(request.WorkerVersionStamp.GetBuildId()) == 0 {
+		return nil, errUseVersioningWithoutBuildID
+	}
+
+	// Copy WorkerVersionStamp to BinaryChecksum if BinaryChecksum is missing (small
+	// optimization to save space in the request).
+	if request.WorkerVersionStamp != nil {
+		if len(request.WorkerVersionStamp.BuildId) > 0 && len(request.BinaryChecksum) == 0 {
+			request.BinaryChecksum = request.WorkerVersionStamp.BuildId
+		}
+	}
+
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
 	histResp, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
