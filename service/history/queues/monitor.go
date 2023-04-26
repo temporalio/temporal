@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -35,7 +36,8 @@ import (
 var _ Monitor = (*monitorImpl)(nil)
 
 const (
-	monitorWatermarkPrecision = time.Second
+	monitorWatermarkPrecision   = time.Second
+	defaultAlertSilenceDuration = 10 * time.Second
 
 	alertChSize = 10
 )
@@ -48,17 +50,18 @@ type (
 		GetSlicePendingTaskCount(slice Slice) int
 		SetSlicePendingTaskCount(slice Slice, count int)
 
-		GetReaderWatermark(readerID int32) (tasks.Key, bool)
-		SetReaderWatermark(readerID int32, watermark tasks.Key)
+		GetReaderWatermark(readerID int64) (tasks.Key, bool)
+		SetReaderWatermark(readerID int64, watermark tasks.Key)
 
 		GetTotalSliceCount() int
-		GetSliceCount(readerID int32) int
-		SetSliceCount(readerID int32, count int)
+		GetSliceCount(readerID int64) int
+		SetSliceCount(readerID int64, count int)
 
 		RemoveSlice(slice Slice)
-		RemoveReader(readerID int32)
+		RemoveReader(readerID int64)
 
 		ResolveAlert(AlertType)
+		SilenceAlert(AlertType)
 		AlertCh() <-chan *Alert
 		Close()
 	}
@@ -75,15 +78,17 @@ type (
 		totalPendingTaskCount int
 		totalSliceCount       int
 
-		readerStats map[int32]readerStats
+		readerStats map[int64]readerStats
 		sliceStats  map[Slice]sliceStats
 
 		categoryType tasks.CategoryType
+		timeSource   clock.TimeSource
 		options      *MonitorOptions
 
-		pendingAlerts map[AlertType]struct{}
-		alertCh       chan *Alert
-		shutdownCh    chan struct{}
+		pendingAlerts  map[AlertType]struct{}
+		silencedAlerts map[AlertType]time.Time // silenced alertType => expiration
+		alertCh        chan *Alert
+		shutdownCh     chan struct{}
 	}
 
 	readerStats struct {
@@ -103,16 +108,19 @@ type (
 
 func newMonitor(
 	categoryType tasks.CategoryType,
+	timeSource clock.TimeSource,
 	options *MonitorOptions,
 ) *monitorImpl {
 	return &monitorImpl{
-		readerStats:   make(map[int32]readerStats),
-		sliceStats:    make(map[Slice]sliceStats),
-		categoryType:  categoryType,
-		options:       options,
-		pendingAlerts: make(map[AlertType]struct{}),
-		alertCh:       make(chan *Alert, alertChSize),
-		shutdownCh:    make(chan struct{}),
+		readerStats:    make(map[int64]readerStats),
+		sliceStats:     make(map[Slice]sliceStats),
+		categoryType:   categoryType,
+		timeSource:     timeSource,
+		options:        options,
+		pendingAlerts:  make(map[AlertType]struct{}),
+		silencedAlerts: make(map[AlertType]time.Time),
+		alertCh:        make(chan *Alert, alertChSize),
+		shutdownCh:     make(chan struct{}),
 	}
 }
 
@@ -155,7 +163,7 @@ func (m *monitorImpl) SetSlicePendingTaskCount(slice Slice, count int) {
 	}
 }
 
-func (m *monitorImpl) GetReaderWatermark(readerID int32) (tasks.Key, bool) {
+func (m *monitorImpl) GetReaderWatermark(readerID int64) (tasks.Key, bool) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -167,7 +175,7 @@ func (m *monitorImpl) GetReaderWatermark(readerID int32) (tasks.Key, bool) {
 	return stats.progress.watermark, true
 }
 
-func (m *monitorImpl) SetReaderWatermark(readerID int32, watermark tasks.Key) {
+func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key) {
 	// TODO: currently only tracking default reader progress for scheduled queue
 	if readerID != DefaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
 		return
@@ -216,7 +224,7 @@ func (m *monitorImpl) GetTotalSliceCount() int {
 	return count
 }
 
-func (m *monitorImpl) GetSliceCount(readerID int32) int {
+func (m *monitorImpl) GetSliceCount(readerID int64) int {
 	m.Lock()
 	defer m.Unlock()
 
@@ -226,7 +234,7 @@ func (m *monitorImpl) GetSliceCount(readerID int32) int {
 	return 0
 }
 
-func (m *monitorImpl) SetSliceCount(readerID int32, count int) {
+func (m *monitorImpl) SetSliceCount(readerID int64, count int) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -261,7 +269,7 @@ func (m *monitorImpl) RemoveSlice(slice Slice) {
 	delete(m.sliceStats, slice)
 }
 
-func (m *monitorImpl) RemoveReader(readerID int32) {
+func (m *monitorImpl) RemoveReader(readerID int64) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -279,6 +287,14 @@ func (m *monitorImpl) ResolveAlert(alertType AlertType) {
 	defer m.Unlock()
 
 	delete(m.pendingAlerts, alertType)
+}
+
+func (m *monitorImpl) SilenceAlert(alertType AlertType) {
+	m.Lock()
+	defer m.Unlock()
+
+	delete(m.pendingAlerts, alertType)
+	m.silencedAlerts[alertType] = m.timeSource.Now().Add(defaultAlertSilenceDuration)
 }
 
 func (m *monitorImpl) AlertCh() <-chan *Alert {
@@ -305,6 +321,10 @@ func (m *monitorImpl) Close() {
 func (m *monitorImpl) sendAlertLocked(alert *Alert) {
 	if m.isClosed() {
 		// make sure alert won't be sent to a closed chan
+		return
+	}
+
+	if m.timeSource.Now().Before(m.silencedAlerts[alert.AlertType]) {
 		return
 	}
 

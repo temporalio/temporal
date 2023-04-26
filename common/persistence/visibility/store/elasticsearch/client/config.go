@@ -25,6 +25,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -94,17 +95,15 @@ func (cfg *Config) GetSecondaryVisibilityIndex() string {
 	return cfg.Indices[SecondaryVisibilityAppName]
 }
 
-func (cfg *Config) Validate(storeName string) error {
+func (cfg *Config) Validate() error {
 	if cfg == nil {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q: must provide config for \"elasticsearch\"", storeName)
+		return errors.New("elasticsearch config: config not found")
 	}
-
 	if len(cfg.Indices) < 1 {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing indices", storeName)
-
+		return errors.New("elasticsearch config: missing indices")
 	}
 	if cfg.Indices[VisibilityAppName] == "" {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q indices configuration: missing %q key", storeName, VisibilityAppName)
+		return fmt.Errorf("elasticsearch config: indices configuration: missing %q key", VisibilityAppName)
 	}
 	return nil
 }

@@ -161,6 +161,7 @@ func NewEngineWithShardContext(
 		config,
 		archivalClient,
 		shard.GetTimeSource(),
+		persistenceVisibilityMgr,
 	)
 
 	historyEngImpl := &historyEngineImpl{
@@ -231,7 +232,7 @@ func NewEngineWithShardContext(
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
-		config.DefaultVisibilityIndexName,
+		persistenceVisibilityMgr.GetIndexName(),
 		visibility.AllowListForValidation(persistenceVisibilityMgr.GetStoreNames()),
 	)
 

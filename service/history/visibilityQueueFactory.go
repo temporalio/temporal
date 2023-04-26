@@ -85,7 +85,7 @@ func NewVisibilityQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					visibilityQueuePersistenceMaxRPSRatio,
 				),
-				params.Config.QueueMaxReaderCount(),
+				int64(params.Config.QueueMaxReaderCount()),
 			),
 		},
 	}

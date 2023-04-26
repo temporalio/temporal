@@ -37,8 +37,7 @@ import (
 
 // Config represents configuration for history service
 type Config struct {
-	NumberOfShards             int32
-	DefaultVisibilityIndexName string
+	NumberOfShards int32
 
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
 
@@ -49,15 +48,11 @@ type Config struct {
 	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 
-	StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-	StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-	AdvancedVisibilityWritingMode             dynamicconfig.StringPropertyFn
-	EnableWriteToSecondaryAdvancedVisibility  dynamicconfig.BoolPropertyFn
-	EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+	VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+	EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SecondaryVisibilityWritingMode    dynamicconfig.StringPropertyFn
+	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog       dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -306,10 +301,14 @@ const (
 )
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisibilityConfigExist bool, defaultVisibilityIndex string) *Config {
+func NewConfig(
+	dc *dynamicconfig.Collection,
+	numberOfShards int32,
+	visibilityStoreConfigExist bool,
+	advancedVisibilityStoreConfigExist bool,
+) *Config {
 	cfg := &Config{
-		NumberOfShards:             numberOfShards,
-		DefaultVisibilityIndexName: defaultVisibilityIndex,
+		NumberOfShards: numberOfShards,
 
 		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
 
@@ -324,15 +323,11 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
 
-		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
-		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
-		AdvancedVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
-		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
-		AdvancedVisibilityWritingMode:             dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, visibility.DefaultAdvancedVisibilityWritingMode(isAdvancedVisibilityConfigExist)),
-		EnableWriteToSecondaryAdvancedVisibility:  dc.GetBoolProperty(dynamicconfig.EnableWriteToSecondaryAdvancedVisibility, false),
-		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, isAdvancedVisibilityConfigExist),
-		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
-		VisibilityDisableOrderByClause:            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, false),
+		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, advancedVisibilityStoreConfigExist),
+		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, advancedVisibilityStoreConfigExist),
+		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, advancedVisibilityStoreConfigExist),
+		SecondaryVisibilityWritingMode:    visibility.GetSecondaryVisibilityWritingModeConfig(dc, visibilityStoreConfigExist, advancedVisibilityStoreConfigExist),
+		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, false),
 
 		EmitShardLagLog:                      dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
 		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),

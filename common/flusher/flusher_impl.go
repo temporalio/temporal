@@ -239,6 +239,26 @@ func (f *flusherImpl[T]) Buffer(item T) future.Future[struct{}] {
 	return flushItem.Future
 }
 
+func (f *flusherImpl[T]) Flush() {
+	if f.shutdownChan.IsShutdown() {
+		return
+	}
+
+	f.Lock()
+	defer f.Unlock()
+
+	if f.shutdownChan.IsShutdown() {
+		return
+	}
+
+	if len(f.flushBuffer) == 0 {
+		// nothing to flush
+		return
+	}
+	f.stopTimerLocked()
+	f.pushDirtyBufferLocked()
+}
+
 func (f *flusherImpl[T]) appendLocked(flushItem FlushItem[T]) {
 	if len(f.flushBuffer) == 0 { // start timer if it's first Item insertion
 		f.startTimerLocked()
