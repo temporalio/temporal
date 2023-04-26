@@ -217,11 +217,11 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
-	tag := metrics.ReplicationTaskTypeTag(task.TaskType)
-	p.metricsHandler.Counter(metrics.ReplicatorMessages.GetMetricName()).Record(1, tag)
+	metricsTag := metrics.ReplicationTaskTypeTag(task.TaskType)
+	p.metricsHandler.Counter(metrics.ReplicatorMessages.GetMetricName()).Record(1, metricsTag)
 	startTime := time.Now().UTC()
 	defer func() {
-		p.metricsHandler.Timer(metrics.ReplicatorLatency.GetMetricName()).Record(time.Since(startTime), tag)
+		p.metricsHandler.Timer(metrics.ReplicatorLatency.GetMetricName()).Record(time.Since(startTime), metricsTag)
 	}()
 
 	switch task.TaskType {

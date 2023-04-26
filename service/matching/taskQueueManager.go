@@ -482,6 +482,7 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 	return data, err
 }
 
+//nolint:revive // control coupling
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, replicate bool, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) error {
 	newData, err := c.db.UpdateUserData(ctx, updateFn)
 	c.signalIfFatal(err)
