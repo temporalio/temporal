@@ -36,6 +36,7 @@ import (
 )
 
 func TestBasic(t *testing.T) {
+	t.Parallel()
 	logger := log.NewTestLogger()
 	handler, err := NewHandler(logger, metrics.ClientConfig{})
 	require.NoError(t, err)
@@ -84,6 +85,7 @@ func TestBasic(t *testing.T) {
 }
 
 func TestHistogram(t *testing.T) {
+	t.Parallel()
 	logger := log.NewTestLogger()
 	handler, err := NewHandler(logger, metrics.ClientConfig{
 		PerUnitHistogramBoundaries: map[string][]float64{
