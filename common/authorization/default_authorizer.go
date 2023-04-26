@@ -51,13 +51,14 @@ var resultDeny = Result{Decision: DecisionDeny}
 
 // Authorize determines if an API call by given claims should be allowed or denied.
 // Rules:
-//   Health check APIs are allowed to everyone.
-//   System Admin is allowed to access all APIs on all namespaces.
-//   System Writer is allowed to access non admin APIs on all namespaces.
-//   System Reader is allowed to access read only APIs on all namespaces.
-//   Namespace Admin is allowed to access all APIs on their namespaces.
-//   Namespace Writer is allowed to access non admin APIs on their namespaces.
-//   Namespace Reader is allowed to access read only APIs on their namespaces.
+//
+//	Health check APIs are allowed to everyone.
+//	System Admin is allowed to access all APIs on all namespaces.
+//	System Writer is allowed to access non admin APIs on all namespaces.
+//	System Reader is allowed to access readonly APIs on all namespaces.
+//	Namespace Admin is allowed to access all APIs on their namespaces.
+//	Namespace Writer is allowed to access non admin APIs on their namespaces.
+//	Namespace Reader is allowed to access non admin readonly APIs on their namespaces.
 func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target *CallTarget) (Result, error) {
 	// APIs that are essentially read-only health checks with no sensitive information are
 	// always allowed
