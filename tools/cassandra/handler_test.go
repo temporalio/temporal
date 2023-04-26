@@ -71,3 +71,29 @@ func (s *HandlerTestSuite) TestParsingOfOptionsMap() {
 
 	s.Assert().Equal(0, len(parsedMap2))
 }
+
+func (s *HandlerTestSuite) TestDropKeyspaceError() {
+	// fake exit function to avoid exiting the application
+	back := osExit
+	defer func() { osExit = back }()
+	osExit = func(i int) {
+		s.Equal(1, i)
+	}
+	args := []string{"./tool", "drop-keyspace", "-f", "--keyspace", ""}
+	app := buildCLIOptions()
+	err := app.Run(args)
+	s.Nil(err)
+}
+
+func (s *HandlerTestSuite) TestCreateKeyspaceError() {
+	// fake exit function to avoid exiting the application
+	back := osExit
+	defer func() { osExit = back }()
+	osExit = func(i int) {
+		s.Equal(1, i)
+	}
+	args := []string{"./tool", "create-keyspace", "--keyspace", ""}
+	app := buildCLIOptions()
+	err := app.Run(args)
+	s.Nil(err)
+}
