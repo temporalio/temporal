@@ -74,14 +74,6 @@ type (
 	}
 )
 
-func MustNewHandler(logger log.Logger, clientConfig metrics.ClientConfig) *Handler {
-	h, err := NewHandler(logger, clientConfig)
-	if err != nil {
-		panic(err)
-	}
-	return h
-}
-
 func NewHandler(logger log.Logger, clientConfig metrics.ClientConfig) (*Handler, error) {
 	registry := prometheus.NewRegistry()
 	exporter, err := exporters.New(exporters.WithRegisterer(registry))
@@ -137,43 +129,7 @@ func (h *Handler) Snapshot() (Snapshot, error) {
 	histogramSamples := map[string]histogramSample{}
 	for name, family := range families {
 		for _, m := range family.GetMetric() {
-			labelvalues := map[string]string{}
-			for _, lp := range m.GetLabel() {
-				labelvalues[lp.GetName()] = lp.GetValue()
-			}
-			// This only records the last sample if there
-			// are multiple samples recorded.
-			switch family.GetType() {
-			default:
-				// Not yet supporting summary, untyped.
-			case dto.MetricType_HISTOGRAM:
-				buckets := m.Histogram.GetBucket()
-				hbs := []HistogramBucket{}
-				for _, bucket := range buckets {
-					hb := HistogramBucket{
-						value:      float64(bucket.GetCumulativeCount()),
-						upperBound: bucket.GetUpperBound(),
-					}
-					hbs = append(hbs, hb)
-				}
-				histogramSamples[name] = histogramSample{
-					metricType:  family.GetType(),
-					labelValues: labelvalues,
-					buckets:     hbs,
-				}
-			case dto.MetricType_COUNTER:
-				samples[name] = sample{
-					metricType:  family.GetType(),
-					labelValues: labelvalues,
-					sampleValue: m.Counter.GetValue(),
-				}
-			case dto.MetricType_GAUGE:
-				samples[name] = sample{
-					metricType:  family.GetType(),
-					labelValues: labelvalues,
-					sampleValue: m.Gauge.GetValue(),
-				}
-			}
+			collectSamples(name, family, m, samples, histogramSamples)
 		}
 	}
 	return Snapshot{
@@ -182,12 +138,44 @@ func (h *Handler) Snapshot() (Snapshot, error) {
 	}, nil
 }
 
-func (h *Handler) MustSnapshot() Snapshot {
-	s, err := h.Snapshot()
-	if err != nil {
-		panic(err)
+func collectSamples(name string, family *dto.MetricFamily, m *dto.Metric, samples map[string]sample, histogramSamples map[string]histogramSample) {
+	labelvalues := map[string]string{}
+	for _, lp := range m.GetLabel() {
+		labelvalues[lp.GetName()] = lp.GetValue()
 	}
-	return s
+	// This only records the last sample if there
+	// are multiple samples recorded.
+	switch family.GetType() {
+	default:
+		// Not yet supporting summary, untyped.
+	case dto.MetricType_HISTOGRAM:
+		buckets := m.Histogram.GetBucket()
+		hbs := []HistogramBucket{}
+		for _, bucket := range buckets {
+			hb := HistogramBucket{
+				value:      float64(bucket.GetCumulativeCount()),
+				upperBound: bucket.GetUpperBound(),
+			}
+			hbs = append(hbs, hb)
+		}
+		histogramSamples[name] = histogramSample{
+			metricType:  family.GetType(),
+			labelValues: labelvalues,
+			buckets:     hbs,
+		}
+	case dto.MetricType_COUNTER:
+		samples[name] = sample{
+			metricType:  family.GetType(),
+			labelValues: labelvalues,
+			sampleValue: m.Counter.GetValue(),
+		}
+	case dto.MetricType_GAUGE:
+		samples[name] = sample{
+			metricType:  family.GetType(),
+			labelValues: labelvalues,
+			sampleValue: m.Gauge.GetValue(),
+		}
+	}
 }
 
 var _ metrics.OpenTelemetryProvider = (*otelProvider)(nil)
@@ -209,13 +197,13 @@ func (s Snapshot) getValue(name string, metricType dto.MetricType, tags ...metri
 	}
 	sample, ok := s.samples[name]
 	if !ok {
-		return 0, fmt.Errorf("metric %s not found", name)
+		return 0, fmt.Errorf("metric %q not found", name)
 	}
 	if sample.metricType != metricType {
-		return 0, fmt.Errorf("metric %s not a %s type", name, metricType.String())
+		return 0, fmt.Errorf("metric %q not a %s type", name, metricType.String())
 	}
 	if !maps.Equal(sample.labelValues, labelValues) {
-		return 0, fmt.Errorf("metric %s label mismatch, has %v, asked for %v", name, sample.labelValues, labelValues)
+		return 0, fmt.Errorf("metric %q label mismatch, has %v, asked for %v", name, sample.labelValues, labelValues)
 	}
 	return sample.sampleValue, nil
 }
@@ -224,24 +212,8 @@ func (s Snapshot) Counter(name string, tags ...metrics.Tag) (float64, error) {
 	return s.getValue(name, dto.MetricType_COUNTER, tags...)
 }
 
-func (s Snapshot) MustCounter(name string, tags ...metrics.Tag) float64 {
-	v, err := s.Counter(name, tags...)
-	if err != nil {
-		panic(err)
-	}
-	return v
-}
-
 func (s Snapshot) Gauge(name string, tags ...metrics.Tag) (float64, error) {
 	return s.getValue(name, dto.MetricType_GAUGE, tags...)
-}
-
-func (s Snapshot) MustGauge(name string, tags ...metrics.Tag) float64 {
-	v, err := s.Gauge(name, tags...)
-	if err != nil {
-		panic(err)
-	}
-	return v
 }
 
 func (s Snapshot) Histogram(name string, tags ...metrics.Tag) ([]HistogramBucket, error) {
@@ -252,43 +224,26 @@ func (s Snapshot) Histogram(name string, tags ...metrics.Tag) ([]HistogramBucket
 
 	sample, ok := s.histogramSamples[name]
 	if !ok {
-		return nil, fmt.Errorf("metric %s not found", name)
+		return nil, fmt.Errorf("metric %q not found", name)
 	}
 	if sample.metricType != dto.MetricType_HISTOGRAM {
-		return nil, fmt.Errorf("metric %s not a %s type", name, dto.MetricType_HISTOGRAM.String())
+		return nil, fmt.Errorf("metric %q not a %s type", name, dto.MetricType_HISTOGRAM.String())
 	}
 	if !maps.Equal(sample.labelValues, labelValues) {
-		return nil, fmt.Errorf("metric %s label mismatch, has %v, asked for %v", name, sample.labelValues, labelValues)
+		return nil, fmt.Errorf("metric %q label mismatch, has %v, asked for %v", name, sample.labelValues, labelValues)
 	}
 	return sample.buckets, nil
-}
-
-func (s Snapshot) MustHistogram(name string, tags ...metrics.Tag) []HistogramBucket {
-	v, err := s.Histogram(name, tags...)
-	if err != nil {
-		panic(err)
-	}
-	return v
 }
 
 func (s Snapshot) String() string {
 	var b strings.Builder
 	for n, s := range s.samples {
-		_, err := b.WriteString(fmt.Sprintf("%v %v %v %v\n", n, s.labelValues, s.sampleValue, s.metricType))
-		if err != nil {
-			panic(err)
-		}
+		b.WriteString(fmt.Sprintf("%v %v %v %v\n", n, s.labelValues, s.sampleValue, s.metricType))
 	}
 	for n, s := range s.histogramSamples {
-		_, err := b.WriteString(fmt.Sprintf("%v %v %v\n", n, s.labelValues, s.metricType))
-		if err != nil {
-			panic(err)
-		}
+		b.WriteString(fmt.Sprintf("%v %v %v\n", n, s.labelValues, s.metricType))
 		for _, bucket := range s.buckets {
-			_, err := b.WriteString(fmt.Sprintf("\t %v: %v \n", bucket.upperBound, bucket.value))
-			if err != nil {
-				panic(err)
-			}
+			b.WriteString(fmt.Sprintf("    %v: %v \n", bucket.upperBound, bucket.value))
 		}
 	}
 	return b.String()

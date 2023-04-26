@@ -28,6 +28,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"go.temporal.io/server/common/log"
@@ -36,7 +37,8 @@ import (
 
 func TestBasic(t *testing.T) {
 	logger := log.NewTestLogger()
-	handler := MustNewHandler(logger, metrics.ClientConfig{})
+	handler, err := NewHandler(logger, metrics.ClientConfig{})
+	require.NoError(t, err)
 
 	counterName := "counter1"
 	counterTags := []metrics.Tag{
@@ -52,8 +54,12 @@ func TestBasic(t *testing.T) {
 	counter.Record(1)
 	counter.Record(1)
 
-	s1 := handler.MustSnapshot()
-	require.Equal(t, float64(2), s1.MustCounter(counterName+"_total", expectedCounterTags...))
+	s1, err := handler.Snapshot()
+	require.NoError(t, err)
+
+	counterVal, err := s1.Counter(counterName+"_total", expectedCounterTags...)
+	require.NoError(t, err)
+	assert.Equal(t, float64(2), counterVal)
 
 	gaugeName := "gauge1"
 	gaugeTags := []metrics.Tag{
@@ -65,14 +71,21 @@ func TestBasic(t *testing.T) {
 	gauge.Record(-2)
 	gauge.Record(10)
 
-	s2 := handler.MustSnapshot()
-	require.Equal(t, float64(2), s2.MustCounter(counterName+"_total", expectedCounterTags...))
-	require.Equal(t, float64(10), s2.MustGauge(gaugeName, expectedGaugeTags...))
+	s2, err := handler.Snapshot()
+	require.NoError(t, err)
+
+	counterVal, err = s2.Counter(counterName+"_total", expectedCounterTags...)
+	require.NoError(t, err)
+	assert.Equal(t, float64(2), counterVal)
+
+	gaugeVal, err := s2.Gauge(gaugeName, expectedGaugeTags...)
+	require.NoError(t, err)
+	assert.Equal(t, float64(10), gaugeVal)
 }
 
 func TestHistogram(t *testing.T) {
 	logger := log.NewTestLogger()
-	handler := MustNewHandler(logger, metrics.ClientConfig{
+	handler, err := NewHandler(logger, metrics.ClientConfig{
 		PerUnitHistogramBoundaries: map[string][]float64{
 			metrics.Dimensionless: {
 				1,
@@ -81,6 +94,7 @@ func TestHistogram(t *testing.T) {
 			},
 		},
 	})
+	require.NoError(t, err)
 
 	histogramName := "histogram1"
 	histogramTags := []metrics.Tag{
@@ -96,7 +110,8 @@ func TestHistogram(t *testing.T) {
 	histogram.Record(1)
 	histogram.Record(3)
 
-	s1 := handler.MustSnapshot()
+	s1, err := handler.Snapshot()
+	require.NoError(t, err)
 
 	expectedBuckets := []HistogramBucket{
 		{value: 1, upperBound: 1},
@@ -104,5 +119,8 @@ func TestHistogram(t *testing.T) {
 		{value: 2, upperBound: 5},
 		{value: 2, upperBound: math.Inf(1)},
 	}
-	require.Equal(t, expectedBuckets, s1.MustHistogram(histogramName+"_ratio", expectedHistogramTags...))
+
+	histogramVal, err := s1.Histogram(histogramName+"_ratio", expectedHistogramTags...)
+	require.NoError(t, err)
+	assert.Equal(t, expectedBuckets, histogramVal)
 }
