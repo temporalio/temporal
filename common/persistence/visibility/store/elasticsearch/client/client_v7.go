@@ -172,8 +172,7 @@ func (c *clientImpl) Scroll(ctx context.Context, scrollID string, keepAliveInter
 }
 
 func (c *clientImpl) CloseScroll(ctx context.Context, id string) error {
-	err := elastic.NewScrollService(c.esClient).ScrollId(id).Clear(ctx)
-	return err
+	return elastic.NewScrollService(c.esClient).ScrollId(id).Clear(ctx)
 }
 
 func (c *clientImpl) IsPointInTimeSupported(ctx context.Context) bool {

@@ -170,8 +170,7 @@ func (p *shardRateLimitedPersistenceClient) UpdateShard(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.UpdateShard(ctx, request)
-	return err
+	return p.persistence.UpdateShard(ctx, request)
 }
 
 func (p *shardRateLimitedPersistenceClient) AssertShardOwnership(
@@ -182,8 +181,7 @@ func (p *shardRateLimitedPersistenceClient) AssertShardOwnership(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.AssertShardOwnership(ctx, request)
-	return err
+	return p.persistence.AssertShardOwnership(ctx, request)
 }
 
 func (p *shardRateLimitedPersistenceClient) Close() {
@@ -266,8 +264,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteWorkflowExecution(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteWorkflowExecution(ctx, request)
-	return err
+	return p.persistence.DeleteWorkflowExecution(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) DeleteCurrentWorkflowExecution(
@@ -278,8 +275,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteCurrentWorkflowExecution(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteCurrentWorkflowExecution(ctx, request)
-	return err
+	return p.persistence.DeleteCurrentWorkflowExecution(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) GetCurrentExecution(
@@ -338,8 +334,7 @@ func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.AddHistoryTasks(ctx, request)
-	return err
+	return p.persistence.AddHistoryTasks(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) GetHistoryTasks(
@@ -370,8 +365,7 @@ func (p *executionRateLimitedPersistenceClient) CompleteHistoryTask(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.CompleteHistoryTask(ctx, request)
-	return err
+	return p.persistence.CompleteHistoryTask(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) RangeCompleteHistoryTasks(
@@ -386,8 +380,7 @@ func (p *executionRateLimitedPersistenceClient) RangeCompleteHistoryTasks(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.RangeCompleteHistoryTasks(ctx, request)
-	return err
+	return p.persistence.RangeCompleteHistoryTasks(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) PutReplicationTaskToDLQ(
@@ -474,8 +467,7 @@ func (p *taskRateLimitedPersistenceClient) CompleteTask(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.CompleteTask(ctx, request)
-	return err
+	return p.persistence.CompleteTask(ctx, request)
 }
 
 func (p *taskRateLimitedPersistenceClient) CompleteTasksLessThan(
@@ -578,8 +570,7 @@ func (p *metadataRateLimitedPersistenceClient) UpdateNamespace(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.UpdateNamespace(ctx, request)
-	return err
+	return p.persistence.UpdateNamespace(ctx, request)
 }
 
 func (p *metadataRateLimitedPersistenceClient) RenameNamespace(
@@ -590,8 +581,7 @@ func (p *metadataRateLimitedPersistenceClient) RenameNamespace(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.RenameNamespace(ctx, request)
-	return err
+	return p.persistence.RenameNamespace(ctx, request)
 }
 
 func (p *metadataRateLimitedPersistenceClient) DeleteNamespace(
@@ -602,8 +592,7 @@ func (p *metadataRateLimitedPersistenceClient) DeleteNamespace(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteNamespace(ctx, request)
-	return err
+	return p.persistence.DeleteNamespace(ctx, request)
 }
 
 func (p *metadataRateLimitedPersistenceClient) DeleteNamespaceByName(
@@ -614,8 +603,7 @@ func (p *metadataRateLimitedPersistenceClient) DeleteNamespaceByName(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteNamespaceByName(ctx, request)
-	return err
+	return p.persistence.DeleteNamespaceByName(ctx, request)
 }
 
 func (p *metadataRateLimitedPersistenceClient) ListNamespaces(
@@ -745,8 +733,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteHistoryBranch(
 	if ok := allow(ctx, "DeleteHistoryBranch", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	err := p.persistence.DeleteHistoryBranch(ctx, request)
-	return err
+	return p.persistence.DeleteHistoryBranch(ctx, request)
 }
 
 // TrimHistoryBranch trims a branch
