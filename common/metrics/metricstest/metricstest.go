@@ -92,9 +92,9 @@ func (r *MetricTypeMismatch) Error() string {
 }
 
 type MetricLabelMismatch struct {
+	Name           string
 	ExpectedLabels map[string]string
 	SampleLabels   map[string]string
-	Name           string
 }
 
 func (r *MetricLabelMismatch) Error() string {
