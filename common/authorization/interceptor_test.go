@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/log"
@@ -52,9 +51,6 @@ var (
 	startWorkflowExecutionRequest = &workflowservice.StartWorkflowExecutionRequest{Namespace: testNamespace}
 	startWorkflowExecutionTarget  = &CallTarget{Namespace: testNamespace, Request: startWorkflowExecutionRequest, APIName: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution"}
 	startWorkflowExecutionInfo    = &grpc.UnaryServerInfo{FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution"}
-	adminAddSearchAttributeReq    = &adminservice.AddSearchAttributesRequest{Namespace: testNamespace}
-	adminAddSearchAttributeTarget = &CallTarget{Namespace: testNamespace, Request: adminAddSearchAttributeReq, APIName: "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"}
-	adminAddSearchAttributeInfo   = &grpc.UnaryServerInfo{FullMethod: "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"}
 )
 
 type (
