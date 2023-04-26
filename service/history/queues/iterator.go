@@ -33,8 +33,8 @@ import (
 
 type (
 	Iterator interface {
-		HasNext(readerID int32) bool
-		Next(readerID int32) (tasks.Task, error)
+		HasNext(readerID int64) bool
+		Next(readerID int64) (tasks.Task, error)
 
 		Range() Range
 		CanSplit(tasks.Key) bool
@@ -44,13 +44,13 @@ type (
 		Remaining() Iterator
 	}
 
-	PaginationFnProvider func(int32, Range) collection.PaginationFn[tasks.Task]
+	PaginationFnProvider func(int64, Range) collection.PaginationFn[tasks.Task]
 
 	IteratorImpl struct {
 		paginationFnProvider PaginationFnProvider
 		remainingRange       Range
 
-		iteratorReaderID int32
+		iteratorReaderID int64
 		pagingIterator   collection.Iterator[tasks.Task]
 	}
 )
@@ -69,7 +69,7 @@ func NewIterator(
 	}
 }
 
-func (i *IteratorImpl) HasNext(readerID int32) bool {
+func (i *IteratorImpl) HasNext(readerID int64) bool {
 	if i.pagingIterator == nil || i.iteratorReaderID != readerID {
 		i.pagingIterator = collection.NewPagingIterator(i.paginationFnProvider(readerID, i.remainingRange))
 		i.iteratorReaderID = readerID
@@ -78,7 +78,7 @@ func (i *IteratorImpl) HasNext(readerID int32) bool {
 	return i.pagingIterator.HasNext()
 }
 
-func (i *IteratorImpl) Next(readerID int32) (tasks.Task, error) {
+func (i *IteratorImpl) Next(readerID int64) (tasks.Task, error) {
 	if !i.HasNext(readerID) {
 		panic("Iterator encountered Next call when there is no next item")
 	}

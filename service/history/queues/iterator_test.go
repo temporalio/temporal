@@ -72,7 +72,7 @@ func (s *iteratorSuite) TestNext_IncreaseTaskKey() {
 	taskKey := NewRandomKeyInRange(r)
 	mockTask := tasks.NewMockTask(s.controller)
 	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
-	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		s.Equal(r, paginationRange)
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			return []tasks.Task{mockTask}, nil, nil
@@ -95,18 +95,18 @@ func (s *iteratorSuite) TestNext_IncreaseTaskKey() {
 func (s *iteratorSuite) TestNext_ReaderIDChange() {
 	r := NewRandomRange()
 
-	firstPageReaderID := int32(DefaultReaderId)
+	firstPageReaderID := DefaultReaderId
 	taskKey := NewRandomKeyInRange(r)
 	mockTask := tasks.NewMockTask(s.controller)
 	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
 
-	secondPageReaderID := int32(DefaultReaderId + 1)
+	secondPageReaderID := DefaultReaderId + 1
 	secondPageRange := NewRange(taskKey.Next(), r.ExclusiveMax)
 	taskKey2 := NewRandomKeyInRange(secondPageRange)
 	mockTask2 := tasks.NewMockTask(s.controller)
 	mockTask2.EXPECT().GetKey().Return(taskKey2).Times(1)
 
-	paginationFnProvider := func(readerID int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(readerID int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		switch readerID {
 		case firstPageReaderID:
 			s.Equal(r, paginationRange)
@@ -164,7 +164,7 @@ func (s *iteratorSuite) TestCanSplit() {
 
 func (s *iteratorSuite) TestSplit() {
 	r := NewRandomRange()
-	paginationFnProvider := func(_ int32, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			return []tasks.Task{}, nil, nil
 		}
@@ -221,7 +221,7 @@ func (s *iteratorSuite) TestMerge() {
 	r := NewRandomRange()
 
 	numLoad := 0
-	paginationFnProvider := func(_ int32, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			numLoad++
 			return []tasks.Task{}, nil, nil
@@ -289,7 +289,7 @@ func (s *iteratorSuite) TestRemaining() {
 	taskKey := NewRandomKeyInRange(r)
 	mockTask := tasks.NewMockTask(s.controller)
 	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
-	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			numLoad++
 			if paginationRange.ContainsKey(taskKey) {

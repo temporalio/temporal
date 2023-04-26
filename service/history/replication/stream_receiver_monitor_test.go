@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -38,11 +37,13 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -50,11 +51,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller *gomock.Controller
-		clientBean *client.MockBean
+		controller      *gomock.Controller
+		clusterMetadata *cluster.MockMetadata
+		clientBean      *client.MockBean
+		shardController *shard.MockController
 
-		sourceCluster string
-		targetCluster string
+		clientClusterID int32
+		serverClusterID int32
 
 		streamReceiverMonitor *StreamReceiverMonitorImpl
 	}
@@ -77,21 +80,26 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.clientBean = client.NewMockBean(s.controller)
+	s.shardController = shard.NewMockController(s.controller)
 
-	s.sourceCluster = uuid.NewString()
-	s.targetCluster = uuid.NewString()
+	s.clientClusterID = int32(cluster.TestCurrentClusterInitialFailoverVersion)
+	s.serverClusterID = int32(cluster.TestAlternativeClusterInitialFailoverVersion)
 
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
 		ProcessToolBox{
 			Config: configs.NewConfig(
 				dynamicconfig.NewNoopCollection(),
 				1,
+				true,
 				false,
 			),
-			ClientBean:     s.clientBean,
-			MetricsHandler: metrics.NoopMetricsHandler,
-			Logger:         log.NewNoopLogger(),
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			MetricsHandler:  metrics.NoopMetricsHandler,
+			Logger:          log.NewNoopLogger(),
 		},
 		true,
 	)
@@ -108,7 +116,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	}, nil).AnyTimes()
 	adminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	adminClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(streamClient, nil).AnyTimes()
-	s.clientBean.EXPECT().GetRemoteAdminClient(s.targetCluster).Return(adminClient, nil).AnyTimes()
+	s.clientBean.EXPECT().GetRemoteAdminClient(cluster.TestAlternativeClusterName).Return(adminClient, nil).AnyTimes()
 }
 
 func (s *streamReceiverMonitorSuite) TearDownTest() {
@@ -116,15 +124,95 @@ func (s *streamReceiverMonitorSuite) TearDownTest() {
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	for targetKey, stream := range s.streamReceiverMonitor.streams {
+	for serverKey, stream := range s.streamReceiverMonitor.streams {
 		stream.Stop()
-		delete(s.streamReceiverMonitor.streams, targetKey)
+		delete(s.streamReceiverMonitor.streams, serverKey)
 	}
 }
 
-func (s *streamReceiverMonitorSuite) TestReconcileToTargetStreams_Add() {
-	sourceKey := NewClusterShardKey(s.sourceCluster, rand.Int31())
-	targetKey := NewClusterShardKey(s.targetCluster, rand.Int31())
+func (s *streamReceiverMonitorSuite) TestGenerateStreamKeys_1To4() {
+	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(s.clientClusterID)).AnyTimes()
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: int64(s.clientClusterID),
+			RPCAddress:             cluster.TestCurrentClusterFrontendAddress,
+			ShardCount:             1,
+		},
+		cluster.TestAlternativeClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: int64(s.serverClusterID),
+			RPCAddress:             cluster.TestAlternativeClusterFrontendAddress,
+			ShardCount:             4,
+		},
+	}).AnyTimes()
+	s.shardController.EXPECT().ShardIDs().Return([]int32{1}).AnyTimes()
+
+	streamKeys := s.streamReceiverMonitor.generateStreamKeys()
+	s.Equal(map[ClusterShardKeyPair]struct{}{
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(s.clientClusterID, 1),
+			Server: NewClusterShardKey(s.serverClusterID, 1),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(s.clientClusterID, 1),
+			Server: NewClusterShardKey(s.serverClusterID, 2),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(s.clientClusterID, 1),
+			Server: NewClusterShardKey(s.serverClusterID, 3),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(s.clientClusterID, 1),
+			Server: NewClusterShardKey(s.serverClusterID, 4),
+		}: {},
+	}, streamKeys)
+}
+
+func (s *streamReceiverMonitorSuite) TestGenerateStreamKeys_4To1() {
+	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(s.clientClusterID)).AnyTimes()
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: int64(s.clientClusterID),
+			RPCAddress:             cluster.TestCurrentClusterFrontendAddress,
+			ShardCount:             4,
+		},
+		cluster.TestAlternativeClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: int64(s.serverClusterID),
+			RPCAddress:             cluster.TestAlternativeClusterFrontendAddress,
+			ShardCount:             1,
+		},
+	}).AnyTimes()
+	s.shardController.EXPECT().ShardIDs().Return([]int32{1, 2, 3, 4}).AnyTimes()
+
+	streamKeys := s.streamReceiverMonitor.generateStreamKeys()
+	s.Equal(map[ClusterShardKeyPair]struct{}{
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(s.clientClusterID, 1),
+			Server: NewClusterShardKey(s.serverClusterID, 1),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(s.clientClusterID, 2),
+			Server: NewClusterShardKey(s.serverClusterID, 1),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(s.clientClusterID, 3),
+			Server: NewClusterShardKey(s.serverClusterID, 1),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(s.clientClusterID, 4),
+			Server: NewClusterShardKey(s.serverClusterID, 1),
+		}: {},
+	}, streamKeys)
+}
+
+func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Add() {
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	clientKey := NewClusterShardKey(s.clientClusterID, rand.Int31())
+	serverKey := NewClusterShardKey(s.serverClusterID, rand.Int31())
 
 	s.streamReceiverMonitor.Lock()
 	s.Equal(0, len(s.streamReceiverMonitor.streams))
@@ -132,39 +220,41 @@ func (s *streamReceiverMonitorSuite) TestReconcileToTargetStreams_Add() {
 
 	streamKeys := map[ClusterShardKeyPair]struct{}{
 		ClusterShardKeyPair{
-			Source: sourceKey,
-			Target: targetKey,
+			Client: clientKey,
+			Server: serverKey,
 		}: {},
 	}
-	s.streamReceiverMonitor.reconcileToTargetStreams(streamKeys)
+	s.streamReceiverMonitor.doReconcileStreams(streamKeys)
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
 	s.Equal(1, len(s.streamReceiverMonitor.streams))
 	stream, ok := s.streamReceiverMonitor.streams[ClusterShardKeyPair{
-		Source: sourceKey,
-		Target: targetKey,
+		Client: clientKey,
+		Server: serverKey,
 	}]
 	s.True(ok)
 	s.True(stream.IsValid())
 }
 
-func (s *streamReceiverMonitorSuite) TestReconcileToTargetStreams_Remove() {
-	sourceKey := NewClusterShardKey(s.sourceCluster, rand.Int31())
-	targetKey := NewClusterShardKey(s.targetCluster, rand.Int31())
-	stream := NewStreamReceiver(s.streamReceiverMonitor.ProcessToolBox, sourceKey, targetKey)
+func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Remove() {
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	clientKey := NewClusterShardKey(s.clientClusterID, rand.Int31())
+	serverKey := NewClusterShardKey(s.serverClusterID, rand.Int31())
+	stream := NewStreamReceiver(s.streamReceiverMonitor.ProcessToolBox, clientKey, serverKey)
 
 	s.streamReceiverMonitor.Lock()
 	s.Equal(0, len(s.streamReceiverMonitor.streams))
 	stream.Start()
 	s.True(stream.IsValid())
 	s.streamReceiverMonitor.streams[ClusterShardKeyPair{
-		Source: sourceKey,
-		Target: targetKey,
+		Client: clientKey,
+		Server: serverKey,
 	}] = stream
 	s.streamReceiverMonitor.Unlock()
 
-	s.streamReceiverMonitor.reconcileToTargetStreams(map[ClusterShardKeyPair]struct{}{})
+	s.streamReceiverMonitor.doReconcileStreams(map[ClusterShardKeyPair]struct{}{})
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
@@ -172,10 +262,12 @@ func (s *streamReceiverMonitorSuite) TestReconcileToTargetStreams_Remove() {
 	s.False(stream.IsValid())
 }
 
-func (s *streamReceiverMonitorSuite) TestReconcileToTargetStreams_Reactivate() {
-	sourceKey := NewClusterShardKey(s.sourceCluster, rand.Int31())
-	targetKey := NewClusterShardKey(s.targetCluster, rand.Int31())
-	stream := NewStreamReceiver(s.streamReceiverMonitor.ProcessToolBox, sourceKey, targetKey)
+func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Reactivate() {
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	clientKey := NewClusterShardKey(s.clientClusterID, rand.Int31())
+	serverKey := NewClusterShardKey(s.serverClusterID, rand.Int31())
+	stream := NewStreamReceiver(s.streamReceiverMonitor.ProcessToolBox, clientKey, serverKey)
 
 	s.streamReceiverMonitor.Lock()
 	s.Equal(0, len(s.streamReceiverMonitor.streams))
@@ -183,15 +275,15 @@ func (s *streamReceiverMonitorSuite) TestReconcileToTargetStreams_Reactivate() {
 	stream.Stop()
 	s.False(stream.IsValid())
 	s.streamReceiverMonitor.streams[ClusterShardKeyPair{
-		Source: sourceKey,
-		Target: targetKey,
+		Client: clientKey,
+		Server: serverKey,
 	}] = stream
 	s.streamReceiverMonitor.Unlock()
 
-	s.streamReceiverMonitor.reconcileToTargetStreams(map[ClusterShardKeyPair]struct{}{
+	s.streamReceiverMonitor.doReconcileStreams(map[ClusterShardKeyPair]struct{}{
 		ClusterShardKeyPair{
-			Source: sourceKey,
-			Target: targetKey,
+			Client: clientKey,
+			Server: serverKey,
 		}: {},
 	})
 
@@ -199,8 +291,8 @@ func (s *streamReceiverMonitorSuite) TestReconcileToTargetStreams_Reactivate() {
 	defer s.streamReceiverMonitor.Unlock()
 	s.Equal(1, len(s.streamReceiverMonitor.streams))
 	stream, ok := s.streamReceiverMonitor.streams[ClusterShardKeyPair{
-		Source: sourceKey,
-		Target: targetKey,
+		Client: clientKey,
+		Server: serverKey,
 	}]
 	s.True(ok)
 	s.True(stream.IsValid())

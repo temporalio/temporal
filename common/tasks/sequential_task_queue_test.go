@@ -1,4 +1,8 @@
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,34 +22,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package tasks
 
-package temporal.server.api.persistence.v1;
-option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
-
-import "temporal/server/api/persistence/v1/predicates.proto";
-import "temporal/server/api/persistence/v1/tasks.proto";
-
-message QueueAckLevel {
-    int64 ack_level = 1;
-    map<string, int64> cluster_ack_level = 2;
+type testSequentialTaskQueue[T Task] struct {
+	q  chan T
+	id int
 }
 
-message QueueState {
-    map<int64, QueueReaderState> reader_states = 1;
-    TaskKey exclusive_reader_high_watermark = 2;
+func newTestSequentialTaskQueue[T Task](id, capacity int) SequentialTaskQueue[T] {
+	return &testSequentialTaskQueue[T]{
+		q:  make(chan T, capacity),
+		id: id,
+	}
 }
 
-message QueueReaderState {
-    repeated QueueSliceScope scopes = 1;
+func (s *testSequentialTaskQueue[T]) ID() interface{} {
+	return s.id
 }
 
-message QueueSliceScope {
-    QueueSliceRange range = 1;
-    Predicate predicate = 2;
+func (s *testSequentialTaskQueue[T]) Add(task T) {
+	s.q <- task
 }
 
-message QueueSliceRange {
-    TaskKey inclusive_min = 1;
-    TaskKey exclusive_max = 2;
+func (s *testSequentialTaskQueue[T]) Remove() T {
+	select {
+	case t := <-s.q:
+		return t
+	default:
+		var emptyT T
+		return emptyT
+	}
+}
+
+func (s *testSequentialTaskQueue[T]) IsEmpty() bool {
+	return len(s.q) == 0
+}
+
+func (s *testSequentialTaskQueue[T]) Len() int {
+	return len(s.q)
 }

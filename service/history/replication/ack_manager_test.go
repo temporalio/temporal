@@ -537,10 +537,10 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 }
 
 func (s *ackManagerSuite) TestClose() {
-	readerIDs := []int32{0, 2, 3}
+	readerIDs := []int64{0, 2, 3}
 
 	s.replicationAckManager.Lock()
-	s.replicationAckManager.registeredQueueReaders = make(map[int32]struct{})
+	s.replicationAckManager.registeredQueueReaders = make(map[int64]struct{})
 
 	for _, readerID := range readerIDs {
 		s.replicationAckManager.registeredQueueReaders[readerID] = struct{}{}

@@ -45,7 +45,7 @@ type (
 	}
 
 	AlertAttributesReaderStuck struct {
-		ReaderID         int32
+		ReaderID         int64
 		CurrentWatermark tasks.Key
 	}
 

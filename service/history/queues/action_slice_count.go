@@ -78,8 +78,8 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
 	// have to compact (force merge) slices to reduce slice count
 	preferredSliceCount := int(float64(a.attributes.CriticalSliceCount) * targetLoadFactor)
 
-	isDefaultReader := func(readerID int32) bool { return readerID == DefaultReaderId }
-	isNotDefaultReader := func(readerID int32) bool { return !isDefaultReader(readerID) }
+	isDefaultReader := func(readerID int64) bool { return readerID == DefaultReaderId }
+	isNotDefaultReader := func(readerID int64) bool { return !isDefaultReader(readerID) }
 	isUniversalPredicate := func(s Slice) bool { return tasks.IsUniverisalPredicate(s.Scope().Predicate) }
 	isNotUniversalPredicate := func(s Slice) bool { return !isUniversalPredicate(s) }
 
@@ -134,8 +134,8 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) error {
 }
 
 func (a *actionSliceCount) findAndCompactCandidates(
-	readers map[int32]Reader,
-	readerPredicate func(int32) bool,
+	readers map[int64]Reader,
+	readerPredicate func(int64) bool,
 	slicePredicate SlicePredicate,
 	targetSliceCount int,
 ) bool {

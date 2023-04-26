@@ -3699,6 +3699,10 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
+	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
 	if err := wh.validateBuildIdCompatibilityUpdate(request); err != nil {
 		return nil, err
 	}
@@ -3733,6 +3737,10 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
 	}
 
 	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {

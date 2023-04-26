@@ -117,7 +117,7 @@ type (
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 
-		readerID               int32
+		readerID               int64
 		loadTime               time.Time
 		scheduledTime          time.Time
 		userLatency            time.Duration
@@ -130,7 +130,7 @@ type (
 )
 
 func NewExecutable(
-	readerID int32,
+	readerID int64,
 	task tasks.Task,
 	executor Executor,
 	scheduler Scheduler,

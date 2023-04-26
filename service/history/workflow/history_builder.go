@@ -129,9 +129,10 @@ func NewMutableHistoryBuilder(
 }
 
 func NewImmutableHistoryBuilder(
-	history []*historypb.HistoryEvent,
+	histories ...[]*historypb.HistoryEvent,
 ) *HistoryBuilder {
-	lastEvent := history[len(history)-1]
+	lastHistory := histories[len(histories)-1]
+	lastEvent := lastHistory[len(lastHistory)-1]
 	return &HistoryBuilder{
 		state:           HistoryBuilderStateImmutable,
 		timeSource:      nil,
@@ -144,8 +145,8 @@ func NewImmutableHistoryBuilder(
 
 		dbBufferBatch:          nil,
 		dbClearBuffer:          false,
-		memEventsBatches:       nil,
-		memLatestBatch:         history,
+		memEventsBatches:       histories,
+		memLatestBatch:         nil,
 		memBufferBatch:         nil,
 		scheduledIDToStartedID: nil,
 

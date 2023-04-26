@@ -1,4 +1,8 @@
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,34 +22,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package tasks
 
-package temporal.server.api.persistence.v1;
-option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+type (
+	SequentialTaskQueueFactory[T Task] func(task T) SequentialTaskQueue[T]
 
-import "temporal/server/api/persistence/v1/predicates.proto";
-import "temporal/server/api/persistence/v1/tasks.proto";
-
-message QueueAckLevel {
-    int64 ack_level = 1;
-    map<string, int64> cluster_ack_level = 2;
-}
-
-message QueueState {
-    map<int64, QueueReaderState> reader_states = 1;
-    TaskKey exclusive_reader_high_watermark = 2;
-}
-
-message QueueReaderState {
-    repeated QueueSliceScope scopes = 1;
-}
-
-message QueueSliceScope {
-    QueueSliceRange range = 1;
-    Predicate predicate = 2;
-}
-
-message QueueSliceRange {
-    TaskKey inclusive_min = 1;
-    TaskKey exclusive_max = 2;
-}
+	SequentialTaskQueue[T Task] interface {
+		// ID return the ID of the queue, as well as the tasks inside (same)
+		ID() interface{}
+		// Add push a task to the task set
+		Add(T)
+		// Remove pop a task from the task set
+		Remove() T
+		// IsEmpty indicate if the task set is empty
+		IsEmpty() bool
+		// Len return the size of the queue
+		Len() int
+	}
+)
