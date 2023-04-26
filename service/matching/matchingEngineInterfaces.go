@@ -45,5 +45,6 @@ type (
 		GetWorkerBuildIdCompatibility(ctx *handlerContext, request *matchingservice.GetWorkerBuildIdCompatibilityRequest) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error)
 		InvalidateTaskQueueUserData(ctx *handlerContext, request *matchingservice.InvalidateTaskQueueUserDataRequest) (*matchingservice.InvalidateTaskQueueUserDataResponse, error)
 		GetTaskQueueUserData(ctx *handlerContext, request *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
+		ApplyTaskQueueUserDataReplicationEvent(ctx *handlerContext, request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error)
 	}
 )

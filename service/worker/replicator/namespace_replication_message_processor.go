@@ -26,12 +26,15 @@ package replicator
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -60,10 +63,11 @@ func newNamespaceReplicationMessageProcessor(
 	logger log.Logger,
 	remotePeer adminservice.AdminServiceClient,
 	metricsHandler metrics.Handler,
-	taskExecutor namespace.ReplicationTaskExecutor,
+	namespaceTaskExecutor namespace.ReplicationTaskExecutor,
 	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *namespaceReplicationMessageProcessor {
 	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
 		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
@@ -77,13 +81,14 @@ func newNamespaceReplicationMessageProcessor(
 		sourceCluster:             sourceCluster,
 		logger:                    logger,
 		remotePeer:                remotePeer,
-		taskExecutor:              taskExecutor,
+		namespaceTaskExecutor:     namespaceTaskExecutor,
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceReplicationTaskScope)),
 		retryPolicy:               retryPolicy,
 		lastProcessedMessageID:    -1,
 		lastRetrievedMessageID:    -1,
 		done:                      make(chan struct{}),
 		namespaceReplicationQueue: namespaceReplicationQueue,
+		matchingClient:            matchingClient,
 	}
 }
 
@@ -96,13 +101,14 @@ type (
 		sourceCluster             string
 		logger                    log.Logger
 		remotePeer                adminservice.AdminServiceClient
-		taskExecutor              namespace.ReplicationTaskExecutor
+		namespaceTaskExecutor     namespace.ReplicationTaskExecutor
 		metricsHandler            metrics.Handler
 		retryPolicy               backoff.RetryPolicy
 		lastProcessedMessageID    int64
 		lastRetrievedMessageID    int64
 		done                      chan struct{}
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
+		matchingClient            matchingservice.MatchingServiceClient
 	}
 )
 
@@ -211,13 +217,27 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
-	p.metricsHandler.Counter(metrics.ReplicatorMessages.GetMetricName()).Record(1)
+	tag := metrics.ReplicationTaskTypeTag(task.TaskType)
+	p.metricsHandler.Counter(metrics.ReplicatorMessages.GetMetricName()).Record(1, tag)
 	startTime := time.Now().UTC()
 	defer func() {
-		p.metricsHandler.Timer(metrics.ReplicatorLatency.GetMetricName()).Record(time.Since(startTime))
+		p.metricsHandler.Timer(metrics.ReplicatorLatency.GetMetricName()).Record(time.Since(startTime), tag)
 	}()
 
-	return p.taskExecutor.Execute(ctx, task.GetNamespaceTaskAttributes())
+	switch task.TaskType {
+	case enums.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
+		return p.namespaceTaskExecutor.Execute(ctx, task.GetNamespaceTaskAttributes())
+	case enums.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
+		attrs := task.GetTaskQueueUserDataAttributes()
+		_, err := p.matchingClient.ApplyTaskQueueUserDataReplicationEvent(ctx, &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
+			NamespaceId: attrs.GetNamespaceId(),
+			TaskQueue:   attrs.GetTaskQueueName(),
+			UserData:    attrs.GetUserData(),
+		})
+		return err
+	default:
+		return fmt.Errorf("cannot handle replication task of type %v", task.TaskType)
+	}
 }
 
 func (p *namespaceReplicationMessageProcessor) Stop() {

@@ -180,7 +180,14 @@ func sortSets(sets []*persistencepb.CompatibleVersionSet, defaultSetIds []string
 // If a build ID appears in both data structures, the merged structure will include that latest status and timestamp.
 // If a build ID appears in different sets in the different structures, those sets will be merged.
 // The merged data's per set default and global default will be set according to the latest timestamps in the sources.
+// if (a) is nil, (b) is returned as is, otherwise, if (b) is nil (a) is returned as is.
 func MergeVersioningData(a *persistencepb.VersioningData, b *persistencepb.VersioningData) *persistencepb.VersioningData {
+	if a == nil {
+		return b
+	} else if b == nil {
+		return a
+	}
+
 	// Collect information about each build ID from both sources
 	buildIDToInfo := collectBuildIDInfo(append(a.VersionSets, b.VersionSets...))
 

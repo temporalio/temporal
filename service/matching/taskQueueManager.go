@@ -43,6 +43,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	repication "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -118,7 +119,7 @@ type (
 		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error)
 		// UpdateUserData allows callers to update user data for this task queue
 		// Extra care should be taken to avoid mutating the existing data in the update function.
-		UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) error
+		UpdateUserData(ctx context.Context, replicate bool, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) error
 		// InvalidateUserData allows callers to invalidate cached data on this task queue
 		InvalidateUserData(request *matchingservice.InvalidateTaskQueueUserDataRequest) error
 		CancelPoller(pollerID string)
@@ -133,23 +134,24 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status               int32
-		taskQueueID          *taskQueueID
-		taskQueueKind        enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
-		config               *taskQueueConfig
-		db                   *taskQueueDB
-		taskWriter           *taskWriter
-		taskReader           *taskReader // reads tasks from db and async matches it with poller
-		liveness             *liveness
-		taskGC               *taskGC
-		taskAckManager       ackManager   // tracks ackLevel for delivered messages
-		matcher              *TaskMatcher // for matching a task producer with a poller
-		namespaceRegistry    namespace.Registry
-		logger               log.Logger
-		matchingClient       matchingservice.MatchingServiceClient
-		metricsHandler       metrics.Handler
-		namespace            namespace.Name
-		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
+		status                    int32
+		taskQueueID               *taskQueueID
+		taskQueueKind             enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		config                    *taskQueueConfig
+		db                        *taskQueueDB
+		taskWriter                *taskWriter
+		taskReader                *taskReader // reads tasks from db and async matches it with poller
+		liveness                  *liveness
+		taskGC                    *taskGC
+		taskAckManager            ackManager   // tracks ackLevel for delivered messages
+		matcher                   *TaskMatcher // for matching a task producer with a poller
+		namespaceRegistry         namespace.Registry
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
+		logger                    log.Logger
+		matchingClient            matchingservice.MatchingServiceClient
+		metricsHandler            metrics.Handler
+		namespace                 namespace.Name
+		taggedMetricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -215,25 +217,26 @@ func newTaskQueueManager(
 		taskQueueKind,
 	)
 	tlMgr := &taskQueueManagerImpl{
-		status:               common.DaemonStatusInitialized,
-		namespaceRegistry:    e.namespaceRegistry,
-		matchingClient:       e.matchingClient,
-		metricsHandler:       e.metricsHandler,
-		taskQueueID:          taskQueue,
-		taskQueueKind:        taskQueueKind,
-		logger:               logger,
-		db:                   db,
-		taskAckManager:       newAckManager(e.logger),
-		taskGC:               newTaskGC(db, taskQueueConfig),
-		config:               taskQueueConfig,
-		pollerHistory:        newPollerHistory(),
-		outstandingPollsMap:  make(map[string]context.CancelFunc),
-		signalFatalProblem:   e.unloadTaskQueue,
-		clusterMeta:          clusterMeta,
-		namespace:            nsName,
-		taggedMetricsHandler: taggedMetricsHandler,
-		initializedError:     future.NewFuture[struct{}](),
-		userDataInitialFetch: future.NewFuture[struct{}](),
+		status:                    common.DaemonStatusInitialized,
+		namespaceRegistry:         e.namespaceRegistry,
+		namespaceReplicationQueue: e.namespaceReplicationQueue,
+		matchingClient:            e.matchingClient,
+		metricsHandler:            e.metricsHandler,
+		taskQueueID:               taskQueue,
+		taskQueueKind:             taskQueueKind,
+		logger:                    logger,
+		db:                        db,
+		taskAckManager:            newAckManager(e.logger),
+		taskGC:                    newTaskGC(db, taskQueueConfig),
+		config:                    taskQueueConfig,
+		pollerHistory:             newPollerHistory(),
+		outstandingPollsMap:       make(map[string]context.CancelFunc),
+		signalFatalProblem:        e.unloadTaskQueue,
+		clusterMeta:               clusterMeta,
+		namespace:                 nsName,
+		taggedMetricsHandler:      taggedMetricsHandler,
+		initializedError:          future.NewFuture[struct{}](),
+		userDataInitialFetch:      future.NewFuture[struct{}](),
 		metadataPoller: metadataPoller{
 			running:           uberatomic.NewBool(false),
 			pollIntervalCfgFn: e.config.UserDataPollFrequency,
@@ -479,14 +482,30 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 	return data, err
 }
 
-func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) error {
+func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, replicate bool, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) error {
 	newData, err := c.db.UpdateUserData(ctx, updateFn)
 	c.signalIfFatal(err)
 	if err != nil {
 		return err
 	}
+	if replicate && c.namespaceReplicationQueue != nil {
+		err = c.namespaceReplicationQueue.Publish(ctx, &repication.ReplicationTask{
+			TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
+			Attributes: &repication.ReplicationTask_TaskQueueUserDataAttributes{
+				TaskQueueUserDataAttributes: &repication.TaskQueueUserDataAttributes{
+					NamespaceId:   c.taskQueueID.namespaceID.String(),
+					TaskQueueName: c.taskQueueID.BaseNameString(),
+					UserData:      newData.GetData(),
+				},
+			},
+		})
+		if err != nil {
+			c.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
+			return serviceerror.NewFailedPrecondition("Storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
+		}
+	}
 	// We will have errored already if this was not the root workflow partition.
-	// Now notify partitions that they should fetch changed data from us
+	// Now notify partitions that the user data has changed.
 	numParts := util.Max(c.config.NumReadPartitions(), c.config.NumWritePartitions())
 	wg := &sync.WaitGroup{}
 	for i := 0; i < numParts; i++ {
