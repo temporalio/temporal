@@ -1127,10 +1127,15 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 		return nil
 	}
 	updatedShardInfo := storeShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(s.shardInfo))
+	// since linter is against any logging control ¯\_(ツ)_/¯, e.g.
+	//  "flag-parameter: parameter 'verboseLogging' seems to be a control flag, avoid control coupling (revive)"
+	var logger log.Logger = log.NewNoopLogger()
+	if s.config.EmitShardLagLog() {
+		logger = s.contextTaggedLogger
+	}
 	emitShardInfoMetricsLogsLocked(
 		s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope)),
-		s.contextTaggedLogger,
-		s.config.EmitShardLagLog(),
+		logger,
 		updatedShardInfo.QueueStates,
 		s.immediateTaskExclusiveMaxReadLevel,
 		s.scheduledTaskMaxReadLevel,

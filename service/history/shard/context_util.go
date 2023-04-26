@@ -38,7 +38,6 @@ import (
 func emitShardInfoMetricsLogsLocked(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-	verboseLogging bool,
 	queueStates map[int32]*persistencespb.QueueState,
 	immediateTaskExclusiveMaxReadLevel int64,
 	scheduledTaskMaxReadLevel time.Time,
@@ -57,7 +56,7 @@ Loop:
 				continue Loop
 			}
 			lag := immediateTaskExclusiveMaxReadLevel - minTaskKey.TaskID
-			if lag > logWarnImmediateTaskLag && verboseLogging {
+			if lag > logWarnImmediateTaskLag {
 				logger.Warn(
 					"Shard queue lag exceeds warn threshold.",
 					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
@@ -74,7 +73,7 @@ Loop:
 				continue Loop
 			}
 			lag := scheduledTaskMaxReadLevel.Sub(minTaskKey.FireTime)
-			if lag > logWarnScheduledTaskLag && verboseLogging {
+			if lag > logWarnScheduledTaskLag {
 				logger.Warn(
 					"Shard queue lag exceeds warn threshold.",
 					tag.ShardQueueAcks(category.Name(), minTaskKey.FireTime),
