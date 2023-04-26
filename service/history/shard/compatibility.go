@@ -250,26 +250,6 @@ func trimShardInfo(
 	return shardInfo
 }
 
-// ReplicationReaderIDFromClusterShardID convert from cluster ID & shard ID to reader ID
-// NOTE: cluster metadata guarantee
-//  1. initial failover version <= int32 max
-//  2. failover increment <= int32 max
-//  3. initial failover version == cluster ID
-func ReplicationReaderIDFromClusterShardID(
-	clusterID int64,
-	shardID int32,
-) int64 {
-	return clusterID<<32 + int64(shardID)
-}
-
-// ReplicationReaderIDToClusterShardID convert from reader ID to cluster ID & shard ID
-// NOTE: see ReplicationReaderIDFromClusterShardID
-func ReplicationReaderIDToClusterShardID(
-	readerID int64,
-) (int64, int32) {
-	return readerID >> 32, int32(readerID & 0xffffffff)
-}
-
 func ClusterNameInfoFromClusterID(
 	allClusterInfo map[string]cluster.ClusterInformation,
 	clusterID int64,

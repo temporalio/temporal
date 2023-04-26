@@ -1127,6 +1127,14 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 		return nil
 	}
 	updatedShardInfo := storeShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(s.shardInfo))
+	emitShardInfoMetricsLogsLocked(
+		s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope)),
+		s.contextTaggedLogger,
+		s.config.EmitShardLagLog(),
+		updatedShardInfo.QueueStates,
+		s.immediateTaskExclusiveMaxReadLevel,
+		s.scheduledTaskMaxReadLevel,
+	)
 
 	ctx, cancel := s.newIOContext()
 	defer cancel()
@@ -1141,65 +1149,6 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	s.lastUpdated = now
 	return nil
 }
-
-//
-//func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
-//	handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-//	logWarnLagExceeded := false
-//
-//	for categoryID := range s.shardInfo.QueueAckLevels {
-//		category, ok := tasks.GetCategoryByID(categoryID)
-//		if !ok {
-//			continue
-//		}
-//
-//		switch category.Type() {
-//		case tasks.CategoryTypeImmediate:
-//			lag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(category).TaskID - 1
-//			if lag > logWarnImmediateTaskLag {
-//				logWarnLagExceeded = true
-//			}
-//			handler.Histogram(
-//				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricName(),
-//				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricUnit(),
-//			).Record(lag, metrics.TaskCategoryTag(category.Name()))
-//		case tasks.CategoryTypeScheduled:
-//			lag := s.scheduledTaskMaxReadLevel.Sub(s.getQueueAckLevelLocked(category).FireTime)
-//			if lag > logWarnScheduledTaskLag {
-//				logWarnLagExceeded = true
-//			}
-//			handler.Timer(
-//				metrics.ShardInfoScheduledQueueLagTimer.GetMetricName(),
-//			).Record(lag, metrics.TaskCategoryTag(category.Name()))
-//		default:
-//			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
-//		}
-//	}
-//
-//	if logWarnLagExceeded && s.config.EmitShardLagLog() {
-//		ackLevelTags := make([]tag.Tag, 0, len(s.shardInfo.QueueAckLevels))
-//		for categoryID, ackLevel := range s.shardInfo.QueueAckLevels {
-//			category, ok := tasks.GetCategoryByID(categoryID)
-//			if !ok {
-//				continue
-//			}
-//			ackLevelTags = append(ackLevelTags, tag.ShardQueueAcks(category.Name(), ackLevel))
-//		}
-//		s.contextTaggedLogger.Warn("Shard ack levels lag exceeds warn threshold.", ackLevelTags...)
-//	}
-//
-//	// Following metrics are double-emitted for backward compatibility so that old dashboard/alert won't break
-//	// TODO: remove in 1.21 release
-//	replicationLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryReplication).TaskID - 1
-//	transferLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryTransfer).TaskID - 1
-//	visibilityLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryVisibility).TaskID - 1
-//	timerLag := s.timeSource.Now().Sub(s.getQueueAckLevelLocked(tasks.CategoryTimer).FireTime)
-//
-//	handler.Histogram(metrics.ShardInfoReplicationLagHistogram.GetMetricName(), metrics.ShardInfoReplicationLagHistogram.GetMetricUnit()).Record(replicationLag)
-//	handler.Histogram(metrics.ShardInfoTransferLagHistogram.GetMetricName(), metrics.ShardInfoTransferLagHistogram.GetMetricUnit()).Record(transferLag)
-//	handler.Histogram(metrics.ShardInfoVisibilityLagHistogram.GetMetricName(), metrics.ShardInfoVisibilityLagHistogram.GetMetricUnit()).Record(visibilityLag)
-//	handler.Timer(metrics.ShardInfoTimerLagTimer.GetMetricName()).Record(timerLag)
-//}
 
 func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 	namespaceEntry *namespace.Namespace,
@@ -2054,43 +2003,5 @@ func OperationPossiblySucceeded(err error) bool {
 		return false
 	default:
 		return true
-	}
-}
-
-func convertPersistenceAckLevelToTaskKey(
-	categoryType tasks.CategoryType,
-	ackLevel int64,
-) tasks.Key {
-	if categoryType == tasks.CategoryTypeImmediate {
-		return tasks.NewImmediateKey(ackLevel)
-	}
-	return tasks.NewKey(timestamp.UnixOrZeroTime(ackLevel), 0)
-}
-
-func convertTaskKeyToPersistenceAckLevel(
-	categoryType tasks.CategoryType,
-	taskKey tasks.Key,
-) int64 {
-	if categoryType == tasks.CategoryTypeImmediate {
-		return taskKey.TaskID
-	}
-	return taskKey.FireTime.UnixNano()
-}
-
-func ConvertFromPersistenceTaskKey(
-	key *persistencespb.TaskKey,
-) tasks.Key {
-	return tasks.NewKey(
-		timestamp.TimeValue(key.FireTime),
-		key.TaskId,
-	)
-}
-
-func ConvertToPersistenceTaskKey(
-	key tasks.Key,
-) *persistencespb.TaskKey {
-	return &persistencespb.TaskKey{
-		FireTime: timestamp.TimePtr(key.FireTime),
-		TaskId:   key.TaskID,
 	}
 }

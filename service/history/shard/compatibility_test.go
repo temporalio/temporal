@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -56,7 +57,10 @@ func TestCompatibilitySuite(t *testing.T) {
 
 func (s *compatibilitySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+}
 
+func (s *compatibilitySuite) TeardownTest() {
+	s.Assertions = require.New(s.T())
 }
 
 func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithoutReplication_OnlyQueueAckLevel() {
@@ -170,13 +174,13 @@ func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithoutReplicati
 			tasks.CategoryIDTransfer: {
 				ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 					FireTime: timestamp.TimePtr(time.Unix(0, 0)),
-					TaskId:   s.MaxInt64(ackLevelTransferAckTaskID, queueStateTransferAckTaskID) + 1,
+					TaskId:   util.Max(ackLevelTransferAckTaskID, queueStateTransferAckTaskID) + 1,
 				},
 				ReaderStates: map[int64]*persistencespb.QueueReaderState{},
 			},
 			tasks.CategoryIDTimer: {
 				ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
-					FireTime: timestamp.TimePtr(time.Unix(0, s.MaxInt64(ackLevelTimerAckTime, queueStateTimerAckTime))),
+					FireTime: timestamp.TimePtr(time.Unix(0, util.Max(ackLevelTimerAckTime, queueStateTimerAckTime))),
 					TaskId:   0,
 				},
 				ReaderStates: map[int64]*persistencespb.QueueReaderState{},
@@ -443,7 +447,7 @@ func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_
 							Range: &persistencespb.QueueSliceRange{
 								InclusiveMin: &persistencespb.TaskKey{
 									FireTime: timestamp.TimePtr(time.Unix(0, 0)),
-									TaskId:   s.MaxInt64(ackLevelReplicationAckTaskID, queueStateReplicationAckTaskID) + 1,
+									TaskId:   util.Max(ackLevelReplicationAckTaskID, queueStateReplicationAckTaskID) + 1,
 								},
 								ExclusiveMax: &persistencespb.TaskKey{
 									FireTime: timestamp.TimePtr(time.Unix(0, 0)),
@@ -577,39 +581,6 @@ func (s *compatibilitySuite) TestStoreShardInfoCompatibilityCheckWithReplication
 	s.EqualShardInfo(expectedMemShardInfo, actualMemShardInfo)
 }
 
-func (s *compatibilitySuite) TestReplicationReaderIDConversion() {
-	expectedClusterID := int64(rand.Int31())
-	expectedShardID := rand.Int31()
-
-	actualClusterID, actualShardID := ReplicationReaderIDToClusterShardID(
-		ReplicationReaderIDFromClusterShardID(expectedClusterID, expectedShardID),
-	)
-	s.Equal(expectedClusterID, actualClusterID)
-	s.Equal(expectedShardID, actualShardID)
-}
-
-func (s *compatibilitySuite) TestReplicationReaderIDConversion_1() {
-	expectedClusterID := int64(1)
-	expectedShardID := int32(1)
-
-	actualClusterID, actualShardID := ReplicationReaderIDToClusterShardID(
-		ReplicationReaderIDFromClusterShardID(expectedClusterID, expectedShardID),
-	)
-	s.Equal(expectedClusterID, actualClusterID)
-	s.Equal(expectedShardID, actualShardID)
-}
-
-func (s *compatibilitySuite) TestReplicationReaderIDConversion_Int32Max() {
-	expectedClusterID := int64(math.MaxInt32)
-	expectedShardID := int32(math.MaxInt32)
-
-	actualClusterID, actualShardID := ReplicationReaderIDToClusterShardID(
-		ReplicationReaderIDFromClusterShardID(expectedClusterID, expectedShardID),
-	)
-	s.Equal(expectedClusterID, actualClusterID)
-	s.Equal(expectedShardID, actualShardID)
-}
-
 func (s *compatibilitySuite) EqualShardInfo(
 	expected *persistencespb.ShardInfo,
 	actual *persistencespb.ShardInfo,
@@ -628,14 +599,4 @@ func (s *compatibilitySuite) EqualShardInfo(
 	s.NoError(err)
 
 	s.Equal(expected, actual)
-}
-
-func (s *compatibilitySuite) MaxInt64(
-	this int64,
-	that int64,
-) int64 {
-	if this < that {
-		return that
-	}
-	return this
 }
