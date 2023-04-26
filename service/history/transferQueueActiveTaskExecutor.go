@@ -997,7 +997,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 
 	// NOTE: reset need to go through history which may take a longer time,
 	// so it's using its own timeout
-	if err := t.resetWorkflow(
+	return t.resetWorkflow(
 		task,
 		reason,
 		resetPoint,
@@ -1005,10 +1005,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		currentContext,
 		currentMutableState,
 		logger,
-	); err != nil {
-		return err
-	}
-	return nil
+	)
 }
 
 func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(

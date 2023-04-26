@@ -80,11 +80,7 @@ func (q *QueueStore) Init(
 	if err := q.initializeQueueMetadata(ctx, blob); err != nil {
 		return err
 	}
-	if err := q.initializeDLQMetadata(ctx, blob); err != nil {
-		return err
-	}
-
-	return nil
+	return q.initializeDLQMetadata(ctx, blob)
 }
 
 func (q *QueueStore) EnqueueMessage(
