@@ -1367,8 +1367,7 @@ func (s *clientIntegrationSuite) Test_InvalidCommandAttribute() {
 		ao := workflow.ActivityOptions{} // invalid activity option without StartToClose timeout
 		ctx = workflow.WithActivityOptions(ctx, ao)
 
-		err := workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil)
-		return err
+		return workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil)
 	}
 
 	s.worker.RegisterWorkflow(workflowFn)

@@ -41,12 +41,14 @@ func RunTool(args []string) error {
 	return app.Run(args)
 }
 
+var osExit = os.Exit
+
 // root handler for all cli commands
 func cliHandler(c *cli.Context, handler func(c *cli.Context, logger log.Logger) error, logger log.Logger) {
 	quiet := c.GlobalBool(schema.CLIOptQuiet)
 	err := handler(c, logger)
 	if err != nil && !quiet {
-		os.Exit(1)
+		osExit(1)
 	}
 }
 

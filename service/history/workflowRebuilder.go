@@ -170,11 +170,8 @@ func (r *workflowRebuilderImpl) persistToDB(
 	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 		HistorySize: historySize,
 	}
-	if err := r.transaction.SetWorkflowExecution(
+	return r.transaction.SetWorkflowExecution(
 		ctx,
 		resetWorkflowSnapshot,
-	); err != nil {
-		return err
-	}
-	return nil
+	)
 }

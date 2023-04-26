@@ -3073,11 +3073,7 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	if err != nil {
 		return err
 	}
-	if err := wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName); err != nil {
-		return err
-	}
-
-	return nil
+	return wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName)
 }
 
 // Returns the schedule description and current state of an existing schedule.
@@ -4348,10 +4344,7 @@ func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.S
 	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String()); err != nil {
 		return err
 	}
-	if err := wh.saValidator.ValidateSize(searchAttributes, namespaceName.String()); err != nil {
-		return err
-	}
-	return nil
+	return wh.saValidator.ValidateSize(searchAttributes, namespaceName.String())
 }
 
 func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
