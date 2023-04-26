@@ -362,13 +362,4 @@ func minInt64(
 		return accumulateMin
 	}
 	return minCursor
-	//if accumulateMin == nil {
-	//	return convert.Int64Ptr(minCursor)
-	//}
-	//
-	//if *accumulateMin <= minCursor {
-	//	return accumulateMin
-	//} else {
-	//	return convert.Int64Ptr(minCursor)
-	//}
 }
