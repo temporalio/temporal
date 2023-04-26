@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
@@ -22,13 +22,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package tasks
 
-type (
-	// Action is a set of operations that can be run on a ReaderGroup.
-	// It is created and run by Mitigator upon receiving an Alert.
-	Action interface {
-		Name() string
-		Run(*ReaderGroup) error
+type testSequentialTaskQueue[T Task] struct {
+	q  chan T
+	id int
+}
+
+func newTestSequentialTaskQueue[T Task](id, capacity int) SequentialTaskQueue[T] {
+	return &testSequentialTaskQueue[T]{
+		q:  make(chan T, capacity),
+		id: id,
 	}
-)
+}
+
+func (s *testSequentialTaskQueue[T]) ID() interface{} {
+	return s.id
+}
+
+func (s *testSequentialTaskQueue[T]) Add(task T) {
+	s.q <- task
+}
+
+func (s *testSequentialTaskQueue[T]) Remove() T {
+	select {
+	case t := <-s.q:
+		return t
+	default:
+		var emptyT T
+		return emptyT
+	}
+}
+
+func (s *testSequentialTaskQueue[T]) IsEmpty() bool {
+	return len(s.q) == 0
+}
+
+func (s *testSequentialTaskQueue[T]) Len() int {
+	return len(s.q)
+}

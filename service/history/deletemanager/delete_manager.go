@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -79,12 +80,13 @@ type (
 	}
 
 	DeleteManagerImpl struct {
-		shard          shard.Context
-		workflowCache  wcache.Cache
-		config         *configs.Config
-		metricsHandler metrics.Handler
-		archivalClient archiver.Client
-		timeSource     clock.TimeSource
+		shard             shard.Context
+		workflowCache     wcache.Cache
+		config            *configs.Config
+		metricsHandler    metrics.Handler
+		archivalClient    archiver.Client
+		timeSource        clock.TimeSource
+		visibilityManager manager.VisibilityManager
 	}
 )
 
@@ -96,14 +98,16 @@ func NewDeleteManager(
 	config *configs.Config,
 	archiverClient archiver.Client,
 	timeSource clock.TimeSource,
+	visibilityManager manager.VisibilityManager,
 ) *DeleteManagerImpl {
 	deleteManager := &DeleteManagerImpl{
-		shard:          shard,
-		workflowCache:  cache,
-		metricsHandler: shard.GetMetricsHandler(),
-		config:         config,
-		archivalClient: archiverClient,
-		timeSource:     timeSource,
+		shard:             shard,
+		workflowCache:     cache,
+		metricsHandler:    shard.GetMetricsHandler(),
+		config:            config,
+		archivalClient:    archiverClient,
+		timeSource:        timeSource,
+		visibilityManager: visibilityManager,
 	}
 
 	return deleteManager
@@ -308,7 +312,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 		req.AttemptArchiveInline = true
 	}
 
-	saTypeMap, err := m.shard.GetSearchAttributesProvider().GetSearchAttributes(m.config.DefaultVisibilityIndexName, false)
+	saTypeMap, err := m.shard.GetSearchAttributesProvider().GetSearchAttributes(m.visibilityManager.GetIndexName(), false)
 	if err != nil {
 		return false, err
 	}

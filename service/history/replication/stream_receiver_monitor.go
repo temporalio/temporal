@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -101,9 +102,9 @@ func (m *StreamReceiverMonitorImpl) Stop() {
 	m.shutdownOnce.Shutdown()
 	m.Lock()
 	defer m.Unlock()
-	for targetKey, stream := range m.streams {
+	for serverKey, stream := range m.streams {
 		stream.Stop()
-		delete(m.streams, targetKey)
+		delete(m.streams, serverKey)
 	}
 	m.Logger.Info("StreamReceiverMonitor stopped.")
 }
@@ -138,36 +139,47 @@ Loop:
 
 func (m *StreamReceiverMonitorImpl) reconcileStreams() {
 	streamKeys := m.generateStreamKeys()
-	m.reconcileToTargetStreams(streamKeys)
+	m.doReconcileStreams(streamKeys)
 }
 
 func (m *StreamReceiverMonitorImpl) generateStreamKeys() map[ClusterShardKeyPair]struct{} {
-	// NOTE: source / target are relative to stream itself, not replication data flow
+	allClusterInfo := m.ClusterMetadata.GetAllClusterInfo()
 
-	sourceClusterName := m.ClusterMetadata.GetCurrentClusterName()
-	targetClusterNames := make(map[string]struct{})
-	for clusterName, clusterInfo := range m.ClusterMetadata.GetAllClusterInfo() {
-		if !clusterInfo.Enabled || clusterName == sourceClusterName {
+	clientClusterID := int32(m.ClusterMetadata.GetClusterID())
+	serverClusterIDs := make(map[int32]struct{})
+	clusterIDToShardCount := make(map[int32]int32)
+	for _, clusterInfo := range allClusterInfo {
+		clusterIDToShardCount[int32(clusterInfo.InitialFailoverVersion)] = clusterInfo.ShardCount
+
+		if !clusterInfo.Enabled || int32(clusterInfo.InitialFailoverVersion) == clientClusterID {
 			continue
 		}
-		targetClusterNames[clusterName] = struct{}{}
+		serverClusterIDs[int32(clusterInfo.InitialFailoverVersion)] = struct{}{}
 	}
 	streamKeys := make(map[ClusterShardKeyPair]struct{})
 	for _, shardID := range m.ShardController.ShardIDs() {
-		for targetClusterName := range targetClusterNames {
-			sourceShardID := shardID
-			// TODO src shards !necessary= target shards, add conversion fn here
-			targetShardID := shardID
-			streamKeys[ClusterShardKeyPair{
-				Source: NewClusterShardKey(sourceClusterName, sourceShardID),
-				Target: NewClusterShardKey(targetClusterName, targetShardID),
-			}] = struct{}{}
+		for serverClusterID := range serverClusterIDs {
+			clientShardID := shardID
+			for _, serverShardID := range common.MapShardID(
+				clusterIDToShardCount[clientClusterID],
+				clusterIDToShardCount[serverClusterID],
+				clientShardID,
+			) {
+				m.Logger.Debug(fmt.Sprintf(
+					"cluster shard ID %v/%v -> cluster shard ID %v/%v",
+					clientClusterID, clientShardID, serverClusterID, serverShardID,
+				))
+				streamKeys[ClusterShardKeyPair{
+					Client: NewClusterShardKey(clientClusterID, clientShardID),
+					Server: NewClusterShardKey(serverClusterID, serverShardID),
+				}] = struct{}{}
+			}
 		}
 	}
 	return streamKeys
 }
 
-func (m *StreamReceiverMonitorImpl) reconcileToTargetStreams(
+func (m *StreamReceiverMonitorImpl) doReconcileStreams(
 	streamKeys map[ClusterShardKeyPair]struct{},
 ) {
 	m.Lock()
@@ -190,8 +202,8 @@ func (m *StreamReceiverMonitorImpl) reconcileToTargetStreams(
 		if _, ok := m.streams[streamKey]; !ok {
 			stream := NewStreamReceiver(
 				m.ProcessToolBox,
-				streamKey.Source,
-				streamKey.Target,
+				streamKey.Client,
+				streamKey.Server,
 			)
 			stream.Start()
 			m.streams[streamKey] = stream

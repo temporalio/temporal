@@ -228,7 +228,7 @@ func (s *convertSuite) TestConvertScope() {
 }
 
 func (s *convertSuite) TestConvertQueueState() {
-	readerScopes := map[int32][]Scope{
+	readerScopes := map[int64][]Scope{
 		0: {},
 		1: {
 			NewScope(

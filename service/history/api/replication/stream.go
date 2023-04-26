@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination stream_mock.go
+
 package replication
 
 import (
@@ -34,25 +36,59 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	historyclient "go.temporal.io/server/client/history"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
+type (
+	TaskConvertorImpl struct {
+		Ctx                     context.Context
+		Engine                  shard.Engine
+		NamespaceCache          namespace.Registry
+		ClientClusterShardCount int32
+		ClientClusterName       string
+		ClientClusterShardID    historyclient.ClusterShardID
+	}
+	TaskConvertor interface {
+		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
+	}
+)
+
 func StreamReplicationTasks(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
-	sourceClusterShardID historyclient.ClusterShardID,
-	targetClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
+	serverClusterShardID historyclient.ClusterShardID,
 ) error {
+	allClusterInfo := shardContext.GetClusterMetadata().GetAllClusterInfo()
+	clientClusterName, clientShardCount, err := clusterIDToClusterNameShardCount(allClusterInfo, clientClusterShardID.ClusterID)
+	if err != nil {
+		return err
+	}
+	engine, err := shardContext.GetEngine(server.Context())
+	if err != nil {
+		return err
+	}
+	filter := &TaskConvertorImpl{
+		Ctx:                     server.Context(),
+		Engine:                  engine,
+		NamespaceCache:          shardContext.GetNamespaceRegistry(),
+		ClientClusterShardCount: clientShardCount,
+		ClientClusterName:       clientClusterName,
+		ClientClusterShardID:    clientClusterShardID,
+	}
 	errGroup, ctx := errgroup.WithContext(server.Context())
 	errGroup.Go(func() error {
-		return recvLoop(ctx, server, shardContext, sourceClusterShardID)
+		return recvLoop(ctx, server, shardContext, clientClusterShardID)
 	})
 	errGroup.Go(func() error {
-		return sendLoop(ctx, server, shardContext, sourceClusterShardID, targetClusterShardID)
+		return sendLoop(ctx, server, shardContext, filter, clientClusterShardID)
 	})
 	return errGroup.Wait()
 }
@@ -61,7 +97,7 @@ func recvLoop(
 	ctx context.Context,
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
-	sourceClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
 ) error {
 	for ctx.Err() == nil {
 		req, err := server.Recv()
@@ -73,7 +109,7 @@ func recvLoop(
 			if err := recvSyncReplicationState(
 				shardContext,
 				attr.SyncReplicationState,
-				sourceClusterShardID,
+				clientClusterShardID,
 			); err != nil {
 				shardContext.GetLogger().Error(
 					"StreamWorkflowReplication unable to handle SyncReplicationState",
@@ -94,28 +130,31 @@ func recvLoop(
 func recvSyncReplicationState(
 	shardContext shard.Context,
 	attr *replicationspb.SyncReplicationState,
-	sourceClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
 ) error {
 	lastProcessedMessageID := attr.GetLastProcessedMessageId()
 	lastProcessedMessageIDTime := attr.GetLastProcessedMessageTime()
-	if lastProcessedMessageID != persistence.EmptyQueueMessageID {
-		if err := shardContext.UpdateQueueClusterAckLevel(
-			tasks.CategoryReplication,
-			sourceClusterShardID.ClusterName,
-			tasks.NewImmediateKey(lastProcessedMessageID),
-		); err != nil {
-			shardContext.GetLogger().Error(
-				"error updating replication level for shard",
-				tag.Error(err),
-				tag.OperationFailed,
-			)
-		}
-		shardContext.UpdateRemoteClusterInfo(
-			sourceClusterShardID.ClusterName,
-			lastProcessedMessageID,
-			*lastProcessedMessageIDTime,
+	if lastProcessedMessageID == persistence.EmptyQueueMessageID {
+		return nil
+	}
+
+	// TODO wait for #4176 to be merged and then use cluster & shard ID as reader ID
+	if err := shardContext.UpdateQueueClusterAckLevel(
+		tasks.CategoryReplication,
+		string(clientClusterShardID.ClusterID),
+		tasks.NewImmediateKey(lastProcessedMessageID),
+	); err != nil {
+		shardContext.GetLogger().Error(
+			"error updating replication level for shard",
+			tag.Error(err),
+			tag.OperationFailed,
 		)
 	}
+	shardContext.UpdateRemoteClusterInfo(
+		string(clientClusterShardID.ClusterID),
+		lastProcessedMessageID,
+		*lastProcessedMessageIDTime,
+	)
 	return nil
 }
 
@@ -123,8 +162,8 @@ func sendLoop(
 	ctx context.Context,
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
-	sourceClusterShardID historyclient.ClusterShardID,
-	targetClusterShardID historyclient.ClusterShardID,
+	taskConvertor TaskConvertor,
+	clientClusterShardID historyclient.ClusterShardID,
 ) error {
 	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
@@ -137,14 +176,13 @@ func sendLoop(
 		ctx,
 		server,
 		shardContext,
-		sourceClusterShardID,
-		targetClusterShardID,
+		taskConvertor,
+		clientClusterShardID,
 	)
 	if err != nil {
 		shardContext.GetLogger().Error(
 			"StreamWorkflowReplication unable to catch up replication tasks",
 			tag.Error(err),
-			tag.ShardID(shardContext.GetShardID()),
 		)
 		return err
 	}
@@ -152,15 +190,14 @@ func sendLoop(
 		ctx,
 		server,
 		shardContext,
-		sourceClusterShardID,
-		targetClusterShardID,
+		taskConvertor,
+		clientClusterShardID,
 		newTaskNotificationChan,
 		catchupEndExclusiveWatermark,
 	); err != nil {
 		shardContext.GetLogger().Error(
 			"StreamWorkflowReplication unable to stream replication tasks",
 			tag.Error(err),
-			tag.ShardID(shardContext.GetShardID()),
 		)
 		return err
 	}
@@ -172,20 +209,21 @@ func sendCatchUp(
 	ctx context.Context,
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
-	sourceClusterShardID historyclient.ClusterShardID,
-	targetClusterShardID historyclient.ClusterShardID,
+	taskConvertor TaskConvertor,
+	clientClusterShardID historyclient.ClusterShardID,
 ) (int64, error) {
+	// TODO wait for #4176 to be merged and then use cluster & shard ID as reader ID
 	catchupBeginInclusiveWatermark := shardContext.GetQueueClusterAckLevel(
 		tasks.CategoryReplication,
-		sourceClusterShardID.ClusterName,
+		string(clientClusterShardID.ClusterID),
 	)
 	catchupEndExclusiveWatermark := shardContext.GetImmediateQueueExclusiveHighReadWatermark()
 	if err := sendTasks(
 		ctx,
 		server,
 		shardContext,
-		sourceClusterShardID,
-		targetClusterShardID,
+		taskConvertor,
+		clientClusterShardID,
 		catchupBeginInclusiveWatermark.TaskID,
 		catchupEndExclusiveWatermark.TaskID,
 	); err != nil {
@@ -198,8 +236,8 @@ func sendLive(
 	ctx context.Context,
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
-	sourceClusterShardID historyclient.ClusterShardID,
-	targetClusterShardID historyclient.ClusterShardID,
+	taskConvertor TaskConvertor,
+	clientClusterShardID historyclient.ClusterShardID,
 	newTaskNotificationChan <-chan struct{},
 	beginInclusiveWatermark int64,
 ) error {
@@ -211,8 +249,8 @@ func sendLive(
 				ctx,
 				server,
 				shardContext,
-				sourceClusterShardID,
-				targetClusterShardID,
+				taskConvertor,
+				clientClusterShardID,
 				beginInclusiveWatermark,
 				endExclusiveWatermark,
 			); err != nil {
@@ -229,8 +267,8 @@ func sendTasks(
 	ctx context.Context,
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
-	sourceClusterShardID historyclient.ClusterShardID,
-	targetClusterShardID historyclient.ClusterShardID,
+	taskConvertor TaskConvertor,
+	clientClusterShardID historyclient.ClusterShardID,
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
 ) error {
@@ -244,7 +282,7 @@ func sendTasks(
 	}
 	iter, err := engine.GetReplicationTasksIter(
 		ctx,
-		sourceClusterShardID.ClusterName,
+		string(clientClusterShardID.ClusterID),
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)
@@ -261,7 +299,7 @@ Loop:
 		if err != nil {
 			return err
 		}
-		task, err := engine.ConvertReplicationTask(ctx, item)
+		task, err := taskConvertor.Convert(item)
 		if err != nil {
 			return err
 		}
@@ -289,4 +327,48 @@ Loop:
 			},
 		},
 	})
+}
+
+func (f *TaskConvertorImpl) Convert(
+	task tasks.Task,
+) (*replicationspb.ReplicationTask, error) {
+	if namespaceEntry, err := f.NamespaceCache.GetNamespaceByID(
+		namespace.ID(task.GetNamespaceID()),
+	); err == nil {
+		shouldProcessTask := false
+	FilterLoop:
+		for _, targetCluster := range namespaceEntry.ClusterNames() {
+			if f.ClientClusterName == targetCluster {
+				shouldProcessTask = true
+				break FilterLoop
+			}
+		}
+		if !shouldProcessTask {
+			return nil, nil
+		}
+	}
+	// if there is error, then blindly send the task, better safe than sorry
+
+	sourceShardID := common.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), f.ClientClusterShardCount)
+	if sourceShardID != f.ClientClusterShardID.ShardID {
+		return nil, nil
+	}
+
+	replicationTask, err := f.Engine.ConvertReplicationTask(f.Ctx, task)
+	if err != nil {
+		return nil, err
+	}
+	return replicationTask, nil
+}
+
+func clusterIDToClusterNameShardCount(
+	allClusterInfo map[string]cluster.ClusterInformation,
+	clusterID int32,
+) (string, int32, error) {
+	for clusterName, clusterInfo := range allClusterInfo {
+		if int32(clusterInfo.InitialFailoverVersion) == clusterID {
+			return clusterName, clusterInfo.ShardCount, nil
+		}
+	}
+	return "", 0, serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
 }

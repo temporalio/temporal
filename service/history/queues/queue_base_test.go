@@ -26,6 +26,7 @@ package queues
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -105,7 +106,7 @@ func (s *queueBaseSuite) SetupTest() {
 
 	s.config = tests.NewDynamicConfig()
 	s.options = testQueueOptions
-	s.rateLimiter = NewReaderPriorityRateLimiter(func() float64 { return 20 }, s.options.MaxReaderCount())
+	s.rateLimiter = NewReaderPriorityRateLimiter(func() float64 { return 20 }, int64(s.options.MaxReaderCount()))
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 }
@@ -151,9 +152,9 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 	s.Equal(ackLevel+1, base.nonReadableScope.Range.InclusiveMin.TaskID)
 }
 
-func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
+func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 	persistenceState := &persistencespb.QueueState{
-		ReaderStates: map[int32]*persistencespb.QueueReaderState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
 			DefaultReaderId: {
 				Scopes: []*persistencespb.QueueSliceScope{
 					{
@@ -215,7 +216,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 		},
 		s.config,
 	)
-	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(2)
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 
 	base := newQueueBase(
 		mockShard,
@@ -232,7 +233,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 		s.metricsHandler,
 	)
 
-	readerScopes := make(map[int32][]Scope)
+	readerScopes := make(map[int64][]Scope)
 	for id, reader := range base.readerGroup.Readers() {
 		readerScopes[id] = reader.Scopes()
 	}
@@ -242,6 +243,80 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 	}
 
 	s.Equal(persistenceState, ToPersistenceQueueState(queueState))
+}
+
+func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreFailed() {
+	persistenceState := &persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			DefaultReaderId: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					{
+						Range: &persistencespb.QueueSliceRange{
+							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 1000},
+							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 2000},
+						},
+						Predicate: &persistencespb.Predicate{
+							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+							Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+						},
+					},
+				},
+			},
+			DefaultReaderId + 1: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					{
+						Range: &persistencespb.QueueSliceRange{
+							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 500},
+							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 1000},
+						},
+						Predicate: &persistencespb.Predicate{
+							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+							Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+						},
+					},
+				},
+			},
+		},
+		ExclusiveReaderHighWatermark: &persistencespb.TaskKey{FireTime: timestamp.TimePtr(tasks.DefaultFireTime), TaskId: 4000},
+	}
+
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				tasks.CategoryIDTransfer: persistenceState,
+			},
+		},
+		s.config,
+	)
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(2)
+
+	base := newQueueBase(
+		mockShard,
+		tasks.CategoryTransfer,
+		nil,
+		s.mockScheduler,
+		s.mockRescheduler,
+		NewNoopPriorityAssigner(),
+		nil,
+		s.options,
+		s.rateLimiter,
+		NoopReaderCompletionFn,
+		s.logger,
+		s.metricsHandler,
+	)
+
+	s.Empty(base.readerGroup.Readers())
+	s.Equal(
+		NewScope(
+			// Range should start from the smallest key among all scopes
+			NewRange(tasks.NewImmediateKey(500), tasks.MaximumKey),
+			predicates.Universal[tasks.Task](),
+		),
+		base.nonReadableScope,
+	)
 }
 
 func (s *queueBaseSuite) TestStartStop() {
@@ -259,10 +334,10 @@ func (s *queueBaseSuite) TestStartStop() {
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(1)
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	mockShard.Resource.ExecutionMgr.EXPECT().UnregisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(1)
 
-	paginationFnProvider := func(_ int32, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			key := NewRandomKeyInRange(paginationRange)
@@ -308,7 +383,7 @@ func (s *queueBaseSuite) TestStartStop() {
 
 func (s *queueBaseSuite) TestProcessNewRange() {
 	queueState := &queueState{
-		readerScopes: map[int32][]Scope{
+		readerScopes: map[int64][]Scope{
 			DefaultReaderId: {},
 		},
 		exclusiveReaderHighWatermark: tasks.MinimumKey,
@@ -328,7 +403,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 		s.config,
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(1)
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	base := newQueueBase(
 		mockShard,
@@ -359,8 +434,8 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 
 func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 	scopeMinKey := tasks.MaximumKey
-	readerScopes := map[int32][]Scope{}
-	readerIDs := []int32{DefaultReaderId, 2, 3}
+	readerScopes := map[int64][]Scope{}
+	readerIDs := []int64{DefaultReaderId, 2, 3}
 	for _, readerID := range readerIDs {
 		scopes := NewRandomScopes(10)
 		readerScopes[readerID] = scopes
@@ -387,7 +462,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
-	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(len(readerIDs))
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Return(nil).Times(len(readerIDs))
 
 	base := newQueueBase(
 		mockShard,
@@ -444,7 +519,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 	exclusiveReaderHighWatermark := NewRandomKey()
 	queueState := &queueState{
-		readerScopes:                 map[int32][]Scope{},
+		readerScopes:                 map[int64][]Scope{},
 		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
 	}
 	persistenceState := ToPersistenceQueueState(queueState)
@@ -521,7 +596,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.New()})
 	scopes[2].Predicate = tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})
 	initialQueueState := &queueState{
-		readerScopes: map[int32][]Scope{
+		readerScopes: map[int64][]Scope{
 			DefaultReaderId: scopes,
 		},
 		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
@@ -529,7 +604,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 	initialPersistenceState := ToPersistenceQueueState(initialQueueState)
 
 	expectedQueueState := &queueState{
-		readerScopes: map[int32][]Scope{
+		readerScopes: map[int64][]Scope{
 			DefaultReaderId:     {scopes[1]},
 			DefaultReaderId + 1: {scopes[0], scopes[2]},
 		},
@@ -550,7 +625,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
-	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(2)
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 
 	base := newQueueBase(
 		mockShard,
@@ -593,7 +668,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 
 func (s *queueBaseSuite) TestUpdateReaderProgress() {
 	queueState := &queueState{
-		readerScopes: map[int32][]Scope{
+		readerScopes: map[int64][]Scope{
 			DefaultReaderId: {},
 			DefaultReaderId + 2: {
 				NewScope(NewRange(tasks.NewImmediateKey(25), tasks.NewImmediateKey(30)), predicates.Universal[tasks.Task]()),
@@ -621,7 +696,7 @@ func (s *queueBaseSuite) TestUpdateReaderProgress() {
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
-	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Times(2)
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 
 	base := newQueueBase(
 		mockShard,
@@ -638,7 +713,7 @@ func (s *queueBaseSuite) TestUpdateReaderProgress() {
 		s.metricsHandler,
 	)
 
-	readerProgress := make(map[int32]tasks.Key)
+	readerProgress := make(map[int64]tasks.Key)
 	mockShard.Resource.ExecutionMgr.EXPECT().UpdateHistoryTaskReaderProgress(gomock.Any(), gomock.Any()).Do(
 		func(_ context.Context, request *persistence.UpdateHistoryTaskReaderProgressRequest) {
 			s.Equal(mockShard.GetShardID(), request.ShardID)
@@ -650,7 +725,7 @@ func (s *queueBaseSuite) TestUpdateReaderProgress() {
 
 	base.updateReaderProgress(queueState.readerScopes)
 
-	s.Equal(map[int32]tasks.Key{
+	s.Equal(map[int64]tasks.Key{
 		DefaultReaderId:     tasks.NewImmediateKey(100),
 		DefaultReaderId + 2: tasks.NewImmediateKey(25),
 		DefaultReaderId + 3: tasks.NewImmediateKey(25),
