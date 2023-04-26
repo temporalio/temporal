@@ -183,7 +183,6 @@ func sendLoop(
 		shardContext.GetLogger().Error(
 			"StreamWorkflowReplication unable to catch up replication tasks",
 			tag.Error(err),
-			tag.ShardID(shardContext.GetShardID()),
 		)
 		return err
 	}
@@ -199,7 +198,6 @@ func sendLoop(
 		shardContext.GetLogger().Error(
 			"StreamWorkflowReplication unable to stream replication tasks",
 			tag.Error(err),
-			tag.ShardID(shardContext.GetShardID()),
 		)
 		return err
 	}
