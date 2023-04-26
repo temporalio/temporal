@@ -26,46 +26,69 @@ package replication
 
 import (
 	"context"
+	"fmt"
 
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common/cluster"
 )
 
 type (
 	StreamBiDirectionStreamClientProvider struct {
-		clientBean client.Bean
+		clusterMetadata cluster.Metadata
+		clientBean      client.Bean
 	}
 )
 
 func NewStreamBiDirectionStreamClientProvider(
+	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 ) *StreamBiDirectionStreamClientProvider {
 	return &StreamBiDirectionStreamClientProvider{
-		clientBean: clientBean,
+		clusterMetadata: clusterMetadata,
+		clientBean:      clientBean,
 	}
 }
 
 func (p *StreamBiDirectionStreamClientProvider) Get(
 	ctx context.Context,
-	sourceShardKey ClusterShardKey,
-	targetShardKey ClusterShardKey,
+	clientShardKey ClusterShardKey,
+	serverShardKey ClusterShardKey,
 ) (BiDirectionStreamClient[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse], error) {
-	adminClient, err := p.clientBean.GetRemoteAdminClient(targetShardKey.ClusterName)
+	allClusterInfo := p.clusterMetadata.GetAllClusterInfo()
+	clusterName, err := clusterIDToClusterName(allClusterInfo, serverShardKey.ClusterID)
+	if err != nil {
+		return nil, err
+	}
+	adminClient, err := p.clientBean.GetRemoteAdminClient(clusterName)
 	if err != nil {
 		return nil, err
 	}
 	ctx = metadata.NewOutgoingContext(ctx, history.EncodeClusterShardMD(
 		history.ClusterShardID{
-			ClusterName: sourceShardKey.ClusterName,
-			ShardID:     sourceShardKey.ShardID,
+			ClusterID: clientShardKey.ClusterID,
+			ShardID:   clientShardKey.ShardID,
 		},
 		history.ClusterShardID{
-			ClusterName: targetShardKey.ClusterName,
-			ShardID:     targetShardKey.ShardID,
+			ClusterID: serverShardKey.ClusterID,
+			ShardID:   serverShardKey.ShardID,
 		},
 	))
 	return adminClient.StreamWorkflowReplicationMessages(ctx)
+}
+
+func clusterIDToClusterName(
+	allClusterInfo map[string]cluster.ClusterInformation,
+	clusterID int32,
+) (string, error) {
+	for clusterName, clusterInfo := range allClusterInfo {
+		if int32(clusterInfo.InitialFailoverVersion) == clusterID {
+			return clusterName, nil
+		}
+	}
+	return "", serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
 }

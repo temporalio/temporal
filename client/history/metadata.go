@@ -33,16 +33,16 @@ import (
 )
 
 const (
-	MetadataKeySourceClusterName = "temporal-source-cluster-name"
-	MetadataKeySourceShardID     = "temporal-source-shard-id"
-	MetadataKeyTargetClusterName = "temporal-target-cluster-name"
-	MetadataKeyTargetShardID     = "temporal-target-shard-id"
+	MetadataKeyClientClusterID = "temporal-client-cluster-id"
+	MetadataKeyClientShardID   = "temporal-client-shard-id"
+	MetadataKeyServerClusterID = "temporal-server-cluster-id"
+	MetadataKeyServerShardID   = "temporal-server-shard-id"
 )
 
 type (
 	ClusterShardID struct {
-		ClusterName string
-		ShardID     int32
+		ClusterID int32
+		ShardID   int32
 	}
 )
 
@@ -51,66 +51,63 @@ func EncodeClusterShardMD(
 	targetClusterShardID ClusterShardID,
 ) metadata.MD {
 	return metadata.Pairs(
-		MetadataKeySourceClusterName, sourceClusterShardID.ClusterName,
-		MetadataKeySourceShardID, strconv.Itoa(int(sourceClusterShardID.ShardID)),
-		MetadataKeyTargetClusterName, targetClusterShardID.ClusterName,
-		MetadataKeyTargetShardID, strconv.Itoa(int(targetClusterShardID.ShardID)),
+		MetadataKeyClientClusterID, strconv.Itoa(int(sourceClusterShardID.ClusterID)),
+		MetadataKeyClientShardID, strconv.Itoa(int(sourceClusterShardID.ShardID)),
+		MetadataKeyServerClusterID, strconv.Itoa(int(targetClusterShardID.ClusterID)),
+		MetadataKeyServerShardID, strconv.Itoa(int(targetClusterShardID.ShardID)),
 	)
 }
 
 func DecodeClusterShardMD(
 	clusterShardMD metadata.MD,
 ) (_ ClusterShardID, _ ClusterShardID, _ error) {
-	var sourceClusterShardID ClusterShardID
-	var targetClusterShardID ClusterShardID
+	var clientClusterShardID ClusterShardID
+	var serverClusterShardID ClusterShardID
 
-	clusterNames := clusterShardMD.Get(MetadataKeySourceClusterName)
-	if len(clusterNames) != 1 {
-		return sourceClusterShardID, targetClusterShardID, serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"unable to parse source cluster shard ID: %v",
-			clusterShardMD,
-		))
-	}
-	sourceClusterShardID.ClusterName = clusterNames[0]
-	shardIDs := clusterShardMD.Get(MetadataKeySourceShardID)
-	if len(shardIDs) != 1 {
-		return sourceClusterShardID, targetClusterShardID, serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"unable to parse source cluster shard ID: %v",
-			clusterShardMD,
-		))
-	}
-	shardID, err := strconv.Atoi(shardIDs[0])
+	clientClusterID, err := parseInt32(clusterShardMD, MetadataKeyClientClusterID)
 	if err != nil {
-		return sourceClusterShardID, targetClusterShardID, serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"unable to parse source cluster shard ID: %v, err: %v",
-			clusterShardMD,
-			err.Error(),
-		))
+		return clientClusterShardID, serverClusterShardID, err
 	}
-	sourceClusterShardID.ShardID = int32(shardID)
-	clusterNames = clusterShardMD.Get(MetadataKeyTargetClusterName)
-	if len(clusterNames) != 1 {
-		return sourceClusterShardID, targetClusterShardID, serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"unable to parse target cluster shard ID: %v",
-			clusterShardMD,
-		))
-	}
-	targetClusterShardID.ClusterName = clusterNames[0]
-	shardIDs = clusterShardMD.Get(MetadataKeyTargetShardID)
-	if len(shardIDs) != 1 {
-		return sourceClusterShardID, targetClusterShardID, serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"unable to parse source cluster shard ID: %v",
-			clusterShardMD,
-		))
-	}
-	shardID, err = strconv.Atoi(shardIDs[0])
+	clientShardID, err := parseInt32(clusterShardMD, MetadataKeyClientShardID)
 	if err != nil {
-		return sourceClusterShardID, targetClusterShardID, serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"unable to parse source cluster shard ID: %v, err: %v",
-			clusterShardMD,
-			err.Error(),
+		return clientClusterShardID, serverClusterShardID, err
+	}
+	clientClusterShardID.ClusterID = clientClusterID
+	clientClusterShardID.ShardID = clientShardID
+
+	serverClusterID, err := parseInt32(clusterShardMD, MetadataKeyServerClusterID)
+	if err != nil {
+		return clientClusterShardID, serverClusterShardID, err
+	}
+	serverShardID, err := parseInt32(clusterShardMD, MetadataKeyServerShardID)
+	if err != nil {
+		return clientClusterShardID, serverClusterShardID, err
+	}
+	serverClusterShardID.ClusterID = serverClusterID
+	serverClusterShardID.ShardID = serverShardID
+
+	return clientClusterShardID, serverClusterShardID, nil
+}
+
+func parseInt32(
+	clusterShardMD metadata.MD,
+	metadataKey string,
+) (int32, error) {
+	metadataValues := clusterShardMD.Get(metadataKey)
+	if len(metadataValues) != 1 {
+		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"unable to parse metadata key %v: %v",
+			metadataKey,
+			metadataValues,
 		))
 	}
-	targetClusterShardID.ShardID = int32(shardID)
-	return sourceClusterShardID, targetClusterShardID, nil
+	metadataValue, err := strconv.Atoi(metadataValues[0])
+	if err != nil {
+		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"unable to parse metadata key %v: %v",
+			metadataKey,
+			metadataValues,
+		))
+	}
+	return int32(metadataValue), nil
 }

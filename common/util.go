@@ -409,7 +409,7 @@ func MapShardID(
 		ratio := targetShardCount / sourceShardCount
 		targetShardIDs := make([]int32, ratio)
 		for i := range targetShardIDs {
-			targetShardIDs[i] = sourceShardID + int32(i)*ratio + 1
+			targetShardIDs[i] = sourceShardID + int32(i)*sourceShardCount + 1
 		}
 		return targetShardIDs
 	} else if sourceShardCount > targetShardCount {
