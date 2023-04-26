@@ -360,15 +360,11 @@ func (q *namespaceReplicationQueueImpl) RangeDeleteMessagesFromDLQ(
 	lastMessageID int64,
 ) error {
 
-	if err := q.queue.RangeDeleteMessagesFromDLQ(
+	return q.queue.RangeDeleteMessagesFromDLQ(
 		ctx,
 		firstMessageID,
 		lastMessageID,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func (q *namespaceReplicationQueueImpl) DeleteMessageFromDLQ(

@@ -293,10 +293,7 @@ func signalWorkflow(
 
 	// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 	// the history and try the operation again.
-	if err := workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
+	return workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
 		ctx,
-	); err != nil {
-		return err
-	}
-	return nil
+	)
 }
