@@ -25,6 +25,7 @@
 package metricstest
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -74,32 +75,12 @@ type (
 	}
 )
 
-type MetricNotFound struct {
-	Name string
-}
-
-func (r *MetricNotFound) Error() string {
-	return fmt.Sprintf("metric %q not found", r.Name)
-}
-
-type MetricTypeMismatch struct {
-	Name         string
-	ExpectedType dto.MetricType
-}
-
-func (r *MetricTypeMismatch) Error() string {
-	return fmt.Sprintf("metric %q not a %s type", r.Name, r.ExpectedType.String())
-}
-
-type MetricLabelMismatch struct {
-	Name           string
-	ExpectedLabels map[string]string
-	SampleLabels   map[string]string
-}
-
-func (r *MetricLabelMismatch) Error() string {
-	return fmt.Sprintf("metric %q label mismatch, has %v, asked for %v", r.Name, r.SampleLabels, r.ExpectedLabels)
-}
+// Potential errors that the test handler can return trying to find a metric to return.
+var (
+	MetricNotFoundError      = errors.New("metric not found")
+	MetricTypeMismatchError  = errors.New("metric is not the expected type")
+	MetricLabelMismatchError = errors.New("metric labels do not match expected labels")
+)
 
 func NewHandler(logger log.Logger, clientConfig metrics.ClientConfig) (*Handler, error) {
 	registry := prometheus.NewRegistry()
@@ -224,13 +205,13 @@ func (s Snapshot) getValue(name string, metricType dto.MetricType, tags ...metri
 	}
 	sample, ok := s.samples[name]
 	if !ok {
-		return 0, &MetricNotFound{Name: name}
+		return 0, fmt.Errorf("%w: %q", MetricNotFoundError, name)
 	}
 	if sample.metricType != metricType {
-		return 0, &MetricTypeMismatch{Name: name, ExpectedType: metricType}
+		return 0, fmt.Errorf("%w: %q is a %s, not a %s", MetricTypeMismatchError, name, sample.metricType, metricType)
 	}
 	if !maps.Equal(sample.labelValues, labelValues) {
-		return 0, &MetricLabelMismatch{Name: name, SampleLabels: sample.labelValues, ExpectedLabels: labelValues}
+		return 0, fmt.Errorf("%w: %q has %v, asked for %v", MetricLabelMismatchError, name, sample.labelValues, labelValues)
 	}
 	return sample.sampleValue, nil
 }
@@ -251,13 +232,13 @@ func (s Snapshot) Histogram(name string, tags ...metrics.Tag) ([]HistogramBucket
 
 	sample, ok := s.histogramSamples[name]
 	if !ok {
-		return nil, &MetricNotFound{Name: name}
+		return nil, fmt.Errorf("%w: %q", MetricNotFoundError, name)
 	}
 	if sample.metricType != dto.MetricType_HISTOGRAM {
-		return nil, &MetricTypeMismatch{Name: name, ExpectedType: dto.MetricType_HISTOGRAM}
+		return nil, fmt.Errorf("%w: %q is a %s, not a %s", MetricTypeMismatchError, name, sample.metricType, dto.MetricType_HISTOGRAM)
 	}
 	if !maps.Equal(sample.labelValues, labelValues) {
-		return nil, &MetricLabelMismatch{Name: name, SampleLabels: sample.labelValues, ExpectedLabels: labelValues}
+		return nil, fmt.Errorf("%w: %q has %v, asked for %v", MetricLabelMismatchError, name, sample.labelValues, labelValues)
 	}
 	return sample.buckets, nil
 }
