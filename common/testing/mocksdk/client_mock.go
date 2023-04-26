@@ -255,6 +255,20 @@ func (mr *MockClientMockRecorder) GetWorkflowHistory(arg0, arg1, arg2, arg3, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowHistory", reflect.TypeOf((*MockClient)(nil).GetWorkflowHistory), arg0, arg1, arg2, arg3, arg4)
 }
 
+// GetWorkflowUpdateHandle mocks base method.
+func (m *MockClient) GetWorkflowUpdateHandle(arg0 client.GetWorkflowUpdateHandleOptions) client.WorkflowUpdateHandle {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowUpdateHandle", arg0)
+	ret0, _ := ret[0].(client.WorkflowUpdateHandle)
+	return ret0
+}
+
+// GetWorkflowUpdateHandle indicates an expected call of GetWorkflowUpdateHandle.
+func (mr *MockClientMockRecorder) GetWorkflowUpdateHandle(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowUpdateHandle", reflect.TypeOf((*MockClient)(nil).GetWorkflowUpdateHandle), arg0)
+}
+
 // ListArchivedWorkflow mocks base method.
 func (m *MockClient) ListArchivedWorkflow(arg0 context.Context, arg1 *workflowservice.ListArchivedWorkflowExecutionsRequest) (*workflowservice.ListArchivedWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
