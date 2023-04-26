@@ -152,11 +152,13 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	filter := sqlplugin.VisibilityTasksFilter{
-		ShardID: shardID,
-		TaskID:  taskID,
+	rangeFilter := sqlplugin.VisibilityTasksRangeFilter{
+		ShardID:            shardID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
+		PageSize:           1,
 	}
-	rows, err := s.store.SelectFromVisibilityTasks(newExecutionContext(), filter)
+	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -216,7 +218,13 @@ func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
-	rows, err := s.store.SelectFromVisibilityTasks(newExecutionContext(), filter)
+	rangeFilter := sqlplugin.VisibilityTasksRangeFilter{
+		ShardID:            shardID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
+		PageSize:           1,
+	}
+	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -270,7 +278,13 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Single() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	rows, err := s.store.SelectFromVisibilityTasks(newExecutionContext(), filter)
+	rangeFilter := sqlplugin.VisibilityTasksRangeFilter{
+		ShardID:            shardID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
+		PageSize:           1,
+	}
+	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), rangeFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

@@ -127,6 +127,8 @@ type (
 		NumHistoryHosts        int
 		HistoryCountLimitError int
 		HistoryCountLimitWarn  int
+		BlobSizeLimitError     int
+		BlobSizeLimitWarn      int
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -691,7 +693,7 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
 	if c.esConfig != nil {
-		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, visibility.AdvancedVisibilityWritingModeDual)
+		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
@@ -699,21 +701,16 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
+	if c.historyConfig.BlobSizeLimitError != 0 {
+		client.OverrideValue(dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeLimitError)
+	}
+	if c.historyConfig.BlobSizeLimitWarn != 0 {
+		client.OverrideValue(dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
+	}
 
 	// For DeleteWorkflowExecution tests
 	client.OverrideValue(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
 	client.OverrideValue(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
-}
-
-func (c *temporalImpl) RefreshNamespaceCache() {
-	c.frontendNamespaceRegistry.Refresh()
-	c.matchingNamespaceRegistry.Refresh()
-	for _, r := range c.historyNamespaceRegistries {
-		r.Refresh()
-	}
-	if c.workerNamespaceRegistry != nil {
-		c.workerNamespaceRegistry.Refresh()
-	}
 }
 
 // copyPersistenceConfig makes a deepcopy of persistence config.

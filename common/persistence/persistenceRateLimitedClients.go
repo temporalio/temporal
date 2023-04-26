@@ -170,8 +170,7 @@ func (p *shardRateLimitedPersistenceClient) UpdateShard(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.UpdateShard(ctx, request)
-	return err
+	return p.persistence.UpdateShard(ctx, request)
 }
 
 func (p *shardRateLimitedPersistenceClient) AssertShardOwnership(
@@ -182,8 +181,7 @@ func (p *shardRateLimitedPersistenceClient) AssertShardOwnership(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.AssertShardOwnership(ctx, request)
-	return err
+	return p.persistence.AssertShardOwnership(ctx, request)
 }
 
 func (p *shardRateLimitedPersistenceClient) Close() {
@@ -192,6 +190,10 @@ func (p *shardRateLimitedPersistenceClient) Close() {
 
 func (p *executionRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
+}
+
+func (p *executionRateLimitedPersistenceClient) GetHistoryBranchUtil() HistoryBranchUtil {
+	return p.persistence.GetHistoryBranchUtil()
 }
 
 func (p *executionRateLimitedPersistenceClient) CreateWorkflowExecution(
@@ -262,8 +264,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteWorkflowExecution(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteWorkflowExecution(ctx, request)
-	return err
+	return p.persistence.DeleteWorkflowExecution(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) DeleteCurrentWorkflowExecution(
@@ -274,8 +275,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteCurrentWorkflowExecution(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteCurrentWorkflowExecution(ctx, request)
-	return err
+	return p.persistence.DeleteCurrentWorkflowExecution(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) GetCurrentExecution(
@@ -302,6 +302,30 @@ func (p *executionRateLimitedPersistenceClient) ListConcreteExecutions(
 	return response, err
 }
 
+func (p *executionRateLimitedPersistenceClient) RegisterHistoryTaskReader(
+	ctx context.Context,
+	request *RegisterHistoryTaskReaderRequest,
+) error {
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	return p.persistence.RegisterHistoryTaskReader(ctx, request)
+}
+
+func (p *executionRateLimitedPersistenceClient) UnregisterHistoryTaskReader(
+	ctx context.Context,
+	request *UnregisterHistoryTaskReaderRequest,
+) {
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	p.persistence.UnregisterHistoryTaskReader(ctx, request)
+}
+
+func (p *executionRateLimitedPersistenceClient) UpdateHistoryTaskReaderProgress(
+	ctx context.Context,
+	request *UpdateHistoryTaskReaderProgressRequest,
+) {
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
+}
+
 func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 	ctx context.Context,
 	request *AddHistoryTasksRequest,
@@ -310,24 +334,7 @@ func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.AddHistoryTasks(ctx, request)
-	return err
-}
-
-func (p *executionRateLimitedPersistenceClient) GetHistoryTask(
-	ctx context.Context,
-	request *GetHistoryTaskRequest,
-) (*GetHistoryTaskResponse, error) {
-	if ok := allow(
-		ctx,
-		ConstructHistoryTaskAPI("GetHistoryTask", request.TaskCategory),
-		p.rateLimiter,
-	); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetHistoryTask(ctx, request)
-	return response, err
+	return p.persistence.AddHistoryTasks(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) GetHistoryTasks(
@@ -358,8 +365,7 @@ func (p *executionRateLimitedPersistenceClient) CompleteHistoryTask(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.CompleteHistoryTask(ctx, request)
-	return err
+	return p.persistence.CompleteHistoryTask(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) RangeCompleteHistoryTasks(
@@ -374,8 +380,7 @@ func (p *executionRateLimitedPersistenceClient) RangeCompleteHistoryTasks(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.RangeCompleteHistoryTasks(ctx, request)
-	return err
+	return p.persistence.RangeCompleteHistoryTasks(ctx, request)
 }
 
 func (p *executionRateLimitedPersistenceClient) PutReplicationTaskToDLQ(
@@ -462,8 +467,7 @@ func (p *taskRateLimitedPersistenceClient) CompleteTask(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.CompleteTask(ctx, request)
-	return err
+	return p.persistence.CompleteTask(ctx, request)
 }
 
 func (p *taskRateLimitedPersistenceClient) CompleteTasksLessThan(
@@ -566,8 +570,7 @@ func (p *metadataRateLimitedPersistenceClient) UpdateNamespace(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.UpdateNamespace(ctx, request)
-	return err
+	return p.persistence.UpdateNamespace(ctx, request)
 }
 
 func (p *metadataRateLimitedPersistenceClient) RenameNamespace(
@@ -578,8 +581,7 @@ func (p *metadataRateLimitedPersistenceClient) RenameNamespace(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.RenameNamespace(ctx, request)
-	return err
+	return p.persistence.RenameNamespace(ctx, request)
 }
 
 func (p *metadataRateLimitedPersistenceClient) DeleteNamespace(
@@ -590,8 +592,7 @@ func (p *metadataRateLimitedPersistenceClient) DeleteNamespace(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteNamespace(ctx, request)
-	return err
+	return p.persistence.DeleteNamespace(ctx, request)
 }
 
 func (p *metadataRateLimitedPersistenceClient) DeleteNamespaceByName(
@@ -602,8 +603,7 @@ func (p *metadataRateLimitedPersistenceClient) DeleteNamespaceByName(
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteNamespaceByName(ctx, request)
-	return err
+	return p.persistence.DeleteNamespaceByName(ctx, request)
 }
 
 func (p *metadataRateLimitedPersistenceClient) ListNamespaces(
@@ -663,45 +663,6 @@ func (p *executionRateLimitedPersistenceClient) AppendRawHistoryNodes(
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
-}
-
-// ParseHistoryBranchInfo parses the history branch for branch information
-func (p *executionRateLimitedPersistenceClient) ParseHistoryBranchInfo(
-	ctx context.Context,
-	request *ParseHistoryBranchInfoRequest,
-) (*ParseHistoryBranchInfoResponse, error) {
-	// ParseHistoryBranchInfo implementation currently doesn't actually query DB
-	// TODO: uncomment if necessary
-	// if ok := allow(ctx, "ParseHistoryBranchInfo", p.rateLimiter); !ok {
-	// 	return nil, ErrPersistenceLimitExceeded
-	// }
-	return p.persistence.ParseHistoryBranchInfo(ctx, request)
-}
-
-// UpdateHistoryBranchInfo updates the history branch with branch information
-func (p *executionRateLimitedPersistenceClient) UpdateHistoryBranchInfo(
-	ctx context.Context,
-	request *UpdateHistoryBranchInfoRequest,
-) (*UpdateHistoryBranchInfoResponse, error) {
-	// UpdateHistoryBranchInfo implementation currently doesn't actually query DB
-	// TODO: uncomment if necessary
-	// if ok := allow(ctx, "UpdateHistoryBranchInfo", p.rateLimiter); !ok {
-	// 	return nil, ErrPersistenceLimitExceeded
-	// }
-	return p.persistence.UpdateHistoryBranchInfo(ctx, request)
-}
-
-// NewHistoryBranch initializes a new history branch
-func (p *executionRateLimitedPersistenceClient) NewHistoryBranch(
-	ctx context.Context,
-	request *NewHistoryBranchRequest,
-) (*NewHistoryBranchResponse, error) {
-	// NewHistoryBranch implementation currently doesn't actually query DB
-	// TODO: uncomment if necessary
-	// if ok := allow(ctx, "NewHistoryBranch", p.rateLimiter); !ok {
-	// 	return nil, ErrPersistenceLimitExceeded
-	// }
-	return p.persistence.NewHistoryBranch(ctx, request)
 }
 
 // ReadHistoryBranch returns history node data for a branch
@@ -772,8 +733,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteHistoryBranch(
 	if ok := allow(ctx, "DeleteHistoryBranch", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	err := p.persistence.DeleteHistoryBranch(ctx, request)
-	return err
+	return p.persistence.DeleteHistoryBranch(ctx, request)
 }
 
 // TrimHistoryBranch trims a branch

@@ -55,6 +55,7 @@ type (
 	// Context represents a history engine shard
 	Context interface {
 		GetShardID() int32
+		GetOwner() string
 		GetExecutionManager() persistence.ExecutionManager
 		GetNamespaceRegistry() namespace.Registry
 		GetClusterMetadata() cluster.Metadata
@@ -81,7 +82,7 @@ type (
 		GetQueueClusterAckLevel(category tasks.Category, cluster string) tasks.Key
 		UpdateQueueClusterAckLevel(category tasks.Category, cluster string, ackLevel tasks.Key) error
 		GetQueueState(category tasks.Category) (*persistencespb.QueueState, bool)
-		UpdateQueueState(category tasks.Category, state *persistencespb.QueueState) error
+		SetQueueState(category tasks.Category, state *persistencespb.QueueState) error
 
 		GetReplicatorDLQAckLevel(sourceCluster string) int64
 		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error

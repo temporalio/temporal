@@ -35,6 +35,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
@@ -392,4 +393,56 @@ func (s *contextSuite) TestAcquireShardNoError() {
 	s.mockShard.acquireShard()
 
 	s.Assert().Equal(contextStateAcquired, s.mockShard.state)
+}
+
+func (s *contextSuite) TestHandoverNamespace() {
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).Times(1)
+
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
+		&persistencespb.NamespaceConfig{
+			Retention: timestamp.DurationFromDays(1),
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+			State: enums.REPLICATION_STATE_HANDOVER,
+		},
+		tests.Version,
+	)
+	s.mockShard.UpdateHandoverNamespace(namespaceEntry, false)
+	_, handoverNS, err := s.mockShard.GetReplicationStatus([]string{})
+	s.NoError(err)
+
+	handoverInfo, ok := handoverNS[namespaceEntry.Name().String()]
+	s.True(ok)
+	s.Equal(s.mockShard.immediateTaskExclusiveMaxReadLevel-1, handoverInfo.HandoverReplicationTaskId)
+
+	// make shard status invalid
+	// ideally we should use s.mockShard.transition() method
+	// but that will cause shard trying to re-acquire the shard in the background
+	s.mockShard.stateLock.Lock()
+	s.mockShard.state = contextStateAcquiring
+	s.mockShard.stateLock.Unlock()
+
+	// note: no mock for NotifyNewTasks
+
+	s.mockShard.UpdateHandoverNamespace(namespaceEntry, false)
+	_, handoverNS, err = s.mockShard.GetReplicationStatus([]string{})
+	s.NoError(err)
+
+	handoverInfo, ok = handoverNS[namespaceEntry.Name().String()]
+	s.True(ok)
+	s.Equal(s.mockShard.immediateTaskExclusiveMaxReadLevel-1, handoverInfo.HandoverReplicationTaskId)
+
+	// delete namespace
+	s.mockShard.UpdateHandoverNamespace(namespaceEntry, true)
+	_, handoverNS, err = s.mockShard.GetReplicationStatus([]string{})
+	s.NoError(err)
+
+	_, ok = handoverNS[namespaceEntry.Name().String()]
+	s.False(ok)
 }

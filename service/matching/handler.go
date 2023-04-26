@@ -328,11 +328,11 @@ func (h *Handler) ListTaskQueuePartitions(
 	return response, err
 }
 
-// UpdateWorkerBuildIdOrdering allows changing the worker versioning graph for a task queue
-func (h *Handler) UpdateWorkerBuildIdOrdering(
+// UpdateWorkerBuildIdCompatibility allows changing the worker versioning graph for a task queue
+func (h *Handler) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.UpdateWorkerBuildIdOrderingRequest,
-) (_ *matchingservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+	request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
+) (_ *matchingservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -341,17 +341,17 @@ func (h *Handler) UpdateWorkerBuildIdOrdering(
 			Name: request.Request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingUpdateWorkerBuildIdOrderingScope,
+		metrics.MatchingUpdateWorkerBuildIdCompatibilityScope,
 	)
 
-	return h.engine.UpdateWorkerBuildIdOrdering(hCtx, request)
+	return h.engine.UpdateWorkerBuildIdCompatibility(hCtx, request)
 }
 
-// GetWorkerBuildIdOrdering fetches the worker versioning graph for a task queue
-func (h *Handler) GetWorkerBuildIdOrdering(
+// GetWorkerBuildIdCompatibility fetches the worker versioning graph for a task queue
+func (h *Handler) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.GetWorkerBuildIdOrderingRequest,
-) (_ *matchingservice.GetWorkerBuildIdOrderingResponse, retError error) {
+	request *matchingservice.GetWorkerBuildIdCompatibilityRequest,
+) (_ *matchingservice.GetWorkerBuildIdCompatibilityResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -360,10 +360,10 @@ func (h *Handler) GetWorkerBuildIdOrdering(
 			Name: request.Request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingGetWorkerBuildIdOrderingScope,
+		metrics.MatchingGetWorkerBuildIdCompatibilityScope,
 	)
 
-	return h.engine.GetWorkerBuildIdOrdering(hCtx, request)
+	return h.engine.GetWorkerBuildIdCompatibility(hCtx, request)
 }
 
 // InvalidateTaskQueueMetadata notifies a task queue that some data has changed, and should be invalidated/refreshed

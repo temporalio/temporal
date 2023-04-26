@@ -25,11 +25,12 @@
 package update
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/gogo/protobuf/types"
-	failurepb "go.temporal.io/api/failure/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 )
 
@@ -40,9 +41,8 @@ type (
 		CreateOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
 
 		HasPending(filterMessages []*protocolpb.Message) bool
+		ValidateIncomingMessages(messages []*protocolpb.Message) error
 		ProcessIncomingMessages(messages []*protocolpb.Message) error
-
-		Clear()
 	}
 
 	Duplicate bool
@@ -139,69 +139,92 @@ func (r *RegistryImpl) CreateOutgoingMessages(startedEventID int64) ([]*protocol
 	return updMessages, nil
 }
 
+func (r *RegistryImpl) ValidateIncomingMessages(messages []*protocolpb.Message) error {
+	r.RLock()
+	defer r.RUnlock()
+
+	// Valid message sequences:
+	//  pending -> reject
+	//  pending -> accept
+	//  accept -> complete
+
+	// make a shallow copy of updates for validation so that it does not alter the state which will be used
+	// by a retry of failed workflow task
+	updates := make(map[string]*Update, len(r.updates))
+	for k, v := range r.updates {
+		updates[k] = &Update{
+			state:              v.state,
+			request:            v.request,
+			messageID:          v.messageID,
+			protocolInstanceID: v.protocolInstanceID,
+			outcome:            nil, // we don't need it for validation
+		}
+	}
+
+	_, err := processIncomingMessages(updates, messages)
+	return err
+}
+
 func (r *RegistryImpl) ProcessIncomingMessages(messages []*protocolpb.Message) error {
 	r.Lock()
 	defer r.Unlock()
+
+	closedUpdates, err := processIncomingMessages(r.updates, messages)
+	if err != nil {
+		return err
+	}
+
+	// notify result to caller
+	for _, upd := range closedUpdates {
+		upd.notify()
+	}
+	return nil
+}
+
+//nolint:revive // cognitive complexity
+func processIncomingMessages(updates map[string]*Update, messages []*protocolpb.Message) ([]*Update, error) {
+	var closedUpdates []*Update
 	for _, message := range messages {
+		instanceId := message.GetProtocolInstanceId()
+		upd, ok := updates[instanceId]
+		if !ok {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: update %s not found", instanceId))
+		}
+
+		if message.GetBody() == nil {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: message %s has empty body", instanceId))
+		}
+
 		if types.Is(message.GetBody(), (*updatepb.Acceptance)(nil)) {
-			if pendingUpdate := r.getPendingUpdateNoLock(message.GetProtocolInstanceId()); pendingUpdate != nil {
-				pendingUpdate.accept()
+			if upd.state != statePending {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to accept update %s, current state: %s", instanceId, upd.state))
 			}
-		}
-		if types.Is(message.GetBody(), (*updatepb.Response)(nil)) {
-			if acceptedUpdate := r.getAcceptedUpdateNoLock(message.GetProtocolInstanceId()); acceptedUpdate != nil {
-				var response updatepb.Response
-				if err := types.UnmarshalAny(message.GetBody(), &response); err != nil {
-					return err
-				}
-				acceptedUpdate.sendComplete(response.GetOutcome())
+			upd.accept()
+		} else if types.Is(message.GetBody(), (*updatepb.Response)(nil)) {
+			if upd.state != stateAccepted {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to complete update %s, current state: %s", instanceId, upd.state))
 			}
-		}
-		if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
-			if pendingUpdate := r.getPendingUpdateNoLock(message.GetProtocolInstanceId()); pendingUpdate != nil {
-				var rejection updatepb.Rejection
-				if err := types.UnmarshalAny(message.GetBody(), &rejection); err != nil {
-					return err
-				}
-				pendingUpdate.sendReject(rejection.GetFailure())
+			var response updatepb.Response
+			if err := types.UnmarshalAny(message.GetBody(), &response); err != nil {
+				return nil, err
 			}
+			upd.complete(response.GetOutcome())
+			closedUpdates = append(closedUpdates, upd)
+		} else if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
+			if upd.state != statePending {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to reject update %s, current state: %s", instanceId, upd.state))
+			}
+			var rejection updatepb.Rejection
+			if err := types.UnmarshalAny(message.GetBody(), &rejection); err != nil {
+				return nil, err
+			}
+			upd.reject(rejection.GetFailure())
+			closedUpdates = append(closedUpdates, upd)
+		} else {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown message type: %s", message.GetBody().GetTypeUrl()))
 		}
 	}
-	return nil
-}
-
-func (r *RegistryImpl) Clear() {
-	r.Lock()
-	defer r.Unlock()
-	for _, upd := range r.updates {
-		upd.sendReject(r.clearFailure())
-	}
-	r.updates = make(map[string]*Update)
-}
-
-func (r *RegistryImpl) getPendingUpdateNoLock(protocolInstanceID string) *Update {
-	if upd, ok := r.updates[protocolInstanceID]; ok && upd.state == statePending {
-		return upd
-	}
-	return nil
-}
-
-func (r *RegistryImpl) getAcceptedUpdateNoLock(protocolInstanceID string) *Update {
-	if upd, ok := r.updates[protocolInstanceID]; ok && upd.state == stateAccepted {
-		return upd
-	}
-	return nil
-}
-
-func (r *RegistryImpl) clearFailure() *failurepb.Failure {
-	return &failurepb.Failure{
-		Message: "update cleared, please retry",
-		FailureInfo: &failurepb.Failure_ServerFailureInfo{
-			ServerFailureInfo: &failurepb.ServerFailureInfo{
-				NonRetryable: false,
-			},
-		},
-	}
+	return closedUpdates, nil
 }
 
 func (r *RegistryImpl) remove(id string) {

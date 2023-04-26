@@ -129,7 +129,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew_
 	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: runID,
 	}).AnyTimes()
-	mutableState.EXPECT().CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive).Return(
+	mutableState.EXPECT().CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive).Return(
 		workflowSnapshot, workflowEventsSeq, nil,
 	)
 
@@ -139,7 +139,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew_
 
 	weContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBrandNew,
 		"",
 		int64(0),
@@ -184,7 +183,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew_
 	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: runID,
 	}).AnyTimes()
-	mutableState.EXPECT().CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive).Return(
+	mutableState.EXPECT().CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive).Return(
 		workflowSnapshot, workflowEventsSeq, nil,
 	)
 
@@ -194,7 +193,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew_
 
 	weContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBrandNew,
 		"",
 		int64(0),
@@ -248,7 +246,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive).Return(
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
 
@@ -268,7 +266,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
@@ -323,7 +320,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive).Return(
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
 
@@ -343,7 +340,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
@@ -400,7 +396,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive).Return(
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
 
@@ -412,7 +408,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -470,7 +465,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive).Return(
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
 
@@ -482,7 +477,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -540,7 +534,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive).Return(
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
 
@@ -552,7 +546,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -610,7 +603,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive).Return(
+	targetMutableState.EXPECT().CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive).Return(
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	)
 
@@ -622,7 +615,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
-		now,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -685,7 +677,6 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressC
 
 	currentContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
-		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetContext,
 		targetMutableState,

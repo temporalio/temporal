@@ -63,12 +63,7 @@ message TaskQueueInfo {
 // Holds all the data related to worker versioning for a task queue.
 // Backwards-incompatible changes cannot be made, as this would make existing stored data unreadable
 message VersioningData {
-    // The currently established default worker build id version.
-    temporal.api.taskqueue.v1.VersionIdNode current_default = 1;
-    // Other current latest-compatible versions who are not the overall default. These are the
-    // versions that will be used when generating new tasks by following the graph from the
-    // version of the last task out to a leaf.
-    repeated temporal.api.taskqueue.v1.VersionIdNode compatible_leaves = 2;
+    repeated temporal.api.taskqueue.v1.CompatibleVersionSet version_sets = 1;
 }
 
 message TaskKey {

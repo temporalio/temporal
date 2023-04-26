@@ -36,10 +36,10 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-const GRPCResolverScheme = "membership"
+const grpcResolverScheme = "membership"
 
-// Empty type used to enforce a dependency using fx so that we're guaranteed to have
-// initialized the global builder before we use it.
+// GRPCResolver is an empty type used to enforce a dependency using fx so that we're guaranteed to have initialized
+// the global builder before we use it.
 type GRPCResolver struct{}
 
 var (
@@ -51,8 +51,8 @@ var (
 )
 
 func init() {
-	// This must be called in init to avoid race conditions. We don't have a Monitor yet so
-	// we'll leave it nil and initialize it with fx.
+	// This must be called in init to avoid race conditions. We don't have a Monitor yet, so we'll leave it nil and
+	// initialize it with fx.
 	resolver.Register(&globalGrpcBuilder)
 }
 
@@ -62,7 +62,7 @@ func initializeBuilder(monitor Monitor) GRPCResolver {
 }
 
 func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
-	return fmt.Sprintf("%s://%s", GRPCResolverScheme, string(service))
+	return fmt.Sprintf("%s://%s", grpcResolverScheme, string(service))
 }
 
 type grpcBuilder struct {
@@ -70,29 +70,29 @@ type grpcBuilder struct {
 }
 
 func (m *grpcBuilder) Scheme() string {
-	return GRPCResolverScheme
+	return grpcResolverScheme
 }
 
-func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
+func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (resolver.Resolver, error) {
 	monitor, ok := m.monitor.Load().(Monitor)
 	if !ok {
 		return nil, errors.New("grpc resolver has not been initialized yet")
 	}
 	// See MakeURL: the service ends up as the "host" of the parsed URL
 	service := target.URL.Host
-	r, err := monitor.GetResolver(primitives.ServiceName(service))
+	serviceResolver, err := monitor.GetResolver(primitives.ServiceName(service))
 	if err != nil {
 		return nil, err
 	}
-	resolver := &grpcResolver{
+	grpcResolver := &grpcResolver{
 		cc:       cc,
-		r:        r,
+		r:        serviceResolver,
 		notifyCh: make(chan *ChangedEvent, 1),
 	}
-	if err := resolver.start(); err != nil {
+	if err := grpcResolver.start(); err != nil {
 		return nil, err
 	}
-	return resolver, nil
+	return grpcResolver, nil
 }
 
 type grpcResolver struct {

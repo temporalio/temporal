@@ -60,6 +60,7 @@ func Invoke(
 			req.Request.WorkflowExecution.WorkflowId,
 			req.Request.WorkflowExecution.RunId,
 		),
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -75,7 +76,7 @@ func Invoke(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
-	upd, duplicate, removeFn := ms.UpdateRegistry().Add(req.GetRequest().GetRequest())
+	upd, duplicate, removeFn := weCtx.GetContext().UpdateRegistry().Add(req.GetRequest().GetRequest())
 	if removeFn != nil {
 		defer removeFn()
 	}
@@ -88,7 +89,7 @@ func Invoke(
 	if createNewWorkflowTask {
 		// This will try not to add an event but will create speculative WT in mutable state.
 		// Task generation will be skipped if WT is created as speculative.
-		wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+		wt, err := ms.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 		if err != nil {
 			return nil, err
 		}

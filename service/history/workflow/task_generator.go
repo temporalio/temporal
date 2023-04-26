@@ -71,6 +71,7 @@ type (
 		) error
 		GenerateScheduleWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
+			generateTimeoutTaskOnly bool,
 		) error
 		GenerateStartWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
@@ -99,7 +100,6 @@ type (
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
-			branchToken []byte,
 			events []*historypb.HistoryEvent,
 		) error
 		GenerateMigrationTasks() (tasks.Task, error)
@@ -142,13 +142,14 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 		return nil
 	}
 
-	r.mutableState.AddTasks(&tasks.WorkflowTimeoutTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: workflowRunExpirationTime,
-		Version:             startVersion,
-	})
-
+	if r.mutableState.IsWorkflowExecutionRunning() {
+		r.mutableState.AddTasks(&tasks.WorkflowTimeoutTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: workflowRunExpirationTime,
+			Version:             startVersion,
+		})
+	}
 	return nil
 }
 
@@ -302,7 +303,7 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
+		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_DELAY_START
 	}
 
 	r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
@@ -332,22 +333,15 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
+	generateTimeoutTaskOnly bool, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching.
 ) error {
 
-	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
+	workflowTask := r.mutableState.GetWorkflowTaskByID(
 		workflowTaskScheduledEventID,
 	)
-	if !ok {
+	if workflowTask == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
-
-	r.mutableState.AddTasks(&tasks.WorkflowTask{
-		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:      r.mutableState.GetWorkflowKey(),
-		TaskQueue:        workflowTask.TaskQueue.GetName(),
-		ScheduledEventID: workflowTask.ScheduledEventID,
-		Version:          workflowTask.Version,
-	})
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
 		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)
@@ -364,6 +358,18 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		})
 	}
 
+	if generateTimeoutTaskOnly {
+		return nil
+	}
+
+	r.mutableState.AddTasks(&tasks.WorkflowTask{
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:      r.mutableState.GetWorkflowKey(),
+		TaskQueue:        workflowTask.TaskQueue.GetName(),
+		ScheduledEventID: workflowTask.ScheduledEventID,
+		Version:          workflowTask.Version,
+	})
+
 	return nil
 }
 
@@ -371,11 +377,11 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
 ) error {
 
-	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
+	workflowTask := r.mutableState.GetWorkflowTaskByID(
 		workflowTaskScheduledEventID,
 	)
-	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduledEventID))
+	if workflowTask == nil {
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
 	startedTime := timestamp.TimeValue(workflowTask.StartedTime)
@@ -569,9 +575,12 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 }
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
-	branchToken []byte,
 	events []*historypb.HistoryEvent,
 ) error {
+	if len(events) == 0 {
+		return nil
+	}
+
 	firstEvent := events[0]
 	lastEvent := events[len(events)-1]
 	if firstEvent.GetVersion() != lastEvent.GetVersion() {

@@ -26,6 +26,7 @@ package sql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -133,6 +135,7 @@ func (s *VisibilityStore) RecordWorkflowExecutionClosed(
 		CloseTime:        &request.CloseTime,
 		Status:           int32(request.Status),
 		HistoryLength:    &request.HistoryLength,
+		HistorySizeBytes: &request.HistorySizeBytes,
 		Memo:             request.Memo.Data,
 		Encoding:         request.Memo.EncodingType.String(),
 		TaskQueue:        request.TaskQueue,
@@ -374,6 +377,11 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	)
 	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
 	if err != nil {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
 		return nil, err
 	}
 
@@ -417,10 +425,10 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 }
 
 func (s *VisibilityStore) ScanWorkflowExecutions(
-	_ context.Context,
-	_ *manager.ListWorkflowExecutionsRequestV2,
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return nil, store.OperationNotSupportedErr
+	return s.ListWorkflowExecutions(ctx, request)
 }
 
 func (s *VisibilityStore) CountWorkflowExecutions(
@@ -447,6 +455,11 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	)
 	selectFilter, err := converter.BuildCountStmt()
 	if err != nil {
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
 		return nil, err
 	}
 
@@ -549,6 +562,9 @@ func (s *VisibilityStore) rowToInfo(
 	}
 	if row.HistoryLength != nil {
 		info.HistoryLength = *row.HistoryLength
+	}
+	if row.HistorySizeBytes != nil {
+		info.HistorySizeBytes = *row.HistorySizeBytes
 	}
 	return info, nil
 }

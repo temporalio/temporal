@@ -79,6 +79,10 @@ func (m *executionManagerImpl) GetName() string {
 	return m.persistence.GetName()
 }
 
+func (m *executionManagerImpl) GetHistoryBranchUtil() HistoryBranchUtil {
+	return m.persistence.GetHistoryBranchUtil()
+}
+
 // The below three APIs are related to serialization/deserialization
 
 func (m *executionManagerImpl) CreateWorkflowExecution(
@@ -359,7 +363,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	newResponse := &GetWorkflowExecutionResponse{
 		State:             state,
 		DBRecordVersion:   response.DBRecordVersion,
-		MutableStateStats: *statusOfInternalWorkflow(response.State, nil),
+		MutableStateStats: *statusOfInternalWorkflow(response.State, state, nil),
 	}
 	return newResponse, nil
 }
@@ -454,7 +458,7 @@ func (m *executionManagerImpl) serializeWorkflowEvents(
 		request.Info = BuildHistoryGarbageCleanupInfo(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID)
 	}
 
-	return m.serializeAppendHistoryNodesRequest(ctx, request)
+	return m.serializeAppendHistoryNodesRequest(request)
 }
 
 func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
@@ -714,6 +718,27 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 	return newResponse, nil
 }
 
+func (m *executionManagerImpl) RegisterHistoryTaskReader(
+	ctx context.Context,
+	request *RegisterHistoryTaskReaderRequest,
+) error {
+	return m.persistence.RegisterHistoryTaskReader(ctx, request)
+}
+
+func (m *executionManagerImpl) UnregisterHistoryTaskReader(
+	ctx context.Context,
+	request *UnregisterHistoryTaskReaderRequest,
+) {
+	m.persistence.UnregisterHistoryTaskReader(ctx, request)
+}
+
+func (m *executionManagerImpl) UpdateHistoryTaskReaderProgress(
+	ctx context.Context,
+	request *UpdateHistoryTaskReaderProgressRequest,
+) {
+	m.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
+}
+
 func (m *executionManagerImpl) AddHistoryTasks(
 	ctx context.Context,
 	input *AddHistoryTasksRequest,
@@ -733,28 +758,6 @@ func (m *executionManagerImpl) AddHistoryTasks(
 
 		Tasks: tasks,
 	})
-}
-
-func (m *executionManagerImpl) GetHistoryTask(
-	ctx context.Context,
-	request *GetHistoryTaskRequest,
-) (*GetHistoryTaskResponse, error) {
-	resp, err := m.persistence.GetHistoryTask(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	task, err := m.serializer.DeserializeTask(request.TaskCategory, resp.Blob)
-	if err != nil {
-		return nil, err
-	}
-	if !resp.Key.FireTime.Equal(tasks.DefaultFireTime) {
-		task.SetVisibilityTime(resp.Key.FireTime)
-	}
-	task.SetTaskID(resp.Key.TaskID)
-	return &GetHistoryTaskResponse{
-		Task: task,
-	}, nil
 }
 
 func (m *executionManagerImpl) GetHistoryTasks(

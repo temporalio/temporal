@@ -77,18 +77,18 @@ func (c *metricClient) GetTaskQueueMetadata(
 	return c.client.GetTaskQueueMetadata(ctx, request, opts...)
 }
 
-func (c *metricClient) GetWorkerBuildIdOrdering(
+func (c *metricClient) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.GetWorkerBuildIdOrderingRequest,
+	request *matchingservice.GetWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (_ *matchingservice.GetWorkerBuildIdOrderingResponse, retError error) {
+) (_ *matchingservice.GetWorkerBuildIdCompatibilityResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientGetWorkerBuildIdOrderingScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientGetWorkerBuildIdCompatibilityScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
 func (c *metricClient) InvalidateTaskQueueMetadata(
@@ -133,16 +133,16 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
-func (c *metricClient) UpdateWorkerBuildIdOrdering(
+func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
-	request *matchingservice.UpdateWorkerBuildIdOrderingRequest,
+	request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
 	opts ...grpc.CallOption,
-) (_ *matchingservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+) (_ *matchingservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientUpdateWorkerBuildIdOrderingScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientUpdateWorkerBuildIdCompatibilityScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 }

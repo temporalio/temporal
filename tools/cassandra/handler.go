@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/urfave/cli"
@@ -96,7 +97,8 @@ func createKeyspace(cli *cli.Context, logger log.Logger) error {
 	}
 	keyspace := cli.String(schema.CLIOptKeyspace)
 	if keyspace == "" {
-		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptKeyspace)+" argument ")))
+		err := fmt.Errorf("missing %s argument", flag(schema.CLIOptKeyspace))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
 	err = doCreateKeyspace(config, keyspace, logger)
@@ -115,7 +117,8 @@ func dropKeyspace(cli *cli.Context, logger log.Logger) error {
 	}
 	keyspace := cli.String(schema.CLIOptKeyspace)
 	if keyspace == "" {
-		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptKeyspace)+" argument ")))
+		err := fmt.Errorf("missing %s argument", flag(schema.CLIOptKeyspace))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
 	err = doDropKeyspace(config, keyspace, logger)
@@ -161,12 +164,8 @@ func doDropKeyspace(cfg *CQLClientConfig, name string, logger log.Logger) error 
 	if err != nil {
 		return err
 	}
-	err = client.dropKeyspace(name)
-	if err != nil {
-		return err
-	}
-	client.Close()
-	return nil
+	defer client.Close()
+	return client.dropKeyspace(name)
 }
 
 func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {

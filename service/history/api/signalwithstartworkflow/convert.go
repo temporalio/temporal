@@ -56,6 +56,7 @@ func ConvertToStartRequest(
 		Memo:                     request.GetMemo(),
 		SearchAttributes:         request.GetSearchAttributes(),
 		Header:                   request.GetHeader(),
+		WorkflowStartDelay:       request.GetWorkflowStartDelay(),
 	}
 
 	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, now)

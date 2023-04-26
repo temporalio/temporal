@@ -29,17 +29,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -999,38 +995,4 @@ func (v *commandAttrValidator) commandTypes(
 		result[index] = command.GetCommandType().String()
 	}
 	return result
-}
-
-// TODO (alex-update): move to messageValidator.
-func (v *commandAttrValidator) validateMessages(
-	messages []*protocolpb.Message,
-) error {
-	// Validates messages:
-	// 1. Sequence: Response (i.e. complete) must go after Acceptance and Rejection.
-	// 2. Only update.Acceptance, update.Response, and update.Rejection messages are allowed.
-
-	seenCompleteMessage := false
-	for _, message := range messages {
-		//nolint:revive // early-return
-		if types.Is(message.GetBody(), (*updatepb.Acceptance)(nil)) {
-			if seenCompleteMessage {
-				return serviceerror.NewInvalidArgument(
-					fmt.Sprintf(
-						"invalid message sequence: %s message must be before %s message",
-						proto.MessageName((*updatepb.Acceptance)(nil)), proto.MessageName((*updatepb.Response)(nil))))
-			}
-		} else if types.Is(message.GetBody(), (*updatepb.Response)(nil)) {
-			seenCompleteMessage = true
-		} else if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
-			if seenCompleteMessage {
-				return serviceerror.NewInvalidArgument(
-					fmt.Sprintf(
-						"invalid message sequence: %s message must be before %s message",
-						proto.MessageName((*updatepb.Rejection)(nil)), proto.MessageName((*updatepb.Response)(nil))))
-			}
-		} else {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown message type: %v", message.GetBody().GetTypeUrl()))
-		}
-	}
-	return nil
 }

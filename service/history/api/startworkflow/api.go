@@ -33,6 +33,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	tokenspb "go.temporal.io/server/api/token/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/cache"
 )
 
 type eagerStartDeniedReason metrics.ReasonString
@@ -78,10 +80,9 @@ type creationParams struct {
 // mutableStateInfo is a container for the relevant mutable state information to generate a start response with an eager
 // workflow task.
 type mutableStateInfo struct {
-	branchToken      []byte
-	lastEventID      int64
-	workflowTaskInfo *workflow.WorkflowTaskInfo
-	hasInflight      bool
+	branchToken  []byte
+	lastEventID  int64
+	workflowTask *workflow.WorkflowTaskInfo
 }
 
 // NewStarter creates a new starter, fails if getting the active namespace fails.
@@ -166,6 +167,14 @@ func (s *Starter) Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	// grab current workflow context as a lock so that user latency can be computed
+	currentRelease, err := s.lockCurrentWorkflowExecution(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { currentRelease(retError) }()
+
 	err = s.createBrandNew(ctx, creationParams)
 	if err == nil {
 		return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
@@ -176,6 +185,21 @@ func (s *Starter) Invoke(
 	}
 	// The history and mutable state we generated above should be deleted by a background process.
 	return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
+}
+
+func (s *Starter) lockCurrentWorkflowExecution(
+	ctx context.Context,
+) (cache.ReleaseCacheFunc, error) {
+	_, currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		s.namespace.ID(),
+		s.request.StartRequest.WorkflowId,
+		workflow.LockPriorityHigh,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return currentRelease, nil
 }
 
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
@@ -194,14 +218,12 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 		return nil, err
 	}
 
-	now := s.shardCtx.GetTimeSource().Now()
 	mutableState := workflowContext.GetMutableState()
-	workflowTaskInfo, hasInflight := mutableState.GetInFlightWorkflowTask()
-	if s.requestEagerStart() && !hasInflight {
-		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have an inflight workflow task")
+	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
+	if s.requestEagerStart() && workflowTaskInfo == nil {
+		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
 	}
 	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {
@@ -223,10 +245,8 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 
 // createBrandNew creates a new "brand new" execution in the executions table.
 func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationParams) error {
-	now := s.shardCtx.GetTimeSource().Now()
 	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		persistence.CreateWorkflowModeBrandNew,
 		"", // prevRunID
 		0,  // prevLastWriteVersion
@@ -269,10 +289,8 @@ func (s *Starter) createAsCurrent(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) error {
-	now := s.shardCtx.GetTimeSource().Now()
 	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.LastWriteVersion,
@@ -367,7 +385,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 		if err != nil {
 			return nil, err
 		}
-		return s.generateResponse(creationParams.runID, mutableStateInfo.workflowTaskInfo, events)
+		return s.generateResponse(creationParams.runID, mutableStateInfo.workflowTask, events)
 	case consts.ErrWorkflowCompleted:
 		// previous workflow already closed
 		// fallthough to the logic for only creating the new workflow below
@@ -394,9 +412,9 @@ func (s *Starter) respondToRetriedRequest(
 		return nil, err
 	}
 
-	// The current workflow task is not inflight or not the first task or we exceeded the first attempt and fell back to
+	// The current workflow task is not started or not the first task or we exceeded the first attempt and fell back to
 	// matching based dispatch.
-	if !mutableStateInfo.hasInflight || mutableStateInfo.workflowTaskInfo.StartedEventID != 3 || mutableStateInfo.workflowTaskInfo.Attempt > 1 {
+	if mutableStateInfo.workflowTask == nil || mutableStateInfo.workflowTask.StartedEventID != 3 || mutableStateInfo.workflowTask.Attempt > 1 {
 		s.recordEagerDenied(eagerStartDeniedReasonTaskAlreadyDispatched)
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId: runID,
@@ -408,7 +426,7 @@ func (s *Starter) respondToRetriedRequest(
 		return nil, err
 	}
 
-	return s.generateResponse(runID, mutableStateInfo.workflowTaskInfo, events)
+	return s.generateResponse(runID, mutableStateInfo.workflowTask, events)
 }
 
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
@@ -419,7 +437,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 		ctx,
 		s.namespace.ID(),
 		commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -443,19 +461,18 @@ func extractMutableStateInfo(mutableState workflow.MutableState) (*mutableStateI
 	}
 
 	// Future work for the request retry path: extend the task timeout (by failing / timing out the current task).
-	workflowTaskInfoSource, hasInflight := mutableState.GetInFlightWorkflowTask()
-	// The workflowTaskInfo returned from the mutable state call is generated on the fly and technically doesn't require
+	workflowTaskSource := mutableState.GetStartedWorkflowTask()
+	// The workflowTask returned from the mutable state call is generated on the fly and technically doesn't require
 	// cloning. We clone here just in case that changes.
-	var workflowTaskInfo workflow.WorkflowTaskInfo
-	if hasInflight {
-		workflowTaskInfo = *workflowTaskInfoSource
+	var workflowTask workflow.WorkflowTaskInfo
+	if workflowTaskSource != nil {
+		workflowTask = *workflowTaskSource
 	}
 
 	return &mutableStateInfo{
-		branchToken:      branchToken,
-		lastEventID:      mutableState.GetNextEventID() - 1,
-		workflowTaskInfo: &workflowTaskInfo,
-		hasInflight:      hasInflight,
+		branchToken:  branchToken,
+		lastEventID:  mutableState.GetNextEventID() - 1,
+		workflowTask: &workflowTask,
 	}, nil
 }
 

@@ -386,6 +386,40 @@ func WorkflowIDToHistoryShard(
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
+func MapShardID(
+	sourceShardCount int32,
+	targetShardCount int32,
+	sourceShardID int32,
+) []int32 {
+	if sourceShardCount%targetShardCount != 0 && targetShardCount%sourceShardCount != 0 {
+		panic(fmt.Sprintf("cannot map shard ID between source & target shard count: %v vs %v",
+			sourceShardCount, targetShardCount))
+	}
+
+	sourceShardID -= 1
+	if sourceShardCount < targetShardCount {
+		// one to many
+		// 0-3
+		// 0-15
+		// 0 -> 0, 4, 8, 12
+		// 1 -> 1, 5, 9, 13
+		// 2 -> 2, 6, 10, 14
+		// 3 -> 3, 7, 11, 15
+		// 4x
+		ratio := targetShardCount / sourceShardCount
+		targetShardIDs := make([]int32, ratio)
+		for i := range targetShardIDs {
+			targetShardIDs[i] = sourceShardID + int32(i)*sourceShardCount + 1
+		}
+		return targetShardIDs
+	} else if sourceShardCount > targetShardCount {
+		// many to one
+		return []int32{(sourceShardID % targetShardCount) + 1}
+	} else {
+		return []int32{sourceShardID + 1}
+	}
+}
+
 func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	var sb strings.Builder
 	_, _ = sb.WriteString("==========================================================================\n")
@@ -564,6 +598,7 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 // Note: this mutates startRequest by unsetting the fields ContinuedFailure and
 // LastCompletionResult (these should only be set on workflows created by the scheduler
 // worker).
+// Assumes startRequest is valid. See frontend workflow_handler for detailed validation logic.
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
@@ -588,8 +623,13 @@ func CreateHistoryStartWorkflowRequest(
 		histRequest.WorkflowExecutionExpirationTime = timestamp.TimePtr(deadline.Round(time.Millisecond))
 	}
 
+	// CronSchedule and WorkflowStartDelay should not both be set on the same request
 	if len(startRequest.CronSchedule) != 0 {
 		histRequest.ContinueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
+	}
+
+	if timestamp.DurationValue(startRequest.GetWorkflowStartDelay()) > 0 {
+		histRequest.FirstWorkflowTaskBackoff = startRequest.GetWorkflowStartDelay()
 	}
 
 	return histRequest

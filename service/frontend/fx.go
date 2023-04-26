@@ -220,6 +220,7 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
+		persistenceConfig.StandardVisibilityConfigExist(),
 		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
@@ -390,7 +391,6 @@ func VisibilityManagerProvider(
 	persistenceConfig *config.Persistence,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
-	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
@@ -399,20 +399,14 @@ func VisibilityManagerProvider(
 	return visibility.NewManager(
 		*persistenceConfig,
 		persistenceServiceResolver,
-		esConfig.GetVisibilityIndex(),
-		esConfig.GetSecondaryVisibilityIndex(),
 		esClient,
 		nil, // frontend visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
-		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
-		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.EnableReadVisibilityFromES,
-		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
-		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
-		dynamicconfig.GetBoolPropertyFn(false), // frontend visibility never write
+		serviceConfig.VisibilityPersistenceMaxReadQPS,
+		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.EnableReadFromSecondaryVisibility,
+		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		metricsHandler,
 		logger,
@@ -507,7 +501,6 @@ func OperatorHandlerProvider(
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
 	historyClient historyservice.HistoryServiceClient,
-	namespaceRegistry namespace.Registry,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
@@ -523,7 +516,6 @@ func OperatorHandlerProvider(
 		saManager,
 		healthServer,
 		historyClient,
-		namespaceRegistry,
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,

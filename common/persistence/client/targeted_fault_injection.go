@@ -92,8 +92,7 @@ func (d *dataStoreErrorGenerator) Generate() error {
 	if !ok {
 		return nil
 	}
-	err := methodErrorGenerator.Generate()
-	return err
+	return methodErrorGenerator.Generate()
 }
 
 // getErrorFromName returns an error based on the provided name. If the name is not recognized, then this method will

@@ -399,10 +399,10 @@ pollLoop:
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
-			isStickyEnabled := false
-			if len(mutableStateResp.StickyTaskQueue.GetName()) != 0 {
-				isStickyEnabled = true
-			}
+			// A non-sticky poll may get task for a workflow that has sticky still set in its mutable state after
+			// their sticky worker is dead for longer than 10s. In such case, we should set this to false so that
+			// frontend returns full history.
+			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 			resp := &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId:     mutableStateResp.PreviousStartedEventId,
 				NextEventId:                mutableStateResp.NextEventId,
@@ -706,10 +706,10 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 	return partitionHostInfo, nil
 }
 
-func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
+func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	hCtx *handlerContext,
-	req *matchingservice.UpdateWorkerBuildIdOrderingRequest,
-) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
+) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -721,18 +721,18 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
 		return nil, err
 	}
 	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) error {
-		return UpdateVersionsGraph(data, req.GetRequest(), e.config.MaxVersionGraphSize())
+		return UpdateVersionSets(data, req.GetRequest(), e.config.MaxVersionGraphSize())
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.UpdateWorkerBuildIdOrderingResponse{}, nil
+	return &matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil
 }
 
-func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
+func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	hCtx *handlerContext,
-	req *matchingservice.GetWorkerBuildIdOrderingRequest,
-) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+	req *matchingservice.GetWorkerBuildIdCompatibilityRequest,
+) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -742,19 +742,19 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
 		}
 		return nil, err
 	}
 	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
-			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
 		}
 		return nil, err
 	}
-	return &matchingservice.GetWorkerBuildIdOrderingResponse{
-		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxDepth())),
+	return &matchingservice.GetWorkerBuildIdCompatibilityResponse{
+		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxSets())),
 	}, nil
 }
 

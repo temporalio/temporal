@@ -550,7 +550,7 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	executionInfo.Memo = nil
 	executionInfo.SearchAttributes = nil
 	executionInfo.CloseVisibilityTaskCompleted = true
-	return weContext.SetWorkflowExecution(ctx, t.shard.GetTimeSource().Now())
+	return weContext.SetWorkflowExecution(ctx)
 }
 
 func getWorkflowMemo(

@@ -25,26 +25,112 @@
 package visibility
 
 import (
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 )
 
 const (
-	// AdvancedVisibilityWritingModeOff means do not write to advanced visibility store
-	AdvancedVisibilityWritingModeOff = "off"
-	// AdvancedVisibilityWritingModeOn means only write to advanced visibility store
-	AdvancedVisibilityWritingModeOn = "on"
-	// AdvancedVisibilityWritingModeDual means write to both normal visibility and advanced visibility store
-	AdvancedVisibilityWritingModeDual = "dual"
+	// SecondaryVisibilityWritingModeOff means do not write to advanced visibility store
+	SecondaryVisibilityWritingModeOff = "off"
+	// SecondaryVisibilityWritingModeOn means only write to advanced visibility store
+	SecondaryVisibilityWritingModeOn = "on"
+	// SecondaryVisibilityWritingModeDual means write to both normal visibility and advanced visibility store
+	SecondaryVisibilityWritingModeDual = "dual"
 )
 
 // DefaultAdvancedVisibilityWritingMode returns default advancedVisibilityWritingMode based on whether related config exists in static config file.
 func DefaultAdvancedVisibilityWritingMode(advancedVisibilityConfigExist bool) string {
 	if advancedVisibilityConfigExist {
-		return AdvancedVisibilityWritingModeOn
+		return SecondaryVisibilityWritingModeOn
 	}
-	return AdvancedVisibilityWritingModeOff
+	return SecondaryVisibilityWritingModeOff
+}
+
+//nolint:revive
+func GetVisibilityPersistenceMaxReadQPS(
+	dc *dynamicconfig.Collection,
+	advancedVisibilityStoreConfigExists bool,
+) dynamicconfig.IntPropertyFn {
+	if dc.HasKey(dynamicconfig.VisibilityPersistenceMaxReadQPS) {
+		return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxReadQPS, 9000)
+	}
+	if advancedVisibilityStoreConfigExists {
+		return dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000)
+	}
+	return dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000)
+}
+
+//nolint:revive
+func GetVisibilityPersistenceMaxWriteQPS(
+	dc *dynamicconfig.Collection,
+	advancedVisibilityStoreConfigExists bool,
+) dynamicconfig.IntPropertyFn {
+	if dc.HasKey(dynamicconfig.VisibilityPersistenceMaxWriteQPS) {
+		return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxWriteQPS, 9000)
+	}
+	if advancedVisibilityStoreConfigExists {
+		return dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000)
+	}
+	return dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000)
+}
+
+//nolint:revive
+func GetEnableReadFromSecondaryVisibilityConfig(
+	dc *dynamicconfig.Collection,
+	visibilityStoreConfigExists bool,
+	advancedVisibilityStoreConfigExists bool,
+) dynamicconfig.BoolPropertyFnWithNamespaceFilter {
+	if dc.HasKey(dynamicconfig.EnableReadFromSecondaryVisibility) {
+		return dc.GetBoolPropertyFnWithNamespaceFilter(
+			dynamicconfig.EnableReadFromSecondaryVisibility,
+			false,
+		)
+	}
+	if visibilityStoreConfigExists && advancedVisibilityStoreConfigExists {
+		return dc.GetBoolPropertyFnWithNamespaceFilter(
+			dynamicconfig.EnableReadVisibilityFromES,
+			advancedVisibilityStoreConfigExists,
+		)
+	}
+	if advancedVisibilityStoreConfigExists {
+		return dc.GetBoolPropertyFnWithNamespaceFilter(
+			dynamicconfig.EnableReadFromSecondaryAdvancedVisibility,
+			false,
+		)
+	}
+	return dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+}
+
+//nolint:revive
+func GetSecondaryVisibilityWritingModeConfig(
+	dc *dynamicconfig.Collection,
+	visibilityStoreConfigExists bool,
+	advancedVisibilityStoreConfigExists bool,
+) dynamicconfig.StringPropertyFn {
+	if dc.HasKey(dynamicconfig.SecondaryVisibilityWritingMode) {
+		return dc.GetStringProperty(
+			dynamicconfig.SecondaryVisibilityWritingMode,
+			SecondaryVisibilityWritingModeOff,
+		)
+	}
+	if visibilityStoreConfigExists && advancedVisibilityStoreConfigExists {
+		return dc.GetStringProperty(
+			dynamicconfig.AdvancedVisibilityWritingMode,
+			DefaultAdvancedVisibilityWritingMode(advancedVisibilityStoreConfigExists),
+		)
+	}
+	if advancedVisibilityStoreConfigExists {
+		enableWriteToSecondaryAdvancedVisibility := dc.GetBoolProperty(
+			dynamicconfig.EnableWriteToSecondaryAdvancedVisibility,
+			false,
+		)
+		if enableWriteToSecondaryAdvancedVisibility() {
+			return dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeDual)
+		}
+	}
+	return dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeOff)
 }
 
 func AllowListForValidation(storeNames []string) bool {

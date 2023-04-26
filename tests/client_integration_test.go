@@ -43,6 +43,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -799,6 +801,96 @@ func (s *clientIntegrationSuite) TestContinueAsNewTightLoop() {
 	s.GreaterOrEqual(duration, time.Second*4)
 }
 
+func (s *clientIntegrationSuite) TestStickyAutoReset() {
+	// This test starts a workflow, wait and verify that the workflow is on sticky task queue.
+	// Then it stops the worker for 10s, this will make matching aware that sticky worker is dead.
+	// Then test sends a signal to the workflow to trigger a new workflow task.
+	// Test verify that workflow is still on sticky task queue.
+	// Then test poll the original workflow task queue directly (not via SDK),
+	// and verify that the polled WorkflowTask contains full history.
+	workflowId := "sticky_auto_reset"
+	wfFn := func(ctx workflow.Context) (string, error) {
+		sigCh := workflow.GetSignalChannel(ctx, "sig-name")
+		var msg string
+		sigCh.Receive(ctx, &msg)
+		return msg, nil
+	}
+
+	s.worker.RegisterWorkflow(wfFn)
+
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
+	defer cancel()
+	options := sdkclient.StartWorkflowOptions{
+		ID:                 workflowId,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: time.Minute,
+	}
+	// start the test workflow
+	future, err := s.sdkClient.ExecuteWorkflow(ctx, options, wfFn)
+	s.NoError(err)
+
+	// wait until wf started and sticky is set
+	var stickyQueue string
+	for i := 0; i < 5; i++ {
+		ms, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: s.namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: future.GetID(),
+			},
+		})
+
+		s.NoError(err)
+		stickyQueue = ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
+		// verify workflow has sticky task queue
+		if stickyQueue == "" {
+			// wait until we see sticky task queue is set
+			time.Sleep(time.Second)
+			continue
+		}
+	}
+	s.NotEmpty(stickyQueue)
+	s.NotEqual(stickyQueue, s.taskQueue)
+
+	// stop worker
+	s.worker.Stop()
+	time.Sleep(time.Second * 10) // wait 10s, after this time, matching will detect StickyWorkerUnavailable
+
+	startTime := time.Now()
+	// send a signal which will trigger a new wft, and it will be pushed to original task queue
+	err = s.sdkClient.SignalWorkflow(ctx, future.GetID(), "", "sig-name", "sig1")
+	s.NoError(err)
+
+	// check that mutable state still has sticky enabled
+	ms, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: future.GetID(),
+		},
+	})
+	s.NoError(err)
+	s.NotEmpty(ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue)
+	s.Equal(stickyQueue, ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue)
+
+	// now poll from normal queue, and it should see the full history.
+	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: s.taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	})
+
+	// should be able to get the task without having to wait until sticky timeout (5s)
+	pollLatency := time.Now().Sub(startTime)
+	s.Less(pollLatency, time.Second*4)
+
+	s.NoError(err)
+	s.NotNil(task)
+	s.NotNil(task.History)
+	s.True(len(task.History.Events) > 0)
+	s.Equal(int64(1), task.History.Events[0].EventId)
+}
+
 func (s *clientIntegrationSuite) eventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {
 	s.T().Helper()
 	s.NoError(backoff.ThrottleRetryContext(
@@ -1220,6 +1312,46 @@ func (s *clientIntegrationSuite) Test_UnhandledCommandAndNewTask() {
 	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
 }
 
+func (s *clientIntegrationSuite) Test_CancelActivityAndTimerBeforeComplete() {
+	workflowFn := func(ctx workflow.Context) error {
+		ctx, cancelFunc := workflow.WithCancel(ctx)
+
+		activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ScheduleToStartTimeout: 10 * time.Second,
+			ScheduleToCloseTimeout: 10 * time.Second,
+			StartToCloseTimeout:    1 * time.Second,
+			TaskQueue:              "bad_tq",
+		})
+		_ = workflow.ExecuteActivity(activityCtx, "Prefix_ToUpper", "hello")
+
+		_ = workflow.NewTimer(ctx, 15*time.Second)
+
+		err := workflow.NewTimer(ctx, time.Second).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
+		cancelFunc()
+		return nil
+	}
+
+	s.worker.RegisterWorkflow(workflowFn)
+
+	id := s.T().Name()
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 5 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+	err = workflowRun.Get(ctx, nil)
+	s.NoError(err)
+}
+
 // This test simulates workflow generate command with invalid attributes.
 // Server is expected to fail the workflow task and schedule a retry immediately for first attempt,
 // but if workflow task keeps failing, server will drop the task and wait for timeout to schedule additional retries.
@@ -1235,8 +1367,7 @@ func (s *clientIntegrationSuite) Test_InvalidCommandAttribute() {
 		ao := workflow.ActivityOptions{} // invalid activity option without StartToClose timeout
 		ctx = workflow.WithActivityOptions(ctx, ao)
 
-		err := workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil)
-		return err
+		return workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil)
 	}
 
 	s.worker.RegisterWorkflow(workflowFn)

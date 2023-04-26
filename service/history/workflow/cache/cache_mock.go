@@ -61,10 +61,26 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 	return m.recorder
 }
 
-// GetOrCreateWorkflowExecution mocks base method.
-func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, namespaceID namespace.ID, execution v1.WorkflowExecution, caller workflow.CallerType) (workflow.Context, ReleaseCacheFunc, error) {
+// GetOrCreateCurrentWorkflowExecution mocks base method.
+func (m *MockCache) GetOrCreateCurrentWorkflowExecution(ctx context.Context, namespaceID namespace.ID, workflowID string, lockPriority workflow.LockPriority) (workflow.Context, ReleaseCacheFunc, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOrCreateWorkflowExecution", ctx, namespaceID, execution, caller)
+	ret := m.ctrl.Call(m, "GetOrCreateCurrentWorkflowExecution", ctx, namespaceID, workflowID, lockPriority)
+	ret0, _ := ret[0].(workflow.Context)
+	ret1, _ := ret[1].(ReleaseCacheFunc)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetOrCreateCurrentWorkflowExecution indicates an expected call of GetOrCreateCurrentWorkflowExecution.
+func (mr *MockCacheMockRecorder) GetOrCreateCurrentWorkflowExecution(ctx, namespaceID, workflowID, lockPriority interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateCurrentWorkflowExecution", reflect.TypeOf((*MockCache)(nil).GetOrCreateCurrentWorkflowExecution), ctx, namespaceID, workflowID, lockPriority)
+}
+
+// GetOrCreateWorkflowExecution mocks base method.
+func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, namespaceID namespace.ID, execution v1.WorkflowExecution, lockPriority workflow.LockPriority) (workflow.Context, ReleaseCacheFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOrCreateWorkflowExecution", ctx, namespaceID, execution, lockPriority)
 	ret0, _ := ret[0].(workflow.Context)
 	ret1, _ := ret[1].(ReleaseCacheFunc)
 	ret2, _ := ret[2].(error)
@@ -72,7 +88,7 @@ func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, namespaceI
 }
 
 // GetOrCreateWorkflowExecution indicates an expected call of GetOrCreateWorkflowExecution.
-func (mr *MockCacheMockRecorder) GetOrCreateWorkflowExecution(ctx, namespaceID, execution, caller interface{}) *gomock.Call {
+func (mr *MockCacheMockRecorder) GetOrCreateWorkflowExecution(ctx, namespaceID, execution, lockPriority interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateWorkflowExecution", reflect.TypeOf((*MockCache)(nil).GetOrCreateWorkflowExecution), ctx, namespaceID, execution, caller)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateWorkflowExecution", reflect.TypeOf((*MockCache)(nil).GetOrCreateWorkflowExecution), ctx, namespaceID, execution, lockPriority)
 }

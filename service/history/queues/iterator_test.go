@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ func (s *iteratorSuite) TestNext_IncreaseTaskKey() {
 	taskKey := NewRandomKeyInRange(r)
 	mockTask := tasks.NewMockTask(s.controller)
 	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		s.Equal(r, paginationRange)
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			return []tasks.Task{mockTask}, nil, nil
@@ -81,14 +82,64 @@ func (s *iteratorSuite) TestNext_IncreaseTaskKey() {
 	iterator := NewIterator(paginationFnProvider, r)
 	s.Equal(r, iterator.Range())
 
-	s.True(iterator.HasNext())
-	task, err := iterator.Next()
+	s.True(iterator.HasNext(DefaultReaderId))
+	task, err := iterator.Next(DefaultReaderId)
 	s.NoError(err)
 	s.Equal(mockTask, task)
 
 	s.Equal(NewRange(taskKey.Next(), r.ExclusiveMax), iterator.Range())
 
-	s.False(iterator.HasNext())
+	s.False(iterator.HasNext(DefaultReaderId))
+}
+
+func (s *iteratorSuite) TestNext_ReaderIDChange() {
+	r := NewRandomRange()
+
+	firstPageReaderID := DefaultReaderId
+	taskKey := NewRandomKeyInRange(r)
+	mockTask := tasks.NewMockTask(s.controller)
+	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
+
+	secondPageReaderID := DefaultReaderId + 1
+	secondPageRange := NewRange(taskKey.Next(), r.ExclusiveMax)
+	taskKey2 := NewRandomKeyInRange(secondPageRange)
+	mockTask2 := tasks.NewMockTask(s.controller)
+	mockTask2.EXPECT().GetKey().Return(taskKey2).Times(1)
+
+	paginationFnProvider := func(readerID int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
+		switch readerID {
+		case firstPageReaderID:
+			s.Equal(r, paginationRange)
+			return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+				return []tasks.Task{mockTask}, []byte("nextPageToken"), nil
+			}
+		case secondPageReaderID:
+			s.Equal(secondPageRange, paginationRange)
+			return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+				return []tasks.Task{mockTask2}, nil, nil
+			}
+		default:
+			return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+				return nil, nil, fmt.Errorf("unexpected readerID: %v", readerID)
+			}
+		}
+	}
+
+	iterator := NewIterator(paginationFnProvider, r)
+	s.Equal(r, iterator.Range())
+
+	s.True(iterator.HasNext(firstPageReaderID))
+	task, err := iterator.Next(firstPageReaderID)
+	s.NoError(err)
+	s.Equal(mockTask, task)
+	s.Equal(NewRange(taskKey.Next(), r.ExclusiveMax), iterator.Range())
+
+	s.True(iterator.HasNext(secondPageReaderID))
+	task2, err := iterator.Next(secondPageReaderID)
+	s.NoError(err)
+	s.Equal(mockTask2, task2)
+
+	s.Equal(NewRange(taskKey2.Next(), r.ExclusiveMax), iterator.Range())
 }
 
 func (s *iteratorSuite) TestCanSplit() {
@@ -113,7 +164,7 @@ func (s *iteratorSuite) TestCanSplit() {
 
 func (s *iteratorSuite) TestSplit() {
 	r := NewRandomRange()
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			return []tasks.Task{}, nil, nil
 		}
@@ -127,8 +178,8 @@ func (s *iteratorSuite) TestSplit() {
 	leftIterator, rightIterator := iterator.Split(splitKey)
 	s.Equal(NewRange(r.InclusiveMin, splitKey), leftIterator.Range())
 	s.Equal(NewRange(splitKey, r.ExclusiveMax), rightIterator.Range())
-	s.False(leftIterator.HasNext())
-	s.False(leftIterator.HasNext())
+	s.False(leftIterator.HasNext(DefaultReaderId))
+	s.False(leftIterator.HasNext(DefaultReaderId))
 }
 
 func (s *iteratorSuite) TestCanMerge() {
@@ -170,7 +221,7 @@ func (s *iteratorSuite) TestMerge() {
 	r := NewRandomRange()
 
 	numLoad := 0
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			numLoad++
 			return []tasks.Task{}, nil, nil
@@ -178,12 +229,12 @@ func (s *iteratorSuite) TestMerge() {
 	}
 
 	iterator := NewIterator(paginationFnProvider, r)
-	s.False(iterator.HasNext())
+	s.False(iterator.HasNext(DefaultReaderId))
 
 	incomingIterator := NewIterator(paginationFnProvider, r)
 	mergedIterator := iterator.Merge(incomingIterator)
 	s.Equal(r, mergedIterator.Range())
-	s.False(mergedIterator.HasNext())
+	s.False(mergedIterator.HasNext(DefaultReaderId))
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
@@ -191,7 +242,7 @@ func (s *iteratorSuite) TestMerge() {
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
 	s.Equal(NewRange(tasks.MinimumKey, r.ExclusiveMax), mergedIterator.Range())
-	s.False(mergedIterator.HasNext())
+	s.False(mergedIterator.HasNext(DefaultReaderId))
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
@@ -199,7 +250,7 @@ func (s *iteratorSuite) TestMerge() {
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
 	s.Equal(NewRange(r.InclusiveMin, tasks.MaximumKey), mergedIterator.Range())
-	s.False(mergedIterator.HasNext())
+	s.False(mergedIterator.HasNext(DefaultReaderId))
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
@@ -207,7 +258,7 @@ func (s *iteratorSuite) TestMerge() {
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
 	s.Equal(NewRange(tasks.MinimumKey, r.ExclusiveMax), mergedIterator.Range())
-	s.False(mergedIterator.HasNext())
+	s.False(mergedIterator.HasNext(DefaultReaderId))
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
@@ -215,7 +266,7 @@ func (s *iteratorSuite) TestMerge() {
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
 	s.Equal(NewRange(r.InclusiveMin, tasks.MaximumKey), mergedIterator.Range())
-	s.False(mergedIterator.HasNext())
+	s.False(mergedIterator.HasNext(DefaultReaderId))
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
@@ -223,7 +274,7 @@ func (s *iteratorSuite) TestMerge() {
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
 	s.Equal(NewRange(tasks.MinimumKey, tasks.MaximumKey), mergedIterator.Range())
-	s.False(mergedIterator.HasNext())
+	s.False(mergedIterator.HasNext(DefaultReaderId))
 
 	// test if Merge returns a new iterator
 	s.Equal(7, numLoad)
@@ -238,7 +289,7 @@ func (s *iteratorSuite) TestRemaining() {
 	taskKey := NewRandomKeyInRange(r)
 	mockTask := tasks.NewMockTask(s.controller)
 	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			numLoad++
 			if paginationRange.ContainsKey(taskKey) {
@@ -249,13 +300,13 @@ func (s *iteratorSuite) TestRemaining() {
 	}
 
 	iterator := NewIterator(paginationFnProvider, r)
-	_, err := iterator.Next()
+	_, err := iterator.Next(DefaultReaderId)
 	s.NoError(err)
-	s.False(iterator.HasNext())
+	s.False(iterator.HasNext(DefaultReaderId))
 
 	remaining := iterator.Remaining()
 	s.Equal(iterator.Range(), remaining.Range())
-	s.False(remaining.HasNext())
+	s.False(remaining.HasNext(DefaultReaderId))
 
 	// test if Remaining returns a new iterator
 	s.Equal(2, numLoad)

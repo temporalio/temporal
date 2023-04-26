@@ -26,14 +26,13 @@ package tests
 
 import (
 	"context"
-	"fmt"
 
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 )
 
 type simpleMonitor struct {
-	hostInfo  *membership.HostInfo
+	hostInfo  membership.HostInfo
 	resolvers map[primitives.ServiceName]membership.ServiceResolver
 }
 
@@ -44,7 +43,7 @@ func newSimpleMonitor(serviceName primitives.ServiceName, hosts map[primitives.S
 		resolvers[service] = newSimpleResolver(service, hostList)
 	}
 
-	hostInfo := membership.NewHostInfo(hosts[serviceName][0], map[string]string{membership.RoleKey: string(serviceName)})
+	hostInfo := membership.NewHostInfoFromAddress(hosts[serviceName][0])
 	return &simpleMonitor{hostInfo, resolvers}
 }
 
@@ -58,7 +57,7 @@ func (s *simpleMonitor) EvictSelf() error {
 	return nil
 }
 
-func (s *simpleMonitor) WhoAmI() (*membership.HostInfo, error) {
+func (s *simpleMonitor) WhoAmI() (membership.HostInfo, error) {
 	return s.hostInfo, nil
 }
 
@@ -70,28 +69,8 @@ func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.
 	return resolver, nil
 }
 
-func (s *simpleMonitor) Lookup(service primitives.ServiceName, key string) (*membership.HostInfo, error) {
-	resolver, ok := s.resolvers[service]
-	if !ok {
-		return nil, fmt.Errorf("cannot lookup host for service %v", service)
-	}
-	return resolver.Lookup(key)
-}
-
-func (s *simpleMonitor) AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *membership.ChangedEvent) error {
-	return nil
-}
-
-func (s *simpleMonitor) RemoveListener(service primitives.ServiceName, name string) error {
-	return nil
-}
-
 func (s *simpleMonitor) GetReachableMembers() ([]string, error) {
 	return nil, nil
-}
-
-func (s *simpleMonitor) GetMemberCount(service primitives.ServiceName) (int, error) {
-	return 0, nil
 }
 
 func (s *simpleMonitor) WaitUntilInitialized(_ context.Context) error {

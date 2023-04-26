@@ -148,7 +148,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetWorkflowVersion = currentMutableState.GetCurrentVersion()
 
 		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
-			r.shard.GetTimeSource().Now(),
 			workflow.TransactionPolicyActive,
 		)
 		if err != nil {
@@ -349,9 +348,7 @@ func (r *workflowResetterImpl) persistToDB(
 	resetWorkflow Workflow,
 ) error {
 
-	now := r.shard.GetTimeSource().Now()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyActive,
 	)
 	if err != nil {
@@ -389,7 +386,6 @@ func (r *workflowResetterImpl) persistToDB(
 
 	return resetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
-		now,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
@@ -455,6 +451,12 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		return nil, err
 	}
 
+	resetMutableState.SetBaseWorkflow(
+		baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+	)
+
 	resetContext.SetHistorySize(resetHistorySize)
 	return NewWorkflow(
 		ctx,
@@ -475,9 +477,9 @@ func (r *workflowResetterImpl) failWorkflowTask(
 	resetReason string,
 ) error {
 
-	workflowTask, ok := resetMutableState.GetPendingWorkflowTask()
-	if !ok {
-		// TODO if resetMutableState.HasProcessedOrPendingWorkflowTask() == true
+	workflowTask := resetMutableState.GetPendingWorkflowTask()
+	if workflowTask == nil {
+		// TODO if resetMutableState.HadOrHasWorkflowTask() == true
 		//  meaning workflow history has NO workflow task ever
 		//  should also allow workflow reset, the only remaining issues are
 		//  * what if workflow is a cron workflow, e.g. should add a workflow task directly or still respect the cron job
@@ -564,6 +566,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		ForkNodeID:      forkNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID.String(), workflowID, resetRunID),
 		ShardID:         shardID,
+		NamespaceID:     namespaceID.String(),
 	})
 	if err != nil {
 		return nil, err
@@ -631,7 +634,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			workflow.CallerTypeAPI,
+			workflow.LockPriorityHigh,
 		)
 		if err != nil {
 			return 0, nil, err

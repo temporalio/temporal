@@ -84,7 +84,6 @@ type (
 		saManager              searchattribute.Manager
 		healthServer           *health.Server
 		historyClient          historyservice.HistoryServiceClient
-		namespaceRegistry      namespace.Registry
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
@@ -101,7 +100,6 @@ type (
 		SaManager              searchattribute.Manager
 		healthServer           *health.Server
 		historyClient          historyservice.HistoryServiceClient
-		namespaceRegistry      namespace.Registry
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
@@ -125,7 +123,6 @@ func NewOperatorHandlerImpl(
 		saManager:              args.SaManager,
 		healthServer:           args.healthServer,
 		historyClient:          args.historyClient,
-		namespaceRegistry:      args.namespaceRegistry,
 		clusterMetadataManager: args.clusterMetadataManager,
 		clusterMetadata:        args.clusterMetadata,
 		clientFactory:          args.clientFactory,
@@ -280,18 +277,22 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 	if nsName == "" {
 		return errNamespaceNotSet
 	}
-	ns, err := h.namespaceRegistry.GetNamespace(namespace.Name(nsName))
+	resp, err := client.DescribeNamespace(
+		ctx,
+		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+	)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
 	}
 
 	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
 	cmCustomSearchAttributes := currentSearchAttributes.Custom()
-	mapper := ns.CustomSearchAttributesMapper()
-	fieldToAliasMap := util.CloneMapNonNil(mapper.FieldToAliasMap())
+	upsertFieldToAliasMap := make(map[string]string)
+	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
+	aliasToFieldMap := util.InverseMap(fieldToAliasMap)
 	for saName, saType := range request.GetSearchAttributes() {
 		// check if alias is already in use
-		if _, err := mapper.GetFieldName(saName, nsName); err == nil {
+		if _, ok := aliasToFieldMap[saName]; ok {
 			return serviceerror.NewAlreadyExist(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
 			)
@@ -318,15 +319,18 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 				fmt.Sprintf(errTooManySearchAttributesMessage, cntUsed, saType.String()),
 			)
 		}
-		fieldToAliasMap[targetFieldName] = saName
+		upsertFieldToAliasMap[targetFieldName] = saName
 	}
 
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: nsName,
 		Config: &namespacepb.NamespaceConfig{
-			CustomSearchAttributeAliases: fieldToAliasMap,
+			CustomSearchAttributeAliases: upsertFieldToAliasMap,
 		},
 	})
+	if err != nil && err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
+		return errRaceConditionAddingSearchAttributes
+	}
 	return err
 }
 
@@ -410,25 +414,28 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 	if nsName == "" {
 		return errNamespaceNotSet
 	}
-	ns, err := h.namespaceRegistry.GetNamespace(namespace.Name(nsName))
+	resp, err := client.DescribeNamespace(
+		ctx,
+		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+	)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
 	}
 
-	mapper := ns.CustomSearchAttributesMapper()
-	fieldToAliasMap := maps.Clone(mapper.FieldToAliasMap())
+	upsertFieldToAliasMap := make(map[string]string)
+	aliasToFieldMap := util.InverseMap(resp.Config.CustomSearchAttributeAliases)
 	for _, saName := range request.GetSearchAttributes() {
-		fieldName, err := mapper.GetFieldName(saName, nsName)
-		if err != nil {
+		fieldName, ok := aliasToFieldMap[saName]
+		if !ok {
 			return serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
 		}
-		delete(fieldToAliasMap, fieldName)
+		upsertFieldToAliasMap[fieldName] = ""
 	}
 
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: nsName,
 		Config: &namespacepb.NamespaceConfig{
-			CustomSearchAttributeAliases: fieldToAliasMap,
+			CustomSearchAttributeAliases: upsertFieldToAliasMap,
 		},
 	})
 	return err
@@ -460,7 +467,7 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
 		return h.listSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
 	}
-	return h.listSearchAttributesSQL(request, searchAttributes)
+	return h.listSearchAttributesSQL(ctx, request, searchAttributes)
 }
 
 func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
@@ -486,23 +493,36 @@ func (h *OperatorHandlerImpl) listSearchAttributesElasticsearch(
 }
 
 func (h *OperatorHandlerImpl) listSearchAttributesSQL(
+	ctx context.Context,
 	request *operatorservice.ListSearchAttributesRequest,
 	searchAttributes searchattribute.NameTypeMap,
 ) (*operatorservice.ListSearchAttributesResponse, error) {
+	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
+		frontend.DefaultTimeout,
+		frontend.DefaultLongPollTimeout,
+	)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
+	}
+
 	nsName := request.GetNamespace()
 	if nsName == "" {
 		return nil, errNamespaceNotSet
 	}
-	ns, err := h.namespaceRegistry.GetNamespace(namespace.Name(nsName))
+	resp, err := client.DescribeNamespace(
+		ctx,
+		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
+	)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName),
 		)
 	}
-	mapper := ns.CustomSearchAttributesMapper()
+
+	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
 	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
 	for field, tp := range searchAttributes.Custom() {
-		if alias, err := mapper.GetAlias(field, nsName); err == nil {
+		if alias, ok := fieldToAliasMap[field]; ok {
 			customSearchAttributes[alias] = tp
 		}
 	}

@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -153,15 +152,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 		return err
 	}
 
-	if r.config.AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
-		if err := r.refreshTasksForWorkflowSearchAttr(
-			taskGenerator,
-		); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return r.refreshTasksForWorkflowSearchAttr(taskGenerator)
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
@@ -182,7 +173,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	if !mutableState.HasProcessedOrPendingWorkflowTask() && timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff()) > 0 {
+	if !mutableState.HadOrHasWorkflowTask() && timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff()) > 0 {
 		if err := taskGenerator.GenerateDelayedWorkflowTasks(
 			startEvent,
 		); err != nil {
@@ -248,8 +239,8 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 		return nil
 	}
 
-	workflowTask, ok := mutableState.GetPendingWorkflowTask()
-	if !ok {
+	workflowTask := mutableState.GetPendingWorkflowTask()
+	if workflowTask == nil {
 		return serviceerror.NewInternal("it could be a bug, cannot get pending workflow task")
 	}
 
@@ -268,6 +259,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 	// workflowTask only scheduled
 	return taskGenerator.GenerateScheduleWorkflowTaskTasks(
 		workflowTask.ScheduledEventID,
+		false,
 	)
 }
 

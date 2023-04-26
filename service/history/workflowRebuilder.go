@@ -85,6 +85,7 @@ func (r *workflowRebuilderImpl) rebuild(
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		workflowKey,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -156,9 +157,7 @@ func (r *workflowRebuilderImpl) persistToDB(
 	mutableState workflow.MutableState,
 	historySize int64,
 ) error {
-	now := r.shard.GetTimeSource().Now()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
-		now,
 		workflow.TransactionPolicyPassive,
 	)
 	if err != nil {

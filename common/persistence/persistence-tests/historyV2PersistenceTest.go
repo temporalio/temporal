@@ -43,7 +43,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
 )
 
@@ -153,7 +152,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 		})
 		s.Nil(err)
 		for _, br := range resp.Branches {
-			branch, err := p.ParseHistoryBranchToken(br.BranchToken)
+			branch, err := serialization.HistoryBranchFromBlob(br.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 			s.NoError(err)
 			uuidTreeId := branch.TreeId
 			if trees[uuidTreeId] {
@@ -578,7 +577,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	}
 
 	wg.Wait()
-	branches = s.descTreeByToken(masterBr)
+	branches = s.descTree(treeID)
 	s.Equal(concurrency, len(branches))
 	forkOnLevel1 := int32(0)
 	level2Br := sync.Map{}
@@ -749,13 +748,15 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 
 // persistence helper
 func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
-	resp, err := s.ExecutionManager.NewHistoryBranch(s.ctx, &p.NewHistoryBranchRequest{
-		TreeID: treeID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return resp.BranchToken, nil
+	return s.ExecutionManager.GetHistoryBranchUtil().NewHistoryBranch(
+		uuid.New(),
+		treeID,
+		nil,
+		[]*persistencespb.HistoryBranchRange{},
+		nil,
+		nil,
+		nil,
+	)
 }
 
 // persistence helper
@@ -772,21 +773,10 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 }
 
 // persistence helper
-func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistencespb.HistoryBranch {
-	resp, err := s.ExecutionManager.GetHistoryTree(s.ctx, &p.GetHistoryTreeRequest{
-		BranchToken: br,
-		ShardID:     convert.Int32Ptr(s.ShardInfo.GetShardId()),
-	})
-	s.Nil(err)
-	branches, err := s.toHistoryBranches(resp.BranchTokens)
-	s.NoError(err)
-	return branches
-}
-
 func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.HistoryBranch {
 	resp, err := s.ExecutionManager.GetHistoryTree(s.ctx, &p.GetHistoryTreeRequest{
 		TreeID:  treeID,
-		ShardID: convert.Int32Ptr(s.ShardInfo.GetShardId()),
+		ShardID: s.ShardInfo.GetShardId(),
 	})
 	s.Nil(err)
 	branches, err := s.toHistoryBranches(resp.BranchTokens)
@@ -797,7 +787,7 @@ func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.Hi
 func (s *HistoryV2PersistenceSuite) toHistoryBranches(branchTokens [][]byte) ([]*persistencespb.HistoryBranch, error) {
 	branches := make([]*persistencespb.HistoryBranch, len(branchTokens))
 	for i, b := range branchTokens {
-		branch, err := p.ParseHistoryBranchToken(b)
+		branch, err := serialization.HistoryBranchFromBlob(b, enumspb.ENCODING_TYPE_PROTO3.String())
 		if err != nil {
 			return nil, err
 		}
@@ -901,6 +891,7 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 			ForkNodeID:      forkNodeID,
 			Info:            testForkRunID,
 			ShardID:         s.ShardInfo.GetShardId(),
+			NamespaceID:     uuid.New(),
 		})
 		if resp != nil {
 			bi = resp.NewBranchToken

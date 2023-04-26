@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+package ringpop
 
 import (
 	"sync/atomic"
@@ -45,8 +45,8 @@ const (
 )
 
 type (
-	// RingPop is a simple wrapper
-	RingPop struct {
+	// service is a wrapper around ringpop.Ringpop that implements common.Daemon
+	service struct {
 		status int32
 		*ringpop.Ringpop
 		logger          log.Logger
@@ -54,13 +54,13 @@ type (
 	}
 )
 
-// NewRingPop create a new ring pop wrapper
-func NewRingPop(
+// newService create a new ring pop service
+func newService(
 	ringPop *ringpop.Ringpop,
 	maxJoinDuration time.Duration,
 	logger log.Logger,
-) *RingPop {
-	return &RingPop{
+) *service {
+	return &service{
 		status:          common.DaemonStatusInitialized,
 		Ringpop:         ringPop,
 		maxJoinDuration: maxJoinDuration,
@@ -68,8 +68,8 @@ func NewRingPop(
 	}
 }
 
-// Start start ring pop
-func (r *RingPop) Start(
+// start bootstraps the ring pop service at most once
+func (r *service) start(
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
 ) {
@@ -84,7 +84,8 @@ func (r *RingPop) Start(
 	r.bootstrap(bootstrapHostPostRetriever, bootstrapRetryBackoffInterval)
 }
 
-func (r *RingPop) bootstrap(
+// bootstrap ring pop service by discovering the bootstrap hosts and joining the ring pop cluster
+func (r *service) bootstrap(
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
 ) {
@@ -106,10 +107,9 @@ func (r *RingPop) bootstrap(
 
 		_, err = r.Ringpop.Bootstrap(bootParams)
 		if err != nil {
-			r.logger.Error("unable to bootstrap ringpop. retrying", tag.Error(err))
+			r.logger.Warn("unable to bootstrap ringpop. retrying", tag.Error(err))
 		}
 		return err
-
 	}
 	err := backoff.ThrottleRetry(op, policy, nil)
 	if err != nil {
@@ -117,8 +117,8 @@ func (r *RingPop) bootstrap(
 	}
 }
 
-// Stop stop ring pop
-func (r *RingPop) Stop() {
+// stop ring pop service by destroying the ring pop instance
+func (r *service) stop() {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
 		common.DaemonStatusStarted,

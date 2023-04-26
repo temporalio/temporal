@@ -82,6 +82,7 @@ func NewTestContext(
 	}
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
+		owner:               shardInfo.GetOwner(),
 		stringRepr:          fmt.Sprintf("Shard(%d)", shardInfo.GetShardId()),
 		executionManager:    resourceTest.ExecutionMgr,
 		metricsHandler:      resourceTest.MetricsHandler,

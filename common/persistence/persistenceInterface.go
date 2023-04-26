@@ -33,7 +33,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -108,6 +107,8 @@ type (
 	ExecutionStore interface {
 		Closeable
 		GetName() string
+		GetHistoryBranchUtil() HistoryBranchUtil
+
 		// The below three APIs are related to serialization/deserialization
 		CreateWorkflowExecution(ctx context.Context, request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(ctx context.Context, request *InternalUpdateWorkflowExecutionRequest) error
@@ -123,8 +124,13 @@ type (
 		ListConcreteExecutions(ctx context.Context, request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
 
 		// Tasks related APIs
+
+		// Hints for persistence implementaion regarding hisotry task readers
+		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
+		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
+		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
+
 		AddHistoryTasks(ctx context.Context, request *InternalAddHistoryTasksRequest) error
-		GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*InternalGetHistoryTaskResponse, error)
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*InternalGetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
 		RangeCompleteHistoryTasks(ctx context.Context, request *RangeCompleteHistoryTasksRequest) error
@@ -137,16 +143,11 @@ type (
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 
+		InsertHistoryTree(ctx context.Context, request *InternalInsertHistoryTreeRequest) error
 		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(ctx context.Context, request *InternalAppendHistoryNodesRequest) error
 		// DeleteHistoryNodes delete a node from history node table
 		DeleteHistoryNodes(ctx context.Context, request *InternalDeleteHistoryNodesRequest) error
-		// ParseHistoryBranchInfo parses the history branch for branch information
-		ParseHistoryBranchInfo(ctx context.Context, request *ParseHistoryBranchInfoRequest) (*ParseHistoryBranchInfoResponse, error)
-		// UpdateHistoryBranchInfo updates the history branch with branch information
-		UpdateHistoryBranchInfo(ctx context.Context, request *UpdateHistoryBranchInfoRequest) (*UpdateHistoryBranchInfoResponse, error)
-		// NewHistoryBranch initializes a new history branch
-		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
@@ -210,6 +211,7 @@ type (
 	InternalUpdateShardRequest struct {
 		ShardID         int32
 		RangeID         int64
+		Owner           string
 		ShardInfo       *commonpb.DataBlob
 		PreviousRangeID int64
 	}
@@ -445,6 +447,15 @@ type (
 		ExecutionState *persistencespb.WorkflowExecutionState
 	}
 
+	InternalInsertHistoryTreeRequest struct {
+		// The branch to be appended
+		BranchInfo *persistencespb.HistoryBranch
+		// Serialized TreeInfo
+		TreeInfo *commonpb.DataBlob
+		// Used in sharded data stores to identify which shard to use
+		ShardID int32
+	}
+
 	// InternalHistoryNode represent a history node metadata
 	InternalHistoryNode struct {
 		// The first eventID becomes the nodeID to be appended
@@ -461,14 +472,10 @@ type (
 	InternalAppendHistoryNodesRequest struct {
 		// The raw branch token
 		BranchToken []byte
-		// True if it is the first append request to the branch
-		IsNewBranch bool
 		// The info for clean up data in background
 		Info string
 		// The branch to be appended
 		BranchInfo *persistencespb.HistoryBranch
-		// Serialized TreeInfo
-		TreeInfo *commonpb.DataBlob
 		// The history node
 		Node InternalHistoryNode
 		// Used in sharded data stores to identify which shard to use
@@ -500,8 +507,6 @@ type (
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
-		// The raw branch token
-		BranchToken []byte
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
 		// Serialized TreeInfo
@@ -532,12 +537,10 @@ type (
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
-		// The raw branch token
-		BranchToken []byte
+		// The branch
+		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
-		ShardID  int32
-		TreeId   string // TreeId, BranchId is used to delete target history branch itself.
-		BranchId string
+		ShardID int32
 		// branch ranges is used to delete range of history nodes from target branch and it ancestors.
 		BranchRanges []InternalDeleteHistoryBranchRange
 	}
@@ -552,8 +555,6 @@ type (
 	InternalReadHistoryBranchRequest struct {
 		// The raw branch token
 		BranchToken []byte
-		// The tree of branch range to be read
-		TreeID string
 		// The branch range to be read
 		BranchID string
 		// Get the history nodes from MinNodeID. Inclusive.

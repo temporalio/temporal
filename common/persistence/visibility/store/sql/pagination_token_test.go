@@ -22,19 +22,53 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package sql
 
 import (
-	"go.temporal.io/server/common"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
-type (
-	Monitor[T Task] interface {
-		common.Daemon
+func TestSerializePageToken(t *testing.T) {
+	s := assert.New(t)
 
-		RecordStart(T)
-
-		// Add more methods here to monitor
-		// other task processing events
+	token := pageToken{
+		CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
+		StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
+		RunID:     "test-run-id",
 	}
-)
+	data, err := serializePageToken(&token)
+	s.NoError(err)
+	s.Equal(
+		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`),
+		data,
+	)
+}
+
+func TestDeserializePageToken(t *testing.T) {
+	s := assert.New(t)
+
+	token, err := deserializePageToken(nil)
+	s.NoError(err)
+	s.Nil(token)
+
+	token, err = deserializePageToken([]byte{})
+	s.NoError(err)
+	s.Nil(token)
+
+	token, err = deserializePageToken(
+		[]byte(`{"CloseTime":"2023-03-21T14:20:32Z","StartTime":"2023-03-21T14:10:32Z","RunID":"test-run-id"}`),
+	)
+	s.NoError(err)
+	s.NotNil(token)
+	s.Equal(
+		pageToken{
+			CloseTime: time.Date(2023, 3, 21, 14, 20, 32, 0, time.UTC),
+			StartTime: time.Date(2023, 3, 21, 14, 10, 32, 0, time.UTC),
+			RunID:     "test-run-id",
+		},
+		*token,
+	)
+}

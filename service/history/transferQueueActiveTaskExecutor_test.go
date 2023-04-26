@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -98,6 +99,7 @@ type (
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
+		mockVisibilityManager        *manager.MockVisibilityManager
 
 		mockExecutionMgr            *persistence.MockExecutionManager
 		mockArchivalClient          *warchiver.MockClient
@@ -186,6 +188,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
+	s.mockVisibilityManager = s.mockShard.Resource.VisibilityManager
 	s.mockArchivalMetadata = s.mockShard.Resource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockShard.Resource.ArchiverProvider
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -236,6 +239,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 		config,
 		s.mockShard.Resource.MatchingClient,
+		s.mockVisibilityManager,
 	).(*transferQueueActiveTaskExecutor)
 	s.transferQueueActiveTaskExecutor.parentClosePolicyClient = s.mockParentClosePolicyClient
 }
@@ -798,6 +802,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_CanSkip
 					)).AnyTimes()
 				s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
 				s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
+				s.mockVisibilityManager.EXPECT().GetIndexName().Return("")
 			}
 
 			_, _, err = s.transferQueueActiveTaskExecutor.Execute(
@@ -858,6 +863,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
+	s.mockVisibilityManager.EXPECT().GetIndexName().Return("")
 
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
@@ -1378,6 +1384,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Times(2)
+	s.mockVisibilityManager.EXPECT().GetIndexName().Return("").Times(2)
 	mockDeleteMgr := deletemanager.NewMockDeleteManager(s.controller)
 	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.transferQueueActiveTaskExecutor.workflowDeleteManager = mockDeleteMgr
@@ -1640,69 +1647,27 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplic
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Success() {
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
-	}
-	workflowType := "some random workflow type"
-	taskQueueName := "some random task queue"
-
-	targetExecution := commonpb.WorkflowExecution{
-		WorkflowId: "some random target workflow ID",
-		RunId:      uuid.New(),
-	}
-	signalName := "some random signal name"
-	signalInput := payloads.EncodeString("some random signal input")
-	signalControl := "some random signal control"
-	signalHeader := &commonpb.Header{
-		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
-	}
-
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
-	_, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
-			},
-		},
-	)
-	s.Nil(err)
-
-	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
-	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
-
-	taskID := int64(59)
-	event, si := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput,
-		signalControl, signalHeader)
+	mutableState, event, si := s.setupSignalExternalWorkflowInitiated()
 	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
 	transferTask := &tasks.SignalExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
+			mutableState.GetExecutionInfo().NamespaceId,
+			mutableState.GetExecutionInfo().WorkflowId,
+			mutableState.GetExecutionState().RunId,
 		),
 		Version:                 s.version,
-		TargetNamespaceID:       s.targetNamespaceID.String(),
-		TargetWorkflowID:        targetExecution.GetWorkflowId(),
-		TargetRunID:             targetExecution.GetRunId(),
-		TaskID:                  taskID,
+		TargetNamespaceID:       attributes.GetNamespaceId(),
+		TargetWorkflowID:        attributes.WorkflowExecution.GetWorkflowId(),
+		TargetRunID:             attributes.WorkflowExecution.GetRunId(),
+		TaskID:                  int64(59),
 		TargetChildWorkflowOnly: true,
 		InitiatedEventID:        event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(s.targetNamespace, transferTask, si, attributes)).Return(nil, nil)
+	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(namespace.Name(attributes.Namespace), transferTask, si, attributes)).Return(nil, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -1715,82 +1680,166 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 		RequestId: si.GetRequestId(),
 	}).Return(nil, nil)
 
-	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, _, err := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failure() {
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
-	}
-	workflowType := "some random workflow type"
-	taskQueueName := "some random task queue"
-
-	targetExecution := commonpb.WorkflowExecution{
-		WorkflowId: "some random target workflow ID",
-		RunId:      uuid.New(),
-	}
-	signalName := "some random signal name"
-	signalInput := payloads.EncodeString("some random signal input")
-	signalControl := "some random signal control"
-	signalHeader := &commonpb.Header{
-		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
-	}
-
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
-	_, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
-			},
-		},
-	)
-	s.Nil(err)
-
-	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
-	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
-
-	taskID := int64(59)
-	event, si := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput,
-		signalControl, signalHeader)
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failure_TargetWorkflowNotFound() {
+	mutableState, event, si := s.setupSignalExternalWorkflowInitiated()
 	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
 	transferTask := &tasks.SignalExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
+			mutableState.GetExecutionInfo().NamespaceId,
+			mutableState.GetExecutionInfo().WorkflowId,
+			mutableState.GetExecutionState().RunId,
 		),
 		Version:                 s.version,
-		TargetNamespaceID:       s.targetNamespaceID.String(),
-		TargetWorkflowID:        targetExecution.GetWorkflowId(),
-		TargetRunID:             targetExecution.GetRunId(),
-		TaskID:                  taskID,
+		TargetNamespaceID:       attributes.GetNamespaceId(),
+		TargetWorkflowID:        attributes.WorkflowExecution.GetWorkflowId(),
+		TargetRunID:             attributes.WorkflowExecution.GetRunId(),
+		TaskID:                  int64(59),
 		TargetChildWorkflowOnly: true,
 		InitiatedEventID:        event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(s.targetNamespace, transferTask, si, attributes)).Return(nil, serviceerror.NewNotFound(""))
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(namespace.Name(attributes.Namespace), transferTask, si, attributes)).Return(nil, serviceerror.NewNotFound(""))
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.validateUpdateExecutionRequestWithSignalExternalFailedEvent(
+				si.InitiatedEventId,
+				enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
+				request,
+			)
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, _, err := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failure_TargetNamespaceNotFound() {
+	mutableState, event, si := s.setupSignalExternalWorkflowInitiated()
+	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
+
+	transferTask := &tasks.SignalExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			mutableState.GetExecutionInfo().NamespaceId,
+			mutableState.GetExecutionInfo().WorkflowId,
+			mutableState.GetExecutionState().RunId,
+		),
+		Version:                 s.version,
+		TargetNamespaceID:       tests.MissedNamespaceID.String(),
+		TargetWorkflowID:        attributes.WorkflowExecution.GetWorkflowId(),
+		TargetRunID:             attributes.WorkflowExecution.GetRunId(),
+		TaskID:                  int64(59),
+		TargetChildWorkflowOnly: true,
+		InitiatedEventID:        event.GetEventId(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.validateUpdateExecutionRequestWithSignalExternalFailedEvent(
+				si.InitiatedEventId,
+				enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
+				request,
+			)
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	_, _, err := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Nil(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failure_SignalCountLimitExceeded() {
+	mutableState, event, si := s.setupSignalExternalWorkflowInitiated()
+	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
+
+	transferTask := &tasks.SignalExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			mutableState.GetExecutionInfo().NamespaceId,
+			mutableState.GetExecutionInfo().WorkflowId,
+			mutableState.GetExecutionState().RunId,
+		),
+		Version:                 s.version,
+		TargetNamespaceID:       attributes.GetNamespaceId(),
+		TargetWorkflowID:        attributes.WorkflowExecution.GetWorkflowId(),
+		TargetRunID:             attributes.WorkflowExecution.GetRunId(),
+		TaskID:                  int64(59),
+		TargetChildWorkflowOnly: true,
+		InitiatedEventID:        event.GetEventId(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(namespace.Name(attributes.Namespace), transferTask, si, attributes)).Return(nil, consts.ErrSignalsLimitExceeded)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.validateUpdateExecutionRequestWithSignalExternalFailedEvent(
+				si.InitiatedEventId,
+				enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_SIGNAL_COUNT_LIMIT_EXCEEDED,
+				request,
+			)
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	_, _, err := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Nil(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplication() {
+	mutableState, event, _ := s.setupSignalExternalWorkflowInitiated()
+	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
+
+	transferTask := &tasks.SignalExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			mutableState.GetExecutionInfo().NamespaceId,
+			mutableState.GetExecutionInfo().WorkflowId,
+			mutableState.GetExecutionState().RunId,
+		),
+		Version:                 s.version,
+		TargetNamespaceID:       attributes.GetNamespaceId(),
+		TargetWorkflowID:        attributes.WorkflowExecution.GetWorkflowId(),
+		TargetRunID:             attributes.WorkflowExecution.GetRunId(),
+		TaskID:                  int64(59),
+		TargetChildWorkflowOnly: true,
+		InitiatedEventID:        event.GetEventId(),
+	}
+
+	event = addSignaledEvent(
+		mutableState,
+		event.GetEventId(),
+		tests.TargetNamespace,
+		namespace.ID(transferTask.TargetNamespaceID),
+		attributes.WorkflowExecution.GetWorkflowId(),
+		attributes.WorkflowExecution.GetRunId(),
+		"",
+	)
+	// Flush buffered events so real IDs get assigned
+	mutableState.FlushBufferedEvents()
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	_, _, err := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Nil(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) setupSignalExternalWorkflowInitiated() (
+	*workflow.MutableStateImpl,
+	*historypb.HistoryEvent,
+	*persistencespb.SignalInfo,
+) {
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
@@ -1830,104 +1879,33 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskID := int64(59)
-	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
+	event, signalInfo := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput,
 		signalControl, signalHeader)
 
-	transferTask := &tasks.SignalExecutionTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
-		Version:                 s.version,
-		TargetNamespaceID:       tests.MissedNamespaceID.String(),
-		TargetWorkflowID:        targetExecution.GetWorkflowId(),
-		TargetRunID:             targetExecution.GetRunId(),
-		TaskID:                  taskID,
-		TargetChildWorkflowOnly: true,
-		InitiatedEventID:        event.GetEventId(),
-	}
-
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
-
-	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(err)
+	return mutableState, event, signalInfo
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplication() {
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
+func (s *transferQueueActiveTaskExecutorSuite) validateUpdateExecutionRequestWithSignalExternalFailedEvent(
+	signalInitiatedEventId int64,
+	expectedFailedCause enumspb.SignalExternalWorkflowExecutionFailedCause,
+	request *persistence.UpdateWorkflowExecutionRequest,
+) {
+	s.Len(request.UpdateWorkflowMutation.DeleteSignalInfos, 1)
+	_, ok := request.UpdateWorkflowMutation.DeleteSignalInfos[signalInitiatedEventId]
+	s.True(ok)
+
+	numFailedEvent := 0
+	s.Len(request.UpdateWorkflowEvents, 1)
+	for _, event := range request.UpdateWorkflowEvents[0].Events {
+		if event.EventType != enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
+			continue
+		}
+		attr := event.GetSignalExternalWorkflowExecutionFailedEventAttributes()
+		s.Equal(expectedFailedCause, attr.GetCause())
+		numFailedEvent++
 	}
-	workflowType := "some random workflow type"
-	taskQueueName := "some random task queue"
-
-	targetExecution := commonpb.WorkflowExecution{
-		WorkflowId: "some random target workflow ID",
-		RunId:      uuid.New(),
-	}
-	signalName := "some random signal name"
-	signalInput := payloads.EncodeString("some random signal input")
-	signalControl := "some random signal control"
-	signalHeader := &commonpb.Header{
-		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
-	}
-
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
-	_, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
-			},
-		},
-	)
-	s.Nil(err)
-
-	wt := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
-	wt.StartedEventID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
-
-	taskID := int64(59)
-	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput,
-		signalControl, signalHeader)
-
-	transferTask := &tasks.SignalExecutionTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
-		Version:                 s.version,
-		TargetNamespaceID:       s.targetNamespaceID.String(),
-		TargetWorkflowID:        targetExecution.GetWorkflowId(),
-		TargetRunID:             targetExecution.GetRunId(),
-		TaskID:                  taskID,
-		TargetChildWorkflowOnly: true,
-		InitiatedEventID:        event.GetEventId(),
-	}
-
-	event = addSignaledEvent(mutableState, event.GetEventId(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), "")
-	// Flush buffered events so real IDs get assigned
-	mutableState.FlushBufferedEvents()
-
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-
-	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(err)
+	s.Equal(1, numFailedEvent)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success() {
@@ -2608,8 +2586,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			}), nil)
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
-			clusterName := namespaceEntry.ActiveClusterName()
-			mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
 			mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 
 			mockShard := shard.NewMockContext(ctrl)
@@ -2645,8 +2621,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 					ackLevel = closeTransferTaskId - 1
 				}
 				mockShard.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(nil, false).AnyTimes()
-				mockShard.EXPECT().GetQueueClusterAckLevel(tasks.CategoryTransfer,
-					clusterName).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
+				mockShard.EXPECT().GetQueueAckLevel(tasks.CategoryTransfer).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
 			}
 
 			mockWorkflowDeleteManager := deletemanager.NewMockDeleteManager(ctrl)

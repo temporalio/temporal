@@ -117,7 +117,7 @@ const (
 	testHostName = "test_host"
 )
 
-var testHostInfo = membership.NewHostInfo(testHostName, nil)
+var testHostInfo = membership.NewHostInfoFromAddress(testHostName)
 
 // NewTest returns a new test resource instance
 func NewTest(
@@ -144,7 +144,7 @@ func NewTest(
 	taskMgr := persistence.NewMockTaskManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
-	executionMgr.EXPECT().NewHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.NewHistoryBranchResponse{BranchToken: []byte{1, 2, 3}}, nil).AnyTimes()
+	executionMgr.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
 	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
 	namespaceReplicationQueue.EXPECT().Stop().AnyTimes()
@@ -248,7 +248,7 @@ func (t *Test) GetHostName() string {
 }
 
 // GetHostInfo for testing
-func (t *Test) GetHostInfo() *membership.HostInfo {
+func (t *Test) GetHostInfo() membership.HostInfo {
 	return testHostInfo
 }
 
@@ -442,8 +442,4 @@ func (t *Test) GetSearchAttributesManager() searchattribute.Manager {
 
 func (t *Test) GetSearchAttributesMapperProvider() searchattribute.MapperProvider {
 	return t.SearchAttributesMapperProvider
-}
-
-func (t *Test) RefreshNamespaceCache() {
-	t.NamespaceCache.Refresh()
 }

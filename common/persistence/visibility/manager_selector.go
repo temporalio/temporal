@@ -36,87 +36,52 @@ import (
 
 type (
 	managerSelector interface {
-		readManager(namespace namespace.Name) manager.VisibilityManager
+		readManager(nsName namespace.Name) manager.VisibilityManager
 		writeManagers() ([]manager.VisibilityManager, error)
 	}
 
-	sqlToESManagerSelector struct {
-		enableAdvancedVisibilityRead  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		advancedVisibilityWritingMode dynamicconfig.StringPropertyFn
-		stdVisibilityManager          manager.VisibilityManager
-		advVisibilityManager          manager.VisibilityManager
-	}
-
-	esManagerSelector struct {
-		enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		enableWriteToSecondaryVisibility  dynamicconfig.BoolPropertyFn
+	defaultManagerSelector struct {
 		visibilityManager                 manager.VisibilityManager
 		secondaryVisibilityManager        manager.VisibilityManager
+		enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		secondaryVisibilityWritingMode    dynamicconfig.StringPropertyFn
 	}
 )
 
-var _ managerSelector = (*sqlToESManagerSelector)(nil)
-var _ managerSelector = (*esManagerSelector)(nil)
+var _ managerSelector = (*defaultManagerSelector)(nil)
 
-func NewSQLToESManagerSelector(
-	stdVisibilityManager manager.VisibilityManager,
-	advVisibilityManager manager.VisibilityManager,
-	enableAdvancedVisibilityRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	advancedVisibilityWritingMode dynamicconfig.StringPropertyFn,
-) *sqlToESManagerSelector {
-	return &sqlToESManagerSelector{
-		stdVisibilityManager:          stdVisibilityManager,
-		advVisibilityManager:          advVisibilityManager,
-		enableAdvancedVisibilityRead:  enableAdvancedVisibilityRead,
-		advancedVisibilityWritingMode: advancedVisibilityWritingMode,
-	}
-}
-
-func NewESManagerSelector(
+func newDefaultManagerSelector(
 	visibilityManager manager.VisibilityManager,
 	secondaryVisibilityManager manager.VisibilityManager,
-	enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	enableWriteToSecondaryVisibility dynamicconfig.BoolPropertyFn,
-) *esManagerSelector {
-	return &esManagerSelector{
+	enableSecondaryVisibilityRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
+) *defaultManagerSelector {
+	return &defaultManagerSelector{
 		visibilityManager:                 visibilityManager,
 		secondaryVisibilityManager:        secondaryVisibilityManager,
-		enableReadFromSecondaryVisibility: enableReadFromSecondaryVisibility,
-		enableWriteToSecondaryVisibility:  enableWriteToSecondaryVisibility,
+		enableReadFromSecondaryVisibility: enableSecondaryVisibilityRead,
+		secondaryVisibilityWritingMode:    secondaryVisibilityWritingMode,
 	}
 }
 
-func (v *sqlToESManagerSelector) writeManagers() ([]manager.VisibilityManager, error) {
-	switch v.advancedVisibilityWritingMode() {
-	case AdvancedVisibilityWritingModeOff:
-		return []manager.VisibilityManager{v.stdVisibilityManager}, nil
-	case AdvancedVisibilityWritingModeOn:
-		return []manager.VisibilityManager{v.advVisibilityManager}, nil
-	case AdvancedVisibilityWritingModeDual:
-		return []manager.VisibilityManager{v.stdVisibilityManager, v.advVisibilityManager}, nil
+func (v *defaultManagerSelector) writeManagers() ([]manager.VisibilityManager, error) {
+	switch v.secondaryVisibilityWritingMode() {
+	case SecondaryVisibilityWritingModeOff:
+		return []manager.VisibilityManager{v.visibilityManager}, nil
+	case SecondaryVisibilityWritingModeOn:
+		return []manager.VisibilityManager{v.secondaryVisibilityManager}, nil
+	case SecondaryVisibilityWritingModeDual:
+		return []manager.VisibilityManager{v.visibilityManager, v.secondaryVisibilityManager}, nil
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisibilityWritingMode()))
+		return nil, serviceerror.NewInternal(fmt.Sprintf(
+			"Unknown secondary visibility writing mode: %s",
+			v.secondaryVisibilityWritingMode(),
+		))
 	}
 }
 
-func (v *sqlToESManagerSelector) readManager(namespace namespace.Name) manager.VisibilityManager {
-	if v.enableAdvancedVisibilityRead(namespace.String()) {
-		return v.advVisibilityManager
-	}
-	return v.stdVisibilityManager
-}
-
-func (v *esManagerSelector) writeManagers() ([]manager.VisibilityManager, error) {
-	managers := []manager.VisibilityManager{v.visibilityManager}
-	if v.enableWriteToSecondaryVisibility() {
-		managers = append(managers, v.secondaryVisibilityManager)
-	}
-
-	return managers, nil
-}
-
-func (v *esManagerSelector) readManager(namespace namespace.Name) manager.VisibilityManager {
-	if v.enableReadFromSecondaryVisibility(namespace.String()) {
+func (v *defaultManagerSelector) readManager(nsName namespace.Name) manager.VisibilityManager {
+	if v.enableReadFromSecondaryVisibility(nsName.String()) {
 		return v.secondaryVisibilityManager
 	}
 	return v.visibilityManager

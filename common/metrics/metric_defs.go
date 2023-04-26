@@ -46,7 +46,7 @@ const (
 	TaskTypeTagName            = "task_type"
 	TaskPriorityTagName        = "task_priority"
 	QueueReaderIDTagName       = "queue_reader_id"
-	QueueAlertTypeTagName      = "queue_alert_type"
+	QueueActionTagName         = "queue_action"
 	QueueTypeTagName           = "queue_type"
 	visibilityTypeTagName      = "visibility_type"
 	ErrorTypeTagName           = "error_type"
@@ -197,6 +197,8 @@ const (
 	AdminRemoveRemoteClusterScope = "AdminRemoveRemoteCluster"
 	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecution
 	AdminDeleteWorkflowExecutionScope = "AdminDeleteWorkflowExecution"
+	// AdminStreamWorkflowReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
+	AdminStreamWorkflowReplicationMessagesScope = "AdminStreamWorkflowReplicationMessages"
 
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope
@@ -245,6 +247,8 @@ const (
 	FrontendClientListOpenWorkflowExecutionsScope = "FrontendClientListOpenWorkflowExecutions"
 	// FrontendClientPollActivityTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollActivityTaskQueueScope = "FrontendClientPollActivityTaskQueue"
+	//FrontendClientPollWorkflowExecutionUpdateScope tracks RPC calls to frontend service
+	FrontendClientPollWorkflowExecutionUpdateScope = "FrontendClientPollWorkflowExecutionUpdate"
 	// FrontendClientPollWorkflowTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollWorkflowTaskQueueScope = "FrontendClientPollWorkflowTaskQueue"
 	// FrontendClientQueryWorkflowScope tracks RPC calls to frontend service
@@ -317,12 +321,12 @@ const (
 	FrontendClientDeleteScheduleScope = "FrontendClientDeleteSchedule"
 	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
 	FrontendClientListSchedulesScope = "FrontendClientListSchedules"
-	// FrontendClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to frontend service
-	FrontendClientUpdateWorkerBuildIdOrderingScope = "FrontendClientUpdateWorkerBuildIdOrdering"
+	// FrontendClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
+	FrontendClientUpdateWorkerBuildIdCompatibilityScope = "FrontendClientUpdateWorkerBuildIdCompatibility"
 	// FrontendClientUpdateWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientUpdateWorkflowExecutionScope = "FrontendClientUpdateWorkflowExecution"
-	// FrontendClientGetWorkerBuildIdOrderingScope tracks RPC calls to frontend service
-	FrontendClientGetWorkerBuildIdOrderingScope = "FrontendClientGetWorkerBuildIdOrdering"
+	// FrontendClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
+	FrontendClientGetWorkerBuildIdCompatibilityScope = "FrontendClientGetWorkerBuildIdCompatibility"
 	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
 	FrontendClientDescribeBatchOperationScope = "FrontendClientDescribeBatchOperation"
 	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
@@ -433,6 +437,8 @@ const (
 	HistoryClientDescribeHistoryHostScope = "HistoryClientDescribeHistoryHost"
 	// HistoryClientGetReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
+	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientStreamWorkflowReplicationMessagesScope = "HistoryClientStreamWorkflowReplicationMessages"
 )
 
 // Matching Client Operations
@@ -455,10 +461,10 @@ const (
 	MatchingClientDescribeTaskQueueScope = "MatchingClientDescribeTaskQueue"
 	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskQueuePartitionsScope = "MatchingClientListTaskQueuePartitions"
-	// MatchingClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to matching service
-	MatchingClientUpdateWorkerBuildIdOrderingScope = "MatchingClientUpdateWorkerBuildIdOrdering"
-	// MatchingClientGetWorkerBuildIdOrderingScope tracks RPC calls to matching service
-	MatchingClientGetWorkerBuildIdOrderingScope = "MatchingClientGetWorkerBuildIdOrdering"
+	// MatchingClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
+	MatchingClientUpdateWorkerBuildIdCompatibilityScope = "MatchingClientUpdateWorkerBuildIdCompatibility"
+	// MatchingClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
+	MatchingClientGetWorkerBuildIdCompatibilityScope = "MatchingClientGetWorkerBuildIdCompatibility"
 	// MatchingClientInvalidateTaskQueueMetadataScope tracks RPC calls to matching service
 	MatchingClientInvalidateTaskQueueMetadataScope = "MatchingClientInvalidateTaskQueueMetadata"
 	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
@@ -480,12 +486,6 @@ const (
 	PersistenceAppendRawHistoryNodesScope = "AppendRawHistoryNodes"
 	// PersistenceDeleteHistoryNodesScope tracks DeleteHistoryNodes calls made by service to persistence layer
 	PersistenceDeleteHistoryNodesScope = "DeleteHistoryNodes"
-	// PersistenceParseHistoryBranchInfoScope tracks NewHistoryBranch calls made by service to persistence layer
-	PersistenceParseHistoryBranchInfoScope = "ParseHistoryBranchInfo"
-	// PersistenceUpdateHistoryBranchInfoScope tracks NewHistoryBranch calls made by service to persistence layer
-	PersistenceUpdateHistoryBranchInfoScope = "UpdateHistoryBranchInfo"
-	// PersistenceNewHistoryBranchScope tracks NewHistoryBranch calls made by service to persistence layer
-	PersistenceNewHistoryBranchScope = "NewHistoryBranch"
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
 	PersistenceReadHistoryBranchScope = "ReadHistoryBranch"
 	// PersistenceReadHistoryBranchReverseScope tracks ReadHistoryBranchReverse calls made by service to persistence layer
@@ -572,16 +572,12 @@ const (
 	PersistenceListConcreteExecutionsScope = "ListConcreteExecutions"
 	// PersistenceAddTasksScope tracks AddTasks calls made by service to persistence layer
 	PersistenceAddTasksScope = "AddTasks"
-	// PersistenceGetTransferTaskScope tracks GetTransferTask calls made by service to persistence layer
-	PersistenceGetTransferTaskScope = "GetTransferTask"
 	// PersistenceGetTransferTasksScope tracks GetTransferTasks calls made by service to persistence layer
 	PersistenceGetTransferTasksScope = "GetTransferTasks"
 	// PersistenceCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceCompleteTransferTaskScope = "CompleteTransferTask"
 	// PersistenceRangeCompleteTransferTasksScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceRangeCompleteTransferTasksScope = "RangeCompleteTransferTasks"
-	// PersistenceGetVisibilityTaskScope tracks GetVisibilityTask calls made by service to persistence layer
-	PersistenceGetVisibilityTaskScope = "GetVisibilityTask"
 	// PersistenceGetVisibilityTasksScope tracks GetVisibilityTasks calls made by service to persistence layer
 	PersistenceGetVisibilityTasksScope = "GetVisibilityTasks"
 	// PersistenceCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
@@ -589,10 +585,6 @@ const (
 	// PersistenceRangeCompleteVisibilityTasksScope tracks CompleteVisibilityTasks calls made by service to persistence layer
 	PersistenceRangeCompleteVisibilityTasksScope = "RangeCompleteVisibilityTasks"
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
-	PersistenceGetReplicationTaskScope = "GetReplicationTask"
-	// PersistenceGetArchivalTaskScope tracks GetArchivalTask calls made by service to persistence layer
-	PersistenceGetArchivalTaskScope = "GetArchivalTask"
-	// PersistenceGetArchivalTasksScope tracks GetArchivalTasks calls made by service to persistence layer
 	PersistenceGetArchivalTasksScope = "GetArchivalTasks"
 	// PersistenceCompleteArchivalTaskScope tracks CompleteArchivalTasks calls made by service to persistence layer
 	PersistenceCompleteArchivalTaskScope = "CompleteArchivalTask"
@@ -612,8 +604,6 @@ const (
 	PersistenceDeleteReplicationTaskFromDLQScope = "DeleteReplicationTaskFromDLQ"
 	// PersistenceRangeDeleteReplicationTaskFromDLQScope tracks PersistenceRangeDeleteReplicationTaskFromDLQScope calls made by service to persistence layer
 	PersistenceRangeDeleteReplicationTaskFromDLQScope = "RangeDeleteReplicationTaskFromDLQ"
-	// PersistenceGetTimerTaskScope tracks GetTimerTask calls made by service to persistence layer
-	PersistenceGetTimerTaskScope = "GetTimerTask"
 	// PersistenceGetTimerTasksScope tracks GetTimerTasks calls made by service to persistence layer
 	PersistenceGetTimerTasksScope = "GetTimerTasks"
 	// PersistenceCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
@@ -808,10 +798,10 @@ const (
 	FrontendDeleteScheduleScope = "DeleteSchedule"
 	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope = "ListSchedulesScope is the metric scope for frontend.ListSchedules"
 	FrontendListSchedulesScope = "ListSchedules"
-	// FrontendUpdateWorkerBuildIdOrderingScope is the metric scope for frontend.UpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrderingScope is the metric scope for frontend.UpdateWorkerBuildIdOrdering"
-	FrontendUpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrdering"
-	// FrontendGetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrdering"
-	FrontendGetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrdering"
+	// FrontendUpdateWorkerBuildIdCompatibilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatibility"
+	FrontendUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
+	// FrontendGetWorkerBuildIdCompatibilityScope is the metric scope for frontend.GetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibilityScope is the metric scope for frontend.GetWorkerBuildIdCompatibility"
+	FrontendGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
 	// FrontendUpdateWorkflowExecutionScope is the metric scope for frontend.UpdateWorkflowExecution
 	FrontendUpdateWorkflowExecutionScope = "UpdateWorkflowExecution"
 	// FrontendDescribeBatchOperationScope is the metric scope for frontend.DescribeBatchOperation
@@ -1102,13 +1092,13 @@ const (
 	MatchingDescribeTaskQueueScope = "DescribeTaskQueue"
 	// MatchingListTaskQueuePartitionsScope tracks ListTaskQueuePartitions API calls received by service
 	MatchingListTaskQueuePartitionsScope = "ListTaskQueuePartitions"
-	// MatchingUpdateWorkerBuildIdOrderingScope tracks UpdateWorkerBuildIdOrdering API calls received by service
-	MatchingUpdateWorkerBuildIdOrderingScope = "UpdateWorkerBuildIdOrdering"
-	// MatchingGetWorkerBuildIdOrderingScope tracks GetWorkerBuildIdOrdering API calls received by service
-	MatchingGetWorkerBuildIdOrderingScope = "GetWorkerBuildIdOrdering"
-	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	// MatchingUpdateWorkerBuildIdCompatibilityScope tracks UpdateWorkerBuildIdCompatibility API calls received by service
+	MatchingUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
+	// MatchingGetWorkerBuildIdCompatibilityScope tracks GetWorkerBuildIdCompatibility API calls received by service
+	MatchingGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
+	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
 	MatchingInvalidateTaskQueueMetadataScope = "InvalidateTaskQueueMetadata"
-	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
 	MatchingGetTaskQueueMetadataScope = "GetTaskQueueMetadata"
 )
 
@@ -1152,12 +1142,14 @@ const (
 	HistoryMetadataReplicationTaskScope = "HistoryMetadataReplicationTask"
 	// SyncShardTaskScope is the scope used by sync shrad information processing
 	SyncShardTaskScope = "SyncShardTask"
-	// SyncActivityTaskScope is the scope used by sync activity information processing
+	// SyncActivityTaskScope is the scope used by sync activity
 	SyncActivityTaskScope = "SyncActivityTask"
-	// ESProcessorScope is scope used by all metric emitted by esProcessor
-	ESProcessorScope = "ESProcessor"
-	// IndexProcessorScope is scope used by all metric emitted by index processor
-	IndexProcessorScope = "IndexProcessor"
+	// SyncWorkflowTaskScope is the scope used by sync workflow
+	SyncWorkflowTaskScope = "SyncWorkflowTask"
+	// NoopTaskScope is the scope used by noop task
+	NoopTaskScope = "NoopTask"
+	// UnknownTaskScope is the scope used by unknown task
+	UnknownTaskScope = "UnknownTask"
 	// ParentClosePolicyProcessorScope is scope used by all metrics emitted by worker.ParentClosePolicyProcessor
 	ParentClosePolicyProcessorScope = "ParentClosePolicyProcessor"
 	DeleteNamespaceWorkflowScope    = "DeleteNamespaceWorkflow"
@@ -1341,6 +1333,7 @@ var (
 	QueueReaderCountHistogram                         = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram                          = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueActionCounter                                = NewCounterDef("queue_actions")
+	QueueActionFailures                               = NewCounterDef("queue_action_errors")
 	ActivityE2ELatency                                = NewTimerDef("activity_end_to_end_latency")
 	AckLevelUpdateCounter                             = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                       = NewCounterDef("ack_level_update_failed")
@@ -1413,16 +1406,25 @@ var (
 	ChildInfoSize                                  = NewBytesHistogramDef("child_info_size")
 	RequestCancelInfoSize                          = NewBytesHistogramDef("request_cancel_info_size")
 	SignalInfoSize                                 = NewBytesHistogramDef("signal_info_size")
+	SignalRequestIDSize                            = NewBytesHistogramDef("signal_request_id_size")
 	BufferedEventsSize                             = NewBytesHistogramDef("buffered_events_size")
 	ActivityInfoCount                              = NewDimensionlessHistogramDef("activity_info_count")
 	TimerInfoCount                                 = NewDimensionlessHistogramDef("timer_info_count")
 	ChildInfoCount                                 = NewDimensionlessHistogramDef("child_info_count")
 	SignalInfoCount                                = NewDimensionlessHistogramDef("signal_info_count")
 	RequestCancelInfoCount                         = NewDimensionlessHistogramDef("request_cancel_info_count")
+	SignalRequestIDCount                           = NewDimensionlessHistogramDef("signal_request_id_count")
 	BufferedEventsCount                            = NewDimensionlessHistogramDef("buffered_events_count")
 	TaskCount                                      = NewDimensionlessHistogramDef("task_count")
+	TotalActivityCount                             = NewDimensionlessHistogramDef("total_activity_count")
+	TotalUserTimerCount                            = NewDimensionlessHistogramDef("total_user_timer_count")
+	TotalChildExecutionCount                       = NewDimensionlessHistogramDef("total_child_execution_count")
+	TotalRequestCancelExternalCount                = NewDimensionlessHistogramDef("total_request_cancel_external_count")
+	TotalSignalExternalCount                       = NewDimensionlessHistogramDef("total_signal_external_count")
+	TotalSignalCount                               = NewDimensionlessHistogramDef("total_signal_count")
 	WorkflowRetryBackoffTimerCount                 = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount                  = NewCounterDef("workflow_cron_backoff_timer")
+	WorkflowDelayedStartBackoffTimerCount          = NewCounterDef("workflow_delayed_start_backoff_timer")
 	WorkflowCleanupDeleteCount                     = NewCounterDef("workflow_cleanup_delete")
 	WorkflowCleanupArchiveCount                    = NewCounterDef("workflow_cleanup_archive")
 	WorkflowCleanupNopCount                        = NewCounterDef("workflow_cleanup_nop")
@@ -1604,6 +1606,7 @@ var (
 	ElasticsearchBulkProcessorBulkSize                        = NewDimensionlessHistogramDef("elasticsearch_bulk_processor_bulk_size")
 	ElasticsearchDocumentParseFailuresCount                   = NewCounterDef("elasticsearch_document_parse_failures_counter")
 	ElasticsearchDocumentGenerateFailuresCount                = NewCounterDef("elasticsearch_document_generate_failures_counter")
+	ElasticsearchCustomOrderByClauseCount                     = NewCounterDef("elasticsearch_custom_order_by_clause_counter")
 	CatchUpReadyShardCountGauge                               = NewGaugeDef("catchup_ready_shard_count")
 	HandoverReadyShardCountGauge                              = NewGaugeDef("handover_ready_shard_count")
 	ReplicatorMessages                                        = NewCounterDef("replicator_messages")

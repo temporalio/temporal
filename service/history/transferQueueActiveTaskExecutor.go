@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -84,6 +85,7 @@ func newTransferQueueActiveTaskExecutor(
 	metricProvider metrics.Handler,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
+	visibilityManager manager.VisibilityManager,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -93,6 +95,7 @@ func newTransferQueueActiveTaskExecutor(
 			logger,
 			metricProvider,
 			matchingClient,
+			visibilityManager,
 		),
 		workflowResetter: ndc.NewWorkflowResetter(
 			shard,
@@ -223,8 +226,8 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		return nil
 	}
 
-	workflowTask, found := mutableState.GetWorkflowTaskInfo(task.ScheduledEventID)
-	if !found {
+	workflowTask := mutableState.GetWorkflowTaskByID(task.ScheduledEventID)
+	if workflowTask == nil {
 		return nil
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
@@ -656,6 +659,8 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND
 		case *serviceerror.NamespaceNotFound:
 			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
+		case *serviceerror.InvalidArgument:
+			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_SIGNAL_COUNT_LIMIT_EXCEEDED
 		default:
 			t.logger.Error("Unexpected error type returned from SignalWorkflowExecution API call.", tag.ErrorType(err), tag.Error(err))
 			return err
@@ -1095,7 +1100,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	targetWorkflowID string,
 	targetRunID string,
 ) error {
-	err := t.updateWorkflowExecution(ctx, context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow execution already completed.")
@@ -1115,8 +1120,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 			)
 			return err
 		})
-
-	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
@@ -1129,7 +1132,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	targetRunID string,
 	control string,
 ) error {
-	err := t.updateWorkflowExecution(ctx, context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow execution already completed.")
@@ -1150,7 +1153,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 			)
 			return err
 		})
-	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
@@ -1163,7 +1165,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	targetRunID string,
 	failedCause enumspb.CancelExternalWorkflowExecutionFailedCause,
 ) error {
-	err := t.updateWorkflowExecution(ctx, context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow execution already completed.")
@@ -1184,8 +1186,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 			)
 			return err
 		})
-
-	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
@@ -1199,7 +1199,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 	control string,
 	failedCause enumspb.SignalExternalWorkflowExecutionFailedCause,
 ) error {
-	err := t.updateWorkflowExecution(ctx, context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow is not running.")
@@ -1221,8 +1221,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 			)
 			return err
 		})
-
-	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
@@ -1248,7 +1246,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 		}
 	}
 
-	return context.UpdateWorkflowExecutionAsActive(ctx, t.shard.GetTimeSource().Now())
+	return context.UpdateWorkflowExecutionAsActive(ctx)
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecution(

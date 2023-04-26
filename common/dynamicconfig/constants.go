@@ -38,6 +38,7 @@ const (
 
 	// keys for system
 
+	// DEPRECATED: the following block of configs are deprecated and replaced by the next block of configs
 	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
 	StandardVisibilityPersistenceMaxReadQPS = "system.standardVisibilityPersistenceMaxReadQPS"
 	// StandardVisibilityPersistenceMaxWriteQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for write.
@@ -54,6 +55,15 @@ const (
 	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
 	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
 	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
+
+	// VisibilityPersistenceMaxReadQPS is the max QPC system host can query visibility DB for read.
+	VisibilityPersistenceMaxReadQPS = "system.visibilityPersistenceMaxReadQPS"
+	// VisibilityPersistenceMaxWriteQPS is the max QPC system host can query visibility DB for write.
+	VisibilityPersistenceMaxWriteQPS = "system.visibilityPersistenceMaxWriteQPS"
+	// EnableReadFromSecondaryVisibility is the config to enable read from secondary visibility
+	EnableReadFromSecondaryVisibility = "system.enableReadFromSecondaryVisibility"
+	// SecondaryVisibilityWritingMode is key for how to write to secondary visibility
+	SecondaryVisibilityWritingMode = "system.secondaryVisibilityWritingMode"
 	// VisibilityDisableOrderByClause is the config to disable ORDERY BY clause for Elasticsearch
 	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
 
@@ -105,6 +115,8 @@ const (
 	DeadlockInterval = "system.deadlock.Interval"
 	// How many extra goroutines can be created per root.
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
+	// Enable / disable worker versioning.
+	EnableWorkerVersioning = "system.workerVersioning.enable"
 
 	// keys for size limit
 
@@ -164,8 +176,6 @@ const (
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize = "frontend.visibilityMaxPageSize"
-	// FrontendESIndexMaxResultWindow is ElasticSearch index setting max_result_window
-	FrontendESIndexMaxResultWindow = "frontend.esIndexMaxResultWindow"
 	// FrontendHistoryMaxPageSize is default max size for GetWorkflowExecutionHistory in one page
 	FrontendHistoryMaxPageSize = "frontend.historyMaxPageSize"
 	// FrontendRPS is workflow rate limit per second
@@ -337,6 +347,9 @@ const (
 	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
 
 	// keys for history
+
+	// EnableReplicationStream turn on replication stream
+	EnableReplicationStream = "history.enableReplicationStream"
 
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS = "history.rps"
@@ -650,6 +663,15 @@ const (
 	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 
+	// ReplicationStreamSyncStatusDuration sync replication status duration
+	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
+	// ReplicationStreamMinReconnectDuration minimal replication stream reconnection duration
+	ReplicationStreamMinReconnectDuration = "history.ReplicationStreamMinReconnectDuration"
+	// ReplicationProcessorSchedulerQueueSize is the replication task executor queue size
+	ReplicationProcessorSchedulerQueueSize = "history.ReplicationProcessorSchedulerQueueSize"
+	// ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count
+	ReplicationProcessorSchedulerWorkerCount = "history.ReplicationProcessorSchedulerWorkerCount"
+
 	// keys for worker
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
@@ -707,6 +729,8 @@ const (
 	ExecutionDataDurationBuffer = "worker.executionDataDurationBuffer"
 	// ExecutionScannerWorkerCount is the execution scavenger worker count
 	ExecutionScannerWorkerCount = "worker.executionScannerWorkerCount"
+	// ExecutionScannerHistoryEventIdValidator is the flag to enable history event id validator
+	ExecutionScannerHistoryEventIdValidator = "worker.executionEnableHistoryEventIdValidator"
 	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
 	TaskQueueScannerEnabled = "worker.taskQueueScannerEnabled"
 	// HistoryScannerEnabled indicates if history scanner should be started as part of worker.Scanner

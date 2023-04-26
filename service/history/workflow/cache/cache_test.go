@@ -41,11 +41,11 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
@@ -106,7 +106,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		namespaceID,
 		execution1,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	ctx.(*workflow.ContextImpl).MutableState = mockMS1
@@ -115,7 +115,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		namespaceID,
 		execution1,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	s.Equal(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
@@ -129,7 +129,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		namespaceID,
 		execution2,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	s.NotEqual(mockMS1, ctx.(*workflow.ContextImpl).MutableState)
@@ -149,7 +149,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 
@@ -163,7 +163,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we2,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.NotNil(err2)
 
@@ -174,7 +174,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we2,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err3)
 	release2(err3)
@@ -184,7 +184,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err4)
 	s.False(ctx == newContext)
@@ -204,7 +204,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
@@ -220,13 +220,12 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 
 	s.NotNil(ctx.(*workflow.ContextImpl).MutableState)
 	mock.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry())
-	mock.EXPECT().UpdateRegistry().Return(update.NewRegistry())
 	release(errors.New("some random error message"))
 
 	// since last time, the release function receive a non-nil error
@@ -235,7 +234,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	s.Nil(ctx.(*workflow.ContextImpl).MutableState)
@@ -270,7 +269,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 				WorkflowId: workflowId,
 				RunId:      runID,
 			},
-			workflow.CallerTypeAPI,
+			workflow.LockPriorityHigh,
 		)
 		s.Nil(err)
 		// since each time the is reset to nil
@@ -279,7 +278,6 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 		// all we need is a fake MutableState
 		mock := workflow.NewMockMutableState(s.controller)
 		mock.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry())
-		mock.EXPECT().UpdateRegistry().Return(update.NewRegistry())
 		ctx.(*workflow.ContextImpl).MutableState = mock
 		release(errors.New("some random error message"))
 	}
@@ -296,7 +294,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 			WorkflowId: workflowId,
 			RunId:      runID,
 		},
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
@@ -343,7 +341,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 					WorkflowId: workflowID,
 					RunId:      runID,
 				},
-				workflow.CallerTypeAPI,
+				workflow.LockPriorityHigh,
 			)
 			if err == nil {
 				break
@@ -364,4 +362,39 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 		go testFn(i, runIDs[i%runIDCount], &runIDRefCounter[i%runIDCount])
 	}
 	stopGroup.Wait()
+}
+
+func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
+	s.cache = NewCache(s.mockShard)
+
+	ctx := metrics.AddMetricsContext(context.Background())
+	_, currentRelease, err := s.cache.GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		tests.NamespaceID,
+		tests.WorkflowID,
+		workflow.LockPriorityHigh,
+	)
+	s.NoError(err)
+	defer currentRelease(nil)
+
+	latency1, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName())
+	s.True(ok)
+	s.NotZero(latency1)
+
+	_, release, err := s.cache.GetOrCreateWorkflowExecution(
+		ctx,
+		tests.NamespaceID,
+		commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		workflow.LockPriorityHigh,
+	)
+	s.Nil(err)
+	defer release(nil)
+
+	latency2, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName())
+	s.True(ok)
+	s.Greater(latency2, latency1)
+
 }

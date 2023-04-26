@@ -76,10 +76,10 @@ func (s *readerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 
-	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
+	s.executableInitializer = func(readerID int64, t tasks.Task) Executable {
 		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, metrics.NoopMetricsHandler)
 	}
-	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
+	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
 		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
@@ -94,7 +94,7 @@ func (s *readerSuite) TestStartLoadStop() {
 	r := NewRandomRange()
 	scopes := []Scope{NewScope(r, predicates.Universal[tasks.Task]())}
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
 		s.Equal(r, paginationRange)
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
@@ -253,10 +253,28 @@ func (s *readerSuite) TestShrinkSlices() {
 	}
 }
 
-func (s *readerSuite) TestThrottle() {
+func (s *readerSuite) TestNotify() {
+	reader := s.newTestReader([]Scope{}, nil, NoopReaderCompletionFn)
+
+	// pause will set the throttle timer, which notify is supposed to stop
+	reader.Pause(time.Hour)
+
+	reader.Lock()
+	s.NotNil(reader.throttleTimer)
+	reader.Unlock()
+
+	reader.Notify()
+	<-reader.notifyCh
+
+	reader.Lock()
+	s.Nil(reader.throttleTimer)
+	reader.Unlock()
+}
+
+func (s *readerSuite) TestPause() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -294,7 +312,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_Throttled() {
 	scopes := NewRandomScopes(1)
 
 	completionFnCalled := false
-	reader := s.newTestReader(scopes, nil, func(_ int32) { completionFnCalled = true })
+	reader := s.newTestReader(scopes, nil, func(_ int64) { completionFnCalled = true })
 	reader.Pause(100 * time.Millisecond)
 
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
@@ -308,7 +326,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 	scopes := NewRandomScopes(1)
 
 	completionFnCalled := false
-	reader := s.newTestReader(scopes, nil, func(_ int32) { completionFnCalled = true })
+	reader := s.newTestReader(scopes, nil, func(_ int64) { completionFnCalled = true })
 
 	s.monitor.SetSlicePendingTaskCount(
 		reader.slices.Front().Value.(Slice),
@@ -323,7 +341,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			result := make([]tasks.Task, 0, 100)
 			for i := 0; i != 100; i++ {
@@ -338,7 +356,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	}
 
 	completionFnCalled := false
-	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int32) { completionFnCalled = true })
+	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int64) { completionFnCalled = true })
 	mockTimeSource := clock.NewEventTimeSource()
 	mockTimeSource.Update(scopes[0].Range.ExclusiveMax.FireTime)
 	reader.timeSource = mockTimeSource
@@ -360,7 +378,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 	scopes := NewRandomScopes(2)
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -370,7 +388,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 	}
 
 	completionFnCalled := false
-	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int32) { completionFnCalled = true })
+	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int64) { completionFnCalled = true })
 	mockTimeSource := clock.NewEventTimeSource()
 	mockTimeSource.Update(scopes[0].Range.ExclusiveMax.FireTime)
 	reader.timeSource = mockTimeSource
@@ -392,7 +410,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -402,7 +420,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 	}
 
 	completionFnCalled := false
-	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int32) { completionFnCalled = true })
+	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int64) { completionFnCalled = true })
 	mockTimeSource := clock.NewEventTimeSource()
 	mockTimeSource.Update(scopes[0].Range.ExclusiveMax.FireTime)
 	reader.timeSource = mockTimeSource

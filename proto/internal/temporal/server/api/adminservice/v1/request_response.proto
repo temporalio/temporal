@@ -304,6 +304,7 @@ message GetDLQMessagesResponse {
     temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
     repeated temporal.server.api.replication.v1.ReplicationTask replication_tasks = 2;
     bytes next_page_token = 3;
+    repeated temporal.server.api.replication.v1.ReplicationTaskInfo replication_tasks_info = 4;
 }
 
 message PurgeDLQMessagesRequest {
@@ -374,4 +375,16 @@ message DeleteWorkflowExecutionRequest {
 
 message DeleteWorkflowExecutionResponse {
     repeated string warnings = 1;
+}
+
+message StreamWorkflowReplicationMessagesRequest {
+    oneof attributes {
+        temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 1;
+    }
+}
+
+message StreamWorkflowReplicationMessagesResponse {
+    oneof attributes {
+        temporal.server.api.replication.v1.WorkflowReplicationMessages messages = 1;
+    }
 }

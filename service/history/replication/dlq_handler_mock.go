@@ -60,13 +60,14 @@ func (m *MockDLQHandler) EXPECT() *MockDLQHandlerMockRecorder {
 }
 
 // GetMessages mocks base method.
-func (m *MockDLQHandler) GetMessages(ctx context.Context, sourceCluster string, lastMessageID int64, pageSize int, pageToken []byte) ([]*repication.ReplicationTask, []byte, error) {
+func (m *MockDLQHandler) GetMessages(ctx context.Context, sourceCluster string, lastMessageID int64, pageSize int, pageToken []byte) ([]*repication.ReplicationTask, []*repication.ReplicationTaskInfo, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMessages", ctx, sourceCluster, lastMessageID, pageSize, pageToken)
 	ret0, _ := ret[0].([]*repication.ReplicationTask)
-	ret1, _ := ret[1].([]byte)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret1, _ := ret[1].([]*repication.ReplicationTaskInfo)
+	ret2, _ := ret[2].([]byte)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
 }
 
 // GetMessages indicates an expected call of GetMessages.

@@ -35,10 +35,14 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -55,7 +59,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -95,10 +98,27 @@ type (
 		logger log.Logger,
 	) resetter
 
+	EventBlobs struct {
+		CurrentRunEvents commonpb.DataBlob
+		NewRunEvents     *commonpb.DataBlob
+	}
+
 	HistoryReplicator interface {
 		ApplyEvents(
 			ctx context.Context,
 			request *historyservice.ReplicateEventsV2Request,
+		) error
+		// ApplyEventBlobs is the batch version of ApplyEvents
+		// NOTE:
+		//  1. all history events should have the same version
+		//  2. all history events should share the same version history
+		ApplyEventBlobs(
+			ctx context.Context,
+			workflowKey definition.WorkflowKey,
+			baseExecutionInfo *workflowpb.BaseExecutionInfo,
+			versionHistoryItems []*historyspb.VersionHistoryItem,
+			events [][]*historypb.HistoryEvent,
+			newEvents []*historypb.HistoryEvent,
 		) error
 		ApplyWorkflowState(
 			ctx context.Context,
@@ -212,11 +232,9 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
 
-	startTime := r.shard.GetTimeSource().Now().UTC()
-	task, err := newReplicationTask(
+	task, err := newReplicationTaskFromRequest(
 		r.clusterMetadata,
 		r.historySerializer,
-		startTime,
 		r.logger,
 		request,
 	)
@@ -224,7 +242,31 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 		return err
 	}
 
-	return r.applyEvents(ctx, task)
+	return r.doApplyEvents(ctx, task)
+}
+
+func (r *HistoryReplicatorImpl) ApplyEventBlobs(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	baseExecutionInfo *workflowpb.BaseExecutionInfo,
+	versionHistoryItems []*historyspb.VersionHistoryItem,
+	eventsSlice [][]*historypb.HistoryEvent,
+	newEvents []*historypb.HistoryEvent,
+) error {
+	task, err := newReplicationTaskFromBatch(
+		r.clusterMetadata,
+		r.logger,
+		workflowKey,
+		baseExecutionInfo,
+		versionHistoryItems,
+		eventsSlice,
+		newEvents,
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.doApplyEvents(ctx, task)
 }
 
 func (r *HistoryReplicatorImpl) ApplyWorkflowState(
@@ -247,7 +289,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		workflow.CallerTypeTask,
+		workflow.LockPriorityLow,
 	)
 	if err != nil {
 		return err
@@ -271,19 +313,22 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 	}
 
 	// The following sanitizes the branch token from the source cluster to this target cluster by re-initializing it.
-	historyBranchResp, err := r.shard.GetExecutionManager().ParseHistoryBranchInfo(ctx,
-		&persistence.ParseHistoryBranchInfoRequest{
-			BranchToken: currentVersionHistory.GetBranchToken(),
-		})
+
+	branchInfo, err := r.shard.GetExecutionManager().GetHistoryBranchUtil().ParseHistoryBranchInfo(
+		currentVersionHistory.GetBranchToken(),
+	)
 	if err != nil {
 		return err
 	}
-	newHistoryBranchResp, err := r.shard.GetExecutionManager().NewHistoryBranch(ctx,
-		&persistence.NewHistoryBranchRequest{
-			TreeID:    historyBranchResp.BranchInfo.GetTreeId(),
-			BranchID:  &historyBranchResp.BranchInfo.BranchId,
-			Ancestors: historyBranchResp.BranchInfo.Ancestors,
-		})
+	newHistoryBranchToken, err := r.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+		request.NamespaceId,
+		branchInfo.GetTreeId(),
+		&branchInfo.BranchId,
+		branchInfo.Ancestors,
+		nil,
+		nil,
+		nil,
+	)
 	if err != nil {
 		return err
 	}
@@ -296,7 +341,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		rid,
 		lastEventItem.GetEventId(),
 		lastEventItem.GetVersion(),
-		newHistoryBranchResp.BranchToken,
+		newHistoryBranchToken,
 	)
 	if err != nil {
 		return err
@@ -320,7 +365,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 
-	err = mutableState.SetCurrentBranchToken(newHistoryBranchResp.BranchToken)
+	err = mutableState.SetCurrentBranchToken(newHistoryBranchToken)
 	if err != nil {
 		return err
 	}
@@ -344,7 +389,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 	)
 }
 
-func (r *HistoryReplicatorImpl) applyEvents(
+func (r *HistoryReplicatorImpl) doApplyEvents(
 	ctx context.Context,
 	task replicationTask,
 ) (retError error) {
@@ -353,7 +398,7 @@ func (r *HistoryReplicatorImpl) applyEvents(
 		ctx,
 		task.getNamespaceID(),
 		*task.getExecution(),
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
@@ -662,9 +707,20 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 		return err
 	}
 
+	eventsSlice := make([]*persistence.WorkflowEvents, len(task.getEvents()))
+	for i, events := range task.getEvents() {
+		eventsSlice[i] = &persistence.WorkflowEvents{
+			NamespaceID: task.getNamespaceID().String(),
+			WorkflowID:  task.getExecution().GetWorkflowId(),
+			RunID:       task.getExecution().GetRunId(),
+			BranchToken: versionHistory.GetBranchToken(),
+			PrevTxnID:   0, // TODO @wxing1292 events chaining will not work for backfill case
+			TxnID:       transactionID,
+			Events:      events,
+		}
+	}
 	err = r.transactionMgr.backfillWorkflow(
 		ctx,
-		task.getEventTime(),
 		NewWorkflow(
 			ctx,
 			r.namespaceRegistry,
@@ -673,15 +729,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 			mutableState,
 			releaseFn,
 		),
-		&persistence.WorkflowEvents{
-			NamespaceID: task.getNamespaceID().String(),
-			WorkflowID:  task.getExecution().GetWorkflowId(),
-			RunID:       task.getExecution().GetRunId(),
-			BranchToken: versionHistory.GetBranchToken(),
-			PrevTxnID:   0, // TODO @wxing1292 events chaining will not work for backfill case
-			TxnID:       transactionID,
-			Events:      task.getEvents(),
-		},
+		eventsSlice...,
 	)
 	if err != nil {
 		task.getLogger().Error(
@@ -714,12 +762,11 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithContinu
 	releaseFn(nil)
 
 	// step 2
-	startTime := time.Now().UTC()
-	task, newTask, err := task.splitTask(startTime)
+	task, newTask, err := task.splitTask()
 	if err != nil {
 		return err
 	}
-	if err := r.applyEvents(ctx, newTask); err != nil {
+	if err := r.doApplyEvents(ctx, newTask); err != nil {
 		newTask.getLogger().Error(
 			"nDCHistoryReplicator unable to create new workflow when applyNonStartEventsToNonCurrentBranchWithContinueAsNew",
 			tag.Error(err),
@@ -728,7 +775,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithContinu
 	}
 
 	// step 3
-	if err := r.applyEvents(ctx, task); err != nil {
+	if err := r.doApplyEvents(ctx, task); err != nil {
 		newTask.getLogger().Error(
 			"nDCHistoryReplicator unable to create target workflow when applyNonStartEventsToNonCurrentBranchWithContinueAsNew",
 			tag.Error(err),
@@ -746,25 +793,32 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 
 	// for non reset workflow execution replication task, just do re-replication
 	if !task.isWorkflowReset() {
+		startEventId := common.EmptyEventID
+		startEventVersion := common.EmptyVersion
+		if task.getBaseWorkflowInfo() != nil {
+			startEventId = task.getBaseWorkflowInfo().LowestCommonAncestorEventId
+			startEventVersion = task.getBaseWorkflowInfo().LowestCommonAncestorEventVersion
+		}
 		firstEvent := task.getFirstEvent()
+		endEventId := firstEvent.GetEventId()
+		endEventVersion := firstEvent.GetVersion()
 		return nil, serviceerrors.NewRetryReplication(
 			mutableStateMissingMessage,
 			task.getNamespaceID().String(),
 			task.getWorkflowID(),
 			task.getRunID(),
-			common.EmptyEventID,
-			common.EmptyVersion,
-			firstEvent.GetEventId(),
-			firstEvent.GetVersion(),
+			startEventId,
+			startEventVersion,
+			endEventId,
+			endEventVersion,
 		)
 	}
 
-	workflowTaskFailedEvent := task.getFirstEvent()
-	attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
-	baseRunID := attr.GetBaseRunId()
-	baseEventID := workflowTaskFailedEvent.GetEventId() - 1
-	baseEventVersion := attr.GetForkEventVersion()
-	newRunID := attr.GetNewRunId()
+	baseWorkflowInfo := task.getBaseWorkflowInfo()
+	baseRunID := baseWorkflowInfo.RunId
+	baseEventID := baseWorkflowInfo.LowestCommonAncestorEventId
+	baseEventVersion := baseWorkflowInfo.LowestCommonAncestorEventVersion
+	newRunID := newContext.GetWorkflowKey().RunID
 
 	workflowResetter := r.newResetter(
 		task.getNamespaceID(),
@@ -896,16 +950,11 @@ func (r *HistoryReplicatorImpl) backfillHistory(
 		lastEventID,
 		lastEventVersion),
 	)
-	resp, err := r.executionMgr.ParseHistoryBranchInfo(
-		ctx,
-		&persistence.ParseHistoryBranchInfoRequest{
-			BranchToken: branchToken,
-		},
-	)
+	historyBranchUtil := r.executionMgr.GetHistoryBranchUtil()
+	historyBranch, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken)
 	if err != nil {
 		return nil, common.EmptyEventTaskID, err
 	}
-	historyBranch := resp.BranchInfo
 
 	prevTxnID := common.EmptyEventTaskID
 	var lastHistoryBatch *commonpb.DataBlob
@@ -949,16 +998,14 @@ BackfillLoop:
 			}
 		}
 
-		filteredHistoryBranch, err := r.executionMgr.UpdateHistoryBranchInfo(
-			ctx,
-			&persistence.UpdateHistoryBranchInfoRequest{
-				BranchToken: branchToken,
-				BranchInfo: &persistencespb.HistoryBranch{
-					TreeId:    historyBranch.GetTreeId(),
-					BranchId:  branchID,
-					Ancestors: ancestors,
-				},
-			})
+		filteredHistoryBranch, err := historyBranchUtil.UpdateHistoryBranchInfo(
+			branchToken,
+			&persistencespb.HistoryBranch{
+				TreeId:    historyBranch.GetTreeId(),
+				BranchId:  branchID,
+				Ancestors: ancestors,
+			},
+		)
 		if err != nil {
 			return nil, common.EmptyEventTaskID, err
 		}
@@ -969,7 +1016,7 @@ BackfillLoop:
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shard.GetShardID(),
 			IsNewBranch:       prevBranchID != branchID,
-			BranchToken:       filteredHistoryBranch.BranchToken,
+			BranchToken:       filteredHistoryBranch,
 			History:           historyBlob.rawHistory,
 			PrevTransactionID: prevTxnID,
 			TransactionID:     txnID,

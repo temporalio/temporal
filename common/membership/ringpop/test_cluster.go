@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+package ringpop
 
 import (
 	"context"
@@ -34,26 +34,28 @@ import (
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/tchannel-go"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 )
 
-// TestRingpopCluster is a type that represents a test ringpop cluster
-type TestRingpopCluster struct {
+// testCluster is a type that represents a test ringpop cluster
+type testCluster struct {
 	hostUUIDs    []string
 	hostAddrs    []string
-	hostInfoList []HostInfo
-	rings        []Monitor
+	hostInfoList []membership.HostInfo
+	rings        []*monitor
 	channels     []*tchannel.Channel
 	seedNode     string
 }
 
-// NewTestRingpopCluster creates a new test cluster with the given name and cluster size
+// newTestCluster creates a new test cluster with the given name and cluster size
 // All the nodes in the test cluster will register themselves in Ringpop
 // with the specified name. This is only intended for unit tests.
-func NewTestRingpopCluster(
+func newTestCluster(
 	t *testing.T,
 	ringPopApp string,
 	size int,
@@ -61,7 +63,7 @@ func NewTestRingpopCluster(
 	seed string,
 	serviceName primitives.ServiceName,
 	broadcastAddress string,
-) *TestRingpopCluster {
+) *testCluster {
 	logger := log.NewTestLogger()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -70,11 +72,11 @@ func NewTestRingpopCluster(
 	mockMgr.EXPECT().PruneClusterMembership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	mockMgr.EXPECT().UpsertClusterMembership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
-	cluster := &TestRingpopCluster{
+	cluster := &testCluster{
 		hostUUIDs:    make([]string, size),
 		hostAddrs:    make([]string, size),
-		hostInfoList: make([]HostInfo, size),
-		rings:        make([]Monitor, size),
+		hostInfoList: make([]membership.HostInfo, size),
+		rings:        make([]*monitor, size),
 		channels:     make([]*tchannel.Channel, size),
 		seedNode:     seed,
 	}
@@ -93,12 +95,12 @@ func NewTestRingpopCluster(
 			return nil
 		}
 		cluster.hostUUIDs[i] = uuid.New()
-		cluster.hostAddrs[i], err = BuildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
+		cluster.hostAddrs[i], err = buildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
 		if err != nil {
 			logger.Error("Failed to build broadcast hostport", tag.Error(err))
 			return nil
 		}
-		cluster.hostInfoList[i] = HostInfo{addr: cluster.hostAddrs[i]}
+		cluster.hostInfoList[i] = newHostInfo(cluster.hostAddrs[i], nil)
 	}
 
 	// if seed node is already supplied, use it; if not, set it
@@ -107,7 +109,7 @@ func NewTestRingpopCluster(
 	}
 	logger.Info("seedNode", tag.Name(cluster.seedNode))
 
-	seedAddress, seedPort, err := SplitHostPortTyped(cluster.seedNode)
+	seedAddress, seedPort, err := splitHostPortTyped(cluster.seedNode)
 	if err != nil {
 		logger.Error("unable to split host port", tag.Error(err))
 		return nil
@@ -145,7 +147,7 @@ func NewTestRingpopCluster(
 
 	for i := 0; i < size; i++ {
 		resolver := func() (string, error) {
-			return BuildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
+			return buildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
 		}
 
 		ringPop, err := ringpop.New(ringPopApp, ringpop.Channel(cluster.channels[i]), ringpop.AddressResolverFunc(resolver))
@@ -153,11 +155,11 @@ func NewTestRingpopCluster(
 			logger.Error("failed to create ringpop instance", tag.Error(err))
 			return nil
 		}
-		rpWrapper := NewRingPop(ringPop, time.Second*2, logger)
-		_, port, _ := SplitHostPortTyped(cluster.hostAddrs[i])
-		cluster.rings[i] = NewRingpopMonitor(
+		rpWrapper := newService(ringPop, time.Second*2, logger)
+		_, port, _ := splitHostPortTyped(cluster.hostAddrs[i])
+		cluster.rings[i] = newMonitor(
 			serviceName,
-			map[primitives.ServiceName]int{serviceName: int(port)}, // use same port for "grpc" port
+			config.ServicePortMap{serviceName: int(port)}, // use same port for "grpc" port
 			rpWrapper,
 			logger,
 			mockMgr,
@@ -169,14 +171,14 @@ func NewTestRingpopCluster(
 }
 
 // GetSeedNode returns the seedNode for this cluster
-func (c *TestRingpopCluster) GetSeedNode() string {
+func (c *testCluster) GetSeedNode() string {
 	return c.seedNode
 }
 
 // KillHost kills the given host within the cluster
-func (c *TestRingpopCluster) KillHost(uuid string) {
+func (c *testCluster) KillHost(hostID string) {
 	for i := 0; i < len(c.hostUUIDs); i++ {
-		if c.hostUUIDs[i] == uuid {
+		if c.hostUUIDs[i] == hostID {
 			c.rings[i].Stop()
 			c.channels[i].Close()
 			c.rings[i] = nil
@@ -186,7 +188,7 @@ func (c *TestRingpopCluster) KillHost(uuid string) {
 }
 
 // Stop stops the cluster
-func (c *TestRingpopCluster) Stop() {
+func (c *testCluster) Stop() {
 	for i := 0; i < len(c.hostAddrs); i++ {
 		if c.rings[i] != nil {
 			c.rings[i].Stop()
@@ -196,22 +198,22 @@ func (c *TestRingpopCluster) Stop() {
 }
 
 // GetHostInfoList returns the list of all hosts within the cluster
-func (c *TestRingpopCluster) GetHostInfoList() []HostInfo {
+func (c *testCluster) GetHostInfoList() []membership.HostInfo {
 	return c.hostInfoList
 }
 
 // GetHostAddrs returns all host addrs within the cluster
-func (c *TestRingpopCluster) GetHostAddrs() []string {
+func (c *testCluster) GetHostAddrs() []string {
 	return c.hostAddrs
 }
 
 // FindHostByAddr returns the host info corresponding to
 // the given addr, if it exists
-func (c *TestRingpopCluster) FindHostByAddr(addr string) (HostInfo, bool) {
+func (c *testCluster) FindHostByAddr(addr string) (membership.HostInfo, bool) {
 	for _, hi := range c.hostInfoList {
-		if hi.addr == addr {
+		if hi.GetAddress() == addr {
 			return hi, true
 		}
 	}
-	return HostInfo{}, false
+	return nil, false
 }

@@ -650,7 +650,7 @@ func executeWithRetry(
 	ctx context.Context,
 	operation func(context.Context) error,
 ) error {
-	err := backoff.ThrottleRetryContext(ctx, operation, persistenceOperationRetryPolicy, func(err error) bool {
+	return backoff.ThrottleRetryContext(ctx, operation, persistenceOperationRetryPolicy, func(err error) bool {
 		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 			return false
 		}
@@ -659,7 +659,6 @@ func executeWithRetry(
 		}
 		return common.IsPersistenceTransientError(err)
 	})
-	return err
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {

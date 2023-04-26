@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/common/searchattribute"
@@ -508,6 +509,73 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	ei, err = convertToExecutionInfo(s.visibilityRecords[1], searchattribute.TestNameTypeMap)
 	s.NoError(err)
 	s.Equal(ei, executions[1])
+}
+
+func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_InvalidNamespace() {
+	URI := s.testArchivalURI
+
+	visibilityArchiver := s.newTestVisibilityArchiver()
+	mockParser := NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		earliestCloseTime: time.Unix(0, 10),
+		latestCloseTime:   time.Unix(0, 10001),
+		status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+	}, nil).AnyTimes()
+	visibilityArchiver.queryParser = mockParser
+	req := &archiver.QueryVisibilityRequest{
+		NamespaceID:   "",
+		PageSize:      1,
+		NextPageToken: nil,
+		Query:         "",
+	}
+	_, err := visibilityArchiver.Query(context.Background(), URI, req, searchattribute.TestNameTypeMap)
+
+	var svcErr *serviceerror.InvalidArgument
+
+	s.ErrorAs(err, &svcErr)
+}
+
+func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_ZeroPageSize() {
+	visibilityArchiver := s.newTestVisibilityArchiver()
+
+	req := &archiver.QueryVisibilityRequest{
+		NamespaceID:   testNamespaceID,
+		PageSize:      0,
+		NextPageToken: nil,
+		Query:         "",
+	}
+	_, err := visibilityArchiver.Query(context.Background(), s.testArchivalURI, req, searchattribute.TestNameTypeMap)
+
+	var svcErr *serviceerror.InvalidArgument
+
+	s.ErrorAs(err, &svcErr)
+}
+
+func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
+	dir := testutils.MkdirTemp(s.T(), "", "TestQuery_EmptyQuery_Pagination")
+
+	visibilityArchiver := s.newTestVisibilityArchiver()
+	URI, err := archiver.NewURI("file://" + dir)
+	s.NoError(err)
+	for _, record := range s.visibilityRecords {
+		err := visibilityArchiver.Archive(context.Background(), URI, record)
+		s.NoError(err)
+	}
+
+	request := &archiver.QueryVisibilityRequest{
+		NamespaceID: testNamespaceID,
+		PageSize:    1,
+		Query:       "",
+	}
+	var executions []*workflowpb.WorkflowExecutionInfo
+	for len(executions) == 0 || request.NextPageToken != nil {
+		response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
+		s.NoError(err)
+		s.NotNil(response)
+		executions = append(executions, response.Executions...)
+		request.NextPageToken = response.NextPageToken
+	}
+	s.Len(executions, 4)
 }
 
 func (s *visibilityArchiverSuite) newTestVisibilityArchiver() *visibilityArchiver {

@@ -29,11 +29,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gocql/gocql"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -44,7 +45,7 @@ type (
 		datacenter string
 		keyspace   string
 		timeout    time.Duration
-		session    gocql.Session
+		session    commongocql.Session
 		logger     log.Logger
 	}
 	// CQLClientConfig contains the configuration for cql client
@@ -108,7 +109,12 @@ func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 	cassandraConfig.ConnectTimeout = time.Duration(cfg.Timeout) * time.Second
 
 	logger.Info("Validating connection to cassandra cluster.")
-	session, err := gocql.NewSession(*cassandraConfig, resolver.NewNoopResolver(), logger)
+	session, err := commongocql.NewSession(
+		func() (*gocql.ClusterConfig, error) {
+			return commongocql.NewCassandraCluster(*cassandraConfig, resolver.NewNoopResolver())
+		},
+		logger,
+	)
 	if err != nil {
 		logger.Error("Connection validation failed.", tag.Error(err))
 		return nil, err

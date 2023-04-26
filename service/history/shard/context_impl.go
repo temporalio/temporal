@@ -30,8 +30,10 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -87,12 +89,17 @@ const (
 	pendingMaxReplicationTaskID = math.MaxInt64
 )
 
+var (
+	shardContextSequenceID int64 = 0
+)
+
 type (
 	contextState int32
 
 	ContextImpl struct {
 		// These fields are constant:
 		shardID             int32
+		owner               string
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
@@ -186,6 +193,11 @@ func (s *ContextImpl) String() string {
 func (s *ContextImpl) GetShardID() int32 {
 	// constant from initialization, no need for locks
 	return s.shardID
+}
+
+func (s *ContextImpl) GetOwner() string {
+	// constant from initialization, no need for locks
+	return s.owner
 }
 
 func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
@@ -426,7 +438,7 @@ func (s *ContextImpl) GetQueueState(
 	return queueState, ok
 }
 
-func (s *ContextImpl) UpdateQueueState(
+func (s *ContextImpl) SetQueueState(
 	category tasks.Category,
 	state *persistencespb.QueueState,
 ) error {
@@ -564,7 +576,14 @@ func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFr
 	}
 
 	s.wUnlock()
-	s.notifyReplicationQueueProcessor(maxReplicationTaskID)
+
+	if maxReplicationTaskID != pendingMaxReplicationTaskID {
+		// notification is for making sure replication queue is able to
+		// ack to the recorded taskID. If the taskID is pending, then
+		// don't notify. Otherwise, replication queue will think (for a period of time)
+		// that the max generated taskID is pendingMaxReplicationTaskID which is MaxInt64.
+		s.notifyReplicationQueueProcessor(maxReplicationTaskID)
+	}
 }
 
 func (s *ContextImpl) AddTasks(
@@ -1740,8 +1759,8 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	// shardInfo is a fresh value, so we don't really need to copy, but
 	// copyShardInfo also ensures that all maps are non-nil
 	updatedShardInfo := copyShardInfo(shardInfo)
-	*ownershipChanged = shardInfo.Owner != s.hostInfoProvider.HostInfo().Identity()
-	updatedShardInfo.Owner = s.hostInfoProvider.HostInfo().Identity()
+	*ownershipChanged = shardInfo.Owner != s.owner
+	updatedShardInfo.Owner = s.owner
 
 	// initialize the cluster current time to be the same as ack level
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
@@ -1985,12 +2004,14 @@ func newContext(
 	hostInfoProvider membership.HostInfoProvider,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
+	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
+		owner:                   fmt.Sprintf("%s-%v-%v", hostIdentity, sequenceID, uuid.New()),
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,

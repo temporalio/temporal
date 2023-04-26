@@ -17,6 +17,7 @@ CREATE TABLE executions_visibility (
   status              INTEGER       NOT NULL,  -- enum WorkflowExecutionStatus {RUNNING, COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
   close_time          TIMESTAMP     NULL,
   history_length      BIGINT        NULL,
+  history_size_bytes  BIGINT        NULL,
   memo                BYTEA         NULL,
   encoding            VARCHAR(64)   NOT NULL,
   task_queue          VARCHAR(255)  NOT NULL DEFAULT '',
@@ -69,13 +70,14 @@ CREATE TABLE executions_visibility (
   PRIMARY KEY  (namespace_id, run_id)
 );
 
-CREATE INDEX default_idx        ON executions_visibility (namespace_id, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
-CREATE INDEX by_execution_time  ON executions_visibility (namespace_id, execution_time,     (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
-CREATE INDEX by_workflow_id     ON executions_visibility (namespace_id, workflow_id,        (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
-CREATE INDEX by_workflow_type   ON executions_visibility (namespace_id, workflow_type_name, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
-CREATE INDEX by_status          ON executions_visibility (namespace_id, status,             (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
-CREATE INDEX by_history_length  ON executions_visibility (namespace_id, history_length,     (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
-CREATE INDEX by_task_queue      ON executions_visibility (namespace_id, task_queue,         (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX default_idx            ON executions_visibility (namespace_id, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_execution_time      ON executions_visibility (namespace_id, execution_time,     (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_workflow_id         ON executions_visibility (namespace_id, workflow_id,        (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_workflow_type       ON executions_visibility (namespace_id, workflow_type_name, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_status              ON executions_visibility (namespace_id, status,             (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_history_length      ON executions_visibility (namespace_id, history_length,     (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_history_size_bytes  ON executions_visibility (namespace_id, history_size_bytes, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
+CREATE INDEX by_task_queue          ON executions_visibility (namespace_id, task_queue,         (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 
 -- Indexes for the predefined search attributes
 CREATE INDEX by_temporal_change_version       ON executions_visibility USING GIN (namespace_id, TemporalChangeVersion jsonb_path_ops);

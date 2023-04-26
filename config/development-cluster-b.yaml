@@ -4,14 +4,13 @@ log:
 
 persistence:
   defaultStore: cass-default
-  visibilityStore:
-  advancedVisibilityStore: es-visibility
-  numHistoryShards: 4
+  visibilityStore: es-visibility
+  numHistoryShards: 32
   datastores:
     cass-default:
       cassandra:
         hosts: "127.0.0.1"
-        keyspace: "temporal_standby"
+        keyspace: "temporal_cluster_b"
     es-visibility:
       elasticsearch:
         version: "v7"
@@ -20,7 +19,7 @@ persistence:
           scheme: "http"
           host: "127.0.0.1:9200"
         indices:
-          visibility: temporal_visibility_v1_dev_standby
+          visibility: temporal_visibility_v1_dev_cluster_b
           # secondary_visibility: temporal_visibility_v2_dev
         closeIdleConnectionsInterval: 15s
 
@@ -33,9 +32,9 @@ global:
     prometheus:
 #      # specify framework to use new approach for initializing metrics and/or use opentelemetry
 #      framework: "opentelemetry"
-      framework: "tally"
+      framework: "opentelemetry"
       timerType: "histogram"
-      listenAddress: "127.0.0.1:8000"
+      listenAddress: "127.0.0.1:8001"
 
 services:
   frontend:
@@ -64,16 +63,16 @@ services:
 
 clusterMetadata:
   enableGlobalNamespace: true
-  failoverVersionIncrement: 10
-  masterClusterName: "active"
-  currentClusterName: "standby"
+  failoverVersionIncrement: 100
+  masterClusterName: "cluster-a"
+  currentClusterName: "cluster-b"
   clusterInformation:
-    active:
+    cluster-a:
       enabled: true
       initialFailoverVersion: 1
       rpcName: "frontend"
       rpcAddress: "localhost:7233"
-    standby:
+    cluster-b:
       enabled: true
       initialFailoverVersion: 2
       rpcName: "frontend"
