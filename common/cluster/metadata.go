@@ -29,6 +29,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -158,8 +159,8 @@ func NewMetadata(
 		panic("Master cluster name is empty")
 	} else if len(currentClusterName) == 0 {
 		panic("Current cluster name is empty")
-	} else if failoverVersionIncrement == 0 {
-		panic("Version increment is 0")
+	} else if failoverVersionIncrement == 0 || failoverVersionIncrement > math.MaxInt32 {
+		panic("Version increment <= 0 or > 2147483647")
 	}
 
 	versionToClusterName := updateVersionToClusterName(clusterInfo, failoverVersionIncrement)

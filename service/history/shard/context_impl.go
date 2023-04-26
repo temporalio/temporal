@@ -1949,7 +1949,7 @@ func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInf
 		NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
 		ReplicationDlqAckLevel:       maps.Clone(shardInfo.ReplicationDlqAckLevel),
 		UpdateTime:                   shardInfo.UpdateTime,
-		QueueAckLevels:               maps.Clone(queueAckLevels),
+		QueueAckLevels:               queueAckLevels,
 		QueueStates:                  queueStates,
 	}
 }
