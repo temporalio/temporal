@@ -236,6 +236,9 @@ func trimShardInfo(
 				delete(shardInfo.QueueAckLevels[tasks.CategoryIDReplication].ClusterAckLevel, clusterName)
 			}
 		}
+		if len(shardInfo.QueueAckLevels[tasks.CategoryIDReplication].ClusterAckLevel) == 0 {
+			delete(shardInfo.QueueAckLevels, tasks.CategoryIDReplication)
+		}
 	}
 
 	if shardInfo.QueueStates != nil && shardInfo.QueueStates[tasks.CategoryIDReplication] != nil {
@@ -245,6 +248,9 @@ func trimShardInfo(
 			if !found || !clusterInfo.Enabled {
 				delete(shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates, readerID)
 			}
+		}
+		if len(shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates) == 0 {
+			delete(shardInfo.QueueStates, tasks.CategoryIDReplication)
 		}
 	}
 	return shardInfo
