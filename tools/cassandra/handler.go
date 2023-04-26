@@ -25,7 +25,7 @@
 package cassandra
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/urfave/cli"
@@ -97,7 +97,7 @@ func createKeyspace(cli *cli.Context, logger log.Logger) error {
 	}
 	keyspace := cli.String(schema.CLIOptKeyspace)
 	if keyspace == "" {
-		err := errors.New("missing " + flag(schema.CLIOptKeyspace) + " argument ")
+		err := fmt.Errorf("missing %s argument", flag(schema.CLIOptKeyspace))
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
@@ -117,7 +117,7 @@ func dropKeyspace(cli *cli.Context, logger log.Logger) error {
 	}
 	keyspace := cli.String(schema.CLIOptKeyspace)
 	if keyspace == "" {
-		err := errors.New("missing " + flag(schema.CLIOptKeyspace) + " argument ")
+		err := fmt.Errorf("missing %s argument", flag(schema.CLIOptKeyspace))
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
