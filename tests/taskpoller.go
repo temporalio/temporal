@@ -452,6 +452,7 @@ retry:
 				Details:   payloads.EncodeString("details"),
 				Identity:  p.Identity,
 			})
+			// todo: we are losing the err2 here
 			return err
 		}
 
@@ -462,6 +463,7 @@ retry:
 				Failure:   newApplicationFailure(err2, false, nil),
 				Identity:  p.Identity,
 			})
+			// todo: we might be losing (hiding) the err2 here
 			return err
 		}
 

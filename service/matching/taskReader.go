@@ -140,6 +140,7 @@ dispatchLoop:
 					tr.tlMgr.logger.Info("Taskqueue manager context is cancelled, shutting down")
 					return err
 				}
+				// todo: if err is != nil and != context.Canceled, we don't handle it here
 				// this should never happen unless there is a bug - don't drop the task
 				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
 				tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))

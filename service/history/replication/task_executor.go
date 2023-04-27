@@ -202,6 +202,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 			// no-op
 		default:
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
+			// todo: resendErr is lost here
 			return err
 		}
 		// This might be extra cost if the workflow belongs to local shard.
@@ -287,6 +288,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 			// no-op
 		default:
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
+			// todo: resendErr is lost here
 			return err
 		}
 

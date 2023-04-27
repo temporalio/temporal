@@ -237,6 +237,7 @@ func (i *RedirectionInterceptor) handleRedirectAPIInvocation(
 				return err
 			}
 		}
+		// todo: check what return value is expected here
 		return err
 	})
 	return resp, err

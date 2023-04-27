@@ -57,6 +57,7 @@ func (s *Scavenger) completeTasks(
 			ExclusiveMaxTaskID: exclusiveMaxTaskID,
 			Limit:              limit,
 		})
+		// todo: it looks like it shadows the err variable from the outer scope
 		return err
 	})
 	return n, err
@@ -78,6 +79,7 @@ func (s *Scavenger) getTasks(
 			ExclusiveMaxTaskID: math.MaxInt64,
 			PageSize:           batchSize,
 		})
+		// todo: it looks like it shadows the err variable from the outer scope
 		return err
 	})
 	return resp, err
@@ -95,6 +97,7 @@ func (s *Scavenger) listTaskQueue(
 			PageSize:  pageSize,
 			PageToken: pageToken,
 		})
+		// todo: it looks like it shadows the err variable from the outer scope
 		return err
 	})
 	return resp, err

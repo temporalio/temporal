@@ -331,6 +331,7 @@ func (scse *sharedConnSpanExporter) Start(ctx context.Context) error {
 		var cc *grpc.ClientConn
 		cc, err = scse.dialer.Dial(ctx)
 		if err != nil {
+			// todo: check what return value is expected here
 			return
 		}
 		opts := append(scse.baseOpts, otlptracegrpc.WithGRPCConn(cc))
@@ -346,6 +347,7 @@ func (scme *sharedConnMetricExporter) Start(ctx context.Context) error {
 		var cc *grpc.ClientConn
 		cc, err = scme.dialer.Dial(ctx)
 		if err != nil {
+			// todo: check what return value is expected here
 			return
 		}
 		opts := append(scme.baseOpts, otlpmetricgrpc.WithGRPCConn(cc))

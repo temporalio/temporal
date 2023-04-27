@@ -231,6 +231,7 @@ func (e *executableImpl) Execute() (retErr error) {
 	priorityTaggedProvider.Counter(metrics.TaskRequests.GetMetricName()).Record(1)
 	priorityTaggedProvider.Timer(metrics.TaskScheduleLatency.GetMetricName()).Record(startTime.Sub(e.scheduledTime))
 
+	// todo: check why is this late error handling here
 	return err
 }
 

@@ -876,7 +876,8 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*historypb.Hi
 	}
 	s.True(resp.Size > 0)
 
-	return err
+       // todo: the error is always nil here
+	return nil
 }
 
 // persistence helper

@@ -133,6 +133,7 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 	case *serviceerrors.RetryReplication:
 		namespaceName, _, nsError := e.GetNamespaceInfo(e.NamespaceID)
 		if nsError != nil {
+			// todo: nsError is lost here
 			return err
 		}
 		ctx, cancel := newTaskContext(namespaceName)
@@ -143,6 +144,7 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 			e.sourceClusterName,
 			retryErr,
 		); resendErr != nil {
+			// todo: resendErr is lost here
 			return err
 		}
 		return e.Execute()

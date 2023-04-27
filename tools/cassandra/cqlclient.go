@@ -306,6 +306,7 @@ func (client *cqlClient) dropAllTablesTypes() error {
 		types = erroredTypes
 	}
 	if len(types) > 0 {
+		// todo: hard to read this error case
 		return err
 	}
 	return nil
