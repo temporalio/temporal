@@ -68,6 +68,7 @@ type ClaimMapperWithAuthInfoRequired interface {
 type noopClaimMapper struct{}
 
 var _ ClaimMapper = (*noopClaimMapper)(nil)
+var _ ClaimMapperWithAuthInfoRequired = (*noopClaimMapper)(nil)
 
 func NewNoopClaimMapper() ClaimMapper {
 	return &noopClaimMapper{}
