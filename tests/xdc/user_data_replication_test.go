@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -71,7 +72,7 @@ func (s *userDataReplicationTestSuite) TearDownSuite() {
 func (s *userDataReplicationTestSuite) TestUserDataIsReplicated() {
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "versioned"
-	client1 := s.cluster1.GetFrontendClient() // active
+	activeFrontendClient := s.cluster1.GetFrontendClient()
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
@@ -79,13 +80,16 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicated() {
 		ActiveClusterName:                clusterName[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
 	}
-	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
+	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
-	client2 := s.cluster2.GetFrontendClient() // standby
+	description, err := activeFrontendClient.DescribeNamespace(tests.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	s.Require().NoError(err)
 
-	_, err = client1.UpdateWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+	standbyMatchingClient := s.cluster2.GetMatchingClient()
+
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.1"},
@@ -93,7 +97,48 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicated() {
 	s.Require().NoError(err)
 
 	s.retry("passive has versioning data", 30, 500*time.Millisecond, func() bool {
-		response, err := client2.GetWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
+		response, err := standbyMatchingClient.GetWorkerBuildIdCompatibility(tests.NewContext(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
+			NamespaceId: description.GetNamespaceInfo().Id,
+			Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+				Namespace: namespace,
+				TaskQueue: taskQueue,
+			},
+		})
+		s.Require().NoError(err)
+		return len(response.GetResponse().GetMajorVersionSets()) == 1
+	})
+}
+
+func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
+	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
+	taskQueue := "versioned"
+	activeFrontendClient := s.cluster1.GetFrontendClient()
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         clusterReplicationConfig,
+		ActiveClusterName:                clusterName[0],
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
+	}
+	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
+	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
+
+	standbyFrontendClient := s.cluster2.GetFrontendClient()
+	s.cluster1.GetExecutionManager()
+
+	// Call matching directly in case frontend is configured to redirect API calls to the active cluster
+	_, err = standbyFrontendClient.UpdateWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.1"},
+	})
+	s.Require().NoError(err)
+
+	s.retry("active has versioning data", 30, 500*time.Millisecond, func() bool {
+		response, err := activeFrontendClient.GetWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: namespace,
 			TaskQueue: taskQueue,
 		})
