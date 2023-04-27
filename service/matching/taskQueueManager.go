@@ -502,7 +502,7 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, replicate boo
 		})
 		if err != nil {
 			c.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
-			return serviceerror.NewFailedPrecondition("Storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
+			return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
 		}
 	}
 	// We will have errored already if this was not the root workflow partition.
