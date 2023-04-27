@@ -523,6 +523,9 @@ func (c *temporalImpl) startHistory(
 		}
 
 		matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger)
+		if err != nil {
+			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
+		}
 
 		c.historyApps = append(c.historyApps, app)
 		c.historyClient = NewHistoryClient(historyConnection)
