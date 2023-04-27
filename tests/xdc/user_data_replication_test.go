@@ -69,7 +69,7 @@ func (s *userDataReplicationTestSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *userDataReplicationTestSuite) TestUserDataIsReplicated() {
+func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassive() {
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "versioned"
 	activeFrontendClient := s.cluster1.GetFrontendClient()
