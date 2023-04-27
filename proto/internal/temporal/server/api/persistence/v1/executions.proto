@@ -54,7 +54,7 @@ message ShardInfo {
     int32 stolen_since_renew = 6;
     google.protobuf.Timestamp update_time = 7 [(gogoproto.stdtime) = true];
     reserved 8;
-    int64 namespace_notification_version = 9;
+    reserved 9;
     reserved 10;
     reserved 11;
     reserved 12;

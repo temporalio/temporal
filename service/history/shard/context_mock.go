@@ -350,20 +350,6 @@ func (mr *MockContextMockRecorder) GetImmediateQueueExclusiveHighReadWatermark()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetImmediateQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockContext)(nil).GetImmediateQueueExclusiveHighReadWatermark))
 }
 
-// GetLastUpdatedTime mocks base method.
-func (m *MockContext) GetLastUpdatedTime() time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLastUpdatedTime")
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// GetLastUpdatedTime indicates an expected call of GetLastUpdatedTime.
-func (mr *MockContextMockRecorder) GetLastUpdatedTime() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastUpdatedTime", reflect.TypeOf((*MockContext)(nil).GetLastUpdatedTime))
-}
-
 // GetLogger mocks base method.
 func (m *MockContext) GetLogger() log.Logger {
 	m.ctrl.T.Helper()
@@ -376,20 +362,6 @@ func (m *MockContext) GetLogger() log.Logger {
 func (mr *MockContextMockRecorder) GetLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogger", reflect.TypeOf((*MockContext)(nil).GetLogger))
-}
-
-// GetMaxTaskIDForCurrentRangeID mocks base method.
-func (m *MockContext) GetMaxTaskIDForCurrentRangeID() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMaxTaskIDForCurrentRangeID")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetMaxTaskIDForCurrentRangeID indicates an expected call of GetMaxTaskIDForCurrentRangeID.
-func (mr *MockContextMockRecorder) GetMaxTaskIDForCurrentRangeID() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxTaskIDForCurrentRangeID", reflect.TypeOf((*MockContext)(nil).GetMaxTaskIDForCurrentRangeID))
 }
 
 // GetMetricsHandler mocks base method.
@@ -671,20 +643,6 @@ func (m *MockContext) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFr
 func (mr *MockContextMockRecorder) UpdateHandoverNamespace(ns, deletedFromDb interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespace", reflect.TypeOf((*MockContext)(nil).UpdateHandoverNamespace), ns, deletedFromDb)
-}
-
-// UpdateNamespaceNotificationVersion mocks base method.
-func (m *MockContext) UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNamespaceNotificationVersion", namespaceNotificationVersion)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateNamespaceNotificationVersion indicates an expected call of UpdateNamespaceNotificationVersion.
-func (mr *MockContextMockRecorder) UpdateNamespaceNotificationVersion(namespaceNotificationVersion interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespaceNotificationVersion", reflect.TypeOf((*MockContext)(nil).UpdateNamespaceNotificationVersion), namespaceNotificationVersion)
 }
 
 // UpdateRemoteClusterInfo mocks base method.

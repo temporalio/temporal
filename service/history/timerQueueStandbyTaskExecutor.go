@@ -420,17 +420,6 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 	)
 }
 
-func (t *timerQueueStandbyTaskExecutor) getStandbyClusterTime() time.Time {
-	// time of remote cluster in the shard is delayed by "StandbyClusterDelay"
-	// so to get the current accurate remote cluster time, need to add it back
-	currentTime := t.shard.GetCurrentTime(t.clusterName)
-	if t.clusterName != t.shard.GetClusterMetadata().GetCurrentClusterName() {
-		currentTime.Add(t.shard.GetConfig().StandbyClusterDelay())
-	}
-
-	return currentTime
-}
-
 func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
 	mutableState workflow.MutableState,
 ) workflow.TimerSequence {
