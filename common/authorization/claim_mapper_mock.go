@@ -71,3 +71,40 @@ func (mr *MockClaimMapperMockRecorder) GetClaims(authInfo interface{}) *gomock.C
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaims", reflect.TypeOf((*MockClaimMapper)(nil).GetClaims), authInfo)
 }
+
+// MockClaimMapperWithAuthInfoRequired is a mock of ClaimMapperWithAuthInfoRequired interface.
+type MockClaimMapperWithAuthInfoRequired struct {
+	ctrl     *gomock.Controller
+	recorder *MockClaimMapperWithAuthInfoRequiredMockRecorder
+}
+
+// MockClaimMapperWithAuthInfoRequiredMockRecorder is the mock recorder for MockClaimMapperWithAuthInfoRequired.
+type MockClaimMapperWithAuthInfoRequiredMockRecorder struct {
+	mock *MockClaimMapperWithAuthInfoRequired
+}
+
+// NewMockClaimMapperWithAuthInfoRequired creates a new mock instance.
+func NewMockClaimMapperWithAuthInfoRequired(ctrl *gomock.Controller) *MockClaimMapperWithAuthInfoRequired {
+	mock := &MockClaimMapperWithAuthInfoRequired{ctrl: ctrl}
+	mock.recorder = &MockClaimMapperWithAuthInfoRequiredMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockClaimMapperWithAuthInfoRequired) EXPECT() *MockClaimMapperWithAuthInfoRequiredMockRecorder {
+	return m.recorder
+}
+
+// AuthInfoRequired mocks base method.
+func (m *MockClaimMapperWithAuthInfoRequired) AuthInfoRequired() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthInfoRequired")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// AuthInfoRequired indicates an expected call of AuthInfoRequired.
+func (mr *MockClaimMapperWithAuthInfoRequiredMockRecorder) AuthInfoRequired() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthInfoRequired", reflect.TypeOf((*MockClaimMapperWithAuthInfoRequired)(nil).AuthInfoRequired))
+}

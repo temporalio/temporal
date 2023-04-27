@@ -26,17 +26,19 @@ package replication
 
 import (
 	"context"
+	"math"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	historyclient "go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/collection"
@@ -58,8 +60,8 @@ type (
 
 		ctx                  context.Context
 		cancel               context.CancelFunc
-		sourceClusterShardID historyclient.ClusterShardID
-		targetClusterShardID historyclient.ClusterShardID
+		clientClusterShardID historyclient.ClusterShardID
+		serverClusterShardID historyclient.ClusterShardID
 	}
 )
 
@@ -86,13 +88,13 @@ func (s *streamSuite) SetupTest() {
 	s.taskConvertor = NewMockTaskConvertor(s.controller)
 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	s.sourceClusterShardID = historyclient.ClusterShardID{
-		ClusterName: uuid.NewString(),
-		ShardID:     rand.Int31(),
+	s.clientClusterShardID = historyclient.ClusterShardID{
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
 	}
-	s.targetClusterShardID = historyclient.ClusterShardID{
-		ClusterName: uuid.NewString(),
-		ShardID:     rand.Int31(),
+	s.serverClusterShardID = historyclient.ClusterShardID{
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
 	}
 	s.shardContext.EXPECT().GetEngine(gomock.Any()).Return(s.historyEngine, nil).AnyTimes()
 }
@@ -102,33 +104,74 @@ func (s *streamSuite) TearDownTest() {
 }
 
 func (s *streamSuite) TestRecvSyncReplicationState() {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientClusterShardID.ClusterID),
+		s.clientClusterShardID.ShardID,
+	)
 	replicationState := &replicationspb.SyncReplicationState{
 		LastProcessedMessageId:   rand.Int63(),
 		LastProcessedMessageTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
 	}
 
-	s.shardContext.EXPECT().UpdateQueueClusterAckLevel(
-		tasks.CategoryReplication,
-		s.sourceClusterShardID.ClusterName,
-		tasks.NewImmediateKey(replicationState.LastProcessedMessageId),
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
+		readerID,
+		&persistencespb.QueueReaderState{
+			Scopes: []*persistencespb.QueueSliceScope{{
+				Range: &persistencespb.QueueSliceRange{
+					InclusiveMin: shard.ConvertToPersistenceTaskKey(
+						tasks.NewImmediateKey(replicationState.LastProcessedMessageId + 1),
+					),
+					ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+						tasks.NewImmediateKey(math.MaxInt64),
+					),
+				},
+				Predicate: &persistencespb.Predicate{
+					PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+					Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+				},
+			}},
+		},
 	).Return(nil)
 	s.shardContext.EXPECT().UpdateRemoteClusterInfo(
-		s.sourceClusterShardID.ClusterName,
+		string(s.clientClusterShardID.ClusterID),
 		replicationState.LastProcessedMessageId,
 		*replicationState.LastProcessedMessageTime,
 	)
 
-	err := recvSyncReplicationState(s.shardContext, replicationState, s.sourceClusterShardID)
+	err := recvSyncReplicationState(s.shardContext, replicationState, s.clientClusterShardID)
 	s.NoError(err)
 }
 
 func (s *streamSuite) TestSendCatchUp() {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientClusterShardID.ClusterID),
+		s.clientClusterShardID.ShardID,
+	)
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark + 1
-	s.shardContext.EXPECT().GetQueueClusterAckLevel(
+	s.shardContext.EXPECT().GetQueueState(
 		tasks.CategoryReplication,
-		s.sourceClusterShardID.ClusterName,
-	).Return(tasks.NewImmediateKey(beginInclusiveWatermark))
+	).Return(&persistencespb.QueueState{
+		ExclusiveReaderHighWatermark: nil,
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {
+				Scopes: []*persistencespb.QueueSliceScope{{
+					Range: &persistencespb.QueueSliceRange{
+						InclusiveMin: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(beginInclusiveWatermark),
+						),
+						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(math.MaxInt64),
+						),
+					},
+					Predicate: &persistencespb.Predicate{
+						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+					},
+				}},
+			},
+		},
+	}, true)
 	s.shardContext.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(
 		tasks.NewImmediateKey(endExclusiveWatermark),
 	)
@@ -140,7 +183,7 @@ func (s *streamSuite) TestSendCatchUp() {
 	)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		s.ctx,
-		s.sourceClusterShardID.ClusterName,
+		string(s.clientClusterShardID.ClusterID),
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
@@ -155,7 +198,7 @@ func (s *streamSuite) TestSendCatchUp() {
 		s.server,
 		s.shardContext,
 		s.taskConvertor,
-		s.sourceClusterShardID,
+		s.clientClusterShardID,
 	)
 	s.NoError(err)
 	s.Equal(endExclusiveWatermark, taskID)
@@ -183,13 +226,13 @@ func (s *streamSuite) TestSendLive() {
 	gomock.InOrder(
 		s.historyEngine.EXPECT().GetReplicationTasksIter(
 			s.ctx,
-			s.sourceClusterShardID.ClusterName,
+			string(s.clientClusterShardID.ClusterID),
 			watermark0,
 			watermark1,
 		).Return(iter, nil),
 		s.historyEngine.EXPECT().GetReplicationTasksIter(
 			s.ctx,
-			s.sourceClusterShardID.ClusterName,
+			string(s.clientClusterShardID.ClusterID),
 			watermark1,
 			watermark2,
 		).Return(iter, nil),
@@ -216,7 +259,7 @@ func (s *streamSuite) TestSendLive() {
 		s.server,
 		s.shardContext,
 		s.taskConvertor,
-		s.sourceClusterShardID,
+		s.clientClusterShardID,
 		channel,
 		watermark0,
 	)
@@ -232,7 +275,7 @@ func (s *streamSuite) TestSendTasks_Noop() {
 		s.server,
 		s.shardContext,
 		s.taskConvertor,
-		s.sourceClusterShardID,
+		s.clientClusterShardID,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)
@@ -250,7 +293,7 @@ func (s *streamSuite) TestSendTasks_WithoutTasks() {
 	)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		s.ctx,
-		s.sourceClusterShardID.ClusterName,
+		string(s.clientClusterShardID.ClusterID),
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
@@ -265,7 +308,7 @@ func (s *streamSuite) TestSendTasks_WithoutTasks() {
 		s.server,
 		s.shardContext,
 		s.taskConvertor,
-		s.sourceClusterShardID,
+		s.clientClusterShardID,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)
@@ -294,7 +337,7 @@ func (s *streamSuite) TestSendTasks_WithTasks() {
 	)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		s.ctx,
-		s.sourceClusterShardID.ClusterName,
+		string(s.clientClusterShardID.ClusterID),
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
@@ -332,7 +375,7 @@ func (s *streamSuite) TestSendTasks_WithTasks() {
 		s.server,
 		s.shardContext,
 		s.taskConvertor,
-		s.sourceClusterShardID,
+		s.clientClusterShardID,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)

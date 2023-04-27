@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
@@ -22,23 +22,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package tasks
 
-import "flag"
-
-// TestFlags contains the feature flags for integration tests
-var TestFlags struct {
-	FrontendAddr                  string
-	PersistenceType               string
-	PersistenceDriver             string
-	TestClusterConfigFile         string
-	PersistenceFaultInjectionRate float64
+type testSequentialTaskQueue[T Task] struct {
+	q  chan T
+	id int
 }
 
-func init() {
-	flag.StringVar(&TestFlags.FrontendAddr, "frontendAddress", "", "host:port for temporal frontend service")
-	flag.StringVar(&TestFlags.PersistenceType, "persistenceType", "sql", "type of persistence - [nosql or sql]")
-	flag.StringVar(&TestFlags.PersistenceDriver, "persistenceDriver", "sqlite", "driver of nosql / sql- [cassandra, mysql, postgresql, sqlite]")
-	flag.StringVar(&TestFlags.TestClusterConfigFile, "TestClusterConfigFile", "", "test cluster config file location")
-	flag.Float64Var(&TestFlags.PersistenceFaultInjectionRate, "PersistenceFaultInjectionRate", 0, "rate of persistence error injection. value: [0..1]. 0 = no injection")
+func newTestSequentialTaskQueue[T Task](id, capacity int) SequentialTaskQueue[T] {
+	return &testSequentialTaskQueue[T]{
+		q:  make(chan T, capacity),
+		id: id,
+	}
+}
+
+func (s *testSequentialTaskQueue[T]) ID() interface{} {
+	return s.id
+}
+
+func (s *testSequentialTaskQueue[T]) Add(task T) {
+	s.q <- task
+}
+
+func (s *testSequentialTaskQueue[T]) Remove() T {
+	select {
+	case t := <-s.q:
+		return t
+	default:
+		var emptyT T
+		return emptyT
+	}
+}
+
+func (s *testSequentialTaskQueue[T]) IsEmpty() bool {
+	return len(s.q) == 0
+}
+
+func (s *testSequentialTaskQueue[T]) Len() int {
+	return len(s.q)
 }

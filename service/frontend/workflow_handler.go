@@ -3073,11 +3073,7 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	if err != nil {
 		return err
 	}
-	if err := wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName); err != nil {
-		return err
-	}
-
-	return nil
+	return wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName)
 }
 
 // Returns the schedule description and current state of an existing schedule.
@@ -3699,6 +3695,10 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
+	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
 	if err := wh.validateBuildIdCompatibilityUpdate(request); err != nil {
 		return nil, err
 	}
@@ -3733,6 +3733,10 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
 	}
 
 	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
@@ -4340,10 +4344,7 @@ func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.S
 	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String()); err != nil {
 		return err
 	}
-	if err := wh.saValidator.ValidateSize(searchAttributes, namespaceName.String()); err != nil {
-		return err
-	}
-	return nil
+	return wh.saValidator.ValidateSize(searchAttributes, namespaceName.String())
 }
 
 func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(

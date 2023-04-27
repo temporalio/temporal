@@ -65,10 +65,7 @@ func (q *sqlQueue) Init(
 	if err := q.initializeQueueMetadata(ctx, blob); err != nil {
 		return err
 	}
-	if err := q.initializeDLQMetadata(ctx, blob); err != nil {
-		return err
-	}
-	return nil
+	return q.initializeDLQMetadata(ctx, blob)
 }
 
 func (q *sqlQueue) EnqueueMessage(

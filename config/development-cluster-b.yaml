@@ -4,9 +4,8 @@ log:
 
 persistence:
   defaultStore: cass-default
-  visibilityStore:
-  advancedVisibilityStore: es-visibility
-  numHistoryShards: 32
+  visibilityStore: es-visibility
+  numHistoryShards: 16
   datastores:
     cass-default:
       cassandra:

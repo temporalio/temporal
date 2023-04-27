@@ -57,7 +57,7 @@ type (
 	ClientConfig struct {
 		// Tags is the set of key-value pairs to be reported as part of every metric
 		Tags map[string]string `yaml:"tags"`
-		// IgnoreTags is a map from tag name string to tag values string list.
+		// ExcludeTags is a map from tag name string to tag values string list.
 		// Each value present in keys will have relevant tag value replaced with "_tag_excluded_"
 		// Each value in values list will white-list tag values to be reported as usual.
 		ExcludeTags map[string][]string `yaml:"excludeTags"`

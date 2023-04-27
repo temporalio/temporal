@@ -29,14 +29,18 @@ package replication
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/sync/errgroup"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	historyclient "go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -50,8 +54,9 @@ type (
 		Ctx                     context.Context
 		Engine                  shard.Engine
 		NamespaceCache          namespace.Registry
-		SourceClusterShardCount int32
-		SourceClusterShardID    historyclient.ClusterShardID
+		ClientClusterShardCount int32
+		ClientClusterName       string
+		ClientClusterShardID    historyclient.ClusterShardID
 	}
 	TaskConvertor interface {
 		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
@@ -61,12 +66,21 @@ type (
 func StreamReplicationTasks(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
-	sourceClusterShardID historyclient.ClusterShardID,
-	targetClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
+	serverClusterShardID historyclient.ClusterShardID,
 ) error {
-	sourceClusterInfo, ok := shardContext.GetClusterMetadata().GetAllClusterInfo()[sourceClusterShardID.ClusterName]
-	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Unknown cluster: %v", sourceClusterInfo.ClusterID))
+	allClusterInfo := shardContext.GetClusterMetadata().GetAllClusterInfo()
+	clientClusterName, clientShardCount, err := clusterIDToClusterNameShardCount(allClusterInfo, clientClusterShardID.ClusterID)
+	if err != nil {
+		return err
+	}
+	_, serverShardCount, err := clusterIDToClusterNameShardCount(allClusterInfo, int32(shardContext.GetClusterMetadata().GetClusterID()))
+	if err != nil {
+		return err
+	}
+	err = common.VerifyShardIDMapping(clientShardCount, serverShardCount, clientClusterShardID.ShardID, serverClusterShardID.ShardID)
+	if err != nil {
+		return err
 	}
 	engine, err := shardContext.GetEngine(server.Context())
 	if err != nil {
@@ -76,15 +90,17 @@ func StreamReplicationTasks(
 		Ctx:                     server.Context(),
 		Engine:                  engine,
 		NamespaceCache:          shardContext.GetNamespaceRegistry(),
-		SourceClusterShardCount: sourceClusterInfo.ShardCount,
-		SourceClusterShardID:    sourceClusterShardID,
+		ClientClusterShardCount: clientShardCount,
+		ClientClusterName:       clientClusterName,
+		ClientClusterShardID:    clientClusterShardID,
 	}
+
 	errGroup, ctx := errgroup.WithContext(server.Context())
 	errGroup.Go(func() error {
-		return recvLoop(ctx, server, shardContext, sourceClusterShardID)
+		return recvLoop(ctx, server, shardContext, clientClusterShardID, serverClusterShardID)
 	})
 	errGroup.Go(func() error {
-		return sendLoop(ctx, server, shardContext, filter, sourceClusterShardID)
+		return sendLoop(ctx, server, shardContext, filter, clientClusterShardID)
 	})
 	return errGroup.Wait()
 }
@@ -93,19 +109,25 @@ func recvLoop(
 	ctx context.Context,
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
-	sourceClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
+	serverClusterShardID historyclient.ClusterShardID,
 ) error {
 	for ctx.Err() == nil {
 		req, err := server.Recv()
 		if err != nil {
 			return err
 		}
+		shardContext.GetLogger().Debug(fmt.Sprintf(
+			"cluster shard ID %v/%v <- cluster shard ID %v/%v",
+			serverClusterShardID.ClusterID, serverClusterShardID.ShardID,
+			clientClusterShardID.ClusterID, clientClusterShardID.ShardID,
+		))
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
 			if err := recvSyncReplicationState(
 				shardContext,
 				attr.SyncReplicationState,
-				sourceClusterShardID,
+				clientClusterShardID,
 			); err != nil {
 				shardContext.GetLogger().Error(
 					"StreamWorkflowReplication unable to handle SyncReplicationState",
@@ -126,7 +148,7 @@ func recvLoop(
 func recvSyncReplicationState(
 	shardContext shard.Context,
 	attr *replicationspb.SyncReplicationState,
-	sourceClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
 ) error {
 	lastProcessedMessageID := attr.GetLastProcessedMessageId()
 	lastProcessedMessageIDTime := attr.GetLastProcessedMessageTime()
@@ -134,11 +156,29 @@ func recvSyncReplicationState(
 		return nil
 	}
 
-	// TODO wait for #4176 to be merged and then use cluster & shard ID as reader ID
-	if err := shardContext.UpdateQueueClusterAckLevel(
-		tasks.CategoryReplication,
-		sourceClusterShardID.ClusterName,
-		tasks.NewImmediateKey(lastProcessedMessageID),
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(clientClusterShardID.ClusterID),
+		clientClusterShardID.ShardID,
+	)
+	readerState := &persistencespb.QueueReaderState{
+		Scopes: []*persistencespb.QueueSliceScope{{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(
+					tasks.NewImmediateKey(lastProcessedMessageID + 1),
+				),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+					tasks.NewImmediateKey(math.MaxInt64),
+				),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}},
+	}
+	if err := shardContext.UpdateReplicationQueueReaderState(
+		readerID,
+		readerState,
 	); err != nil {
 		shardContext.GetLogger().Error(
 			"error updating replication level for shard",
@@ -147,7 +187,7 @@ func recvSyncReplicationState(
 		)
 	}
 	shardContext.UpdateRemoteClusterInfo(
-		sourceClusterShardID.ClusterName,
+		string(clientClusterShardID.ClusterID),
 		lastProcessedMessageID,
 		*lastProcessedMessageIDTime,
 	)
@@ -159,7 +199,7 @@ func sendLoop(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
 	taskConvertor TaskConvertor,
-	sourceClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
 ) error {
 	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
@@ -173,13 +213,12 @@ func sendLoop(
 		server,
 		shardContext,
 		taskConvertor,
-		sourceClusterShardID,
+		clientClusterShardID,
 	)
 	if err != nil {
 		shardContext.GetLogger().Error(
 			"StreamWorkflowReplication unable to catch up replication tasks",
 			tag.Error(err),
-			tag.ShardID(shardContext.GetShardID()),
 		)
 		return err
 	}
@@ -188,14 +227,13 @@ func sendLoop(
 		server,
 		shardContext,
 		taskConvertor,
-		sourceClusterShardID,
+		clientClusterShardID,
 		newTaskNotificationChan,
 		catchupEndExclusiveWatermark,
 	); err != nil {
 		shardContext.GetLogger().Error(
 			"StreamWorkflowReplication unable to stream replication tasks",
 			tag.Error(err),
-			tag.ShardID(shardContext.GetShardID()),
 		)
 		return err
 	}
@@ -208,26 +246,41 @@ func sendCatchUp(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
 	taskConvertor TaskConvertor,
-	sourceClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
 ) (int64, error) {
-	// TODO wait for #4176 to be merged and then use cluster & shard ID as reader ID
-	catchupBeginInclusiveWatermark := shardContext.GetQueueClusterAckLevel(
-		tasks.CategoryReplication,
-		sourceClusterShardID.ClusterName,
+
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(clientClusterShardID.ClusterID),
+		clientClusterShardID.ShardID,
 	)
-	catchupEndExclusiveWatermark := shardContext.GetImmediateQueueExclusiveHighReadWatermark()
+
+	var catchupBeginInclusiveWatermark int64
+	queueState, ok := shardContext.GetQueueState(
+		tasks.CategoryReplication,
+	)
+	if !ok {
+		catchupBeginInclusiveWatermark = 0
+	} else {
+		readerState, ok := queueState.ReaderStates[readerID]
+		if !ok {
+			catchupBeginInclusiveWatermark = 0
+		} else {
+			catchupBeginInclusiveWatermark = readerState.Scopes[0].Range.InclusiveMin.TaskId
+		}
+	}
+	catchupEndExclusiveWatermark := shardContext.GetImmediateQueueExclusiveHighReadWatermark().TaskID
 	if err := sendTasks(
 		ctx,
 		server,
 		shardContext,
 		taskConvertor,
-		sourceClusterShardID,
-		catchupBeginInclusiveWatermark.TaskID,
-		catchupEndExclusiveWatermark.TaskID,
+		clientClusterShardID,
+		catchupBeginInclusiveWatermark,
+		catchupEndExclusiveWatermark,
 	); err != nil {
 		return 0, err
 	}
-	return catchupEndExclusiveWatermark.TaskID, nil
+	return catchupEndExclusiveWatermark, nil
 }
 
 func sendLive(
@@ -235,7 +288,7 @@ func sendLive(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
 	taskConvertor TaskConvertor,
-	sourceClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
 	newTaskNotificationChan <-chan struct{},
 	beginInclusiveWatermark int64,
 ) error {
@@ -248,7 +301,7 @@ func sendLive(
 				server,
 				shardContext,
 				taskConvertor,
-				sourceClusterShardID,
+				clientClusterShardID,
 				beginInclusiveWatermark,
 				endExclusiveWatermark,
 			); err != nil {
@@ -266,7 +319,7 @@ func sendTasks(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
 	taskConvertor TaskConvertor,
-	sourceClusterShardID historyclient.ClusterShardID,
+	clientClusterShardID historyclient.ClusterShardID,
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
 ) error {
@@ -280,7 +333,7 @@ func sendTasks(
 	}
 	iter, err := engine.GetReplicationTasksIter(
 		ctx,
-		sourceClusterShardID.ClusterName,
+		string(clientClusterShardID.ClusterID),
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)
@@ -336,7 +389,7 @@ func (f *TaskConvertorImpl) Convert(
 		shouldProcessTask := false
 	FilterLoop:
 		for _, targetCluster := range namespaceEntry.ClusterNames() {
-			if f.SourceClusterShardID.ClusterName == targetCluster {
+			if f.ClientClusterName == targetCluster {
 				shouldProcessTask = true
 				break FilterLoop
 			}
@@ -347,8 +400,8 @@ func (f *TaskConvertorImpl) Convert(
 	}
 	// if there is error, then blindly send the task, better safe than sorry
 
-	sourceShardID := common.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), f.SourceClusterShardCount)
-	if sourceShardID != f.SourceClusterShardID.ShardID {
+	sourceShardID := common.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), f.ClientClusterShardCount)
+	if sourceShardID != f.ClientClusterShardID.ShardID {
 		return nil, nil
 	}
 
@@ -357,4 +410,16 @@ func (f *TaskConvertorImpl) Convert(
 		return nil, err
 	}
 	return replicationTask, nil
+}
+
+func clusterIDToClusterNameShardCount(
+	allClusterInfo map[string]cluster.ClusterInformation,
+	clusterID int32,
+) (string, int32, error) {
+	for clusterName, clusterInfo := range allClusterInfo {
+		if int32(clusterInfo.InitialFailoverVersion) == clusterID {
+			return clusterName, clusterInfo.ShardCount, nil
+		}
+	}
+	return "", 0, serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
 }
