@@ -850,6 +850,14 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 	namespaceID := namespaceEntry.ID()
 
+	// Copy WorkerVersionCapabilities.BuildId to BinaryChecksum if BinaryChecksum is missing (small
+	// optimization to save space in the poll request).
+	if request.WorkerVersionCapabilities != nil {
+		if len(request.WorkerVersionCapabilities.BuildId) > 0 && len(request.BinaryChecksum) == 0 {
+			request.BinaryChecksum = request.WorkerVersionCapabilities.BuildId
+		}
+	}
+
 	wh.logger.Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowNamespaceID(namespaceID.String()))
 	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
 		return nil, err
@@ -926,6 +934,18 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, err
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
+
+	if request.UseVersioning && len(request.WorkerVersionStamp.GetBuildId()) == 0 {
+		return nil, errUseVersioningWithoutBuildID
+	}
+
+	// Copy WorkerVersionStamp to BinaryChecksum if BinaryChecksum is missing (small
+	// optimization to save space in the request).
+	if request.WorkerVersionStamp != nil {
+		if len(request.WorkerVersionStamp.BuildId) > 0 && len(request.BinaryChecksum) == 0 {
+			request.BinaryChecksum = request.WorkerVersionStamp.BuildId
+		}
+	}
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 

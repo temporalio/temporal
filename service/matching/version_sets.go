@@ -25,13 +25,11 @@
 package matching
 
 import (
-	"encoding/binary"
 	"fmt"
 
 	"crypto/sha256"
 	"encoding/base64"
 
-	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -57,21 +55,6 @@ func ToBuildIdOrderingResponse(data *persistence.VersioningData, maxSets int) *w
 		versionSets[i] = &taskqueue.CompatibleVersionSet{BuildIds: buildIds}
 	}
 	return &workflowservice.GetWorkerBuildIdCompatibilityResponse{MajorVersionSets: versionSets}
-}
-
-// HashVersioningData returns a farm.Fingerprint64 hash of the versioning data as bytes. If the data is nonexistent or
-// invalid, returns nil.
-func HashVersioningData(data *persistence.VersioningData) []byte {
-	if data == nil || data.GetVersionSets() == nil {
-		return nil
-	}
-	asBytes, err := data.Marshal()
-	if err != nil {
-		return nil
-	}
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, farm.Fingerprint64(asBytes))
-	return b
 }
 
 func checkLimits(g *persistence.VersioningData, maxSets, maxBuildIDs int) error {

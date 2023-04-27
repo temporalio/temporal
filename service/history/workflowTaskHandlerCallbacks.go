@@ -417,6 +417,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
+	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
+	if ms.GetWorkerVersionStamp() != nil {
+		if !request.UseVersioning || len(request.WorkerVersionStamp.GetBuildId()) == 0 {
+			return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
+		}
+	}
+
 	maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name().String())
 	if ms.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {
 		handler.metricsHandler.Counter(metrics.AutoResetPointsLimitExceededCounter.GetMetricName()).Record(
