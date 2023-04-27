@@ -77,8 +77,7 @@ func (c *Connection) WriteSchemaUpdateLog(oldVersion string, newVersion string, 
 
 // Exec executes a sql statement
 func (c *Connection) Exec(stmt string, args ...interface{}) error {
-	err := c.adminDb.Exec(stmt, args...)
-	return err
+	return c.adminDb.Exec(stmt, args...)
 }
 
 // ListTables returns a list of tables in this database

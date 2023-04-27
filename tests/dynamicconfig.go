@@ -40,12 +40,11 @@ var (
 	// Override values for dynamic configs
 	staticOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendRPS:                                    3000,
-		dynamicconfig.FrontendESIndexMaxResultWindow:                 defaultPageSize,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance:   50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance: 50,
 		dynamicconfig.TimerProcessorHistoryArchivalSizeLimit:         5 * 1024,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts:  1,
-		dynamicconfig.AdvancedVisibilityWritingMode:                  visibility.AdvancedVisibilityWritingModeOff,
+		dynamicconfig.AdvancedVisibilityWritingMode:                  visibility.SecondaryVisibilityWritingModeOff,
 		dynamicconfig.WorkflowTaskHeartbeatTimeout:                   5 * time.Second,
 		dynamicconfig.ReplicationTaskFetcherAggregationInterval:      200 * time.Millisecond,
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:           50 * time.Millisecond,

@@ -60,6 +60,7 @@ func Invoke(
 			req.Request.WorkflowExecution.WorkflowId,
 			req.Request.WorkflowExecution.RunId,
 		),
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -88,7 +89,7 @@ func Invoke(
 	if createNewWorkflowTask {
 		// This will try not to add an event but will create speculative WT in mutable state.
 		// Task generation will be skipped if WT is created as speculative.
-		wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+		wt, err := ms.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 		if err != nil {
 			return nil, err
 		}

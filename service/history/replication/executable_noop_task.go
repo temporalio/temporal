@@ -63,3 +63,7 @@ func (e *ExecutableNoopTask) Execute() error {
 func (e *ExecutableNoopTask) HandleErr(err error) error {
 	return err
 }
+
+func (e *ExecutableNoopTask) MarkPoisonPill() error {
+	return nil
+}

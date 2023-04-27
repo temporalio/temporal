@@ -144,6 +144,7 @@ type (
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 
+		InsertHistoryTree(ctx context.Context, request *InternalInsertHistoryTreeRequest) error
 		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(ctx context.Context, request *InternalAppendHistoryNodesRequest) error
 		// DeleteHistoryNodes delete a node from history node table
@@ -447,6 +448,15 @@ type (
 		ExecutionState *persistencespb.WorkflowExecutionState
 	}
 
+	InternalInsertHistoryTreeRequest struct {
+		// The branch to be appended
+		BranchInfo *persistencespb.HistoryBranch
+		// Serialized TreeInfo
+		TreeInfo *commonpb.DataBlob
+		// Used in sharded data stores to identify which shard to use
+		ShardID int32
+	}
+
 	// InternalHistoryNode represent a history node metadata
 	InternalHistoryNode struct {
 		// The first eventID becomes the nodeID to be appended
@@ -463,14 +473,10 @@ type (
 	InternalAppendHistoryNodesRequest struct {
 		// The raw branch token
 		BranchToken []byte
-		// True if it is the first append request to the branch
-		IsNewBranch bool
 		// The info for clean up data in background
 		Info string
 		// The branch to be appended
 		BranchInfo *persistencespb.HistoryBranch
-		// Serialized TreeInfo
-		TreeInfo *commonpb.DataBlob
 		// The history node
 		Node InternalHistoryNode
 		// Used in sharded data stores to identify which shard to use
@@ -502,8 +508,6 @@ type (
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
-		// The raw branch token
-		BranchToken []byte
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
 		// Serialized TreeInfo
@@ -534,12 +538,10 @@ type (
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
-		// The raw branch token
-		BranchToken []byte
+		// The branch
+		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
-		ShardID  int32
-		TreeId   string // TreeId, BranchId is used to delete target history branch itself.
-		BranchId string
+		ShardID int32
 		// branch ranges is used to delete range of history nodes from target branch and it ancestors.
 		BranchRanges []InternalDeleteHistoryBranchRange
 	}
@@ -554,8 +556,6 @@ type (
 	InternalReadHistoryBranchRequest struct {
 		// The raw branch token
 		BranchToken []byte
-		// The tree of branch range to be read
-		TreeID string
 		// The branch range to be read
 		BranchID string
 		// Get the history nodes from MinNodeID. Inclusive.

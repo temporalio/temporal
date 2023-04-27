@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -160,6 +161,7 @@ func NewEngineWithShardContext(
 		config,
 		archivalClient,
 		shard.GetTimeSource(),
+		persistenceVisibilityMgr,
 	)
 
 	historyEngImpl := &historyEngineImpl{
@@ -230,7 +232,7 @@ func NewEngineWithShardContext(
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
-		config.DefaultVisibilityIndexName,
+		persistenceVisibilityMgr.GetIndexName(),
 		visibility.AllowListForValidation(persistenceVisibilityMgr.GetStoreNames()),
 	)
 
@@ -670,6 +672,29 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 	return replicationapi.GetTasks(ctx, e.shard, e.replicationAckMgr, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
+}
+
+func (e *historyEngineImpl) SubscribeReplicationNotification() (<-chan struct{}, string) {
+	return e.replicationAckMgr.SubscribeNotification()
+}
+
+func (e *historyEngineImpl) UnsubscribeReplicationNotification(subscriberID string) {
+	e.replicationAckMgr.UnsubscribeNotification(subscriberID)
+}
+
+func (e *historyEngineImpl) ConvertReplicationTask(
+	ctx context.Context,
+	task tasks.Task,
+) (*replicationspb.ReplicationTask, error) {
+	return e.replicationAckMgr.ConvertTask(ctx, task)
+}
+func (e *historyEngineImpl) GetReplicationTasksIter(
+	ctx context.Context,
+	pollingCluster string,
+	minInclusiveTaskID int64,
+	maxExclusiveTaskID int64,
+) (collection.Iterator[tasks.Task], error) {
+	return e.replicationAckMgr.GetReplicationTasksIter(ctx, pollingCluster, minInclusiveTaskID, maxExclusiveTaskID)
 }
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(

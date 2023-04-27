@@ -438,7 +438,7 @@ func (s *ContextImpl) GetQueueState(
 	return queueState, ok
 }
 
-func (s *ContextImpl) UpdateQueueState(
+func (s *ContextImpl) SetQueueState(
 	category tasks.Category,
 	state *persistencespb.QueueState,
 ) error {
@@ -576,7 +576,14 @@ func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFr
 	}
 
 	s.wUnlock()
-	s.notifyReplicationQueueProcessor(maxReplicationTaskID)
+
+	if maxReplicationTaskID != pendingMaxReplicationTaskID {
+		// notification is for making sure replication queue is able to
+		// ack to the recorded taskID. If the taskID is pending, then
+		// don't notify. Otherwise, replication queue will think (for a period of time)
+		// that the max generated taskID is pendingMaxReplicationTaskID which is MaxInt64.
+		s.notifyReplicationQueueProcessor(maxReplicationTaskID)
+	}
 }
 
 func (s *ContextImpl) AddTasks(

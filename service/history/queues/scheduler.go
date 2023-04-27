@@ -170,13 +170,6 @@ func NewNamespacePriorityScheduler(
 				DispatchThrottleDuration:    options.DispatchThrottleDuration,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
-				newSchedulerMonitor(
-					taskChannelKeyFn,
-					namespaceRegistry,
-					timeSource,
-					metricsHandler,
-					defaultSchedulerMonitorOptions,
-				),
 				fifoSchedulerOptions,
 				logger,
 			)),
@@ -244,7 +237,6 @@ func NewPriorityScheduler(
 				DispatchThrottleDuration:    options.DispatchThrottleDuration,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
-				noopScheduleMonitor,
 				fifoSchedulerOptions,
 				logger,
 			)),

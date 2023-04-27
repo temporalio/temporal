@@ -32,4 +32,4 @@ const Version = "1.9"
 
 // VisibilityVersion is the Postgres visibility database release version
 // Temporal supports both MySQL and Postgres officially, so upgrade should be performed for both MySQL and Postgres
-const VisibilityVersion = "1.2"
+const VisibilityVersion = "1.3"

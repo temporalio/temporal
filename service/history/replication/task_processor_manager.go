@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -71,6 +71,7 @@ type (
 		metricsHandler                metrics.Handler
 		logger                        log.Logger
 
+		enableFetcher     bool
 		taskProcessorLock sync.RWMutex
 		taskProcessors    map[string][]TaskProcessor // cluster name - processor
 		minTxAckedTaskID  int64
@@ -112,8 +113,10 @@ func NewTaskProcessorManager(
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 			shard.GetLogger(),
 		),
-		logger:               shard.GetLogger(),
-		metricsHandler:       shard.GetMetricsHandler(),
+		logger:         shard.GetLogger(),
+		metricsHandler: shard.GetMetricsHandler(),
+
+		enableFetcher:        !config.EnableReplicationStream(),
 		taskProcessors:       make(map[string][]TaskProcessor),
 		taskExecutorProvider: taskExecutorProvider,
 		taskPollerManager:    newPollerManager(shard.GetShardID(), shard.GetClusterMetadata()),
@@ -132,7 +135,9 @@ func (r *taskProcessorManagerImpl) Start() {
 	}
 
 	// Listen to cluster metadata and dynamically update replication processor for remote clusters.
-	r.listenToClusterMetadataChange()
+	if r.enableFetcher {
+		r.listenToClusterMetadataChange()
+	}
 	go r.completeReplicationTaskLoop()
 	go r.checkReplicationDLQEmptyLoop()
 }
@@ -148,7 +153,9 @@ func (r *taskProcessorManagerImpl) Stop() {
 
 	close(r.shutdownChan)
 
-	r.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(r)
+	if r.enableFetcher {
+		r.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(r)
+	}
 	r.taskProcessorLock.Lock()
 	for _, taskProcessors := range r.taskProcessors {
 		for _, processor := range taskProcessors {

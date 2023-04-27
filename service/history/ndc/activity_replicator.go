@@ -32,6 +32,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -105,7 +106,7 @@ func (r *ActivityReplicatorImpl) SyncActivity(
 		ctx,
 		namespaceID,
 		execution,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
@@ -191,7 +192,6 @@ func (r *ActivityReplicatorImpl) SyncActivity(
 	}
 
 	// passive logic need to explicitly call create timer
-	now := eventTime
 	if _, err := workflow.NewTimerSequence(
 		mutableState,
 	).CreateNextActivityTimer(); err != nil {
@@ -205,7 +205,6 @@ func (r *ActivityReplicatorImpl) SyncActivity(
 
 	return executionContext.UpdateWorkflowExecutionWithNew(
 		ctx,
-		now,
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow

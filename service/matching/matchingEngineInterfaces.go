@@ -41,8 +41,8 @@ type (
 		CancelOutstandingPoll(hCtx *handlerContext, request *matchingservice.CancelOutstandingPollRequest) error
 		DescribeTaskQueue(hCtx *handlerContext, request *matchingservice.DescribeTaskQueueRequest) (*matchingservice.DescribeTaskQueueResponse, error)
 		ListTaskQueuePartitions(hCtx *handlerContext, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error)
-		UpdateWorkerBuildIdOrdering(ctx *handlerContext, request *matchingservice.UpdateWorkerBuildIdOrderingRequest) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error)
-		GetWorkerBuildIdOrdering(ctx *handlerContext, request *matchingservice.GetWorkerBuildIdOrderingRequest) (*matchingservice.GetWorkerBuildIdOrderingResponse, error)
+		UpdateWorkerBuildIdCompatibility(ctx *handlerContext, request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error)
+		GetWorkerBuildIdCompatibility(ctx *handlerContext, request *matchingservice.GetWorkerBuildIdCompatibilityRequest) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error)
 		InvalidateTaskQueueMetadata(ctx *handlerContext, request *matchingservice.InvalidateTaskQueueMetadataRequest) (*matchingservice.InvalidateTaskQueueMetadataResponse, error)
 		GetTaskQueueMetadata(ctx *handlerContext, request *matchingservice.GetTaskQueueMetadataRequest) (*matchingservice.GetTaskQueueMetadataResponse, error)
 	}

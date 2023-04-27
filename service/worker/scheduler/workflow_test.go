@@ -434,6 +434,52 @@ func (s *workflowSuite) TestCatchupWindow() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
+func (s *workflowSuite) TestCatchupWindowWhilePaused() {
+	// written using low-level mocks so we can set initial state
+
+	s.env.RegisterDelayedCallback(func() {
+		// should not count any "misses" since we were paused
+		s.Equal(int64(0), s.describe().Info.MissedCatchupWindow)
+		// unpause just to make the test end cleanly
+		s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{Unpause: "go ahead"})
+	}, 3*time.Minute)
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 17, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:17:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
+		Schedule: &schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Calendar: []*schedpb.CalendarSpec{{
+					Minute: "17",
+					Hour:   "*",
+				}},
+			},
+			Action: s.defaultAction("myid"),
+			Policies: &schedpb.SchedulePolicies{
+				CatchupWindow: timestamp.DurationPtr(1 * time.Hour),
+			},
+			State: &schedpb.ScheduleState{
+				Paused: true,
+			},
+		},
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+			// workflow "woke up" after 6 hours
+			LastProcessedTime: timestamp.TimePtr(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
+		},
+	})
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()), s.env.GetWorkflowError())
+}
+
 func (s *workflowSuite) TestOverlapSkip() {
 	s.runAcrossContinue(
 		[]workflowRun{

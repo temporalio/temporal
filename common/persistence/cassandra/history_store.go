@@ -85,49 +85,39 @@ func NewHistoryStore(
 	}
 }
 
+func (h *HistoryStore) InsertHistoryTree(
+	ctx context.Context,
+	request *p.InternalInsertHistoryTreeRequest,
+) error {
+	query := h.Session.Query(v2templateInsertTree,
+		request.BranchInfo.TreeId,
+		request.BranchInfo.BranchId,
+		request.TreeInfo.Data,
+		request.TreeInfo.EncodingType.String(),
+	).WithContext(ctx)
+	if err := query.Exec(); err != nil {
+		return convertTimeoutError(gocql.ConvertError("InsertHistoryTree", err))
+	}
+	return nil
+
+}
+
 // AppendHistoryNodes upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
 func (h *HistoryStore) AppendHistoryNodes(
 	ctx context.Context,
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
-	branchInfo := request.BranchInfo
-	node := request.Node
-
-	if !request.IsNewBranch {
-		query := h.Session.Query(v2templateUpsertHistoryNode,
-			branchInfo.TreeId,
-			branchInfo.BranchId,
-			node.NodeID,
-			node.PrevTransactionID,
-			node.TransactionID,
-			node.Events.Data,
-			node.Events.EncodingType.String(),
-		).WithContext(ctx)
-		if err := query.Exec(); err != nil {
-			return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
-		}
-		return nil
-	}
-
-	treeInfoDataBlob := request.TreeInfo
-	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-	batch.Query(v2templateInsertTree,
-		branchInfo.TreeId,
-		branchInfo.BranchId,
-		treeInfoDataBlob.Data,
-		treeInfoDataBlob.EncodingType.String(),
-	)
-	batch.Query(v2templateUpsertHistoryNode,
-		branchInfo.TreeId,
-		branchInfo.BranchId,
-		node.NodeID,
-		node.PrevTransactionID,
-		node.TransactionID,
-		node.Events.Data,
-		node.Events.EncodingType.String(),
-	)
-	if err := h.Session.ExecuteBatch(batch); err != nil {
+	query := h.Session.Query(v2templateUpsertHistoryNode,
+		request.BranchInfo.TreeId,
+		request.BranchInfo.BranchId,
+		request.Node.NodeID,
+		request.Node.PrevTransactionID,
+		request.Node.TransactionID,
+		request.Node.Events.Data,
+		request.Node.Events.EncodingType.String(),
+	).WithContext(ctx)
+	if err := query.Exec(); err != nil {
 		return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
 	}
 	return nil
@@ -168,7 +158,12 @@ func (h *HistoryStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
-	treeID, err := primitives.ValidateUUID(request.TreeID)
+	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
+
+	treeID, err := primitives.ValidateUUID(branch.TreeId)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
@@ -290,12 +285,13 @@ func (h *HistoryStore) DeleteHistoryBranch(
 	ctx context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
+
 	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-	batch.Query(v2templateDeleteBranch, request.TreeId, request.BranchId)
+	batch.Query(v2templateDeleteBranch, request.BranchInfo.TreeId, request.BranchInfo.BranchId)
 
 	// delete each branch range
 	for _, br := range request.BranchRanges {
-		h.deleteBranchRangeNodes(batch, request.TreeId, br.BranchId, br.BeginNodeId)
+		h.deleteBranchRangeNodes(batch, request.BranchInfo.TreeId, br.BranchId, br.BeginNodeId)
 	}
 
 	err := h.Session.ExecuteBatch(batch)

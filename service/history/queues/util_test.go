@@ -39,7 +39,7 @@ func TestIsTaskAcked(t *testing.T) {
 	scopes := NewRandomScopes(5)
 	exclusiveReaderHighWatermark := scopes[len(scopes)-1].Range.ExclusiveMax.Next()
 	persistenceQueueState := ToPersistenceQueueState(&queueState{
-		readerScopes: map[int32][]Scope{
+		readerScopes: map[int64][]Scope{
 			DefaultReaderId: scopes,
 		},
 		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,

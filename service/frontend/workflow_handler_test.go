@@ -159,9 +159,6 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
 
-	mockMonitor := s.mockResource.MembershipMonitor
-	mockMonitor.EXPECT().GetMemberCount(primitives.FrontendService).Return(5, nil).AnyTimes()
-
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 }
 
@@ -204,6 +201,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	wh := s.getWorkflowHandler(config)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(testNamespace).Return("").AnyTimes()
 
 	// test list open by wid
 	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
@@ -656,6 +654,67 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
 	s.Equal(errInvalidWorkflowTaskTimeoutSeconds, err)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_CronAndStartDelaySet() {
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
+		},
+		RequestId:          uuid.New(),
+		CronSchedule:       "dummy-cron-schedule",
+		WorkflowStartDelay: timestamp.DurationPtr(10 * time.Second),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.ErrorIs(err, errCronAndStartDelaySet)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDelay() {
+	config := s.newConfig()
+	config.RPS = dc.GetIntPropertyFn(10)
+	wh := s.getWorkflowHandler(config)
+
+	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  "test-namespace",
+		WorkflowId: "workflow-id",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow-type",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "task-queue",
+		},
+		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumAttempts:    1,
+		},
+		RequestId:          uuid.New(),
+		WorkflowStartDelay: timestamp.DurationPtr(-10 * time.Second),
+	}
+	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	s.ErrorIs(err, errInvalidWorkflowStartDelaySeconds)
 }
 
 func (s *workflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI() {
@@ -1723,9 +1782,7 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 }
 
 func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
-	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	wh := s.getWorkflowHandler(config)
+	wh := s.getWorkflowHandler(s.newConfig())
 	now := timestamp.TimePtr(time.Now())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
@@ -1761,9 +1818,7 @@ func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
 }
 
 func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
-	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	wh := s.getWorkflowHandler(config)
+	wh := s.getWorkflowHandler(s.newConfig())
 	now := timestamp.TimePtr(time.Now())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
@@ -1800,63 +1855,130 @@ func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
 
 func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-
 	wh := s.getWorkflowHandler(config)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(elasticsearch.PersistenceName).AnyTimes()
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
-
+	query := "WorkflowId = 'wid'"
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.testNamespace.String(),
-		PageSize:  int32(config.ESIndexMaxResultWindow()),
+		PageSize:  int32(config.VisibilityMaxPageSize(s.testNamespace.String())),
+		Query:     query,
 	}
 	ctx := context.Background()
 
-	query := "WorkflowId = 'wid'"
-	listRequest.Query = query
+	// page size <= 0 => max page size = 1000
+	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(
+		gomock.Any(),
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   s.testNamespaceID,
+			Namespace:     s.testNamespace,
+			PageSize:      config.VisibilityMaxPageSize(s.testNamespace.String()),
+			NextPageToken: nil,
+			Query:         query,
+		},
+	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
 	_, err := wh.ListWorkflowExecutions(ctx, listRequest)
 	s.NoError(err)
 	s.Equal(query, listRequest.GetQuery())
 
-	listRequest.PageSize = int32(config.ESIndexMaxResultWindow() + 1)
+	// page size > 1000 => max page size = 1000
+	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(
+		gomock.Any(),
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   s.testNamespaceID,
+			Namespace:     s.testNamespace,
+			PageSize:      config.VisibilityMaxPageSize(s.testNamespace.String()),
+			NextPageToken: nil,
+			Query:         query,
+		},
+	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
+	listRequest.PageSize = int32(config.VisibilityMaxPageSize(s.testNamespace.String())) + 1
 	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
-	s.Error(err)
+	s.NoError(err)
+	s.Equal(query, listRequest.GetQuery())
+
+	// page size between 0 and 1000
+	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(
+		gomock.Any(),
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   s.testNamespaceID,
+			Namespace:     s.testNamespace,
+			PageSize:      10,
+			NextPageToken: nil,
+			Query:         query,
+		},
+	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
+	listRequest.PageSize = 10
+	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
+	s.NoError(err)
+	s.Equal(query, listRequest.GetQuery())
 }
 
 func (s *workflowHandlerSuite) TestScanWorkflowExecutions() {
 	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(s.testNamespace).Return(elasticsearch.PersistenceName).AnyTimes()
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
-
+	query := "WorkflowId = 'wid'"
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
 		Namespace: s.testNamespace.String(),
-		PageSize:  int32(config.ESIndexMaxResultWindow()),
+		PageSize:  int32(config.VisibilityMaxPageSize(s.testNamespace.String())),
+		Query:     query,
 	}
 	ctx := context.Background()
 
-	query := "WorkflowId = 'wid'"
-	scanRequest.Query = query
+	// page size <= 0 => max page size = 1000
+	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(
+		gomock.Any(),
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   s.testNamespaceID,
+			Namespace:     s.testNamespace,
+			PageSize:      config.VisibilityMaxPageSize(s.testNamespace.String()),
+			NextPageToken: nil,
+			Query:         query,
+		},
+	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
 	_, err := wh.ScanWorkflowExecutions(ctx, scanRequest)
 	s.NoError(err)
 	s.Equal(query, scanRequest.GetQuery())
 
-	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.testNamespace.String(),
-		PageSize:  int32(config.ESIndexMaxResultWindow() + 1),
-		Query:     query,
-	}
-	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
-	s.Error(err)
+	// page size > 1000 => max page size = 1000
+	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(
+		gomock.Any(),
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   s.testNamespaceID,
+			Namespace:     s.testNamespace,
+			PageSize:      config.VisibilityMaxPageSize(s.testNamespace.String()),
+			NextPageToken: nil,
+			Query:         query,
+		},
+	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
+	scanRequest.PageSize = int32(config.VisibilityMaxPageSize(s.testNamespace.String())) + 1
+	_, err = wh.ScanWorkflowExecutions(ctx, scanRequest)
+	s.NoError(err)
+	s.Equal(query, scanRequest.GetQuery())
+
+	// page size between 0 and 1000
+	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(
+		gomock.Any(),
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   s.testNamespaceID,
+			Namespace:     s.testNamespace,
+			PageSize:      10,
+			NextPageToken: nil,
+			Query:         query,
+		},
+	).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
+	scanRequest.PageSize = 10
+	_, err = wh.ScanWorkflowExecutions(ctx, scanRequest)
+	s.NoError(err)
+	s.Equal(query, scanRequest.GetQuery())
 }
 
 func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
-	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	wh := s.getWorkflowHandler(config)
+	wh := s.getWorkflowHandler(s.newConfig())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 5}, nil)
@@ -1929,10 +2051,7 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 }
 
 func (s *workflowHandlerSuite) TestGetSystemInfo() {
-	config := s.newConfig()
-	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
-
-	wh := s.getWorkflowHandler(config)
+	wh := s.getWorkflowHandler(s.newConfig())
 
 	resp, err := wh.GetSystemInfo(context.Background(), &workflowservice.GetSystemInfoRequest{})
 	s.NoError(err)
@@ -2498,6 +2617,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations() {
 	wh := s.getWorkflowHandler(config)
 	now := timestamp.TimePtr(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetReadStoreName(testNamespace).Return("").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
@@ -2549,7 +2669,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, false)
+	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, true, false)
 }
 
 func updateRequest(

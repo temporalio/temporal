@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -138,6 +139,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 			// just turn this into a success, with unspecified status
 			return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED}, nil
 		}
+		a.Logger.Error("error from PollMutableState", tag.Error(err), tag.WorkflowID(req.Execution.WorkflowId))
 		return nil, err
 	}
 
@@ -180,11 +182,13 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 	histRes, err := a.FrontendClient.GetWorkflowExecutionHistory(ctx, histReq)
 
 	if err != nil {
+		a.Logger.Error("error from GetWorkflowExecutionHistory", tag.Error(err), tag.WorkflowID(req.Execution.WorkflowId))
 		return nil, err
 	}
 
 	events := histRes.GetHistory().GetEvents()
 	if len(events) < 1 {
+		a.Logger.Error("GetWorkflowExecutionHistory returned no events", tag.WorkflowID(req.Execution.WorkflowId))
 		return nil, errNoEvents
 	}
 	lastEvent := events[0]
@@ -229,12 +233,21 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 }
 
 func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+	if !req.LongPoll {
+		// Go SDK currently doesn't set context timeout based on local activity
+		// StartToCloseTimeout if ScheduleToCloseTimeout is set, so add a timeout here.
+		// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+		defer cancel()
+	}
+
 	for ctx.Err() == nil {
 		activity.RecordHeartbeat(ctx)
 		res, err := a.tryWatchWorkflow(ctx, req)
 		// long poll should return before our deadline, but even if it doesn't,
 		// we can still try again within the same activity
-		if err == errTryAgain || common.IsContextDeadlineExceededErr(err) {
+		if req.LongPoll && (err == errTryAgain || common.IsContextDeadlineExceededErr(err)) {
 			continue
 		}
 		if newRunID, ok := err.(errFollow); ok {
@@ -243,10 +256,15 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkf
 		}
 		return res, translateError(err, "WatchWorkflow")
 	}
-	return nil, ctx.Err()
+	return nil, translateError(ctx.Err(), "WatchWorkflow")
 }
 
 func (a *activities) CancelWorkflow(ctx context.Context, req *schedspb.CancelWorkflowRequest) error {
+	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+	defer cancel()
+
 	rreq := &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: a.namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -265,6 +283,11 @@ func (a *activities) CancelWorkflow(ctx context.Context, req *schedspb.CancelWor
 }
 
 func (a *activities) TerminateWorkflow(ctx context.Context, req *schedspb.TerminateWorkflowRequest) error {
+	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+	defer cancel()
+
 	rreq := &historyservice.TerminateWorkflowExecutionRequest{
 		NamespaceId: a.namespaceID.String(),
 		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -290,7 +313,7 @@ func translateError(err error, msgPrefix string) error {
 		return nil
 	}
 	message := fmt.Sprintf("%s: %s", msgPrefix, err.Error())
-	if common.IsServiceTransientError(err) {
+	if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
 		return temporal.NewApplicationErrorWithCause(message, errType(err), err)
 	}
 	return temporal.NewNonRetryableApplicationError(message, errType(err), err)

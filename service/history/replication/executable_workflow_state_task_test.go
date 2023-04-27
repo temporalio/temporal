@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -66,7 +68,8 @@ type (
 		replicationTask   *replicationspb.SyncWorkflowStateTaskAttributes
 		sourceClusterName string
 
-		task *ExecutableWorkflowStateTask
+		taskID int64
+		task   *ExecutableWorkflowStateTask
 	}
 )
 
@@ -106,6 +109,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 
+	s.taskID = rand.Int63()
 	s.task = NewExecutableWorkflowStateTask(
 		ProcessToolBox{
 			ClusterMetadata:    s.clusterMetadata,
@@ -116,12 +120,13 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 			MetricsHandler:     s.metricsHandler,
 			Logger:             s.logger,
 		},
-		rand.Int63(),
+		s.taskID,
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
 	)
 	s.task.ExecutableTask = s.executableTask
+	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
 }
 
 func (s *executableWorkflowStateTaskSuite) TearDownTest() {
@@ -129,6 +134,7 @@ func (s *executableWorkflowStateTaskSuite) TearDownTest() {
 }
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -150,7 +156,15 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
 	s.NoError(err)
 }
 
-func (s *executableWorkflowStateTaskSuite) TestExecute_Skip() {
+func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_TerminalState() {
+	s.executableTask.EXPECT().TerminalState().Return(true)
+
+	err := s.task.Execute()
+	s.NoError(err)
+}
+
+func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_Namespace() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
@@ -160,6 +174,7 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Skip() {
 }
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	err := errors.New("OwO")
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		"", false, err,
@@ -177,4 +192,30 @@ func (s *executableWorkflowStateTaskSuite) TestHandleErr() {
 
 	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
+}
+
+func (s *executableWorkflowStateTaskSuite) TestMarkPoisonPill() {
+	shardID := rand.Int31()
+	shardContext := shard.NewMockContext(s.controller)
+	executionManager := persistence.NewMockExecutionManager(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.task.NamespaceID),
+		s.task.WorkflowID,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	shardContext.EXPECT().GetExecutionManager().Return(executionManager).AnyTimes()
+	executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardID,
+		SourceClusterName: s.sourceClusterName,
+		TaskInfo: &persistencepb.ReplicationTaskInfo{
+			NamespaceId: s.task.NamespaceID,
+			WorkflowId:  s.task.WorkflowID,
+			RunId:       s.task.RunID,
+			TaskId:      s.task.ExecutableTask.TaskID(),
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+		},
+	}).Return(nil)
+
+	err := s.task.MarkPoisonPill()
+	s.NoError(err)
 }

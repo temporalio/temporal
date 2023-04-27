@@ -37,8 +37,9 @@ import (
 
 // Config represents configuration for history service
 type Config struct {
-	NumberOfShards             int32
-	DefaultVisibilityIndexName string
+	NumberOfShards int32
+
+	EnableReplicationStream dynamicconfig.BoolPropertyFn
 
 	RPS                                   dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit                      dynamicconfig.IntPropertyFn
@@ -47,15 +48,11 @@ type Config struct {
 	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 
-	StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-	StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-	AdvancedVisibilityWritingMode             dynamicconfig.StringPropertyFn
-	EnableWriteToSecondaryAdvancedVisibility  dynamicconfig.BoolPropertyFn
-	EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFn
+	VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+	VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+	EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SecondaryVisibilityWritingMode    dynamicconfig.StringPropertyFn
+	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog       dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -233,6 +230,11 @@ type Config struct {
 	ReplicationTaskProcessorShardQPS                     dynamicconfig.FloatPropertyFn
 	ReplicationBypassCorruptedData                       dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 
+	ReplicationStreamSyncStatusDuration      dynamicconfig.DurationPropertyFn
+	ReplicationStreamMinReconnectDuration    dynamicconfig.DurationPropertyFn
+	ReplicationProcessorSchedulerQueueSize   dynamicconfig.IntPropertyFn
+	ReplicationProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
+
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
 
@@ -299,10 +301,16 @@ const (
 )
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisibilityConfigExist bool, defaultVisibilityIndex string) *Config {
+func NewConfig(
+	dc *dynamicconfig.Collection,
+	numberOfShards int32,
+	visibilityStoreConfigExist bool,
+	advancedVisibilityStoreConfigExist bool,
+) *Config {
 	cfg := &Config{
-		NumberOfShards:             numberOfShards,
-		DefaultVisibilityIndexName: defaultVisibilityIndex,
+		NumberOfShards: numberOfShards,
+
+		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                      dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
@@ -315,15 +323,11 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
 
-		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
-		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
-		AdvancedVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
-		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
-		AdvancedVisibilityWritingMode:             dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, visibility.DefaultAdvancedVisibilityWritingMode(isAdvancedVisibilityConfigExist)),
-		EnableWriteToSecondaryAdvancedVisibility:  dc.GetBoolProperty(dynamicconfig.EnableWriteToSecondaryAdvancedVisibility, false),
-		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, isAdvancedVisibilityConfigExist),
-		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
-		VisibilityDisableOrderByClause:            dc.GetBoolProperty(dynamicconfig.VisibilityDisableOrderByClause, false),
+		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, advancedVisibilityStoreConfigExist),
+		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, advancedVisibilityStoreConfigExist),
+		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, advancedVisibilityStoreConfigExist),
+		SecondaryVisibilityWritingMode:    visibility.GetSecondaryVisibilityWritingModeConfig(dc, visibilityStoreConfigExist, advancedVisibilityStoreConfigExist),
+		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, false),
 
 		EmitShardLagLog:                      dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
 		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
@@ -398,6 +402,11 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ReplicationTaskProcessorHostQPS:                       dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorHostQPS, 1500),
 		ReplicationTaskProcessorShardQPS:                      dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorShardQPS, 30),
 		ReplicationBypassCorruptedData:                        dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.ReplicationBypassCorruptedData, false),
+
+		ReplicationStreamSyncStatusDuration:      dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
+		ReplicationStreamMinReconnectDuration:    dc.GetDurationProperty(dynamicconfig.ReplicationStreamMinReconnectDuration, 4*time.Second),
+		ReplicationProcessorSchedulerQueueSize:   dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
+		ReplicationProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
 
 		MaximumBufferedEventsBatch:      dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
 		MaximumSignalsPerExecution:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 0),

@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
@@ -111,6 +112,7 @@ type (
 
 		transferQueueStandbyTaskExecutor *transferQueueStandbyTaskExecutor
 		mockSearchAttributesProvider     *searchattribute.MockProvider
+		mockVisibilityManager            *manager.MockVisibilityManager
 	}
 )
 
@@ -166,6 +168,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockAdminClient = s.mockShard.Resource.RemoteAdminClient
 	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
+	s.mockVisibilityManager = s.mockShard.Resource.VisibilityManager
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.TargetNamespaceID).Return(tests.GlobalTargetNamespaceEntry, nil).AnyTimes()
@@ -216,6 +219,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 		s.clusterName,
 		s.mockShard.Resource.GetMatchingClient(),
+		s.mockVisibilityManager,
 	).(*transferQueueStandbyTaskExecutor)
 }
 
@@ -744,6 +748,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution_CanSki
 				).AnyTimes()
 				s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
 				s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
+				s.mockVisibilityManager.EXPECT().GetIndexName().Return("")
 			}
 
 			_, _, err = s.transferQueueStandbyTaskExecutor.Execute(

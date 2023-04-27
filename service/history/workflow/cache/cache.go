@@ -35,6 +35,7 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -55,11 +56,18 @@ type (
 	ReleaseCacheFunc func(err error)
 
 	Cache interface {
+		GetOrCreateCurrentWorkflowExecution(
+			ctx context.Context,
+			namespaceID namespace.ID,
+			workflowID string,
+			lockPriority workflow.LockPriority,
+		) (workflow.Context, ReleaseCacheFunc, error)
+
 		GetOrCreateWorkflowExecution(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			execution commonpb.WorkflowExecution,
-			caller workflow.CallerType,
+			lockPriority workflow.LockPriority,
 		) (workflow.Context, ReleaseCacheFunc, error)
 	}
 
@@ -97,11 +105,47 @@ func NewCache(shard shard.Context) Cache {
 	}
 }
 
+func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+	lockPriority workflow.LockPriority,
+) (workflow.Context, ReleaseCacheFunc, error) {
+
+	if err := c.validateWorkflowID(workflowID); err != nil {
+		return nil, nil, err
+	}
+
+	handler := c.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryCacheGetOrCreateCurrentScope))
+	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	start := time.Now()
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(start)) }()
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		// using empty run ID as current workflow run ID
+		RunId: "",
+	}
+
+	weCtx, weReleaseFn, err := c.getOrCreateWorkflowExecutionInternal(
+		ctx,
+		namespaceID,
+		execution,
+		handler,
+		true,
+		lockPriority,
+	)
+
+	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(), time.Since(start).Nanoseconds())
+
+	return weCtx, weReleaseFn, err
+}
+
 func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
-	caller workflow.CallerType,
+	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
 	if err := c.validateWorkflowExecutionInfo(ctx, namespaceID, &execution); err != nil {
@@ -119,7 +163,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 		execution,
 		handler,
 		false,
-		caller,
+		lockPriority,
 	)
 
 	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(), time.Since(start).Nanoseconds())
@@ -133,7 +177,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	execution commonpb.WorkflowExecution,
 	handler metrics.Handler,
 	forceClearContext bool,
-	caller workflow.CallerType,
+	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
@@ -152,9 +196,9 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext, caller)
+	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext, lockPriority)
 
-	if err := workflowCtx.Lock(ctx, caller); err != nil {
+	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
 		// ctx is done before lock can be acquired
 		c.Release(key)
 		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
@@ -168,7 +212,7 @@ func (c *CacheImpl) makeReleaseFunc(
 	key definition.WorkflowKey,
 	context workflow.Context,
 	forceClearContext bool,
-	caller workflow.CallerType,
+	lockPriority workflow.LockPriority,
 ) func(error) {
 
 	status := cacheNotReleased
@@ -176,7 +220,7 @@ func (c *CacheImpl) makeReleaseFunc(
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
 			if rec := recover(); rec != nil {
 				context.Clear()
-				context.Unlock(caller)
+				context.Unlock(lockPriority)
 				c.Release(key)
 				panic(rec)
 			} else {
@@ -184,7 +228,7 @@ func (c *CacheImpl) makeReleaseFunc(
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					context.Clear()
 				}
-				context.Unlock(caller)
+				context.Unlock(lockPriority)
 				c.Release(key)
 			}
 		}
@@ -197,13 +241,8 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	execution *commonpb.WorkflowExecution,
 ) error {
 
-	if execution.GetWorkflowId() == "" {
-		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
-	}
-
-	if !utf8.ValidString(execution.GetWorkflowId()) {
-		// We know workflow cannot exist with invalid utf8 string as WorkflowID.
-		return serviceerror.NewNotFound("Workflow not exists.")
+	if err := c.validateWorkflowID(execution.GetWorkflowId()); err != nil {
+		return err
 	}
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
@@ -222,5 +261,20 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
 		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}
+	return nil
+}
+
+func (c *CacheImpl) validateWorkflowID(
+	workflowID string,
+) error {
+	if workflowID == "" {
+		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
+	}
+
+	if !utf8.ValidString(workflowID) {
+		// We know workflow cannot exist with invalid utf8 string as WorkflowID.
+		return serviceerror.NewNotFound("Workflow not exists.")
+	}
+
 	return nil
 }

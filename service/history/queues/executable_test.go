@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -124,6 +125,28 @@ func (s *executableSuite) TestExecute_CapturePanic() {
 		},
 	)
 	s.Error(executable.Execute())
+}
+
+func (s *executableSuite) TestExecute_CallerInfo() {
+	executable := s.newTestExecutable()
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(ctx context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+			s.Equal(headers.CallerTypeBackground, headers.GetCallerInfo(ctx).CallerType)
+			return nil, true, nil
+		},
+	)
+	s.NoError(executable.Execute())
+
+	// force set to low priority
+	executable.(*executableImpl).priority = ctasks.PriorityLow
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(ctx context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+			s.Equal(headers.CallerTypePreemptable, headers.GetCallerInfo(ctx).CallerType)
+			return nil, true, nil
+		},
+	)
+	s.NoError(executable.Execute())
 }
 
 func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
@@ -212,6 +235,24 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 		executable.Nack(consts.ErrDependencyTaskNotCompleted) // this error won't trigger re-submit
 		s.Equal(ctasks.TaskStatePending, executable.State())
 	})
+}
+
+func (s *executableSuite) TestTaskAbort() {
+	executable := s.newTestExecutable()
+
+	executable.Abort()
+
+	s.NoError(executable.Execute()) // should be no-op and won't invoke executor
+
+	executable.Ack() // should be no-op
+	s.Equal(ctasks.TaskStateAborted, executable.State())
+
+	executable.Nack(errors.New("some random error")) // should be no-op and won't invoke scheduler or rescheduler
+
+	executable.Reschedule() // should be no-op and won't invoke rescheduler
+
+	// all error should be treated as non-retryable to break retry loop
+	s.False(executable.IsRetryableError(errors.New("some random error")))
 }
 
 func (s *executableSuite) TestTaskCancellation() {

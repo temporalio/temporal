@@ -49,8 +49,6 @@ type (
 		scheduler   *FIFOScheduler[*MockTask]
 		retryPolicy backoff.RetryPolicy
 	}
-
-	noopMonitor[T Task] struct{}
 )
 
 func TestFIFOSchedulerSuite(t *testing.T) {
@@ -118,7 +116,7 @@ func (s *fifoSchedulerSuite) TestSubmitProcess_Stopped_Submission() {
 	mockTask.EXPECT().Ack().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
 	// if task get drained
-	mockTask.EXPECT().Reschedule().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
+	mockTask.EXPECT().Abort().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
 	s.scheduler.Submit(mockTask)
 
@@ -138,7 +136,7 @@ func (s *fifoSchedulerSuite) TestSubmitProcess_Stopped_FailExecution() {
 		return err
 	}).Times(1)
 	mockTask.EXPECT().IsRetryableError(executionErr).Return(true).MaxTimes(1)
-	mockTask.EXPECT().Reschedule().Do(func() { testWaitGroup.Done() }).Times(1)
+	mockTask.EXPECT().Abort().Do(func() { testWaitGroup.Done() }).Times(1)
 
 	s.scheduler.Submit(mockTask)
 
@@ -220,7 +218,6 @@ func (s *fifoSchedulerSuite) TestStartStopWorkers() {
 
 func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
 	return NewFIFOScheduler[*MockTask](
-		&noopMonitor[*MockTask]{},
 		&FIFOSchedulerOptions{
 			QueueSize:   1,
 			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
@@ -228,7 +225,3 @@ func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
 		log.NewNoopLogger(),
 	)
 }
-
-func (m *noopMonitor[T]) Start()        {}
-func (m *noopMonitor[T]) Stop()         {}
-func (m *noopMonitor[T]) RecordStart(T) {}

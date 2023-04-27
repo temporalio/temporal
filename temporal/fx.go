@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -164,14 +163,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
-	err = verifyPersistenceCompatibleVersion(so.config.Persistence, so.persistenceServiceResolver)
+	persistenceConfig := so.config.Persistence
+	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver)
 	if err != nil {
 		return serverOptionsProvider{}, err
-	}
-
-	err = membership.ValidateConfig(&so.config.Global.Membership)
-	if err != nil {
-		return serverOptionsProvider{}, fmt.Errorf("ringpop config validation error: %w", err)
 	}
 
 	stopChan := make(chan interface{})
@@ -222,22 +217,26 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// EsConfig / EsClient
 	var esConfig *esclient.Config
 	var esClient esclient.Client
-	if so.config.Persistence.AdvancedVisibilityConfigExist() {
-		advancedVisibilityStore, ok := so.config.Persistence.DataStores[so.config.Persistence.AdvancedVisibilityStore]
-		if !ok {
-			return serverOptionsProvider{}, fmt.Errorf("persistence config: advanced visibility datastore %q: missing config", so.config.Persistence.AdvancedVisibilityStore)
-		}
 
+	if persistenceConfig.StandardVisibilityConfigExist() &&
+		persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch != nil {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.VisibilityStore].Elasticsearch
+	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
+		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
+	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
+		esConfig = persistenceConfig.DataStores[persistenceConfig.AdvancedVisibilityStore].Elasticsearch
+	}
+
+	if esConfig != nil {
 		esHttpClient := so.elasticsearchHttpClient
 		if esHttpClient == nil {
 			var err error
-			esHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.Elasticsearch.AWSRequestSigning)
+			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
 			if err != nil {
 				return serverOptionsProvider{}, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 			}
 		}
-
-		esConfig = advancedVisibilityStore.Elasticsearch
 
 		esClient, err = esclient.NewClient(esConfig, esHttpClient, logger)
 		if err != nil {
@@ -644,13 +643,17 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
-	var indexName string
-	var initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes
-	if config.Persistence.IsSQLVisibilityStore() {
-		indexName = config.Persistence.DataStores[config.Persistence.VisibilityStore].SQL.DatabaseName
-		initialIndexSearchAttributes = map[string]*persistencespb.IndexSearchAttributes{
-			indexName: searchattribute.GetSqlDbIndexSearchAttributes(),
-		}
+	var sqlIndexNames []string
+	initialIndexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
+	if ds := config.Persistence.GetVisibilityStoreConfig(); ds.SQL != nil {
+		indexName := ds.GetIndexName()
+		sqlIndexNames = append(sqlIndexNames, indexName)
+		initialIndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
+	}
+	if ds := config.Persistence.GetSecondaryVisibilityStoreConfig(); ds.SQL != nil {
+		indexName := ds.GetIndexName()
+		sqlIndexNames = append(sqlIndexNames, indexName)
+		initialIndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
 
 	clusterData := config.ClusterMetadata
@@ -708,25 +711,31 @@ func ApplyClusterMetadataConfigProvider(
 		if err != nil {
 			return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 		}
-
 		currentMetadata := resp.ClusterMetadata
 
 		// TODO (rodrigozhou): Remove this block for v1.21.
 		// Handle registering custom search attributes when upgrading to v1.20.
-		if config.Persistence.IsSQLVisibilityStore() {
+		if len(sqlIndexNames) > 0 {
 			needSave := false
 			if currentMetadata.IndexSearchAttributes == nil {
 				currentMetadata.IndexSearchAttributes = initialIndexSearchAttributes
 				needSave = true
-			} else if _, ok := currentMetadata.IndexSearchAttributes[indexName]; !ok {
-				currentMetadata.IndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
-				needSave = true
+			} else {
+				for _, indexName := range sqlIndexNames {
+					if _, ok := currentMetadata.IndexSearchAttributes[indexName]; !ok {
+						currentMetadata.IndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
+						needSave = true
+					}
+				}
 			}
 
 			if needSave {
 				_, err := clusterMetadataManager.SaveClusterMetadata(
 					ctx,
-					&persistence.SaveClusterMetadataRequest{ClusterMetadata: currentMetadata},
+					&persistence.SaveClusterMetadataRequest{
+						ClusterMetadata: currentMetadata,
+						Version:         resp.Version,
+					},
 				)
 				if err != nil {
 					logger.Warn(
@@ -736,6 +745,16 @@ func ApplyClusterMetadataConfigProvider(
 					)
 				}
 				logger.Info("Successfully registered search attributes.", tag.ClusterName(clusterName))
+
+				// need to re-fetch cluster metadata since it might need to be updated again below
+				resp, err = clusterMetadataManager.GetClusterMetadata(
+					ctx,
+					&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+				)
+				if err != nil {
+					return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
+				}
+				currentMetadata = resp.ClusterMetadata
 			}
 		}
 

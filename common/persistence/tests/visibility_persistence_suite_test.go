@@ -78,13 +78,18 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())
 	s.SearchAttributesProvider = searchattribute.NewTestProvider()
 	s.SearchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
-	s.VisibilityMgr, err = visibility.NewStandardManager(
+	s.VisibilityMgr, err = visibility.NewManager(
 		cfg,
 		resolver.NewNoopResolver(),
+		nil,
+		nil,
 		s.SearchAttributesProvider,
 		s.SearchAttributesMapperProvider,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		metrics.NoopMetricsHandler,
 		s.Logger,
 	)

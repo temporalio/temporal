@@ -203,7 +203,7 @@ func (s *scheduledQueueSuite) TestLookAheadTask_HasLookAheadTask() {
 
 	timerGate.SetCurrentTime(lookAheadTask.GetKey().FireTime)
 	select {
-	case <-s.scheduledQueue.timerGate.FireChan():
+	case <-s.scheduledQueue.timerGate.FireCh():
 	default:
 		s.Fail("timer gate should fire when look ahead task is due")
 	}
@@ -220,7 +220,7 @@ func (s *scheduledQueueSuite) TestLookAheadTask_NoLookAheadTask() {
 		(1 + testQueueOptions.MaxPollIntervalJitterCoefficient()) * float64(testQueueOptions.MaxPollInterval()),
 	)))
 	select {
-	case <-s.scheduledQueue.timerGate.FireChan():
+	case <-s.scheduledQueue.timerGate.FireCh():
 	default:
 		s.Fail("timer gate should fire at the end of look ahead window")
 	}
@@ -240,14 +240,14 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 		ShardOwner:   s.mockShard.GetOwner(),
 		TaskCategory: tasks.CategoryTimer,
 		ReaderID:     lookAheadReaderID,
-	}).Times(1)
+	}).Return(nil).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("some random error")).Times(1)
 	s.scheduledQueue.lookAheadTask()
 
 	timerGate.SetCurrentTime(s.scheduledQueue.nonReadableScope.Range.InclusiveMin.FireTime)
 	select {
-	case <-s.scheduledQueue.timerGate.FireChan():
+	case <-s.scheduledQueue.timerGate.FireCh():
 	default:
 		s.Fail("timer gate should fire when time reaches look ahead range")
 	}
@@ -275,11 +275,11 @@ func (s *scheduledQueueSuite) setupLookAheadMock(
 		ShardOwner:   s.mockShard.GetOwner(),
 		TaskCategory: tasks.CategoryTimer,
 		ReaderID:     lookAheadReaderID,
-	}).Times(1)
+	}).Return(nil).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
 		s.Equal(s.mockShard.GetShardID(), request.ShardID)
 		s.Equal(tasks.CategoryTimer, request.TaskCategory)
-		s.Equal(int32(DefaultReaderId), request.ReaderID)
+		s.Equal(DefaultReaderId, request.ReaderID)
 		s.Equal(lookAheadRange.InclusiveMin, request.InclusiveMinTaskKey)
 		s.Equal(1, request.BatchSize)
 		s.Nil(request.NextPageToken)

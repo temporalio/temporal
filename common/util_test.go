@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -369,4 +370,131 @@ func TestOverrideWorkflowTaskTimeout_Finite(t *testing.T) {
 	defaultTimeout = time.Duration(20)
 	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
 	require.Equal(t, MaxWorkflowTaskStartToCloseTimeout, OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
+}
+
+func TestMapShardID_ByNamespaceWorkflow_4And16(t *testing.T) {
+	namespaceID := uuid.New()
+	workflowID := uuid.New()
+	shardID4 := WorkflowIDToHistoryShard(namespaceID, workflowID, 4)
+	shardID16 := WorkflowIDToHistoryShard(namespaceID, workflowID, 16)
+
+	targetShardIDs := MapShardID(16, 4, shardID16)
+	require.Equal(t, []int32{
+		shardID4,
+	}, targetShardIDs)
+
+	targetShardIDs = MapShardID(4, 16, shardID4)
+	found := false
+	for _, targetShardID := range targetShardIDs {
+		if shardID16 == targetShardID {
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+}
+
+func TestMapShardID_1To4(t *testing.T) {
+	sourceShardCount := int32(1)
+	targetShardCount := int32(4)
+
+	targetShards := MapShardID(sourceShardCount, targetShardCount, 1)
+	require.Equal(t, []int32{
+		1, 2, 3, 4,
+	}, targetShards)
+}
+
+func TestMapShardID_4To1(t *testing.T) {
+	sourceShardCount := int32(4)
+	targetShardCount := int32(1)
+
+	targetShards := MapShardID(sourceShardCount, targetShardCount, 4)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 3)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 2)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 1)
+	require.Equal(t, []int32{1}, targetShards)
+}
+
+func TestMapShardID_4To16(t *testing.T) {
+	sourceShardCount := int32(4)
+	targetShardCount := int32(16)
+
+	targetShards := MapShardID(sourceShardCount, targetShardCount, 1)
+	require.Equal(t, []int32{
+		1, 5, 9, 13,
+	}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 2)
+	require.Equal(t, []int32{
+		2, 6, 10, 14,
+	}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 3)
+	require.Equal(t, []int32{
+		3, 7, 11, 15,
+	}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 4)
+	require.Equal(t, []int32{
+		4, 8, 12, 16,
+	}, targetShards)
+}
+
+func TestMapShardID_16To4(t *testing.T) {
+	sourceShardCount := int32(16)
+	targetShardCount := int32(4)
+
+	targetShards := MapShardID(sourceShardCount, targetShardCount, 16)
+	require.Equal(t, []int32{4}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 15)
+	require.Equal(t, []int32{3}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 14)
+	require.Equal(t, []int32{2}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 13)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 12)
+	require.Equal(t, []int32{4}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 11)
+	require.Equal(t, []int32{3}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 10)
+	require.Equal(t, []int32{2}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 9)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 8)
+	require.Equal(t, []int32{4}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 7)
+	require.Equal(t, []int32{3}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 6)
+	require.Equal(t, []int32{2}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 5)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 4)
+	require.Equal(t, []int32{4}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 3)
+	require.Equal(t, []int32{3}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 2)
+	require.Equal(t, []int32{2}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 1)
+	require.Equal(t, []int32{1}, targetShards)
 }

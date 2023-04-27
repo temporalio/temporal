@@ -35,6 +35,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -64,7 +65,7 @@ type monitor struct {
 	lifecycleCancel context.CancelFunc
 
 	serviceName               primitives.ServiceName
-	services                  map[primitives.ServiceName]int
+	services                  config.ServicePortMap
 	rp                        *service
 	rings                     map[primitives.ServiceName]*serviceResolver
 	logger                    log.Logger
@@ -79,12 +80,12 @@ var _ membership.Monitor = (*monitor)(nil)
 // newMonitor returns a ringpop-based membership monitor
 func newMonitor(
 	serviceName primitives.ServiceName,
-	services map[primitives.ServiceName]int,
+	services config.ServicePortMap,
 	rp *service,
 	logger log.Logger,
 	metadataManager persistence.ClusterMetadataManager,
 	broadcastHostPortResolver func() (string, error),
-) membership.Monitor {
+) *monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
 		lifecycleCtx,
@@ -338,7 +339,7 @@ func (rpo *monitor) Stop() {
 // WhoAmI returns the address (host:port) and labels for a service
 // Ringpop implementation of WhoAmI return the address used by ringpop listener.
 // This is different from service address as we register ringpop handlers on a separate port.
-// For this reason we need to lookup the port for the service and replace ringpop port with service port before
+// For this reason we need to look up the port for the service and replace ringpop port with service port before
 // returning HostInfo back.
 func (rpo *monitor) WhoAmI() (membership.HostInfo, error) {
 	address, err := rpo.rp.WhoAmI()
@@ -374,40 +375,8 @@ func (rpo *monitor) GetResolver(service primitives.ServiceName) (membership.Serv
 	return ring, nil
 }
 
-func (rpo *monitor) Lookup(service primitives.ServiceName, key string) (membership.HostInfo, error) {
-	ring, err := rpo.GetResolver(service)
-	if err != nil {
-		return nil, err
-	}
-	return ring.Lookup(key)
-}
-
-func (rpo *monitor) AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *membership.ChangedEvent) error {
-	ring, err := rpo.GetResolver(service)
-	if err != nil {
-		return err
-	}
-	return ring.AddListener(name, notifyChannel)
-}
-
-func (rpo *monitor) RemoveListener(service primitives.ServiceName, name string) error {
-	ring, err := rpo.GetResolver(service)
-	if err != nil {
-		return err
-	}
-	return ring.RemoveListener(name)
-}
-
 func (rpo *monitor) GetReachableMembers() ([]string, error) {
 	return rpo.rp.GetReachableMembers()
-}
-
-func (rpo *monitor) GetMemberCount(service primitives.ServiceName) (int, error) {
-	ring, err := rpo.GetResolver(service)
-	if err != nil {
-		return 0, err
-	}
-	return ring.MemberCount(), nil
 }
 
 func replaceServicePort(address string, servicePort int) (string, error) {

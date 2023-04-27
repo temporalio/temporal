@@ -149,7 +149,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 
 	s.mockEventsCache = s.mockShard.MockEventsCache
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.ParentNamespaceID).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ChildNamespace).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
@@ -193,7 +193,7 @@ func (s *engine2Suite) SetupTest() {
 			s.config.SearchAttributesNumberOfKeysLimit,
 			s.config.SearchAttributesSizeOfValueLimit,
 			s.config.SearchAttributesTotalSizeLimit,
-			s.config.DefaultVisibilityIndexName,
+			"",
 			false,
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
@@ -466,7 +466,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		metrics.AddMetricsContext(context.Background()),
 		tests.NamespaceID,
 		workflowExecution,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background())
@@ -1946,7 +1946,7 @@ func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we commonpb.Wor
 		metrics.AddMetricsContext(context.Background()),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return nil

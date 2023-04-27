@@ -363,7 +363,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	newResponse := &GetWorkflowExecutionResponse{
 		State:             state,
 		DBRecordVersion:   response.DBRecordVersion,
-		MutableStateStats: *statusOfInternalWorkflow(response.State, nil),
+		MutableStateStats: *statusOfInternalWorkflow(response.State, state, nil),
 	}
 	return newResponse, nil
 }
@@ -458,7 +458,7 @@ func (m *executionManagerImpl) serializeWorkflowEvents(
 		request.Info = BuildHistoryGarbageCleanupInfo(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID)
 	}
 
-	return m.serializeAppendHistoryNodesRequest(ctx, request)
+	return m.serializeAppendHistoryNodesRequest(request)
 }
 
 func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport

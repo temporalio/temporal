@@ -77,7 +77,7 @@ func NewScheduledQueue(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *scheduledQueue {
-	paginationFnProvider := func(readerID int32, r Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(readerID int64, r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			ctx, cancel := newQueueIOContext()
 			defer cancel()
@@ -111,7 +111,7 @@ func NewScheduledQueue(
 	}
 
 	lookAheadCh := make(chan struct{}, 1)
-	readerCompletionFn := func(readerID int32) {
+	readerCompletionFn := func(readerID int64) {
 		if readerID != DefaultReaderId {
 			return
 		}
@@ -214,7 +214,7 @@ func (p *scheduledQueue) processEventLoop() {
 			p.processNewTime()
 		case <-p.lookAheadCh:
 			p.lookAheadTask()
-		case <-p.timerGate.FireChan():
+		case <-p.timerGate.FireCh():
 			p.processNewRange()
 		case <-p.checkpointTimer.C:
 			p.checkpoint()
@@ -267,8 +267,8 @@ func (p *scheduledQueue) lookAheadTask() {
 	ctx, cancel := newQueueIOContext()
 	defer cancel()
 
-	if err := p.registerLookAheadReader(); err != nil {
-		p.logger.Error("Failed to load look ahead task", tag.Error(err))
+	if err := p.ensureLookAheadReader(); err != nil {
+		p.logger.Error("Failed to create look ahead reader", tag.Error(err))
 		p.timerGate.Update(lookAheadMinTime)
 		return
 	}
@@ -308,19 +308,9 @@ func (p *scheduledQueue) lookAheadTask() {
 	p.timerGate.Update(lookAheadMaxTime)
 }
 
-func (p *scheduledQueue) registerLookAheadReader() error {
-	_, ok := p.readerGroup.ReaderByID(lookAheadReaderID)
-	if ok {
-		return nil
-	}
-
-	// This should not happen actually
-	// since lookAheadReadID == DefaultReaderID and defaultReaderID should
-	// always be available (unless during shutdown)
-
-	// TODO: return error from NewReader
-	p.readerGroup.NewReader(lookAheadReaderID)
-	return nil
+func (p *scheduledQueue) ensureLookAheadReader() error {
+	_, err := p.readerGroup.GetOrCreateReader(lookAheadReaderID)
+	return err
 }
 
 // IsTimeExpired checks if the testing time is equal or before

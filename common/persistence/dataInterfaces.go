@@ -114,7 +114,12 @@ type (
 		Msg string
 	}
 
-	// AppendHistoryTimeoutError represents a failed insert to history tree / node request
+	// InsertHistoryTimeoutError represents a failed insert to history tree request
+	InsertHistoryTimeoutError struct {
+		Msg string
+	}
+
+	// AppendHistoryTimeoutError represents a failed insert to history node request
 	AppendHistoryTimeoutError struct {
 		Msg string
 	}
@@ -410,7 +415,7 @@ type (
 		ShardID      int32
 		ShardOwner   string
 		TaskCategory tasks.Category
-		ReaderID     int32
+		ReaderID     int64
 	}
 
 	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
@@ -424,7 +429,7 @@ type (
 		ShardID                    int32
 		ShardOwner                 string
 		TaskCategory               tasks.Category
-		ReaderID                   int32
+		ReaderID                   int64
 		InclusiveMinPendingTaskKey tasks.Key
 	}
 
@@ -434,7 +439,7 @@ type (
 	GetHistoryTasksRequest struct {
 		ShardID             int32
 		TaskCategory        tasks.Category
-		ReaderID            int32
+		ReaderID            int64
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
 		BatchSize           int
@@ -692,6 +697,14 @@ type (
 		SignalRequestIDCount   int
 		BufferedEventsCount    int
 		TaskCountByCategory    map[string]int
+
+		// Total item count for various information captured within mutable state
+		TotalActivityCount              int64
+		TotalUserTimerCount             int64
+		TotalChildExecutionCount        int64
+		TotalRequestCancelExternalCount int64
+		TotalSignalExternalCount        int64
+		TotalSignalCount                int64
 	}
 
 	HistoryStatistics struct {
@@ -833,6 +846,8 @@ type (
 	ForkHistoryBranchRequest struct {
 		// The shard to get history branch data
 		ShardID int32
+		// The namespace performing the fork
+		NamespaceID string
 		// The base branch to fork from
 		ForkBranchToken []byte
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
@@ -888,9 +903,7 @@ type (
 		// A UUID of a tree
 		TreeID string
 		// Get data from this shard
-		ShardID *int32
-		// optional: can provide treeID via branchToken if treeID is empty
-		BranchToken []byte
+		ShardID int32
 	}
 
 	// HistoryBranchDetail contains detailed information of a branch
@@ -1137,6 +1150,10 @@ type (
 )
 
 func (e *InvalidPersistenceRequestError) Error() string {
+	return e.Msg
+}
+
+func (e *InsertHistoryTimeoutError) Error() string {
 	return e.Msg
 }
 

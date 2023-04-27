@@ -31,6 +31,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/log"
@@ -81,6 +82,16 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 	_, methodName := SplitMethodName(info.FullMethod)
 	// token will default to 0
 	token := ni.tokens[methodName]
+
+	if token != 0 {
+		// for GetWorkflowExecutionHistoryRequest, we only care about long poll requests
+		longPollReq, ok := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
+		if ok && !longPollReq.WaitNewEvent {
+			// ignore non-long-poll GetHistory calls.
+			token = 0
+		}
+	}
+
 	if token != 0 {
 		nsName := MustGetNamespaceName(ni.namespaceRegistry, req)
 		counter := ni.counter(nsName, methodName)

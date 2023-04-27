@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/rpc/interceptor"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -91,6 +92,9 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptor
 				metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
 				errorInterceptor,
 			)...,
+		),
+		grpc.WithChainStreamInterceptor(
+			interceptor.StreamErrorInterceptor,
 		),
 		grpc.WithDefaultServiceConfig(DefaultServiceConfig),
 		grpc.WithDisableServiceConfig(),

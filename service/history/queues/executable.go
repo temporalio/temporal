@@ -117,7 +117,7 @@ type (
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 
-		readerID               int32
+		readerID               int64
 		loadTime               time.Time
 		scheduledTime          time.Time
 		userLatency            time.Duration
@@ -129,11 +129,8 @@ type (
 	}
 )
 
-// TODO: CriticalRetryAttempt probably should be removed as it's only
-// used for emiting logs and metrics when # of attempts is high, and
-// doesn't have to be a dynamic config.
 func NewExecutable(
-	readerID int32,
+	readerID int64,
 	task tasks.Task,
 	executor Executor,
 	scheduler Scheduler,
@@ -172,15 +169,26 @@ func NewExecutable(
 }
 
 func (e *executableImpl) Execute() (retErr error) {
-	if e.State() == ctasks.TaskStateCancelled {
+	e.Lock()
+	if e.state != ctasks.TaskStatePending {
+		e.Unlock()
 		return nil
 	}
 
 	ns, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+	var callerInfo headers.CallerInfo
+	switch e.priority {
+	case ctasks.PriorityHigh:
+		callerInfo = headers.NewBackgroundCallerInfo(ns.String())
+	default:
+		// priority low or unknown
+		callerInfo = headers.NewPreemptableCallerInfo(ns.String())
+	}
 	ctx := headers.SetCallerInfo(
 		metrics.AddMetricsContext(context.Background()),
-		headers.NewBackgroundCallerInfo(ns.String()),
+		callerInfo,
 	)
+	e.Unlock()
 
 	defer func() {
 		if panicObj := recover(); panicObj != nil {
@@ -317,7 +325,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 func (e *executableImpl) IsRetryableError(err error) bool {
 	// this determines if the executable should be retried when hold the worker goroutine
 
-	if e.State() == ctasks.TaskStateCancelled {
+	if e.State() != ctasks.TaskStatePending {
 		return false
 	}
 
@@ -352,6 +360,15 @@ func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
 	return schedulerRetryPolicy
 }
 
+func (e *executableImpl) Abort() {
+	e.Lock()
+	defer e.Unlock()
+
+	if e.state == ctasks.TaskStatePending {
+		e.state = ctasks.TaskStateAborted
+	}
+}
+
 func (e *executableImpl) Cancel() {
 	e.Lock()
 	defer e.Unlock()
@@ -365,7 +382,7 @@ func (e *executableImpl) Ack() {
 	e.Lock()
 	defer e.Unlock()
 
-	if e.state == ctasks.TaskStateCancelled {
+	if e.state != ctasks.TaskStatePending {
 		return
 	}
 
@@ -385,7 +402,8 @@ func (e *executableImpl) Ack() {
 }
 
 func (e *executableImpl) Nack(err error) {
-	if e.State() == ctasks.TaskStateCancelled {
+	state := e.State()
+	if state != ctasks.TaskStatePending {
 		return
 	}
 
@@ -406,7 +424,8 @@ func (e *executableImpl) Nack(err error) {
 }
 
 func (e *executableImpl) Reschedule() {
-	if e.State() == ctasks.TaskStateCancelled {
+	state := e.State()
+	if state != ctasks.TaskStatePending {
 		return
 	}
 
