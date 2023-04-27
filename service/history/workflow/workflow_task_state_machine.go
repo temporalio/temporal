@@ -532,13 +532,19 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
 	}
+
 	// Now write the completed event
+	versionStamp := request.WorkerVersionStamp
+	if !request.UseVersioning {
+		versionStamp = nil
+	}
+	// TODO: omit BinaryChecksum if version stamp is present and matches BinaryChecksum
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
 		workflowTask.StartedEventID,
 		request.Identity,
 		request.BinaryChecksum,
-		request.WorkerVersionStamp,
+		versionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
 	)
