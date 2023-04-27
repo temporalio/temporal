@@ -498,3 +498,22 @@ func TestMapShardID_16To4(t *testing.T) {
 	targetShards = MapShardID(sourceShardCount, targetShardCount, 1)
 	require.Equal(t, []int32{1}, targetShards)
 }
+
+func TestVerifyShardIDMapping_1VS4(t *testing.T) {
+	require.NoError(t, VerifyShardIDMapping(1, 4, 1, 1))
+	require.NoError(t, VerifyShardIDMapping(1, 4, 1, 2))
+	require.NoError(t, VerifyShardIDMapping(1, 4, 1, 3))
+	require.NoError(t, VerifyShardIDMapping(1, 4, 1, 4))
+}
+
+func TestVerifyShardIDMapping_2VS4(t *testing.T) {
+	require.NoError(t, VerifyShardIDMapping(2, 4, 1, 1))
+	require.Error(t, VerifyShardIDMapping(2, 4, 1, 2))
+	require.NoError(t, VerifyShardIDMapping(2, 4, 1, 3))
+	require.Error(t, VerifyShardIDMapping(2, 4, 1, 4))
+
+	require.Error(t, VerifyShardIDMapping(2, 4, 2, 1))
+	require.NoError(t, VerifyShardIDMapping(2, 4, 2, 2))
+	require.Error(t, VerifyShardIDMapping(2, 4, 2, 3))
+	require.NoError(t, VerifyShardIDMapping(2, 4, 2, 4))
+}

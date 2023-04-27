@@ -80,6 +80,7 @@ func NewTestContext(
 	if shardInfo.QueueStates == nil {
 		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
 	}
+	shardInfo = loadShardInfoCompatibilityCheckWithoutReplication(shardInfo)
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
 		owner:               shardInfo.GetOwner(),

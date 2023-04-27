@@ -448,34 +448,6 @@ func (mr *MockContextMockRecorder) GetPayloadSerializer() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPayloadSerializer", reflect.TypeOf((*MockContext)(nil).GetPayloadSerializer))
 }
 
-// GetQueueAckLevel mocks base method.
-func (m *MockContext) GetQueueAckLevel(category tasks.Category) tasks.Key {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetQueueAckLevel", category)
-	ret0, _ := ret[0].(tasks.Key)
-	return ret0
-}
-
-// GetQueueAckLevel indicates an expected call of GetQueueAckLevel.
-func (mr *MockContextMockRecorder) GetQueueAckLevel(category interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueAckLevel", reflect.TypeOf((*MockContext)(nil).GetQueueAckLevel), category)
-}
-
-// GetQueueClusterAckLevel mocks base method.
-func (m *MockContext) GetQueueClusterAckLevel(category tasks.Category, cluster string) tasks.Key {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetQueueClusterAckLevel", category, cluster)
-	ret0, _ := ret[0].(tasks.Key)
-	return ret0
-}
-
-// GetQueueClusterAckLevel indicates an expected call of GetQueueClusterAckLevel.
-func (mr *MockContextMockRecorder) GetQueueClusterAckLevel(category, cluster interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueClusterAckLevel", reflect.TypeOf((*MockContext)(nil).GetQueueClusterAckLevel), category, cluster)
-}
-
 // GetQueueState mocks base method.
 func (m *MockContext) GetQueueState(category tasks.Category) (*v13.QueueState, bool) {
 	m.ctrl.T.Helper()
@@ -715,34 +687,6 @@ func (mr *MockContextMockRecorder) UpdateNamespaceNotificationVersion(namespaceN
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespaceNotificationVersion", reflect.TypeOf((*MockContext)(nil).UpdateNamespaceNotificationVersion), namespaceNotificationVersion)
 }
 
-// UpdateQueueAckLevel mocks base method.
-func (m *MockContext) UpdateQueueAckLevel(category tasks.Category, ackLevel tasks.Key) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateQueueAckLevel", category, ackLevel)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateQueueAckLevel indicates an expected call of UpdateQueueAckLevel.
-func (mr *MockContextMockRecorder) UpdateQueueAckLevel(category, ackLevel interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateQueueAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateQueueAckLevel), category, ackLevel)
-}
-
-// UpdateQueueClusterAckLevel mocks base method.
-func (m *MockContext) UpdateQueueClusterAckLevel(category tasks.Category, cluster string, ackLevel tasks.Key) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateQueueClusterAckLevel", category, cluster, ackLevel)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateQueueClusterAckLevel indicates an expected call of UpdateQueueClusterAckLevel.
-func (mr *MockContextMockRecorder) UpdateQueueClusterAckLevel(category, cluster, ackLevel interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateQueueClusterAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateQueueClusterAckLevel), category, cluster, ackLevel)
-}
-
 // UpdateRemoteClusterInfo mocks base method.
 func (m *MockContext) UpdateRemoteClusterInfo(cluster string, ackTaskID int64, ackTimestamp time.Time) {
 	m.ctrl.T.Helper()
@@ -753,6 +697,20 @@ func (m *MockContext) UpdateRemoteClusterInfo(cluster string, ackTaskID int64, a
 func (mr *MockContextMockRecorder) UpdateRemoteClusterInfo(cluster, ackTaskID, ackTimestamp interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemoteClusterInfo", reflect.TypeOf((*MockContext)(nil).UpdateRemoteClusterInfo), cluster, ackTaskID, ackTimestamp)
+}
+
+// UpdateReplicationQueueReaderState mocks base method.
+func (m *MockContext) UpdateReplicationQueueReaderState(readerID int64, readerState *v13.QueueReaderState) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateReplicationQueueReaderState", readerID, readerState)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateReplicationQueueReaderState indicates an expected call of UpdateReplicationQueueReaderState.
+func (mr *MockContextMockRecorder) UpdateReplicationQueueReaderState(readerID, readerState interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReplicationQueueReaderState", reflect.TypeOf((*MockContext)(nil).UpdateReplicationQueueReaderState), readerID, readerState)
 }
 
 // UpdateReplicatorDLQAckLevel mocks base method.
