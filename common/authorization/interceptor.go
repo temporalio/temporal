@@ -89,10 +89,13 @@ func (a *interceptor) Interceptor(
 			tlsSubject = &clientCert.Subject
 		}
 
-		_, authInfoNotRequired := a.claimMapper.(interface{ AuthInfoNotRequired() })
+		authInfoRequired := true
+		if cm, ok := a.claimMapper.(ClaimMapperWithAuthInfoRequired); ok {
+			authInfoRequired = cm.AuthInfoRequired()
+		}
 
 		// Add auth info to context only if there's some auth info
-		if tlsSubject != nil || len(authHeaders) > 0 || authInfoNotRequired {
+		if tlsSubject != nil || len(authHeaders) > 0 || !authInfoRequired {
 			var authHeader string
 			var authExtraHeader string
 			var audience string

@@ -57,6 +57,13 @@ type ClaimMapper interface {
 
 // @@@SNIPEND
 
+// Normally, GetClaims will never be called without either an auth token or TLS metadata set in
+// AuthInfo. However, if you want your ClaimMapper to be called in all cases, you can implement
+// this additional interface and return false.
+type ClaimMapperWithAuthInfoRequired interface {
+	AuthInfoRequired() bool
+}
+
 // No-op claim mapper that gives system level admin permission to everybody
 type noopClaimMapper struct{}
 
@@ -70,8 +77,9 @@ func (*noopClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
 	return &Claims{System: RoleAdmin}, nil
 }
 
-// tag this implementation to always run even without auth info
-func (*noopClaimMapper) AuthInfoNotRequired() {
+// This implementation can run even without auth info.
+func (*noopClaimMapper) AuthInfoRequired() bool {
+	return false
 }
 
 func GetClaimMapperFromConfig(config *config.Authorization, logger log.Logger) (ClaimMapper, error) {
