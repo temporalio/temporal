@@ -471,6 +471,68 @@ func TestPromoteWithinVersion(t *testing.T) {
 	assert.Equal(t, expected, data)
 }
 
+func TestAddNewDefaultAlreadyExtantVersionWithNoConflictSucceeds(t *testing.T) {
+	clock := hlc.Zero(1)
+	original := mkInitialData(3, clock)
+
+	req := mkNewDefReq("2")
+	updated, err := UpdateVersionSets(clock, original, req, 0, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, original, updated)
+}
+
+func TestAddToExistingSetAlreadyExtantVersionWithNoConflictSucceeds(t *testing.T) {
+	clock := hlc.Zero(1)
+	req := mkNewCompatReq("1.1", "1", false)
+	original, err := UpdateVersionSets(clock, mkInitialData(3, clock), req, 0, 0)
+	assert.NoError(t, err)
+	updated, err := UpdateVersionSets(clock, original, req, 0, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, original, updated)
+}
+
+func TestAddToExistingSetAlreadyExtantVersionErrorsIfNotDefault(t *testing.T) {
+	clock := hlc.Zero(1)
+	req := mkNewCompatReq("1.1", "1", true)
+	original, err := UpdateVersionSets(clock, mkInitialData(3, clock), req, 0, 0)
+	assert.NoError(t, err)
+	req = mkNewCompatReq("1", "1.1", true)
+	_, err = UpdateVersionSets(clock, original, req, 0, 0)
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+}
+
+func TestAddToExistingSetAlreadyExtantVersionErrorsIfNotDefaultSet(t *testing.T) {
+	clock := hlc.Zero(1)
+	req := mkNewCompatReq("1.1", "1", false)
+	original, err := UpdateVersionSets(clock, mkInitialData(3, clock), req, 0, 0)
+	assert.NoError(t, err)
+	req = mkNewCompatReq("1.1", "1", true)
+	_, err = UpdateVersionSets(clock, original, req, 0, 0)
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+}
+
+func TestPromoteWithinSetAlreadyPromotedIsANoop(t *testing.T) {
+	clock0 := hlc.Zero(1)
+	original := mkInitialData(3, clock0)
+	req := mkPromoteInSet("1")
+	clock1 := hlc.Zero(2)
+	updated, err := UpdateVersionSets(clock1, original, req, 0, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, original, updated)
+}
+
+func TestPromoteSetAlreadyPromotedIsANoop(t *testing.T) {
+	clock0 := hlc.Zero(1)
+	original := mkInitialData(3, clock0)
+	req := mkExistingDefault("2")
+	clock1 := hlc.Zero(2)
+	updated, err := UpdateVersionSets(clock1, original, req, 0, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, original, updated)
+}
+
 func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
