@@ -330,7 +330,7 @@ func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	// We don't really care if the initial fetch worked or not, anything that *requires* a bit of metadata should fail
 	// that operation if it's never fetched OK. If the initial fetch errored, the metadataPoller will have been started.
 	_, _ = c.metadataInitialFetch.Get(ctx)
-       // todo: the error is always nil here
+	// todo: the error is always nil here
 	return nil
 }
 
