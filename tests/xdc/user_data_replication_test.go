@@ -29,6 +29,7 @@
 package xdc
 
 import (
+	"errors"
 	"flag"
 	"testing"
 	"time"
@@ -96,7 +97,7 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	})
 	s.Require().NoError(err)
 
-	s.retry("passive has versioning data", 30, 500*time.Millisecond, func() bool {
+	s.retryReasonably(func() error {
 		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
 		response, err := standbyMatchingClient.GetWorkerBuildIdCompatibility(tests.NewContext(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 			NamespaceId: description.GetNamespaceInfo().Id,
@@ -105,8 +106,13 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 				TaskQueue: taskQueue,
 			},
 		})
-		s.Require().NoError(err)
-		return len(response.GetResponse().GetMajorVersionSets()) == 1
+		if err != nil {
+			return err
+		}
+		if len(response.GetResponse().GetMajorVersionSets()) != 1 {
+			return errors.New("passive has no versioning data")
+		}
+		return nil
 	})
 }
 
@@ -129,20 +135,27 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 	standbyFrontendClient := s.cluster2.GetFrontendClient()
 	s.cluster1.GetExecutionManager()
 
-	// Call matching directly in case frontend is configured to redirect API calls to the active cluster
-	_, err = standbyFrontendClient.UpdateWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: namespace,
-		TaskQueue: taskQueue,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.1"},
+	s.retryReasonably(func() error {
+		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
+		_, err = standbyFrontendClient.UpdateWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+			Namespace: namespace,
+			TaskQueue: taskQueue,
+			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.1"},
+		})
+		return err
 	})
-	s.Require().NoError(err)
 
-	s.retry("active has versioning data", 30, 500*time.Millisecond, func() bool {
+	s.retryReasonably(func() error {
 		response, err := activeFrontendClient.GetWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: namespace,
 			TaskQueue: taskQueue,
 		})
-		s.Require().NoError(err)
-		return len(response.GetMajorVersionSets()) == 1
+		if err != nil {
+			return err
+		}
+		if len(response.GetMajorVersionSets()) != 1 {
+			return errors.New("active has no versioning data")
+		}
+		return nil
 	})
 }
