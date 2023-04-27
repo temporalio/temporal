@@ -119,9 +119,10 @@ type (
 		SleepWhilePaused                  bool // If true, don't set timers while paused/out of actions
 		// MaxBufferSize limits the number of buffered starts. This also limits the number of
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
-		MaxBufferSize  int
-		AllowZeroSleep bool // Whether to allow a zero-length timer. Used for workflow compatibility.
-		ReuseTimer     bool // Whether to reuse timer. Used for workflow compatibility.
+		MaxBufferSize             int
+		AllowZeroSleep            bool // Whether to allow a zero-length timer. Used for workflow compatibility.
+		ReuseTimer                bool // Whether to reuse timer. Used for workflow compatibility.
+		SkipOverTimeRangeIfPaused bool // Whether to skip over the entiner time range if schedule was paused
 	}
 )
 
@@ -155,6 +156,7 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
+		SkipOverTimeRangeIfPaused:         true,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -357,11 +359,16 @@ func (s *scheduler) processTimeRange(
 		return next
 	}
 
-	// Peek at paused/remaining actions state and don't bother if we're not going to
-	// take an action now. (Don't count as missed catchup window either.)
-	// Skip over entire time range if paused or no actions can be taken
-	if !s.canTakeScheduledAction(manual, false) {
-		return getNextTime(t2).Next
+	// A previous version would record a marker for each time which could make a workflow
+	// fail. With the new version, the entier time range is skipped if the workflow is paused
+	// or we are not going to take an action now
+	if s.tweakables.SkipOverTimeRangeIfPaused {
+		// Peek at paused/remaining actions state and don't bother if we're not going to
+		// take an action now. (Don't count as missed catchup window either.)
+		// Skip over entire time range if paused or no actions can be taken
+		if !s.canTakeScheduledAction(manual, false) {
+			return getNextTime(t2).Next
+		}
 	}
 
 	for {
@@ -369,6 +376,9 @@ func (s *scheduler) processTimeRange(
 		t1 = next.Next
 		if t1.IsZero() || t1.After(t2) {
 			return t1
+		}
+		if !s.tweakables.SkipOverTimeRangeIfPaused && !s.canTakeScheduledAction(manual, false) {
+			continue
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
 			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
