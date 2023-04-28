@@ -229,6 +229,7 @@ type Config struct {
 	ReplicationTaskProcessorHostQPS                      dynamicconfig.FloatPropertyFn
 	ReplicationTaskProcessorShardQPS                     dynamicconfig.FloatPropertyFn
 	ReplicationBypassCorruptedData                       dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
+	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
 
 	ReplicationStreamSyncStatusDuration      dynamicconfig.DurationPropertyFn
 	ReplicationStreamMinReconnectDuration    dynamicconfig.DurationPropertyFn
@@ -402,6 +403,7 @@ func NewConfig(
 		ReplicationTaskProcessorHostQPS:                       dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorHostQPS, 1500),
 		ReplicationTaskProcessorShardQPS:                      dc.GetFloat64Property(dynamicconfig.ReplicationTaskProcessorShardQPS, 30),
 		ReplicationBypassCorruptedData:                        dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.ReplicationBypassCorruptedData, false),
+		ReplicationEnableDLQMetrics:                           dc.GetBoolProperty(dynamicconfig.ReplicationEnableDLQMetrics, true),
 
 		ReplicationStreamSyncStatusDuration:      dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
 		ReplicationStreamMinReconnectDuration:    dc.GetDurationProperty(dynamicconfig.ReplicationStreamMinReconnectDuration, 4*time.Second),
