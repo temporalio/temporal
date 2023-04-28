@@ -75,6 +75,7 @@ import (
 type (
 	ServicesGroupOut struct {
 		fx.Out
+
 		Services *ServicesMetadata `group:"services"`
 	}
 
@@ -119,13 +120,14 @@ type (
 		AudienceGetter         authorization.JWTAudienceMapper
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
-		Logger                log.Logger
-		ClientFactoryProvider client.FactoryProvider
-		DynamicConfigClient   dynamicconfig.Client
-		TLSConfigProvider     encryption.TLSConfigProvider
-		EsConfig              *esclient.Config
-		EsClient              esclient.Client
-		MetricsHandler        metrics.Handler
+		Logger                  log.Logger
+		ClientFactoryProvider   client.FactoryProvider
+		DynamicConfigClient     dynamicconfig.Client
+		DynamicConfigCollection *dynamicconfig.Collection
+		TLSConfigProvider       encryption.TLSConfigProvider
+		EsConfig                *esclient.Config
+		EsClient                esclient.Client
+		MetricsHandler          metrics.Handler
 	}
 )
 
@@ -268,13 +270,14 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ClaimMapper:            so.claimMapper,
 		AudienceGetter:         so.audienceGetter,
 
-		Logger:                logger,
-		ClientFactoryProvider: clientFactoryProvider,
-		DynamicConfigClient:   dcClient,
-		TLSConfigProvider:     tlsConfigProvider,
-		EsConfig:              esConfig,
-		EsClient:              esClient,
-		MetricsHandler:        metricHandler,
+		Logger:                  logger,
+		ClientFactoryProvider:   clientFactoryProvider,
+		DynamicConfigClient:     dcClient,
+		DynamicConfigCollection: dynamicconfig.NewCollection(dcClient, logger),
+		TLSConfigProvider:       tlsConfigProvider,
+		EsConfig:                esConfig,
+		EsClient:                esClient,
+		MetricsHandler:          metricHandler,
 	}, nil
 }
 

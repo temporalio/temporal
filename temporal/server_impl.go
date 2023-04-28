@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -50,6 +51,8 @@ type (
 		logger           log.Logger
 		namespaceLogger  resource.NamespaceLogger
 
+		dcCollection *dynamicconfig.Collection
+
 		persistenceConfig          config.Persistence
 		clusterMetadata            *cluster.Config
 		persistenceFactoryProvider persistenceClient.FactoryProviderFn
@@ -62,6 +65,7 @@ func NewServerFxImpl(
 	logger log.Logger,
 	namespaceLogger resource.NamespaceLogger,
 	stoppedCh chan interface{},
+	dcCollection *dynamicconfig.Collection,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
@@ -72,6 +76,7 @@ func NewServerFxImpl(
 		stoppedCh:                  stoppedCh,
 		logger:                     logger,
 		namespaceLogger:            namespaceLogger,
+		dcCollection:               dcCollection,
 		persistenceConfig:          persistenceConfig,
 		clusterMetadata:            clusterMetadata,
 		persistenceFactoryProvider: persistenceFactoryProvider,
