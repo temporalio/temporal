@@ -22,16 +22,10 @@
 #    MaximumIntervalCoefficient: 100.0
 #    BackoffCoefficient: 2.0
 #    MaximumAttempts: 0
-#system.advancedVisibilityWritingMode:
+#system.secondaryVisibilityWritingMode:
 #  - value: "off"
 #    constraints: {}
-#system.enableReadVisibilityFromES:
-#  - value: true
-#    constraints: {}
-#system.enableWriteToSecondaryAdvancedVisibility:
-#  - value: true
-#    constraints: {}
-#system.enableReadFromSecondaryAdvancedVisibility:
+#system.enableReadFromSecondaryVisibility:
 #  - value: false
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
