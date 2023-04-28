@@ -352,12 +352,12 @@ func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
 			continue
 		}
 
-		minTaskKey := r.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName)
+		minTaskKey := r.shard.GetReplicatorDLQAckLevel(clusterName)
 		isEmpty, err := r.shard.GetExecutionManager().IsReplicationDLQEmpty(ctx, &persistence.GetReplicationTasksFromDLQRequest{
 			GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 				ShardID:             r.shard.GetShardID(),
 				TaskCategory:        tasks.CategoryReplication,
-				InclusiveMinTaskKey: minTaskKey.Next(),
+				InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskKey),
 			},
 			SourceClusterName: clusterName,
 		})
