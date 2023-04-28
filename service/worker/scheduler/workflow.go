@@ -292,7 +292,7 @@ func (s *scheduler) ensureFields() {
 
 func (s *scheduler) compileSpec() {
 	// if spec changes invalidate current nextTimeResult cache
-	s.nextTimeResultCache = make([]getNextTimeResult, 0)
+	s.nextTimeResultCache = nil
 
 	cspec, err := NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
