@@ -177,15 +177,7 @@ func Invoke(
 				}, nil
 			}
 
-			postActions := &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: true,
-			}
-			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
-				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-				postActions.CreateWorkflowTask = false
-			}
-			reappliedEvents, err := eventsReapplier.ReapplyEvents(
+			_, err = eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
 				toReapplyEvents,
@@ -195,13 +187,10 @@ func Invoke(
 				shard.GetLogger().Error("failed to re-apply stale events", tag.Error(err))
 				return nil, err
 			}
-			if len(reappliedEvents) == 0 {
-				return &api.UpdateWorkflowAction{
-					Noop:               true,
-					CreateWorkflowTask: false,
-				}, nil
-			}
-			return postActions, nil
+			return &api.UpdateWorkflowAction{
+				Noop:               true,
+				CreateWorkflowTask: false,
+			}, nil
 		},
 		nil,
 		shard,
