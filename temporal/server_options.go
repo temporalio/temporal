@@ -45,9 +45,9 @@ import (
 )
 
 type (
-	blockingStartParams struct {
-		interruptCh   <-chan interface{}
+	synchronizationModeParams struct {
 		blockingStart bool
+		interruptCh   <-chan interface{}
 	}
 
 	serverOptions struct {
@@ -58,7 +58,7 @@ type (
 		env       string
 		zone      string
 
-		blockingStart blockingStartParams
+		startupSynchronizationMode synchronizationModeParams
 
 		logger                     log.Logger
 		namespaceLogger            log.Logger

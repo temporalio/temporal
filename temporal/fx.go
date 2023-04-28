@@ -92,16 +92,16 @@ type (
 	}
 
 	ServerFx struct {
-		app           *fx.App
-		blockingStart blockingStartParams
-		logger        log.Logger
+		app                        *fx.App
+		startupSynchronizationMode synchronizationModeParams
+		logger                     log.Logger
 	}
 
 	serverOptionsProvider struct {
 		fx.Out
-		ServerOptions *serverOptions
-		StopChan      chan interface{}
-		BlockingStart blockingStartParams
+		ServerOptions              *serverOptions
+		StopChan                   chan interface{}
+		StartupSynchronizationMode synchronizationModeParams
 
 		Config      *config.Config
 		PProfConfig *config.PProf
@@ -151,7 +151,7 @@ func NewServerFx(opts ...ServerOption) (*ServerFx, error) {
 		fx.Invoke(ServerLifetimeHooks),
 		FxLogAdapter,
 
-		fx.Populate(&s.blockingStart),
+		fx.Populate(&s.startupSynchronizationMode),
 		fx.Populate(&s.logger),
 	)
 	if err := s.app.Err(); err != nil {
@@ -250,9 +250,9 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	return serverOptionsProvider{
-		ServerOptions: so,
-		StopChan:      stopChan,
-		BlockingStart: so.blockingStart,
+		ServerOptions:              so,
+		StopChan:                   stopChan,
+		StartupSynchronizationMode: so.startupSynchronizationMode,
 
 		Config:      so.config,
 		PProfConfig: &so.config.Global.PProf,
@@ -289,9 +289,9 @@ func (s *ServerFx) Start() error {
 		return err
 	}
 
-	if s.blockingStart.blockingStart {
+	if s.startupSynchronizationMode.blockingStart {
 		// If s.so.interruptCh is nil this will wait forever.
-		interruptSignal := <-s.blockingStart.interruptCh
+		interruptSignal := <-s.startupSynchronizationMode.interruptCh
 		s.logger.Info("Received interrupt signal, stopping the server.", tag.Value(interruptSignal))
 		return s.Stop()
 	}
