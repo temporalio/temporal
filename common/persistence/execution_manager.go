@@ -493,6 +493,9 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
 		DeleteSignalRequestedIDs: input.DeleteSignalRequestedIDs,
 
+		UpsertUpdateRecords: make(map[string]*commonpb.DataBlob, len(input.UpsertUpdateRecords)),
+		DeleteUpdateRecords: input.DeleteUpdateRecords,
+
 		NewBufferedEvents:   nil,
 		ClearBufferedEvents: input.ClearBufferedEvents,
 
@@ -555,6 +558,14 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		result.UpsertSignalInfos[key] = blob
 	}
 
+	for key, rec := range input.UpsertUpdateRecords {
+		blob, err := m.serializer.UpdateRecordToBlob(rec, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.UpsertUpdateRecords[key] = blob
+	}
+
 	if len(input.NewBufferedEvents) > 0 {
 		result.NewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
@@ -593,6 +604,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		ChildExecutionInfos: make(map[int64]*commonpb.DataBlob, len(input.ChildExecutionInfos)),
 		RequestCancelInfos:  make(map[int64]*commonpb.DataBlob, len(input.RequestCancelInfos)),
 		SignalInfos:         make(map[int64]*commonpb.DataBlob, len(input.SignalInfos)),
+		UpdateRecords:       make(map[string]*commonpb.DataBlob, len(input.UpdateRecords)),
 
 		ExecutionInfo:      input.ExecutionInfo,
 		ExecutionState:     input.ExecutionState,
@@ -652,6 +664,13 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 			return nil, err
 		}
 		result.SignalInfos[key] = blob
+	}
+	for key, rec := range input.UpdateRecords {
+		blob, err := m.serializer.UpdateRecordToBlob(rec, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.UpdateRecords[key] = blob
 	}
 	for key := range input.SignalRequestedIDs {
 		result.SignalRequestedIDs[key] = struct{}{}
@@ -933,6 +952,7 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 		SignalRequestedIds:  internState.SignalRequestedIDs,
 		NextEventId:         internState.NextEventID,
 		BufferedEvents:      make([]*historypb.HistoryEvent, len(internState.BufferedEvents)),
+		UpdateRecords:       make(map[string]*persistencespb.WorkflowExecutionUpdateRecord),
 	}
 	for key, blob := range internState.ActivityInfos {
 		info, err := m.serializer.ActivityInfoFromBlob(blob)
@@ -983,6 +1003,13 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 		return nil, err
 	}
 	state.BufferedEvents, err = m.DeserializeBufferedEvents(internState.BufferedEvents)
+	for key, blob := range internState.UpdateRecords {
+		rec, err := m.serializer.UpdateRecordFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
+		state.UpdateRecords[key] = rec
+	}
 	if err != nil {
 		return nil, err
 	}

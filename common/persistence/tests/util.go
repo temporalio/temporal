@@ -76,6 +76,7 @@ func RandomSnapshot(
 		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
+		UpdateRecords:       RandomUpdateRecordMap(),
 
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer:    {},
@@ -202,6 +203,12 @@ func RandomInt64SignalInfoMap() map[int64]*persistencespb.SignalInfo {
 	}
 }
 
+func RandomUpdateRecordMap() map[string]*persistencespb.WorkflowExecutionUpdateRecord {
+	return map[string]*persistencespb.WorkflowExecutionUpdateRecord{
+		uuid.NewString(): RandomUpdateRecord(),
+	}
+}
+
 func RandomActivityInfo() *persistencespb.ActivityInfo {
 	// cannot use gofakeit due to RetryLastFailure is of type Failure
 	// and Failure can contain another Failure -> stack overflow
@@ -261,6 +268,22 @@ func RandomResetPoints() *workflowpb.ResetPoints {
 		ExpireTime:                   RandomTime(),
 		Resettable:                   rand.Int31()%2 == 0,
 	}}}
+}
+
+func RandomUpdateRecord() *persistencespb.WorkflowExecutionUpdateRecord {
+	ptr := historyspb.HistoryEventPointer{EventId: rand.Int63()}
+	if rand.Intn(2) == 0 {
+		return &persistencespb.WorkflowExecutionUpdateRecord{
+			Value: &persistencespb.WorkflowExecutionUpdateRecord_AcceptancePointer{
+				AcceptancePointer: &ptr,
+			},
+		}
+	}
+	return &persistencespb.WorkflowExecutionUpdateRecord{
+		Value: &persistencespb.WorkflowExecutionUpdateRecord_CompletedPointer{
+			CompletedPointer: &ptr,
+		},
+	}
 }
 
 func RandomStringPayloadMap() map[string]*commonpb.Payload {

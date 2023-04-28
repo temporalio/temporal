@@ -1,0 +1,8 @@
+{
+    "CurrVersion": "1.10",
+    "MinCompatibleVersion": "1.0",
+    "Description": "add storage for update records",
+    "SchemaUpdateCqlFiles": [
+        "update_record_maps_table.sql"
+    ]
+}

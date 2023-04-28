@@ -38,4 +38,5 @@ message WorkflowMutableState{
     int64 next_event_id = 9;
     repeated temporal.api.history.v1.HistoryEvent buffered_events = 10;
     Checksum checksum = 11;
+    map<string, WorkflowExecutionUpdateRecord> update_records = 12;
 }

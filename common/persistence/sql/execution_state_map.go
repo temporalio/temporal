@@ -131,6 +131,96 @@ func deleteActivityInfoMap(
 	return nil
 }
 
+func updateUpdateRecordMap(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	updateRecords map[string]*commonpb.DataBlob,
+	deleteIDs map[string]struct{},
+	shardID int32,
+	namespaceID primitives.UUID,
+	workflowID string,
+	runID primitives.UUID,
+) error {
+
+	if len(updateRecords) > 0 {
+		rows := make([]sqlplugin.UpdateRecordMapsRow, 0, len(updateRecords))
+		for updateID, blob := range updateRecords {
+			rows = append(rows, sqlplugin.UpdateRecordMapsRow{
+				ShardID:      shardID,
+				NamespaceID:  namespaceID,
+				WorkflowID:   workflowID,
+				RunID:        runID,
+				UpdateID:     updateID,
+				Data:         blob.Data,
+				DataEncoding: blob.EncodingType.String(),
+			})
+		}
+
+		if _, err := tx.ReplaceIntoUpdateRecordMaps(ctx, rows); err != nil {
+			return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update update records. Failed to execute update query. Error: %v", err))
+		}
+	}
+
+	if len(deleteIDs) > 0 {
+		if _, err := tx.DeleteFromUpdateRecordMaps(ctx, sqlplugin.UpdateRecordMapsFilter{
+			ShardID:     shardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
+			RunID:       runID,
+			UpdateIDs:   convert.StringSetToSlice(deleteIDs),
+		}); err != nil {
+			return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update update records. Failed to execute delete query. Error: %v", err))
+		}
+	}
+	return nil
+}
+
+func getUpdateRecordMap(
+	ctx context.Context,
+	db sqlplugin.DB,
+	shardID int32,
+	namespaceID primitives.UUID,
+	workflowID string,
+	runID primitives.UUID,
+) (map[string]*commonpb.DataBlob, error) {
+	rows, err := db.SelectAllFromUpdateRecordMaps(ctx, sqlplugin.UpdateRecordMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	})
+	if err != nil && err != sql.ErrNoRows {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Failed to get activity info. Error: %v", err))
+	}
+
+	ret := make(map[string]*commonpb.DataBlob)
+	for _, row := range rows {
+		ret[row.UpdateID] = persistence.NewDataBlob(row.Data, row.DataEncoding)
+	}
+
+	return ret, nil
+}
+
+func deleteUpdateRecordMap(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	namespaceID primitives.UUID,
+	workflowID string,
+	runID primitives.UUID,
+) error {
+
+	if _, err := tx.DeleteAllFromUpdateRecordMaps(ctx, sqlplugin.UpdateRecordMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to delete update records map. Error: %v", err))
+	}
+	return nil
+}
+
 func updateTimerInfos(
 	ctx context.Context,
 	tx sqlplugin.Tx,

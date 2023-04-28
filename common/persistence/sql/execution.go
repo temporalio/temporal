@@ -275,6 +275,17 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err))
 	}
 
+	state.UpdateRecords, err = getUpdateRecordMap(ctx,
+		m.Db,
+		request.ShardID,
+		namespaceID,
+		workflowID,
+		runID,
+	)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get update records. Error: %v", err))
+	}
+
 	state.ChildExecutionInfos, err = getChildExecutionInfoMap(ctx,
 		m.Db,
 		request.ShardID,

@@ -289,6 +289,92 @@ func (mdb *db) DeleteAllFromTimerInfoMaps(
 }
 
 var (
+	updateRecordColumns = []string{
+		"data",
+		"data_encoding",
+	}
+	updateRecordTableName = "update_record_maps"
+	updateRecordKey       = "update_id"
+
+	deleteUpdateRecordMapSQLQuery      = makeDeleteMapQry(updateRecordTableName)
+	setKeyInUpdateRecordMapSQLQuery    = makeSetKeyInMapQry(updateRecordTableName, updateRecordColumns, updateRecordKey)
+	deleteKeyInUpdateRecordMapSQLQuery = makeDeleteKeyInMapQry(updateRecordTableName, updateRecordKey)
+	getUpdateRecordMapSQLQuery         = makeGetMapQryTemplate(updateRecordTableName, updateRecordColumns, updateRecordKey)
+)
+
+// ReplaceIntoUpdateRecordMaps replaces one or more rows in update_record_maps table
+func (mdb *db) ReplaceIntoUpdateRecordMaps(
+	ctx context.Context,
+	rows []sqlplugin.UpdateRecordMapsRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		setKeyInUpdateRecordMapSQLQuery,
+		rows,
+	)
+}
+
+// SelectAllFromUpdateRecordMaps reads all rows from update_record_maps table
+func (mdb *db) SelectAllFromUpdateRecordMaps(
+	ctx context.Context,
+	filter sqlplugin.UpdateRecordMapsAllFilter,
+) ([]sqlplugin.UpdateRecordMapsRow, error) {
+	var rows []sqlplugin.UpdateRecordMapsRow
+	if err := mdb.conn.SelectContext(ctx,
+		&rows,
+		getUpdateRecordMapSQLQuery,
+		filter.ShardID,
+		filter.NamespaceID,
+		filter.WorkflowID,
+		filter.RunID,
+	); err != nil {
+		return nil, err
+	}
+	for i := 0; i < len(rows); i++ {
+		rows[i].ShardID = filter.ShardID
+		rows[i].NamespaceID = filter.NamespaceID
+		rows[i].WorkflowID = filter.WorkflowID
+		rows[i].RunID = filter.RunID
+	}
+	return rows, nil
+}
+
+// DeleteFromUpdateRecordMaps deletes one or more rows from update_record_maps table
+func (mdb *db) DeleteFromUpdateRecordMaps(
+	ctx context.Context,
+	filter sqlplugin.UpdateRecordMapsFilter,
+) (sql.Result, error) {
+	query, args, err := sqlx.In(
+		deleteKeyInUpdateRecordMapSQLQuery,
+		filter.ShardID,
+		filter.NamespaceID,
+		filter.WorkflowID,
+		filter.RunID,
+		filter.UpdateIDs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return mdb.conn.ExecContext(ctx,
+		mdb.conn.Rebind(query),
+		args...,
+	)
+}
+
+// DeleteAllFromUpdateRecordMaps deletes all rows from update_record_maps table
+func (mdb *db) DeleteAllFromUpdateRecordMaps(
+	ctx context.Context,
+	filter sqlplugin.UpdateRecordMapsAllFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		deleteUpdateRecordMapSQLQuery,
+		filter.ShardID,
+		filter.NamespaceID,
+		filter.WorkflowID,
+		filter.RunID,
+	)
+}
+
+var (
 	childExecutionInfoColumns = []string{
 		"data",
 		"data_encoding",

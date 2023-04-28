@@ -41,6 +41,8 @@ CREATE TABLE executions (
   request_cancel_map_encoding    text,
   signal_map                     map<bigint, blob>,
   signal_map_encoding            text,
+  update_record_map              map<text, blob>,
+  update_record_map_encoding     text,
   signal_requested               set<uuid>,
   buffered_events_list           list<frozen<serialized_event_batch>>,
   workflow_last_write_version    bigint,
