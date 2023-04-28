@@ -77,6 +77,10 @@ const (
 	maxListMatchingTimesCount = 1000
 
 	rateLimitedErrorType = "RateLimited"
+
+	// Size of the time generator cache, the generator batches getNextTime function calls and
+	// caches the result to avoid the overhead of SideEffects
+	TimeGeneratorCacheSize = 10
 )
 
 type (
@@ -104,6 +108,9 @@ type (
 		pendingUpdate *schedspb.FullUpdateRequest
 
 		uuidBatch []string
+
+		// generator that batches nextTime queries in a side effect and caches the results
+		nextTimeGenerator func(time.Time) getNextTimeResult
 	}
 
 	tweakablePolicies struct {
@@ -119,10 +126,11 @@ type (
 		SleepWhilePaused                  bool // If true, don't set timers while paused/out of actions
 		// MaxBufferSize limits the number of buffered starts. This also limits the number of
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
-		MaxBufferSize             int
-		AllowZeroSleep            bool // Whether to allow a zero-length timer. Used for workflow compatibility.
-		ReuseTimer                bool // Whether to reuse timer. Used for workflow compatibility.
-		SkipOverTimeRangeIfPaused bool // Whether to skip over the entiner time range if schedule was paused
+		MaxBufferSize  int
+		AllowZeroSleep bool // Whether to allow a zero-length timer. Used for workflow compatibility.
+		ReuseTimer     bool // Whether to reuse timer. Used for workflow compatibility.
+		Version        int  // Used to keep track of schedules version to release new features and for backward compatibility
+		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 	}
 )
 
@@ -156,7 +164,7 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		SkipOverTimeRangeIfPaused:         true,
+		Version:                           1,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -203,7 +211,18 @@ func (s *scheduler) run() error {
 	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
+	// initialize the generator
+	s.nextTimeGenerator = s.timeGenerator()
+
+	currentVersion := s.tweakables.Version
+	currentSpec := s.cspec
+
 	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
+		// if spec changes or version is changed (donwgrade or upgrade), break and continue-as-new
+		// to force invalidation of internal caches
+		if currentVersion != s.tweakables.Version && currentSpec != s.cspec {
+			break
+		}
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
 		if t2.Before(t1) {
@@ -336,6 +355,43 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 	}
 }
 
+func (s *scheduler) timeGenerator() func(time.Time) getNextTimeResult {
+	var nextResults [TimeGeneratorCacheSize]getNextTimeResult
+	currentIndex := 0
+	lastCacheElement := -1
+	return func(after time.Time) getNextTimeResult {
+
+		// we are only interested in schedules that comes after 'after' parameter
+		for currentIndex <= lastCacheElement && nextResults[currentIndex].Next.Before(after) {
+			currentIndex++
+		}
+
+		// if we exhausted all cache elements, fetch more schedules
+		if currentIndex > lastCacheElement {
+			currentIndex = 0
+			lastCacheElement = -1
+			// Run this logic in a SideEffect so that we can fix bugs there without breaking
+			// existing schedule workflows.
+			panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+				var results [TimeGeneratorCacheSize]getNextTimeResult
+				for lastCacheElement < TimeGeneratorCacheSize-1 {
+					next := s.cspec.getNextTime(after)
+					after = next.Next
+					lastCacheElement += 1
+					results[lastCacheElement] = next
+					// if there is no matching time, stop fetching
+					if after.IsZero() {
+						break
+					}
+				}
+				return results
+			}).Get(&nextResults))
+		}
+		currentIndex++
+		return nextResults[currentIndex-1]
+	}
+}
+
 func (s *scheduler) processTimeRange(
 	t1, t2 time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
@@ -349,42 +405,34 @@ func (s *scheduler) processTimeRange(
 
 	catchupWindow := s.getCatchupWindow()
 
-	getNextTime := func(after time.Time) []getNextTimeResult {
-		// Run this logic in a SideEffect so that we can fix bugs there without breaking
-		// existing schedule workflows.
-		var nextResults []getNextTimeResult
-		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-			var results []getNextTimeResult
-			for {
-				next := s.cspec.getNextTime(after)
-				after = next.Next
-				results = append(results, next)
-				if after.IsZero() || after.After(t2) {
-					break
-				}
-			}
-			return results
-		}).Get(&nextResults))
-		return nextResults
-	}
-
 	// A previous version would record a marker for each time which could make a workflow
-	// fail. With the new version, the entier time range is skipped if the workflow is paused
+	// fail. With the new version, the entire time range is skipped if the workflow is paused
 	// or we are not going to take an action now
-	if s.tweakables.SkipOverTimeRangeIfPaused {
+	if s.tweakables.Version >= 1 {
 		// Peek at paused/remaining actions state and don't bother if we're not going to
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
-			next := getNextTime(t2)[0]
-			return next.Next
+			return s.nextTimeGenerator(t2).Next
 		}
 	}
 
-	nextResults := getNextTime(t1)
-	for _, next := range nextResults[:len(nextResults)-1] {
+	for {
+		var next getNextTimeResult
+		if s.tweakables.Version < 1 {
+			// Run this logic in a SideEffect so that we can fix bugs there without breaking
+			// existing schedule workflows.
+			panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+				return s.cspec.getNextTime(t1)
+			}).Get(&next))
+		} else {
+			next = s.nextTimeGenerator(t1)
+		}
 		t1 = next.Next
-		if !s.tweakables.SkipOverTimeRangeIfPaused && !s.canTakeScheduledAction(manual, false) {
+		if t1.IsZero() || t1.After(t2) {
+			return t1
+		}
+		if s.tweakables.Version < 1 && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
@@ -395,8 +443,6 @@ func (s *scheduler) processTimeRange(
 		}
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
 	}
-
-	return nextResults[len(nextResults)-1].Next
 }
 
 func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
