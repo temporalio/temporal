@@ -53,10 +53,14 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-// List of scheduler workflow versions:
-// 0 this represents the code before Version is introduced
-// 1 Skip over entire time range if paused and batch and cache getNextTime queries
-const latestVersion = 1
+type SchedulerWorkflowVersion int64
+
+const (
+	// represents the state before Version is introduced
+	SCHEDULDER_WORKFLOW_VERSION_0 SchedulerWorkflowVersion = iota
+	// skip over entire time range if paused and batch and cache getNextTime queries
+	SCHEDULDER_WORKFLOW_VERSION_1
+)
 
 const (
 	// Schedules are implemented by a workflow whose ID is this string plus the schedule ID.
@@ -131,9 +135,9 @@ type (
 		// MaxBufferSize limits the number of buffered starts. This also limits the number of
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
 		MaxBufferSize  int
-		AllowZeroSleep bool // Whether to allow a zero-length timer. Used for workflow compatibility.
-		ReuseTimer     bool // Whether to reuse timer. Used for workflow compatibility.
-		Version        int  // Used to keep track of schedules version to release new features and for backward compatibility
+		AllowZeroSleep bool                     // Whether to allow a zero-length timer. Used for workflow compatibility.
+		ReuseTimer     bool                     // Whether to reuse timer. Used for workflow compatibility.
+		Version        SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 	}
 )
@@ -168,7 +172,7 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		Version:                           latestVersion,
+		Version:                           SCHEDULDER_WORKFLOW_VERSION_1,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -403,7 +407,7 @@ func (s *scheduler) processTimeRange(
 	// A previous version would record a marker for each time which could make a workflow
 	// fail. With the new version, the entire time range is skipped if the workflow is paused
 	// or we are not going to take an action now
-	if s.tweakables.Version >= 1 {
+	if s.tweakables.Version >= SCHEDULDER_WORKFLOW_VERSION_1 {
 		// Peek at paused/remaining actions state and don't bother if we're not going to
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
@@ -414,7 +418,7 @@ func (s *scheduler) processTimeRange(
 
 	for {
 		var next getNextTimeResult
-		if s.tweakables.Version < 1 {
+		if s.tweakables.Version < SCHEDULDER_WORKFLOW_VERSION_1 {
 			// Run this logic in a SideEffect so that we can fix bugs there without breaking
 			// existing schedule workflows.
 			panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
