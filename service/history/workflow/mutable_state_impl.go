@@ -1351,6 +1351,11 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 	return ms.hBuilder.HasBufferEvents()
 }
 
+// HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
+func (ms *MutableStateImpl) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+	return ms.hBuilder.HasAnyBufferedEvent(filter)
+}
+
 // DeleteWorkflowTask deletes a workflow task.
 func (ms *MutableStateImpl) DeleteWorkflowTask() {
 	ms.workflowTaskManager.DeleteWorkflowTask()
@@ -3232,6 +3237,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
+	skipGenerateWorkflowTask bool,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowSignaled
@@ -3239,7 +3245,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionSignaledEvent(signalName, input, identity, header)
+	event := ms.hBuilder.AddWorkflowExecutionSignaledEvent(signalName, input, identity, header, skipGenerateWorkflowTask)
 	if err := ms.ReplicateWorkflowExecutionSignaled(event); err != nil {
 		return nil, err
 	}

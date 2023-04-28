@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -41,7 +40,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -127,60 +125,6 @@ func (s *contextSuite) TestAddTasks_Success() {
 
 	err := s.mockShard.AddTasks(context.Background(), addTasksRequest)
 	s.NoError(err)
-}
-
-func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
-
-	now := time.Now().Truncate(time.Millisecond)
-	persistenceShardInfo := &persistencespb.ShardInfo{
-		ShardId: 0,
-		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-			tasks.CategoryTimer.ID(): {
-				AckLevel: now.Add(-time.Minute).UnixNano(),
-				ClusterAckLevel: map[string]int64{
-					cluster.TestCurrentClusterName: now.UnixNano(),
-				},
-			},
-		},
-		QueueStates: map[int32]*persistencespb.QueueState{
-			tasks.CategoryTimer.ID(): {
-				ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
-					FireTime: timestamp.TimePtr(now.Add(time.Duration(rand.Intn(3)-2) * time.Minute)),
-					TaskId:   rand.Int63(),
-				},
-			},
-		},
-	}
-	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), gomock.Any()).Return(
-		&persistence.GetOrCreateShardResponse{
-			ShardInfo: persistenceShardInfo,
-		},
-		nil,
-	)
-
-	// clear shardInfo and load from persistence
-	shardContextImpl := s.mockShard
-	shardContextImpl.shardInfo = nil
-	err := shardContextImpl.loadShardMetadata(convert.BoolPtr(false))
-	s.NoError(err)
-
-	for clusterName, info := range s.mockShard.GetClusterMetadata().GetAllClusterInfo() {
-		if !info.Enabled {
-			continue
-		}
-
-		timerQueueAckLevels := persistenceShardInfo.QueueAckLevels[tasks.CategoryTimer.ID()]
-		timerQueueStates := persistenceShardInfo.QueueStates[tasks.CategoryTimer.ID()]
-
-		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
-		s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(timerQueueAckLevels.AckLevel)))
-
-		if clusterAckLevel, ok := timerQueueAckLevels.ClusterAckLevel[clusterName]; ok {
-			s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(clusterAckLevel)))
-		}
-
-		s.False(maxReadLevel.Before(timestamp.TimeValue(timerQueueStates.ExclusiveReaderHighWatermark.FireTime)))
-	}
 }
 
 func (s *contextSuite) TestTimerMaxReadLevelUpdate() {

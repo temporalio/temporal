@@ -77,6 +77,7 @@ type ShardInfo struct {
 	NamespaceNotificationVersion int64            `protobuf:"varint,9,opt,name=namespace_notification_version,json=namespaceNotificationVersion,proto3" json:"namespace_notification_version,omitempty"`
 	ReplicationDlqAckLevel       map[string]int64 `protobuf:"bytes,13,rep,name=replication_dlq_ack_level,json=replicationDlqAckLevel,proto3" json:"replication_dlq_ack_level,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
 	// Map from task category to ack levels of the corresponding queue processor
+	// Deprecated. Use queue_states instead.
 	QueueAckLevels map[int32]*QueueAckLevel `protobuf:"bytes,16,rep,name=queue_ack_levels,json=queueAckLevels,proto3" json:"queue_ack_levels,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	QueueStates    map[int32]*QueueState    `protobuf:"bytes,17,rep,name=queue_states,json=queueStates,proto3" json:"queue_states,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
