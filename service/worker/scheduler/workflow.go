@@ -53,6 +53,11 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
+// List of scheudle versions:
+// 0 this represents the code before Version is introduced
+// 1 Skip over entire time range if paused and batch and cache getNextTime queries
+const latestVersion = 1
+
 const (
 	// Schedules are implemented by a workflow whose ID is this string plus the schedule ID.
 	WorkflowIDPrefix = "temporal-sys-scheduler:"
@@ -78,9 +83,7 @@ const (
 
 	rateLimitedErrorType = "RateLimited"
 
-	// Size of the time generator cache, the generator batches getNextTime function calls and
-	// caches the result to avoid the overhead of SideEffects
-	timeGeneratorCacheSize = 10
+	maxNextTimeResultCacheSize = 10
 )
 
 type (
@@ -109,8 +112,9 @@ type (
 
 		uuidBatch []string
 
-		// generator that batches nextTime queries in a side effect and caches the results
-		nextTimeGenerator func(time.Time) getNextTimeResult
+		// This cache is used to store time results after batching getNextTime queries
+		// in a single SideEffect
+		nextTimeResultCache []getNextTimeResult
 	}
 
 	tweakablePolicies struct {
@@ -164,7 +168,7 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		Version:                           1,
+		Version:                           latestVersion,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -211,16 +215,11 @@ func (s *scheduler) run() error {
 	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
-	// initialize the generator
-	s.nextTimeGenerator = s.timeGenerator()
-
 	currentVersion := s.tweakables.Version
-	currentSpec := s.cspec
 
 	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
-		// if spec changes or version is changed (donwgrade or upgrade), break and continue-as-new
-		// to force invalidation of internal caches
-		if currentVersion != s.tweakables.Version && currentSpec != s.cspec {
+		// in case of downgrades, break to contine-as-new
+		if currentVersion > s.tweakables.Version {
 			break
 		}
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
@@ -292,6 +291,9 @@ func (s *scheduler) ensureFields() {
 }
 
 func (s *scheduler) compileSpec() {
+	// if spec changes invalidate current nextTimeResult cache
+	s.nextTimeResultCache = make([]getNextTimeResult, 0)
+
 	cspec, err := NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
 		if s.logger != nil {
@@ -355,41 +357,34 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 	}
 }
 
-func (s *scheduler) timeGenerator() func(time.Time) getNextTimeResult {
-	var nextResults [TimeGeneratorCacheSize]getNextTimeResult
-	currentIndex := 0
-	lastCacheElement := -1
-	return func(after time.Time) getNextTimeResult {
+func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
 
-		// we are only interested in schedules that comes after 'after' parameter
-		for currentIndex <= lastCacheElement && nextResults[currentIndex].Next.Before(after) {
-			currentIndex++
-		}
-
-		// if we exhausted all cache elements, fetch more schedules
-		if currentIndex > lastCacheElement {
-			currentIndex = 0
-			lastCacheElement = -1
-			// Run this logic in a SideEffect so that we can fix bugs there without breaking
-			// existing schedule workflows.
-			panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-				var results [TimeGeneratorCacheSize]getNextTimeResult
-				for lastCacheElement < TimeGeneratorCacheSize-1 {
-					next := s.cspec.getNextTime(after)
-					after = next.Next
-					lastCacheElement += 1
-					results[lastCacheElement] = next
-					// if there is no matching time, stop fetching
-					if after.IsZero() {
-						break
-					}
-				}
-				return results
-			}).Get(&nextResults))
-		}
-		currentIndex++
-		return nextResults[currentIndex-1]
+	// ignore schedules that come before the 'after' parameter
+	for len(s.nextTimeResultCache) != 0 && s.nextTimeResultCache[0].Next.Before(after) {
+		s.nextTimeResultCache = s.nextTimeResultCache[1:]
 	}
+
+	// if we exhausted all cache elements, fetch more schedules
+	if len(s.nextTimeResultCache) == 0 {
+		// Run this logic in a SideEffect so that we can fix bugs there without breaking
+		// existing schedule workflows.
+		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+			var results []getNextTimeResult
+			for len(results) < maxNextTimeResultCacheSize {
+				next := s.cspec.getNextTime(after)
+				after = next.Next
+				results = append(results, next)
+				// if there is no matching time, stop fetching
+				if after.IsZero() {
+					break
+				}
+			}
+			return results
+		}).Get(&s.nextTimeResultCache))
+	}
+	next := s.nextTimeResultCache[0]
+	s.nextTimeResultCache = s.nextTimeResultCache[1:]
+	return next
 }
 
 func (s *scheduler) processTimeRange(
@@ -413,7 +408,7 @@ func (s *scheduler) processTimeRange(
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
-			return s.nextTimeGenerator(t2).Next
+			return s.getNextTime(t2).Next
 		}
 	}
 
@@ -426,7 +421,7 @@ func (s *scheduler) processTimeRange(
 				return s.cspec.getNextTime(t1)
 			}).Get(&next))
 		} else {
-			next = s.nextTimeGenerator(t1)
+			next = s.getNextTime(t1)
 		}
 		t1 = next.Next
 		if t1.IsZero() || t1.After(t2) {
