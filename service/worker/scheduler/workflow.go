@@ -80,7 +80,7 @@ const (
 
 	// Size of the time generator cache, the generator batches getNextTime function calls and
 	// caches the result to avoid the overhead of SideEffects
-	TimeGeneratorCacheSize = 10
+	timeGeneratorCacheSize = 10
 )
 
 type (
