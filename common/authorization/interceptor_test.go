@@ -133,3 +133,23 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
 	s.Nil(res)
 	s.Error(err)
 }
+
+func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
+	admin := &Claims{System: RoleAdmin}
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), admin, describeNamespaceTarget).
+		DoAndReturn(func(ctx context.Context, caller *Claims, target *CallTarget) (Result, error) {
+			// check that claims are present in ctx also
+			s.Equal(admin, ctx.Value(MappedClaims))
+
+			return Result{Decision: DecisionAllow}, nil
+		})
+
+	interceptor := NewAuthorizationInterceptor(
+		NewNoopClaimMapper(),
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		nil)
+	_, err := interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+	s.NoError(err)
+}

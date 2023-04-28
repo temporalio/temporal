@@ -328,106 +328,6 @@ func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Ke
 	return tasks.NewKey(s.scheduledTaskMaxReadLevel, 0), nil
 }
 
-// NOTE: the ack level returned is inclusive for immediate task category (acked),
-// but exclusive for scheduled task category (not acked).
-func (s *ContextImpl) GetQueueAckLevel(category tasks.Category) tasks.Key {
-	s.rLock()
-	defer s.rUnlock()
-
-	return s.getQueueAckLevelLocked(category)
-}
-
-func (s *ContextImpl) getQueueAckLevelLocked(category tasks.Category) tasks.Key {
-	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[category.ID()]; ok && queueAckLevel.AckLevel != 0 {
-		return convertPersistenceAckLevelToTaskKey(category.Type(), queueAckLevel.AckLevel)
-	}
-
-	return tasks.NewKey(tasks.DefaultFireTime, 0)
-}
-
-func (s *ContextImpl) UpdateQueueAckLevel(
-	category tasks.Category,
-	ackLevel tasks.Key,
-) error {
-	s.wLock()
-	defer s.wUnlock()
-
-	// the ack level is already the min ack level across all types of
-	// queue processors: active, passive, failover
-
-	categoryID := category.ID()
-	if _, ok := s.shardInfo.QueueAckLevels[categoryID]; !ok {
-		s.shardInfo.QueueAckLevels[categoryID] = &persistencespb.QueueAckLevel{
-			ClusterAckLevel: make(map[string]int64),
-		}
-	}
-	persistenceAckLevel := convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
-	s.shardInfo.QueueAckLevels[categoryID].AckLevel = persistenceAckLevel
-
-	// if cluster ack level is less than the overall ack level, update cluster ack level
-	// as well to prevent loading too many tombstones if the cluster ack level is used later
-	// this may happen when adding back a removed cluster or rolling back the change for using
-	// single queue in timer/transfer queue processor
-	clusterAckLevel := s.shardInfo.QueueAckLevels[categoryID].ClusterAckLevel
-	for clusterName, persistenceClusterAckLevel := range clusterAckLevel {
-		if persistenceClusterAckLevel < persistenceAckLevel {
-			clusterAckLevel[clusterName] = persistenceAckLevel
-		}
-	}
-
-	// when this method is called, it means multi-cursor is disabled.
-	// clear processor state field, so that next time multi-cursor is enabled,
-	// it won't start from an very old state
-	delete(s.shardInfo.QueueStates, categoryID)
-
-	s.shardInfo.StolenSinceRenew = 0
-	return s.updateShardInfoLocked()
-}
-
-func (s *ContextImpl) GetQueueClusterAckLevel(
-	category tasks.Category,
-	cluster string,
-) tasks.Key {
-	s.rLock()
-	defer s.rUnlock()
-
-	return s.getQueueClusterAckLevelLocked(category, cluster)
-}
-
-func (s *ContextImpl) getQueueClusterAckLevelLocked(
-	category tasks.Category,
-	cluster string,
-) tasks.Key {
-	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[category.ID()]; ok {
-		if ackLevel, ok := queueAckLevel.ClusterAckLevel[cluster]; ok {
-			return convertPersistenceAckLevelToTaskKey(category.Type(), ackLevel)
-		}
-	}
-
-	// otherwise, default to existing ack level, which belongs to local cluster
-	// this can happen if you add more clusters or a new category
-	return s.getQueueAckLevelLocked(category)
-}
-
-func (s *ContextImpl) UpdateQueueClusterAckLevel(
-	category tasks.Category,
-	cluster string,
-	ackLevel tasks.Key,
-) error {
-	s.wLock()
-	defer s.wUnlock()
-
-	if _, ok := s.shardInfo.QueueAckLevels[category.ID()]; !ok {
-		s.shardInfo.QueueAckLevels[category.ID()] = &persistencespb.QueueAckLevel{
-			ClusterAckLevel: make(map[string]int64),
-		}
-	}
-	s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel[cluster] = convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
-
-	s.shardInfo.StolenSinceRenew = 0
-	return s.updateShardInfoLocked()
-}
-
 func (s *ContextImpl) GetQueueState(
 	category tasks.Category,
 ) (*persistencespb.QueueState, bool) {
@@ -435,6 +335,12 @@ func (s *ContextImpl) GetQueueState(
 	defer s.rUnlock()
 
 	queueState, ok := s.shardInfo.QueueStates[category.ID()]
+	if !ok {
+		return nil, false
+	}
+	// need to make a deep copy, in case UpdateReplicationQueueReaderState does a partial update
+	blob, _ := serialization.QueueStateToBlob(queueState)
+	queueState, _ = serialization.QueueStateFromBlob(blob.Data, blob.EncodingType.String())
 	return queueState, ok
 }
 
@@ -448,36 +354,27 @@ func (s *ContextImpl) SetQueueState(
 	categoryID := category.ID()
 	s.shardInfo.QueueStates[categoryID] = state
 
-	// for compatability, update ack level and cluster ack level as well
-	// so after rollback or disabling the feature, we won't load too many tombstones
-	minAckLevel := convertFromPersistenceTaskKey(state.ExclusiveReaderHighWatermark)
-	for _, readerState := range state.ReaderStates {
-		if len(readerState.Scopes) != 0 {
-			minAckLevel = tasks.MinKey(
-				minAckLevel,
-				convertFromPersistenceTaskKey(readerState.Scopes[0].Range.InclusiveMin),
-			)
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *ContextImpl) UpdateReplicationQueueReaderState(
+	readerID int64,
+	readerState *persistencespb.QueueReaderState,
+) error {
+	s.wLock()
+	defer s.wUnlock()
+
+	categoryID := tasks.CategoryReplication.ID()
+	queueState, ok := s.shardInfo.QueueStates[categoryID]
+	if !ok {
+		queueState = &persistencespb.QueueState{
+			ExclusiveReaderHighWatermark: nil,
+			ReaderStates:                 make(map[int64]*persistencespb.QueueReaderState),
 		}
+		s.shardInfo.QueueStates[categoryID] = queueState
 	}
-
-	if category.Type() == tasks.CategoryTypeImmediate && minAckLevel.TaskID > 0 {
-		// for immediate task type, the ack level is inclusive
-		// for scheduled task type, the ack level is exclusive
-		minAckLevel = minAckLevel.Prev()
-	}
-	persistenceAckLevel := convertTaskKeyToPersistenceAckLevel(category.Type(), minAckLevel)
-
-	if _, ok := s.shardInfo.QueueAckLevels[categoryID]; !ok {
-		s.shardInfo.QueueAckLevels[categoryID] = &persistencespb.QueueAckLevel{
-			ClusterAckLevel: make(map[string]int64),
-		}
-	}
-	s.shardInfo.QueueAckLevels[categoryID].AckLevel = persistenceAckLevel
-
-	clusterAckLevel := s.shardInfo.QueueAckLevels[categoryID].ClusterAckLevel
-	for clusterName := range clusterAckLevel {
-		clusterAckLevel[clusterName] = persistenceAckLevel
-	}
+	queueState.ReaderStates[readerID] = readerState
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -1173,7 +1070,7 @@ func (s *ContextImpl) updateRangeIfNeededLocked() error {
 }
 
 func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
-	updatedShardInfo := copyShardInfo(s.shardInfo)
+	updatedShardInfo := storeShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(s.shardInfo))
 	updatedShardInfo.RangeId++
 	if isStealing {
 		updatedShardInfo.StolenSinceRenew++
@@ -1229,8 +1126,20 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		return nil
 	}
-	updatedShardInfo := copyShardInfo(s.shardInfo)
-	s.emitShardInfoMetricsLogsLocked()
+	updatedShardInfo := storeShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(s.shardInfo))
+	// since linter is against any logging control ¯\_(ツ)_/¯, e.g.
+	//  "flag-parameter: parameter 'verboseLogging' seems to be a control flag, avoid control coupling (revive)"
+	var logger log.Logger = log.NewNoopLogger()
+	if s.config.EmitShardLagLog() {
+		logger = s.contextTaggedLogger
+	}
+	emitShardInfoMetricsLogsLocked(
+		s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope)),
+		logger,
+		updatedShardInfo.QueueStates,
+		s.immediateTaskExclusiveMaxReadLevel,
+		s.scheduledTaskMaxReadLevel,
+	)
 
 	ctx, cancel := s.newIOContext()
 	defer cancel()
@@ -1244,64 +1153,6 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 
 	s.lastUpdated = now
 	return nil
-}
-
-func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
-	handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	logWarnLagExceeded := false
-
-	for categoryID := range s.shardInfo.QueueAckLevels {
-		category, ok := tasks.GetCategoryByID(categoryID)
-		if !ok {
-			continue
-		}
-
-		switch category.Type() {
-		case tasks.CategoryTypeImmediate:
-			lag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(category).TaskID - 1
-			if lag > logWarnImmediateTaskLag {
-				logWarnLagExceeded = true
-			}
-			handler.Histogram(
-				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricName(),
-				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricUnit(),
-			).Record(lag, metrics.TaskCategoryTag(category.Name()))
-		case tasks.CategoryTypeScheduled:
-			lag := s.scheduledTaskMaxReadLevel.Sub(s.getQueueAckLevelLocked(category).FireTime)
-			if lag > logWarnScheduledTaskLag {
-				logWarnLagExceeded = true
-			}
-			handler.Timer(
-				metrics.ShardInfoScheduledQueueLagTimer.GetMetricName(),
-			).Record(lag, metrics.TaskCategoryTag(category.Name()))
-		default:
-			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
-		}
-	}
-
-	if logWarnLagExceeded && s.config.EmitShardLagLog() {
-		ackLevelTags := make([]tag.Tag, 0, len(s.shardInfo.QueueAckLevels))
-		for categoryID, ackLevel := range s.shardInfo.QueueAckLevels {
-			category, ok := tasks.GetCategoryByID(categoryID)
-			if !ok {
-				continue
-			}
-			ackLevelTags = append(ackLevelTags, tag.ShardQueueAcks(category.Name(), ackLevel))
-		}
-		s.contextTaggedLogger.Warn("Shard ack levels lag exceeds warn threshold.", ackLevelTags...)
-	}
-
-	// Following metrics are double-emitted for backward compatibility so that old dashboard/alert won't break
-	// TODO: remove in 1.21 release
-	replicationLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryReplication).TaskID - 1
-	transferLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryTransfer).TaskID - 1
-	visibilityLag := s.immediateTaskExclusiveMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryVisibility).TaskID - 1
-	timerLag := s.timeSource.Now().Sub(s.getQueueAckLevelLocked(tasks.CategoryTimer).FireTime)
-
-	handler.Histogram(metrics.ShardInfoReplicationLagHistogram.GetMetricName(), metrics.ShardInfoReplicationLagHistogram.GetMetricUnit()).Record(replicationLag)
-	handler.Histogram(metrics.ShardInfoTransferLagHistogram.GetMetricName(), metrics.ShardInfoTransferLagHistogram.GetMetricUnit()).Record(transferLag)
-	handler.Histogram(metrics.ShardInfoVisibilityLagHistogram.GetMetricName(), metrics.ShardInfoVisibilityLagHistogram.GetMetricUnit()).Record(visibilityLag)
-	handler.Timer(metrics.ShardInfoTimerLagTimer.GetMetricName()).Record(timerLag)
 }
 
 func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
@@ -1754,13 +1605,9 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		s.contextTaggedLogger.Error("Failed to load shard", tag.Error(err))
 		return err
 	}
-	shardInfo := resp.ShardInfo
-
-	// shardInfo is a fresh value, so we don't really need to copy, but
-	// copyShardInfo also ensures that all maps are non-nil
-	updatedShardInfo := copyShardInfo(shardInfo)
-	*ownershipChanged = shardInfo.Owner != s.owner
-	updatedShardInfo.Owner = s.owner
+	*ownershipChanged = resp.ShardInfo.Owner != s.owner
+	shardInfo := loadShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(resp.ShardInfo))
+	shardInfo.Owner = s.owner
 
 	// initialize the cluster current time to be the same as ack level
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
@@ -1773,25 +1620,6 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		}
 
 		maxReadTime := tasks.DefaultFireTime
-		for categoryID, queueAckLevels := range shardInfo.QueueAckLevels {
-			category, ok := taskCategories[categoryID]
-			if !ok || category.Type() != tasks.CategoryTypeScheduled {
-				continue
-			}
-
-			if queueAckLevels.AckLevel != 0 {
-				currentTime := timestamp.UnixOrZeroTime(queueAckLevels.AckLevel)
-				maxReadTime = util.MaxTime(maxReadTime, currentTime)
-			}
-
-			if queueAckLevels.ClusterAckLevel != nil {
-				if ackLevel, ok := queueAckLevels.ClusterAckLevel[clusterName]; ok {
-					currentTime := timestamp.UnixOrZeroTime(ackLevel)
-					maxReadTime = util.MaxTime(maxReadTime, currentTime)
-				}
-			}
-		}
-
 		for categoryID, queueState := range shardInfo.QueueStates {
 			category, ok := taskCategories[categoryID]
 			if !ok || category.Type() != tasks.CategoryTypeScheduled {
@@ -1819,7 +1647,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.wLock()
 	defer s.wUnlock()
 
-	s.shardInfo = updatedShardInfo
+	s.shardInfo = shardInfo
 	s.remoteClusterInfos = remoteClusterInfos
 	s.scheduledTaskMaxReadLevel = scheduledTaskMaxReadLevel
 
@@ -2059,6 +1887,13 @@ func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInf
 			ClusterAckLevel: maps.Clone(ackLevels.ClusterAckLevel),
 		}
 	}
+	// need to ser/de to make a deep copy of queue state
+	queueStates := make(map[int32]*persistencespb.QueueState, len(shardInfo.QueueStates))
+	for k, v := range shardInfo.QueueStates {
+		blob, _ := serialization.QueueStateToBlob(v)
+		queueState, _ := serialization.QueueStateFromBlob(blob.Data, blob.EncodingType.String())
+		queueStates[k] = queueState
+	}
 
 	return &persistencespb.ShardInfo{
 		ShardId:                      shardInfo.ShardId,
@@ -2069,7 +1904,7 @@ func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInf
 		ReplicationDlqAckLevel:       maps.Clone(shardInfo.ReplicationDlqAckLevel),
 		UpdateTime:                   shardInfo.UpdateTime,
 		QueueAckLevels:               queueAckLevels,
-		QueueStates:                  shardInfo.QueueStates,
+		QueueStates:                  queueStates,
 	}
 }
 
@@ -2174,33 +2009,4 @@ func OperationPossiblySucceeded(err error) bool {
 	default:
 		return true
 	}
-}
-
-func convertPersistenceAckLevelToTaskKey(
-	categoryType tasks.CategoryType,
-	ackLevel int64,
-) tasks.Key {
-	if categoryType == tasks.CategoryTypeImmediate {
-		return tasks.NewImmediateKey(ackLevel)
-	}
-	return tasks.NewKey(timestamp.UnixOrZeroTime(ackLevel), 0)
-}
-
-func convertTaskKeyToPersistenceAckLevel(
-	categoryType tasks.CategoryType,
-	taskKey tasks.Key,
-) int64 {
-	if categoryType == tasks.CategoryTypeImmediate {
-		return taskKey.TaskID
-	}
-	return taskKey.FireTime.UnixNano()
-}
-
-func convertFromPersistenceTaskKey(
-	key *persistencespb.TaskKey,
-) tasks.Key {
-	return tasks.NewKey(
-		timestamp.TimeValue(key.FireTime),
-		key.TaskId,
-	)
 }

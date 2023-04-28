@@ -38,6 +38,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/primitives"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -65,7 +66,7 @@ const (
 )
 
 var (
-	permissionsAdmin              = []string{"system:admin", "default:read"}
+	permissionsAdmin              = []string{primitives.SystemLocalNamespace + ":admin", "default:read"}
 	permissionsReaderWriterWorker = []string{"default:read", "default:write", "default:worker"}
 )
 
@@ -161,6 +162,27 @@ func (s *defaultClaimMapperSuite) testTokenWithAdminPermissions(alg keyAlgorithm
 	s.Equal(1, len(claims.Namespaces))
 	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader, defaultRole)
+}
+
+func (s *defaultClaimMapperSuite) TestNamespacePermissionCaseSensitive() {
+	tokenString, err := s.tokenGenerator.generateToken(RSA,
+		testSubject, []string{"Temporal-system:admin", "Foo:read"}, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"",
+	}
+	claims, err := s.claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+	s.Equal(testSubject, claims.Subject)
+	s.Equal(RoleUndefined, claims.System) // no system role
+	s.Equal(2, len(claims.Namespaces))
+	// claims contain namespace role for 'Foo', not for 'foo'.
+	s.Equal(RoleReader, claims.Namespaces["Foo"])
+	s.Equal(RoleAdmin, claims.Namespaces["Temporal-system"])
 }
 
 func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsRSA() {
