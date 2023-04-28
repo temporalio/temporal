@@ -899,6 +899,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 		&commonpb.Payloads{},
 		"identity",
 		&commonpb.Header{},
+		false,
 	)
 	s.NoError(err)
 

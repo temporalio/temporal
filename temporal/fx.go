@@ -313,7 +313,7 @@ func (svc *ServicesMetadata) Stop(ctx context.Context) {
 	select {
 	case <-svc.stopChan:
 	case <-stopCtx.Done():
-		svc.logger.Error("Timed out waiting for service to stop", tag.Service(svc.serviceName))
+		logger.Error("Timed out waiting for service to stop", tag.Service(svcName), tag.NewDurationTag("timeout", serviceStopTimeout))
 	}
 }
 

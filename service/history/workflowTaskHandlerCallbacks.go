@@ -470,6 +470,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	)
 	// hasPendingUpdates indicates if there are more pending updates (excluding those which are accepted/rejected by this workflow task).
 	hasPendingUpdates := weContext.UpdateRegistry().HasPending(request.GetMessages())
+	// hasBufferedEvents indicates if there are any buffered events which should generate a new workflow task
 	hasBufferedEvents := ms.HasBufferedEvents()
 	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
@@ -546,6 +547,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		hasBufferedEvents = workflowTaskHandler.hasBufferedEvents
 	}
 
+	wtFailedShouldCreateNewTask := false
 	if wtFailedCause != nil {
 		handler.metricsHandler.Counter(metrics.FailedWorkflowTasksCounter.GetMetricName()).Record(
 			1,
@@ -564,7 +566,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		if err != nil {
 			return nil, err
 		}
-		hasBufferedEvents = true
+		wtFailedShouldCreateNewTask = true
 		newMutableState = nil
 
 		if wtFailedCause.workflowFailure != nil {
@@ -577,12 +579,17 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			if _, err := ms.AddFailWorkflowEvent(nextEventBatchId, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
 				return nil, err
 			}
-			hasBufferedEvents = false
+			wtFailedShouldCreateNewTask = false
 		}
 	}
 
+	bufferedEventShouldCreateNewTask := hasBufferedEvents && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
+	if hasBufferedEvents && !bufferedEventShouldCreateNewTask {
+		// Make sure tasks that should not create a new event don't get stuck in ms forever
+		ms.FlushBufferedEvents()
+	}
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
-	if ms.IsWorkflowExecutionRunning() && (hasBufferedEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled) {
+	if ms.IsWorkflowExecutionRunning() && (wtFailedShouldCreateNewTask || bufferedEventShouldCreateNewTask || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled) {
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 	} else if ms.IsWorkflowExecutionRunning() && hasPendingUpdates {
 		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
@@ -981,4 +988,14 @@ func failWorkflowTask(
 
 	// Return new mutable state back to the caller for further updates
 	return mutableState, nextEventBatchId, nil
+}
+
+// Filter function to be passed to mutable_state.HasAnyBufferedEvent
+// Returns true if the event should generate a new workflow task
+// Currently only signal events with SkipGenerateWorkflowTask=true flag set do not generate tasks
+func eventShouldGenerateNewTaskFilter(event *historypb.HistoryEvent) bool {
+	if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+		return true
+	}
+	return !event.GetWorkflowExecutionSignaledEventAttributes().GetSkipGenerateWorkflowTask()
 }
