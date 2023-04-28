@@ -53,7 +53,7 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-// List of scheudle versions:
+// List of scheduler workflow versions:
 // 0 this represents the code before Version is introduced
 // 1 Skip over entire time range if paused and batch and cache getNextTime queries
 const latestVersion = 1
