@@ -349,14 +349,23 @@ func (s *scheduler) processTimeRange(
 
 	catchupWindow := s.getCatchupWindow()
 
-	getNextTime := func(after time.Time) getNextTimeResult {
+	getNextTime := func(after time.Time) []getNextTimeResult {
 		// Run this logic in a SideEffect so that we can fix bugs there without breaking
 		// existing schedule workflows.
-		var next getNextTimeResult
+		var nextResults []getNextTimeResult
 		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-			return s.cspec.getNextTime(after)
-		}).Get(&next))
-		return next
+			var results []getNextTimeResult
+			for {
+				next := s.cspec.getNextTime(after)
+				after = next.Next
+				results = append(results, next)
+				if after.IsZero() || after.After(t2) {
+					break
+				}
+			}
+			return results
+		}).Get(&nextResults))
+		return nextResults
 	}
 
 	// A previous version would record a marker for each time which could make a workflow
@@ -367,16 +376,14 @@ func (s *scheduler) processTimeRange(
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
-			return getNextTime(t2).Next
+			next := getNextTime(t2)[0]
+			return next.Next
 		}
 	}
 
-	for {
-		next := getNextTime(t1)
+	nextResults := getNextTime(t1)
+	for _, next := range nextResults[:len(nextResults)-1] {
 		t1 = next.Next
-		if t1.IsZero() || t1.After(t2) {
-			return t1
-		}
 		if !s.tweakables.SkipOverTimeRangeIfPaused && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
@@ -388,6 +395,8 @@ func (s *scheduler) processTimeRange(
 		}
 		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
 	}
+
+	return nextResults[len(nextResults)-1].Next
 }
 
 func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
