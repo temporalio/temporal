@@ -70,6 +70,18 @@ type (
 		DataEncoding string
 	}
 
+	ListTaskQueueUserDataEntriesRequest struct {
+		NamespaceID       []byte
+		LastTaskQueueName string
+		Limit             int
+	}
+
+	TaskQueueUserDataEntry struct {
+		TaskQueueName string
+		Data          []byte
+		DataEncoding  string
+	}
+
 	// MatchingTaskQueue is the SQL persistence interface for matching task queues
 	MatchingTaskQueue interface {
 		InsertIntoTaskQueues(ctx context.Context, row *TaskQueuesRow) (sql.Result, error)
@@ -83,5 +95,6 @@ type (
 		LockTaskQueues(ctx context.Context, filter TaskQueuesFilter) (int64, error)
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*VersionedBlob, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueDataRequest) error
+		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) ([]TaskQueueUserDataEntry, error)
 	}
 )

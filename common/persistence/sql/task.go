@@ -516,6 +516,51 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 	return err
 }
 
+func (m *sqlTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.InternalListTaskQueueUserDataEntriesResponse, error) {
+	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, serviceerror.NewInternal(err.Error())
+	}
+
+	lastQueueName := ""
+	if len(request.NextPageToken) != 0 {
+		token, err := deserializeUserDataListNextPageToken(request.NextPageToken)
+		if err != nil {
+			return nil, err
+		}
+		lastQueueName = token.LastTaskQueueName
+	}
+
+	rows, err := m.Db.ListTaskQueueUserDataEntries(ctx, &sqlplugin.ListTaskQueueUserDataEntriesRequest{
+		NamespaceID:       namespaceID,
+		LastTaskQueueName: lastQueueName,
+		Limit:             request.PageSize + 1, // request 1 more to know if there'll be a next page
+	})
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListTaskQueueUserDataEntries operation failed. Failed to get rows. Error: %v", err))
+	}
+
+	var nextPageToken []byte
+	if len(rows) > request.PageSize {
+		rows = rows[:request.PageSize]
+		nextPageToken, err = serializeUserDataListNextPageToken(&userDataListNextPageToken{LastTaskQueueName: rows[request.PageSize-1].TaskQueueName})
+		if err != nil {
+			return nil, serviceerror.NewInternal(err.Error())
+		}
+	}
+	entries := make([]persistence.InternalTaskQueueUserDataEntry, len(rows))
+	for i, row := range rows {
+		entries[i].TaskQueue = rows[i].TaskQueueName
+		entries[i].Data = persistence.NewDataBlob(row.Data, row.DataEncoding)
+	}
+	response := &persistence.InternalListTaskQueueUserDataEntriesResponse{
+		Entries:       entries,
+		NextPageToken: nextPageToken,
+	}
+
+	return response, nil
+}
+
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
 func (m *sqlTaskManager) taskQueueIdAndHash(
 	namespaceID primitives.UUID,
@@ -576,6 +621,22 @@ func serializeMatchingTaskPageToken(token *matchingTaskPageToken) ([]byte, error
 
 func deserializeMatchingTaskPageToken(payload []byte) (*matchingTaskPageToken, error) {
 	var token matchingTaskPageToken
+	if err := json.Unmarshal(payload, &token); err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+type userDataListNextPageToken struct {
+	LastTaskQueueName string
+}
+
+func serializeUserDataListNextPageToken(token *userDataListNextPageToken) ([]byte, error) {
+	return json.Marshal(token)
+}
+
+func deserializeUserDataListNextPageToken(payload []byte) (*userDataListNextPageToken, error) {
+	var token userDataListNextPageToken
 	if err := json.Unmarshal(payload, &token); err != nil {
 		return nil, err
 	}

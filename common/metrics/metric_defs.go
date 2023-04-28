@@ -470,7 +470,9 @@ const (
 	// MatchingClientGetTaskQueueUserDataScope tracks RPC calls to matching service
 	MatchingClientGetTaskQueueUserDataScope = "MatchingClientGetTaskQueueUserData"
 	// MatchingClientApplyTaskQueueUserDataReplicationEventScope tracks RPC calls to matching service
-	MatchingClientApplyTaskQueueUserDataReplicationEventScope = "MatchingClientApplyTaskQueueUserDataReplicationEventScope"
+	MatchingClientApplyTaskQueueUserDataReplicationEventScope = "MatchingClientApplyTaskQueueUserDataReplicationEvent"
+	// MatchingClientSeedReplicationQueueWithUserDataEntriesScope tracks RPC calls to matching service
+	MatchingClientSeedReplicationQueueWithUserDataEntriesScope = "MatchingClientSeedReplicationQueueWithUserDataEntries"
 )
 
 // Worker
@@ -634,6 +636,8 @@ const (
 	PersistenceGetTaskQueueUserDataScope = "GetTaskQueueUserData"
 	// PersistenceUpdateTaskQueueUserDataScope is the metric scope for persistence.TaskManager.UpdateTaskQueueUserData API
 	PersistenceUpdateTaskQueueUserDataScope = "UpdateTaskQueueUserData"
+	// PersistenceListTaskQueueUserDataEntriesScope is the metric scope for persistence.TaskManager.ListTaskQueueUserDataEntries API
+	PersistenceListTaskQueueUserDataEntriesScope = "ListTaskQueueUserDataEntries"
 	// PersistenceAppendHistoryEventsScope tracks AppendHistoryEvents calls made by service to persistence layer
 	PersistenceAppendHistoryEventsScope = "AppendHistoryEvents"
 	// PersistenceGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory calls made by service to persistence layer
@@ -1107,7 +1111,9 @@ const (
 	// MatchingGetTaskQueueUserDataScope tracks GetTaskQueueUserData API calls received by service
 	MatchingGetTaskQueueUserDataScope = "GetTaskQueueUserData"
 	// MatchingApplyTaskQueueUserDataReplicationEventScope tracks ApplyTaskQueueUserDataReplicationEvent API calls received by service
-	MatchingApplyTaskQueueUserDataReplicationEventScope = "MatchingApplyTaskQueueUserDataReplicationEventScope"
+	MatchingApplyTaskQueueUserDataReplicationEventScope = "MatchingApplyTaskQueueUserDataReplicationEvent"
+	// MatchingSeedReplicationQueueWithUserDataEntriesScope tracks SeedReplicationQueueWithUserDataEntries API calls received by service
+	MatchingSeedReplicationQueueWithUserDataEntriesScope = "MatchingSeedReplicationQueueWithUserDataEntries"
 )
 
 // Worker Scope

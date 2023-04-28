@@ -103,6 +103,8 @@ task_queue_id = :task_queue_id
 	insertTaskQueueUserDataQry = `INSERT INTO task_queue_user_data` +
 		`(namespace_id, task_queue_name, data, data_encoding, version) ` +
 		`VALUES (?, ?, ?, ?, 1)`
+
+	listTaskQueueUserDataQry = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ? AND task_queue_name > ? LIMIT ?`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -332,4 +334,10 @@ func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.U
 		return &persistence.ConditionFailedError{Msg: "Expected exactly one row to be updated"}
 	}
 	return nil
+}
+
+func (mdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplugin.ListTaskQueueUserDataEntriesRequest) ([]sqlplugin.TaskQueueUserDataEntry, error) {
+	var rows []sqlplugin.TaskQueueUserDataEntry
+	err := mdb.conn.SelectContext(ctx, &rows, listTaskQueueUserDataQry, request.NamespaceID, request.LastTaskQueueName, request.Limit)
+	return rows, err
 }

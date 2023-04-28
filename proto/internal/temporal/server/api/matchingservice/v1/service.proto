@@ -93,4 +93,8 @@ service MatchingService {
     // Apply a user data replication event
     rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns
     (ApplyTaskQueueUserDataReplicationEventResponse) {}
+    // (-- api-linter: core::0136::prepositions=disabled
+    //     aip.dev/not-precedent: SeedReplicationQueueWithUserDataEntries RPC doesn't follow Google API format. --)
+    rpc SeedReplicationQueueWithUserDataEntries (SeedReplicationQueueWithUserDataEntriesRequest) returns
+    (SeedReplicationQueueWithUserDataEntriesResponse) {}
 }

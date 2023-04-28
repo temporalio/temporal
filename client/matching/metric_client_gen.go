@@ -147,6 +147,20 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
+func (c *metricClient) SeedReplicationQueueWithUserDataEntries(
+	ctx context.Context,
+	request *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientSeedReplicationQueueWithUserDataEntriesScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.SeedReplicationQueueWithUserDataEntries(ctx, request, opts...)
+}
+
 func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,

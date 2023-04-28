@@ -184,6 +184,10 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 
 	var tqtPath string
 	switch t.Name() {
+	case "SeedReplicationQueueWithUserDataEntriesRequest":
+		tqPath = "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"
+		tqtPath = "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"
+		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
 	case "GetWorkerBuildIdCompatibilityRequest",
 		"UpdateWorkerBuildIdCompatibilityRequest",
 		"RespondQueryTaskCompletedRequest",

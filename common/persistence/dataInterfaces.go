@@ -559,6 +559,22 @@ type (
 		UserData    *persistencespb.VersionedTaskQueueUserData
 	}
 
+	ListTaskQueueUserDataEntriesRequest struct {
+		NamespaceID   string
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	TaskQueueUserDataEntry struct {
+		TaskQueue string
+		Data      *persistencespb.TaskQueueUserData
+	}
+
+	ListTaskQueueUserDataEntriesResponse struct {
+		NextPageToken []byte
+		Entries       []*TaskQueueUserDataEntry
+	}
+
 	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
 	ListTaskQueueRequest struct {
 		PageSize  int
@@ -1144,6 +1160,7 @@ type (
 		// The caller should +1 increment the cached version number if this call succeeds.
 		// Fails with ConditionFailedError if the user data was updated concurrently.
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error
+		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities

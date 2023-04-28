@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 )
 
@@ -76,6 +77,9 @@ func TestForceReplicationWorkflow(t *testing.T) {
 
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(totalPageCount)
 
+	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
+
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
@@ -97,6 +101,8 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	assert.Equal(t, 0, status.ContinuedAsNewCount)
 	assert.Equal(t, startTime, status.LastStartTime)
 	assert.Equal(t, closeTime, status.LastCloseTime)
+	assert.True(t, status.TaskQueueUserDataReplicationStatus.Done)
+	assert.Equal(t, "", status.TaskQueueUserDataReplicationStatus.FailureMessage)
 }
 
 func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
@@ -135,6 +141,9 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(maxPageCountPerExecution)
 
+	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
+
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
@@ -171,6 +180,9 @@ func TestForceReplicationWorkflow_ListWorkflowsError(t *testing.T) {
 
 	maxPageCountPerExecution := 2
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(nil, errors.New("mock listWorkflows error"))
+
+	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
 
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
@@ -217,6 +229,9 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskError(t *testing.T) {
 
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(errors.New("mock generate replication tasks error"))
 
+	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
+
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
@@ -231,4 +246,45 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskError(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "mock generate replication tasks error")
 	env.AssertExpectations(t)
+}
+
+func TestForceReplicationWorkflow_TaskQueueReplicationFailure(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	namespaceID := uuid.New()
+
+	var a *activities
+	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+
+	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(&listWorkflowsResponse{
+		Executions:    []commonpb.WorkflowExecution{},
+		NextPageToken: nil, // last page
+	}, nil)
+	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil)
+	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(
+		temporal.NewNonRetryableApplicationError("namespace is required", "InvalidArgument", nil),
+	)
+
+	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
+		Namespace:               "test-ns",
+		Query:                   "",
+		ConcurrentActivityCount: 2,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   1,
+		PageCountPerExecution:   maxPageCountPerExecution,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+	env.AssertExpectations(t)
+
+	envValue, err := env.QueryWorkflow(forceReplicationStatusQueryType)
+	require.NoError(t, err)
+
+	var status ForceReplicationStatus
+	envValue.Get(&status)
+	assert.True(t, status.TaskQueueUserDataReplicationStatus.Done)
+	assert.Contains(t, status.TaskQueueUserDataReplicationStatus.FailureMessage, "namespace is required")
 }

@@ -41,9 +41,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	repication "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -877,6 +879,37 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		return &mergedUserData, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
+}
+
+func (e *matchingEngineImpl) SeedReplicationQueueWithUserDataEntries(ctx context.Context, request *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest) (*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, error) {
+	if e.namespaceReplicationQueue == nil {
+		return nil, serviceerror.NewInternal("Namespace replication queue not initialized")
+	}
+	persistenceRequest := &persistence.ListTaskQueueUserDataEntriesRequest{
+		NamespaceID:   request.NamespaceId,
+		PageSize:      int(request.PageSize),
+		NextPageToken: request.NextPageToken,
+	}
+	response, err := e.taskManager.ListTaskQueueUserDataEntries(ctx, persistenceRequest)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range response.Entries {
+		err = e.namespaceReplicationQueue.Publish(ctx, &repication.ReplicationTask{
+			TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
+			Attributes: &repication.ReplicationTask_TaskQueueUserDataAttributes{
+				TaskQueueUserDataAttributes: &repication.TaskQueueUserDataAttributes{
+					NamespaceId:   request.NamespaceId,
+					TaskQueueName: entry.TaskQueue,
+					UserData:      entry.Data,
+				},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &matchingservice.SeedReplicationQueueWithUserDataEntriesResponse{NextPageToken: response.NextPageToken}, nil
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {

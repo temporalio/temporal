@@ -36,7 +36,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -345,4 +347,54 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	}
 
 	return nil
+}
+
+func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context, params TaskQueueUserDataReplicationParamsWithNamespace) error {
+	if len(params.Namespace) == 0 {
+		return temporal.NewNonRetryableApplicationError("namespace is required", "InvalidArgument", nil)
+	}
+	if params.PageSize == 0 {
+		params.PageSize = defaultPageSizeForTaskQueueUserDataReplication
+	}
+	if params.RPS == 0 {
+		params.RPS = defaultRPSForTaskQueueUserDataReplication
+	}
+
+	describeResponse, err := a.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: params.Namespace,
+	})
+	if err != nil {
+		return err
+	}
+
+	rateLimiter := quotas.NewRateLimiter(params.RPS, int(math.Ceil(params.RPS)))
+	var nextPageToken []byte
+
+	if activity.HasHeartbeatDetails(ctx) {
+		if err := activity.GetHeartbeatDetails(ctx, &nextPageToken); err != nil {
+			return temporal.NewNonRetryableApplicationError("failed to load previous heartbeat details", "TypeError", err)
+		}
+	}
+
+	for {
+		if err := rateLimiter.Wait(ctx); err != nil {
+			return err
+		}
+
+		request := &matchingservice.SeedReplicationQueueWithUserDataEntriesRequest{
+			NamespaceId:   describeResponse.GetNamespaceInfo().Id,
+			NextPageToken: nextPageToken,
+			PageSize:      int32(params.PageSize),
+		}
+		response, err := a.matchingClient.SeedReplicationQueueWithUserDataEntries(ctx, request)
+		if err != nil {
+			a.logger.Error("Seed task queue user data failed", tag.WorkflowNamespaceID(request.NamespaceId), tag.Error(err))
+			return err
+		}
+		if len(response.NextPageToken) == 0 {
+			return nil
+		}
+		nextPageToken = request.NextPageToken
+		activity.RecordHeartbeat(ctx, nextPageToken)
+	}
 }

@@ -31,6 +31,7 @@ import (
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -47,6 +48,7 @@ type (
 		NamespaceRegistry namespace.Registry
 		HistoryClient     historyservice.HistoryServiceClient
 		FrontendClient    workflowservice.WorkflowServiceClient
+		MatchingClient    matchingservice.MatchingServiceClient
 		Logger            log.Logger
 		MetricsHandler    metrics.Handler
 	}
@@ -77,6 +79,7 @@ func NewResult(params initParams) fxResult {
 func (wc *replicationWorkerComponent) Register(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
 	worker.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
+	worker.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
 	worker.RegisterActivity(wc.activities())
 }
 
@@ -92,6 +95,7 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		namespaceRegistry: wc.NamespaceRegistry,
 		historyClient:     wc.HistoryClient,
 		frontendClient:    wc.FrontendClient,
+		matchingClient:    wc.MatchingClient,
 		logger:            wc.Logger,
 		metricsHandler:    wc.MetricsHandler,
 	}

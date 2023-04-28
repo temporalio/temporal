@@ -247,3 +247,13 @@ message ApplyTaskQueueUserDataReplicationEventRequest {
 
 message ApplyTaskQueueUserDataReplicationEventResponse {
 }
+
+message SeedReplicationQueueWithUserDataEntriesRequest {
+    string namespace_id = 1;
+    bytes next_page_token = 2;
+    int32 page_size = 3;
+}
+
+message SeedReplicationQueueWithUserDataEntriesResponse {
+    bytes next_page_token = 1;
+}

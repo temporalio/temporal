@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -50,6 +51,9 @@ const (
 
 	minimumAllowedLaggingSeconds  = 5
 	minimumHandoverTimeoutSeconds = 30
+
+	defaultPageSizeForTaskQueueUserDataReplication = 20
+	defaultRPSForTaskQueueUserDataReplication      = 1.0
 )
 
 type (
@@ -71,6 +75,7 @@ type (
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
 		frontendClient    workflowservice.WorkflowServiceClient
+		matchingClient    matchingservice.MatchingServiceClient
 		logger            log.Logger
 		metricsHandler    metrics.Handler
 	}
