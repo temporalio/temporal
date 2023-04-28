@@ -683,6 +683,121 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	s.True(workflowTaskDelay > time.Second*2)
 }
 
+func (s *integrationSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
+	id := "integration-signal-workflow-test-skip-wft"
+	wt := "integration-signal-workflow-test-skip-wft-type"
+	tl := "integration-signal-workflow-test-skip-wft-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+
+	// Start workflow execution
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	workflowComplete := false
+	// workflow logic
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+
+		if !workflowComplete {
+			workflowComplete = true
+			return []*commandpb.Command{}, nil
+		}
+
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// process start task
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	// Send first signal which should NOT generate a new wft
+	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+		SignalName:               "signal without task",
+		Input:                    nil,
+		Identity:                 identity,
+		SkipGenerateWorkflowTask: true,
+	})
+	s.NoError(err)
+
+	// Send second signal which should generate a new wft
+	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+		SignalName:               "signal with task",
+		Input:                    nil,
+		Identity:                 identity,
+		SkipGenerateWorkflowTask: false,
+	})
+	s.NoError(err)
+
+	// process signal and complete workflow
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(historyResponse)
+	s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 WorkflowExecutionCompleted`, historyResponse.GetHistory())
+}
+
 func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	id := "integration-signal-external-workflow-test-without-run-id"
 	wt := "integration-signal-external-workflow-test-without-run-id-type"
@@ -1669,4 +1784,123 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_StartDelay() {
 	})
 	s.NoError(descErr)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
+}
+
+func (s *integrationSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
+	id := "integration-signal-with-start-workflow-no-wft-test"
+	wt := "integration-signal-with-start-workflow-no-wft-test-type"
+	tl := "integration-signal-with-start-workflow-no-wft-test-taskqueue"
+	identity := "worker1"
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+
+	// Start workflow execution
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+	}
+
+	we0, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we0.RunId))
+
+	workflowComplete := false
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+
+		if !workflowComplete {
+			workflowComplete = true
+			return []*commandpb.Command{}, nil
+		}
+
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		StickyTaskQueue:     taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// process start task
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(err)
+
+	signalName := "my signal"
+	signalInput := payloads.EncodeString("my signal input")
+
+	sRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		RequestId:                uuid.New(),
+		Namespace:                s.namespace,
+		WorkflowId:               id,
+		WorkflowType:             &commonpb.WorkflowType{Name: wt},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: tl},
+		Input:                    nil,
+		WorkflowRunTimeout:       timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+		SignalName:               signalName,
+		SignalInput:              signalInput,
+		SkipGenerateWorkflowTask: true,
+		Identity:                 identity,
+	}
+
+	we1, err := s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
+	s.NoError(err)
+
+	// Send second signal which should generate a new wft
+	_, err = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we1.RunId,
+		},
+		SignalName:               "signal with task",
+		Input:                    nil,
+		Identity:                 identity,
+		SkipGenerateWorkflowTask: false,
+	})
+	s.NoError(err)
+
+	// process signal and complete workflow
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we1.RunId,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(historyResponse)
+	s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionSignaled
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 WorkflowExecutionCompleted`, historyResponse.GetHistory())
 }

@@ -74,11 +74,9 @@ func Invoke(
 			}
 
 			executionInfo := mutableState.GetExecutionInfo()
-			createWorkflowTask := true
-			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
-				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-				createWorkflowTask = false
-			}
+
+			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
+			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() && !request.GetSkipGenerateWorkflowTask()
 
 			if err := api.ValidateSignal(
 				ctx,
@@ -106,7 +104,8 @@ func Invoke(
 				request.GetSignalName(),
 				request.GetInput(),
 				request.GetIdentity(),
-				request.GetHeader()); err != nil {
+				request.GetHeader(),
+				request.GetSkipGenerateWorkflowTask()); err != nil {
 				return nil, err
 			}
 
