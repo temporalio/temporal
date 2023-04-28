@@ -137,6 +137,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		s.currentMutableState,
 	)
 	request := s.randomRequest()
+	request.SkipGenerateWorkflowTask = false
 
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(false)
 	s.currentMutableState.EXPECT().AddSignalRequested(request.GetRequestId())
