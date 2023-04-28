@@ -333,11 +333,7 @@ func (r *workflowResetterImpl) reapplyEventsToResetWorkflow(
 		panic(fmt.Sprintf("unknown reset reapply type: %v", resetReapplyType))
 	}
 
-	if err := r.reapplyEvents(resetMutableState, additionalReapplyEvents); err != nil {
-		return err
-	}
-
-	return nil
+	return r.reapplyEvents(resetMutableState, additionalReapplyEvents)
 }
 
 func (r *workflowResetterImpl) persistToDB(

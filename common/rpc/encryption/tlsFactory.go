@@ -107,10 +107,7 @@ func validateRootTLS(cfg *config.RootTLS) error {
 	if err := validateGroupTLS(&cfg.Frontend); err != nil {
 		return err
 	}
-	if err := validateWorkerTLS(&cfg.SystemWorker); err != nil {
-		return err
-	}
-	return nil
+	return validateWorkerTLS(&cfg.SystemWorker)
 }
 
 func validateGroupTLS(cfg *config.GroupTLS) error {
@@ -139,10 +136,7 @@ func validateWorkerTLS(cfg *config.WorkerTLS) error {
 	if cfg.KeyFile != "" && cfg.KeyData != "" {
 		return fmt.Errorf("cannot specify KeyFile and KeyData at the same time")
 	}
-	if err := validateClientTLS(&cfg.Client); err != nil {
-		return err
-	}
-	return nil
+	return validateClientTLS(&cfg.Client)
 }
 
 func validateServerTLS(cfg *config.ServerTLS) error {

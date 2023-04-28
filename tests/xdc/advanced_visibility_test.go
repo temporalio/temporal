@@ -67,11 +67,11 @@ type advVisCrossDCTestSuite struct {
 	// not merely log an error
 	*require.Assertions
 	suite.Suite
-	cluster1       *tests.TestCluster
-	cluster2       *tests.TestCluster
-	logger         log.Logger
-	clusterConfigs []*tests.TestClusterConfig
-	isElasticsearchEnabled       bool
+	cluster1               *tests.TestCluster
+	cluster2               *tests.TestCluster
+	logger                 log.Logger
+	clusterConfigs         []*tests.TestClusterConfig
+	isElasticsearchEnabled bool
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string

@@ -323,8 +323,7 @@ func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.
 	// check if close execution transfer task is completed
 	transferQueueState, ok := t.shard.GetQueueState(tasks.CategoryTransfer)
 	if !ok {
-		transferQueueAckLevel := t.shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID
-		return closeTransferTaskId > transferQueueAckLevel
+		return true
 	}
 	fakeCloseTransferTask := &tasks.CloseExecutionTask{
 		WorkflowKey: weCtx.GetWorkflowKey(),

@@ -2292,8 +2292,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 			HeartbeatTimeout:    time.Second * 3,
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
-		err := workflow.ExecuteActivity(ctx, activityWithHB).Get(ctx, nil)
-		return err
+		return workflow.ExecuteActivity(ctx, activityWithHB).Get(ctx, nil)
 	}
 	worker1.RegisterWorkflow(testWorkflowFn)
 	worker1.RegisterActivity(activityWithHB)
@@ -2391,8 +2390,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context, sleepInterval time.Duration) error {
-		err := workflow.Sleep(ctx, sleepInterval)
-		return err
+		return workflow.Sleep(ctx, sleepInterval)
 	}
 
 	worker1.RegisterWorkflow(testWorkflowFn)
