@@ -948,6 +948,20 @@ func (mr *MockExecutionStoreMockRecorder) GetWorkflowExecution(ctx, request inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).GetWorkflowExecution), ctx, request)
 }
 
+// InsertHistoryTree mocks base method.
+func (m *MockExecutionStore) InsertHistoryTree(ctx context.Context, request *persistence.InternalInsertHistoryTreeRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertHistoryTree", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InsertHistoryTree indicates an expected call of InsertHistoryTree.
+func (mr *MockExecutionStoreMockRecorder) InsertHistoryTree(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertHistoryTree", reflect.TypeOf((*MockExecutionStore)(nil).InsertHistoryTree), ctx, request)
+}
+
 // IsReplicationDLQEmpty mocks base method.
 func (m *MockExecutionStore) IsReplicationDLQEmpty(ctx context.Context, request *persistence.GetReplicationTasksFromDLQRequest) (bool, error) {
 	m.ctrl.T.Helper()
@@ -961,20 +975,6 @@ func (m *MockExecutionStore) IsReplicationDLQEmpty(ctx context.Context, request 
 func (mr *MockExecutionStoreMockRecorder) IsReplicationDLQEmpty(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsReplicationDLQEmpty", reflect.TypeOf((*MockExecutionStore)(nil).IsReplicationDLQEmpty), ctx, request)
-}
-
-// InsertHistoryTree mocks base method.
-func (m *MockExecutionStore) InsertHistoryTree(ctx context.Context, request *persistence.InternalInsertHistoryTreeRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InsertHistoryTree", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// InsertHistoryTree indicates an expected call of InsertHistoryTree.
-func (mr *MockExecutionStoreMockRecorder) InsertHistoryTree(ctx, request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertHistoryTree", reflect.TypeOf((*MockExecutionStore)(nil).InsertHistoryTree), ctx, request)
 }
 
 // ListConcreteExecutions mocks base method.
