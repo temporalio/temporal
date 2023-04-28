@@ -218,7 +218,7 @@ func (s *scheduler) run() error {
 	currentVersion := s.tweakables.Version
 
 	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
-		// in case of downgrades, break to contine-as-new
+		// in case of downgrades, break to continue-as-new
 		if currentVersion > s.tweakables.Version {
 			break
 		}
