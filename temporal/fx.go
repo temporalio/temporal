@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -285,8 +284,8 @@ func (s ServerFx) Stop() error {
 
 func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName, stopChan chan struct{}) {
 	stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
+	defer cancelFunc()
 	err := app.Stop(stopCtx)
-	cancelFunc()
 	if err != nil {
 		logger.Error("Failed to stop service", tag.Service(svcName), tag.Error(err))
 	}
@@ -294,8 +293,8 @@ func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName,
 	// verify "Start" goroutine returned
 	select {
 	case <-stopChan:
-	case <-time.After(time.Minute):
-		logger.Error("Timed out (1 minute) waiting for service to stop.", tag.Service(svcName))
+	case <-stopCtx.Done():
+		logger.Error("Timed out waiting for service to stop", tag.Service(svcName), tag.NewDurationTag("timeout", serviceStopTimeout))
 	}
 }
 
