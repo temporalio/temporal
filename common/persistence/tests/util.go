@@ -203,8 +203,8 @@ func RandomInt64SignalInfoMap() map[int64]*persistencespb.SignalInfo {
 	}
 }
 
-func RandomUpdateInfoMap() map[string]*persistencespb.WorkflowExecutionUpdateInfo {
-	return map[string]*persistencespb.WorkflowExecutionUpdateInfo{
+func RandomUpdateInfoMap() map[string]*persistencespb.UpdateInfo {
+	return map[string]*persistencespb.UpdateInfo{
 		uuid.NewString(): RandomUpdateInfo(),
 	}
 }
@@ -270,17 +270,17 @@ func RandomResetPoints() *workflowpb.ResetPoints {
 	}}}
 }
 
-func RandomUpdateInfo() *persistencespb.WorkflowExecutionUpdateInfo {
+func RandomUpdateInfo() *persistencespb.UpdateInfo {
 	ptr := historyspb.HistoryEventPointer{EventId: rand.Int63()}
 	if rand.Intn(2) == 0 {
-		return &persistencespb.WorkflowExecutionUpdateInfo{
-			Value: &persistencespb.WorkflowExecutionUpdateInfo_AcceptancePointer{
+		return &persistencespb.UpdateInfo{
+			Value: &persistencespb.UpdateInfo_AcceptancePointer{
 				AcceptancePointer: &ptr,
 			},
 		}
 	}
-	return &persistencespb.WorkflowExecutionUpdateInfo{
-		Value: &persistencespb.WorkflowExecutionUpdateInfo_CompletedPointer{
+	return &persistencespb.UpdateInfo{
+		Value: &persistencespb.UpdateInfo_CompletedPointer{
 			CompletedPointer: &ptr,
 		},
 	}

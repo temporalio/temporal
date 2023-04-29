@@ -1877,7 +1877,7 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 		mutableState.BufferedEvents = make([]*historypb.HistoryEvent, 0)
 	}
 	if mutableState.UpdateInfos == nil {
-		mutableState.UpdateInfos = make(map[string]*persistencespb.WorkflowExecutionUpdateInfo)
+		mutableState.UpdateInfos = make(map[string]*persistencespb.UpdateInfo)
 	}
 
 	return mutableState, dbRecordVersion
