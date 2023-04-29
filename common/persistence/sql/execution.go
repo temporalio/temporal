@@ -275,7 +275,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err))
 	}
 
-	state.UpdateRecords, err = getUpdateRecordMap(ctx,
+	state.UpdateInfos, err = getUpdateInfoMap(ctx,
 		m.Db,
 		request.ShardID,
 		namespaceID,

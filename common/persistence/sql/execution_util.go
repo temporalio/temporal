@@ -116,10 +116,10 @@ func applyWorkflowMutationTx(
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
-	if err := updateUpdateRecordMap(ctx,
+	if err := updateUpdateInfoMap(ctx,
 		tx,
-		workflowMutation.UpsertUpdateRecords,
-		workflowMutation.DeleteUpdateRecords,
+		workflowMutation.UpsertUpdateInfos,
+		workflowMutation.DeleteUpdateInfos,
 		shardID,
 		namespaceIDBytes,
 		workflowID,
@@ -282,7 +282,7 @@ func applyWorkflowSnapshotTxAsReset(
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear activity info map. Error: %v", err))
 	}
 
-	if err := deleteUpdateRecordMap(ctx,
+	if err := deleteUpdateInfoMap(ctx,
 		tx,
 		shardID,
 		namespaceIDBytes,
@@ -304,9 +304,9 @@ func applyWorkflowSnapshotTxAsReset(
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
-	if err := updateUpdateRecordMap(ctx,
+	if err := updateUpdateInfoMap(ctx,
 		tx,
-		workflowSnapshot.UpdateRecords,
+		workflowSnapshot.UpdateInfos,
 		nil,
 		shardID,
 		namespaceIDBytes,
@@ -491,9 +491,9 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsNew(
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into activity info map after clearing. Error: %v", err))
 	}
 
-	if err := updateUpdateRecordMap(ctx,
+	if err := updateUpdateInfoMap(ctx,
 		tx,
-		workflowSnapshot.UpdateRecords,
+		workflowSnapshot.UpdateInfos,
 		nil,
 		shardID,
 		namespaceIDBytes,

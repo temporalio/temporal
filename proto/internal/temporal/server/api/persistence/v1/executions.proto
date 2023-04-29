@@ -359,7 +359,7 @@ message Checksum {
     bytes value = 3;
 }
 
-message WorkflowExecutionUpdateRecord {
+message WorkflowExecutionUpdateInfo {
     oneof value {
         temporal.server.api.history.v1.HistoryEventPointer acceptance_pointer = 1;
         temporal.server.api.history.v1.HistoryEventPointer completed_pointer = 2;

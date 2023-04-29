@@ -81,7 +81,7 @@ const (
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
-		`update_record_map, update_record_map_encoding, ` +
+		`update_info_map, update_info_map_encoding, ` +
 		`checksum, checksum_encoding, db_record_version ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -244,8 +244,8 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateResetUpdateRecordQuery = `UPDATE executions ` +
-		`SET update_record_map = ?, update_record_map_encoding = ? ` +
+	templateResetUpdateInfoQuery = `UPDATE executions ` +
+		`SET update_info_map = ?, update_info_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and namespace_id = ? ` +
@@ -274,8 +274,8 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateUpdateUpdateRecordQuery = `UPDATE executions ` +
-		`SET update_record_map[ ? ] = ? , update_record_map_encoding = ? ` +
+	templateUpdateUpdateInfoQuery = `UPDATE executions ` +
+		`SET update_info_map[ ? ] = ? , update_info_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and namespace_id = ? ` +
@@ -314,7 +314,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateDeleteUpdateRecordQuery = `DELETE update_record_map[ ? ] ` +
+	templateDeleteUpdateInfoQuery = `DELETE update_info_map[ ? ] ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -553,13 +553,13 @@ func (d *MutableStateStore) GetWorkflowExecution(
 	}
 	state.TimerInfos = timerInfos
 
-	updateRecords := make(map[string]*commonpb.DataBlob)
-	uMapEncoding := result["update_record_map_encoding"].(string)
-	uMap := result["update_record_map"].(map[string][]byte)
+	updateInfos := make(map[string]*commonpb.DataBlob)
+	uMapEncoding := result["update_info_map_encoding"].(string)
+	uMap := result["update_info_map"].(map[string][]byte)
 	for key, value := range uMap {
-		updateRecords[key] = p.NewDataBlob(value, uMapEncoding)
+		updateInfos[key] = p.NewDataBlob(value, uMapEncoding)
 	}
-	state.UpdateRecords = updateRecords
+	state.UpdateInfos = updateInfos
 
 	childExecutionInfos := make(map[int64]*commonpb.DataBlob)
 	cMap := result["child_executions_map"].(map[int64][]byte)

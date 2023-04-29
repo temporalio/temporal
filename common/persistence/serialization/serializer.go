@@ -76,8 +76,8 @@ type (
 		ActivityInfoToBlob(info *persistencespb.ActivityInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ActivityInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ActivityInfo, error)
 
-		UpdateRecordToBlob(rec *persistencespb.WorkflowExecutionUpdateRecord, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		UpdateRecordFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionUpdateRecord, error)
+		UpdateInfoToBlob(rec *persistencespb.WorkflowExecutionUpdateInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		UpdateInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionUpdateInfo, error)
 
 		ChildExecutionInfoToBlob(info *persistencespb.ChildExecutionInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ChildExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ChildExecutionInfo, error)
@@ -386,12 +386,12 @@ func (t *serializerImpl) HistoryTreeInfoFromBlob(data *commonpb.DataBlob) (*pers
 	return result, ProtoDecodeBlob(data, result)
 }
 
-func (t *serializerImpl) UpdateRecordToBlob(rec *persistencespb.WorkflowExecutionUpdateRecord, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) UpdateInfoToBlob(rec *persistencespb.WorkflowExecutionUpdateInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return ProtoEncodeBlob(rec, encodingType)
 }
 
-func (t *serializerImpl) UpdateRecordFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionUpdateRecord, error) {
-	result := &persistencespb.WorkflowExecutionUpdateRecord{}
+func (t *serializerImpl) UpdateInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionUpdateInfo, error) {
+	result := &persistencespb.WorkflowExecutionUpdateInfo{}
 	return result, ProtoDecodeBlob(data, result)
 }
 

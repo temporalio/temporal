@@ -131,10 +131,10 @@ func deleteActivityInfoMap(
 	return nil
 }
 
-func updateUpdateRecordMap(
+func updateUpdateInfoMap(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	updateRecords map[string]*commonpb.DataBlob,
+	updateInfos map[string]*commonpb.DataBlob,
 	deleteIDs map[string]struct{},
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -142,10 +142,10 @@ func updateUpdateRecordMap(
 	runID primitives.UUID,
 ) error {
 
-	if len(updateRecords) > 0 {
-		rows := make([]sqlplugin.UpdateRecordMapsRow, 0, len(updateRecords))
-		for updateID, blob := range updateRecords {
-			rows = append(rows, sqlplugin.UpdateRecordMapsRow{
+	if len(updateInfos) > 0 {
+		rows := make([]sqlplugin.UpdateInfoMapsRow, 0, len(updateInfos))
+		for updateID, blob := range updateInfos {
+			rows = append(rows, sqlplugin.UpdateInfoMapsRow{
 				ShardID:      shardID,
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
@@ -156,13 +156,13 @@ func updateUpdateRecordMap(
 			})
 		}
 
-		if _, err := tx.ReplaceIntoUpdateRecordMaps(ctx, rows); err != nil {
+		if _, err := tx.ReplaceIntoUpdateInfoMaps(ctx, rows); err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update update records. Failed to execute update query. Error: %v", err))
 		}
 	}
 
 	if len(deleteIDs) > 0 {
-		if _, err := tx.DeleteFromUpdateRecordMaps(ctx, sqlplugin.UpdateRecordMapsFilter{
+		if _, err := tx.DeleteFromUpdateInfoMaps(ctx, sqlplugin.UpdateInfoMapsFilter{
 			ShardID:     shardID,
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
@@ -175,7 +175,7 @@ func updateUpdateRecordMap(
 	return nil
 }
 
-func getUpdateRecordMap(
+func getUpdateInfoMap(
 	ctx context.Context,
 	db sqlplugin.DB,
 	shardID int32,
@@ -183,7 +183,7 @@ func getUpdateRecordMap(
 	workflowID string,
 	runID primitives.UUID,
 ) (map[string]*commonpb.DataBlob, error) {
-	rows, err := db.SelectAllFromUpdateRecordMaps(ctx, sqlplugin.UpdateRecordMapsAllFilter{
+	rows, err := db.SelectAllFromUpdateInfoMaps(ctx, sqlplugin.UpdateInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -201,7 +201,7 @@ func getUpdateRecordMap(
 	return ret, nil
 }
 
-func deleteUpdateRecordMap(
+func deleteUpdateInfoMap(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
@@ -210,7 +210,7 @@ func deleteUpdateRecordMap(
 	runID primitives.UUID,
 ) error {
 
-	if _, err := tx.DeleteAllFromUpdateRecordMaps(ctx, sqlplugin.UpdateRecordMapsAllFilter{
+	if _, err := tx.DeleteAllFromUpdateInfoMaps(ctx, sqlplugin.UpdateInfoMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,

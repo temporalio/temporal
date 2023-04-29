@@ -193,7 +193,7 @@ CREATE TABLE child_execution_info_maps (
 	PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, initiated_id)
 );
 
-CREATE TABLE update_record_maps (
+CREATE TABLE update_info_maps (
 	shard_id INT NOT NULL,
 	namespace_id BINARY(16) NOT NULL,
 	workflow_id VARCHAR(255) NOT NULL,

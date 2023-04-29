@@ -236,38 +236,38 @@ func (pdb *db) DeleteAllFromActivityInfoMaps(
 
 var (
 	// Omit shard_id, run_id, namespace_id, workflow_id, update_id since they're in the primary key
-	updateRecordColumns = []string{
+	updateInfoColumns = []string{
 		"data",
 		"data_encoding",
 	}
-	updateRecordTableName = "update_record_maps"
-	updateRecordKey       = "update_id"
+	updateInfoTableName = "update_info_maps"
+	updateInfoKey       = "update_id"
 
-	deleteUpdateRecordMapQry      = makeDeleteMapQry(updateRecordTableName)
-	setKeyInUpdateRecordMapQry    = makeSetKeyInMapQry(updateRecordTableName, updateRecordColumns, updateRecordKey)
-	deleteKeyInUpdateRecordMapQry = makeDeleteKeyInMapQry(updateRecordTableName, updateRecordKey)
-	getUpdateRecordMapQry         = makeGetMapQryTemplate(updateRecordTableName, updateRecordColumns, updateRecordKey)
+	deleteUpdateInfoMapQry      = makeDeleteMapQry(updateInfoTableName)
+	setKeyInUpdateInfoMapQry    = makeSetKeyInMapQry(updateInfoTableName, updateInfoColumns, updateInfoKey)
+	deleteKeyInUpdateInfoMapQry = makeDeleteKeyInMapQry(updateInfoTableName, updateInfoKey)
+	getUpdateInfoMapQry         = makeGetMapQryTemplate(updateInfoTableName, updateInfoColumns, updateInfoKey)
 )
 
-// ReplaceIntoUpdateRecordMaps replaces one or more rows in update_record_maps table
-func (pdb *db) ReplaceIntoUpdateRecordMaps(
+// ReplaceIntoUpdateInfoMaps replaces one or more rows in update_info_maps table
+func (pdb *db) ReplaceIntoUpdateInfoMaps(
 	ctx context.Context,
-	rows []sqlplugin.UpdateRecordMapsRow,
+	rows []sqlplugin.UpdateInfoMapsRow,
 ) (sql.Result, error) {
 	return pdb.conn.NamedExecContext(ctx,
-		setKeyInUpdateRecordMapQry,
+		setKeyInUpdateInfoMapQry,
 		rows,
 	)
 }
 
-// SelectAllFromUpdateRecordMaps reads all rows from update_record_maps table
-func (pdb *db) SelectAllFromUpdateRecordMaps(
+// SelectAllFromUpdateInfoMaps reads all rows from update_info_maps table
+func (pdb *db) SelectAllFromUpdateInfoMaps(
 	ctx context.Context,
-	filter sqlplugin.UpdateRecordMapsAllFilter,
-) ([]sqlplugin.UpdateRecordMapsRow, error) {
-	var rows []sqlplugin.UpdateRecordMapsRow
+	filter sqlplugin.UpdateInfoMapsAllFilter,
+) ([]sqlplugin.UpdateInfoMapsRow, error) {
+	var rows []sqlplugin.UpdateInfoMapsRow
 	if err := pdb.conn.SelectContext(ctx,
-		&rows, getUpdateRecordMapQry,
+		&rows, getUpdateInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
 		filter.WorkflowID,
@@ -284,13 +284,13 @@ func (pdb *db) SelectAllFromUpdateRecordMaps(
 	return rows, nil
 }
 
-// DeleteFromUpdateRecordMaps deletes one or more rows from update_record_maps table
-func (pdb *db) DeleteFromUpdateRecordMaps(
+// DeleteFromUpdateInfoMaps deletes one or more rows from update_info_maps table
+func (pdb *db) DeleteFromUpdateInfoMaps(
 	ctx context.Context,
-	filter sqlplugin.UpdateRecordMapsFilter,
+	filter sqlplugin.UpdateInfoMapsFilter,
 ) (sql.Result, error) {
 	query, args, err := sqlx.In(
-		deleteKeyInUpdateRecordMapQry,
+		deleteKeyInUpdateInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
 		filter.WorkflowID,
@@ -306,13 +306,13 @@ func (pdb *db) DeleteFromUpdateRecordMaps(
 	)
 }
 
-// DeleteAllFromUpdateRecordMaps deletes all rows from update_record_maps table
-func (pdb *db) DeleteAllFromUpdateRecordMaps(
+// DeleteAllFromUpdateInfoMaps deletes all rows from update_info_maps table
+func (pdb *db) DeleteAllFromUpdateInfoMaps(
 	ctx context.Context,
-	filter sqlplugin.UpdateRecordMapsAllFilter,
+	filter sqlplugin.UpdateInfoMapsAllFilter,
 ) (sql.Result, error) {
 	return pdb.conn.ExecContext(ctx,
-		deleteUpdateRecordMapQry,
+		deleteUpdateInfoMapQry,
 		filter.ShardID,
 		filter.NamespaceID,
 		filter.WorkflowID,

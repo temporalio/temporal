@@ -32,8 +32,8 @@ import (
 )
 
 type (
-	// UpdateRecordMapsRow represents a row in update_record_maps table
-	UpdateRecordMapsRow struct {
+	// UpdateInfoMapsRow represents a row in update_info_maps table
+	UpdateInfoMapsRow struct {
 		ShardID      int32
 		NamespaceID  primitives.UUID
 		WorkflowID   string
@@ -43,7 +43,7 @@ type (
 		DataEncoding string
 	}
 
-	UpdateRecordMapsFilter struct {
+	UpdateInfoMapsFilter struct {
 		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
@@ -51,22 +51,22 @@ type (
 		UpdateIDs   []string
 	}
 
-	UpdateRecordMapsAllFilter struct {
+	UpdateInfoMapsAllFilter struct {
 		ShardID     int32
 		NamespaceID primitives.UUID
 		WorkflowID  string
 		RunID       primitives.UUID
 	}
 
-	// HistoryExecutionUpdateRecord is the SQL persistence interface for history execution updates
-	HistoryExecutionUpdateRecord interface {
-		// ReplaceIntoUpdateRecordMaps replace one or more rows into update_record_maps table
-		ReplaceIntoUpdateRecordMaps(ctx context.Context, rows []UpdateRecordMapsRow) (sql.Result, error)
-		// SelectAllFromUpdateRecordMaps returns all rows from update_record_maps table
-		SelectAllFromUpdateRecordMaps(ctx context.Context, filter UpdateRecordMapsAllFilter) ([]UpdateRecordMapsRow, error)
-		// DeleteFromUpdateRecordMaps deletes one or more rows from update_record_maps table
-		DeleteFromUpdateRecordMaps(ctx context.Context, filter UpdateRecordMapsFilter) (sql.Result, error)
-		// DeleteAllFromUpdateRecordMaps deletes all rows from update_record_maps table
-		DeleteAllFromUpdateRecordMaps(ctx context.Context, filter UpdateRecordMapsAllFilter) (sql.Result, error)
+	// HistoryExecutionUpdateInfo is the SQL persistence interface for history execution updates
+	HistoryExecutionUpdateInfo interface {
+		// ReplaceIntoUpdateInfoMaps replace one or more rows into update_info_maps table
+		ReplaceIntoUpdateInfoMaps(ctx context.Context, rows []UpdateInfoMapsRow) (sql.Result, error)
+		// SelectAllFromUpdateInfoMaps returns all rows from update_info_maps table
+		SelectAllFromUpdateInfoMaps(ctx context.Context, filter UpdateInfoMapsAllFilter) ([]UpdateInfoMapsRow, error)
+		// DeleteFromUpdateInfoMaps deletes one or more rows from update_info_maps table
+		DeleteFromUpdateInfoMaps(ctx context.Context, filter UpdateInfoMapsFilter) (sql.Result, error)
+		// DeleteAllFromUpdateInfoMaps deletes all rows from update_info_maps table
+		DeleteAllFromUpdateInfoMaps(ctx context.Context, filter UpdateInfoMapsAllFilter) (sql.Result, error)
 	}
 )

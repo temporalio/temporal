@@ -1769,7 +1769,7 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 		RequestCancelInfos:  snapshot.RequestCancelInfos,
 		SignalInfos:         snapshot.SignalInfos,
 		SignalRequestedIds:  convert.StringSetToSlice(snapshot.SignalRequestedIDs),
-		UpdateRecords:       snapshot.UpdateRecords,
+		UpdateInfos:         snapshot.UpdateInfos,
 	}
 	dbRecordVersion := snapshot.DBRecordVersion
 
@@ -1822,11 +1822,11 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 			delete(mutableState.SignalInfos, key)
 		}
 
-		for key, rec := range mutation.UpsertUpdateRecords {
-			mutableState.UpdateRecords[key] = rec
+		for key, rec := range mutation.UpsertUpdateInfos {
+			mutableState.UpdateInfos[key] = rec
 		}
-		for key := range mutation.DeleteUpdateRecords {
-			delete(mutableState.UpdateRecords, key)
+		for key := range mutation.DeleteUpdateInfos {
+			delete(mutableState.UpdateInfos, key)
 		}
 
 		// signal request IDs
@@ -1876,8 +1876,8 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 	if mutableState.BufferedEvents == nil {
 		mutableState.BufferedEvents = make([]*historypb.HistoryEvent, 0)
 	}
-	if mutableState.UpdateRecords == nil {
-		mutableState.UpdateRecords = make(map[string]*persistencespb.WorkflowExecutionUpdateRecord)
+	if mutableState.UpdateInfos == nil {
+		mutableState.UpdateInfos = make(map[string]*persistencespb.WorkflowExecutionUpdateInfo)
 	}
 
 	return mutableState, dbRecordVersion

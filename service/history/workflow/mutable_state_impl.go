@@ -133,7 +133,7 @@ type (
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
 		deleteSignalRequestedIDs  map[string]struct{} // Deleted signaled requestId
 
-		updateRecords map[string]*persistencespb.WorkflowExecutionUpdateRecord
+		updateInfos map[string]*persistencespb.WorkflowExecutionUpdateInfo
 
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
@@ -220,7 +220,7 @@ func NewMutableState(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
-		updateRecords: make(map[string]*persistencespb.WorkflowExecutionUpdateRecord),
+		updateInfos: make(map[string]*persistencespb.WorkflowExecutionUpdateInfo),
 
 		currentVersion:   namespaceEntry.FailoverVersion(),
 		bufferEventsInDB: nil,
@@ -317,8 +317,8 @@ func newMutableStateFromDB(
 		mutableState.pendingSignalInfoIDs = dbRecord.SignalInfos
 	}
 
-	if dbRecord.UpdateRecords != nil {
-		mutableState.updateRecords = dbRecord.UpdateRecords
+	if dbRecord.UpdateInfos != nil {
+		mutableState.updateInfos = dbRecord.UpdateInfos
 	}
 
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
@@ -401,7 +401,7 @@ func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState 
 		NextEventId:         ms.hBuilder.NextEventID(),
 		BufferedEvents:      ms.bufferEventsInDB,
 		Checksum:            ms.checksum,
-		UpdateRecords:       ms.updateRecords,
+		UpdateInfos:         ms.updateInfos,
 	}
 
 	return common.CloneProto(msProto)
@@ -662,7 +662,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	ctx context.Context,
 	updateID string,
 ) (*updatepb.Outcome, error) {
-	rec, ok := ms.updateRecords[updateID]
+	rec, ok := ms.updateInfos[updateID]
 	if !ok {
 		return nil, serviceerror.NewNotFound("update not found")
 	}
@@ -3250,8 +3250,8 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateAcceptedEvent(
 	if attrs == nil {
 		return serviceerror.NewInternal("wrong event type in call to ReplicateworkflowExecutionUpdateAcceptedEvent")
 	}
-	ms.updateRecords[attrs.GetAcceptedRequest().GetMeta().GetUpdateId()] = &persistencespb.WorkflowExecutionUpdateRecord{
-		Value: &persistencespb.WorkflowExecutionUpdateRecord_AcceptancePointer{
+	ms.updateInfos[attrs.GetAcceptedRequest().GetMeta().GetUpdateId()] = &persistencespb.WorkflowExecutionUpdateInfo{
+		Value: &persistencespb.WorkflowExecutionUpdateInfo_AcceptancePointer{
 			AcceptancePointer: &historyspb.HistoryEventPointer{EventId: event.GetEventId()},
 		},
 	}
@@ -3274,7 +3274,7 @@ func (ms *MutableStateImpl) GetIncompleteWorkflowExecutionUpdates(
 	ctx context.Context,
 ) ([]*historypb.WorkflowExecutionUpdateAcceptedEventAttributes, error) {
 	out := make([]*historypb.WorkflowExecutionUpdateAcceptedEventAttributes, 0)
-	for _, rec := range ms.updateRecords {
+	for _, rec := range ms.updateInfos {
 		ptr := rec.GetAcceptancePointer()
 		if ptr == nil {
 			continue
@@ -3310,8 +3310,8 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
 	if attrs == nil {
 		return serviceerror.NewInternal("wrong event type in call to ReplicateworkflowExecutionUpdateCompletedEvent")
 	}
-	ms.updateRecords[attrs.GetMeta().GetUpdateId()] = &persistencespb.WorkflowExecutionUpdateRecord{
-		Value: &persistencespb.WorkflowExecutionUpdateRecord_CompletedPointer{
+	ms.updateInfos[attrs.GetMeta().GetUpdateId()] = &persistencespb.WorkflowExecutionUpdateInfo{
+		Value: &persistencespb.WorkflowExecutionUpdateInfo_CompletedPointer{
 			CompletedPointer: &historyspb.HistoryEventPointer{EventId: event.GetEventId()},
 		},
 	}
@@ -4187,7 +4187,7 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		RequestCancelInfos:  ms.pendingRequestCancelInfoIDs,
 		SignalInfos:         ms.pendingSignalInfoIDs,
 		SignalRequestedIDs:  ms.pendingSignalRequestedIDs,
-		UpdateRecords:       ms.updateRecords,
+		UpdateInfos:         ms.updateInfos,
 
 		Tasks: ms.InsertTasks,
 

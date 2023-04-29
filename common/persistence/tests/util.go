@@ -76,7 +76,7 @@ func RandomSnapshot(
 		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
-		UpdateRecords:       RandomUpdateRecordMap(),
+		UpdateInfos:         RandomUpdateInfoMap(),
 
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer:    {},
@@ -203,9 +203,9 @@ func RandomInt64SignalInfoMap() map[int64]*persistencespb.SignalInfo {
 	}
 }
 
-func RandomUpdateRecordMap() map[string]*persistencespb.WorkflowExecutionUpdateRecord {
-	return map[string]*persistencespb.WorkflowExecutionUpdateRecord{
-		uuid.NewString(): RandomUpdateRecord(),
+func RandomUpdateInfoMap() map[string]*persistencespb.WorkflowExecutionUpdateInfo {
+	return map[string]*persistencespb.WorkflowExecutionUpdateInfo{
+		uuid.NewString(): RandomUpdateInfo(),
 	}
 }
 
@@ -270,17 +270,17 @@ func RandomResetPoints() *workflowpb.ResetPoints {
 	}}}
 }
 
-func RandomUpdateRecord() *persistencespb.WorkflowExecutionUpdateRecord {
+func RandomUpdateInfo() *persistencespb.WorkflowExecutionUpdateInfo {
 	ptr := historyspb.HistoryEventPointer{EventId: rand.Int63()}
 	if rand.Intn(2) == 0 {
-		return &persistencespb.WorkflowExecutionUpdateRecord{
-			Value: &persistencespb.WorkflowExecutionUpdateRecord_AcceptancePointer{
+		return &persistencespb.WorkflowExecutionUpdateInfo{
+			Value: &persistencespb.WorkflowExecutionUpdateInfo_AcceptancePointer{
 				AcceptancePointer: &ptr,
 			},
 		}
 	}
-	return &persistencespb.WorkflowExecutionUpdateRecord{
-		Value: &persistencespb.WorkflowExecutionUpdateRecord_CompletedPointer{
+	return &persistencespb.WorkflowExecutionUpdateInfo{
+		Value: &persistencespb.WorkflowExecutionUpdateInfo_CompletedPointer{
 			CompletedPointer: &ptr,
 		},
 	}

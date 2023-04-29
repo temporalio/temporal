@@ -135,10 +135,10 @@ func applyWorkflowMutationBatch(
 		runID,
 	)
 
-	updateUpdateRecords(
+	updateUpdateInfos(
 		batch,
-		workflowMutation.UpsertUpdateRecords,
-		workflowMutation.DeleteUpdateRecords,
+		workflowMutation.UpsertUpdateInfos,
+		workflowMutation.DeleteUpdateInfos,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -247,9 +247,9 @@ func applyWorkflowSnapshotBatchAsReset(
 		runID,
 	)
 
-	resetUpdateRecords(
+	resetUpdateInfos(
 		batch,
-		workflowSnapshot.UpdateRecords,
+		workflowSnapshot.UpdateInfos,
 		shardID,
 		namespaceID,
 		workflowID,
@@ -359,9 +359,9 @@ func applyWorkflowSnapshotBatchAsNew(
 		runID,
 	)
 
-	updateUpdateRecords(
+	updateUpdateInfos(
 		batch,
-		workflowSnapshot.UpdateRecords,
+		workflowSnapshot.UpdateInfos,
 		nil,
 		shardID,
 		namespaceID,
@@ -910,17 +910,17 @@ func updateSignalInfos(
 	return nil
 }
 
-func updateUpdateRecords(
+func updateUpdateInfos(
 	batch gocql.Batch,
-	updateRecords map[string]*commonpb.DataBlob,
-	deletedUpdateRecords map[string]struct{},
+	updateInfos map[string]*commonpb.DataBlob,
+	deletedUpdateInfos map[string]struct{},
 	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) {
-	for id, blob := range updateRecords {
-		batch.Query(templateUpdateUpdateRecordQuery,
+	for id, blob := range updateInfos {
+		batch.Query(templateUpdateUpdateInfoQuery,
 			id,
 			blob.Data,
 			blob.EncodingType.String(),
@@ -933,8 +933,8 @@ func updateUpdateRecords(
 			rowTypeExecutionTaskID)
 	}
 
-	for deleteID := range deletedUpdateRecords {
-		batch.Query(templateDeleteUpdateRecordQuery,
+	for deleteID := range deletedUpdateInfos {
+		batch.Query(templateDeleteUpdateInfoQuery,
 			deleteID,
 			shardID,
 			rowTypeExecution,
@@ -1023,17 +1023,17 @@ func resetSignalRequested(
 		rowTypeExecutionTaskID)
 }
 
-func resetUpdateRecords(
+func resetUpdateInfos(
 	batch gocql.Batch,
-	updateRecords map[string]*commonpb.DataBlob,
+	updateInfos map[string]*commonpb.DataBlob,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) {
-	uMap, uMapEncoding := resetBlobMap(updateRecords)
+	uMap, uMapEncoding := resetBlobMap(updateInfos)
 
-	batch.Query(templateResetUpdateRecordQuery,
+	batch.Query(templateResetUpdateInfoQuery,
 		uMap,
 		uMapEncoding.String(),
 		shardID,

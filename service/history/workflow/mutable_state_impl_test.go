@@ -804,7 +804,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 	}
 }
 
-func (s *mutableStateSuite) TestUpdateRecords() {
+func (s *mutableStateSuite) TestUpdateInfos() {
 	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
 	dbstate := s.buildWorkflowMutableState()
 	var err error
