@@ -1098,6 +1098,8 @@ func (ms *MutableStateImpl) writeEventToCache(
 	// load it from database
 	// For completion event: store it within events cache so we can communicate the result to parent execution
 	// during the processing of DeleteTransferTask without loading this event from database
+	// For Update Accepted/Completed event: store it in here so that Update
+	// disposition lookups can be fast
 	ms.eventsCache.PutEvent(
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
