@@ -63,7 +63,8 @@ type WorkflowMutableState struct {
 	NextEventId         int64                         `protobuf:"varint,9,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
 	BufferedEvents      []*v1.HistoryEvent            `protobuf:"bytes,10,rep,name=buffered_events,json=bufferedEvents,proto3" json:"buffered_events,omitempty"`
 	Checksum            *Checksum                     `protobuf:"bytes,11,opt,name=checksum,proto3" json:"checksum,omitempty"`
-	UpdateInfos         map[string]*UpdateInfo        `protobuf:"bytes,12,rep,name=update_infos,json=updateInfos,proto3" json:"update_infos,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	// map key here is UpdateID
+	UpdateInfos map[string]*UpdateInfo `protobuf:"bytes,12,rep,name=update_infos,json=updateInfos,proto3" json:"update_infos,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *WorkflowMutableState) Reset()      { *m = WorkflowMutableState{} }
