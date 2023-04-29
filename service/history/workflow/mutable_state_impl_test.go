@@ -860,7 +860,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.Require().Error(err)
 	s.Require().IsType((*serviceerror.NotFound)(nil), err)
 
-	incompletes, err := s.mutableState.GetIncompleteWorkflowExecutionUpdates(context.TODO())
+	incompletes, err := s.mutableState.GetAcceptedWorkflowExecutionUpdates(context.TODO())
 	s.Require().NoError(err)
 	s.Require().Len(incompletes, 2)
 }

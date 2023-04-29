@@ -970,6 +970,21 @@ func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks))
 }
 
+// GetAcceptedWorkflowExecutionUpdates mocks base method.
+func (m *MockMutableState) GetAcceptedWorkflowExecutionUpdates(arg0 context.Context) ([]*v13.WorkflowExecutionUpdateAcceptedEventAttributes, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAcceptedWorkflowExecutionUpdates", arg0)
+	ret0, _ := ret[0].([]*v13.WorkflowExecutionUpdateAcceptedEventAttributes)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAcceptedWorkflowExecutionUpdates indicates an expected call of GetAcceptedWorkflowExecutionUpdates.
+func (mr *MockMutableStateMockRecorder) GetAcceptedWorkflowExecutionUpdates(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAcceptedWorkflowExecutionUpdates", reflect.TypeOf((*MockMutableState)(nil).GetAcceptedWorkflowExecutionUpdates), arg0)
+}
+
 // GetActivityByActivityID mocks base method.
 func (m *MockMutableState) GetActivityByActivityID(arg0 string) (*v112.ActivityInfo, bool) {
 	m.ctrl.T.Helper()
@@ -1174,21 +1189,6 @@ func (m *MockMutableState) GetFirstRunID() (string, error) {
 func (mr *MockMutableStateMockRecorder) GetFirstRunID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFirstRunID", reflect.TypeOf((*MockMutableState)(nil).GetFirstRunID))
-}
-
-// GetIncompleteWorkflowExecutionUpdates mocks base method.
-func (m *MockMutableState) GetIncompleteWorkflowExecutionUpdates(arg0 context.Context) ([]*v13.WorkflowExecutionUpdateAcceptedEventAttributes, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetIncompleteWorkflowExecutionUpdates", arg0)
-	ret0, _ := ret[0].([]*v13.WorkflowExecutionUpdateAcceptedEventAttributes)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetIncompleteWorkflowExecutionUpdates indicates an expected call of GetIncompleteWorkflowExecutionUpdates.
-func (mr *MockMutableStateMockRecorder) GetIncompleteWorkflowExecutionUpdates(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIncompleteWorkflowExecutionUpdates", reflect.TypeOf((*MockMutableState)(nil).GetIncompleteWorkflowExecutionUpdates), arg0)
 }
 
 // GetLastFirstEventIDTxnID mocks base method.

@@ -157,7 +157,7 @@ type (
 		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
-		GetIncompleteWorkflowExecutionUpdates(context.Context) ([]*historypb.WorkflowExecutionUpdateAcceptedEventAttributes, error)
+		GetAcceptedWorkflowExecutionUpdates(context.Context) ([]*historypb.WorkflowExecutionUpdateAcceptedEventAttributes, error)
 		GetWorkflowKey() definition.WorkflowKey
 		GetActivityByActivityID(string) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistencespb.ActivityInfo, bool)

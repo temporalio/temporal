@@ -3270,7 +3270,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(updResp *up
 	return event, nil
 }
 
-func (ms *MutableStateImpl) GetIncompleteWorkflowExecutionUpdates(
+func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdates(
 	ctx context.Context,
 ) ([]*historypb.WorkflowExecutionUpdateAcceptedEventAttributes, error) {
 	out := make([]*historypb.WorkflowExecutionUpdateAcceptedEventAttributes, 0)
