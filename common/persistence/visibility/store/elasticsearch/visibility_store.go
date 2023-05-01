@@ -31,7 +31,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -54,9 +53,7 @@ import (
 const (
 	PersistenceName = "elasticsearch"
 
-	delimiter                    = "~"
-	pointInTimeKeepAliveInterval = "1m"
-	scrollKeepAliveInterval      = "1m"
+	delimiter = "~"
 )
 
 // Default sort by uses the sorting order defined in the index template, so no
@@ -84,12 +81,6 @@ type (
 
 	visibilityPageToken struct {
 		SearchAfter []interface{}
-
-		// For ScanWorkflowExecutions API.
-		// For ES<7.10.0 and "oss" flavor.
-		ScrollID string
-		// For ES>=7.10.0 and "default" flavor.
-		PointInTimeID string
 	}
 )
 
@@ -469,95 +460,23 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	// Elasticsearch 7.10+ can use "point in time" (PIT) instead of scroll to scan over all workflows without skipping or duplicating them.
-	// https://www.elastic.co/guide/en/elasticsearch/reference/7.10/point-in-time-api.html
-	if s.esClient.IsPointInTimeSupported(ctx) {
-		return s.scanWorkflowExecutionsWithPit(ctx, request)
-	}
-
-	return s.scanWorkflowExecutionsWithScroll(ctx, request)
-}
-
-func (s *visibilityStore) scanWorkflowExecutionsWithPit(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
 	p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
 	if err != nil {
 		return nil, err
 	}
 
-	// First call doesn't have token with PointInTimeID.
-	if len(request.NextPageToken) == 0 {
-		pitID, err := s.esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
-		if err != nil {
-			return nil, convertElasticsearchClientError("Unable to create point in time", err)
-		}
-		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval)
-	} else {
-		token, err := s.deserializePageToken(request.NextPageToken)
-		if err != nil {
-			return nil, err
-		}
-		if token.PointInTimeID == "" {
-			return nil, serviceerror.NewInvalidArgument("pointInTimeId must present in pagination token")
-		}
+	token, err := s.deserializePageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	if token != nil && len(token.SearchAfter) > 0 {
 		p.SearchAfter = token.SearchAfter
-		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(token.PointInTimeID, pointInTimeKeepAliveInterval)
 	}
 
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", err)
-	}
-
-	// Empty hits list indicate that this is a last page.
-	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
-		_, err = s.esClient.ClosePointInTime(ctx, searchResult.PitId)
-		if err != nil {
-			return nil, convertElasticsearchClientError("Unable to close point in time", err)
-		}
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) scanWorkflowExecutionsWithScroll(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*store.InternalListWorkflowExecutionsResponse, error) {
-	var (
-		searchResult *elastic.SearchResult
-		scrollErr    error
-	)
-
-	// First call doesn't have token with ScrollID.
-	if len(request.NextPageToken) == 0 {
-		// First page.
-		p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
-		if err != nil {
-			return nil, err
-		}
-		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, scrollKeepAliveInterval)
-	} else {
-		token, err := s.deserializePageToken(request.NextPageToken)
-		if err != nil {
-			return nil, err
-		}
-		if token.ScrollID == "" {
-			return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
-		}
-		searchResult, scrollErr = s.esClient.Scroll(ctx, token.ScrollID, scrollKeepAliveInterval)
-	}
-
-	if scrollErr != nil && scrollErr != io.EOF {
-		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", scrollErr)
-	}
-
-	// Both io.IOF and empty hits list indicate that this is a last page.
-	if (searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize) ||
-		scrollErr == io.EOF {
-		err := s.esClient.CloseScroll(ctx, searchResult.ScrollId)
-		if err != nil {
-			return nil, convertElasticsearchClientError("Unable to close scroll", err)
-		}
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
@@ -794,9 +713,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 
 	if len(searchResult.Hits.Hits) == pageSize && lastHitSort != nil { // this means the response is not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
-			SearchAfter:   lastHitSort,
-			PointInTimeID: searchResult.PitId,
-			ScrollID:      searchResult.ScrollId,
+			SearchAfter: lastHitSort,
 		})
 		if err != nil {
 			return nil, err
