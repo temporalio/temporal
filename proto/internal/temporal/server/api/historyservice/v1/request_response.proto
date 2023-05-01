@@ -654,6 +654,8 @@ message ReadHistoryBranchResponse {
     // may return less than requested count
     repeated temporal.api.history.v1.HistoryEvent history_events = 1;
     bytes next_page_token = 2;
+    // total number of bytes for all history events read
+    int64 size = 3;
 }
 
 message ReadHistoryBranchReverseRequest {
@@ -672,6 +674,8 @@ message ReadHistoryBranchReverseResponse {
     // may return less than requested count
     repeated temporal.api.history.v1.HistoryEvent history_events = 1;
     bytes next_page_token = 2;
+    // total number of bytes for all history events read
+    int64 size = 3;
 }
 
 message ReadRawHistoryBranchRequest {
@@ -691,6 +695,8 @@ message ReadRawHistoryBranchResponse {
     repeated temporal.api.common.v1.DataBlob history_event_blobs = 1;
     repeated int64 node_ids = 2;
     bytes next_page_token = 3;
+    // total number of bytes for all history events read
+    int64 size = 4;
 }
 
 message TrimHistoryBranchRequest {
