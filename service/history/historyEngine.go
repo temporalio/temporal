@@ -54,10 +54,14 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/deletehistorybranch"
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
 	"go.temporal.io/server/service/history/api/queryworkflow"
+	"go.temporal.io/server/service/history/api/readhistorybranch"
+	"go.temporal.io/server/service/history/api/readhistorybranchreverse"
+	"go.temporal.io/server/service/history/api/readrawhistorybranch"
 	"go.temporal.io/server/service/history/api/reapplyevents"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
@@ -76,6 +80,7 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/trimhistorybranch"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
@@ -772,4 +777,39 @@ func (e *historyEngineImpl) GetReplicationStatus(
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 	return replicationapi.GetStatus(ctx, request, e.shard, e.replicationAckMgr)
+}
+
+func (e *historyEngineImpl) ReadHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadHistoryBranchRequest,
+) (_ *historyservice.ReadHistoryBranchResponse, retError error) {
+	return readhistorybranch.Invoke(ctx, request, e.shard)
+}
+
+func (e *historyEngineImpl) ReadHistoryBranchReverse(
+	ctx context.Context,
+	request *historyservice.ReadHistoryBranchReverseRequest,
+) (_ *historyservice.ReadHistoryBranchReverseResponse, retError error) {
+	return readhistorybranchreverse.Invoke(ctx, request, e.shard)
+}
+
+func (e *historyEngineImpl) ReadRawHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadRawHistoryBranchRequest,
+) (_ *historyservice.ReadRawHistoryBranchResponse, retError error) {
+	return readrawhistorybranch.Invoke(ctx, request, e.shard)
+}
+
+func (e *historyEngineImpl) TrimHistoryBranch(
+	ctx context.Context,
+	request *historyservice.TrimHistoryBranchRequest,
+) (_ *historyservice.TrimHistoryBranchResponse, retError error) {
+	return trimhistorybranch.Invoke(ctx, request, e.shard)
+}
+
+func (e *historyEngineImpl) DeleteHistoryBranch(
+	ctx context.Context,
+	request *historyservice.DeleteHistoryBranchRequest,
+) (_ *historyservice.DeleteHistoryBranchResponse, retError error) {
+	return deletehistorybranch.Invoke(ctx, request, e.shard)
 }
