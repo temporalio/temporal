@@ -361,7 +361,7 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 	}
 }
 
-func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
+func (s *scheduler) getNextTime(after time.Time, stop time.Time) getNextTimeResult {
 
 	// ignore start times that come before the 'after' parameter
 	for len(s.nextTimeResultCache) != 0 && s.nextTimeResultCache[0].Next.Before(after) {
@@ -387,7 +387,9 @@ func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
 		}).Get(&s.nextTimeResultCache))
 	}
 	next := s.nextTimeResultCache[0]
-	s.nextTimeResultCache = s.nextTimeResultCache[1:]
+	if next.Next.Before(stop) {
+		s.nextTimeResultCache = s.nextTimeResultCache[1:]
+	}
 	return next
 }
 
@@ -412,7 +414,7 @@ func (s *scheduler) processTimeRange(
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
-			return s.getNextTime(t2).Next
+			return s.getNextTime(t2, t2).Next
 		}
 	}
 
@@ -425,13 +427,13 @@ func (s *scheduler) processTimeRange(
 				return s.cspec.getNextTime(t1)
 			}).Get(&next))
 		} else {
-			next = s.getNextTime(t1)
+			next = s.getNextTime(t1, t2)
 		}
 		t1 = next.Next
 		if t1.IsZero() || t1.After(t2) {
 			return t1
 		}
-		if s.tweakables.Version < 1 && !s.canTakeScheduledAction(manual, false) {
+		if s.tweakables.Version < SCHEDULDER_WORKFLOW_VERSION_1 && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
