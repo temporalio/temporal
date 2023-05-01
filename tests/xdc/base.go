@@ -39,6 +39,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -51,6 +52,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		clusterNames []string
 		suite.Suite
 		cluster1               *tests.TestCluster
 		cluster2               *tests.TestCluster
@@ -59,19 +61,18 @@ type (
 	}
 )
 
-var (
-	clusterName              = []string{"active", "standby"}
-	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfig{
-		{
-			ClusterName: clusterName[0],
-		},
-		{
-			ClusterName: clusterName[1],
-		},
+func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplicationConfig {
+	config := make([]*replicationpb.ClusterReplicationConfig, len(s.clusterNames))
+	for i, clusterName := range s.clusterNames {
+		config[i] = &replicationpb.ClusterReplicationConfig{
+			ClusterName: clusterName,
+		}
 	}
-)
+	return config
+}
 
-func (s *xdcBaseSuite) setupSuite() {
+func (s *xdcBaseSuite) setupSuite(clusterNames []string) {
+	s.clusterNames = clusterNames
 	s.logger = log.NewTestLogger()
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
@@ -89,15 +90,24 @@ func (s *xdcBaseSuite) setupSuite() {
 
 	var clusterConfigs []*tests.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-	for _, config := range clusterConfigs {
+	for i, config := range clusterConfigs {
 		config.DynamicConfigOverrides = s.dynamicConfigOverrides
+		clusterConfigs[i].ClusterMetadata.MasterClusterName = s.clusterNames[i]
+		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
+		clusterConfigs[i].Persistence.DBName = "integration_" + s.clusterNames[i]
+		clusterConfigs[i].ClusterMetadata.ClusterInformation = make(map[string]cluster.ClusterInformation)
+		clusterConfigs[i].ClusterMetadata.ClusterInformation[s.clusterNames[i]] = cluster.ClusterInformation{
+			Enabled:                true,
+			InitialFailoverVersion: int64(i + 1),
+			RPCAddress:             fmt.Sprintf("127.0.0.1:%d134", 7+i),
+		}
 	}
 
-	c, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
+	c, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = tests.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterName[1])))
+	c, err = tests.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 

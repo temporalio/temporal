@@ -59,7 +59,7 @@ func TestUserDataReplicationTestSuite(t *testing.T) {
 func (s *userDataReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	s.dynamicConfigOverrides[dynamicconfig.EnableWorkerVersioning] = true
-	s.setupSuite()
+	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
 }
 
 func (s *userDataReplicationTestSuite) SetupTest() {
@@ -77,8 +77,8 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
 	}
 	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
@@ -123,8 +123,8 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
 	}
 	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
