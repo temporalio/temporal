@@ -436,18 +436,18 @@ func (mr *MockContextMockRecorder) GetQueueState(category interface{}) *gomock.C
 }
 
 // GetRemoteAdminClient mocks base method.
-func (m *MockContext) GetRemoteAdminClient(cluster string) (v10.AdminServiceClient, error) {
+func (m *MockContext) GetRemoteAdminClient(arg0 string) (v10.AdminServiceClient, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRemoteAdminClient", cluster)
+	ret := m.ctrl.Call(m, "GetRemoteAdminClient", arg0)
 	ret0, _ := ret[0].(v10.AdminServiceClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetRemoteAdminClient indicates an expected call of GetRemoteAdminClient.
-func (mr *MockContextMockRecorder) GetRemoteAdminClient(cluster interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) GetRemoteAdminClient(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteAdminClient", reflect.TypeOf((*MockContext)(nil).GetRemoteAdminClient), cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteAdminClient", reflect.TypeOf((*MockContext)(nil).GetRemoteAdminClient), arg0)
 }
 
 // GetReplicationStatus mocks base method.
