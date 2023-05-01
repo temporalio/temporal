@@ -66,7 +66,7 @@ type (
 		GetMetricsHandler() metrics.Handler
 		GetTimeSource() clock.TimeSource
 
-		GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error)
+		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)
 		GetHistoryClient() historyservice.HistoryServiceClient
 		GetPayloadSerializer() serialization.Serializer
 
