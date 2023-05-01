@@ -193,50 +193,60 @@ func applyWorkflowSnapshotBatchAsReset(
 		return err
 	}
 
-	resetActivityInfos(
+	if err := resetActivityInfos(
 		batch,
 		workflowSnapshot.ActivityInfos,
 		shardID,
 		namespaceID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
-	resetTimerInfos(
+	if err := resetTimerInfos(
 		batch,
 		workflowSnapshot.TimerInfos,
 		shardID,
 		namespaceID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
-	resetChildExecutionInfos(
+	if err := resetChildExecutionInfos(
 		batch,
 		workflowSnapshot.ChildExecutionInfos,
 		shardID,
 		namespaceID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
-	resetRequestCancelInfos(
+	if err := resetRequestCancelInfos(
 		batch,
 		workflowSnapshot.RequestCancelInfos,
 		shardID,
 		namespaceID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
-	resetSignalInfos(
+	if err := resetSignalInfos(
 		batch,
 		workflowSnapshot.SignalInfos,
 		shardID,
 		namespaceID,
 		workflowID,
 		runID,
-	)
+	); err != nil {
+		return err
+	}
 
 	resetSignalRequested(
 		batch,
@@ -679,9 +689,12 @@ func resetActivityInfos(
 	namespaceID string,
 	workflowID string,
 	runID string,
-) {
+) error {
 
-	infoMap, encoding := resetBlobMap(activityInfos)
+	infoMap, encoding, err := resetActivityInfoMap(activityInfos)
+	if err != nil {
+		return err
+	}
 
 	batch.Query(templateResetActivityInfoQuery,
 		infoMap,
@@ -693,6 +706,7 @@ func resetActivityInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+	return nil
 }
 
 func updateTimerInfos(
@@ -740,8 +754,13 @@ func resetTimerInfos(
 	namespaceID string,
 	workflowID string,
 	runID string,
-) {
-	timerMap, timerMapEncoding := resetBlobMap(timerInfos)
+) error {
+
+	timerMap, timerMapEncoding, err := resetTimerInfoMap(timerInfos)
+	if err != nil {
+		return err
+	}
+
 	batch.Query(templateResetTimerInfoQuery,
 		timerMap,
 		timerMapEncoding.String(),
@@ -752,6 +771,8 @@ func resetTimerInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
+	return nil
 }
 
 func updateChildExecutionInfos(
@@ -799,8 +820,12 @@ func resetChildExecutionInfos(
 	namespaceID string,
 	workflowID string,
 	runID string,
-) {
-	infoMap, encoding := resetBlobMap(childExecutionInfos)
+) error {
+
+	infoMap, encoding, err := resetChildExecutionInfoMap(childExecutionInfos)
+	if err != nil {
+		return err
+	}
 	batch.Query(templateResetChildExecutionInfoQuery,
 		infoMap,
 		encoding.String(),
@@ -811,6 +836,7 @@ func resetChildExecutionInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+	return nil
 }
 
 func updateRequestCancelInfos(
@@ -858,8 +884,14 @@ func resetRequestCancelInfos(
 	namespaceID string,
 	workflowID string,
 	runID string,
-) {
-	rciMap, rciMapEncoding := resetBlobMap(requestCancelInfos)
+) error {
+
+	rciMap, rciMapEncoding, err := resetRequestCancelInfoMap(requestCancelInfos)
+
+	if err != nil {
+		return err
+	}
+
 	batch.Query(templateResetRequestCancelInfoQuery,
 		rciMap,
 		rciMapEncoding.String(),
@@ -870,6 +902,8 @@ func resetRequestCancelInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
+	return nil
 }
 
 func updateSignalInfos(
@@ -910,42 +944,6 @@ func updateSignalInfos(
 	return nil
 }
 
-func updateUpdateInfos(
-	batch gocql.Batch,
-	updateInfos map[string]*commonpb.DataBlob,
-	deletedUpdateInfos map[string]struct{},
-	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
-) {
-	for id, blob := range updateInfos {
-		batch.Query(templateUpdateUpdateInfoQuery,
-			id,
-			blob.Data,
-			blob.EncodingType.String(),
-			shardID,
-			rowTypeExecution,
-			namespaceID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
-	}
-
-	for deleteID := range deletedUpdateInfos {
-		batch.Query(templateDeleteUpdateInfoQuery,
-			deleteID,
-			shardID,
-			rowTypeExecution,
-			namespaceID,
-			workflowID,
-			runID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID)
-	}
-}
-
 func resetSignalInfos(
 	batch gocql.Batch,
 	signalInfos map[int64]*commonpb.DataBlob,
@@ -953,8 +951,12 @@ func resetSignalInfos(
 	namespaceID string,
 	workflowID string,
 	runID string,
-) {
-	sMap, sMapEncoding := resetBlobMap(signalInfos)
+) error {
+	sMap, sMapEncoding, err := resetSignalInfoMap(signalInfos)
+
+	if err != nil {
+		return err
+	}
 
 	batch.Query(templateResetSignalInfoQuery,
 		sMap,
@@ -966,6 +968,8 @@ func resetSignalInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
+	return nil
 }
 
 func updateSignalsRequested(
@@ -1021,6 +1025,42 @@ func resetSignalRequested(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+}
+
+func updateUpdateInfos(
+	batch gocql.Batch,
+	updateInfos map[string]*commonpb.DataBlob,
+	deletedUpdateInfos map[string]struct{},
+	shardID int32,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) {
+	for id, blob := range updateInfos {
+		batch.Query(templateUpdateUpdateInfoQuery,
+			id,
+			blob.Data,
+			blob.EncodingType.String(),
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID)
+	}
+
+	for deleteID := range deletedUpdateInfos {
+		batch.Query(templateDeleteUpdateInfoQuery,
+			deleteID,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID)
+	}
 }
 
 func resetUpdateInfos(
@@ -1080,6 +1120,76 @@ func updateBufferedEvents(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID)
 	}
+}
+
+func resetActivityInfoMap(
+	activityInfos map[int64]*commonpb.DataBlob,
+) (map[int64][]byte, enumspb.EncodingType, error) {
+
+	encoding := enumspb.ENCODING_TYPE_UNSPECIFIED
+	aMap := make(map[int64][]byte)
+	for scheduledEventID, blob := range activityInfos {
+		aMap[scheduledEventID] = blob.Data
+		encoding = blob.EncodingType
+	}
+
+	return aMap, encoding, nil
+}
+
+func resetTimerInfoMap(
+	timerInfos map[string]*commonpb.DataBlob,
+) (map[string][]byte, enumspb.EncodingType, error) {
+
+	tMap := make(map[string][]byte)
+	var encoding enumspb.EncodingType
+	for timerID, blob := range timerInfos {
+		encoding = blob.EncodingType
+		tMap[timerID] = blob.Data
+	}
+
+	return tMap, encoding, nil
+}
+
+func resetChildExecutionInfoMap(
+	childExecutionInfos map[int64]*commonpb.DataBlob,
+) (map[int64][]byte, enumspb.EncodingType, error) {
+
+	cMap := make(map[int64][]byte)
+	encoding := enumspb.ENCODING_TYPE_UNSPECIFIED
+	for initiatedID, blob := range childExecutionInfos {
+		cMap[initiatedID] = blob.Data
+		encoding = blob.EncodingType
+	}
+
+	return cMap, encoding, nil
+}
+
+func resetRequestCancelInfoMap(
+	requestCancelInfos map[int64]*commonpb.DataBlob,
+) (map[int64][]byte, enumspb.EncodingType, error) {
+
+	rcMap := make(map[int64][]byte)
+	var encoding enumspb.EncodingType
+	for initiatedID, blob := range requestCancelInfos {
+		encoding = blob.EncodingType
+		rcMap[initiatedID] = blob.Data
+	}
+
+	return rcMap, encoding, nil
+}
+
+func resetSignalInfoMap(
+	signalInfos map[int64]*commonpb.DataBlob,
+) (map[int64][]byte, enumspb.EncodingType, error) {
+
+	sMap := make(map[int64][]byte)
+	var encoding enumspb.EncodingType
+	for initiatedID, blob := range signalInfos {
+		encoding = blob.EncodingType
+		sMap[initiatedID] = blob.Data
+	}
+
+	return sMap, encoding, nil
 }
 
 func resetBlobMap[K comparable](
