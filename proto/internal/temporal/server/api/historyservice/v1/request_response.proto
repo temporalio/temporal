@@ -638,6 +638,82 @@ message UpdateWorkflowExecutionResponse {
     temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse response = 1;
 }
 
+message ReadHistoryBranchRequest {
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    bytes branch_token = 3;
+    // inclusive lower bound
+    int64 min_event_id = 4;
+    // exclusive upper bound
+    int64 max_event_id = 5;
+    int64 page_size = 6;
+    bytes next_page_token = 7;
+}
+
+message ReadHistoryBranchResponse {
+    // may return less than requested count
+    repeated temporal.api.history.v1.HistoryEvent history_events = 1;
+    bytes next_page_token = 2;
+}
+
+message ReadHistoryBranchReverseRequest {
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    bytes branch_token = 3;
+    // inclusive upper bound
+    int64 max_event_id = 4;
+    int64 page_size = 5;
+    // transaction id for the original write
+    int64 last_first_transaction_id = 6;
+    bytes next_page_token = 7;
+}
+
+message ReadHistoryBranchReverseResponse {
+    // may return less than requested count
+    repeated temporal.api.history.v1.HistoryEvent history_events = 1;
+    bytes next_page_token = 2;
+}
+
+message ReadRawHistoryBranchRequest {
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    bytes branch_token = 3;
+    // inclusive lower bound
+    int64 min_event_id = 4;
+    // exclusive upper bound
+    int64 max_event_id = 5;
+    int64 page_size = 6;
+    bytes next_page_token = 7;
+}
+
+message ReadRawHistoryBranchResponse {
+    // may return less than requested count
+    repeated temporal.api.common.v1.DataBlob history_event_blobs = 1;
+    repeated int64 node_ids = 2;
+    bytes next_page_token = 3;
+}
+
+message TrimHistoryBranchRequest {
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    bytes branch_token = 3;
+    int64 node_id = 4;
+    // transaction id for the original write
+    int64 transaction_id = 5;
+}
+
+message TrimHistoryBranchResponse {
+}
+
+message DeleteHistoryBranchRequest {
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    bytes branch_token = 3;
+}
+
+message DeleteHistoryBranchResponse {
+}
+
 message StreamWorkflowReplicationMessagesRequest {
     oneof attributes {
         temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 1;
