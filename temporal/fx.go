@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -78,7 +77,6 @@ type (
 
 	ServicesGroupOut struct {
 		fx.Out
-
 		Services *ServicesMetadata `group:"services"`
 	}
 
@@ -119,14 +117,13 @@ type (
 		AudienceGetter         authorization.JWTAudienceMapper
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
-		Logger                  log.Logger
-		ClientFactoryProvider   client.FactoryProvider
-		DynamicConfigClient     dynamicconfig.Client
-		DynamicConfigCollection *dynamicconfig.Collection
-		TLSConfigProvider       encryption.TLSConfigProvider
-		EsConfig                *esclient.Config
-		EsClient                esclient.Client
-		MetricsHandler          metrics.Handler
+		Logger                log.Logger
+		ClientFactoryProvider client.FactoryProvider
+		DynamicConfigClient   dynamicconfig.Client
+		TLSConfigProvider     encryption.TLSConfigProvider
+		EsConfig              *esclient.Config
+		EsClient              esclient.Client
+		MetricsHandler        metrics.Handler
 	}
 )
 
@@ -264,14 +261,13 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ClaimMapper:            so.claimMapper,
 		AudienceGetter:         so.audienceGetter,
 
-		Logger:                  logger,
-		ClientFactoryProvider:   clientFactoryProvider,
-		DynamicConfigClient:     dcClient,
-		DynamicConfigCollection: dynamicconfig.NewCollection(dcClient, logger),
-		TLSConfigProvider:       tlsConfigProvider,
-		EsConfig:                esConfig,
-		EsClient:                esClient,
-		MetricsHandler:          metricHandler,
+		Logger:                logger,
+		ClientFactoryProvider: clientFactoryProvider,
+		DynamicConfigClient:   dcClient,
+		TLSConfigProvider:     tlsConfigProvider,
+		EsConfig:              esConfig,
+		EsClient:              esClient,
+		MetricsHandler:        metricHandler,
 	}, nil
 }
 
@@ -285,8 +281,8 @@ func (s ServerFx) Stop() error {
 
 func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName, stopChan chan struct{}) {
 	stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
+	defer cancelFunc()
 	err := app.Stop(stopCtx)
-	cancelFunc()
 	if err != nil {
 		logger.Error("Failed to stop service", tag.Service(svcName), tag.Error(err))
 	}
@@ -294,8 +290,8 @@ func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName,
 	// verify "Start" goroutine returned
 	select {
 	case <-stopChan:
-	case <-time.After(time.Minute):
-		logger.Error("Timed out (1 minute) waiting for service to stop.", tag.Service(svcName))
+	case <-stopCtx.Done():
+		logger.Error("Timed out waiting for service to stop", tag.Service(svcName), tag.NewDurationTag("timeout", serviceStopTimeout))
 	}
 }
 

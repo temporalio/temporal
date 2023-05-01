@@ -115,8 +115,6 @@ const (
 	DeadlockInterval = "system.deadlock.Interval"
 	// How many extra goroutines can be created per root.
 	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
-	// Enable / disable worker versioning.
-	EnableWorkerVersioning = "system.workerVersioning.enable"
 
 	// keys for size limit
 
@@ -275,6 +273,9 @@ const (
 	//  UpdateWorkflowExecution API is under active development and is not ready for production use.
 	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
+
+	// FrontendEnableUpdateWorkflowExecution enables worker versioning data read / write APIs.
+	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
 
 	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.

@@ -609,18 +609,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionCanceledEvent(arg0, 
 }
 
 // AddWorkflowExecutionSignaled mocks base method.
-func (m *MockMutableState) AddWorkflowExecutionSignaled(signalName string, input *v10.Payloads, identity string, header *v10.Header) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowExecutionSignaled(signalName string, input *v10.Payloads, identity string, header *v10.Header, skipGenerateWorkflowTask bool) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowExecutionSignaled", signalName, input, identity, header)
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionSignaled", signalName, input, identity, header, skipGenerateWorkflowTask)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowExecutionSignaled indicates an expected call of AddWorkflowExecutionSignaled.
-func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionSignaled(signalName, input, identity, header interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionSignaled(signalName, input, identity, header, skipGenerateWorkflowTask interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionSignaled", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionSignaled), signalName, input, identity, header)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionSignaled", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionSignaled), signalName, input, identity, header, skipGenerateWorkflowTask)
 }
 
 // AddWorkflowExecutionStartedEvent mocks base method.
@@ -1608,6 +1608,20 @@ func (m *MockMutableState) HadOrHasWorkflowTask() bool {
 func (mr *MockMutableStateMockRecorder) HadOrHasWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HadOrHasWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HadOrHasWorkflowTask))
+}
+
+// HasAnyBufferedEvent mocks base method.
+func (m *MockMutableState) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasAnyBufferedEvent", filter)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasAnyBufferedEvent indicates an expected call of HasAnyBufferedEvent.
+func (mr *MockMutableStateMockRecorder) HasAnyBufferedEvent(filter interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasAnyBufferedEvent", reflect.TypeOf((*MockMutableState)(nil).HasAnyBufferedEvent), filter)
 }
 
 // HasBufferedEvents mocks base method.

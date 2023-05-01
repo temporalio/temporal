@@ -1101,7 +1101,9 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 		},
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: activeClusterName,
-			Clusters:          []*replicationpb.ClusterReplicationConfig{{activeClusterName}},
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: activeClusterName},
+			},
 		},
 	})
 	s.NoError(err)

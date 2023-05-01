@@ -56,7 +56,7 @@ type versioningIntegSuite struct {
 func (s *versioningIntegSuite) SetupSuite() {
 	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	s.dynamicConfigOverrides[dynamicconfig.MatchingUpdateAckInterval] = 1 * time.Second
-	s.dynamicConfigOverrides[dynamicconfig.EnableWorkerVersioning] = true
+	s.dynamicConfigOverrides[dynamicconfig.FrontendEnableWorkerVersioningDataAPIs] = true
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
 
