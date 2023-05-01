@@ -34,11 +34,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"flag"
+	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -55,14 +57,18 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"gopkg.in/yaml.v3"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/environment"
 	sw "go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests"
@@ -70,7 +76,25 @@ import (
 
 type (
 	integrationClustersTestSuite struct {
-		xdcBaseSuite
+		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+		// not merely log an error
+		*require.Assertions
+		suite.Suite
+		cluster1 *tests.TestCluster
+		cluster2 *tests.TestCluster
+		logger   log.Logger
+	}
+)
+
+var (
+	clusterName              = []string{"active", "standby"}
+	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfig{
+		{
+			ClusterName: clusterName[0],
+		},
+		{
+			ClusterName: clusterName[1],
+		},
 	}
 )
 
@@ -80,15 +104,58 @@ func TestIntegrationClustersTestSuite(t *testing.T) {
 }
 
 func (s *integrationClustersTestSuite) SetupSuite() {
-	s.setupSuite()
+	s.logger = log.NewTestLogger()
+
+	fileName := "../testdata/xdc_integration_test_clusters.yaml"
+	if tests.TestFlags.TestClusterConfigFile != "" {
+		fileName = tests.TestFlags.TestClusterConfigFile
+	}
+	environment.SetupEnv()
+
+	confContent, err := os.ReadFile(fileName)
+	s.Require().NoError(err)
+	confContent = []byte(os.ExpandEnv(string(confContent)))
+
+	var clusterConfigs []*tests.TestClusterConfig
+	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
+
+	c, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
+	s.Require().NoError(err)
+	s.cluster1 = c
+
+	c, err = tests.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterName[1])))
+	s.Require().NoError(err)
+	s.cluster2 = c
+
+	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
+	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
+	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(
+		tests.NewContext(),
+		&adminservice.AddOrUpdateRemoteClusterRequest{
+			FrontendAddress:               cluster2Address,
+			EnableRemoteClusterConnection: true,
+		})
+	s.Require().NoError(err)
+
+	_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(
+		tests.NewContext(),
+		&adminservice.AddOrUpdateRemoteClusterRequest{
+			FrontendAddress:               cluster1Address,
+			EnableRemoteClusterConnection: true,
+		})
+	s.Require().NoError(err)
+	// Wait for cluster metadata to refresh new added clusters
+	time.Sleep(time.Millisecond * 200)
 }
 
 func (s *integrationClustersTestSuite) SetupTest() {
-	s.setupTest()
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
 }
 
 func (s *integrationClustersTestSuite) TearDownSuite() {
-	s.tearDownSuite()
+	s.NoError(s.cluster1.TearDownCluster())
+	s.NoError(s.cluster2.TearDownCluster())
 }
 
 func (s *integrationClustersTestSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
