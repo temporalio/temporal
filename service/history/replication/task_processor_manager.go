@@ -52,7 +52,6 @@ import (
 )
 
 const (
-	clusterCallbackKey   = "%s-%d" // <cluster name>-<polling shard id>
 	dlqSizeCheckInterval = time.Minute * 5
 )
 
