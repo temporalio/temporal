@@ -410,11 +410,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	weContext := workflowContext.GetContext()
 	ms := workflowContext.GetMutableState()
 
-	executionStats, err := weContext.LoadExecutionStats(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
 	// TODO (alex-update): call mutableState.SetSpeculativeWorkflowTaskStartedEventID(mutableState) here to set StartEventID.
 	if !ms.IsWorkflowExecutionRunning() || currentWorkflowTask == nil || currentWorkflowTask.Attempt != token.Attempt ||
@@ -508,7 +503,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			},
 			ms,
 			handler.searchAttributesValidator,
-			executionStats,
 			handler.metricsHandler.WithTags(
 				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
 				metrics.NamespaceTag(namespace.String()),

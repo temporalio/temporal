@@ -143,7 +143,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	currentMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
-	currentEventsSize := int64(2333)
 	currentNewEventsSize := int64(3444)
 	currentMutation := &persistence.WorkflowMutation{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -164,8 +163,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 			EventId: 234,
 		}},
 	}}
-	currentContext.EXPECT().GetHistorySize().Return(currentEventsSize).AnyTimes()
-	currentContext.EXPECT().SetHistorySize(currentEventsSize + currentNewEventsSize)
 
 	resetWorkflow := NewMockWorkflow(s.controller)
 	resetReleaseCalled := false
@@ -177,7 +174,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	resetWorkflow.EXPECT().GetReleaseFn().Return(tarGetReleaseFn).AnyTimes()
 
 	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
-	resetEventsSize := int64(1444)
 	resetNewEventsSize := int64(4321)
 	resetSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -201,8 +197,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
-	resetContext.EXPECT().GetHistorySize().Return(resetEventsSize).AnyTimes()
-	resetContext.EXPECT().SetHistorySize(resetEventsSize + resetNewEventsSize)
 
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
@@ -263,7 +257,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
-	resetContext.EXPECT().GetHistorySize().Return(int64(123)).AnyTimes()
 	resetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		persistence.CreateWorkflowModeUpdateCurrent,
@@ -326,6 +319,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 	)
+	resetMutableState.EXPECT().AddHistorySize(resetHistorySize)
 
 	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
 		ctx,
@@ -339,7 +333,6 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		resetRequestID,
 	)
 	s.NoError(err)
-	s.Equal(resetHistorySize, resetWorkflow.GetContext().GetHistorySize())
 	s.Equal(resetMutableState, resetWorkflow.GetMutableState())
 }
 

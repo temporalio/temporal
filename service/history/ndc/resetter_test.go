@@ -185,6 +185,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		newBranchToken,
 		gomock.Any(),
 	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil)
+	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuiltHistorySize)
 
 	shardID := s.mockShard.GetShardID()
 	s.mockExecManager.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
@@ -205,7 +206,6 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	)
 	s.NoError(err)
 	s.Equal(s.mockRebuiltMutableState, rebuiltMutableState)
-	s.Equal(s.newContext.GetHistorySize(), rebuiltHistorySize)
 	s.True(mockBaseWorkflowReleaseFnCalled)
 }
 

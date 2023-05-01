@@ -180,10 +180,10 @@ func (r *ConflictResolverImpl) rebuild(
 		return nil, err
 	}
 	rebuildMutableState.GetExecutionInfo().VersionHistories = versionHistories
+	rebuildMutableState.AddHistorySize(rebuiltHistorySize)
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
 
 	r.context.Clear()
-	r.context.SetHistorySize(rebuiltHistorySize)
 	return rebuildMutableState, nil
 }

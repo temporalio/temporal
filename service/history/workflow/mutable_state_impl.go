@@ -4043,6 +4043,14 @@ func (ms *MutableStateImpl) truncateRetryableActivityFailure(
 	return serverFailure
 }
 
+func (ms *MutableStateImpl) GetHistorySize() int64 {
+	return ms.executionInfo.ExecutionStats.HistorySize
+}
+
+func (ms *MutableStateImpl) AddHistorySize(size int64) {
+	ms.executionInfo.ExecutionStats.HistorySize += size
+}
+
 // TODO mutable state should generate corresponding transfer / timer tasks according to
 //  updates accumulated, while currently all transfer / timer tasks are managed manually
 

@@ -38,6 +38,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -110,7 +111,6 @@ func TestCommandProtocolMessage(t *testing.T) {
 				workflowSizeLimits{blobSizeLimitError: blobSizeLimit},
 				out.ms,
 				nil, //searchAttributesValidator
-				&persistencespb.ExecutionStats{},
 				metricsHandler,
 				logger,
 			),
