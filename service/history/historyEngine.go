@@ -324,9 +324,6 @@ func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 				queueProcessor.FailoverNamespace(ns.ID().String())
 			}
 		}
-
-		// for backward compatibility
-		_ = e.shard.UpdateNamespaceNotificationVersion(ns.NotificationVersion() + 1)
 	})
 }
 

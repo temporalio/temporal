@@ -228,13 +228,6 @@ func (s *ContextImpl) GetEngine(
 	return s.engineFuture.Get(ctx)
 }
 
-func (s *ContextImpl) GetMaxTaskIDForCurrentRangeID() int64 {
-	s.rLock()
-	defer s.rUnlock()
-	// maxTaskSequenceNumber is the exclusive upper bound of task ID for current range.
-	return s.maxTaskSequenceNumber - 1
-}
-
 func (s *ContextImpl) AssertOwnership(
 	ctx context.Context,
 ) error {
@@ -421,19 +414,6 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 			metrics.OperationTag(metrics.ReplicationDLQStatsScope),
 			metrics.TargetClusterTag(sourceCluster),
 			metrics.InstanceTag(convert.Int32ToString(s.shardID)))
-	return nil
-}
-
-func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error {
-	s.wLock()
-	defer s.wUnlock()
-
-	// update namespace notification version.
-	if s.shardInfo.NamespaceNotificationVersion < namespaceNotificationVersion {
-		s.shardInfo.NamespaceNotificationVersion = namespaceNotificationVersion
-		return s.updateShardInfoLocked()
-	}
-
 	return nil
 }
 
@@ -1230,7 +1210,7 @@ func (s *ContextImpl) GetCurrentTime(cluster string) time.Time {
 	return s.timeSource.Now().UTC()
 }
 
-func (s *ContextImpl) GetLastUpdatedTime() time.Time {
+func (s *ContextImpl) getLastUpdatedTime() time.Time {
 	s.rLock()
 	defer s.rUnlock()
 	return s.lastUpdated
@@ -1297,7 +1277,7 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 func (s *ContextImpl) maybeRecordShardAcquisitionLatency(ownershipChanged bool) {
 	if ownershipChanged {
 		s.GetMetricsHandler().Timer(metrics.ShardContextAcquisitionLatency.GetMetricName()).
-			Record(s.GetCurrentTime(s.GetClusterMetadata().GetCurrentClusterName()).Sub(s.GetLastUpdatedTime()),
+			Record(s.GetCurrentTime(s.GetClusterMetadata().GetCurrentClusterName()).Sub(s.getLastUpdatedTime()),
 				metrics.OperationTag(metrics.ShardInfoScope),
 			)
 	}
@@ -1896,15 +1876,14 @@ func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInf
 	}
 
 	return &persistencespb.ShardInfo{
-		ShardId:                      shardInfo.ShardId,
-		Owner:                        shardInfo.Owner,
-		RangeId:                      shardInfo.RangeId,
-		StolenSinceRenew:             shardInfo.StolenSinceRenew,
-		NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
-		ReplicationDlqAckLevel:       maps.Clone(shardInfo.ReplicationDlqAckLevel),
-		UpdateTime:                   shardInfo.UpdateTime,
-		QueueAckLevels:               queueAckLevels,
-		QueueStates:                  queueStates,
+		ShardId:                shardInfo.ShardId,
+		Owner:                  shardInfo.Owner,
+		RangeId:                shardInfo.RangeId,
+		StolenSinceRenew:       shardInfo.StolenSinceRenew,
+		ReplicationDlqAckLevel: maps.Clone(shardInfo.ReplicationDlqAckLevel),
+		UpdateTime:             shardInfo.UpdateTime,
+		QueueAckLevels:         queueAckLevels,
+		QueueStates:            queueStates,
 	}
 }
 
