@@ -970,19 +970,19 @@ func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks))
 }
 
-// GetAcceptedWorkflowExecutionUpdates mocks base method.
-func (m *MockMutableState) GetAcceptedWorkflowExecutionUpdates(arg0 context.Context) ([]*v13.WorkflowExecutionUpdateAcceptedEventAttributes, error) {
+// GetAcceptedWorkflowExecutionUpdateIDs mocks base method.
+func (m *MockMutableState) GetAcceptedWorkflowExecutionUpdateIDs(arg0 context.Context) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAcceptedWorkflowExecutionUpdates", arg0)
-	ret0, _ := ret[0].([]*v13.WorkflowExecutionUpdateAcceptedEventAttributes)
+	ret := m.ctrl.Call(m, "GetAcceptedWorkflowExecutionUpdateIDs", arg0)
+	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetAcceptedWorkflowExecutionUpdates indicates an expected call of GetAcceptedWorkflowExecutionUpdates.
-func (mr *MockMutableStateMockRecorder) GetAcceptedWorkflowExecutionUpdates(arg0 interface{}) *gomock.Call {
+// GetAcceptedWorkflowExecutionUpdateIDs indicates an expected call of GetAcceptedWorkflowExecutionUpdateIDs.
+func (mr *MockMutableStateMockRecorder) GetAcceptedWorkflowExecutionUpdateIDs(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAcceptedWorkflowExecutionUpdates", reflect.TypeOf((*MockMutableState)(nil).GetAcceptedWorkflowExecutionUpdates), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAcceptedWorkflowExecutionUpdateIDs", reflect.TypeOf((*MockMutableState)(nil).GetAcceptedWorkflowExecutionUpdateIDs), arg0)
 }
 
 // GetActivityByActivityID mocks base method.

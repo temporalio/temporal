@@ -3272,35 +3272,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(updResp *up
 	return event, nil
 }
 
-func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdates(
+func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdateIDs(
 	ctx context.Context,
-) ([]*historypb.WorkflowExecutionUpdateAcceptedEventAttributes, error) {
-	out := make([]*historypb.WorkflowExecutionUpdateAcceptedEventAttributes, 0)
-	for _, rec := range ms.updateInfos {
-		ptr := rec.GetAcceptancePointer()
-		if ptr == nil {
-			continue
+) ([]string, error) {
+	out := make([]string, 0)
+	for id, updateInfo := range ms.updateInfos {
+		if updateInfo.GetAcceptancePointer() != nil {
+			out = append(out, id)
 		}
-		currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(ptr.EventId)
-		if err != nil {
-			return nil, err
-		}
-		eventKey := events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ptr.EventId,
-			Version:     version,
-		}
-		event, err := ms.eventsCache.GetEvent(ctx, eventKey, ptr.EventId-1, currentBranchToken)
-		if err != nil {
-			return nil, err
-		}
-		attrs := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-		if attrs == nil {
-			return nil, serviceerror.NewInternal("event pointer does not reference an update accepted event")
-		}
-		out = append(out, attrs)
 	}
 	return out, nil
 }
