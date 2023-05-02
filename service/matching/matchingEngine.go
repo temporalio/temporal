@@ -1143,6 +1143,8 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 ) (*taskQueueID, error) {
 	// Since sticky queues are pinned to a particular worker, we don't need to redirect
 	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// TODO: we may need to kick the workflow off of the sticky queue here
+		// (e.g. serviceerrors.StickyWorkerUnavailable) if there's a newer build id
 		return taskQueue, nil
 	}
 	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
@@ -1158,6 +1160,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 			// queue is not versioned and neither is worker, all good
 			return taskQueue, nil
 		}
+		// TODO: consider making an ephemeral set so we can match even if replication fails
 		return nil, errPollWithVersionOnUnversionedQueue
 	}
 	if workerVersionCapabilities == nil {

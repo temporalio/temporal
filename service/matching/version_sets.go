@@ -34,14 +34,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/persistence/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
 
 var (
 	// TODO: go over error types, maybe not all should be invalid argument
-	errBuildIDNotFound                     = serviceerror.NewInvalidArgument("build ID not found")
+	errBuildIDNotFound                   = serviceerror.NewInvalidArgument("build ID not found")
 	errNewerBuildFound                   = serviceerror.NewInvalidArgument("newer compatible build exists")
 	errEmptyVersioningData               = serviceerror.NewInvalidArgument("versioning data is empty")
 	errPollWithVersionOnUnversionedQueue = serviceerror.NewInvalidArgument("poll with version capabilities on unversioned queue")
@@ -138,7 +137,7 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 	targetedVersion := extractTargetedVersion(req)
 	targetSetIdx, versionInSetIdx := findVersion(existingData, targetedVersion)
 	numExistingSets := len(existingData.GetVersionSets())
-	modifiedData := persistence.VersioningData{
+	modifiedData := persistencespb.VersioningData{
 		VersionSets:            make([]*persistencespb.CompatibleVersionSet, len(existingData.GetVersionSets())),
 		DefaultUpdateTimestamp: existingData.GetDefaultUpdateTimestamp(),
 	}
@@ -282,12 +281,14 @@ func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, version
 	}
 }
 
+// Requires: data is not nil, caps is not nil
 func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, error) {
 	// for poll, only the latest version in the compatible set can get tasks
 	// find the version set that this worker is in
 	setIdx, _ := findVersion(data, caps.BuildId)
 	if setIdx < 0 {
-		return "", errBuildNotFound
+		// TODO: consider making an ephemeral set so we can match even if replication fails
+		return "", errBuildIDNotFound
 	}
 	set := data.VersionSets[setIdx]
 	if caps.BuildId != set.BuildIds[len(set.BuildIds)-1].Id {
@@ -296,6 +297,7 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 	return getSetID(set), nil
 }
 
+// Requires: data is not nil
 func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb.WorkerVersionStamp) (string, error) {
 	var set *persistencespb.CompatibleVersionSet
 	if stamp == nil {
@@ -311,20 +313,22 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb
 		// for add, any version in the compatible set maps to the set
 		setIdx, _ := findVersion(data, stamp.BuildId)
 		if setIdx < 0 {
-			return "", errBuildNotFound
+			// TODO: consider making an ephemeral set so we can match even if replication fails
+			return "", errBuildIDNotFound
 		}
 		set = data.VersionSets[setIdx]
 	}
 	return getSetID(set), nil
 }
 
+// getSetID returns an arbitrary but consistent member of the set.
+// We want Add and Poll requests for the same set to converge on a single id so we can match
+// them, but we don't have a single id for a set in the general case: in rare cases we may have
+// multiple ids (due to failovers). We can do this by picking an arbitrary id in the set, e.g.
+// the first. If the versioning data changes in any way, we'll re-resolve the set id, so this
+// choice only has to be consistent within one version of the versioning data. (For correct
+// handling of spooled tasks in Add, this does need to be an actual set id, not an arbitrary
+// string.)
 func getSetID(set *persistencespb.CompatibleVersionSet) string {
-	// We want Add and Poll requests for the same set to converge on a single id so we can
-	// match them, but we don't have a single id for a set in the general case: in rare cases
-	// we may have multiple ids (due to failovers). We can do this by picking an arbitrary id
-	// in the set, e.g. the first. If the versioning data changes in any way, we'll re-resolve
-	// the set id, so this choice only has to be consistent within one version of the
-	// versioning data. (For correct handling of spooled tasks in Add, this does need to be an
-	// actual set id, not an arbitrary string.)
 	return set.SetIds[0]
 }
