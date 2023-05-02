@@ -87,10 +87,10 @@ service MatchingService {
     rpc GetWorkerBuildIdCompatibility (GetWorkerBuildIdCompatibilityRequest) returns (GetWorkerBuildIdCompatibilityResponse) {}
     // Tell a task queue that the associated user data has changed.
     rpc InvalidateTaskQueueUserData (InvalidateTaskQueueUserDataRequest) returns (InvalidateTaskQueueUserDataResponse) {}
-    // Fetch user data for a task queue, this request should always be routed to the node holding the task queue's root partition.
+    // Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
     rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
 
-    // Apply a user data replication event
+    // Apply a user data replication event.
     rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns
     (ApplyTaskQueueUserDataReplicationEventResponse) {}
 }
