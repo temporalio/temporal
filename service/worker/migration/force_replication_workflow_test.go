@@ -97,7 +97,8 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	require.NoError(t, err)
 
 	var status ForceReplicationStatus
-	envValue.Get(&status)
+	err = envValue.Get(&status)
+	require.NoError(t, err)
 	assert.Equal(t, 0, status.ContinuedAsNewCount)
 	assert.Equal(t, startTime, status.LastStartTime)
 	assert.Equal(t, closeTime, status.LastCloseTime)
@@ -284,7 +285,8 @@ func TestForceReplicationWorkflow_TaskQueueReplicationFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	var status ForceReplicationStatus
-	envValue.Get(&status)
+	err = envValue.Get(&status)
+	require.NoError(t, err)
 	assert.True(t, status.TaskQueueUserDataReplicationStatus.Done)
 	assert.Contains(t, status.TaskQueueUserDataReplicationStatus.FailureMessage, "namespace is required")
 }

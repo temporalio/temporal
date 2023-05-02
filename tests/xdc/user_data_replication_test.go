@@ -170,8 +170,8 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
 	}
 	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
