@@ -46,7 +46,6 @@ import (
 
 type (
 	userDataReplicationTestSuite struct {
-		// Embed the base functionality from the XCD test suite
 		xdcBaseSuite
 	}
 )

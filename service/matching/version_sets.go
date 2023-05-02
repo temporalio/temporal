@@ -134,8 +134,10 @@ func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, r
 	copy(modifiedData.VersionSets, existingData.GetVersionSets())
 
 	if req.GetAddNewBuildIdInNewDefaultSet() != "" {
+		targetIsInDefaultSet := targetSetIdx == numExistingSets-1
+		targetIsOnlyBuildIdInSet := versionInSetIdx == 0 && len(existingData.VersionSets[numExistingSets-1].BuildIds) == 1
 		// Make the request idempotent
-		if numExistingSets > 0 && targetSetIdx == numExistingSets-1 && versionInSetIdx == 0 && len(existingData.VersionSets[numExistingSets-1].BuildIds) == 1 {
+		if numExistingSets > 0 && targetIsInDefaultSet && targetIsOnlyBuildIdInSet {
 			return existingData, nil
 		}
 		// If it's not already in the sets, add it as the new default set
