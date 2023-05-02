@@ -1141,7 +1141,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 	workerVersionCapabilities *commonpb.WorkerVersionCapabilities,
 	kind enumspb.TaskQueueKind,
 ) (*taskQueueID, error) {
-	// sticky queues are unversioned
+	// Since sticky queues are pinned to a particular worker, we don't need to redirect
 	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		return taskQueue, nil
 	}

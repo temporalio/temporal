@@ -41,7 +41,7 @@ import (
 
 var (
 	// TODO: go over error types, maybe not all should be invalid argument
-	errBuildNotFound                     = serviceerror.NewInvalidArgument("build id not found")
+	errBuildIDNotFound                     = serviceerror.NewInvalidArgument("build ID not found")
 	errNewerBuildFound                   = serviceerror.NewInvalidArgument("newer compatible build exists")
 	errEmptyVersioningData               = serviceerror.NewInvalidArgument("versioning data is empty")
 	errPollWithVersionOnUnversionedQueue = serviceerror.NewInvalidArgument("poll with version capabilities on unversioned queue")
