@@ -1402,3 +1402,33 @@ func (s *workflowSuite) TestLimitedActions() {
 	s.True(s.env.IsWorkflowCompleted())
 	// doesn't end properly since it sleeps forever after pausing
 }
+
+func (s *workflowSuite) TestLotsOfIterations() {
+	// This is mostly testing getNextTime caching logic.
+	const iterations = 30
+
+	runs := make([]workflowRun, iterations)
+	for i := range runs {
+		t := time.Date(2022, 6, 1, i, 17+i%2, 0, 0, time.UTC)
+		runs[i] = workflowRun{
+			id:     "myid-" + t.Format(time.RFC3339),
+			start:  t,
+			end:    t.Add(time.Duration(5+i%7) * time.Minute),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		}
+	}
+
+	s.runAcrossContinue(
+		runs,
+		nil,
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Calendar: []*schedpb.CalendarSpec{
+					{Minute: "17", Hour: "0/2"},
+					{Minute: "18", Hour: "1/2"},
+				},
+			},
+		},
+		iterations+1,
+	)
+}
