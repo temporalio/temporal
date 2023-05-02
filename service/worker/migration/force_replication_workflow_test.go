@@ -30,14 +30,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
+	"google.golang.org/grpc"
 )
 
 func TestForceReplicationWorkflow(t *testing.T) {
@@ -46,7 +52,27 @@ func TestForceReplicationWorkflow(t *testing.T) {
 
 	namespaceID := uuid.New()
 
-	var a *activities
+	ctrl := gomock.NewController(t)
+	mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+	a := &activities{
+		matchingClient: mockMatchingClient,
+		frontendClient: mockFrontendClient,
+	}
+
+	mockFrontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Times(1).Return(&workflowservice.DescribeNamespaceResponse{NamespaceInfo: &namespace.NamespaceInfo{Id: namespaceID}}, nil)
+	mockMatchingClient.EXPECT().SeedReplicationQueueWithUserDataEntries(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(
+		func(ctx context.Context, request *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest, _ ...grpc.CallOption) (*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, error) {
+			if len(request.NextPageToken) == 0 {
+				return &matchingservice.SeedReplicationQueueWithUserDataEntriesResponse{
+					NextPageToken: []byte{0xac, 0xdc},
+				}, nil
+			}
+			return &matchingservice.SeedReplicationQueueWithUserDataEntriesResponse{
+				NextPageToken: []byte{},
+			}, nil
+		})
+
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	totalPageCount := 4
@@ -78,7 +104,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(totalPageCount)
 
 	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
-	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
+	env.RegisterActivity(a.SeedReplicationQueueWithUserDataEntries)
 
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",

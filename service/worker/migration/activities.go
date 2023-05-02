@@ -394,7 +394,7 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 		if len(response.NextPageToken) == 0 {
 			return nil
 		}
-		nextPageToken = request.NextPageToken
+		nextPageToken = response.NextPageToken
 		activity.RecordHeartbeat(ctx, nextPageToken)
 	}
 }
