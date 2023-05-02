@@ -44,6 +44,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -97,6 +98,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
+		matchingClient                   matchingservice.MatchingServiceClient
 		dcClient                         *dcClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
@@ -345,6 +347,10 @@ func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
 }
 
+func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient {
+	return c.matchingClient
+}
+
 func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
 	serviceName := primitives.FrontendService
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
@@ -518,8 +524,14 @@ func (c *temporalImpl) startHistory(
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
 
+		matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger)
+		if err != nil {
+			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
+		}
+
 		c.historyApps = append(c.historyApps, app)
 		c.historyClient = NewHistoryClient(historyConnection)
+		c.matchingClient = matchingservice.NewMatchingServiceClient(matchingConnection)
 		c.historyServices = append(c.historyServices, historyService)
 		c.historyNamespaceRegistries = append(c.historyNamespaceRegistries, namespaceRegistry)
 

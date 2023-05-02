@@ -35,6 +35,20 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
+func (c *metricClient) ApplyTaskQueueUserDataReplicationEvent(
+	ctx context.Context,
+	request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientApplyTaskQueueUserDataReplicationEventScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ApplyTaskQueueUserDataReplicationEvent(ctx, request, opts...)
+}
+
 func (c *metricClient) CancelOutstandingPoll(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest,

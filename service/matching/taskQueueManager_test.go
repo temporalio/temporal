@@ -600,7 +600,7 @@ func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 	rootTq.Start()
 	require.NoError(t, rootTq.WaitUntilInitialized(ctx))
 	// Make a change, mock verifies children are invalidated
-	require.NoError(t, rootTq.UpdateUserData(ctx, func(vd *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+	require.NoError(t, rootTq.UpdateUserData(ctx, false, func(vd *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		return mkUserData(1), nil
 	}))
 	rootTq.Stop()
@@ -829,7 +829,7 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
 	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	err = subTq.UpdateUserData(ctx, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+	err = subTq.UpdateUserData(ctx, false, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		return data, nil
 	})
 	require.Error(t, err)
@@ -840,7 +840,7 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 	actTqCfg := defaultTqmTestOpts(controller)
 	actTqCfg.tqId = actTqId
 	actTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, actTqCfg)
-	err = actTq.UpdateUserData(ctx, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+	err = actTq.UpdateUserData(ctx, false, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		return data, nil
 	})
 	require.Error(t, err)

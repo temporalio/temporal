@@ -35,6 +35,21 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *clientImpl) ApplyTaskQueueUserDataReplicationEvent(
+	ctx context.Context,
+	request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
+
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ApplyTaskQueueUserDataReplicationEvent(ctx, request, opts...)
+}
+
 func (c *clientImpl) CancelOutstandingPoll(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest,

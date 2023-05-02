@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	serverenumbspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/primitives"
 )
@@ -55,6 +56,8 @@ const (
 	actionType     = "action_type"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
+	// See server.api.enums.v1.ReplicationTaskType
+	replicationTaskType = "replicationTaskType"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -301,4 +304,9 @@ type ReasonString string
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
 	return &tagImpl{key: reason, value: string(value)}
+}
+
+// ReplicationTaskTypeTag returns a new replication task type tag.
+func ReplicationTaskTypeTag(value serverenumbspb.ReplicationTaskType) Tag {
+	return &tagImpl{key: replicationTaskType, value: value.String()}
 }

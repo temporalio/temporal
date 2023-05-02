@@ -55,6 +55,7 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
+	fx.Provide(TaskQueueReplicatorNamespaceReplicationQueueProvider),
 	resource.Module,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(NewService),
@@ -111,6 +112,21 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 	return membershipMonitor.GetResolver(primitives.MatchingService)
 }
 
+// This type alias is used to ensure the replicator only gets set if global namespaces are enabled on this cluster.
+// See TaskQueueReplicatorNamespaceReplicationQueueProvider below.
+type TaskQueueReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+
+func TaskQueueReplicatorNamespaceReplicationQueueProvider(
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	clusterMetadata cluster.Metadata,
+) TaskQueueReplicatorNamespaceReplicationQueue {
+	var replicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+	if clusterMetadata.IsGlobalNamespaceEnabled() {
+		replicatorNamespaceReplicationQueue = namespaceReplicationQueue
+	}
+	return replicatorNamespaceReplicationQueue
+}
+
 func HandlerProvider(
 	config *Config,
 	logger log.SnTaggedLogger,
@@ -122,6 +138,7 @@ func HandlerProvider(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
+	namespaceReplicationQueue TaskQueueReplicatorNamespaceReplicationQueue,
 ) *Handler {
 	return NewHandler(
 		config,
@@ -134,6 +151,7 @@ func HandlerProvider(
 		metricsHandler,
 		namespaceRegistry,
 		clusterMetadata,
+		namespaceReplicationQueue,
 	)
 }
 

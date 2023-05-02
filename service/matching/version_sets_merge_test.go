@@ -85,6 +85,14 @@ func TestSetMerge_IdenticalBuildIDsAndGreaterUpdateTimestamp_SetsMaxUpdateTimest
 	assert.Equal(t, a, MergeVersioningData(b, a))
 }
 
+func TestSetMerge_DataIsNil(t *testing.T) {
+	data := mkSingleSetData("0.1", buildID(1, "0.1"), buildID(3, "0.2"))
+	assert.Equal(t, data, MergeVersioningData(nil, data))
+	assert.Equal(t, data, MergeVersioningData(data, nil))
+	var nilData *persistencepb.VersioningData
+	assert.Equal(t, nilData, MergeVersioningData(nil, nil))
+}
+
 func TestSetMerge_AdditionalBuildIDAndGreaterUpdateTimestamp_MergesBuildIDsAndSetsMaxUpdateTimestamp(t *testing.T) {
 	a := mkSingleSetData("0.1", buildID(6, "0.1"))
 	b := mkSingleSetData("0.1", buildID(1, "0.1"), buildID(3, "0.2"))
