@@ -144,9 +144,9 @@ type MatchingServiceClient interface {
 	GetWorkerBuildIdCompatibility(ctx context.Context, in *GetWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Tell a task queue that the associated user data has changed.
 	InvalidateTaskQueueUserData(ctx context.Context, in *InvalidateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*InvalidateTaskQueueUserDataResponse, error)
-	// Fetch user data for a task queue, this request should always be routed to the node holding the task queue's root partition.
+	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
-	// Apply a user data replication event
+	// Apply a user data replication event.
 	ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, in *ApplyTaskQueueUserDataReplicationEventRequest, opts ...grpc.CallOption) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 }
 
@@ -323,9 +323,9 @@ type MatchingServiceServer interface {
 	GetWorkerBuildIdCompatibility(context.Context, *GetWorkerBuildIdCompatibilityRequest) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Tell a task queue that the associated user data has changed.
 	InvalidateTaskQueueUserData(context.Context, *InvalidateTaskQueueUserDataRequest) (*InvalidateTaskQueueUserDataResponse, error)
-	// Fetch user data for a task queue, this request should always be routed to the node holding the task queue's root partition.
+	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
-	// Apply a user data replication event
+	// Apply a user data replication event.
 	ApplyTaskQueueUserDataReplicationEvent(context.Context, *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
 }
 
