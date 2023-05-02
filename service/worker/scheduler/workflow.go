@@ -364,7 +364,7 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 func (s *scheduler) getNextTime(after time.Time, stop time.Time) getNextTimeResult {
 
 	// ignore start times that come before the 'after' parameter
-	for len(s.nextTimeResultCache) != 0 && (s.nextTimeResultCache[0].Next.Before(after) || s.nextTimeResultCache[0].Next.Equal(after)) {
+	for len(s.nextTimeResultCache) != 0 && after.Before(s.nextTimeResultCache[0].Next) {
 		s.nextTimeResultCache = s.nextTimeResultCache[1:]
 	}
 
