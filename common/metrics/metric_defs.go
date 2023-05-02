@@ -469,6 +469,8 @@ const (
 	MatchingClientInvalidateTaskQueueUserDataScope = "MatchingClientInvalidateTaskQueueUserData"
 	// MatchingClientGetTaskQueueUserDataScope tracks RPC calls to matching service
 	MatchingClientGetTaskQueueUserDataScope = "MatchingClientGetTaskQueueUserData"
+	// MatchingClientApplyTaskQueueUserDataReplicationEventScope tracks RPC calls to matching service
+	MatchingClientApplyTaskQueueUserDataReplicationEventScope = "MatchingClientApplyTaskQueueUserDataReplicationEventScope"
 )
 
 // Worker
@@ -1104,6 +1106,8 @@ const (
 	MatchingInvalidateTaskQueueUserDataScope = "InvalidateTaskQueueUserData"
 	// MatchingGetTaskQueueUserDataScope tracks GetTaskQueueUserData API calls received by service
 	MatchingGetTaskQueueUserDataScope = "GetTaskQueueUserData"
+	// MatchingApplyTaskQueueUserDataReplicationEventScope tracks ApplyTaskQueueUserDataReplicationEvent API calls received by service
+	MatchingApplyTaskQueueUserDataReplicationEventScope = "MatchingApplyTaskQueueUserDataReplicationEventScope"
 )
 
 // Worker Scope

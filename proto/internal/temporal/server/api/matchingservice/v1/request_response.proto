@@ -238,3 +238,12 @@ message GetTaskQueueUserDataResponse {
     // than the version cached in the root partition.
     temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 2;
 }
+
+message ApplyTaskQueueUserDataReplicationEventRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
+}
+
+message ApplyTaskQueueUserDataReplicationEventResponse {
+}
