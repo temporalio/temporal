@@ -335,15 +335,15 @@ func isDone(ctx context.Context) bool {
 
 func getResetEventIDByType(ctx context.Context,
 	resetType enumspb.ResetType,
-	namespace string,
+	namespaceStr string,
 	workflowExecution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
 	logger log.Logger) (int64, error) {
 	switch resetType {
 	case enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK:
-		return getFirstWorkflowTaskEventID(ctx, resetType, namespace, workflowExecution, frontendClient, logger)
+		return getFirstWorkflowTaskEventID(ctx, resetType, namespaceStr, workflowExecution, frontendClient, logger)
 	case enumspb.RESET_TYPE_LAST_WORKFLOW_TASK:
-		return getLastWorkflowTaskEventID(ctx, resetType, namespace, workflowExecution, frontendClient, logger)
+		return getLastWorkflowTaskEventID(ctx, resetType, namespaceStr, workflowExecution, frontendClient, logger)
 	default:
 		errorMsg := fmt.Sprintf("provided reset type (%v) is not supported.", resetType)
 		return 0, serviceerror.NewInvalidArgument(errorMsg)
@@ -352,12 +352,12 @@ func getResetEventIDByType(ctx context.Context,
 
 func getLastWorkflowTaskEventID(ctx context.Context,
 	resetType enumspb.ResetType,
-	namespace string,
+	namespaceStr string,
 	workflowExecution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
 	logger log.Logger) (workflowTaskEventID int64, err error) {
 	req := &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
-		Namespace:       namespace,
+		Namespace:       namespaceStr,
 		Execution:       workflowExecution,
 		MaximumPageSize: 1000,
 		NextPageToken:   nil,
@@ -377,11 +377,10 @@ func getLastWorkflowTaskEventID(ctx context.Context,
 				workflowTaskEventID = e.GetEventId() + 1
 			}
 		}
-		if len(resp.NextPageToken) != 0 {
-			req.NextPageToken = resp.NextPageToken
-		} else {
+		if len(resp.NextPageToken) == 0 {
 			break
 		}
+		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
 		return 0, errors.New("unable to find any scheduled or completed task")
@@ -391,12 +390,12 @@ func getLastWorkflowTaskEventID(ctx context.Context,
 
 func getFirstWorkflowTaskEventID(ctx context.Context,
 	resetType enumspb.ResetType,
-	namespace string,
+	namespaceStr string,
 	workflowExecution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
 	logger log.Logger) (workflowTaskEventID int64, err error) {
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:       namespace,
+		Namespace:       namespaceStr,
 		Execution:       workflowExecution,
 		MaximumPageSize: 1000,
 		NextPageToken:   nil,
@@ -418,11 +417,10 @@ func getFirstWorkflowTaskEventID(ctx context.Context,
 				}
 			}
 		}
-		if len(resp.NextPageToken) != 0 {
-			req.NextPageToken = resp.NextPageToken
-		} else {
+		if len(resp.NextPageToken) == 0 {
 			break
 		}
+		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
 		return 0, errors.New("unable to find any scheduled or completed task")
