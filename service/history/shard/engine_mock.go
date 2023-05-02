@@ -82,6 +82,21 @@ func (mr *MockEngineMockRecorder) ConvertReplicationTask(ctx, task interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertReplicationTask", reflect.TypeOf((*MockEngine)(nil).ConvertReplicationTask), ctx, task)
 }
 
+// DeleteHistoryBranch mocks base method.
+func (m *MockEngine) DeleteHistoryBranch(ctx context.Context, request *historyservice.DeleteHistoryBranchRequest) (*historyservice.DeleteHistoryBranchResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteHistoryBranch", ctx, request)
+	ret0, _ := ret[0].(*historyservice.DeleteHistoryBranchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteHistoryBranch indicates an expected call of DeleteHistoryBranch.
+func (mr *MockEngineMockRecorder) DeleteHistoryBranch(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryBranch", reflect.TypeOf((*MockEngine)(nil).DeleteHistoryBranch), ctx, request)
+}
+
 // DeleteWorkflowExecution mocks base method.
 func (m *MockEngine) DeleteWorkflowExecution(ctx context.Context, deleteRequest *historyservice.DeleteWorkflowExecutionRequest) (*historyservice.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -314,6 +329,51 @@ func (m *MockEngine) QueryWorkflow(ctx context.Context, request *historyservice.
 func (mr *MockEngineMockRecorder) QueryWorkflow(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryWorkflow", reflect.TypeOf((*MockEngine)(nil).QueryWorkflow), ctx, request)
+}
+
+// ReadHistoryBranch mocks base method.
+func (m *MockEngine) ReadHistoryBranch(ctx context.Context, request *historyservice.ReadHistoryBranchRequest) (*historyservice.ReadHistoryBranchResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadHistoryBranch", ctx, request)
+	ret0, _ := ret[0].(*historyservice.ReadHistoryBranchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadHistoryBranch indicates an expected call of ReadHistoryBranch.
+func (mr *MockEngineMockRecorder) ReadHistoryBranch(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranch", reflect.TypeOf((*MockEngine)(nil).ReadHistoryBranch), ctx, request)
+}
+
+// ReadHistoryBranchReverse mocks base method.
+func (m *MockEngine) ReadHistoryBranchReverse(ctx context.Context, request *historyservice.ReadHistoryBranchReverseRequest) (*historyservice.ReadHistoryBranchReverseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadHistoryBranchReverse", ctx, request)
+	ret0, _ := ret[0].(*historyservice.ReadHistoryBranchReverseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadHistoryBranchReverse indicates an expected call of ReadHistoryBranchReverse.
+func (mr *MockEngineMockRecorder) ReadHistoryBranchReverse(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranchReverse", reflect.TypeOf((*MockEngine)(nil).ReadHistoryBranchReverse), ctx, request)
+}
+
+// ReadRawHistoryBranch mocks base method.
+func (m *MockEngine) ReadRawHistoryBranch(ctx context.Context, request *historyservice.ReadRawHistoryBranchRequest) (*historyservice.ReadRawHistoryBranchResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadRawHistoryBranch", ctx, request)
+	ret0, _ := ret[0].(*historyservice.ReadRawHistoryBranchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadRawHistoryBranch indicates an expected call of ReadRawHistoryBranch.
+func (mr *MockEngineMockRecorder) ReadRawHistoryBranch(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadRawHistoryBranch", reflect.TypeOf((*MockEngine)(nil).ReadRawHistoryBranch), ctx, request)
 }
 
 // ReapplyEvents mocks base method.
@@ -719,6 +779,21 @@ func (m *MockEngine) TerminateWorkflowExecution(ctx context.Context, request *hi
 func (mr *MockEngineMockRecorder) TerminateWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).TerminateWorkflowExecution), ctx, request)
+}
+
+// TrimHistoryBranch mocks base method.
+func (m *MockEngine) TrimHistoryBranch(ctx context.Context, request *historyservice.TrimHistoryBranchRequest) (*historyservice.TrimHistoryBranchResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TrimHistoryBranch", ctx, request)
+	ret0, _ := ret[0].(*historyservice.TrimHistoryBranchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TrimHistoryBranch indicates an expected call of TrimHistoryBranch.
+func (mr *MockEngineMockRecorder) TrimHistoryBranch(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrimHistoryBranch", reflect.TypeOf((*MockEngine)(nil).TrimHistoryBranch), ctx, request)
 }
 
 // UnsubscribeReplicationNotification mocks base method.
