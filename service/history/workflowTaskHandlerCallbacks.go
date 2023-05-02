@@ -406,14 +406,16 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
-	if ms.GetWorkerVersionStamp() != nil {
-		if !request.UseVersioning || len(request.WorkerVersionStamp.GetBuildId()) == 0 {
-			return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
-		}
+	if ms.GetWorkerVersionStamp().GetUseVersioning() && !request.GetWorkerVersionStamp().UseVersioning {
+		return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
 	}
 
-	maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name().String())
-	if ms.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {
+	limits := workflow.WorkflowTaskCompletionLimits{
+		MaxResetPoints:     handler.config.MaxAutoResetPoints(namespaceEntry.Name().String()),
+		MaxTrackedBuildIDs: handler.config.MaxTrackedBuildIDs(namespaceEntry.Name().String()),
+	}
+	// TODO: this metric is inaccurate, it should only be emitted if a new binary checksum (or build ID) is added in this completion.
+	if ms.GetExecutionInfo().AutoResetPoints != nil && limits.MaxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {
 		handler.metricsHandler.Counter(metrics.AutoResetPointsLimitExceededCounter.GetMetricName()).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
@@ -442,13 +444,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			}
 			ms.ClearStickyness()
 		} else {
-			completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, maxResetPoints)
+			completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, limits)
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, maxResetPoints)
+		completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, limits)
 		if err != nil {
 			return nil, err
 		}

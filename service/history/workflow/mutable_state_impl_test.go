@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -1048,4 +1049,60 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 			s.NotEqual(common.EmptyEventID, execInfo.WorkflowTaskStartedEventId)
 		})
 	}
+}
+
+func (s *mutableStateSuite) TestTrackBuildIDFromCompletion() {
+	dbState := s.buildWorkflowMutableState()
+	var err error
+	s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// Max 0
+	s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxTrackedBuildIDs: 0})
+	s.Equal([]string{}, s.getBuildIDsFromMutableState())
+	s.Equal([]string{}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+	s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	s.Equal([]string{"0.1"}, s.getBuildIDsFromMutableState())
+	s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+	// Add the same build ID
+	s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	s.Equal([]string{"0.1"}, s.getBuildIDsFromMutableState())
+	s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+	s.mutableState.trackBuildIDFromCompletion("0.2", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	s.Equal([]string{"0.1", "0.2"}, s.getBuildIDsFromMutableState())
+	s.Equal([]string{"0.1", "0.2"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+	// Limit applies
+	s.mutableState.trackBuildIDFromCompletion("0.3", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	s.Equal([]string{"0.2", "0.3"}, s.getBuildIDsFromMutableState())
+	s.Equal([]string{"0.2", "0.3"}, s.getResetPointsBinaryChecksumsFromMutableState())
+}
+
+func (s *mutableStateSuite) getBuildIDsFromMutableState() []string {
+	searchAttributes := s.mutableState.executionInfo.SearchAttributes
+	if searchAttributes == nil {
+		return []string{}
+	}
+
+	payload, found := searchAttributes[searchattribute.BuildIDs]
+	if !found {
+		return []string{}
+	}
+	decoded, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	s.NoError(err)
+	buildIDs, ok := decoded.([]string)
+	s.True(ok)
+	return buildIDs
+}
+
+func (s *mutableStateSuite) getResetPointsBinaryChecksumsFromMutableState() []string {
+	resetPoints := s.mutableState.executionInfo.GetAutoResetPoints().GetPoints()
+	binaryChecksums := make([]string, len(resetPoints))
+	for i, point := range resetPoints {
+		binaryChecksums[i] = point.GetBinaryChecksum()
+	}
+	return binaryChecksums
 }

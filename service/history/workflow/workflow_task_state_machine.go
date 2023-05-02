@@ -212,7 +212,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 ) error {
 	m.beforeAddWorkflowTaskCompletedEvent()
-	return m.afterAddWorkflowTaskCompletedEvent(event, math.MaxInt32)
+	return m.afterAddWorkflowTaskCompletedEvent(event, WorkflowTaskCompletionLimits{math.MaxInt32, math.MaxInt32})
 }
 
 func (m *workflowTaskStateMachine) ReplicateWorkflowTaskFailedEvent() error {
@@ -500,7 +500,7 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	workflowTask *WorkflowTaskInfo,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-	maxResetPoints int,
+	limits WorkflowTaskCompletionLimits,
 ) (*historypb.HistoryEvent, error) {
 
 	// Capture if WorkflowTaskScheduled and WorkflowTaskStarted events were created
@@ -534,22 +534,17 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	}
 
 	// Now write the completed event
-	versionStamp := request.WorkerVersionStamp
-	if !request.UseVersioning {
-		versionStamp = nil
-	}
-	// TODO: omit BinaryChecksum if version stamp is present and matches BinaryChecksum
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
 		workflowTask.StartedEventID,
 		request.Identity,
 		request.BinaryChecksum,
-		versionStamp,
+		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
 	)
 
-	err := m.afterAddWorkflowTaskCompletedEvent(event, maxResetPoints)
+	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
 	if err != nil {
 		return nil, err
 	}
@@ -876,12 +871,16 @@ func (m *workflowTaskStateMachine) beforeAddWorkflowTaskCompletedEvent() {
 
 func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
-	maxResetPoints int,
+	limits WorkflowTaskCompletionLimits,
 ) error {
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.WorkerVersionStamp = attrs.GetWorkerVersion()
-	return m.ms.addBinaryCheckSumIfNotExists(event, maxResetPoints)
+	buildID := attrs.GetWorkerVersion().GetBuildId()
+	if buildID != "" {
+		return m.ms.trackBuildIDFromCompletion(buildID, event.GetEventId(), limits)
+	}
+	return m.ms.addBinaryCheckSumIfNotExists(event, limits.MaxResetPoints)
 }
 
 func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
