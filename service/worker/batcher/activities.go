@@ -265,7 +265,7 @@ func startTaskProcessor(
 							WorkflowId: workflowID,
 							RunId:      runID,
 						}
-						eventId, err := getResetEventIDByType(ctx, batchParams.ResetParams.ResetType, batchParams.Namespace, workflowExecution, frontendClient)
+						eventId, err := getResetEventIDByType(ctx, batchParams.ResetParams.ResetType, batchParams.Namespace, workflowExecution, frontendClient, logger)
 						if err != nil {
 							return err
 						}
@@ -333,36 +333,49 @@ func isDone(ctx context.Context) bool {
 	}
 }
 
-func getResetEventIDByType(ctx context.Context, resetType enumspb.ResetType, namespace string, workflowExecution *commonpb.WorkflowExecution, frontendClient workflowservice.WorkflowServiceClient) (int64, error) {
+func getResetEventIDByType(ctx context.Context,
+	resetType enumspb.ResetType,
+	namespace string,
+	workflowExecution *commonpb.WorkflowExecution,
+	frontendClient workflowservice.WorkflowServiceClient,
+	logger log.Logger) (int64, error) {
 	switch resetType {
 	case enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK:
-		return getFirstWorkflowTaskEventID(ctx, resetType, namespace, workflowExecution, frontendClient)
+		return getFirstWorkflowTaskEventID(ctx, resetType, namespace, workflowExecution, frontendClient, logger)
 	case enumspb.RESET_TYPE_LAST_WORKFLOW_TASK:
-		return getLastWorkflowTaskEventID(ctx, resetType, namespace, workflowExecution, frontendClient)
+		return getLastWorkflowTaskEventID(ctx, resetType, namespace, workflowExecution, frontendClient, logger)
 	default:
 		errorMsg := fmt.Sprintf("provided reset type (%v) is not supported.", resetType)
 		return 0, serviceerror.NewInvalidArgument(errorMsg)
 	}
 }
 
-func getLastWorkflowTaskEventID(ctx context.Context, resetType enumspb.ResetType, namespace string, workflowExecution *commonpb.WorkflowExecution, frontendClient workflowservice.WorkflowServiceClient) (workflowTaskEventID int64, err error) {
-	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+func getLastWorkflowTaskEventID(ctx context.Context,
+	resetType enumspb.ResetType,
+	namespace string,
+	workflowExecution *commonpb.WorkflowExecution,
+	frontendClient workflowservice.WorkflowServiceClient,
+	logger log.Logger) (workflowTaskEventID int64, err error) {
+	req := &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 		Namespace:       namespace,
 		Execution:       workflowExecution,
 		MaximumPageSize: 1000,
 		NextPageToken:   nil,
 	}
 	for {
-		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
+		resp, err := frontendClient.GetWorkflowExecutionHistoryReverse(ctx, req)
 		if err != nil {
-			//TODO: What type of error should we return here?
-			return 0, errors.New("GetWorkflowExecutionHistory failed")
+			logger.Error("failed to run GetWorkflowExecutionHistoryReverse")
+			return 0, errors.New("failed to get workflow execution history")
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 				workflowTaskEventID = e.GetEventId()
+				return workflowTaskEventID, nil
 			} else if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-				workflowTaskEventID = e.GetEventId() + 1
+				if workflowTaskEventID == 0 {
+					workflowTaskEventID = e.GetEventId() + 1
+				}
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
@@ -372,13 +385,17 @@ func getLastWorkflowTaskEventID(ctx context.Context, resetType enumspb.ResetType
 		}
 	}
 	if workflowTaskEventID == 0 {
-		//TODO: what type of error should we return here?
-		return 0, errors.New("GetLastWorkflowTaskID failed:unable to find any scheduled or completed task")
+		return 0, errors.New("unable to find any scheduled or completed task")
 	}
 	return
 }
 
-func getFirstWorkflowTaskEventID(ctx context.Context, resetType enumspb.ResetType, namespace string, workflowExecution *commonpb.WorkflowExecution, frontendClient workflowservice.WorkflowServiceClient) (workflowTaskEventID int64, err error) {
+func getFirstWorkflowTaskEventID(ctx context.Context,
+	resetType enumspb.ResetType,
+	namespace string,
+	workflowExecution *commonpb.WorkflowExecution,
+	frontendClient workflowservice.WorkflowServiceClient,
+	logger log.Logger) (workflowTaskEventID int64, err error) {
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       workflowExecution,
@@ -388,7 +405,7 @@ func getFirstWorkflowTaskEventID(ctx context.Context, resetType enumspb.ResetTyp
 	for {
 		resp, err := frontendClient.GetWorkflowExecutionHistory(ctx, req)
 		if err != nil {
-			//TODO: What type of error should we return here?
+			logger.Error("failed to run GetWorkflowExecutionHistory")
 			return 0, errors.New("GetWorkflowExecutionHistory failed")
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
@@ -409,8 +426,7 @@ func getFirstWorkflowTaskEventID(ctx context.Context, resetType enumspb.ResetTyp
 		}
 	}
 	if workflowTaskEventID == 0 {
-		//TODO: what type of error should we return here?
-		return 0, errors.New("GetFirstWorkflowTaskID failed: unable to find any scheduled or completed task")
+		return 0, errors.New("unable to find any scheduled or completed task")
 	}
 	return
 }
