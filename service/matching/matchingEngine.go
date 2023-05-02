@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	repication "go.temporal.io/server/api/replication/v1"
+	repicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -895,10 +895,10 @@ func (e *matchingEngineImpl) SeedReplicationQueueWithUserDataEntries(ctx context
 		return nil, err
 	}
 	for _, entry := range response.Entries {
-		err = e.namespaceReplicationQueue.Publish(ctx, &repication.ReplicationTask{
+		err = e.namespaceReplicationQueue.Publish(ctx, &repicationspb.ReplicationTask{
 			TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
-			Attributes: &repication.ReplicationTask_TaskQueueUserDataAttributes{
-				TaskQueueUserDataAttributes: &repication.TaskQueueUserDataAttributes{
+			Attributes: &repicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+				TaskQueueUserDataAttributes: &repicationspb.TaskQueueUserDataAttributes{
 					NamespaceId:   request.NamespaceId,
 					TaskQueueName: entry.TaskQueue,
 					UserData:      entry.Data,

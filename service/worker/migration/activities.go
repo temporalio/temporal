@@ -368,10 +368,12 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 	}
 
 	rateLimiter := quotas.NewRateLimiter(params.RPS, int(math.Ceil(params.RPS)))
-	var nextPageToken []byte
+	heartbeatDetails := struct {
+		nextPageToken []byte
+	}{}
 
 	if activity.HasHeartbeatDetails(ctx) {
-		if err := activity.GetHeartbeatDetails(ctx, &nextPageToken); err != nil {
+		if err := activity.GetHeartbeatDetails(ctx, &heartbeatDetails); err != nil {
 			return temporal.NewNonRetryableApplicationError("failed to load previous heartbeat details", "TypeError", err)
 		}
 	}
@@ -383,7 +385,7 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 
 		request := &matchingservice.SeedReplicationQueueWithUserDataEntriesRequest{
 			NamespaceId:   describeResponse.GetNamespaceInfo().Id,
-			NextPageToken: nextPageToken,
+			NextPageToken: heartbeatDetails.nextPageToken,
 			PageSize:      int32(params.PageSize),
 		}
 		response, err := a.matchingClient.SeedReplicationQueueWithUserDataEntries(ctx, request)
@@ -394,7 +396,7 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 		if len(response.NextPageToken) == 0 {
 			return nil
 		}
-		nextPageToken = response.NextPageToken
-		activity.RecordHeartbeat(ctx, nextPageToken)
+		heartbeatDetails.nextPageToken = response.NextPageToken
+		activity.RecordHeartbeat(ctx, heartbeatDetails)
 	}
 }

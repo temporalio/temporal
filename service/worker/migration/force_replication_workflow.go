@@ -30,7 +30,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -189,6 +189,10 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 }
 
 func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params ForceReplicationParams, onDone func(failureReason string)) error {
+	if workflow.GetVersion(ctx, taskQueueUserDataReplicationVersionMarker, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return nil
+	}
+
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		taskQueueUserDataReplicationDoneCh := workflow.GetSignalChannel(ctx, taskQueueUserDataReplicationDoneSignalType)
 		var errStr string
@@ -197,9 +201,8 @@ func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params Force
 		onDone(errStr)
 	})
 
-	// We only start the child workflow if run started with a new enough version of this workflow code and before we
-	// continue as new to avoid starting the child workflow more than once.
-	if workflow.GetVersion(ctx, taskQueueUserDataReplicationVersionMarker, workflow.DefaultVersion, 1) == workflow.DefaultVersion || params.ContinuedAsNewCount > 0 {
+	// We only start the child workflow before we continue as new to avoid starting the child workflow more than once.
+	if params.ContinuedAsNewCount > 0 {
 		return nil
 	}
 
@@ -207,7 +210,7 @@ func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params Force
 		WorkflowID: fmt.Sprintf("%s-task-queue-user-data-replicator", workflow.GetInfo(ctx).WorkflowExecution.ID),
 		// We're going to continue-as-new, and cannot wait for this child to complete, instead child will notify of
 		// its completion via signal.
-		ParentClosePolicy: enums.PARENT_CLOSE_POLICY_ABANDON,
+		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
 	}
 	childCtx := workflow.WithChildOptions(ctx, options)
 	input := TaskQueueUserDataReplicationParamsWithNamespace{
