@@ -44,7 +44,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	repication "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -497,10 +497,10 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, replicate boo
 		return err
 	}
 	if replicate && c.namespaceReplicationQueue != nil {
-		err = c.namespaceReplicationQueue.Publish(ctx, &repication.ReplicationTask{
+		err = c.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
 			TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
-			Attributes: &repication.ReplicationTask_TaskQueueUserDataAttributes{
-				TaskQueueUserDataAttributes: &repication.TaskQueueUserDataAttributes{
+			Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+				TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
 					NamespaceId:   c.taskQueueID.namespaceID.String(),
 					TaskQueueName: c.taskQueueID.BaseNameString(),
 					UserData:      newData.GetData(),
