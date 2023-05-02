@@ -89,4 +89,8 @@ service MatchingService {
     rpc InvalidateTaskQueueUserData (InvalidateTaskQueueUserDataRequest) returns (InvalidateTaskQueueUserDataResponse) {}
     // Fetch user data for a task queue, this request should always be routed to the node holding the task queue's root partition.
     rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
+
+    // Apply a user data replication event
+    rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns
+    (ApplyTaskQueueUserDataReplicationEventResponse) {}
 }

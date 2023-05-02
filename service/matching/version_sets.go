@@ -126,13 +126,20 @@ func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, r
 	targetedVersion := extractTargetedVersion(req)
 	findRes := findVersion(existingData, targetedVersion)
 	targetSetIdx, versionInSetIdx := findRes.setIdx, findRes.indexInSet
+	numExistingSets := len(existingData.GetVersionSets())
 	modifiedData := persistence.VersioningData{
-		VersionSets:            make([]*persistence.CompatibleVersionSet, len(existingData.GetVersionSets())),
+		VersionSets:            make([]*persistence.CompatibleVersionSet, numExistingSets),
 		DefaultUpdateTimestamp: existingData.GetDefaultUpdateTimestamp(),
 	}
 	copy(modifiedData.VersionSets, existingData.GetVersionSets())
 
 	if req.GetAddNewBuildIdInNewDefaultSet() != "" {
+		targetIsInDefaultSet := targetSetIdx == numExistingSets-1
+		targetIsOnlyBuildIdInSet := versionInSetIdx == 0 && len(existingData.VersionSets[numExistingSets-1].BuildIds) == 1
+		// Make the request idempotent
+		if numExistingSets > 0 && targetIsInDefaultSet && targetIsOnlyBuildIdInSet {
+			return existingData, nil
+		}
 		// If it's not already in the sets, add it as the new default set
 		if targetSetIdx != -1 {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
@@ -154,7 +161,17 @@ func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, r
 		if targetSetIdx != -1 {
 			// If the version does exist, this operation can't do anything meaningful, but we can fail if the user
 			// says the version is now compatible with some different set.
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
+			if compatSetIdx == targetSetIdx {
+				if addNew.GetMakeSetDefault() && targetSetIdx != numExistingSets-1 {
+					return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists and is not default for queue", targetedVersion))
+				}
+				if versionInSetIdx != len(existingData.GetVersionSets()[targetSetIdx].BuildIds)-1 {
+					return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists and is not default in set", targetedVersion))
+				}
+				// Make the operation idempotent
+				return existingData, nil
+			}
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("%s requested to be made compatible with %s but both versions exist and are incompatible", targetedVersion, compatVer))
 		}
 
 		// First duplicate the build IDs to avoid mutation
@@ -176,10 +193,26 @@ func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, r
 		if targetSetIdx == -1 {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
+		if targetSetIdx == numExistingSets-1 {
+			// Make the request idempotent
+			return existingData, nil
+		}
 		makeDefaultSet(&modifiedData, targetSetIdx, &timestamp)
 	} else if req.GetPromoteBuildIdWithinSet() != "" {
 		if targetSetIdx == -1 {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
+		}
+		if versionInSetIdx == len(existingData.GetVersionSets()[targetSetIdx].BuildIds)-1 {
+			// Make the request idempotent
+			return existingData, nil
+		}
+		// We're gonna have to copy here too to avoid mutating the original
+		numBuildIDs := len(existingData.GetVersionSets()[targetSetIdx].BuildIds)
+		buildIDSCopy := make([]*persistence.BuildID, numBuildIDs)
+		copy(buildIDSCopy, existingData.VersionSets[targetSetIdx].BuildIds)
+		modifiedData.VersionSets[targetSetIdx] = &persistence.CompatibleVersionSet{
+			SetIds:   existingData.VersionSets[targetSetIdx].SetIds,
+			BuildIds: buildIDSCopy,
 		}
 		makeVersionInSetDefault(&modifiedData, targetSetIdx, versionInSetIdx, &timestamp)
 	}

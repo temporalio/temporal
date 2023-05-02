@@ -112,6 +112,8 @@ type (
 		keyResolver          membership.ServiceResolver
 		clusterMeta          cluster.Metadata
 		timeSource           clock.TimeSource
+		// Only set if global namespaces are enabled on the cluster.
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 	}
 )
 
@@ -142,24 +144,26 @@ func NewEngine(
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 ) Engine {
 
 	return &matchingEngineImpl{
-		status:               common.DaemonStatusInitialized,
-		taskManager:          taskManager,
-		historyClient:        historyClient,
-		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		taskQueues:           make(map[taskQueueID]taskQueueManager),
-		taskQueueCount:       make(map[taskQueueCounterKey]int),
-		logger:               log.With(logger, tag.ComponentMatchingEngine),
-		metricsHandler:       metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
-		matchingClient:       matchingClient,
-		config:               config,
-		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
-		namespaceRegistry:    namespaceRegistry,
-		keyResolver:          resolver,
-		clusterMeta:          clusterMeta,
-		timeSource:           clock.NewRealTimeSource(), // No need to mock this at the moment
+		status:                    common.DaemonStatusInitialized,
+		taskManager:               taskManager,
+		historyClient:             historyClient,
+		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
+		taskQueues:                make(map[taskQueueID]taskQueueManager),
+		taskQueueCount:            make(map[taskQueueCounterKey]int),
+		logger:                    log.With(logger, tag.ComponentMatchingEngine),
+		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
+		matchingClient:            matchingClient,
+		config:                    config,
+		lockableQueryTaskMap:      lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
+		namespaceRegistry:         namespaceRegistry,
+		keyResolver:               resolver,
+		clusterMeta:               clusterMeta,
+		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
+		namespaceReplicationQueue: namespaceReplicationQueue,
 	}
 }
 
@@ -735,7 +739,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.UpdateUserData(hCtx.Context, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+	err = tqMgr.UpdateUserData(hCtx.Context, true, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		clock := data.GetClock()
 		if clock == nil {
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
@@ -851,6 +855,28 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 		}
 	}
 	return resp, nil
+}
+
+func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
+	hCtx *handlerContext,
+	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueueName := req.GetTaskQueue()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	if err != nil {
+		return nil, err
+	}
+	err = tqMgr.UpdateUserData(hCtx, false, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+		mergedUserData := *current
+		mergedUserData.VersioningData = MergeVersioningData(current.GetVersioningData(), req.GetUserData().GetVersioningData())
+		return &mergedUserData, nil
+	})
+	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
