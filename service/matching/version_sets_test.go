@@ -326,8 +326,8 @@ func TestCompatibleTargetsNotFound(t *testing.T) {
 	req := mkNewCompatReq("1.1", "1", false)
 	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
 	_, err := UpdateVersionSets(nextClock, data, req, 0, 0)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.NotFound{}, err)
+	var notFound *serviceerror.NotFound
+	assert.ErrorAs(t, err, &notFound)
 }
 
 func TestMakeExistingSetDefault(t *testing.T) {
@@ -406,8 +406,8 @@ func TestSayVersionIsCompatWithDifferentSetThanItsAlreadyCompatWithNotAllowed(t 
 
 	req = mkNewCompatReq("0.1", "1", false)
 	_, err = UpdateVersionSets(clock, data, req, 0, 0)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+	var invalidArgument *serviceerror.InvalidArgument
+	assert.ErrorAs(t, err, &invalidArgument)
 }
 
 func TestLimitsMaxSets(t *testing.T) {
@@ -417,8 +417,8 @@ func TestLimitsMaxSets(t *testing.T) {
 
 	req := mkNewDefReq("10")
 	_, err := UpdateVersionSets(clock, data, req, maxSets, 0)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.FailedPrecondition{}, err)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	assert.ErrorAs(t, err, &failedPrecondition)
 }
 
 func TestLimitsMaxBuildIDs(t *testing.T) {
@@ -428,8 +428,8 @@ func TestLimitsMaxBuildIDs(t *testing.T) {
 
 	req := mkNewDefReq("10")
 	_, err := UpdateVersionSets(clock, data, req, 0, maxBuildIDs)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.FailedPrecondition{}, err)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	assert.ErrorAs(t, err, &failedPrecondition)
 }
 
 func TestPromoteWithinVersion(t *testing.T) {
@@ -498,8 +498,8 @@ func TestAddToExistingSetAlreadyExtantVersionErrorsIfNotDefault(t *testing.T) {
 	assert.NoError(t, err)
 	req = mkNewCompatReq("1", "1.1", true)
 	_, err = UpdateVersionSets(clock, original, req, 0, 0)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+	var invalidArgument *serviceerror.InvalidArgument
+	assert.ErrorAs(t, err, &invalidArgument)
 }
 
 func TestAddToExistingSetAlreadyExtantVersionErrorsIfNotDefaultSet(t *testing.T) {
@@ -509,8 +509,8 @@ func TestAddToExistingSetAlreadyExtantVersionErrorsIfNotDefaultSet(t *testing.T)
 	assert.NoError(t, err)
 	req = mkNewCompatReq("1.1", "1", true)
 	_, err = UpdateVersionSets(clock, original, req, 0, 0)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+	var invalidArgument *serviceerror.InvalidArgument
+	assert.ErrorAs(t, err, &invalidArgument)
 }
 
 func TestPromoteWithinSetAlreadyPromotedIsANoop(t *testing.T) {
@@ -539,8 +539,8 @@ func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
 
 	req := mkNewDefReq("0")
 	_, err := UpdateVersionSets(clock, data, req, 0, 0)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+	var invalidArgument *serviceerror.InvalidArgument
+	assert.ErrorAs(t, err, &invalidArgument)
 }
 
 func TestAddAlreadyExtantVersionToAnotherSetErrors(t *testing.T) {
@@ -549,8 +549,8 @@ func TestAddAlreadyExtantVersionToAnotherSetErrors(t *testing.T) {
 
 	req := mkNewCompatReq("0", "1", false)
 	_, err := UpdateVersionSets(clock, data, req, 0, 0)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+	var invalidArgument *serviceerror.InvalidArgument
+	assert.ErrorAs(t, err, &invalidArgument)
 }
 
 func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
@@ -559,8 +559,8 @@ func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
 
 	req := mkExistingDefault("crab boi")
 	_, err := UpdateVersionSets(clock, data, req, 0, 0)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.NotFound{}, err)
+	var notFound *serviceerror.NotFound
+	assert.ErrorAs(t, err, &notFound)
 }
 
 func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
@@ -569,8 +569,8 @@ func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
 
 	req := mkPromoteInSet("i'd rather be writing rust ;)")
 	_, err := UpdateVersionSets(clock, data, req, 0, 0)
-	assert.Error(t, err)
-	assert.IsType(t, &serviceerror.NotFound{}, err)
+	var notFound *serviceerror.NotFound
+	assert.ErrorAs(t, err, &notFound)
 }
 
 func TestToBuildIdOrderingResponseTrimsResponse(t *testing.T) {

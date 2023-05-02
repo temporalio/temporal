@@ -97,6 +97,8 @@ type (
 		forwardedFrom string
 	}
 
+	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)
+
 	taskQueueManager interface {
 		Start()
 		Stop()
@@ -119,7 +121,7 @@ type (
 		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error)
 		// UpdateUserData allows callers to update user data for this task queue
 		// Extra care should be taken to avoid mutating the existing data in the update function.
-		UpdateUserData(ctx context.Context, replicate bool, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) error
+		UpdateUserData(ctx context.Context, replicate bool, updateFn UserDataUpdateFunc) error
 		// InvalidateUserData allows callers to invalidate cached data on this task queue
 		InvalidateUserData(request *matchingservice.InvalidateTaskQueueUserDataRequest) error
 		CancelPoller(pollerID string)
@@ -483,7 +485,7 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 }
 
 //nolint:revive // control coupling
-func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, replicate bool, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) error {
+func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, replicate bool, updateFn UserDataUpdateFunc) error {
 	newData, err := c.db.UpdateUserData(ctx, updateFn)
 	c.signalIfFatal(err)
 	if err != nil {

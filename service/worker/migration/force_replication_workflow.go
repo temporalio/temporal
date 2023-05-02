@@ -169,12 +169,14 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	}
 
 	if params.NextPageToken == nil {
-		err := workflow.Await(ctx, func() bool { return params.TaskQueueUserDataReplicationStatus.Done })
-		if err != nil {
-			return err
-		}
-		if params.TaskQueueUserDataReplicationStatus.FailureMessage != "" {
-			return fmt.Errorf("task queue user data replication failed: %v", params.TaskQueueUserDataReplicationStatus.FailureMessage)
+		if workflow.GetVersion(ctx, taskQueueUserDataReplicationVersionMarker, workflow.DefaultVersion, 1) > workflow.DefaultVersion {
+			err := workflow.Await(ctx, func() bool { return params.TaskQueueUserDataReplicationStatus.Done })
+			if err != nil {
+				return err
+			}
+			if params.TaskQueueUserDataReplicationStatus.FailureMessage != "" {
+				return fmt.Errorf("task queue user data replication failed: %v", params.TaskQueueUserDataReplicationStatus.FailureMessage)
+			}
 		}
 		return nil
 	}
@@ -195,6 +197,8 @@ func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params Force
 		onDone(errStr)
 	})
 
+	// We only start the child workflow if run started with a new enough version of this workflow code and before we
+	// continue as new to avoid starting the child workflow more than once.
 	if workflow.GetVersion(ctx, taskQueueUserDataReplicationVersionMarker, workflow.DefaultVersion, 1) == workflow.DefaultVersion || params.ContinuedAsNewCount > 0 {
 		return nil
 	}
