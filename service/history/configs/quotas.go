@@ -77,6 +77,11 @@ var (
 		"DeleteWorkflowVisibilityRecord":         0,
 		"UpdateWorkflowExecution":                0,
 		"StreamWorkflowReplicationMessages":      0,
+		"ReadHistoryBranch":                      0,
+		"ReadHistoryBranchReverse":               0,
+		"ReadRawHistoryBranch":                   0,
+		"TrimHistoryBranch":                      0,
+		"DeleteHistoryBranch":                    0,
 	}
 
 	APIPrioritiesOrdered = []int{0}

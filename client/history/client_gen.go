@@ -58,6 +58,30 @@ func (c *clientImpl) CloseShard(
 	return response, nil
 }
 
+func (c *clientImpl) DeleteHistoryBranch(
+	ctx context.Context,
+	request *historyservice.DeleteHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteHistoryBranchResponse, error) {
+	client, err := c.getClientForShardID(request.GetShardId())
+	if err != nil {
+		return nil, err
+	}
+	var response *historyservice.DeleteHistoryBranchResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DeleteHistoryBranch(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
@@ -365,6 +389,78 @@ func (c *clientImpl) QueryWorkflow(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.QueryWorkflow(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) ReadHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReadHistoryBranchResponse, error) {
+	client, err := c.getClientForShardID(request.GetShardId())
+	if err != nil {
+		return nil, err
+	}
+	var response *historyservice.ReadHistoryBranchResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ReadHistoryBranch(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) ReadHistoryBranchReverse(
+	ctx context.Context,
+	request *historyservice.ReadHistoryBranchReverseRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReadHistoryBranchReverseResponse, error) {
+	client, err := c.getClientForShardID(request.GetShardId())
+	if err != nil {
+		return nil, err
+	}
+	var response *historyservice.ReadHistoryBranchReverseResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ReadHistoryBranchReverse(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) ReadRawHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadRawHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReadRawHistoryBranchResponse, error) {
+	client, err := c.getClientForShardID(request.GetShardId())
+	if err != nil {
+		return nil, err
+	}
+	var response *historyservice.ReadRawHistoryBranchResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ReadRawHistoryBranch(ctx, request, opts...)
 		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)
@@ -1019,6 +1115,30 @@ func (c *clientImpl) TerminateWorkflowExecution(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.TerminateWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) TrimHistoryBranch(
+	ctx context.Context,
+	request *historyservice.TrimHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.TrimHistoryBranchResponse, error) {
+	client, err := c.getClientForShardID(request.GetShardId())
+	if err != nil {
+		return nil, err
+	}
+	var response *historyservice.TrimHistoryBranchResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.TrimHistoryBranch(ctx, request, opts...)
 		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)
