@@ -370,7 +370,7 @@ func getLastWorkflowTaskEventID(ctx context.Context,
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				workflowTaskEventID = e.GetEventId()
+				workflowTaskEventID = e.GetWorkflowTaskCompletedEventAttributes().GetScheduledEventId()
 				return workflowTaskEventID, nil
 			} else if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
 				// if there is no task completed event, set it to first scheduled event + 1
@@ -408,7 +408,7 @@ func getFirstWorkflowTaskEventID(ctx context.Context,
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				workflowTaskEventID = e.GetEventId()
+				workflowTaskEventID = e.GetWorkflowTaskCompletedEventAttributes().GetScheduledEventId()
 				return workflowTaskEventID, nil
 			}
 			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
