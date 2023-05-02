@@ -30,7 +30,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	serverenumbspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/primitives"
 )
@@ -307,6 +307,6 @@ func ReasonTag(value ReasonString) Tag {
 }
 
 // ReplicationTaskTypeTag returns a new replication task type tag.
-func ReplicationTaskTypeTag(value serverenumbspb.ReplicationTaskType) Tag {
+func ReplicationTaskTypeTag(value enumsspb.ReplicationTaskType) Tag {
 	return &tagImpl{key: replicationTaskType, value: value.String()}
 }
