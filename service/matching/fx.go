@@ -112,7 +112,7 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 }
 
 // This type is used to ensure the replicator only gets set if global namespaces are enabled on this cluster.
-// askQueueReplicatorNamespaceReplicationQueueProvider below.
+// See NamespaceReplicationQueueProvider below.
 type TaskQueueReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 
 func NamespaceReplicationQueueProvider(
