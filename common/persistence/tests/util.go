@@ -76,7 +76,7 @@ func RandomSnapshot(
 		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
-		UpdateInfos:         RandomUpdateInfoMap(),
+		UpdateInfos:         RandomStringUpdateInfoMap(),
 
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer:    {},
@@ -117,6 +117,8 @@ func RandomMutation(
 		DeleteSignalInfos:         map[int64]struct{}{rand.Int63(): {}},
 		UpsertSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 		DeleteSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
+		UpsertUpdateInfos:         RandomStringUpdateInfoMap(),
+		DeleteUpdateInfos:         map[string]struct{}{uuid.NewString(): {}},
 		// NewBufferedEvents: see below
 		// ClearBufferedEvents: see below
 
@@ -203,7 +205,7 @@ func RandomInt64SignalInfoMap() map[int64]*persistencespb.SignalInfo {
 	}
 }
 
-func RandomUpdateInfoMap() map[string]*persistencespb.UpdateInfo {
+func RandomStringUpdateInfoMap() map[string]*persistencespb.UpdateInfo {
 	return map[string]*persistencespb.UpdateInfo{
 		uuid.NewString(): RandomUpdateInfo(),
 	}
