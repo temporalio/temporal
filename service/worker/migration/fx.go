@@ -31,12 +31,12 @@ import (
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
@@ -48,7 +48,7 @@ type (
 		NamespaceRegistry namespace.Registry
 		HistoryClient     historyservice.HistoryServiceClient
 		FrontendClient    workflowservice.WorkflowServiceClient
-		MatchingClient    matchingservice.MatchingServiceClient
+		MatchingClient    resource.MatchingClient
 		Logger            log.Logger
 		MetricsHandler    metrics.Handler
 	}
