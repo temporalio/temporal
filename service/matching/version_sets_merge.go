@@ -27,7 +27,7 @@ package matching
 import (
 	"sort"
 
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
 
@@ -49,7 +49,7 @@ func mergeSetIDs(a []string, b []string) []string {
 }
 
 // Check if a set contains any of the given set IDs.
-func setContainsSetIDs(set *persistencepb.CompatibleVersionSet, ids []string) bool {
+func setContainsSetIDs(set *persistencespb.CompatibleVersionSet, ids []string) bool {
 	for _, needle := range ids {
 		for _, id := range set.SetIds {
 			if needle == id {
@@ -60,7 +60,7 @@ func setContainsSetIDs(set *persistencepb.CompatibleVersionSet, ids []string) bo
 	return false
 }
 
-func findSetWithSetIDs(sets []*persistencepb.CompatibleVersionSet, ids []string) *persistencepb.CompatibleVersionSet {
+func findSetWithSetIDs(sets []*persistencespb.CompatibleVersionSet, ids []string) *persistencespb.CompatibleVersionSet {
 	for _, set := range sets {
 		if setContainsSetIDs(set, ids) {
 			return set
@@ -70,13 +70,13 @@ func findSetWithSetIDs(sets []*persistencepb.CompatibleVersionSet, ids []string)
 }
 
 type buildIDInfo struct {
-	state                persistencepb.BuildID_State
+	state                persistencespb.BuildID_State
 	stateUpdateTimestamp hlc.Clock
 	setIDs               []string
 	madeDefaultAt        hlc.Clock
 }
 
-func collectBuildIDInfo(sets []*persistencepb.CompatibleVersionSet) map[string]buildIDInfo {
+func collectBuildIDInfo(sets []*persistencespb.CompatibleVersionSet) map[string]buildIDInfo {
 	buildIDToInfo := make(map[string]buildIDInfo, 0)
 	for _, set := range sets {
 		lastIdx := len(set.BuildIds) - 1
@@ -117,15 +117,15 @@ func collectBuildIDInfo(sets []*persistencepb.CompatibleVersionSet) map[string]b
 	return buildIDToInfo
 }
 
-func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []string) []*persistencepb.CompatibleVersionSet {
-	sets := make([]*persistencepb.CompatibleVersionSet, 0)
+func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []string) []*persistencespb.CompatibleVersionSet {
+	sets := make([]*persistencespb.CompatibleVersionSet, 0)
 	for id, info := range buildIDToInfo {
 		set := findSetWithSetIDs(sets, info.setIDs)
 		if set == nil {
 			defaultTimestamp := hlc.Zero(0)
-			set = &persistencepb.CompatibleVersionSet{
+			set = &persistencespb.CompatibleVersionSet{
 				SetIds:                 info.setIDs,
-				BuildIds:               make([]*persistencepb.BuildID, 0),
+				BuildIds:               make([]*persistencespb.BuildID, 0),
 				DefaultUpdateTimestamp: &defaultTimestamp,
 			}
 			sets = append(sets, set)
@@ -133,7 +133,7 @@ func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []strin
 			set.SetIds = mergeSetIDs(set.SetIds, info.setIDs)
 		}
 		timestamp := info.stateUpdateTimestamp
-		buildID := &persistencepb.BuildID{
+		buildID := &persistencespb.BuildID{
 			Id:                   id,
 			State:                info.state,
 			StateUpdateTimestamp: &timestamp,
@@ -162,7 +162,7 @@ func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []strin
 	return sets
 }
 
-func sortSets(sets []*persistencepb.CompatibleVersionSet, defaultSetIds []string) {
+func sortSets(sets []*persistencespb.CompatibleVersionSet, defaultSetIds []string) {
 	sort.Slice(sets, func(i, j int) bool {
 		si := sets[i]
 		sj := sets[j]
@@ -181,7 +181,7 @@ func sortSets(sets []*persistencepb.CompatibleVersionSet, defaultSetIds []string
 // If a build ID appears in different sets in the different structures, those sets will be merged.
 // The merged data's per set default and global default will be set according to the latest timestamps in the sources.
 // if (a) is nil, (b) is returned as is, otherwise, if (b) is nil (a) is returned as is.
-func MergeVersioningData(a *persistencepb.VersioningData, b *persistencepb.VersioningData) *persistencepb.VersioningData {
+func MergeVersioningData(a *persistencespb.VersioningData, b *persistencespb.VersioningData) *persistencespb.VersioningData {
 	if a == nil {
 		return b
 	} else if b == nil {
@@ -201,7 +201,7 @@ func MergeVersioningData(a *persistencepb.VersioningData, b *persistencepb.Versi
 	// Build the merged compatible sets using collected build ID information
 	sets := intoVersionSets(buildIDToInfo, defaultSetIds)
 
-	return &persistencepb.VersioningData{
+	return &persistencespb.VersioningData{
 		VersionSets:            sets,
 		DefaultUpdateTimestamp: &maxDefaultTimestamp,
 	}

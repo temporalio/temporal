@@ -31,33 +31,33 @@ import (
 	"encoding/base64"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
 
 // ToBuildIdOrderingResponse transforms the internal VersioningData representation to public representation.
 // If maxSets is given, the last sets up to maxSets will be returned.
-func ToBuildIdOrderingResponse(data *persistence.VersioningData, maxSets int) *workflowservice.GetWorkerBuildIdCompatibilityResponse {
+func ToBuildIdOrderingResponse(data *persistencespb.VersioningData, maxSets int) *workflowservice.GetWorkerBuildIdCompatibilityResponse {
 	lenSets := len(data.GetVersionSets())
 	numSets := lenSets
 	if maxSets > 0 && numSets > maxSets {
 		numSets = maxSets
 	}
-	versionSets := make([]*taskqueue.CompatibleVersionSet, numSets)
+	versionSets := make([]*taskqueuepb.CompatibleVersionSet, numSets)
 	for i := range versionSets {
 		set := data.GetVersionSets()[i+lenSets-numSets]
 		buildIds := make([]string, len(set.GetBuildIds()))
 		for j, version := range set.GetBuildIds() {
 			buildIds[j] = version.Id
 		}
-		versionSets[i] = &taskqueue.CompatibleVersionSet{BuildIds: buildIds}
+		versionSets[i] = &taskqueuepb.CompatibleVersionSet{BuildIds: buildIds}
 	}
 	return &workflowservice.GetWorkerBuildIdCompatibilityResponse{MajorVersionSets: versionSets}
 }
 
-func checkLimits(g *persistence.VersioningData, maxSets, maxBuildIDs int) error {
+func checkLimits(g *persistencespb.VersioningData, maxSets, maxBuildIDs int) error {
 	sets := g.GetVersionSets()
 	if maxSets > 0 && len(sets) > maxSets {
 		return serviceerror.NewFailedPrecondition(fmt.Sprintf("update would exceed number of compatible version sets permitted in namespace dynamic config (%v/%v)", len(sets), maxSets))
@@ -102,7 +102,7 @@ func checkLimits(g *persistence.VersioningData, maxSets, maxBuildIDs int) error 
 // Deletions are performed by a background process which verifies build IDs are no longer in use and safe to delete (not yet implemented).
 //
 // Update may fail with FailedPrecondition if it would cause exceeding the supplied limits.
-func UpdateVersionSets(clock hlc.Clock, data *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIDs int) (*persistence.VersioningData, error) {
+func UpdateVersionSets(clock hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIDs int) (*persistencespb.VersioningData, error) {
 	data, err := updateImpl(clock, data, req)
 	if err != nil {
 		return nil, err
@@ -121,14 +121,14 @@ func hashBuildID(buildID string) string {
 }
 
 //nolint:revive // cyclomatic complexity
-func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistence.VersioningData, error) {
+func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistencespb.VersioningData, error) {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
 	findRes := findVersion(existingData, targetedVersion)
 	targetSetIdx, versionInSetIdx := findRes.setIdx, findRes.indexInSet
 	numExistingSets := len(existingData.GetVersionSets())
-	modifiedData := persistence.VersioningData{
-		VersionSets:            make([]*persistence.CompatibleVersionSet, numExistingSets),
+	modifiedData := persistencespb.VersioningData{
+		VersionSets:            make([]*persistencespb.CompatibleVersionSet, numExistingSets),
 		DefaultUpdateTimestamp: existingData.GetDefaultUpdateTimestamp(),
 	}
 	copy(modifiedData.VersionSets, existingData.GetVersionSets())
@@ -145,9 +145,9 @@ func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, r
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("version %s already exists", targetedVersion))
 		}
 
-		modifiedData.VersionSets = append(modifiedData.VersionSets, &persistence.CompatibleVersionSet{
+		modifiedData.VersionSets = append(modifiedData.VersionSets, &persistencespb.CompatibleVersionSet{
 			SetIds:   []string{hashBuildID(targetedVersion)},
-			BuildIds: []*persistence.BuildID{{Id: targetedVersion, State: persistence.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}},
+			BuildIds: []*persistencespb.BuildID{{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}},
 		})
 		makeVersionInSetDefault(&modifiedData, len(modifiedData.VersionSets)-1, 0, &timestamp)
 		makeDefaultSet(&modifiedData, len(modifiedData.VersionSets)-1, &timestamp)
@@ -176,15 +176,15 @@ func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, r
 
 		// First duplicate the build IDs to avoid mutation
 		lastIdx := len(existingData.VersionSets[compatSetIdx].BuildIds)
-		modifiedData.VersionSets[compatSetIdx] = &persistence.CompatibleVersionSet{
+		modifiedData.VersionSets[compatSetIdx] = &persistencespb.CompatibleVersionSet{
 			SetIds:   existingData.VersionSets[compatSetIdx].SetIds,
-			BuildIds: make([]*persistence.BuildID, lastIdx+1),
+			BuildIds: make([]*persistencespb.BuildID, lastIdx+1),
 		}
 		copy(modifiedData.VersionSets[compatSetIdx].BuildIds, existingData.VersionSets[compatSetIdx].BuildIds)
 
 		// If the version doesn't exist, add it to the compatible set
 		modifiedData.VersionSets[compatSetIdx].BuildIds[lastIdx] =
-			&persistence.BuildID{Id: targetedVersion, State: persistence.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}
+			&persistencespb.BuildID{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}
 		makeVersionInSetDefault(&modifiedData, compatSetIdx, lastIdx, &timestamp)
 		if addNew.GetMakeSetDefault() {
 			makeDefaultSet(&modifiedData, compatSetIdx, &timestamp)
@@ -208,9 +208,9 @@ func updateImpl(timestamp hlc.Clock, existingData *persistence.VersioningData, r
 		}
 		// We're gonna have to copy here too to avoid mutating the original
 		numBuildIDs := len(existingData.GetVersionSets()[targetSetIdx].BuildIds)
-		buildIDSCopy := make([]*persistence.BuildID, numBuildIDs)
+		buildIDSCopy := make([]*persistencespb.BuildID, numBuildIDs)
 		copy(buildIDSCopy, existingData.VersionSets[targetSetIdx].BuildIds)
-		modifiedData.VersionSets[targetSetIdx] = &persistence.CompatibleVersionSet{
+		modifiedData.VersionSets[targetSetIdx] = &persistencespb.CompatibleVersionSet{
 			SetIds:   existingData.VersionSets[targetSetIdx].SetIds,
 			BuildIds: buildIDSCopy,
 		}
@@ -238,7 +238,7 @@ type findVersionRes struct {
 
 // Finds the version in the version sets, returning (set index, index within that set)
 // Returns -1, -1 if not found.
-func findVersion(data *persistence.VersioningData, buildID string) findVersionRes {
+func findVersion(data *persistencespb.VersioningData, buildID string) findVersionRes {
 	for setIx, set := range data.GetVersionSets() {
 		for versionIx, version := range set.GetBuildIds() {
 			if version.Id == buildID {
@@ -255,7 +255,7 @@ func findVersion(data *persistence.VersioningData, buildID string) findVersionRe
 	}
 }
 
-func makeDefaultSet(data *persistence.VersioningData, setIx int, timestamp *hlc.Clock) {
+func makeDefaultSet(data *persistencespb.VersioningData, setIx int, timestamp *hlc.Clock) {
 	data.DefaultUpdateTimestamp = timestamp
 	if len(data.VersionSets) <= 1 {
 		return
@@ -268,7 +268,7 @@ func makeDefaultSet(data *persistence.VersioningData, setIx int, timestamp *hlc.
 	}
 }
 
-func makeVersionInSetDefault(data *persistence.VersioningData, setIx, versionIx int, timestamp *hlc.Clock) {
+func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, versionIx int, timestamp *hlc.Clock) {
 	data.VersionSets[setIx].DefaultUpdateTimestamp = timestamp
 	setVersions := data.VersionSets[setIx].BuildIds
 	if len(setVersions) <= 1 {
