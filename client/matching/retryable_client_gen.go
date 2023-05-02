@@ -65,6 +65,21 @@ func (c *retryableClient) AddWorkflowTask(
 	return resp, err
 }
 
+func (c *retryableClient) ApplyTaskQueueUserDataReplicationEvent(
+	ctx context.Context,
+	request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
+	var resp *matchingservice.ApplyTaskQueueUserDataReplicationEventResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ApplyTaskQueueUserDataReplicationEvent(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CancelOutstandingPoll(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest,

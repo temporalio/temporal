@@ -75,6 +75,7 @@ func NewHandler(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -91,6 +92,7 @@ func NewHandler(
 			namespaceRegistry,
 			matchingServiceResolver,
 			clusterMetadata,
+			namespaceReplicationQueue,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}
@@ -322,6 +324,14 @@ func (h *Handler) GetTaskQueueUserData(
 ) (_ *matchingservice.GetTaskQueueUserDataResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.GetTaskQueueUserData(ctx, request)
+}
+
+func (h *Handler) ApplyTaskQueueUserDataReplicationEvent(
+	ctx context.Context,
+	request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+) (_ *matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.ApplyTaskQueueUserDataReplicationEvent(ctx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

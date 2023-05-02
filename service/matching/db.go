@@ -359,7 +359,6 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 	if err == nil {
 		db.userData = &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData}
 	}
-	// TODO: Put a message in the namespace replication queue
 	return db.userData, err
 }
 

@@ -100,6 +100,26 @@ func (mr *MockMatchingServiceClientMockRecorder) AddWorkflowTask(ctx, in interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTask", reflect.TypeOf((*MockMatchingServiceClient)(nil).AddWorkflowTask), varargs...)
 }
 
+// ApplyTaskQueueUserDataReplicationEvent mocks base method.
+func (m *MockMatchingServiceClient) ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, in *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest, opts ...grpc.CallOption) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ApplyTaskQueueUserDataReplicationEvent", varargs...)
+	ret0, _ := ret[0].(*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyTaskQueueUserDataReplicationEvent indicates an expected call of ApplyTaskQueueUserDataReplicationEvent.
+func (mr *MockMatchingServiceClientMockRecorder) ApplyTaskQueueUserDataReplicationEvent(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyTaskQueueUserDataReplicationEvent", reflect.TypeOf((*MockMatchingServiceClient)(nil).ApplyTaskQueueUserDataReplicationEvent), varargs...)
+}
+
 // CancelOutstandingPoll mocks base method.
 func (m *MockMatchingServiceClient) CancelOutstandingPoll(ctx context.Context, in *matchingservice.CancelOutstandingPollRequest, opts ...grpc.CallOption) (*matchingservice.CancelOutstandingPollResponse, error) {
 	m.ctrl.T.Helper()
@@ -371,6 +391,21 @@ func (m *MockMatchingServiceServer) AddWorkflowTask(arg0 context.Context, arg1 *
 func (mr *MockMatchingServiceServerMockRecorder) AddWorkflowTask(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTask", reflect.TypeOf((*MockMatchingServiceServer)(nil).AddWorkflowTask), arg0, arg1)
+}
+
+// ApplyTaskQueueUserDataReplicationEvent mocks base method.
+func (m *MockMatchingServiceServer) ApplyTaskQueueUserDataReplicationEvent(arg0 context.Context, arg1 *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyTaskQueueUserDataReplicationEvent", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyTaskQueueUserDataReplicationEvent indicates an expected call of ApplyTaskQueueUserDataReplicationEvent.
+func (mr *MockMatchingServiceServerMockRecorder) ApplyTaskQueueUserDataReplicationEvent(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyTaskQueueUserDataReplicationEvent", reflect.TypeOf((*MockMatchingServiceServer)(nil).ApplyTaskQueueUserDataReplicationEvent), arg0, arg1)
 }
 
 // CancelOutstandingPoll mocks base method.
