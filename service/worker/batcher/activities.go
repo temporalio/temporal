@@ -373,9 +373,8 @@ func getLastWorkflowTaskEventID(ctx context.Context,
 				workflowTaskEventID = e.GetEventId()
 				return workflowTaskEventID, nil
 			} else if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-				if workflowTaskEventID == 0 {
-					workflowTaskEventID = e.GetEventId() + 1
-				}
+				// if there is no task completed event, set it to first scheduled event + 1
+				workflowTaskEventID = e.GetEventId() + 1
 			}
 		}
 		if len(resp.NextPageToken) != 0 {
