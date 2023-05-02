@@ -137,8 +137,8 @@ func (s *adminHandlerSuite) SetupTest() {
 	}
 
 	cfg := &Config{
-		NumHistoryShards:               4,
-		PercentageFrontendToHistoryRPC: dynamicconfig.GetFloatPropertyFn(0.0),
+		NumHistoryShards:              4,
+		ReadEventsFromHistoryFraction: dynamicconfig.GetFloatPropertyFn(0.0),
 	}
 	args := NewAdminHandlerArgs{
 		persistenceConfig,

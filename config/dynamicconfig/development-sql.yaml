@@ -35,5 +35,3 @@ system.enableEagerWorkflowStart:
 limit.maxIDLength:
   - value: 255
     constraints: {}
-frontend.percentageFrontendToHistoryRPC:
-  - value: 0.0

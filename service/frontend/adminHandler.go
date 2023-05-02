@@ -952,7 +952,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	var historyEventBlobs []*commonpb.DataBlob
 	var nodeIDs []int64
 	var size int64
-	if adh.config.enableFrontendToHistoryRPC() {
+	if adh.config.readEventsFromHistory() {
 		panic("not implemented yet")
 	} else {
 		rawHistoryResponse, err := adh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
@@ -1753,7 +1753,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 	}
 
 	for _, branchToken := range branchTokens {
-		if adh.config.enableFrontendToHistoryRPC() {
+		if adh.config.readEventsFromHistory() {
 			panic("not implemented yet")
 		} else {
 			if err := adh.persistenceExecutionManager.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
@@ -1943,7 +1943,7 @@ func (adh *AdminHandler) getWorkflowCompletionEvent(
 	}
 
 	var historyEvents []*historypb.HistoryEvent
-	if adh.config.enableFrontendToHistoryRPC() {
+	if adh.config.readEventsFromHistory() {
 		panic("not implemented yet")
 	} else {
 		resp, err := adh.persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{

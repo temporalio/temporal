@@ -4128,7 +4128,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 
 	var historyEventBlobs []*commonpb.DataBlob
-	if wh.config.enableFrontendToHistoryRPC() {
+	if wh.config.readEventsFromHistory() {
 		panic("not implemented yet")
 	} else {
 		resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
@@ -4198,7 +4198,7 @@ func (wh *WorkflowHandler) getHistory(
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
-	if wh.config.enableFrontendToHistoryRPC() {
+	if wh.config.readEventsFromHistory() {
 		panic("not implemented yet")
 	} else {
 		historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchRequest{
@@ -4278,7 +4278,7 @@ func (wh *WorkflowHandler) getHistoryReverse(
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
-	if wh.config.enableFrontendToHistoryRPC() {
+	if wh.config.readEventsFromHistory() {
 		panic("not implemented yet")
 	} else {
 		historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
@@ -4880,7 +4880,7 @@ func (wh *WorkflowHandler) trimHistoryNode(
 		return // abort
 	}
 
-	if wh.config.enableFrontendToHistoryRPC() {
+	if wh.config.readEventsFromHistory() {
 		panic("not implemented yet")
 	} else {
 		_, err = wh.persistenceExecutionManager.TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{

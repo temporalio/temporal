@@ -32,5 +32,3 @@
 #  - value: true
 system.enableEagerWorkflowStart:
   - value: true
-frontend.percentageFrontendToHistoryRPC:
-  - value: 0.0
