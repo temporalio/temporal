@@ -206,13 +206,13 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 			// Make the request idempotent
 			return existingData, nil
 		}
-		// We're gonna have to copy here too to avoid mutating the original
+		// We're gonna have to copy here to to avoid mutating the original
 		numBuildIDs := len(existingData.GetVersionSets()[targetSetIdx].BuildIds)
-		buildIDSCopy := make([]*persistencespb.BuildID, numBuildIDs)
-		copy(buildIDSCopy, existingData.VersionSets[targetSetIdx].BuildIds)
+		buildIDsCopy := make([]*persistencespb.BuildID, numBuildIDs)
+		copy(buildIDsCopy, existingData.VersionSets[targetSetIdx].BuildIds)
 		modifiedData.VersionSets[targetSetIdx] = &persistencespb.CompatibleVersionSet{
 			SetIds:   existingData.VersionSets[targetSetIdx].SetIds,
-			BuildIds: buildIDSCopy,
+			BuildIds: buildIDsCopy,
 		}
 		makeVersionInSetDefault(&modifiedData, targetSetIdx, versionInSetIdx, &timestamp)
 	}
