@@ -39,11 +39,13 @@ import (
 	"go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
-	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/matchingservicemock/v1"
-	"google.golang.org/grpc"
+	"go.temporal.io/sdk/worker"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 )
 
 func TestForceReplicationWorkflow(t *testing.T) {
@@ -52,26 +54,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 
 	namespaceID := uuid.New()
 
-	ctrl := gomock.NewController(t)
-	mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
-	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
-	a := &activities{
-		matchingClient: mockMatchingClient,
-		frontendClient: mockFrontendClient,
-	}
-
-	mockFrontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Times(1).Return(&workflowservice.DescribeNamespaceResponse{NamespaceInfo: &namespace.NamespaceInfo{Id: namespaceID}}, nil)
-	mockMatchingClient.EXPECT().SeedReplicationQueueWithUserDataEntries(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(
-		func(ctx context.Context, request *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest, _ ...grpc.CallOption) (*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, error) {
-			if len(request.NextPageToken) == 0 {
-				return &matchingservice.SeedReplicationQueueWithUserDataEntriesResponse{
-					NextPageToken: []byte{0xac, 0xdc},
-				}, nil
-			}
-			return &matchingservice.SeedReplicationQueueWithUserDataEntriesResponse{
-				NextPageToken: []byte{},
-			}, nil
-		})
+	var a *activities
 
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
@@ -104,7 +87,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(totalPageCount)
 
 	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
-	env.RegisterActivity(a.SeedReplicationQueueWithUserDataEntries)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Times(1)
 
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
@@ -315,4 +298,97 @@ func TestForceReplicationWorkflow_TaskQueueReplicationFailure(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, status.TaskQueueUserDataReplicationStatus.Done)
 	assert.Contains(t, status.TaskQueueUserDataReplicationStatus.FailureMessage, "namespace is required")
+}
+
+func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestActivityEnvironment()
+
+	namespaceID := uuid.New()
+
+	ctrl := gomock.NewController(t)
+	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+	mockTaskManager := persistence.NewMockTaskManager(ctrl)
+	mockNamespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(ctrl)
+	a := &activities{
+		namespaceReplicationQueue: mockNamespaceReplicationQueue,
+		taskManager:               mockTaskManager,
+		frontendClient:            mockFrontendClient,
+		logger:                    log.NewCLILogger(),
+	}
+
+	// Once per attempt
+	mockFrontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Times(2).Return(&workflowservice.DescribeNamespaceResponse{NamespaceInfo: &namespace.NamespaceInfo{Id: namespaceID}}, nil)
+	// Twice for the first page due to expected failure of the first activity attempt, once for the second page
+	mockTaskManager.EXPECT().ListTaskQueueUserDataEntries(gomock.Any(), gomock.Any()).Times(3).DoAndReturn(
+		func(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.ListTaskQueueUserDataEntriesResponse, error) {
+			if len(request.NextPageToken) == 0 {
+				return &persistence.ListTaskQueueUserDataEntriesResponse{
+					NextPageToken: []byte{0xac, 0xdc},
+					Entries:       []*persistence.TaskQueueUserDataEntry{{TaskQueue: "a"}, {TaskQueue: "b"}},
+				}, nil
+			}
+			return &persistence.ListTaskQueueUserDataEntriesResponse{
+				NextPageToken: []byte{},
+				Entries:       make([]*persistence.TaskQueueUserDataEntry, 0),
+			}, nil
+		},
+	)
+
+	numCalls := 0
+	mockNamespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).Times(3).DoAndReturn(func(ctx context.Context, task *replicationspb.ReplicationTask) error {
+		assert.Equal(t, namespaceID, task.GetTaskQueueUserDataAttributes().NamespaceId)
+		numCalls++
+		if numCalls == 1 {
+			assert.Equal(t, "a", task.GetTaskQueueUserDataAttributes().TaskQueueName)
+		} else {
+			// b is published twice
+			assert.Equal(t, "b", task.GetTaskQueueUserDataAttributes().TaskQueueName)
+		}
+		if numCalls == 2 {
+			return errors.New("some random error")
+		}
+		return nil
+	})
+	iceptor := heartbeatRecordingInterceptor{}
+	env.SetWorkerOptions(worker.Options{MaxHeartbeatThrottleInterval: time.Nanosecond, DefaultHeartbeatThrottleInterval: time.Nanosecond, Interceptors: []interceptor.WorkerInterceptor{&iceptor}})
+	env.RegisterActivity(a)
+	params := TaskQueueUserDataReplicationParamsWithNamespace{
+		TaskQueueUserDataReplicationParams: TaskQueueUserDataReplicationParams{PageSize: 10, RPS: 1},
+		Namespace:                          "foo",
+	}
+	_, err := env.ExecuteActivity(a.SeedReplicationQueueWithUserDataEntries, params)
+	assert.Error(t, err)
+	assert.Equal(t, len(iceptor.recordedHeartbeats), 2)
+	assert.Equal(t, []byte(nil), iceptor.recordedHeartbeats[1].NextPageToken)
+	assert.Equal(t, 1, iceptor.recordedHeartbeats[1].IndexInPage)
+	env.SetHeartbeatDetails(iceptor.recordedHeartbeats[1])
+	_, err = env.ExecuteActivity(a.SeedReplicationQueueWithUserDataEntries, params)
+	assert.NoError(t, err)
+}
+
+// The SDK's test environment throttles emitted heartbeat forcing us to use an interceptor to record the heartbeat details
+type heartbeatRecordingInterceptor struct {
+	interceptor.WorkerInterceptorBase
+	interceptor.ActivityInboundInterceptorBase
+	interceptor.ActivityOutboundInterceptorBase
+	recordedHeartbeats []seedReplicationQueueWithUserDataEntriesHeartbeatDetails
+	T                  *testing.T
+}
+
+func (i *heartbeatRecordingInterceptor) InterceptActivity(ctx context.Context, next interceptor.ActivityInboundInterceptor) interceptor.ActivityInboundInterceptor {
+	i.ActivityInboundInterceptorBase.Next = next
+	return i
+}
+
+func (i *heartbeatRecordingInterceptor) Init(outbound interceptor.ActivityOutboundInterceptor) error {
+	i.ActivityOutboundInterceptorBase.Next = outbound
+	return i.ActivityInboundInterceptorBase.Init(i)
+}
+
+func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...interface{}) {
+	d, ok := details[0].(seedReplicationQueueWithUserDataEntriesHeartbeatDetails)
+	assert.True(i.T, ok, "invalid heartbeat details")
+	i.recordedHeartbeats = append(i.recordedHeartbeats, d)
+	i.ActivityOutboundInterceptorBase.Next.RecordHeartbeat(ctx, details...)
 }

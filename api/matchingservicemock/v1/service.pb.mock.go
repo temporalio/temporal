@@ -320,26 +320,6 @@ func (mr *MockMatchingServiceClientMockRecorder) RespondQueryTaskCompleted(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceClient)(nil).RespondQueryTaskCompleted), varargs...)
 }
 
-// SeedReplicationQueueWithUserDataEntries mocks base method.
-func (m *MockMatchingServiceClient) SeedReplicationQueueWithUserDataEntries(ctx context.Context, in *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest, opts ...grpc.CallOption) (*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "SeedReplicationQueueWithUserDataEntries", varargs...)
-	ret0, _ := ret[0].(*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SeedReplicationQueueWithUserDataEntries indicates an expected call of SeedReplicationQueueWithUserDataEntries.
-func (mr *MockMatchingServiceClientMockRecorder) SeedReplicationQueueWithUserDataEntries(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeedReplicationQueueWithUserDataEntries", reflect.TypeOf((*MockMatchingServiceClient)(nil).SeedReplicationQueueWithUserDataEntries), varargs...)
-}
-
 // UpdateWorkerBuildIdCompatibility mocks base method.
 func (m *MockMatchingServiceClient) UpdateWorkerBuildIdCompatibility(ctx context.Context, in *matchingservice.UpdateWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	m.ctrl.T.Helper()
@@ -576,21 +556,6 @@ func (m *MockMatchingServiceServer) RespondQueryTaskCompleted(arg0 context.Conte
 func (mr *MockMatchingServiceServerMockRecorder) RespondQueryTaskCompleted(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceServer)(nil).RespondQueryTaskCompleted), arg0, arg1)
-}
-
-// SeedReplicationQueueWithUserDataEntries mocks base method.
-func (m *MockMatchingServiceServer) SeedReplicationQueueWithUserDataEntries(arg0 context.Context, arg1 *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest) (*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SeedReplicationQueueWithUserDataEntries", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SeedReplicationQueueWithUserDataEntries indicates an expected call of SeedReplicationQueueWithUserDataEntries.
-func (mr *MockMatchingServiceServerMockRecorder) SeedReplicationQueueWithUserDataEntries(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeedReplicationQueueWithUserDataEntries", reflect.TypeOf((*MockMatchingServiceServer)(nil).SeedReplicationQueueWithUserDataEntries), arg0, arg1)
 }
 
 // UpdateWorkerBuildIdCompatibility mocks base method.

@@ -230,21 +230,6 @@ func (c *retryableClient) RespondQueryTaskCompleted(
 	return resp, err
 }
 
-func (c *retryableClient) SeedReplicationQueueWithUserDataEntries(
-	ctx context.Context,
-	request *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, error) {
-	var resp *matchingservice.SeedReplicationQueueWithUserDataEntriesResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.SeedReplicationQueueWithUserDataEntries(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,

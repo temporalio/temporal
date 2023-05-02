@@ -422,24 +422,6 @@ func (h *Handler) ApplyTaskQueueUserDataReplicationEvent(
 	return h.engine.ApplyTaskQueueUserDataReplicationEvent(hCtx, request)
 }
 
-func (h *Handler) SeedReplicationQueueWithUserDataEntries(
-	ctx context.Context,
-	request *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest,
-) (_ *matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
-	hCtx := h.newHandlerContext(
-		ctx,
-		namespace.ID(request.GetNamespaceId()),
-		// We don't have a task queue for this request, use UNSPECIFIED to get the correct metrics tags
-		&taskqueuepb.TaskQueue{
-			Name: "not-applicable",
-			Kind: enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
-		},
-		metrics.MatchingSeedReplicationQueueWithUserDataEntriesScope,
-	)
-	return h.engine.SeedReplicationQueueWithUserDataEntries(hCtx, request)
-}
-
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {

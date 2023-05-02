@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -70,14 +69,15 @@ type (
 	}
 
 	activities struct {
-		historyShardCount int32
-		executionManager  persistence.ExecutionManager
-		namespaceRegistry namespace.Registry
-		historyClient     historyservice.HistoryServiceClient
-		frontendClient    workflowservice.WorkflowServiceClient
-		matchingClient    matchingservice.MatchingServiceClient
-		logger            log.Logger
-		metricsHandler    metrics.Handler
+		historyShardCount         int32
+		executionManager          persistence.ExecutionManager
+		taskManager               persistence.TaskManager
+		namespaceRegistry         namespace.Registry
+		historyClient             historyservice.HistoryServiceClient
+		frontendClient            workflowservice.WorkflowServiceClient
+		logger                    log.Logger
+		metricsHandler            metrics.Handler
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 	}
 
 	replicationStatus struct {

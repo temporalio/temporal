@@ -155,21 +155,6 @@ func (c *clientImpl) RespondQueryTaskCompleted(
 	return client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
-func (c *clientImpl) SeedReplicationQueueWithUserDataEntries(
-	ctx context.Context,
-	request *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, error) {
-
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.SeedReplicationQueueWithUserDataEntries(ctx, request, opts...)
-}
-
 func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,

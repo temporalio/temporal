@@ -37,12 +37,14 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -349,6 +351,11 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	return nil
 }
 
+type seedReplicationQueueWithUserDataEntriesHeartbeatDetails struct {
+	NextPageToken []byte
+	IndexInPage   int
+}
+
 func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context, params TaskQueueUserDataReplicationParamsWithNamespace) error {
 	if len(params.Namespace) == 0 {
 		return temporal.NewNonRetryableApplicationError("namespace is required", "InvalidArgument", nil)
@@ -368,9 +375,7 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 	}
 
 	rateLimiter := quotas.NewRateLimiter(params.RPS, int(math.Ceil(params.RPS)))
-	heartbeatDetails := struct {
-		nextPageToken []byte
-	}{}
+	heartbeatDetails := seedReplicationQueueWithUserDataEntriesHeartbeatDetails{}
 
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &heartbeatDetails); err != nil {
@@ -383,20 +388,42 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 			return err
 		}
 
-		request := &matchingservice.SeedReplicationQueueWithUserDataEntriesRequest{
-			NamespaceId:   describeResponse.GetNamespaceInfo().Id,
-			NextPageToken: heartbeatDetails.nextPageToken,
-			PageSize:      int32(params.PageSize),
+		request := &persistence.ListTaskQueueUserDataEntriesRequest{
+			NamespaceID:   describeResponse.GetNamespaceInfo().Id,
+			NextPageToken: heartbeatDetails.NextPageToken,
+			PageSize:      params.PageSize,
 		}
-		response, err := a.matchingClient.SeedReplicationQueueWithUserDataEntries(ctx, request)
+		response, err := a.taskManager.ListTaskQueueUserDataEntries(ctx, request)
 		if err != nil {
-			a.logger.Error("Seed task queue user data failed", tag.WorkflowNamespaceID(request.NamespaceId), tag.Error(err))
+			a.logger.Error("List task queue user data failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.Error(err))
 			return err
+		}
+		for idx, entry := range response.Entries {
+			if heartbeatDetails.IndexInPage > idx {
+				continue
+			}
+			heartbeatDetails.IndexInPage = idx
+			activity.RecordHeartbeat(ctx, heartbeatDetails)
+			err = a.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
+				TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
+				Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+					TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+						NamespaceId:   request.NamespaceID,
+						TaskQueueName: entry.TaskQueue,
+						UserData:      entry.Data,
+					},
+				},
+			})
+			if err != nil {
+				a.logger.Error("Inserting into namespace replication queue failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.Error(err))
+				return err
+			}
 		}
 		if len(response.NextPageToken) == 0 {
 			return nil
 		}
-		heartbeatDetails.nextPageToken = response.NextPageToken
+		heartbeatDetails.NextPageToken = response.NextPageToken
+		heartbeatDetails.IndexInPage = 0
 		activity.RecordHeartbeat(ctx, heartbeatDetails)
 	}
 }

@@ -25,8 +25,6 @@
 package matching
 
 import (
-	"context"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 )
 
@@ -48,6 +46,5 @@ type (
 		InvalidateTaskQueueUserData(ctx *handlerContext, request *matchingservice.InvalidateTaskQueueUserDataRequest) (*matchingservice.InvalidateTaskQueueUserDataResponse, error)
 		GetTaskQueueUserData(ctx *handlerContext, request *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 		ApplyTaskQueueUserDataReplicationEvent(ctx *handlerContext, request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error)
-		SeedReplicationQueueWithUserDataEntries(ctx context.Context, request *matchingservice.SeedReplicationQueueWithUserDataEntriesRequest) (*matchingservice.SeedReplicationQueueWithUserDataEntriesResponse, error)
 	}
 )

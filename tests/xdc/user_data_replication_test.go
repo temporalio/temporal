@@ -37,6 +37,9 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	sw "go.temporal.io/server/service/worker"
+	"go.temporal.io/server/service/worker/migration"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
@@ -195,50 +198,46 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		s.NoError(err)
 		s.NotNil(res)
 	}
-	activeMatchingClient := s.cluster1.GetMatchingClient()
 	adminClient := s.cluster1.GetAdminClient()
-	var nextPageToken []byte
-	pageSize := 10
 
-	for i := 0; i < 2; i++ {
-		response, err := activeMatchingClient.SeedReplicationQueueWithUserDataEntries(ctx, &matchingservice.SeedReplicationQueueWithUserDataEntriesRequest{
-			NamespaceId:   description.GetNamespaceInfo().Id,
-			PageSize:      int32(pageSize),
-			NextPageToken: nextPageToken,
-		})
-		s.NoError(err)
-		s.Greater(len(response.NextPageToken), 0)
-		nextPageToken = response.NextPageToken
+	// start force-replicate wf
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		Namespace: "temporal-system",
+	})
+	s.NoError(err)
+	workflowID4 := "force-replication-wf-4"
+	run, err := sysClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID4,
+		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "force-replication", migration.ForceReplicationParams{
+		Namespace:  namespace,
+		OverallRps: 10,
+	})
+	s.NoError(err)
+	err = run.Get(ctx, nil)
+	s.NoError(err)
 
-		replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
-			ClusterName:            "follower",
-			LastRetrievedMessageId: -1,
-			LastProcessedMessageId: -1,
-		})
-		s.NoError(err)
-		numReplicationTasks := len(replicationResponse.GetMessages().ReplicationTasks)
-		s.Equal(numReplicationTasks, numTaskQueues+1+(i+1)*pageSize)
+	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	numReplicationTasks := len(replicationResponse.GetMessages().ReplicationTasks)
+	s.Equal(numReplicationTasks, numTaskQueues*2+1)
 
-		if i == 1 {
-			lastTasks := replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-numTaskQueues:]
-			s.Equal(numTaskQueues, len(lastTasks))
-			seenTaskQueues := make(map[string]struct{}, numTaskQueues)
-			// Check the seeded messages
-			for _, task := range lastTasks {
-				s.Equal(enums.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
-				attrs := task.GetTaskQueueUserDataAttributes()
-				s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
-				seenTaskQueues[attrs.TaskQueueName] = struct{}{}
-			}
-
-			s.Equal(exectedReplicatedTaskQueues, seenTaskQueues)
-			response, err := activeMatchingClient.SeedReplicationQueueWithUserDataEntries(ctx, &matchingservice.SeedReplicationQueueWithUserDataEntriesRequest{
-				NamespaceId:   description.GetNamespaceInfo().Id,
-				PageSize:      int32(pageSize),
-				NextPageToken: nextPageToken,
-			})
-			s.NoError(err)
-			s.Equal(len(response.NextPageToken), 0)
-		}
+	lastTasks := replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-numTaskQueues:]
+	s.Equal(numTaskQueues, len(lastTasks))
+	seenTaskQueues := make(map[string]struct{}, numTaskQueues)
+	// Check the seeded messages
+	for _, task := range lastTasks {
+		s.Equal(enums.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
+		attrs := task.GetTaskQueueUserDataAttributes()
+		s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
+		seenTaskQueues[attrs.TaskQueueName] = struct{}{}
 	}
+
+	s.Equal(exectedReplicatedTaskQueues, seenTaskQueues)
 }
