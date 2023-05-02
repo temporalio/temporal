@@ -534,15 +534,14 @@ func (m *sqlTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, reque
 	rows, err := m.Db.ListTaskQueueUserDataEntries(ctx, &sqlplugin.ListTaskQueueUserDataEntriesRequest{
 		NamespaceID:       namespaceID,
 		LastTaskQueueName: lastQueueName,
-		Limit:             request.PageSize + 1, // request 1 more to know if there'll be a next page
+		Limit:             request.PageSize,
 	})
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListTaskQueueUserDataEntries operation failed. Failed to get rows. Error: %v", err))
 	}
 
 	var nextPageToken []byte
-	if len(rows) > request.PageSize {
-		rows = rows[:request.PageSize]
+	if len(rows) == request.PageSize {
 		nextPageToken, err = serializeUserDataListNextPageToken(&userDataListNextPageToken{LastTaskQueueName: rows[request.PageSize-1].TaskQueueName})
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())

@@ -207,11 +207,7 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 			NextPageToken: nextPageToken,
 		})
 		s.NoError(err)
-		if i == 0 {
-			s.True(len(response.NextPageToken) > 0)
-		} else {
-			s.True(len(response.NextPageToken) == 0)
-		}
+		s.Greater(len(response.NextPageToken), 0)
 		nextPageToken = response.NextPageToken
 
 		replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
@@ -236,7 +232,13 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 			}
 
 			s.Equal(exectedReplicatedTaskQueues, seenTaskQueues)
+			response, err := activeMatchingClient.SeedReplicationQueueWithUserDataEntries(ctx, &matchingservice.SeedReplicationQueueWithUserDataEntriesRequest{
+				NamespaceId:   description.GetNamespaceInfo().Id,
+				PageSize:      int32(pageSize),
+				NextPageToken: nextPageToken,
+			})
+			s.NoError(err)
+			s.Equal(len(response.NextPageToken), 0)
 		}
 	}
-
 }
