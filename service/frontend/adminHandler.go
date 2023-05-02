@@ -948,42 +948,52 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		execution.GetWorkflowId(),
 		adh.numberOfHistoryShards,
 	)
-	rawHistoryResponse, err := adh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		BranchToken: targetVersionHistory.GetBranchToken(),
-		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
-		// ReadRawHistoryBranch is inclusive exclusive.
-		MinEventID:    pageToken.GetStartEventId() + 1,
-		MaxEventID:    pageToken.GetEndEventId(),
-		PageSize:      pageSize,
-		NextPageToken: pageToken.PersistenceToken,
-		ShardID:       shardID,
-	})
-	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
-			// when no events can be returned from DB, DB layer will return
-			// EntityNotExistsError, this API shall return empty response
-			return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-				HistoryBatches: []*commonpb.DataBlob{},
-				NextPageToken:  nil, // no further pagination
-				VersionHistory: targetVersionHistory,
-			}, nil
+
+	var historyEventBlobs []*commonpb.DataBlob
+	var nodeIDs []int64
+	var size int64
+	if adh.config.enableFrontendToHistoryRPC() {
+		panic("not implemented yet")
+	} else {
+		rawHistoryResponse, err := adh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+			BranchToken: targetVersionHistory.GetBranchToken(),
+			// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
+			// ReadRawHistoryBranch is inclusive exclusive.
+			MinEventID:    pageToken.GetStartEventId() + 1,
+			MaxEventID:    pageToken.GetEndEventId(),
+			PageSize:      pageSize,
+			NextPageToken: pageToken.PersistenceToken,
+			ShardID:       shardID,
+		})
+		if err != nil {
+			if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+				// when no events can be returned from DB, DB layer will return
+				// EntityNotExistsError, this API shall return empty response
+				return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+					HistoryBatches: []*commonpb.DataBlob{},
+					NextPageToken:  nil, // no further pagination
+					VersionHistory: targetVersionHistory,
+				}, nil
+			}
+			return nil, err
 		}
-		return nil, err
+		historyEventBlobs = rawHistoryResponse.HistoryEventBlobs
+		nodeIDs = rawHistoryResponse.NodeIDs
+		pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
+		size = int64(rawHistoryResponse.Size)
 	}
 
-	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
-	size := rawHistoryResponse.Size
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
 	adh.metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(
-		int64(size),
+		size,
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope))
 	taggedMetricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
+		HistoryBatches: historyEventBlobs,
 		VersionHistory: targetVersionHistory,
-		HistoryNodeIds: rawHistoryResponse.NodeIDs,
+		HistoryNodeIds: nodeIDs,
 	}
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
@@ -1743,13 +1753,17 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 	}
 
 	for _, branchToken := range branchTokens {
-		if err := adh.persistenceExecutionManager.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-			ShardID:     shardID,
-			BranchToken: branchToken,
-		}); err != nil {
-			warnMsg := "Failed to delete history branch, skip"
-			adh.logger.Warn(warnMsg, tag.WorkflowBranchID(string(branchToken)), tag.Error(err))
-			warnings = append(warnings, fmt.Sprintf("%s. BranchToken: %v, Error: %v", warnMsg, branchToken, err.Error()))
+		if adh.config.enableFrontendToHistoryRPC() {
+			panic("not implemented yet")
+		} else {
+			if err := adh.persistenceExecutionManager.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
+				ShardID:     shardID,
+				BranchToken: branchToken,
+			}); err != nil {
+				warnMsg := "Failed to delete history branch, skip"
+				adh.logger.Warn(warnMsg, tag.WorkflowBranchID(string(branchToken)), tag.Error(err))
+				warnings = append(warnings, fmt.Sprintf("%s. BranchToken: %v, Error: %v", warnMsg, branchToken, err.Error()))
+			}
 		}
 	}
 
@@ -1928,19 +1942,25 @@ func (adh *AdminHandler) getWorkflowCompletionEvent(
 		return nil, err
 	}
 
-	resp, err := adh.persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		ShardID:     shardID,
-		BranchToken: currentVersionHistory.GetBranchToken(),
-		MinEventID:  executionInfo.CompletionEventBatchId,
-		MaxEventID:  completionEventID + 1,
-		PageSize:    1,
-	})
-	if err != nil {
-		return nil, err
+	var historyEvents []*historypb.HistoryEvent
+	if adh.config.enableFrontendToHistoryRPC() {
+		panic("not implemented yet")
+	} else {
+		resp, err := adh.persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+			ShardID:     shardID,
+			BranchToken: currentVersionHistory.GetBranchToken(),
+			MinEventID:  executionInfo.CompletionEventBatchId,
+			MaxEventID:  completionEventID + 1,
+			PageSize:    1,
+		})
+		if err != nil {
+			return nil, err
+		}
+		historyEvents = resp.HistoryEvents
 	}
 
 	// find history event from batch and return back single event to caller
-	for _, e := range resp.HistoryEvents {
+	for _, e := range historyEvents {
 		if e.EventId == completionEventID && e.Version == version {
 			return e, nil
 		}

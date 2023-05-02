@@ -165,6 +165,9 @@ type Config struct {
 
 	EnableUpdateWorkflowExecution dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioning        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// PercentageFrontendToHistoryRPC is an interim flag across 2 minor releases and will be removed once fully enabled.
+	PercentageFrontendToHistoryRPC dynamicconfig.FloatPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -240,6 +243,8 @@ func NewConfig(
 
 		EnableUpdateWorkflowExecution: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
 		EnableWorkerVersioning:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
+
+		PercentageFrontendToHistoryRPC: dc.GetFloat64Property(dynamicconfig.FrontendPercentageFrontendToHistoryRPC, 0.0),
 	}
 }
 
@@ -397,6 +402,11 @@ func numFrontendHosts(
 		return defaultHosts
 	}
 	return ringSize
+}
+
+func (c *Config) enableFrontendToHistoryRPC() bool {
+	randomPercentage := float64(time.Now().Nanosecond()%1000000000) / 1000000000
+	return randomPercentage < c.PercentageFrontendToHistoryRPC()
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {

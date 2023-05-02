@@ -277,6 +277,9 @@ const (
 	// FrontendEnableUpdateWorkflowExecution enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
 
+	// FrontendPercentageFrontendToHistoryRPC (0.0~1.0) frontend calls to history for history branch related operations.
+	FrontendPercentageFrontendToHistoryRPC = "frontend.percentageFrontendToHistoryRPC"
+
 	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
 	// Default value is 100.
