@@ -415,10 +415,9 @@ func (c *Config) readEventsFromHistory(metricsHandler metrics.Handler) bool {
 	if rand.Float64() < c.ReadEventsFromHistoryFraction() {
 		metricsHandler.Counter(readEventsFromHistoryRPC).Record(1)
 		return true
-	} else {
-		metricsHandler.Counter(readEventsFromHistoryDB).Record(1)
-		return false
 	}
+	metricsHandler.Counter(readEventsFromHistoryDB).Record(1)
+	return false
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
