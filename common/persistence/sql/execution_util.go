@@ -313,7 +313,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runIDBytes,
 	); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowMutationTxAsReset failed. Failed to insert into update record map after clearing. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into update record map after clearing. Error: %v", err))
 	}
 
 	if err := deleteTimerInfoMap(ctx,
@@ -500,7 +500,7 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsNew(
 		workflowID,
 		runIDBytes,
 	); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowMutationTxAsNew failed. Failed to insert into update record map after clearing. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into update record map after clearing. Error: %v", err))
 	}
 
 	if err := updateTimerInfos(ctx,
