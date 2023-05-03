@@ -952,7 +952,7 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 		SignalRequestedIds:  internState.SignalRequestedIDs,
 		NextEventId:         internState.NextEventID,
 		BufferedEvents:      make([]*historypb.HistoryEvent, len(internState.BufferedEvents)),
-		UpdateInfos:         make(map[string]*persistencespb.UpdateInfo),
+		UpdateInfos:         make(map[string]*persistencespb.UpdateInfo, len(internState.UpdateInfos)),
 	}
 	for key, blob := range internState.ActivityInfos {
 		info, err := m.serializer.ActivityInfoFromBlob(blob)

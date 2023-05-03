@@ -193,7 +193,7 @@ func getUpdateInfoMap(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Failed to get activity info. Error: %v", err))
 	}
 
-	ret := make(map[string]*commonpb.DataBlob)
+	ret := make(map[string]*commonpb.DataBlob, len(rows))
 	for _, row := range rows {
 		ret[row.UpdateID] = persistence.NewDataBlob(row.Data, row.DataEncoding)
 	}
