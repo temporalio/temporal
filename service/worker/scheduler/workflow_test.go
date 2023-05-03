@@ -27,6 +27,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,7 +40,9 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
 	schedspb "go.temporal.io/server/api/schedule/v1"
@@ -1401,4 +1404,81 @@ func (s *workflowSuite) TestLimitedActions() {
 	}, 4)
 	s.True(s.env.IsWorkflowCompleted())
 	// doesn't end properly since it sleeps forever after pausing
+}
+
+// To generate workflow history for a specific server version, run the server with that version
+// uncomment the first line to run the workflow with the given schedule, and run the test. Make sure
+// to set the timeout flag accordingly. When test is finished, run temporal client with the command at the end
+// to capture the JSON history.
+func (s *workflowSuite) TestGenerateWorkflowHistoryForReplay() {
+	//s.T().Skip("Remove this Skip to generate the history for a specific version.")
+	c, _ := client.Dial(client.Options{})
+	defer c.Close()
+
+	sid := "sched-test-replay"
+	wid := "sched-test-replay-wf"
+	tq := "sched-test-tq"
+
+	var runs int32
+	workflowFn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			atomic.AddInt32(&runs, 1)
+			return runs
+		})
+		return nil
+	}
+	w := worker.New(c, tq, worker.Options{})
+	w.RegisterWorkflow(workflowFn)
+
+	_ = w.Start()
+	defer w.Stop()
+
+	ctx := context.Background()
+	numberOfActionsToTake := 50
+	interval := 1
+	scheduleHandle, err := c.ScheduleClient().Create(ctx, client.ScheduleOptions{
+		ID: sid,
+		Spec: client.ScheduleSpec{
+			Intervals: []client.ScheduleIntervalSpec{
+				{
+					Every: time.Duration(interval) * time.Second,
+				},
+			},
+		},
+		Action: &client.ScheduleWorkflowAction{
+			ID:        wid,
+			Workflow:  workflowFn,
+			TaskQueue: tq,
+		},
+		Overlap:          enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		RemainingActions: numberOfActionsToTake,
+	})
+	s.NoError(err)
+	deleteScheule := func() {
+		// delete schedule
+		err = scheduleHandle.Delete(ctx)
+		s.NoError(err)
+	}
+
+	defer deleteScheule()
+
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == int32(numberOfActionsToTake) }, time.Duration((numberOfActionsToTake+2)*interval)*time.Second, time.Duration(interval)*time.Second)
+
+	// Now run:
+	// temporal workflow show --workflow-id temporal-sys-scheduler -o json > schedule_workflow_replay_test_[version].json
+}
+
+func (s *workflowSuite) TestReplayHistory() {
+	testCases := []struct {
+		version string
+	}{
+		{
+			version: "1.20.0",
+		},
+	}
+	for _, tc := range testCases {
+		s.T().Run(tc.version, func(t *testing.T) {
+
+		})
+	}
 }
