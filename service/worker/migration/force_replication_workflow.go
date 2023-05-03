@@ -40,7 +40,7 @@ type (
 	TaskQueueUserDataReplicationParams struct {
 		// PageSize for the SeedReplicationQueueWithUserDataEntries activity
 		PageSize int
-		// RPS for enqueuing of replication tasks
+		// RPS limits the number of task queue user data entries pages requested per second.
 		RPS float64
 	}
 
