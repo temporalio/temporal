@@ -149,6 +149,20 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	s.NoError(executable.Execute())
 }
 
+func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
+	executable := s.newTestExecutable()
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, errors.New("some random error"))
+	err := executable.Execute()
+	s.Error(err)
+	s.Error(executable.HandleErr(err))
+	s.Equal(2, executable.Attempt())
+
+	// isActive changed to false, should reset attempt
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, false, nil)
+	s.NoError(executable.Execute())
+	s.Equal(1, executable.Attempt())
+}
+
 func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 	executable := s.newTestExecutable()
 
