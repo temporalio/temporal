@@ -74,6 +74,7 @@ type (
 		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*InternalGetTaskQueueUserDataResponse, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *InternalUpdateTaskQueueUserDataRequest) error
+		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*InternalListTaskQueueUserDataEntriesResponse, error)
 	}
 	// MetadataStore is a lower level of MetadataManager
 	MetadataStore interface {
@@ -264,6 +265,16 @@ type (
 		TaskQueue   string
 		Version     int64
 		UserData    *commonpb.DataBlob
+	}
+
+	InternalTaskQueueUserDataEntry struct {
+		TaskQueue string
+		Data      *commonpb.DataBlob
+	}
+
+	InternalListTaskQueueUserDataEntriesResponse struct {
+		NextPageToken []byte
+		Entries       []InternalTaskQueueUserDataEntry
 	}
 
 	InternalCreateTasksRequest struct {

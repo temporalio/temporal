@@ -31,12 +31,18 @@ package xdc
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	sw "go.temporal.io/server/service/worker"
+	"go.temporal.io/server/service/worker/migration"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -157,4 +163,81 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 		}
 		return nil
 	})
+}
+
+func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {
+	ctx := tests.NewContext()
+	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
+	activeFrontendClient := s.cluster1.GetFrontendClient()
+	numTaskQueues := 20
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
+	}
+	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
+	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
+	description, err := activeFrontendClient.DescribeNamespace(tests.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	s.Require().NoError(err)
+
+	exectedReplicatedTaskQueues := make(map[string]struct{}, numTaskQueues)
+	for i := 0; i < numTaskQueues; i++ {
+		taskQueue := fmt.Sprintf("q%v", i)
+		res, err := activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+			Namespace: namespace,
+			TaskQueue: taskQueue,
+			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+				AddNewBuildIdInNewDefaultSet: "v0.1",
+			},
+		})
+		exectedReplicatedTaskQueues[taskQueue] = struct{}{}
+		s.NoError(err)
+		s.NotNil(res)
+	}
+	adminClient := s.cluster1.GetAdminClient()
+
+	// start force-replicate wf
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		Namespace: "temporal-system",
+	})
+	s.NoError(err)
+	workflowID4 := "force-replication-wf-4"
+	run, err := sysClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID4,
+		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "force-replication", migration.ForceReplicationParams{
+		Namespace:  namespace,
+		OverallRps: 10,
+	})
+	s.NoError(err)
+	err = run.Get(ctx, nil)
+	s.NoError(err)
+
+	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	numReplicationTasks := len(replicationResponse.GetMessages().ReplicationTasks)
+	s.Equal(numReplicationTasks, numTaskQueues*2+1)
+
+	lastTasks := replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-numTaskQueues:]
+	s.Equal(numTaskQueues, len(lastTasks))
+	seenTaskQueues := make(map[string]struct{}, numTaskQueues)
+	// Check the seeded messages
+	for _, task := range lastTasks {
+		s.Equal(enums.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
+		attrs := task.GetTaskQueueUserDataAttributes()
+		s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
+		seenTaskQueues[attrs.TaskQueueName] = struct{}{}
+	}
+
+	s.Equal(exectedReplicatedTaskQueues, seenTaskQueues)
 }

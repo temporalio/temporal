@@ -276,3 +276,25 @@ func (m *taskManagerImpl) UpdateTaskQueueUserData(ctx context.Context, request *
 	}
 	return m.taskStore.UpdateTaskQueueUserData(ctx, internalRequest)
 }
+
+func (m *taskManagerImpl) ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error) {
+	response, err := m.taskStore.ListTaskQueueUserDataEntries(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]*TaskQueueUserDataEntry, len(response.Entries))
+	for i, entry := range response.Entries {
+		data, err := m.serializer.TaskQueueUserDataFromBlob(entry.Data)
+		if err != nil {
+			return nil, err
+		}
+		entries[i] = &TaskQueueUserDataEntry{
+			TaskQueue: entry.TaskQueue,
+			Data:      data,
+		}
+	}
+	return &ListTaskQueueUserDataEntriesResponse{
+		NextPageToken: response.NextPageToken,
+		Entries:       entries,
+	}, nil
+}

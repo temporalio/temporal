@@ -564,6 +564,16 @@ func (p taskRateLimitedPersistenceClient) UpdateTaskQueueUserData(
 	return p.persistence.UpdateTaskQueueUserData(ctx, request)
 }
 
+func (p taskRateLimitedPersistenceClient) ListTaskQueueUserDataEntries(
+	ctx context.Context,
+	request *ListTaskQueueUserDataEntriesRequest,
+) (*ListTaskQueueUserDataEntriesResponse, error) {
+	if ok := allow(ctx, "ListTaskQueueUserDataEntries", CallerSegmentMissing, p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.ListTaskQueueUserDataEntries(ctx, request)
+}
+
 func (p *taskRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

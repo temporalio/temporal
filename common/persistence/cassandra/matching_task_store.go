@@ -147,6 +147,8 @@ const (
 	templateInsertTaskQueueUserDataQuery = `INSERT INTO task_queue_user_data` +
 		`(namespace_id, task_queue_name, data, data_encoding, version) ` +
 		`VALUES (?, ?, ?, ?, 1) IF NOT EXISTS`
+
+	templateListTaskQueueUserDataQuery = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ?`
 )
 
 type (
@@ -574,6 +576,58 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 	}
 
 	return nil
+}
+
+func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *p.ListTaskQueueUserDataEntriesRequest) (*p.InternalListTaskQueueUserDataEntriesResponse, error) {
+	query := d.Session.Query(templateListTaskQueueUserDataQuery, request.NamespaceID).WithContext(ctx)
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+
+	response := &p.InternalListTaskQueueUserDataEntriesResponse{}
+	row := make(map[string]interface{})
+	for iter.MapScan(row) {
+		taskQueueRaw, ok := row["task_queue_name"]
+		if !ok {
+			return nil, newFieldNotFoundError("task_queue_name", row)
+		}
+		taskQueue, ok := taskQueueRaw.(string)
+		if !ok {
+			var stringType string
+			return nil, newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row)
+		}
+
+		dataRaw, ok := row["data"]
+		if !ok {
+			return nil, newFieldNotFoundError("data", row)
+		}
+		data, ok := dataRaw.([]byte)
+		if !ok {
+			var byteSliceType []byte
+			return nil, newPersistedTypeMismatchError("data", byteSliceType, dataRaw, row)
+
+		}
+
+		dataEncodingRaw, ok := row["data_encoding"]
+		if !ok {
+			return nil, newFieldNotFoundError("data_encoding", row)
+		}
+		dataEncoding, ok := dataEncodingRaw.(string)
+		if !ok {
+			var stringType string
+			return nil, newPersistedTypeMismatchError("data_encoding", stringType, dataEncodingRaw, row)
+		}
+
+		response.Entries = append(response.Entries, p.InternalTaskQueueUserDataEntry{TaskQueue: taskQueue, Data: p.NewDataBlob(data, dataEncoding)})
+
+		row = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+	}
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListTaskQueueUserDataEntries operation failed. Error: %v", err))
+	}
+	return response, nil
 }
 
 func (d *MatchingTaskStore) GetName() string {

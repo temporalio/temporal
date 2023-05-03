@@ -2448,6 +2448,12 @@ func (m *testTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *
 	return nil
 }
 
+// ListTaskQueueUserDataEntries implements persistence.TaskManager
+func (*testTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.ListTaskQueueUserDataEntriesResponse, error) {
+	// No need to implement this for unit tests
+	panic("unimplemented")
+}
+
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 	currentTime := time.Now().UTC()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())

@@ -1058,6 +1058,13 @@ func (t *FaultInjectionTaskStore) UpdateTaskQueueUserData(ctx context.Context, r
 	return t.baseTaskStore.UpdateTaskQueueUserData(ctx, request)
 }
 
+func (t *FaultInjectionTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.InternalListTaskQueueUserDataEntriesResponse, error) {
+	if err := t.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return t.baseTaskStore.ListTaskQueueUserDataEntries(ctx, request)
+}
+
 func (t *FaultInjectionTaskStore) UpdateRate(rate float64) {
 	t.ErrorGenerator.UpdateRate(rate)
 }

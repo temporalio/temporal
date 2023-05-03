@@ -524,14 +524,8 @@ func (c *temporalImpl) startHistory(
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
 
-		matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger)
-		if err != nil {
-			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
-		}
-
 		c.historyApps = append(c.historyApps, app)
 		c.historyClient = NewHistoryClient(historyConnection)
-		c.matchingClient = matchingservice.NewMatchingServiceClient(matchingConnection)
 		c.historyServices = append(c.historyServices, historyService)
 		c.historyNamespaceRegistries = append(c.historyNamespaceRegistries, namespaceRegistry)
 
@@ -598,6 +592,12 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 			}
 		}
 	}
+
+	matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger)
+	if err != nil {
+		c.logger.Fatal("Failed to create connection for matching", tag.Error(err))
+	}
+	c.matchingClient = matchingservice.NewMatchingServiceClient(matchingConnection)
 	c.matchingApp = app
 	c.matchingService = matchingService
 	c.matchingNamespaceRegistry = namespaceRegistry

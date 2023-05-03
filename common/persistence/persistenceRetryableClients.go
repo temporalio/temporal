@@ -803,6 +803,21 @@ func (p *taskRetryablePersistenceClient) UpdateTaskQueueUserData(
 	return err
 }
 
+func (p *taskRetryablePersistenceClient) ListTaskQueueUserDataEntries(
+	ctx context.Context,
+	request *ListTaskQueueUserDataEntriesRequest,
+) (*ListTaskQueueUserDataEntriesResponse, error) {
+	var response *ListTaskQueueUserDataEntriesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.ListTaskQueueUserDataEntries(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
 func (p *taskRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }

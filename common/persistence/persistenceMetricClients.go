@@ -707,6 +707,20 @@ func (p *taskPersistenceClient) UpdateTaskQueueUserData(
 	return p.persistence.UpdateTaskQueueUserData(ctx, request)
 }
 
+func (p *taskPersistenceClient) ListTaskQueueUserDataEntries(
+	ctx context.Context,
+	request *ListTaskQueueUserDataEntriesRequest,
+) (_ *ListTaskQueueUserDataEntriesResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		latency := time.Since(startTime)
+		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.recordRequestMetrics(metrics.PersistenceListTaskQueueUserDataEntriesScope, caller, latency, retErr)
+	}()
+	return p.persistence.ListTaskQueueUserDataEntries(ctx, request)
+}
+
 func (p *taskPersistenceClient) Close() {
 	p.persistence.Close()
 }

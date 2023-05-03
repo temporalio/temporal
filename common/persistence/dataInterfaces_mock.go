@@ -871,6 +871,21 @@ func (mr *MockTaskManagerMockRecorder) ListTaskQueue(ctx, request interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).ListTaskQueue), ctx, request)
 }
 
+// ListTaskQueueUserDataEntries mocks base method.
+func (m *MockTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTaskQueueUserDataEntries", ctx, request)
+	ret0, _ := ret[0].(*ListTaskQueueUserDataEntriesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTaskQueueUserDataEntries indicates an expected call of ListTaskQueueUserDataEntries.
+func (mr *MockTaskManagerMockRecorder) ListTaskQueueUserDataEntries(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueueUserDataEntries", reflect.TypeOf((*MockTaskManager)(nil).ListTaskQueueUserDataEntries), ctx, request)
+}
+
 // UpdateTaskQueue mocks base method.
 func (m *MockTaskManager) UpdateTaskQueue(ctx context.Context, request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
