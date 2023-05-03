@@ -589,24 +589,26 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 		if !ok {
 			return nil, newFieldNotFoundError("task_queue_name", row)
 		}
-		dataRaw, ok := row["data"]
-		if !ok {
-			return nil, newFieldNotFoundError("data", row)
-		}
-		dataEncodingRaw, ok := row["data_encoding"]
-		if !ok {
-			return nil, newFieldNotFoundError("data_encoding", row)
-		}
 		taskQueue, ok := taskQueueRaw.(string)
 		if !ok {
 			var stringType string
-			return nil, newPersistedTypeMismatchError("task_queue_name", stringType, dataEncodingRaw, row)
+			return nil, newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row)
+		}
+
+		dataRaw, ok := row["data"]
+		if !ok {
+			return nil, newFieldNotFoundError("data", row)
 		}
 		data, ok := dataRaw.([]byte)
 		if !ok {
 			var byteSliceType []byte
 			return nil, newPersistedTypeMismatchError("data", byteSliceType, dataRaw, row)
 
+		}
+
+		dataEncodingRaw, ok := row["data_encoding"]
+		if !ok {
+			return nil, newFieldNotFoundError("data_encoding", row)
 		}
 		dataEncoding, ok := dataEncodingRaw.(string)
 		if !ok {
