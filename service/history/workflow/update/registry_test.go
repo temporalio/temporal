@@ -25,6 +25,7 @@
 package update
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
@@ -32,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	updatepb "go.temporal.io/api/update/v1"
 )
@@ -43,7 +45,33 @@ type (
 		*require.Assertions
 		suite.Suite
 	}
+
+	mockStore struct {
+		Storage
+		AddWorkflowExecutionUpdateAcceptedEventFunc  func(string, *updatepb.Acceptance) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionUpdateCompletedEventFunc func(*updatepb.Response) (*historypb.HistoryEvent, error)
+		GetAcceptedWorkflowExecutionUpdateIDsFunc    func(context.Context) ([]string, error)
+	}
 )
+
+func (m mockStore) AddWorkflowExecutionUpdateAcceptedEvent(
+	updateID string,
+	accpt *updatepb.Acceptance,
+) (*historypb.HistoryEvent, error) {
+	return m.AddWorkflowExecutionUpdateAcceptedEventFunc(updateID, accpt)
+}
+
+func (m mockStore) AddWorkflowExecutionUpdateCompletedEvent(
+	resp *updatepb.Response,
+) (*historypb.HistoryEvent, error) {
+	return m.AddWorkflowExecutionUpdateCompletedEventFunc(resp)
+}
+
+func (m mockStore) GetAcceptedWorkflowExecutionUpdateIDs(
+	ctx context.Context,
+) ([]string, error) {
+	return m.GetAcceptedWorkflowExecutionUpdateIDsFunc(ctx)
+}
 
 func (s *updateSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
@@ -55,7 +83,7 @@ func TestUpdateSuite(t *testing.T) {
 
 func (s *updateSuite) TestValidateMessages() {
 
-	reg := NewRegistry()
+	reg := NewRegistry(mockStore{})
 	upd1, _, _ := reg.Add(&updatepb.Request{Meta: &updatepb.Meta{UpdateId: "update-1"}})
 
 	testCases := []struct {
