@@ -154,7 +154,7 @@ func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, errors.New("some random error"))
 	err := executable.Execute()
 	s.Error(err)
-	executable.HandleErr(err)
+	s.Error(executable.HandleErr(err))
 	s.Equal(2, executable.Attempt())
 
 	// isActive changed to false, should reset attempt
