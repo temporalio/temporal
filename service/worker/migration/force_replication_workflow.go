@@ -38,7 +38,7 @@ import (
 
 type (
 	TaskQueueUserDataReplicationParams struct {
-		// PageSize for matchingengine.SeedReplicationQueueWithUserDataEntries, will paginate through results.
+		// PageSize for the SeedReplicationQueueWithUserDataEntries activity
 		PageSize int
 		// RPS for enqueuing of replication tasks
 		RPS float64
