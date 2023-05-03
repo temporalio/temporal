@@ -76,6 +76,9 @@ type (
 		ActivityInfoToBlob(info *persistencespb.ActivityInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ActivityInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ActivityInfo, error)
 
+		UpdateInfoToBlob(rec *persistencespb.UpdateInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		UpdateInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.UpdateInfo, error)
+
 		ChildExecutionInfoToBlob(info *persistencespb.ChildExecutionInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ChildExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ChildExecutionInfo, error)
 
@@ -380,6 +383,15 @@ func (t *serializerImpl) HistoryTreeInfoToBlob(info *persistencespb.HistoryTreeI
 
 func (t *serializerImpl) HistoryTreeInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.HistoryTreeInfo, error) {
 	result := &persistencespb.HistoryTreeInfo{}
+	return result, ProtoDecodeBlob(data, result)
+}
+
+func (t *serializerImpl) UpdateInfoToBlob(rec *persistencespb.UpdateInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	return ProtoEncodeBlob(rec, encodingType)
+}
+
+func (t *serializerImpl) UpdateInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.UpdateInfo, error) {
+	result := &persistencespb.UpdateInfo{}
 	return result, ProtoDecodeBlob(data, result)
 }
 
