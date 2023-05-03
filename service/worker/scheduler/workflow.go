@@ -368,15 +368,10 @@ func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
 	// existing schedule workflows.
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
 		results := make(map[time.Time]getNextTimeResult)
-		localAfter := after
-		for len(results) < maxNextTimeResultCacheSize {
-			next := s.cspec.getNextTime(localAfter)
-			results[localAfter] = next
-			localAfter = next.Next
-			// if there is no matching time, stop fetching
-			if localAfter.IsZero() {
-				break
-			}
+		for t := after; !t.IsZero() && len(results) < maxNextTimeResultCacheSize; {
+			next := s.cspec.getNextTime(t)
+			results[t] = next
+			t = next.Next
 		}
 		return results
 	}).Get(&s.nextTimeResultCache))
