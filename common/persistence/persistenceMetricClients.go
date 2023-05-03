@@ -620,6 +620,18 @@ func (p *taskPersistenceClient) UpdateTaskQueueUserData(
 	return p.persistence.UpdateTaskQueueUserData(ctx, request)
 }
 
+func (p *taskPersistenceClient) ListTaskQueueUserDataEntries(
+	ctx context.Context,
+	request *ListTaskQueueUserDataEntriesRequest,
+) (_ *ListTaskQueueUserDataEntriesResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceListTaskQueueUserDataEntriesScope, caller, startTime, retErr)
+	}()
+	return p.persistence.ListTaskQueueUserDataEntries(ctx, request)
+}
+
 func (p *taskPersistenceClient) Close() {
 	p.persistence.Close()
 }
