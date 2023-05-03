@@ -52,6 +52,12 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
+const (
+	// TODO: remove interim metric names for tracking fraction of FE->History calls migrating from DB->RPC
+	readEventsFromHistoryRPC = "read-events-from-history-rpc"
+	readEventsFromHistoryDB  = "read-events-from-history-db"
+)
+
 // Config represents configuration for frontend service
 type Config struct {
 	NumHistoryShards                      int32
@@ -404,8 +410,15 @@ func numFrontendHosts(
 	return ringSize
 }
 
-func (c *Config) readEventsFromHistory() bool {
-	return rand.Float64() < c.ReadEventsFromHistoryFraction()
+// TODO: remove interim dynamic config helper for dialing fraction of FE->History calls from DB->RPC
+func (c *Config) readEventsFromHistory(metricsHandler metrics.Handler) bool {
+	if rand.Float64() < c.ReadEventsFromHistoryFraction() {
+		metricsHandler.Counter(readEventsFromHistoryRPC).Record(1)
+		return true
+	} else {
+		metricsHandler.Counter(readEventsFromHistoryDB).Record(1)
+		return false
+	}
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {

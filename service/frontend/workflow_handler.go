@@ -4127,33 +4127,26 @@ func (wh *WorkflowHandler) getRawHistory(
 	var rawHistory []*commonpb.DataBlob
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 
-	var historyEventBlobs []*commonpb.DataBlob
-	if wh.config.readEventsFromHistory() {
-		panic("not implemented yet")
-	} else {
-		resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-			BranchToken:   branchToken,
-			MinEventID:    firstEventID,
-			MaxEventID:    nextEventID,
-			PageSize:      int(pageSize),
-			NextPageToken: nextPageToken,
-			ShardID:       shardID,
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		historyEventBlobs = resp.HistoryEventBlobs
-		nextPageToken = resp.NextPageToken
+	resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      int(pageSize),
+		NextPageToken: nextPageToken,
+		ShardID:       shardID,
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
-	for _, data := range historyEventBlobs {
+	for _, data := range resp.HistoryEventBlobs {
 		rawHistory = append(rawHistory, &commonpb.DataBlob{
 			EncodingType: data.EncodingType,
 			Data:         data.Data,
 		})
 	}
 
-	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
+	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
 			wh.logger.Error("getHistory error",
@@ -4176,7 +4169,7 @@ func (wh *WorkflowHandler) getRawHistory(
 		}
 	}
 
-	return rawHistory, nextPageToken, nil
+	return rawHistory, resp.NextPageToken, nil
 }
 
 func (wh *WorkflowHandler) getHistory(
@@ -4198,27 +4191,23 @@ func (wh *WorkflowHandler) getHistory(
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
-	if wh.config.readEventsFromHistory() {
-		panic("not implemented yet")
-	} else {
-		historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchRequest{
-			BranchToken:   branchToken,
-			MinEventID:    firstEventID,
-			MaxEventID:    nextEventID,
-			PageSize:      int(pageSize),
-			NextPageToken: nextPageToken,
-			ShardID:       shardID,
-		})
-		switch err.(type) {
-		case nil:
-			// noop
-		case *serviceerror.DataLoss:
-			// log event
-			wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
-			return nil, nil, err
-		default:
-			return nil, nil, err
-		}
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      int(pageSize),
+		NextPageToken: nextPageToken,
+		ShardID:       shardID,
+	})
+	switch err.(type) {
+	case nil:
+		// noop
+	case *serviceerror.DataLoss:
+		// log event
+		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
+		return nil, nil, err
+	default:
+		return nil, nil, err
 	}
 
 	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
@@ -4278,27 +4267,25 @@ func (wh *WorkflowHandler) getHistoryReverse(
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
-	if wh.config.readEventsFromHistory() {
-		panic("not implemented yet")
-	} else {
-		historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
-			BranchToken:            branchToken,
-			MaxEventID:             nextEventID,
-			LastFirstTransactionID: lastFirstTxnID,
-			PageSize:               int(pageSize),
-			NextPageToken:          nextPageToken,
-			ShardID:                shardID,
-		})
-		switch err.(type) {
-		case nil:
-			// noop
-		case *serviceerror.DataLoss:
-			// log event
-			wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
-			return nil, nil, 0, err
-		default:
-			return nil, nil, 0, err
-		}
+
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
+		BranchToken:            branchToken,
+		MaxEventID:             nextEventID,
+		LastFirstTransactionID: lastFirstTxnID,
+		PageSize:               int(pageSize),
+		NextPageToken:          nextPageToken,
+		ShardID:                shardID,
+	})
+
+	switch err.(type) {
+	case nil:
+		// noop
+	case *serviceerror.DataLoss:
+		// log event
+		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
+		return nil, nil, 0, err
+	default:
+		return nil, nil, 0, err
 	}
 
 	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
@@ -4880,24 +4867,20 @@ func (wh *WorkflowHandler) trimHistoryNode(
 		return // abort
 	}
 
-	if wh.config.readEventsFromHistory() {
-		panic("not implemented yet")
-	} else {
-		_, err = wh.persistenceExecutionManager.TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{
-			ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, wh.config.NumHistoryShards),
-			BranchToken:   response.CurrentBranchToken,
-			NodeID:        response.GetLastFirstEventId(),
-			TransactionID: response.GetLastFirstEventTxnId(),
-		})
-		if err != nil {
-			// best effort
-			wh.logger.Error("unable to trim history branch",
-				tag.WorkflowNamespaceID(namespaceID),
-				tag.WorkflowID(workflowID),
-				tag.WorkflowRunID(runID),
-				tag.Error(err),
-			)
-		}
+	_, err = wh.persistenceExecutionManager.TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{
+		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, wh.config.NumHistoryShards),
+		BranchToken:   response.CurrentBranchToken,
+		NodeID:        response.GetLastFirstEventId(),
+		TransactionID: response.GetLastFirstEventTxnId(),
+	})
+	if err != nil {
+		// best effort
+		wh.logger.Error("unable to trim history branch",
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+			tag.Error(err),
+		)
 	}
 }
 
