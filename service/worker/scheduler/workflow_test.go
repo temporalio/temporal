@@ -1420,7 +1420,34 @@ func (s *workflowSuite) TestLotsOfIterations() {
 
 	s.runAcrossContinue(
 		runs,
-		nil,
+		[]delayedCallback{
+			// 2 backfills at iteration 14 when cache is populated
+			{
+				at: time.Date(2022, 6, 1, 14, 0, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+						BackfillRequest: []*schedpb.BackfillRequest{{
+							StartTime:     timestamp.TimePtr(time.Date(2022, 5, 31, 12, 0, 0, 0, time.UTC)),
+							EndTime:       timestamp.TimePtr(time.Date(2022, 5, 31, 14, 0, 0, 0, time.UTC)),
+							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+						}},
+					})
+				},
+			},
+			// 2 iterations before cache is populated
+			{
+				at: time.Date(2022, 5, 31, 23, 0, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+						BackfillRequest: []*schedpb.BackfillRequest{{
+							StartTime:     timestamp.TimePtr(time.Date(2022, 5, 31, 12, 0, 0, 0, time.UTC)),
+							EndTime:       timestamp.TimePtr(time.Date(2022, 5, 31, 14, 0, 0, 0, time.UTC)),
+							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+						}},
+					})
+				},
+			},
+		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Calendar: []*schedpb.CalendarSpec{
@@ -1429,6 +1456,6 @@ func (s *workflowSuite) TestLotsOfIterations() {
 				},
 			},
 		},
-		iterations+1,
+		iterations+5,
 	)
 }

@@ -57,9 +57,9 @@ type SchedulerWorkflowVersion int64
 
 const (
 	// represents the state before Version is introduced
-	SCHEDULDER_WORKFLOW_VERSION_0 SchedulerWorkflowVersion = iota
+	InitialVersion SchedulerWorkflowVersion = iota
 	// skip over entire time range if paused and batch and cache getNextTime queries
-	SCHEDULDER_WORKFLOW_VERSION_1
+	BatchandCacheTimeQueries
 )
 
 const (
@@ -118,7 +118,7 @@ type (
 
 		// This cache is used to store time results after batching getNextTime queries
 		// in a single SideEffect
-		nextTimeResultCache []getNextTimeResult
+		nextTimeResultCache map[time.Time]getNextTimeResult
 	}
 
 	tweakablePolicies struct {
@@ -172,7 +172,7 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		Version:                           SCHEDULDER_WORKFLOW_VERSION_1,
+		Version:                           BatchandCacheTimeQueries,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -219,13 +219,8 @@ func (s *scheduler) run() error {
 	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
-	currentVersion := s.tweakables.Version
-
 	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
-		// in case of downgrades, break to continue-as-new
-		if currentVersion > s.tweakables.Version {
-			break
-		}
+
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
 		if t2.Before(t1) {
@@ -361,36 +356,31 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 	}
 }
 
-func (s *scheduler) getNextTime(after time.Time, stop time.Time) getNextTimeResult {
+func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
 
-	// ignore start times that come before the 'after' parameter
-	for len(s.nextTimeResultCache) != 0 && after.Before(s.nextTimeResultCache[0].Next) {
-		s.nextTimeResultCache = s.nextTimeResultCache[1:]
+	// we populate the map sequentially, if after is not in the map, it means we either exauhsted
+	// all items, or we jumped through time (forward or backward), in either case, refresh the cache
+	next, ok := s.nextTimeResultCache[after]
+	if ok {
+		return next
 	}
-
-	// if we exhausted all cache elements, fetch more schedules
-	if len(s.nextTimeResultCache) == 0 {
-		// Run this logic in a SideEffect so that we can fix bugs there without breaking
-		// existing schedule workflows.
-		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-			var results []getNextTimeResult
-			for len(results) < maxNextTimeResultCacheSize {
-				next := s.cspec.getNextTime(after)
-				after = next.Next
-				results = append(results, next)
-				// if there is no matching time, stop fetching
-				if after.IsZero() {
-					break
-				}
+	// Run this logic in a SideEffect so that we can fix bugs there without breaking
+	// existing schedule workflows.
+	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		results := make(map[time.Time]getNextTimeResult)
+		localAfter := after
+		for len(results) < maxNextTimeResultCacheSize {
+			next := s.cspec.getNextTime(localAfter)
+			results[localAfter] = next
+			localAfter = next.Next
+			// if there is no matching time, stop fetching
+			if localAfter.IsZero() {
+				break
 			}
-			return results
-		}).Get(&s.nextTimeResultCache))
-	}
-	next := s.nextTimeResultCache[0]
-	if next.Next.Before(stop) || next.Next.Equal(stop) {
-		s.nextTimeResultCache = s.nextTimeResultCache[1:]
-	}
-	return next
+		}
+		return results
+	}).Get(&s.nextTimeResultCache))
+	return s.nextTimeResultCache[after]
 }
 
 func (s *scheduler) processTimeRange(
@@ -409,31 +399,31 @@ func (s *scheduler) processTimeRange(
 	// A previous version would record a marker for each time which could make a workflow
 	// fail. With the new version, the entire time range is skipped if the workflow is paused
 	// or we are not going to take an action now
-	if s.tweakables.Version >= SCHEDULDER_WORKFLOW_VERSION_1 {
+	if s.tweakables.Version >= BatchandCacheTimeQueries {
 		// Peek at paused/remaining actions state and don't bother if we're not going to
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
-			return s.getNextTime(t2, t2).Next
+			return s.getNextTime(t2).Next
 		}
 	}
 
 	for {
 		var next getNextTimeResult
-		if s.tweakables.Version < SCHEDULDER_WORKFLOW_VERSION_1 {
+		if s.tweakables.Version < BatchandCacheTimeQueries {
 			// Run this logic in a SideEffect so that we can fix bugs there without breaking
 			// existing schedule workflows.
 			panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
 				return s.cspec.getNextTime(t1)
 			}).Get(&next))
 		} else {
-			next = s.getNextTime(t1, t2)
+			next = s.getNextTime(t1)
 		}
 		t1 = next.Next
 		if t1.IsZero() || t1.After(t2) {
 			return t1
 		}
-		if s.tweakables.Version < SCHEDULDER_WORKFLOW_VERSION_1 && !s.canTakeScheduledAction(manual, false) {
+		if s.tweakables.Version < BatchandCacheTimeQueries && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
