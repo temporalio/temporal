@@ -351,7 +351,7 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 		return nil
 	})
 	iceptor := heartbeatRecordingInterceptor{}
-	env.SetWorkerOptions(worker.Options{MaxHeartbeatThrottleInterval: time.Nanosecond, DefaultHeartbeatThrottleInterval: time.Nanosecond, Interceptors: []interceptor.WorkerInterceptor{&iceptor}})
+	env.SetWorkerOptions(worker.Options{Interceptors: []interceptor.WorkerInterceptor{&iceptor}})
 	env.RegisterActivity(a)
 	params := TaskQueueUserDataReplicationParamsWithNamespace{
 		TaskQueueUserDataReplicationParams: TaskQueueUserDataReplicationParams{PageSize: 10, RPS: 1},
