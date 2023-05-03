@@ -59,7 +59,7 @@ const (
 	// represents the state before Version is introduced
 	InitialVersion SchedulerWorkflowVersion = iota
 	// skip over entire time range if paused and batch and cache getNextTime queries
-	BatchandCacheTimeQueries
+	BatchAndCacheTimeQueries
 )
 
 const (
