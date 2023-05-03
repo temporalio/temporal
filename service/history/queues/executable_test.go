@@ -151,24 +151,14 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 
 func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 	executable := s.newTestExecutable()
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(ctx context.Context, _ Executable) ([]metrics.Tag, bool, error) {
-			s.Equal(headers.CallerTypeBackground, headers.GetCallerInfo(ctx).CallerType)
-			return nil, true, errors.New("some random error")
-		},
-	)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, errors.New("some random error"))
 	err := executable.Execute()
 	s.Error(err)
 	executable.HandleErr(err)
 	s.Equal(2, executable.Attempt())
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(ctx context.Context, _ Executable) ([]metrics.Tag, bool, error) {
-			s.Equal(headers.CallerTypeBackground, headers.GetCallerInfo(ctx).CallerType)
-			// isActive changed to false, should reset attempt
-			return nil, false, nil
-		},
-	)
+	// isActive changed to false, should reset attempt
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, false, nil)
 	s.NoError(executable.Execute())
 	s.Equal(1, executable.Attempt())
 }
