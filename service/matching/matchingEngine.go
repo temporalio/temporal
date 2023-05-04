@@ -270,7 +270,12 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	taskQueueName := addRequest.TaskQueue.GetName()
 	taskQueueKind := addRequest.TaskQueue.GetKind()
 
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	origTaskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return false, err
+	}
+
+	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -321,7 +326,12 @@ func (e *matchingEngineImpl) AddActivityTask(
 	taskQueueName := addRequest.TaskQueue.GetName()
 	taskQueueKind := addRequest.TaskQueue.GetKind()
 
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	origTaskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	if err != nil {
+		return false, err
+	}
+
+	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -567,7 +577,13 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	namespaceID := namespace.ID(queryRequest.GetNamespaceId())
 	taskQueueName := queryRequest.TaskQueue.GetName()
 	taskQueueKind := queryRequest.TaskQueue.GetKind()
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	origTaskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, queryRequest.WorkerVersionStamp, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
@@ -912,10 +928,19 @@ func (e *matchingEngineImpl) getAllPartitions(
 
 func (e *matchingEngineImpl) getTask(
 	ctx context.Context,
-	taskQueue *taskQueueID,
+	origTaskQueue *taskQueueID,
 	taskQueueKind enumspb.TaskQueueKind,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
+	taskQueue, err := e.redirectToVersionedQueueForPoll(
+		ctx,
+		origTaskQueue,
+		pollMetadata.workerVersionCapabilities,
+		taskQueueKind,
+	)
+	if err != nil {
+		return nil, err
+	}
 	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
 	if err != nil {
 		return nil, err
@@ -1108,6 +1133,83 @@ func (e *matchingEngineImpl) emitForwardedSourceStats(
 	default:
 		metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	}
+}
+
+func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
+	ctx context.Context,
+	taskQueue *taskQueueID,
+	workerVersionCapabilities *commonpb.WorkerVersionCapabilities,
+	kind enumspb.TaskQueueKind,
+) (*taskQueueID, error) {
+	// Since sticky queues are pinned to a particular worker, we don't need to redirect
+	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// TODO: we may need to kick the workflow off of the sticky queue here
+		// (e.g. serviceerrors.StickyWorkerUnavailable) if there's a newer build id
+		return taskQueue, nil
+	}
+	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
+	if err != nil {
+		return nil, err
+	}
+	userData, err := unversionedTQM.GetUserData(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if userData.GetData().GetVersioningData() == nil {
+		if workerVersionCapabilities == nil {
+			// queue is not versioned and neither is worker, all good
+			return taskQueue, nil
+		}
+		// TODO: consider making an ephemeral set so we can match even if replication fails
+		return nil, errPollWithVersionOnUnversionedQueue
+	}
+	if workerVersionCapabilities == nil {
+		// TODO: We should leave this one on the unversioned queue for unversioned workflows to
+		// continue running. Do that in the same PR as the first-wft switch below.
+		return nil, errPollOnVersionedQueueWithNoVersion
+	}
+	versionSet, err := lookupVersionSetForPoll(userData.Data.VersioningData, workerVersionCapabilities)
+	if err != nil {
+		return nil, err
+	}
+	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), nil
+}
+
+func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
+	ctx context.Context,
+	taskQueue *taskQueueID,
+	stamp *commonpb.WorkerVersionStamp,
+	kind enumspb.TaskQueueKind,
+) (*taskQueueID, error) {
+	// sticky queues are unversioned
+	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		return taskQueue, nil
+	}
+	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
+	if err != nil {
+		return nil, err
+	}
+	userData, err := unversionedTQM.GetUserData(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if userData.GetData().GetVersioningData() == nil {
+		if stamp == nil {
+			// queue is not versioned and neither is workflow, all good
+			return taskQueue, nil
+		}
+		return nil, errVersionedTaskForUnversionedQueue
+	}
+
+	// TODO: Here we have to distinguish between a new workflow (first wft), which we should
+	// assign to the default version), and a later wft, which we should leave on the
+	// unversioned queue. Do that in a follow-up PR.
+
+	versionSet, err := lookupVersionSetForAdd(userData.Data.VersioningData, stamp)
+	if err != nil {
+		return nil, err
+	}
+	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), nil
 }
 
 func (m *lockableQueryTaskMap) put(key string, value chan *queryResult) {
