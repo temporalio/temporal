@@ -39,9 +39,8 @@ import (
 )
 
 var (
-	// TODO: go over error types, maybe not all should be invalid argument
+	// TODO: all of these errors are temporary, we'll handle all these cases in future PRs
 	errBuildIDNotFound                   = serviceerror.NewInvalidArgument("build ID not found")
-	errNewerBuildFound                   = serviceerror.NewInvalidArgument("newer compatible build exists")
 	errEmptyVersioningData               = serviceerror.NewInvalidArgument("versioning data is empty")
 	errPollWithVersionOnUnversionedQueue = serviceerror.NewInvalidArgument("poll with version capabilities on unversioned queue")
 	errPollOnVersionedQueueWithNoVersion = serviceerror.NewInvalidArgument("poll on versioned queue with no version capabilities")
@@ -291,8 +290,9 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 		return "", errBuildIDNotFound
 	}
 	set := data.VersionSets[setIdx]
-	if caps.BuildId != set.BuildIds[len(set.BuildIds)-1].Id {
-		return "", errNewerBuildFound
+	latestInSet := set.BuildIds[len(set.BuildIds)-1].Id
+	if caps.BuildId != latestInSet {
+		return "", serviceerror.NewNewerBuildExists(latestInSet)
 	}
 	return getSetID(set), nil
 }
