@@ -216,8 +216,13 @@ func (s *fileBasedClientSuite) TestGetDurationValue() {
 	s.Equal(time.Minute, v)
 }
 
-func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
+func (s *fileBasedClientSuite) TestGetDurationValue_DefaultSeconds() {
 	v := s.collection.GetDurationPropertyFilteredByNamespace(testGetDurationPropertyKey, time.Second)("samples-namespace")
+	s.Equal(2*time.Second, v)
+}
+
+func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
+	v := s.collection.GetDurationPropertyFilteredByNamespace(testGetDurationPropertyKey, time.Second)("broken-namespace")
 	s.Equal(time.Second, v)
 }
 
