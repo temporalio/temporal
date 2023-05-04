@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -399,13 +400,15 @@ func (c *ControllerImpl) acquireShards() {
 			return
 		}
 
+		systemBackgroundCtx := headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
+
 		// Wait up to 1s for the shard to acquire the rangeid lock.
 		// After 1s we will move on but the shard will continue trying in the background.
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		ctx, cancel := context.WithTimeout(systemBackgroundCtx, 1*time.Second)
 		defer cancel()
 		_, _ = shard.GetEngine(ctx)
 
-		ctx, cancel = context.WithTimeout(context.Background(), shardIOTimeout)
+		ctx, cancel = context.WithTimeout(systemBackgroundCtx, shardIOTimeout)
 		defer cancel()
 		// trust the AssertOwnership will handle shard ownership lost
 		_ = shard.AssertOwnership(ctx)

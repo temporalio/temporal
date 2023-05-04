@@ -26,6 +26,7 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"math"
 	"strconv"
@@ -47,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/matching"
 )
 
@@ -789,7 +789,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		// Test get history from old SDKs
 		// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
 		// See comment in workflowHandler.go:GetWorkflowExecutionHistory
-		ctx, _ := rpc.NewContextWithTimeout(90 * time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		oldSDKCtx := headers.SetVersionsForTests(ctx, "1.3.1", headers.ClientNameJavaSDK, headers.SupportedServerVersions, "")
 		resp, err := s.engine.GetWorkflowExecutionHistory(oldSDKCtx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:              s.namespace,
@@ -797,6 +797,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 			MaximumPageSize:        5,
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
 		})
+		cancel()
 		s.NoError(err)
 		events = resp.History.Events
 		s.Equal(1, len(events))

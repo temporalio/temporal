@@ -192,7 +192,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, errors.New("some random error")),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, errors.New("some random error")),
 	)
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -218,7 +218,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "")),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "")),
 	)
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -260,7 +260,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	}
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(historyBlob, nil),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
 	)
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -286,7 +286,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, errors.New("upload non-retryable error")),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, errors.New("upload non-retryable error")),
 	)
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -330,9 +330,9 @@ func (h *historyArchiverSuite) TestArchive_Skip() {
 	}
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(historyBlob, nil),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, serviceerror.NewNotFound("workflow not found")),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, serviceerror.NewNotFound("workflow not found")),
 	)
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -391,7 +391,7 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 	}
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(historyBlob, nil),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(historyBlob, nil),
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 

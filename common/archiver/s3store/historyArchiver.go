@@ -162,7 +162,7 @@ func (h *historyArchiver) Archive(
 		historyIterator = loadHistoryIterator(ctx, request, h.container.ExecutionManager, featureCatalog, &progress)
 	}
 	for historyIterator.HasNext() {
-		historyBlob, err := historyIterator.Next()
+		historyBlob, err := historyIterator.Next(ctx)
 		if err != nil {
 			if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 				// workflow history no longer exists, may due to duplicated archival signal

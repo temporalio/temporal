@@ -186,7 +186,7 @@ func SetupNewWorkflowForRetryOrCron(
 		RunId:      newRunID,
 	}
 
-	firstRunID, err := previousMutableState.GetFirstRunID()
+	firstRunID, err := previousMutableState.GetFirstRunID(ctx)
 	if err != nil {
 		return err
 	}
