@@ -39,7 +39,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -270,13 +269,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -498,13 +490,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -841,13 +826,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -995,13 +973,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().UTC().Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -1120,13 +1091,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -1476,10 +1440,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 
 	// resend history post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution:   &execution,
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,

@@ -29,10 +29,8 @@ import (
 	"errors"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -230,23 +228,6 @@ func getStandbyPostActionFn(
 
 	// task start time + StandbyTaskMissingEventsResendDelay <= now
 	return discardTaskStandbyPostActionFn
-}
-
-func refreshTasks(
-	ctx context.Context,
-	adminClient adminservice.AdminServiceClient,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-) error {
-	_, err := adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-	})
-	return err
 }
 
 func getRemoteClusterName(
