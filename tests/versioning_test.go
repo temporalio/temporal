@@ -25,7 +25,6 @@
 package tests
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"testing"
@@ -37,8 +36,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -55,7 +52,7 @@ type versioningIntegSuite struct {
 
 func (s *versioningIntegSuite) SetupSuite() {
 	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
-	s.dynamicConfigOverrides[dynamicconfig.MatchingUpdateAckInterval] = 1 * time.Second
+	s.dynamicConfigOverrides[dynamicconfig.MatchingMaxTaskQueueIdleTime] = 5 * time.Second
 	s.dynamicConfigOverrides[dynamicconfig.FrontendEnableWorkerVersioningDataAPIs] = true
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
@@ -173,8 +170,7 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-// This test verifies that the lease renewal of a task queue does not destroy the versioning data - as it updates the
-// task queue info. We need to make sure that update preserves the versioning data.
+// This test verifies that user data persists across unload/reload.
 func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
@@ -189,27 +185,9 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	s.NoError(err)
 	s.NotNil(res)
 
-	sdkWorker := worker.New(s.sdkClient, tq, worker.Options{})
-	if err := sdkWorker.Start(); err != nil {
-		s.Logger.Fatal("Error starting worker", tag.Error(err))
-	}
-
-	wfFunc := func(ctx workflow.Context) error {
-		// This timer exists to ensure the lease-renewal on the task queue happens, to verify that doesn't blow up data.
-		// The renewal interval has been lowered in this suite.
-		_ = workflow.Sleep(ctx, 3*time.Second)
-		return nil
-	}
-	sdkWorker.RegisterWorkflow(wfFunc)
-	id := "integration-test-unhandled-command-new-task"
-	workflowOptions := sdkclient.StartWorkflowOptions{ID: id, TaskQueue: tq}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, wfFunc)
-	s.NoError(err)
-	err = workflowRun.Get(ctx, nil)
-	s.NoError(err)
-	sdkWorker.Stop()
+	// The idle interval has been lowered to 5s in this suite, so we can sleep > 10s to ensure
+	// that the task queue is unloaded.
+	time.Sleep(11 * time.Second)
 
 	res2, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
