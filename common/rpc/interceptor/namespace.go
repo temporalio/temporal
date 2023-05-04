@@ -58,6 +58,20 @@ func MustGetNamespaceName(
 	return namespaceName
 }
 
+// MustGetNamespaceID returns request namespace ID
+// or EmptyID if there's error when retrieving namespace name,
+// e.g. unable to find namespace
+func MustGetNamespaceID(
+	namespaceRegistry namespace.Registry,
+	req interface{},
+) namespace.ID {
+	namespaceID, err := GetNamespaceID(namespaceRegistry, req)
+	if err != nil {
+		return namespace.EmptyID
+	}
+	return namespaceID
+}
+
 func GetNamespaceName(
 	namespaceRegistry namespace.Registry,
 	req interface{},
