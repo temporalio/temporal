@@ -59,19 +59,21 @@ func TestActivitiesSuite(t *testing.T) {
 	suite.Run(t, new(activitiesSuite))
 }
 
+const NumTotalEvents = 10
+
 // pattern contains either c or f representing completed or failed task
-// Schedule events for each task has id of 2*i + 1 where i is the index of the character
-// eventId for each task has id of 2*i+2 where is is the index of the character
-func generateEventHistory(pattern string, shouldReverse bool) history.History {
+// Schedule events for each task has id of NumTotalEvents*i + 1 where i is the index of the character
+// eventId for each task has id of NumTotalEvents*i+NumTotalEvents where is is the index of the character
+func generateEventHistory(pattern string) history.History {
 
 	events := make([]*history.HistoryEvent, 0)
 	for i, char := range pattern {
 		// add a Schedule event independent of type of event
-		scheduledEventId := int64(2*i + 1)
+		scheduledEventId := int64(NumTotalEvents*i + 1)
 		scheduledEvent := history.HistoryEvent{EventId: scheduledEventId, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED}
 		events = append(events, &scheduledEvent)
 
-		event := history.HistoryEvent{EventId: int64(2*i + 2)}
+		event := history.HistoryEvent{EventId: int64(NumTotalEvents*i + NumTotalEvents)}
 		switch unicode.ToLower(char) {
 		case 'c':
 			event.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED
@@ -84,12 +86,15 @@ func generateEventHistory(pattern string, shouldReverse bool) history.History {
 		events = append(events, &event)
 	}
 
-	if shouldReverse {
-		for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
-			events[i], events[j] = events[j], events[i]
-		}
-	}
 	return history.History{Events: events}
+}
+
+func reverse(hist history.History) history.History {
+	for i, j := 0, len(hist.Events)-1; i < j; i, j = i+1, j-1 {
+		hist.Events[i], hist.Events[j] = hist.Events[j], hist.Events[i]
+	}
+
+	return hist
 }
 
 func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
@@ -103,27 +108,27 @@ func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 	}{
 		{
 			name:                    "Test history with all completed task event history",
-			history:                 generateEventHistory("ccccc", true),
-			wantWorkflowTaskEventID: 2*4 + 2,
+			history:                 reverse(generateEventHistory("ccccc")),
+			wantWorkflowTaskEventID: NumTotalEvents*4 + NumTotalEvents,
 		},
 		{
 			name:                    "Test history with last task failing",
-			history:                 generateEventHistory("ccccf", true),
-			wantWorkflowTaskEventID: 2*3 + 2,
+			history:                 reverse(generateEventHistory("ccccf")),
+			wantWorkflowTaskEventID: NumTotalEvents*3 + NumTotalEvents,
 		},
 		{
 			name:                    "Test history with all tasks failing",
-			history:                 generateEventHistory("fffff", true),
+			history:                 reverse(generateEventHistory("fffff")),
 			wantWorkflowTaskEventID: 2,
 		},
 		{
 			name:                    "Test history with some tasks failing in the middle",
-			history:                 generateEventHistory("cfffc", true),
-			wantWorkflowTaskEventID: 2*4 + 2,
+			history:                 reverse(generateEventHistory("cfffc")),
+			wantWorkflowTaskEventID: NumTotalEvents*4 + NumTotalEvents,
 		},
 		{
 			name:    "Test history with empty history should error",
-			history: generateEventHistory("", true),
+			history: reverse(generateEventHistory("")),
 			wantErr: true,
 		},
 	}
@@ -155,32 +160,32 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 	}{
 		{
 			name:                    "Test history with all completed task event history",
-			history:                 generateEventHistory("ccccc", false),
-			wantWorkflowTaskEventID: 2,
+			history:                 generateEventHistory("ccccc"),
+			wantWorkflowTaskEventID: NumTotalEvents,
 		},
 		{
 			name:                    "Test history with last task failing",
-			history:                 generateEventHistory("ccccf", false),
-			wantWorkflowTaskEventID: 2,
+			history:                 generateEventHistory("ccccf"),
+			wantWorkflowTaskEventID: NumTotalEvents,
 		},
 		{
 			name:                    "Test history with first task failing",
-			history:                 generateEventHistory("fcccc", false),
-			wantWorkflowTaskEventID: 2*1 + 2,
+			history:                 generateEventHistory("fcccc"),
+			wantWorkflowTaskEventID: NumTotalEvents*1 + NumTotalEvents,
 		},
 		{
 			name:                    "Test history with all tasks failing",
-			history:                 generateEventHistory("fffff", false),
+			history:                 generateEventHistory("fffff"),
 			wantWorkflowTaskEventID: 2,
 		},
 		{
 			name:                    "Test history with some tasks failing in the middle",
-			history:                 generateEventHistory("cfffc", false),
-			wantWorkflowTaskEventID: 2,
+			history:                 generateEventHistory("cfffc"),
+			wantWorkflowTaskEventID: NumTotalEvents,
 		},
 		{
 			name:    "Test history with empty history should error",
-			history: generateEventHistory("", true),
+			history: generateEventHistory(""),
 			wantErr: true,
 		},
 	}
