@@ -63,7 +63,7 @@ func TestUserDataReplicationTestSuite(t *testing.T) {
 
 func (s *userDataReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
-	s.dynamicConfigOverrides[dynamicconfig.EnableWorkerVersioning] = true
+	s.dynamicConfigOverrides[dynamicconfig.FrontendEnableWorkerVersioningDataAPIs] = true
 	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
 }
 
