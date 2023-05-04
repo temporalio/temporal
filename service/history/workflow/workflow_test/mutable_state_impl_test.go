@@ -39,6 +39,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -164,11 +165,6 @@ func (c mutationTestCase) startWorkflowExecution(
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	_, _, err = ms.CloseTransactionAsMutation(c.transactionPolicy)
-	if err != nil {
-		t.Fatal(err)
-	}
 }
 
 func (c mutationTestCase) addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableStateImpl) {
@@ -221,6 +217,10 @@ func (c mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.Na
 		startTime,
 	)
 	ms.GetExecutionInfo().NamespaceId = nsEntry.ID().String()
+	// must start with a non-empty version history so that we have something to compare against when writing
+	ms.GetExecutionInfo().VersionHistories.Histories[0].Items = []*historyspb.VersionHistoryItem{
+		{Version: 0, EventId: 1},
+	}
 
 	return ms
 }
