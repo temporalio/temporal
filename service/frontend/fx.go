@@ -82,6 +82,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
+	fx.Provide(ShardNamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
@@ -136,6 +137,7 @@ func GrpcServerOptionsProvider(
 	rpcFactory common.RPCFactory,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	shardNamespaceRateLimiterInterceptor *interceptor.ShardNamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.NamespaceCountLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	redirectionInterceptor *RedirectionInterceptor,
@@ -194,6 +196,7 @@ func GrpcServerOptionsProvider(
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
+		shardNamespaceRateLimiterInterceptor.Intercept,
 		rateLimitInterceptor.Intercept,
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
@@ -339,6 +342,47 @@ func NamespaceRateLimitInterceptorProvider(
 		},
 	)
 	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{})
+}
+
+func ShardNamespaceRateLimitInterceptorProvider(
+	serviceName primitives.ServiceName,
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+	frontendServiceResolver membership.ServiceResolver,
+) *interceptor.ShardNamespaceRateLimitInterceptor {
+	var globalNamespaceVisibilityRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+
+	switch serviceName {
+	case primitives.FrontendService:
+		globalNamespaceVisibilityRPS = serviceConfig.GlobalNamespaceVisibilityRPS
+	case primitives.InternalFrontendService:
+		globalNamespaceVisibilityRPS = serviceConfig.InternalFEGlobalNamespaceVisibilityRPS
+	default:
+		panic("invalid service name")
+	}
+
+	rateFn := func(namespace string) float64 {
+		return float64(serviceConfig.MaxNamespaceRPSPerShard(namespace))
+	}
+
+	visibilityRateFn := func(namespace string) float64 {
+		return namespaceRPS(
+			serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
+			globalNamespaceVisibilityRPS,
+			frontendServiceResolver,
+			namespace,
+		)
+	}
+	namespaceRateLimiter := quotas.NewNamespaceRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return configs.NewRequestToRateLimiter(
+				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerShard),
+				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerShard),
+			)
+		},
+	)
+	return interceptor.NewShardNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{}, serviceConfig.NumHistoryShards)
 }
 
 func NamespaceCountLimitInterceptorProvider(

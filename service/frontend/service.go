@@ -70,6 +70,8 @@ type Config struct {
 	RPS                                    dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstPerInstance           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceRPSPerShard                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceBurstPerShard              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceCountPerInstance           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -191,6 +193,8 @@ func NewConfig(
 		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
 		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
 		MaxNamespaceBurstPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerInstance, 4800),
+		MaxNamespaceRPSPerShard:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerShard, 2400),
+		MaxNamespaceBurstPerShard:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerShard, 4800),
 		MaxNamespaceCountPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
 		MaxNamespaceVisibilityRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
 		MaxNamespaceVisibilityBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),

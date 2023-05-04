@@ -182,6 +182,10 @@ const (
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
 	// FrontendMaxNamespaceBurstPerInstance is workflow namespace burst limit
 	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
+	// FrontendMaxNamespaceRPSPerShard is workflow per-shard namespace rate limit per second
+	FrontendMaxNamespaceRPSPerShard = "frontend.shardNamespaceRPS"
+	// FrontendMaxNamespaceBurstPerShard is workflow per-shard namespace burst limit
+	FrontendMaxNamespaceBurstPerShard = "frontend.shardNamespaceBurst"
 	// FrontendMaxNamespaceCountPerInstance limits concurrent task queue polls per namespace per instance
 	FrontendMaxNamespaceCountPerInstance = "frontend.namespaceCount"
 	// FrontendMaxNamespaceVisibilityRPSPerInstance is namespace rate limit per second for visibility APIs.

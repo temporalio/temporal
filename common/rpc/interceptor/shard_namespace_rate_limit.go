@@ -82,6 +82,12 @@ func (i *ShardNamespaceRateLimitInterceptor) Intercept(
 
 	namespaceID := MustGetNamespaceID(i.namespaceRegistry, req)
 	shardID := MustGetShardID(i.namespaceRegistry, req, i.numShards)
+
+	if namespaceID == namespace.EmptyID || shardID == -1 {
+		// skip rate limiting for requests that do not target a specific shard+namespace
+		return handler(ctx, req)
+	}
+
 	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,
