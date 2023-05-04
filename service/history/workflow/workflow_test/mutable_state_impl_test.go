@@ -109,6 +109,7 @@ func (c mutationTestCase) Run(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_ = mu
 
 	if c.expectFailure {
@@ -122,6 +123,8 @@ func (c mutationTestCase) startWFT(
 	t *testing.T,
 	ms *workflow.MutableStateImpl,
 ) *workflow.WorkflowTaskInfo {
+	t.Helper()
+
 	wft, err := ms.AddWorkflowTaskScheduledEvent(false, enums.WORKFLOW_TASK_TYPE_NORMAL)
 	if err != nil {
 		t.Fatal(err)
@@ -131,10 +134,15 @@ func (c mutationTestCase) startWFT(
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return wft
 }
 
-func (c mutationTestCase) startWorkflowExecution(t *testing.T, ms *workflow.MutableStateImpl, nsEntry *namespace.Namespace) {
+func (c mutationTestCase) startWorkflowExecution(
+	t *testing.T,
+	ms *workflow.MutableStateImpl,
+	nsEntry *namespace.Namespace,
+) {
 	t.Helper()
 
 	_, err := ms.AddWorkflowExecutionStartedEvent(
@@ -284,6 +292,7 @@ func (c mutationTestCase) testFailure(
 	}
 
 	flushedSignals := 0
+
 	for _, batch := range workflowEvents {
 		for _, ev := range batch.Events {
 			if ev.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
@@ -291,6 +300,7 @@ func (c mutationTestCase) testFailure(
 			}
 		}
 	}
+
 	if flushedSignals != c.signals {
 		t.Errorf(
 			"Expected number of flushed signals, %d, to equal the number of signals in this WFT, %d",
