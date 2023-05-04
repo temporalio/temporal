@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistence2 "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -53,27 +53,27 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
-func TestMutableStateImpl_CloseTransactionAsMutation(t *testing.T) {
+func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []mutationTestCase{
 		{
-			name:              "numEvents<maxNumEvents",
-			numEvents:         1,
+			name:              "signals<maxNumEvents",
+			signals:           1,
 			maxNumEvents:      2,
 			transactionPolicy: workflow.TransactionPolicyActive,
 			expectFailure:     false,
 		},
 		{
-			name:              "numEvents=maxNumEvents",
-			numEvents:         2,
+			name:              "signals=maxNumEvents",
+			signals:           2,
 			maxNumEvents:      2,
 			transactionPolicy: workflow.TransactionPolicyActive,
 			expectFailure:     true,
 		},
 		{
-			name:              "numEvents>maxNumEvents",
-			numEvents:         3,
+			name:              "signals>maxNumEvents",
+			signals:           3,
 			maxNumEvents:      2,
 			transactionPolicy: workflow.TransactionPolicyActive,
 			expectFailure:     true,
@@ -86,7 +86,7 @@ func TestMutableStateImpl_CloseTransactionAsMutation(t *testing.T) {
 type mutationTestCase struct {
 	name              string
 	transactionPolicy workflow.TransactionPolicy
-	numEvents         int
+	signals           int
 	maxNumEvents      int
 	expectFailure     bool
 }
@@ -96,6 +96,46 @@ func (c mutationTestCase) Run(t *testing.T) {
 
 	nsEntry := tests.LocalNamespaceEntry
 	ms := c.createMutableState(t, nsEntry)
+
+	c.startWorkflowExecution(t, ms, nsEntry)
+
+	wft := c.startWFT(t, ms)
+
+	for i := 0; i < c.signals; i++ {
+		c.addWorkflowExecutionSignaled(t, i, ms)
+	}
+
+	mu, workflowEvents, err := ms.CloseTransactionAsMutation(c.transactionPolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = mu
+
+	if c.expectFailure {
+		c.testFailure(t, ms, wft, workflowEvents)
+	} else {
+		c.testSuccess(t, ms, workflowEvents)
+	}
+}
+
+func (c mutationTestCase) startWFT(
+	t *testing.T,
+	ms *workflow.MutableStateImpl,
+) *workflow.WorkflowTaskInfo {
+	wft, err := ms.AddWorkflowTaskScheduledEvent(false, enums.WORKFLOW_TASK_TYPE_NORMAL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return wft
+}
+
+func (c mutationTestCase) startWorkflowExecution(t *testing.T, ms *workflow.MutableStateImpl, nsEntry *namespace.Namespace) {
+	t.Helper()
 
 	_, err := ms.AddWorkflowExecutionStartedEvent(
 		commonpb.WorkflowExecution{
@@ -117,31 +157,9 @@ func (c mutationTestCase) Run(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c.completeOneWFT(t, ms)
-
-	wft, err := ms.AddWorkflowTaskScheduledEvent(false, enums.WORKFLOW_TASK_TYPE_NORMAL)
+	_, _, err = ms.CloseTransactionAsMutation(c.transactionPolicy)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	_, wft, err = ms.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, wft.RequestID, wft.TaskQueue, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for i := 0; i < c.numEvents; i++ {
-		c.addWorkflowExecutionSignaled(t, i, ms)
-	}
-
-	_, workflowEvents, err := ms.CloseTransactionAsMutation(c.transactionPolicy)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if c.expectFailure {
-		c.testFailure(t, ms, wft, workflowEvents)
-	} else {
-		c.testSuccess(t, ms, workflowEvents)
 	}
 }
 
@@ -169,7 +187,7 @@ func (c mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.Na
 
 	ctrl := gomock.NewController(t)
 	cfg := c.createConfig()
-	shardContext := shard.NewTestContext(ctrl, &persistence2.ShardInfo{}, cfg)
+	shardContext := shard.NewTestContext(ctrl, &persistencespb.ShardInfo{}, cfg)
 
 	nsRegistry := shardContext.Resource.NamespaceCache
 	nsRegistry.EXPECT().GetNamespaceByID(nsEntry.ID()).Return(nsEntry, nil).AnyTimes()
@@ -206,39 +224,6 @@ func (c mutationTestCase) createConfig() *configs.Config {
 	}
 
 	return cfg
-}
-
-func (c mutationTestCase) completeOneWFT(t *testing.T, ms *workflow.MutableStateImpl) {
-	t.Helper()
-
-	wft, err := ms.AddWorkflowTaskScheduledEvent(false, enums.WORKFLOW_TASK_TYPE_NORMAL)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, wft, err = ms.AddWorkflowTaskStartedEvent(
-		wft.ScheduledEventID,
-		wft.RequestID,
-		wft.TaskQueue,
-		"identity",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = ms.AddWorkflowTaskCompletedEvent(
-		wft,
-		&workflowservice.RespondWorkflowTaskCompletedRequest{},
-		1,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, err = ms.CloseTransactionAsMutation(c.transactionPolicy)
-	if err != nil {
-		t.Fatal(err)
-	}
 }
 
 func (c mutationTestCase) testWFTFailedEvent(
@@ -296,6 +281,22 @@ func (c mutationTestCase) testFailure(
 	event, ok := c.findWFTEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, workflowEvents)
 	if !ok {
 		t.Fatal("Failed to find WFT-failed event in history")
+	}
+
+	flushedSignals := 0
+	for _, batch := range workflowEvents {
+		for _, ev := range batch.Events {
+			if ev.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+				flushedSignals++
+			}
+		}
+	}
+	if flushedSignals != c.signals {
+		t.Errorf(
+			"Expected number of flushed signals, %d, to equal the number of signals in this WFT, %d",
+			flushedSignals,
+			c.signals,
+		)
 	}
 
 	c.testWFTFailedEvent(t, wft, event)
