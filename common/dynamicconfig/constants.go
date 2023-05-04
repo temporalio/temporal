@@ -318,10 +318,8 @@ const (
 	MatchingSyncMatchWaitDuration = "matching.syncMatchWaitDuration"
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval = "matching.updateAckInterval"
-	// MatchingIdleTaskqueueCheckInterval is the IdleTaskqueueCheckInterval
-	MatchingIdleTaskqueueCheckInterval = "matching.idleTaskqueueCheckInterval"
-	// MaxTaskqueueIdleTime is the max time taskqueue being idle
-	MaxTaskqueueIdleTime = "matching.maxTaskqueueIdleTime"
+	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded
+	MatchingMaxTaskQueueIdleTime = "matching.maxTaskQueueIdleTime"
 	// MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends
 	MatchingOutstandingTaskAppendsThreshold = "matching.outstandingTaskAppendsThreshold"
 	// MatchingMaxTaskBatchSize is max batch size for task writer

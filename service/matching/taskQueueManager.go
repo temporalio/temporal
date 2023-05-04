@@ -45,7 +45,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -242,8 +241,7 @@ func newTaskQueueManager(
 	tlMgr.metadataPoller.tqMgr = tlMgr
 
 	tlMgr.liveness = newLiveness(
-		clock.NewRealTimeSource(),
-		taskQueueConfig.IdleTaskqueueCheckInterval(),
+		taskQueueConfig.MaxTaskQueueIdleTime,
 		tlMgr.unloadFromEngine,
 	)
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
@@ -325,6 +323,8 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
+	// This may call Stop again, but the status check above makes that a no-op.
+	c.unloadFromEngine()
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -347,7 +347,7 @@ func (c *taskQueueManagerImpl) AddTask(
 ) (bool, error) {
 	if params.forwardedFrom == "" {
 		// request sent by history service
-		c.liveness.markAlive(time.Now())
+		c.liveness.markAlive()
 	}
 
 	if c.QueueID().IsRoot() && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
@@ -391,7 +391,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	ctx context.Context,
 	maxDispatchPerSecond *float64,
 ) (*internalTask, error) {
-	c.liveness.markAlive(time.Now())
+	c.liveness.markAlive()
 
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,

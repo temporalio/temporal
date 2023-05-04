@@ -25,103 +25,41 @@
 package matching
 
 import (
-	"sync"
 	"sync/atomic"
 	"time"
-
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 )
 
 type (
 	liveness struct {
-		status     int32
-		timeSource clock.TimeSource
-		ttl        time.Duration
-		// internal shutdown channel
-		shutdownChan chan struct{}
-
-		// broadcast shutdown functions
-		broadcastShutdownFn func()
-
-		sync.Mutex
-		lastEventTime time.Time
+		ttl    func() time.Duration
+		onIdle func()
+		timer  atomic.Value
 	}
 )
 
-var _ common.Daemon = (*liveness)(nil)
-
 func newLiveness(
-	timeSource clock.TimeSource,
-	ttl time.Duration,
-	broadcastShutdownFn func(),
+	ttl func() time.Duration,
+	onIdle func(),
 ) *liveness {
 	return &liveness{
-		status:       common.DaemonStatusInitialized,
-		timeSource:   timeSource,
-		ttl:          ttl,
-		shutdownChan: make(chan struct{}),
-
-		broadcastShutdownFn: broadcastShutdownFn,
-
-		lastEventTime: timeSource.Now(),
+		ttl:    ttl,
+		onIdle: onIdle,
 	}
 }
 
 func (l *liveness) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&l.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
-
-	go l.eventLoop()
+	l.timer.Store(time.AfterFunc(l.ttl(), l.onIdle))
 }
 
 func (l *liveness) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&l.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-
-	close(l.shutdownChan)
-	l.broadcastShutdownFn()
-}
-
-func (l *liveness) eventLoop() {
-	ttlTimer := time.NewTicker(l.ttl)
-	defer ttlTimer.Stop()
-
-	for {
-		select {
-		case <-ttlTimer.C:
-			if !l.isAlive() {
-				l.Stop()
-			}
-
-		case <-l.shutdownChan:
-			return
-		}
+	var nilTimer *time.Timer
+	if t, ok := l.timer.Swap(nilTimer).(*time.Timer); ok && t != nil {
+		t.Stop()
 	}
 }
 
-func (l *liveness) isAlive() bool {
-	l.Lock()
-	defer l.Unlock()
-	return l.lastEventTime.Add(l.ttl).After(l.timeSource.Now())
-}
-
-func (l *liveness) markAlive(
-	now time.Time,
-) {
-	l.Lock()
-	defer l.Unlock()
-	if l.lastEventTime.Before(now) {
-		l.lastEventTime = now.UTC()
+func (l *liveness) markAlive() {
+	if t, ok := l.timer.Load().(*time.Timer); ok && t != nil {
+		t.Reset(l.ttl())
 	}
 }
