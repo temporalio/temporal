@@ -73,8 +73,6 @@ import (
 )
 
 type (
-	ServiceStopFn func()
-
 	ServicesGroupOut struct {
 		fx.Out
 		Services *ServicesMetadata `group:"services"`
@@ -86,19 +84,23 @@ type (
 	}
 
 	ServicesMetadata struct {
-		App           *fx.App // Added for info. ServiceStopFn is enough.
-		ServiceName   primitives.ServiceName
-		ServiceStopFn ServiceStopFn
+		app         *fx.App
+		serviceName primitives.ServiceName
+		logger      log.Logger
+		stopChan    chan struct{}
 	}
 
 	ServerFx struct {
-		app *fx.App
+		app                        *fx.App
+		startupSynchronizationMode synchronizationModeParams
+		logger                     log.Logger
 	}
 
 	serverOptionsProvider struct {
 		fx.Out
-		ServerOptions *serverOptions
-		StopChan      chan interface{}
+		ServerOptions              *serverOptions
+		StopChan                   chan interface{}
+		StartupSynchronizationMode synchronizationModeParams
 
 		Config      *config.Config
 		PProfConfig *config.PProf
@@ -128,9 +130,10 @@ type (
 )
 
 func NewServerFx(opts ...ServerOption) (*ServerFx, error) {
-	app := fx.New(
+	var s ServerFx
+	s.app = fx.New(
 		pprof.Module,
-		ServerFxImplModule,
+		fx.Provide(NewServerFxImpl),
 		fx.Supply(opts),
 		fx.Provide(ServerOptionsProvider),
 		TraceExportModule,
@@ -145,11 +148,14 @@ func NewServerFx(opts ...ServerOption) (*ServerFx, error) {
 		fx.Provide(ApplyClusterMetadataConfigProvider),
 		fx.Invoke(ServerLifetimeHooks),
 		FxLogAdapter,
+
+		fx.Populate(&s.startupSynchronizationMode),
+		fx.Populate(&s.logger),
 	)
-	s := &ServerFx{
-		app,
+	if err := s.app.Err(); err != nil {
+		return nil, err
 	}
-	return s, app.Err()
+	return &s, nil
 }
 
 func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
@@ -242,8 +248,9 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	return serverOptionsProvider{
-		ServerOptions: so,
-		StopChan:      stopChan,
+		ServerOptions:              so,
+		StopChan:                   stopChan,
+		StartupSynchronizationMode: so.startupSynchronizationMode,
 
 		Config:      so.config,
 		PProfConfig: &so.config.Global.PProf,
@@ -271,27 +278,42 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}, nil
 }
 
-func (s ServerFx) Start() error {
-	return s.app.Start(context.Background())
+// Start temporal server.
+// This function should be called only once, Server doesn't support multiple restarts.
+func (s *ServerFx) Start() error {
+	err := s.app.Start(context.Background())
+	if err != nil {
+		return err
+	}
+
+	if s.startupSynchronizationMode.blockingStart {
+		// If s.so.interruptCh is nil this will wait forever.
+		interruptSignal := <-s.startupSynchronizationMode.interruptCh
+		s.logger.Info("Received interrupt signal, stopping the server.", tag.Value(interruptSignal))
+		return s.Stop()
+	}
+
+	return nil
 }
 
-func (s ServerFx) Stop() error {
+// Stop stops the server.
+func (s *ServerFx) Stop() error {
 	return s.app.Stop(context.Background())
 }
 
-func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName, stopChan chan struct{}) {
-	stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
+func (svc *ServicesMetadata) Stop(ctx context.Context) {
+	stopCtx, cancelFunc := context.WithTimeout(ctx, serviceStopTimeout)
 	defer cancelFunc()
-	err := app.Stop(stopCtx)
+	err := svc.app.Stop(stopCtx)
 	if err != nil {
-		logger.Error("Failed to stop service", tag.Service(svcName), tag.Error(err))
+		svc.logger.Error("Failed to stop service", tag.Service(svc.serviceName), tag.Error(err))
 	}
 
 	// verify "Start" goroutine returned
 	select {
-	case <-stopChan:
+	case <-svc.stopChan:
 	case <-stopCtx.Done():
-		logger.Error("Timed out waiting for service to stop", tag.Service(svcName), tag.NewDurationTag("timeout", serviceStopTimeout))
+		svc.logger.Error("Timed out waiting for service to stop", tag.Service(svc.serviceName), tag.NewDurationTag("timeout", serviceStopTimeout))
 	}
 }
 
@@ -331,17 +353,10 @@ func HistoryServiceProvider(
 
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
-		return ServicesGroupOut{
-			Services: &ServicesMetadata{
-				App:           fx.New(fx.NopLogger),
-				ServiceName:   serviceName,
-				ServiceStopFn: func() {},
-			},
-		}, nil
+		return ServicesGroupOut{}, nil
 	}
 
 	stopChan := make(chan struct{})
-
 	app := fx.New(
 		fx.Supply(
 			stopChan,
@@ -378,12 +393,12 @@ func HistoryServiceProvider(
 		FxLogAdapter,
 	)
 
-	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
-			App:           app,
-			ServiceName:   serviceName,
-			ServiceStopFn: stopFn,
+			app:         app,
+			serviceName: serviceName,
+			logger:      params.Logger,
+			stopChan:    stopChan,
 		},
 	}, app.Err()
 }
@@ -395,13 +410,7 @@ func MatchingServiceProvider(
 
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
-		return ServicesGroupOut{
-			Services: &ServicesMetadata{
-				App:           fx.New(fx.NopLogger),
-				ServiceName:   serviceName,
-				ServiceStopFn: func() {},
-			},
-		}, nil
+		return ServicesGroupOut{}, nil
 	}
 
 	stopChan := make(chan struct{})
@@ -438,12 +447,12 @@ func MatchingServiceProvider(
 		FxLogAdapter,
 	)
 
-	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
-			App:           app,
-			ServiceName:   serviceName,
-			ServiceStopFn: stopFn,
+			app:         app,
+			serviceName: serviceName,
+			logger:      params.Logger,
+			stopChan:    stopChan,
 		},
 	}, app.Err()
 }
@@ -466,13 +475,7 @@ func genericFrontendServiceProvider(
 ) (ServicesGroupOut, error) {
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
-		return ServicesGroupOut{
-			Services: &ServicesMetadata{
-				App:           fx.New(fx.NopLogger),
-				ServiceName:   serviceName,
-				ServiceStopFn: func() {},
-			},
-		}, nil
+		return ServicesGroupOut{}, nil
 	}
 
 	stopChan := make(chan struct{})
@@ -528,12 +531,12 @@ func genericFrontendServiceProvider(
 		FxLogAdapter,
 	)
 
-	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
-			App:           app,
-			ServiceName:   serviceName,
-			ServiceStopFn: stopFn,
+			app:         app,
+			serviceName: serviceName,
+			logger:      params.Logger,
+			stopChan:    stopChan,
 		},
 	}, app.Err()
 }
@@ -545,13 +548,7 @@ func WorkerServiceProvider(
 
 	if _, ok := params.ServiceNames[serviceName]; !ok {
 		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
-		return ServicesGroupOut{
-			Services: &ServicesMetadata{
-				App:           fx.New(fx.NopLogger),
-				ServiceName:   serviceName,
-				ServiceStopFn: func() {},
-			},
-		}, nil
+		return ServicesGroupOut{}, nil
 	}
 
 	stopChan := make(chan struct{})
@@ -588,12 +585,12 @@ func WorkerServiceProvider(
 		FxLogAdapter,
 	)
 
-	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
-			App:           app,
-			ServiceName:   serviceName,
-			ServiceStopFn: stopFn,
+			app:         app,
+			serviceName: serviceName,
+			logger:      params.Logger,
+			stopChan:    stopChan,
 		},
 	}, app.Err()
 }
@@ -862,18 +859,9 @@ func loadClusterInformationFromStore(ctx context.Context, config *config.Config,
 
 func ServerLifetimeHooks(
 	lc fx.Lifecycle,
-	svr Server,
+	svr *ServerImpl,
 ) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				return svr.Start()
-			},
-			OnStop: func(ctx context.Context) error {
-				return svr.Stop()
-			},
-		},
-	)
+	lc.Append(fx.StartStopHook(svr.Start, svr.Stop))
 }
 
 func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver) error {

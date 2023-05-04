@@ -235,6 +235,92 @@ func (pdb *db) DeleteAllFromActivityInfoMaps(
 }
 
 var (
+	// Omit shard_id, run_id, namespace_id, workflow_id, update_id since they're in the primary key
+	updateInfoColumns = []string{
+		"data",
+		"data_encoding",
+	}
+	updateInfoTableName = "update_info_maps"
+	updateInfoKey       = "update_id"
+
+	deleteUpdateInfoMapQry      = makeDeleteMapQry(updateInfoTableName)
+	setKeyInUpdateInfoMapQry    = makeSetKeyInMapQry(updateInfoTableName, updateInfoColumns, updateInfoKey)
+	deleteKeyInUpdateInfoMapQry = makeDeleteKeyInMapQry(updateInfoTableName, updateInfoKey)
+	getUpdateInfoMapQry         = makeGetMapQryTemplate(updateInfoTableName, updateInfoColumns, updateInfoKey)
+)
+
+// ReplaceIntoUpdateInfoMaps replaces one or more rows in update_info_maps table
+func (pdb *db) ReplaceIntoUpdateInfoMaps(
+	ctx context.Context,
+	rows []sqlplugin.UpdateInfoMapsRow,
+) (sql.Result, error) {
+	return pdb.conn.NamedExecContext(ctx,
+		setKeyInUpdateInfoMapQry,
+		rows,
+	)
+}
+
+// SelectAllFromUpdateInfoMaps reads all rows from update_info_maps table
+func (pdb *db) SelectAllFromUpdateInfoMaps(
+	ctx context.Context,
+	filter sqlplugin.UpdateInfoMapsAllFilter,
+) ([]sqlplugin.UpdateInfoMapsRow, error) {
+	var rows []sqlplugin.UpdateInfoMapsRow
+	if err := pdb.conn.SelectContext(ctx,
+		&rows, getUpdateInfoMapQry,
+		filter.ShardID,
+		filter.NamespaceID,
+		filter.WorkflowID,
+		filter.RunID,
+	); err != nil {
+		return nil, err
+	}
+	for i := 0; i < len(rows); i++ {
+		rows[i].ShardID = filter.ShardID
+		rows[i].NamespaceID = filter.NamespaceID
+		rows[i].WorkflowID = filter.WorkflowID
+		rows[i].RunID = filter.RunID
+	}
+	return rows, nil
+}
+
+// DeleteFromUpdateInfoMaps deletes one or more rows from update_info_maps table
+func (pdb *db) DeleteFromUpdateInfoMaps(
+	ctx context.Context,
+	filter sqlplugin.UpdateInfoMapsFilter,
+) (sql.Result, error) {
+	query, args, err := sqlx.In(
+		deleteKeyInUpdateInfoMapQry,
+		filter.ShardID,
+		filter.NamespaceID,
+		filter.WorkflowID,
+		filter.RunID,
+		filter.UpdateIDs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return pdb.conn.ExecContext(ctx,
+		pdb.conn.Rebind(query),
+		args...,
+	)
+}
+
+// DeleteAllFromUpdateInfoMaps deletes all rows from update_info_maps table
+func (pdb *db) DeleteAllFromUpdateInfoMaps(
+	ctx context.Context,
+	filter sqlplugin.UpdateInfoMapsAllFilter,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		deleteUpdateInfoMapQry,
+		filter.ShardID,
+		filter.NamespaceID,
+		filter.WorkflowID,
+		filter.RunID,
+	)
+}
+
+var (
 	timerInfoColumns = []string{
 		"data",
 		"data_encoding",

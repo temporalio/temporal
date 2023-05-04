@@ -116,6 +116,18 @@ func applyWorkflowMutationTx(
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
 
+	if err := updateUpdateInfoMap(ctx,
+		tx,
+		workflowMutation.UpsertUpdateInfos,
+		workflowMutation.DeleteUpdateInfos,
+		shardID,
+		namespaceIDBytes,
+		workflowID,
+		runIDBytes,
+	); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
+	}
+
 	if err := updateTimerInfos(ctx,
 		tx,
 		workflowMutation.UpsertTimerInfos,
@@ -270,6 +282,16 @@ func applyWorkflowSnapshotTxAsReset(
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear activity info map. Error: %v", err))
 	}
 
+	if err := deleteUpdateInfoMap(ctx,
+		tx,
+		shardID,
+		namespaceIDBytes,
+		workflowID,
+		runIDBytes,
+	); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear update record map. Error: %v", err))
+	}
+
 	if err := updateActivityInfos(ctx,
 		tx,
 		workflowSnapshot.ActivityInfos,
@@ -280,6 +302,18 @@ func applyWorkflowSnapshotTxAsReset(
 		runIDBytes,
 	); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into activity info map after clearing. Error: %v", err))
+	}
+
+	if err := updateUpdateInfoMap(ctx,
+		tx,
+		workflowSnapshot.UpdateInfos,
+		nil,
+		shardID,
+		namespaceIDBytes,
+		workflowID,
+		runIDBytes,
+	); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to insert into update record map after clearing. Error: %v", err))
 	}
 
 	if err := deleteTimerInfoMap(ctx,
@@ -455,6 +489,18 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsNew(
 		runIDBytes,
 	); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into activity info map after clearing. Error: %v", err))
+	}
+
+	if err := updateUpdateInfoMap(ctx,
+		tx,
+		workflowSnapshot.UpdateInfos,
+		nil,
+		shardID,
+		namespaceIDBytes,
+		workflowID,
+		runIDBytes,
+	); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into update record map after clearing. Error: %v", err))
 	}
 
 	if err := updateTimerInfos(ctx,
