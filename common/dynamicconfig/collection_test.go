@@ -144,6 +144,8 @@ func (s *collectionSuite) TestGetDurationProperty() {
 	s.Equal(time.Minute, value())
 	s.client[testGetDurationPropertyKey] = 33
 	s.Equal(33*time.Second, value())
+	s.client[testGetDurationPropertyKey] = "33"
+	s.Equal(33*time.Second, value())
 }
 
 func (s *collectionSuite) TestGetDurationPropertyFilteredByNamespace() {
