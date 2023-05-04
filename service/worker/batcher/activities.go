@@ -341,9 +341,9 @@ func getResetEventIDByType(ctx context.Context,
 	logger log.Logger) (int64, error) {
 	switch resetType {
 	case enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK:
-		return getFirstWorkflowTaskEventID(ctx, resetType, namespaceStr, workflowExecution, frontendClient, logger)
+		return getFirstWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, frontendClient, logger)
 	case enumspb.RESET_TYPE_LAST_WORKFLOW_TASK:
-		return getLastWorkflowTaskEventID(ctx, resetType, namespaceStr, workflowExecution, frontendClient, logger)
+		return getLastWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, frontendClient, logger)
 	default:
 		errorMsg := fmt.Sprintf("provided reset type (%v) is not supported.", resetType)
 		return 0, serviceerror.NewInvalidArgument(errorMsg)
@@ -351,7 +351,6 @@ func getResetEventIDByType(ctx context.Context,
 }
 
 func getLastWorkflowTaskEventID(ctx context.Context,
-	resetType enumspb.ResetType,
 	namespaceStr string,
 	workflowExecution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
@@ -369,10 +368,11 @@ func getLastWorkflowTaskEventID(ctx context.Context,
 			return 0, errors.New("failed to get workflow execution history")
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				workflowTaskEventID = e.GetWorkflowTaskCompletedEventAttributes().GetScheduledEventId()
+			switch e.GetEventType() {
+			case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+				workflowTaskEventID = e.GetWorkflowTaskCompletedEventAttributes().GetScheduledEventId() + 1
 				return workflowTaskEventID, nil
-			} else if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+			case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
 				// if there is no task completed event, set it to first scheduled event + 1
 				workflowTaskEventID = e.GetEventId() + 1
 			}
@@ -389,7 +389,6 @@ func getLastWorkflowTaskEventID(ctx context.Context,
 }
 
 func getFirstWorkflowTaskEventID(ctx context.Context,
-	resetType enumspb.ResetType,
 	namespaceStr string,
 	workflowExecution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
@@ -407,11 +406,11 @@ func getFirstWorkflowTaskEventID(ctx context.Context,
 			return 0, errors.New("GetWorkflowExecutionHistory failed")
 		}
 		for _, e := range resp.GetHistory().GetEvents() {
-			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				workflowTaskEventID = e.GetWorkflowTaskCompletedEventAttributes().GetScheduledEventId()
+			switch e.GetEventType() {
+			case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+				workflowTaskEventID = e.GetWorkflowTaskCompletedEventAttributes().GetScheduledEventId() + 1
 				return workflowTaskEventID, nil
-			}
-			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+			case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
 				if workflowTaskEventID == 0 {
 					workflowTaskEventID = e.GetEventId() + 1
 				}
