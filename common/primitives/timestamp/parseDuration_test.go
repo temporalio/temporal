@@ -84,3 +84,21 @@ func (s *ParseDurationSuite) TestParseDurationDefaultDays() {
 		}
 	}
 }
+
+func (s *ParseDurationSuite) TestParseDurationDefaultSeconds() {
+	for _, c := range []struct {
+		input    string
+		expected time.Duration // -1 means error
+	}{
+		{"3m30s", 3*time.Minute + 30*time.Second},
+		{"7", 7 * time.Second},
+		{"", -1}, // error
+	} {
+		got, err := ParseDurationDefaultSeconds(c.input)
+		if c.expected == -1 {
+			s.Error(err)
+		} else {
+			s.Equal(c.expected, got)
+		}
+	}
+}

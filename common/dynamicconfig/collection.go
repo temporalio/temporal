@@ -538,8 +538,11 @@ func convertDuration(val any) (time.Duration, error) {
 	switch v := val.(type) {
 	case time.Duration:
 		return v, nil
+	case int:
+		// treat plain int as seconds
+		return time.Duration(v) * time.Second, nil
 	case string:
-		d, err := timestamp.ParseDurationDefaultDays(v)
+		d, err := timestamp.ParseDurationDefaultSeconds(v)
 		if err != nil {
 			return 0, fmt.Errorf("failed to parse duration: %v", err)
 		}
