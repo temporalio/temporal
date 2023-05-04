@@ -45,7 +45,7 @@ type (
 )
 
 // MustGetNamespaceName returns request namespace name
-// or EmptyName if there's error when retriving namespace name,
+// or EmptyName if there's error when retrieving namespace name,
 // e.g. unable to find namespace
 func MustGetNamespaceName(
 	namespaceRegistry namespace.Registry,
@@ -56,6 +56,20 @@ func MustGetNamespaceName(
 		return namespace.EmptyName
 	}
 	return namespaceName
+}
+
+// MustGetNamespaceID returns request namespace ID
+// or EmptyID if there's error when retrieving namespace name,
+// e.g. unable to find namespace
+func MustGetNamespaceID(
+	namespaceRegistry namespace.Registry,
+	req interface{},
+) namespace.ID {
+	namespaceID, err := GetNamespaceID(namespaceRegistry, req)
+	if err != nil {
+		return namespace.EmptyID
+	}
+	return namespaceID
 }
 
 func GetNamespaceName(
@@ -85,5 +99,31 @@ func GetNamespaceName(
 
 	default:
 		return namespace.EmptyName, serviceerror.NewInternal(fmt.Sprintf("unable to extract namespace info from request: %+v", req))
+	}
+}
+
+func GetNamespaceID(
+	namespaceRegistry namespace.Registry,
+	req interface{},
+) (namespace.ID, error) {
+	switch request := req.(type) {
+	case NamespaceNameGetter:
+		namespaceName := namespace.Name(request.GetNamespace())
+		namespaceID, err := namespaceRegistry.GetNamespaceID(namespaceName)
+		if err != nil {
+			return namespace.EmptyID, err
+		}
+		return namespaceID, nil
+
+	case NamespaceIDGetter:
+		namespaceID := namespace.ID(request.GetNamespaceId())
+		_, err := namespaceRegistry.GetNamespaceByID(namespaceID)
+		if err != nil {
+			return namespace.EmptyID, err
+		}
+		return namespaceID, nil
+
+	default:
+		return namespace.EmptyID, serviceerror.NewInternal(fmt.Sprintf("unable to extract namespace info from request: %+v", req))
 	}
 }
