@@ -1346,7 +1346,8 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_LoadMutableStateFailed()
 	s.NoError(err)
 }
 
-func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
+// TODO: remove deprecated unit test after all FE->History calls migrated from DB->RPC
+func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend_Deprecated() {
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "workflowID",
 		RunId:      uuid.New(),
@@ -1419,6 +1420,110 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacke
 		MaxEventID:  mutableState.NextEventId,
 		PageSize:    1,
 	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{
+				EventId:   10,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+				Version:   version,
+				EventTime: timestamp.TimePtr(closeTime.Add(-time.Millisecond)),
+			},
+			{
+				EventId:   11,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+				Version:   version,
+				EventTime: timestamp.TimePtr(closeTime),
+			},
+		},
+	}, nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId:       s.namespaceID.String(),
+		Execution:         &execution,
+		WorkflowCloseTime: timestamp.TimePtr(closeTime),
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+
+	_, err = s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
+	s.handler.config.ReadEventsFromHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "workflowID",
+		RunId:      uuid.New(),
+	}
+
+	request := &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.namespace.String(),
+		Execution: &execution,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true).AnyTimes()
+
+	// test delete open records
+	branchToken := []byte("branchToken")
+	version := int64(100)
+	mutableState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			CreateRequestId: uuid.New(),
+			RunId:           execution.RunId,
+			State:           enums.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 12,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			CompletionEventBatchId: 10,
+			StartTime:              timestamp.TimePtr(time.Now()),
+			VersionHistories: &historyspb.VersionHistories{
+				CurrentVersionHistoryIndex: 0,
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: branchToken,
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 11, Version: version},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId:       s.namespaceID.String(),
+		Execution:         &execution,
+		WorkflowStartTime: mutableState.ExecutionInfo.StartTime,
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+
+	_, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+
+	// test delete close records
+	mutableState.ExecutionState.State = enums.WORKFLOW_EXECUTION_STATE_COMPLETED
+	mutableState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+
+	shardID := common.WorkflowIDToHistoryShard(
+		s.namespaceID.String(),
+		execution.GetWorkflowId(),
+		s.handler.numberOfHistoryShards,
+	)
+	closeTime := time.Now()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
+	s.mockHistoryClient.EXPECT().ReadHistoryBranch(gomock.Any(), &historyservice.ReadHistoryBranchRequest{
+		NamespaceId: s.namespaceID.String(),
+		ShardId:     shardID,
+		BranchToken: branchToken,
+		MinEventId:  mutableState.ExecutionInfo.CompletionEventBatchId,
+		MaxEventId:  mutableState.NextEventId,
+		PageSize:    1,
+	}).Return(&historyservice.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
