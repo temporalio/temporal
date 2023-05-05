@@ -146,8 +146,9 @@ type Config struct {
 	ReplicatorProcessorMaxSkipTaskCount                   dynamicconfig.IntPropertyFn
 
 	// System Limits
-	MaximumBufferedEventsBatch dynamicconfig.IntPropertyFn
-	MaximumSignalsPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaximumBufferedEventsBatch       dynamicconfig.IntPropertyFn
+	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
+	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// ShardUpdateMinInterval the minimal time interval which the shard info can be updated
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
@@ -408,11 +409,12 @@ func NewConfig(
 		ReplicationProcessorSchedulerQueueSize:   dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
 		ReplicationProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
 
-		MaximumBufferedEventsBatch:      dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
-		MaximumSignalsPerExecution:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 0),
-		ShardUpdateMinInterval:          dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
-		ShardSyncMinInterval:            dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
-		ShardSyncTimerJitterCoefficient: dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
+		MaximumBufferedEventsBatch:       dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
+		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 1<<20),
+		MaximumSignalsPerExecution:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 0),
+		ShardUpdateMinInterval:           dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
+		ShardSyncMinInterval:             dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
+		ShardSyncTimerJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
 
 		// history client: client/history/client.go set the client timeout 30s
 		// TODO: Return this value to the client: go.temporal.io/server/issues/294

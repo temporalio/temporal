@@ -152,7 +152,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 	}))
 	err := s.mutableState.ReplicateWorkflowTaskCompletedEvent(newWorkflowTaskCompletedEvent)
 	s.NoError(err)
-	s.Equal(0, s.mutableState.hBuilder.BufferEventSize())
+	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
 }
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_FailoverWorkflowTaskTimeout() {
@@ -175,7 +175,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 		newWorkflowTask,
 	)
 	s.NoError(err)
-	s.Equal(0, s.mutableState.hBuilder.BufferEventSize())
+	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
 }
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_FailoverWorkflowTaskFailed() {
@@ -202,7 +202,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 		"", "", "", 0,
 	)
 	s.NoError(err)
-	s.Equal(0, s.mutableState.hBuilder.BufferEventSize())
+	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
 }
 
 func (s *mutableStateSuite) TestChecksum() {
@@ -421,7 +421,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChan
 	s.NotNil(wt)
 
 	s.Equal(int32(1), s.mutableState.GetExecutionInfo().WorkflowTaskAttempt)
-	s.Equal(0, s.mutableState.hBuilder.BufferEventSize())
+	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
 }
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged() {
@@ -461,7 +461,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		"random identity",
 	)
 	s.NoError(err)
-	s.Equal(0, s.mutableState.hBuilder.BufferEventSize())
+	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
 }
 
 func (s *mutableStateSuite) TestSanitizedMutableState() {

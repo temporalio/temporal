@@ -1119,8 +1119,16 @@ func (b *HistoryBuilder) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
 	return false
 }
 
-func (b *HistoryBuilder) BufferEventSize() int {
+func (b *HistoryBuilder) NumBufferedEvents() int {
 	return len(b.dbBufferBatch) + len(b.memBufferBatch)
+}
+
+func (b *HistoryBuilder) SizeInBytesOfBufferedEvents() int {
+	size := 0
+	for _, ev := range append(b.dbBufferBatch, b.memBufferBatch...) {
+		size += ev.Size()
+	}
+	return size
 }
 
 func (b *HistoryBuilder) NextEventID() int64 {

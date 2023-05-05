@@ -575,6 +575,9 @@ const (
 	ReplicatorProcessorEnablePriorityTaskProcessor = "history.replicatorProcessorEnablePriorityTaskProcessor"
 	// MaximumBufferedEventsBatch is max number of buffer event in mutable state
 	MaximumBufferedEventsBatch = "history.maximumBufferedEventsBatch"
+	// MaximumBufferedEventsSizeInBytes is the maximum total size of all buffered events for a workflow execution.
+	// The total size is determined by the sum of the size, in bytes, of each HistoryEvent proto.
+	MaximumBufferedEventsSizeInBytes = "history.maximumBufferedEventsSizeInBytes"
 	// MaximumSignalsPerExecution is max number of signals supported by single execution
 	MaximumSignalsPerExecution = "history.maximumSignalsPerExecution"
 	// ShardUpdateMinInterval is the minimal time interval which the shard info can be updated
