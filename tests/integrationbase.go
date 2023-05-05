@@ -359,3 +359,19 @@ func (s *IntegrationBase) EqualHistoryEvents(expectedHistory string, actualHisto
 	s.T().Helper()
 	s.EqualHistory(expectedHistory, &historypb.History{Events: actualHistoryEvents})
 }
+
+func (s *IntegrationBase) retry(attempts int, interval time.Duration, fn func() error) {
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		lastErr = fn()
+		if lastErr == nil {
+			return
+		}
+		time.Sleep(interval)
+	}
+	s.FailNow(fmt.Sprintf("%v after %v attempts", lastErr, attempts))
+}
+
+func (s *IntegrationBase) retryReasonably(fn func() error) {
+	s.retry(30, 500*time.Millisecond, fn)
+}
