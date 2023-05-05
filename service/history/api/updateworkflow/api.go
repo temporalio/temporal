@@ -35,6 +35,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
@@ -162,6 +163,8 @@ func addWorkflowTaskToMatching(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: taskScheduleToStartTimeout,
 		Clock:                  clock,
+		// TODO: is it ever possible that this is the first workflow task?
+		IsFirstWorkflowTask: ms.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID,
 	})
 	if err != nil {
 		return err

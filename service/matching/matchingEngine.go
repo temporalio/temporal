@@ -275,9 +275,8 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	isFirstWorkflowTask := addRequest.ScheduledEventId == common.FirstWorkflowTaskScheduledEventID
 	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind,
-		isFirstWorkflowTask)
+		addRequest.IsFirstWorkflowTask)
 	if err != nil {
 		return false, err
 	}
@@ -301,13 +300,15 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId:      namespaceID.String(),
-		RunId:            addRequest.Execution.GetRunId(),
-		WorkflowId:       addRequest.Execution.GetWorkflowId(),
-		ScheduledEventId: addRequest.GetScheduledEventId(),
-		Clock:            addRequest.GetClock(),
-		ExpiryTime:       expirationTime,
-		CreateTime:       now,
+		NamespaceId:         namespaceID.String(),
+		RunId:               addRequest.Execution.GetRunId(),
+		WorkflowId:          addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId:    addRequest.GetScheduledEventId(),
+		Clock:               addRequest.GetClock(),
+		ExpiryTime:          expirationTime,
+		CreateTime:          now,
+		WorkerVersionStamp:  addRequest.WorkerVersionStamp,
+		IsFirstWorkflowTask: addRequest.IsFirstWorkflowTask,
 	}
 
 	return tqm.AddTask(hCtx.Context, addTaskParams{
@@ -352,13 +353,14 @@ func (e *matchingEngineImpl) AddActivityTask(
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
-		WorkflowId:       addRequest.Execution.GetWorkflowId(),
-		ScheduledEventId: addRequest.GetScheduledEventId(),
-		Clock:            addRequest.GetClock(),
-		CreateTime:       now,
-		ExpiryTime:       expirationTime,
+		NamespaceId:        namespaceID.String(),
+		RunId:              runID,
+		WorkflowId:         addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId:   addRequest.GetScheduledEventId(),
+		Clock:              addRequest.GetClock(),
+		CreateTime:         now,
+		ExpiryTime:         expirationTime,
+		WorkerVersionStamp: addRequest.WorkerVersionStamp,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{

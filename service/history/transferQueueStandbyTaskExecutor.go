@@ -578,6 +578,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		&pushwtInfo.taskqueue,
 		timestamp.DurationFromSeconds(timeout),
 		pushwtInfo.workerVersionStamp,
+		pushwtInfo.isFirstWorkflowTask,
 	)
 }
 

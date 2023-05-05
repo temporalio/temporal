@@ -33,6 +33,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -116,6 +117,7 @@ type (
 		workflowTaskScheduleToStartTimeout int64
 		taskqueue                          taskqueuepb.TaskQueue
 		workerVersionStamp                 *commonpb.WorkerVersionStamp
+		isFirstWorkflowTask                bool
 	}
 
 	startChildExecutionPostActionInfo struct {
@@ -190,6 +192,7 @@ func newWorkflowTaskPostActionInfo(
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
 		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
+		isFirstWorkflowTask:                mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID,
 	}, nil
 }
 

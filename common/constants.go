@@ -54,8 +54,6 @@ const (
 	LastBlobNextPageToken = -1
 	// EndMessageID is the id of the end message, here we use the int64 max
 	EndMessageID int64 = 1<<63 - 1
-	// FirstWorkflowTaskScheduledEventID is the id of the first WorkflowTaskScheduled event in a workflow
-	FirstWorkflowTaskScheduledEventID int64 = FirstEventID + 1
 )
 
 const (

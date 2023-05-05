@@ -113,6 +113,8 @@ message AddWorkflowTaskRequest {
     // If using build-id based versioning: version stamp of last worker to complete a workflow
     // task for this workflow. Used to dispatch to correct worker in matching.
     temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 10;
+    // True if this is the first workflow task for the workflow.
+    bool is_first_workflow_task = 11;
 }
 
 message AddWorkflowTaskResponse {

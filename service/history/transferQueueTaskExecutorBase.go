@@ -151,6 +151,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout *time.Duration,
 	workerVersionStamp *commonpb.WorkerVersionStamp,
+	isFirstWorkflowTask bool,
 ) error {
 	_, err := t.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -163,6 +164,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 		WorkerVersionStamp:     workerVersionStamp,
+		IsFirstWorkflowTask:    isFirstWorkflowTask,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls

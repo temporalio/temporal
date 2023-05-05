@@ -264,13 +264,15 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	originalTaskQueue := mutableState.GetExecutionInfo().TaskQueue
 	workerVersionStamp := mutableState.GetWorkerVersionStamp()
+	isFirstWorkflowTask := mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds), workerVersionStamp)
+	err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds),
+		workerVersionStamp, isFirstWorkflowTask)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
 		// sticky worker is unavailable, switch to original task queue
@@ -285,7 +287,8 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
 		// will re-create a new non-sticky task and reset sticky.
-		err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds), workerVersionStamp)
+		err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds),
+			workerVersionStamp, isFirstWorkflowTask)
 	}
 	return err
 }
