@@ -50,6 +50,21 @@ func (c *retryableClient) CloseShard(
 	return resp, err
 }
 
+func (c *retryableClient) DeleteHistoryBranch(
+	ctx context.Context,
+	request *historyservice.DeleteHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteHistoryBranchResponse, error) {
+	var resp *historyservice.DeleteHistoryBranchResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteHistoryBranch(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
@@ -284,6 +299,51 @@ func (c *retryableClient) QueryWorkflow(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.QueryWorkflow(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ReadHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReadHistoryBranchResponse, error) {
+	var resp *historyservice.ReadHistoryBranchResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ReadHistoryBranch(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ReadHistoryBranchReverse(
+	ctx context.Context,
+	request *historyservice.ReadHistoryBranchReverseRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReadHistoryBranchReverseResponse, error) {
+	var resp *historyservice.ReadHistoryBranchReverseResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ReadHistoryBranchReverse(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ReadRawHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadRawHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ReadRawHistoryBranchResponse, error) {
+	var resp *historyservice.ReadRawHistoryBranchResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ReadRawHistoryBranch(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -674,6 +734,21 @@ func (c *retryableClient) TerminateWorkflowExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.TerminateWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) TrimHistoryBranch(
+	ctx context.Context,
+	request *historyservice.TrimHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.TrimHistoryBranchResponse, error) {
+	var resp *historyservice.TrimHistoryBranchResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.TrimHistoryBranch(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

@@ -49,6 +49,20 @@ func (c *metricClient) CloseShard(
 	return c.client.CloseShard(ctx, request, opts...)
 }
 
+func (c *metricClient) DeleteHistoryBranch(
+	ctx context.Context,
+	request *historyservice.DeleteHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DeleteHistoryBranchResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientDeleteHistoryBranchScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeleteHistoryBranch(ctx, request, opts...)
+}
+
 func (c *metricClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
@@ -271,6 +285,48 @@ func (c *metricClient) QueryWorkflow(
 	}()
 
 	return c.client.QueryWorkflow(ctx, request, opts...)
+}
+
+func (c *metricClient) ReadHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ReadHistoryBranchResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientReadHistoryBranchScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ReadHistoryBranch(ctx, request, opts...)
+}
+
+func (c *metricClient) ReadHistoryBranchReverse(
+	ctx context.Context,
+	request *historyservice.ReadHistoryBranchReverseRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ReadHistoryBranchReverseResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientReadHistoryBranchReverseScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ReadHistoryBranchReverse(ctx, request, opts...)
+}
+
+func (c *metricClient) ReadRawHistoryBranch(
+	ctx context.Context,
+	request *historyservice.ReadRawHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ReadRawHistoryBranchResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientReadRawHistoryBranchScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ReadRawHistoryBranch(ctx, request, opts...)
 }
 
 func (c *metricClient) ReapplyEvents(
@@ -635,6 +691,20 @@ func (c *metricClient) TerminateWorkflowExecution(
 	}()
 
 	return c.client.TerminateWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) TrimHistoryBranch(
+	ctx context.Context,
+	request *historyservice.TrimHistoryBranchRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.TrimHistoryBranchResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientTrimHistoryBranchScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.TrimHistoryBranch(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateWorkflowExecution(
