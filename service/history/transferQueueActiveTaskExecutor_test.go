@@ -2658,6 +2658,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		ScheduleToStartTimeout: &timeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
 		WorkerVersionStamp:     mutableState.GetWorkerVersionStamp(),
+		IsFirstWorkflowTask:    mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID,
 	}
 }
 
