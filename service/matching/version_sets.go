@@ -39,9 +39,6 @@ import (
 )
 
 var (
-	// TODO: all of these errors are temporary, we'll handle all these cases in future PRs
-	errPollOnVersionedQueueWithNoVersion = serviceerror.NewInvalidArgument("poll on versioned queue with no version capabilities")
-
 	// This shouldn't happen, if we have versioning data we should have at least one set.
 	errEmptyVersioningData = serviceerror.NewInternal("versioning data is empty")
 )
@@ -279,10 +276,11 @@ func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, version
 	}
 }
 
-// Requires: data is not nil, caps is not nil
+// Requires: caps is not nil
 func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, error) {
 	// For poll, only the latest version in the compatible set can get tasks.
 	// Find the version set that this worker is in.
+	// Note data may be nil here, findVersion will return -1 then.
 	setIdx, _ := findVersion(data, caps.BuildId)
 	if setIdx < 0 {
 		// A poller is using a build ID but we don't know about that build ID. This can happen
@@ -304,20 +302,20 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 	return getSetID(set), nil
 }
 
-// Requires: data is not nil
 func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb.WorkerVersionStamp) (string, error) {
 	var set *persistencespb.CompatibleVersionSet
 	if stamp == nil {
 		// If this is a new workflow, assign it to the latest version.
 		// (If it's an unversioned workflow that has already completed one or more tasks, then
 		// leave it on the unversioned one. That case is handled already before we get here.)
-		setLen := len(data.VersionSets)
+		setLen := len(data.GetVersionSets())
 		if setLen == 0 || data.VersionSets[setLen-1] == nil {
 			return "", errEmptyVersioningData
 		}
 		set = data.VersionSets[setLen-1]
 	} else {
 		// For add, any version in the compatible set maps to the set.
+		// Note data may be nil here, findVersion will return -1 then.
 		setIdx, _ := findVersion(data, stamp.BuildId)
 		if setIdx < 0 {
 			// A workflow has a build ID set, but we don't know about that build ID. This can

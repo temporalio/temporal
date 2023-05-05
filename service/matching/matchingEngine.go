@@ -1147,6 +1147,13 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 		// (e.g. serviceerrors.StickyWorkerUnavailable) if there's a newer build id
 		return taskQueue, nil
 	}
+
+	if workerVersionCapabilities == nil {
+		// Either this task queue is versioned, or there are still some workflows running on
+		// the "unversioned" set.
+		return taskQueue, nil
+	}
+
 	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
 	if err != nil {
 		return nil, err
@@ -1155,29 +1162,9 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 	if err != nil {
 		return nil, err
 	}
-	if userData.GetData().GetVersioningData() == nil {
-		if workerVersionCapabilities == nil {
-			// queue is not versioned and neither is worker, all good
-			return taskQueue, nil
-		}
-		// A poller is using a build ID but we don't even think the queue is supposed to be
-		// versioned. This can happen in a replication scenario if pollers are running on the
-		// passive side before the data has been replicated. Instead of rejecting, we can guess
-		// a set id based on the build ID. If the build ID was the first in its set on the
-		// other side, then our guess is right and things will work out. If not, then we'll
-		// guess wrong, but when the versioning data replicates, we'll redirect the poll to the
-		// correct set id. In the meantime (e.g. during an ungraceful failover) we can at least
-		// match tasks using the exact same build ID.
-		guessedSetID := hashBuildID(workerVersionCapabilities.BuildId)
-		return newTaskQueueIDWithVersionSet(taskQueue, guessedSetID), nil
-		// TODO: consolidate this logic with lookupVersionSetForPoll
-	}
-	if workerVersionCapabilities == nil {
-		// TODO: We should leave this one on the unversioned queue for unversioned workflows to
-		// continue running. Do that in the same PR as the first-wft switch below.
-		return nil, errPollOnVersionedQueueWithNoVersion
-	}
-	versionSet, err := lookupVersionSetForPoll(userData.Data.VersioningData, workerVersionCapabilities)
+	data := userData.GetData().GetVersioningData()
+
+	versionSet, err := lookupVersionSetForPoll(data, workerVersionCapabilities)
 	if err != nil {
 		return nil, err
 	}
@@ -1197,6 +1184,19 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	if !stamp.GetUseVersioning() {
 		return taskQueue, nil
 	}
+
+	// TODO: Here we have to distinguish between a new workflow (first wft), which we should
+	// assign to the default version), and a later wft, which we should leave on the
+	// unversioned queue. Do that in a follow-up PR.
+	newWorkflow := true
+
+	// Leave unversioned workflow on unversioned queue, even if the queue has versioning data.
+	// We can check this before loading data.
+	if stamp == nil && !newWorkflow {
+		return taskQueue, nil
+	}
+
+	// Have to look up versioning data.
 	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
 	if err != nil {
 		return nil, err
@@ -1205,31 +1205,15 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	if err != nil {
 		return nil, err
 	}
-	if userData.GetData().GetVersioningData() == nil {
-		if stamp == nil {
-			// queue is not versioned and neither is workflow, all good
-			return taskQueue, nil
-		}
+	data := userData.GetData().GetVersioningData()
 
-		// A workflow has a build ID set, but we don't even think the queue is versioned. This
-		// can happen in replication scenario: the workflow itself was migrated and we failed
-		// over, but the versioning data hasn't been migrated yet. Instead of rejecting it, we
-		// can guess a set ID based on the build ID. If the build ID was the first in its set
-		// on the other side, then our guess is right and things will work out. If not, then
-		// we'll guess wrong, but when we get the replication event, we'll merge the sets and
-		// use both ids.
-		// TODO: this doesn't really work unless we persist the fact that we've created this
-		// set? we can do that on the root. on other partitions... let's notify the root?
-		guessedSetID := hashBuildID(stamp.BuildId)
-		return newTaskQueueIDWithVersionSet(taskQueue, guessedSetID), nil
-		// TODO: consolidate with logic in lookupVersionSetForAdd
+	if stamp == nil && data == nil {
+		// Unversioned workflow that started before this queue was versioned. Leave on
+		// unversioned queue.
+		return taskQueue, nil
 	}
 
-	// TODO: Here we have to distinguish between a new workflow (first wft), which we should
-	// assign to the default version), and a later wft, which we should leave on the
-	// unversioned queue. Do that in a follow-up PR.
-
-	versionSet, err := lookupVersionSetForAdd(userData.Data.VersioningData, stamp)
+	versionSet, err := lookupVersionSetForAdd(data, stamp)
 	if err != nil {
 		return nil, err
 	}
