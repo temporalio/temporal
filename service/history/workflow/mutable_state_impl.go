@@ -1906,7 +1906,7 @@ func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
 	// List of all recent binary checksums associated with the workflow.
 	recentBinaryChecksums := make([]string, len(resetPoints))
 
-	for i, rp := range ms.executionInfo.AutoResetPoints.Points {
+	for i, rp := range resetPoints {
 		recentBinaryChecksums[i] = rp.GetBinaryChecksum()
 	}
 
