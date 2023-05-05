@@ -1897,6 +1897,7 @@ func (s *advancedVisibilitySuite) Test_BuildIDIndexedOnCompletion() {
 			response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.namespace,
 				Query:     fmt.Sprintf("BuildIDs = '1.%d'", minor),
+				PageSize:  defaultPageSize,
 			})
 			if err != nil {
 				return err
