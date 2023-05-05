@@ -125,19 +125,21 @@ func (m *MetadataStore) CreateNamespace(
 	ctx context.Context,
 	request *p.InternalCreateNamespaceRequest,
 ) (*p.CreateNamespaceResponse, error) {
+
 	query := m.session.Query(templateCreateNamespaceQuery, request.ID, request.Name).WithContext(ctx)
-	_, err := query.MapScanCAS(make(map[string]interface{}))
+	row := make(map[string]interface{})
+	applied, err := query.MapScanCAS(row)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
 	}
 
-	// let the code falls through and call the next function if there is a uuid collision here (MapScanCas returns false).
-	// If we are here this mean either:
-	// 	- namespace did not exist in the first table, it was successfully created and we want to add it to the second table
-	//  - namespace exists in the first table:
-	// 		- if it was added to the second table already, we return a NamespaceAlreadyExists Error
-	// 		- if not, there was an orphan entry in the first table, try to add the second table, or remove the orphan entry upon failure
-
+	if !applied {
+		// if we are here, namespace handler already checked whether this namespace exists in 'namespaces' table and failed
+		// if this name exists in `namespaces_by_name` and not in `namespaces`, fall through and add the row there
+		if name, ok := row["name"]; !ok || name != request.Name {
+			return nil, serviceerror.NewNamespaceAlreadyExists("CreateNamespace operation failed because of uuid collision.")
+		}
+	}
 	return m.CreateNamespaceInV2Table(ctx, request)
 }
 
