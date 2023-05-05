@@ -42,17 +42,17 @@ type (
 		// Tags are merged with registered Tags from the source MetricsHandler
 		WithTags(...Tag) Handler
 
-		// Counter obtains a counter for the given name and MetricOptions.
-		Counter(string) CounterIface
+		// Counter obtains a counter for the given name and Option list.
+		Counter(string, ...Option) CounterIface
 
-		// Gauge obtains a gauge for the given name and MetricOptions.
-		Gauge(string) GaugeIface
+		// Gauge obtains a gauge for the given name and Option list.
+		Gauge(string, ...Option) GaugeIface
 
-		// Timer obtains a timer for the given name and MetricOptions.
-		Timer(string) TimerIface
+		// Timer obtains a timer for the given name and Option list.
+		Timer(string, ...Option) TimerIface
 
-		// Histogram obtains a histogram for the given name and MetricOptions.
-		Histogram(string, MetricUnit) HistogramIface
+		// Histogram obtains a histogram for the given name, unit, and Option list.
+		Histogram(string, MetricUnit, ...Option) HistogramIface
 
 		Stop(log.Logger)
 	}

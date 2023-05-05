@@ -55,28 +55,28 @@ func (r *replayMetricsClient) WithTags(tags ...metrics.Tag) metrics.Handler {
 	return NewReplayMetricsClient(r.metricsHandler.WithTags(tags...), r.ctx)
 }
 
-func (r *replayMetricsClient) Counter(s string) metrics.CounterIface {
+func (r *replayMetricsClient) Counter(s string, _ ...metrics.Option) metrics.CounterIface {
 	if workflow.IsReplaying(r.ctx) {
 		return metrics.CounterFunc(func(i int64, t ...metrics.Tag) {})
 	}
 	return r.metricsHandler.Counter(s)
 }
 
-func (r *replayMetricsClient) Gauge(s string) metrics.GaugeIface {
+func (r *replayMetricsClient) Gauge(s string, _ ...metrics.Option) metrics.GaugeIface {
 	if workflow.IsReplaying(r.ctx) {
 		return metrics.GaugeFunc(func(i float64, t ...metrics.Tag) {})
 	}
 	return r.metricsHandler.Gauge(s)
 }
 
-func (r *replayMetricsClient) Timer(s string) metrics.TimerIface {
+func (r *replayMetricsClient) Timer(s string, option ...metrics.Option) metrics.TimerIface {
 	if workflow.IsReplaying(r.ctx) {
 		return metrics.TimerFunc(func(ti time.Duration, t ...metrics.Tag) {})
 	}
 	return r.metricsHandler.Timer(s)
 }
 
-func (r *replayMetricsClient) Histogram(s string, unit metrics.MetricUnit) metrics.HistogramIface {
+func (r *replayMetricsClient) Histogram(s string, unit metrics.MetricUnit, option ...metrics.Option) metrics.HistogramIface {
 	if workflow.IsReplaying(r.ctx) {
 		return metrics.HistogramFunc(func(i int64, t ...metrics.Tag) {})
 	}

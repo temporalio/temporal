@@ -47,22 +47,22 @@ func (n *noopMetricsHandler) WithTags(...Tag) Handler {
 }
 
 // Counter obtains a counter for the given name and MetricOptions.
-func (*noopMetricsHandler) Counter(string) CounterIface {
+func (*noopMetricsHandler) Counter(string, ...Option) CounterIface {
 	return NoopCounterMetricFunc
 }
 
 // Gauge obtains a gauge for the given name and MetricOptions.
-func (*noopMetricsHandler) Gauge(string) GaugeIface {
+func (*noopMetricsHandler) Gauge(string, ...Option) GaugeIface {
 	return NoopGaugeMetricFunc
 }
 
 // Timer obtains a timer for the given name and MetricOptions.
-func (*noopMetricsHandler) Timer(string) TimerIface {
+func (*noopMetricsHandler) Timer(string, ...Option) TimerIface {
 	return NoopTimerMetricFunc
 }
 
 // Histogram obtains a histogram for the given name and MetricOptions.
-func (*noopMetricsHandler) Histogram(string, MetricUnit) HistogramIface {
+func (*noopMetricsHandler) Histogram(string, MetricUnit, ...Option) HistogramIface {
 	return NoopHistogramMetricFunc
 }
 

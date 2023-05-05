@@ -75,29 +75,29 @@ func (tmp *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	}
 }
 
-// Counter obtains a counter for the given name and MetricOptions.
-func (tmp *tallyMetricsHandler) Counter(counter string) CounterIface {
+// Counter obtains a counter for the given name. The Option list is ignored.
+func (tmp *tallyMetricsHandler) Counter(counter string, _ ...Option) CounterIface {
 	return CounterFunc(func(i int64, t ...Tag) {
 		tmp.scope.Tagged(tagsToMap(t, tmp.excludeTags)).Counter(counter).Inc(i)
 	})
 }
 
-// Gauge obtains a gauge for the given name and MetricOptions.
-func (tmp *tallyMetricsHandler) Gauge(gauge string) GaugeIface {
+// Gauge obtains a gauge for the given name. The Option list is ignored.
+func (tmp *tallyMetricsHandler) Gauge(gauge string, option ...Option) GaugeIface {
 	return GaugeFunc(func(f float64, t ...Tag) {
 		tmp.scope.Tagged(tagsToMap(t, tmp.excludeTags)).Gauge(gauge).Update(f)
 	})
 }
 
-// Timer obtains a timer for the given name and MetricOptions.
-func (tmp *tallyMetricsHandler) Timer(timer string) TimerIface {
+// Timer obtains a timer for the given name. The Option list is ignored.
+func (tmp *tallyMetricsHandler) Timer(timer string, _ ...Option) TimerIface {
 	return TimerFunc(func(d time.Duration, tag ...Tag) {
 		tmp.scope.Tagged(tagsToMap(tag, tmp.excludeTags)).Timer(timer).Record(d)
 	})
 }
 
 // Histogram obtains a histogram for the given name and MetricOptions.
-func (tmp *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
+func (tmp *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit, _ ...Option) HistogramIface {
 	return HistogramFunc(func(i int64, t ...Tag) {
 		tmp.scope.Tagged(tagsToMap(t, tmp.excludeTags)).Histogram(histogram, tmp.perUnitBuckets[unit]).RecordValue(float64(i))
 	})

@@ -144,6 +144,7 @@ func TestMeter(t *testing.T) {
 				Temporality: metricdata.CumulativeTemporality,
 				IsMonotonic: true,
 			},
+			Description: "hits-tagged-excluded-help",
 		},
 		{
 			Name: "latency",
@@ -171,6 +172,7 @@ func TestMeter(t *testing.T) {
 					},
 				},
 			},
+			Description: "temp-help",
 		},
 		{
 			Name: "transmission",
@@ -186,7 +188,8 @@ func TestMeter(t *testing.T) {
 				},
 				Temporality: metricdata.CumulativeTemporality,
 			},
-			Unit: unit.Bytes,
+			Unit:        unit.Bytes,
+			Description: "transmission-help",
 		},
 	}
 	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,
@@ -211,12 +214,12 @@ func TestMeter(t *testing.T) {
 
 func recordMetrics(mp Handler) {
 	hitsCounter := mp.Counter("hits")
-	gauge := mp.Gauge("temp")
+	gauge := mp.Gauge("temp", WithHelpText("temp-help"))
 
 	timer := mp.Timer("latency")
-	histogram := mp.Histogram("transmission", Bytes)
+	histogram := mp.Histogram("transmission", Bytes, WithHelpText("transmission-help"))
 	hitsTaggedCounter := mp.Counter("hits-tagged")
-	hitsTaggedExcludedCounter := mp.Counter("hits-tagged-excluded")
+	hitsTaggedExcludedCounter := mp.Counter("hits-tagged-excluded", WithHelpText("hits-tagged-excluded-help"))
 
 	hitsCounter.Record(8)
 	gauge.Record(100, StringTag("location", "Mare Imbrium"))

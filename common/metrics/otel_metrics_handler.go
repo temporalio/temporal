@@ -37,8 +37,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-// MetricsHandler is an event.Handler for OpenTelemetry metrics.
-// Its Event method handles Metric events and ignores all others.
+// otelMetricsHandler is a Handler for OpenTelemetry metrics.
 type otelMetricsHandler struct {
 	l           log.Logger
 	tags        []Tag
@@ -56,8 +55,8 @@ func NewOtelMetricsHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConf
 	}
 }
 
-// WithTags creates a new MetricProvder with provided []Tag
-// Tags are merged with registered Tags from the source MetricsHandler
+// WithTags creates a new Handler with the provided Tag list.
+// Tags are merged with the registered tags from the source Handler.
 func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
 	return &otelMetricsHandler{
 		provider:    omp.provider,
@@ -66,9 +65,11 @@ func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
 	}
 }
 
-// Counter obtains a counter for the given name and MetricOptions.
-func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
-	c, err := omp.provider.GetMeter().Int64Counter(counter)
+// Counter obtains a counter for the given name and Option list.
+func (omp *otelMetricsHandler) Counter(counter string, opts ...Option) CounterIface {
+	c, err := omp.provider.GetMeter().Int64Counter(counter, buildOtelOptions[instrument.Int64Option](
+		opts,
+	)...)
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", counter), tag.Error(err))
 	}
@@ -78,9 +79,11 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 	})
 }
 
-// Gauge obtains a gauge for the given name and MetricOptions.
-func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
-	c, err := omp.provider.GetMeter().Float64ObservableGauge(gauge)
+// Gauge obtains a gauge for the given name and Option list.
+func (omp *otelMetricsHandler) Gauge(gauge string, opts ...Option) GaugeIface {
+	c, err := omp.provider.GetMeter().Float64ObservableGauge(gauge, buildOtelOptions[instrument.Float64ObserverOption](
+		opts,
+	)...)
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 	}
@@ -96,9 +99,12 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 	})
 }
 
-// Timer obtains a timer for the given name and MetricOptions.
-func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
-	c, err := omp.provider.GetMeter().Int64Histogram(timer, instrument.WithUnit(otelunit.Unit(Milliseconds)))
+// Timer obtains a timer for the given name and Option list.
+func (omp *otelMetricsHandler) Timer(timer string, opts ...Option) TimerIface {
+	c, err := omp.provider.GetMeter().Int64Histogram(timer, buildOtelOptions[instrument.Int64Option](
+		opts,
+		instrument.WithUnit(Milliseconds),
+	)...)
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
 	}
@@ -108,9 +114,12 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 	})
 }
 
-// Histogram obtains a histogram for the given name and MetricOptions.
-func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
-	c, err := omp.provider.GetMeter().Int64Histogram(histogram, instrument.WithUnit(otelunit.Unit(unit)))
+// Histogram obtains a histogram for the given name and Option list.
+func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit, opts ...Option) HistogramIface {
+	c, err := omp.provider.GetMeter().Int64Histogram(histogram, buildOtelOptions[instrument.Int64Option](
+		opts,
+		instrument.WithUnit(otelunit.Unit(unit)),
+	)...)
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
 	}
@@ -118,6 +127,19 @@ func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) Hist
 	return CounterFunc(func(i int64, t ...Tag) {
 		c.Record(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 	})
+}
+
+// buildOtelOptions returns a list of otel options derived from the Option list, appended to an existing list of otel
+// options.
+// This function will panic if T is not implemented by instrument.Option, so it must remain unexported.
+// See https://github.com/OpenObservability/OpenMetrics/blob/main/specification/OpenMetrics.md#help for a description
+// of what the help text is for OpenTelemetry.
+func buildOtelOptions[T any](opts []Option, otelOpts ...T) []T {
+	if text := buildParams(opts).optionalHelpText; text != nil {
+		otelOpts = append(otelOpts, instrument.WithDescription(*text).(T))
+	}
+
+	return otelOpts
 }
 
 func (omp *otelMetricsHandler) Stop(l log.Logger) {

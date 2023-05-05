@@ -60,45 +60,60 @@ func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
 }
 
 // Counter mocks base method.
-func (m *MockHandler) Counter(arg0 string) CounterIface {
+func (m *MockHandler) Counter(arg0 string, arg1 ...Option) CounterIface {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Counter", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Counter", varargs...)
 	ret0, _ := ret[0].(CounterIface)
 	return ret0
 }
 
 // Counter indicates an expected call of Counter.
-func (mr *MockHandlerMockRecorder) Counter(arg0 interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) Counter(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Counter", reflect.TypeOf((*MockHandler)(nil).Counter), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Counter", reflect.TypeOf((*MockHandler)(nil).Counter), varargs...)
 }
 
 // Gauge mocks base method.
-func (m *MockHandler) Gauge(arg0 string) GaugeIface {
+func (m *MockHandler) Gauge(arg0 string, arg1 ...Option) GaugeIface {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Gauge", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Gauge", varargs...)
 	ret0, _ := ret[0].(GaugeIface)
 	return ret0
 }
 
 // Gauge indicates an expected call of Gauge.
-func (mr *MockHandlerMockRecorder) Gauge(arg0 interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) Gauge(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Gauge", reflect.TypeOf((*MockHandler)(nil).Gauge), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Gauge", reflect.TypeOf((*MockHandler)(nil).Gauge), varargs...)
 }
 
 // Histogram mocks base method.
-func (m *MockHandler) Histogram(arg0 string, arg1 MetricUnit) HistogramIface {
+func (m *MockHandler) Histogram(arg0 string, arg1 MetricUnit, arg2 ...Option) HistogramIface {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Histogram", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Histogram", varargs...)
 	ret0, _ := ret[0].(HistogramIface)
 	return ret0
 }
 
 // Histogram indicates an expected call of Histogram.
-func (mr *MockHandlerMockRecorder) Histogram(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) Histogram(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Histogram", reflect.TypeOf((*MockHandler)(nil).Histogram), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Histogram", reflect.TypeOf((*MockHandler)(nil).Histogram), varargs...)
 }
 
 // Stop mocks base method.
@@ -114,17 +129,22 @@ func (mr *MockHandlerMockRecorder) Stop(arg0 interface{}) *gomock.Call {
 }
 
 // Timer mocks base method.
-func (m *MockHandler) Timer(arg0 string) TimerIface {
+func (m *MockHandler) Timer(arg0 string, arg1 ...Option) TimerIface {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Timer", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Timer", varargs...)
 	ret0, _ := ret[0].(TimerIface)
 	return ret0
 }
 
 // Timer indicates an expected call of Timer.
-func (mr *MockHandlerMockRecorder) Timer(arg0 interface{}) *gomock.Call {
+func (mr *MockHandlerMockRecorder) Timer(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Timer", reflect.TypeOf((*MockHandler)(nil).Timer), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Timer", reflect.TypeOf((*MockHandler)(nil).Timer), varargs...)
 }
 
 // WithTags mocks base method.
