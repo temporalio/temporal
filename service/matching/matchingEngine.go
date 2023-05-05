@@ -275,7 +275,9 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
+	isFirstWorkflowTask := addRequest.ScheduledEventId == common.FirstWorkflowTaskScheduledEventID
+	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind,
+		isFirstWorkflowTask)
 	if err != nil {
 		return false, err
 	}
@@ -331,7 +333,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind, false)
 	if err != nil {
 		return false, err
 	}
@@ -583,7 +585,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, queryRequest.WorkerVersionStamp, taskQueueKind)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, queryRequest.WorkerVersionStamp, taskQueueKind, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1176,6 +1178,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	taskQueue *taskQueueID,
 	stamp *commonpb.WorkerVersionStamp,
 	kind enumspb.TaskQueueKind,
+	isFirstWorkflowTask bool,
 ) (*taskQueueID, error) {
 	// sticky queues are unversioned
 	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -1185,14 +1188,10 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 		return taskQueue, nil
 	}
 
-	// TODO: Here we have to distinguish between a new workflow (first wft), which we should
-	// assign to the default version), and a later wft, which we should leave on the
-	// unversioned queue. Do that in a follow-up PR.
-	newWorkflow := true
-
-	// Leave unversioned workflow on unversioned queue, even if the queue has versioning data.
-	// We can check this before loading data.
-	if stamp == nil && !newWorkflow {
+	// If this is the first workflow task for a workflow, we need to assign it to the default
+	// version. If not, we leave it on the unversioned queue, even if the queue has versioning
+	// data. We can check this before loading versioning data.
+	if stamp == nil && !isFirstWorkflowTask {
 		return taskQueue, nil
 	}
 
