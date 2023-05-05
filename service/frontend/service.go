@@ -52,6 +52,12 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
+const (
+	// TODO: remove interim metric names for tracking fraction of FE->History calls migrating from DB->RPC
+	readEventsFromHistoryRPC = "read-events-from-history-rpc"
+	readEventsFromHistoryDB  = "read-events-from-history-db"
+)
+
 // Config represents configuration for frontend service
 type Config struct {
 	NumHistoryShards                      int32
@@ -165,6 +171,9 @@ type Config struct {
 
 	EnableUpdateWorkflowExecution dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioning        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// ReadEventsFromHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
+	ReadEventsFromHistoryFraction dynamicconfig.FloatPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -240,6 +249,8 @@ func NewConfig(
 
 		EnableUpdateWorkflowExecution: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
 		EnableWorkerVersioning:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
+
+		ReadEventsFromHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendReadEventsFromHistoryFraction, 0.0),
 	}
 }
 
@@ -397,6 +408,16 @@ func numFrontendHosts(
 		return defaultHosts
 	}
 	return ringSize
+}
+
+// TODO: remove interim dynamic config helper for dialing fraction of FE->History calls from DB->RPC
+func (c *Config) readEventsFromHistory(metricsHandler metrics.Handler) bool {
+	if rand.Float64() < c.ReadEventsFromHistoryFraction() {
+		metricsHandler.Counter(readEventsFromHistoryRPC).Record(1)
+		return true
+	}
+	metricsHandler.Counter(readEventsFromHistoryDB).Record(1)
+	return false
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
