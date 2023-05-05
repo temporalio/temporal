@@ -40,10 +40,12 @@ import (
 
 var (
 	// TODO: all of these errors are temporary, we'll handle all these cases in future PRs
-	errEmptyVersioningData               = serviceerror.NewInvalidArgument("versioning data is empty")
 	errPollWithVersionOnUnversionedQueue = serviceerror.NewInvalidArgument("poll with version capabilities on unversioned queue")
 	errPollOnVersionedQueueWithNoVersion = serviceerror.NewInvalidArgument("poll on versioned queue with no version capabilities")
 	errVersionedTaskForUnversionedQueue  = serviceerror.NewInvalidArgument("got task with version stamp for unversioned queue")
+
+	// This shouldn't happen, if we have versioning data we should have at least one set.
+	errEmptyVersioningData = serviceerror.NewInternal("versioning data is empty")
 )
 
 // ToBuildIdOrderingResponse transforms the internal VersioningData representation to public representation.
