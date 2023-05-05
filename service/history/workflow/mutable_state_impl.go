@@ -1981,11 +1981,11 @@ func (ms *MutableStateImpl) trackBuildIDFromCompletion(
 	}
 
 	var buildIDs []string
-	payload, found := searchAttributes[searchattribute.BuildIDs]
+	saPayload, found := searchAttributes[searchattribute.BuildIDs]
 	if !found {
 		buildIDs = make([]string, 0, 1)
 	} else {
-		decoded, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+		decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 		if err != nil {
 			return err
 		}
@@ -2006,11 +2006,11 @@ func (ms *MutableStateImpl) trackBuildIDFromCompletion(
 
 	buildIDs = append(buildIDs, buildID)
 
-	payload, err := searchattribute.EncodeValue(buildIDs, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	saPayload, err := searchattribute.EncodeValue(buildIDs, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
 	}
-	searchAttributes[searchattribute.BuildIDs] = payload
+	searchAttributes[searchattribute.BuildIDs] = saPayload
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 

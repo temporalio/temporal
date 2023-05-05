@@ -1058,25 +1058,30 @@ func (s *mutableStateSuite) TestTrackBuildIDFromCompletion() {
 	s.NoError(err)
 
 	// Max 0
-	s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxTrackedBuildIDs: 0})
+	err = s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxTrackedBuildIDs: 0})
+	s.NoError(err)
 	s.Equal([]string{}, s.getBuildIDsFromMutableState())
 	s.Equal([]string{}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-	s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	err = s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	s.NoError(err)
 	s.Equal([]string{"0.1"}, s.getBuildIDsFromMutableState())
 	s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
 	// Add the same build ID
-	s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	err = s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	s.NoError(err)
 	s.Equal([]string{"0.1"}, s.getBuildIDsFromMutableState())
 	s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-	s.mutableState.trackBuildIDFromCompletion("0.2", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	err = s.mutableState.trackBuildIDFromCompletion("0.2", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	s.NoError(err)
 	s.Equal([]string{"0.1", "0.2"}, s.getBuildIDsFromMutableState())
 	s.Equal([]string{"0.1", "0.2"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
 	// Limit applies
-	s.mutableState.trackBuildIDFromCompletion("0.3", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	err = s.mutableState.trackBuildIDFromCompletion("0.3", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIDs: 2})
+	s.NoError(err)
 	s.Equal([]string{"0.2", "0.3"}, s.getBuildIDsFromMutableState())
 	s.Equal([]string{"0.2", "0.3"}, s.getResetPointsBinaryChecksumsFromMutableState())
 }
