@@ -109,7 +109,7 @@ func (c *Collection) throttleLog() bool {
 	// TODO: This is a lot of unnecessary contention with little benefit. Consider using
 	// https://github.com/cespare/percpu here.
 	errCount := atomic.AddInt64(&c.errCount, 1)
-	// log only the first x errors and then x after that to reduce log noise
+	// log only the first x errors and then one every x after that to reduce log noise
 	return errCount < errCountLogThreshold || errCount%errCountLogThreshold == 0
 }
 
