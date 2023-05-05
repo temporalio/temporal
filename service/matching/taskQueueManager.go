@@ -257,7 +257,10 @@ func newTaskQueueManager(
 
 	var fwdr *Forwarder
 	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
-		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, taskQueue, taskQueueKind, e.matchingClient)
+		// Forward without version set, the target will resolve the correct version set from
+		// the build id itself. TODO: check if we still need this here after tqm refactoring
+		forwardTaskQueue := newTaskQueueIDWithVersionSet(taskQueue, "")
+		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, taskQueueKind, e.matchingClient)
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
