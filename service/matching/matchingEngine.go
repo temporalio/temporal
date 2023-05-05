@@ -1185,6 +1185,9 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		return taskQueue, nil
 	}
+	if !stamp.GetUseVersioning() {
+		return taskQueue, nil
+	}
 	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
 	if err != nil {
 		return nil, err

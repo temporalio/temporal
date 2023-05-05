@@ -1830,6 +1830,7 @@ func (s *advancedVisibilitySuite) Test_BuildIDIndexedOnCompletion() {
 	pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{Namespace: s.namespace, TaskQueue: request.TaskQueue, Identity: id}
 	task, err := s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
+	s.Greater(len(task.TaskToken), 0)
 	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace:          s.namespace,
 		Identity:           id,
@@ -1846,6 +1847,7 @@ func (s *advancedVisibilitySuite) Test_BuildIDIndexedOnCompletion() {
 
 	task, err = s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
+	s.Greater(len(task.TaskToken), 0)
 	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace:          s.namespace,
 		Identity:           id,
@@ -1868,6 +1870,7 @@ func (s *advancedVisibilitySuite) Test_BuildIDIndexedOnCompletion() {
 
 	task, err = s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
+	s.Greater(len(task.TaskToken), 0)
 
 	buildIDs = s.getBuildIDs(ctx, task.WorkflowExecution)
 	s.Equal([]string{}, buildIDs)
