@@ -358,7 +358,7 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 
 func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
 
-	// we populate the map sequentially, if after is not in the map, it means we either exauhsted
+	// we populate the map sequentially, if after is not in the map, it means we either exhausted
 	// all items, or we jumped through time (forward or backward), in either case, refresh the cache
 	next, ok := s.nextTimeResultCache[after]
 	if ok {
