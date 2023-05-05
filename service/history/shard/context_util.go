@@ -79,10 +79,9 @@ Loop:
 					tag.ShardQueueAcks(category.Name(), minTaskKey.FireTime),
 				)
 			}
-			metricsHandler.Timer(metrics.ShardInfoScheduledQueueLagTimer.GetMetricName()).Record(
-				lag,
-				metrics.TaskCategoryTag(category.Name()),
-			)
+			metricsHandler.Timer(
+				metrics.ShardInfoScheduledQueueLagTimer.GetMetricName(),
+			).Record(lag, metrics.TaskCategoryTag(category.Name()))
 		default:
 			logger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
 		}
