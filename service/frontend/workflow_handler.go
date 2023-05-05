@@ -4307,29 +4307,72 @@ func (wh *WorkflowHandler) getHistoryReverse(
 	nextPageToken []byte,
 	branchToken []byte,
 ) (*historypb.History, []byte, int64, error) {
+
+	// readFullPageEventsReverse reads a full page of history events from history service in reverse orcer. Due to
+	// storage format of V2 History it is not guaranteed that pageSize amount of data is returned. Function returns the
+	// list of history events, the size of data read, the next page token, and an error if present.
+	readFullPageEventsReverse := func(
+		req *historyservice.ReadHistoryBranchReverseRequest,
+	) ([]*historypb.HistoryEvent, int, []byte, error) {
+		var historyEvents []*historypb.HistoryEvent
+		size := 0
+		for {
+			response, err := wh.historyClient.ReadHistoryBranchReverse(ctx, req)
+			if err != nil {
+				return nil, 0, nil, err
+			}
+			historyEvents = append(historyEvents, response.HistoryEvents...)
+			size += int(response.Size_)
+			if len(historyEvents) >= int(req.PageSize) || len(response.NextPageToken) == 0 {
+				return historyEvents, size, response.NextPageToken, nil
+			}
+			req.NextPageToken = response.NextPageToken
+		}
+	}
+
 	var size int
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
-
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
-		BranchToken:            branchToken,
-		MaxEventID:             nextEventID,
-		LastFirstTransactionID: lastFirstTxnID,
-		PageSize:               int(pageSize),
-		NextPageToken:          nextPageToken,
-		ShardID:                shardID,
-	})
-
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss:
-		// log event
-		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
-		return nil, nil, 0, err
-	default:
-		return nil, nil, 0, err
+	if wh.config.readEventsFromHistory(wh.metricsScope(ctx)) {
+		historyEvents, size, nextPageToken, err = readFullPageEventsReverse(&historyservice.ReadHistoryBranchReverseRequest{
+			NamespaceId:            namespaceID.String(),
+			ShardId:                shardID,
+			BranchToken:            branchToken,
+			MaxEventId:             nextEventID,
+			LastFirstTransactionId: lastFirstTxnID,
+			PageSize:               int64(pageSize),
+			NextPageToken:          nextPageToken,
+		})
+		switch err.(type) {
+		case nil:
+			// noop
+		case *serviceerror.DataLoss:
+			// log event
+			wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
+			return nil, nil, 0, err
+		default:
+			return nil, nil, 0, err
+		}
+	} else {
+		historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
+			BranchToken:            branchToken,
+			MaxEventID:             nextEventID,
+			LastFirstTransactionID: lastFirstTxnID,
+			PageSize:               int(pageSize),
+			NextPageToken:          nextPageToken,
+			ShardID:                shardID,
+		})
+		switch err.(type) {
+		case nil:
+			// noop
+		case *serviceerror.DataLoss:
+			// log event
+			wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
+			return nil, nil, 0, err
+		default:
+			return nil, nil, 0, err
+		}
 	}
 
 	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
