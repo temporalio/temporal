@@ -1209,8 +1209,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	data := userData.GetData().GetVersioningData()
 
 	if stamp == nil && data == nil {
-		// Unversioned workflow that started before this queue was versioned. Leave on
-		// unversioned queue.
+		// Unversioned workflow on unversioned queue.
 		return taskQueue, nil
 	}
 
