@@ -127,8 +127,8 @@ func (m *MetadataStore) CreateNamespace(
 ) (*p.CreateNamespaceResponse, error) {
 
 	query := m.session.Query(templateCreateNamespaceQuery, request.ID, request.Name).WithContext(ctx)
-	row := make(map[string]interface{})
-	applied, err := query.MapScanCAS(row)
+	existingRow := make(map[string]interface{})
+	applied, err := query.MapScanCAS(existingRow)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
 	}
@@ -136,7 +136,7 @@ func (m *MetadataStore) CreateNamespace(
 	if !applied {
 		// if we are here, namespace handler already checked whether this namespace exists in 'namespaces' table and failed
 		// if this name exists in `namespaces_by_name` and not in `namespaces`, fall through and add the row there
-		if name, ok := row["name"]; !ok || name != request.Name {
+		if name, ok := existingRow["name"]; !ok || name != request.Name {
 			return nil, serviceerror.NewNamespaceAlreadyExists("CreateNamespace operation failed because of uuid collision.")
 		}
 	}
