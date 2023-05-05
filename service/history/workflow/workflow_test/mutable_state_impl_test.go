@@ -63,21 +63,21 @@ func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 			signals:           1,
 			maxNumEvents:      2,
 			transactionPolicy: workflow.TransactionPolicyActive,
-			expectFailure:     false,
+			expectFlush:       false,
 		},
 		{
 			name:              "signals=maxNumEvents",
 			signals:           2,
 			maxNumEvents:      2,
 			transactionPolicy: workflow.TransactionPolicyActive,
-			expectFailure:     true,
+			expectFlush:       true,
 		},
 		{
 			name:              "signals>maxNumEvents",
 			signals:           3,
 			maxNumEvents:      2,
 			transactionPolicy: workflow.TransactionPolicyActive,
-			expectFailure:     true,
+			expectFlush:       true,
 		},
 	} {
 		t.Run(tc.name, tc.Run)
@@ -89,7 +89,7 @@ type mutationTestCase struct {
 	transactionPolicy workflow.TransactionPolicy
 	signals           int
 	maxNumEvents      int
-	expectFailure     bool
+	expectFlush       bool
 }
 
 func (c mutationTestCase) Run(t *testing.T) {
@@ -106,14 +106,12 @@ func (c mutationTestCase) Run(t *testing.T) {
 		c.addWorkflowExecutionSignaled(t, i, ms)
 	}
 
-	mu, workflowEvents, err := ms.CloseTransactionAsMutation(c.transactionPolicy)
+	_, workflowEvents, err := ms.CloseTransactionAsMutation(c.transactionPolicy)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_ = mu
-
-	if c.expectFailure {
+	if c.expectFlush {
 		c.testFailure(t, ms, wft, workflowEvents)
 	} else {
 		c.testSuccess(t, ms, workflowEvents)
