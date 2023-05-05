@@ -323,6 +323,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSignaled() {
 		testPayloads,
 		testIdentity,
 		testHeader,
+		false,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{

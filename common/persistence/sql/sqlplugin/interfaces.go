@@ -71,6 +71,7 @@ type (
 		HistoryExecutionActivity
 		HistoryExecutionChildWorkflow
 		HistoryExecutionTimer
+		HistoryExecutionUpdateInfo
 		HistoryExecutionRequestCancel
 		HistoryExecutionSignal
 		HistoryExecutionSignalRequest

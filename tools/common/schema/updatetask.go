@@ -129,8 +129,9 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 		return nil
 	}
 
+	task.logger.Debug(fmt.Sprintf("running %v updates for current version %v", len(updates), currVer))
 	for _, cs := range updates {
-
+		task.logger.Debug("running update", tag.NewAnyTag("cs", cs))
 		err := task.execStmts(cs.version, cs.cqlStmts)
 		if err != nil {
 			return err
@@ -161,16 +162,24 @@ func (task *UpdateTask) execStmts(ver string, stmts []string) error {
 }
 
 func (task *UpdateTask) updateSchemaVersion(oldVer string, cs *changeSet) error {
-
+	task.logger.Debug(fmt.Sprintf("updating schema version to %v", cs.version))
 	err := task.db.UpdateSchemaVersion(cs.version, cs.manifest.MinCompatibleVersion)
 	if err != nil {
 		return fmt.Errorf("failed to update schema_version table, err=%v", err.Error())
 	}
 
+	task.logger.Debug("adding entry to schema_update_history for version", tag.NewAnyTag("cs", cs))
 	err = task.db.WriteSchemaUpdateLog(oldVer, cs.manifest.CurrVersion, cs.manifest.md5, cs.manifest.Description)
 	if err != nil {
 		return fmt.Errorf("failed to add entry to schema_update_history, err=%v", err.Error())
 	}
+
+	// todo: for debugging
+	latestVer, err := task.db.ReadSchemaVersion()
+	if err != nil {
+		return fmt.Errorf("error reading current schema version: %v", err.Error())
+	}
+	task.logger.Debug(fmt.Sprintf("schema version now is %v", latestVer))
 
 	return nil
 }

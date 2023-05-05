@@ -76,12 +76,14 @@ func updateSchema(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
+	logger.Debug("CQL client config", tag.Value(config))
 	client, err := newCQLClient(config, logger)
 	if err != nil {
 		logger.Error("Unable to establish CQL session.", tag.Error(err))
 		return err
 	}
 	defer client.Close()
+	logger.Debug("CQL client", tag.Value(client))
 	if err := schema.Update(cli, client, logger); err != nil {
 		logger.Error("Unable to update CQL schema.", tag.Error(err))
 		return err

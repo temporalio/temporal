@@ -503,9 +503,7 @@ func (t *visibilityQueueTaskExecutor) isCloseExecutionVisibilityTaskPending(task
 	// check if close execution visibility task is completed
 	visibilityQueueState, ok := t.shard.GetQueueState(tasks.CategoryVisibility)
 	if !ok {
-		// !ok means multi-cursor is not available, so we have to revert to using acks
-		visibilityQueueAckLevel := t.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID
-		return CloseExecutionVisibilityTaskID > visibilityQueueAckLevel
+		return true
 	}
 	queryTask := &tasks.CloseExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(task.GetNamespaceID(), task.GetWorkflowID(), task.GetRunID()),

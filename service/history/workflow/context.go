@@ -176,7 +176,6 @@ func NewContext(
 		timeSource:      shard.GetTimeSource(),
 		config:          shard.GetConfig(),
 		mutex:           locks.NewPriorityMutex(),
-		updateRegistry:  update.NewRegistry(),
 		transaction:     NewTransaction(shard),
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
@@ -850,6 +849,9 @@ func (c *ContextImpl) ReapplyEvents(
 }
 
 func (c *ContextImpl) UpdateRegistry() update.Registry {
+	if c.updateRegistry == nil {
+		c.updateRegistry = update.NewRegistry(c.MutableState)
+	}
 	return c.updateRegistry
 }
 

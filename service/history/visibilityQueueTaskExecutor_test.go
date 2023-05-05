@@ -498,28 +498,6 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 		})
 		s.Assert().NoError(err)
 	})
-	s.Run("SingleCursorQueue", func() {
-		const ackLevel int64 = 5
-		s.mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any())
-		s.NoError(s.mockShard.UpdateQueueAckLevel(tasks.CategoryVisibility,
-			tasks.NewImmediateKey(ackLevel),
-		))
-		s.Run("NotAcked", func() {
-			err := s.execute(&tasks.DeleteExecutionVisibilityTask{
-				WorkflowKey:                    workflowKey,
-				CloseExecutionVisibilityTaskID: ackLevel + 1,
-			})
-			s.ErrorIs(err, consts.ErrDependencyTaskNotCompleted)
-		})
-		s.Run("Acked", func() {
-			s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
-			err := s.execute(&tasks.DeleteExecutionVisibilityTask{
-				WorkflowKey:                    workflowKey,
-				CloseExecutionVisibilityTaskID: ackLevel - 1,
-			})
-			s.NoError(err)
-		})
-	})
 	s.Run("MultiCursorQueue", func() {
 		const highWatermark int64 = 5
 		s.NoError(s.mockShard.SetQueueState(tasks.CategoryVisibility, &persistencespb.QueueState{

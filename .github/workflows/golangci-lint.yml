@@ -19,3 +19,11 @@ jobs:
         with:
           version: v1.51.2
           args: --verbose --timeout 10m --fix=false --new-from-rev=HEAD~ --config=.golangci.yml
+      - name: check-is-dirty
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Detected uncommitted changes."
+            git status
+            git diff
+            exit 1
+          fi

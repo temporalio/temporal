@@ -66,6 +66,14 @@ type (
 		GetMetricsHandler() metrics.Handler
 		GetTimeSource() clock.TimeSource
 
+		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)
+		GetHistoryClient() historyservice.HistoryServiceClient
+		GetPayloadSerializer() serialization.Serializer
+
+		GetSearchAttributesProvider() searchattribute.Provider
+		GetSearchAttributesMapperProvider() searchattribute.MapperProvider
+		GetArchivalMetadata() archiver.ArchivalMetadata
+
 		GetEngine(ctx context.Context) (Engine, error)
 
 		AssertOwnership(ctx context.Context) error
@@ -77,29 +85,20 @@ type (
 
 		GetImmediateQueueExclusiveHighReadWatermark() tasks.Key
 		UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error)
-		GetQueueAckLevel(category tasks.Category) tasks.Key
-		UpdateQueueAckLevel(category tasks.Category, ackLevel tasks.Key) error
-		GetQueueClusterAckLevel(category tasks.Category, cluster string) tasks.Key
-		UpdateQueueClusterAckLevel(category tasks.Category, cluster string, ackLevel tasks.Key) error
 		GetQueueState(category tasks.Category) (*persistencespb.QueueState, bool)
 		SetQueueState(category tasks.Category, state *persistencespb.QueueState) error
+		UpdateReplicationQueueReaderState(readerID int64, readerState *persistencespb.QueueReaderState) error
 
 		GetReplicatorDLQAckLevel(sourceCluster string) int64
 		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
 
 		UpdateRemoteClusterInfo(cluster string, ackTaskID int64, ackTimestamp time.Time)
 
-		GetMaxTaskIDForCurrentRangeID() int64
-
 		SetCurrentTime(cluster string, currentTime time.Time)
 		GetCurrentTime(cluster string) time.Time
-		GetLastUpdatedTime() time.Time
 
 		GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error)
 
-		// TODO: deprecate UpdateNamespaceNotificationVersion in v1.21 and remove
-		// NamespaceNotificationVersion from shardInfo proto blob
-		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
 		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool)
 
 		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
@@ -114,14 +113,6 @@ type (
 		// DeleteWorkflowExecution add task to delete visibility, current workflow execution, and deletes workflow execution.
 		// If branchToken != nil, then delete history also, otherwise leave history.
 		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime *time.Time, closeTime *time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error
-
-		GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error)
-		GetHistoryClient() historyservice.HistoryServiceClient
-		GetPayloadSerializer() serialization.Serializer
-
-		GetSearchAttributesProvider() searchattribute.Provider
-		GetSearchAttributesMapperProvider() searchattribute.MapperProvider
-		GetArchivalMetadata() archiver.ArchivalMetadata
 
 		Unload()
 	}

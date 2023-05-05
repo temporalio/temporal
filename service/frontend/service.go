@@ -239,7 +239,7 @@ func NewConfig(
 		MaxExecutionCountBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace, 1000),
 
 		EnableUpdateWorkflowExecution: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
-		EnableWorkerVersioning:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableWorkerVersioning, false),
+		EnableWorkerVersioning:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
 	}
 }
 
@@ -356,10 +356,12 @@ func (s *Service) Stop() {
 	s.visibilityManager.Close()
 
 	logger.Info("ShutdownHandler: Draining traffic")
-	time.Sleep(requestDrainTime)
-
-	// TODO: Change this to GracefulStop when integration tests are refactored.
-	s.server.Stop()
+	t := time.AfterFunc(requestDrainTime, func() {
+		logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
+		s.server.Stop()
+	})
+	s.server.GracefulStop()
+	t.Stop()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(logger)

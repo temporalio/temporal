@@ -25,10 +25,12 @@
 package update
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
 	"github.com/gogo/protobuf/types"
+	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -49,17 +51,35 @@ type (
 
 	RemoveFunc func()
 
+	// Storage represents the update package's requirements for writing
+	// events and restoring ephemeral state from an event index.
+	Storage interface {
+		// AddWorkflowExecutionUpdateAcceptedEvent writes an update accepted
+		// event.
+		AddWorkflowExecutionUpdateAcceptedEvent(updateID string, accpt *updatepb.Acceptance) (*historypb.HistoryEvent, error)
+
+		// AddWorkflowExecutionUpdateCompletedEvent writes an update completed
+		// event.
+		AddWorkflowExecutionUpdateCompletedEvent(resp *updatepb.Response) (*historypb.HistoryEvent, error)
+
+		// GetAcceptedWorkflowExecutionUpdateIDs reads from durable state the
+		// set of update IDs that are known to be in the accepted state.
+		GetAcceptedWorkflowExecutionUpdateIDs(ctx context.Context) ([]string, error)
+	}
+
 	RegistryImpl struct {
 		sync.RWMutex
 		updates map[string]*Update
+		store   Storage
 	}
 )
 
 var _ Registry = (*RegistryImpl)(nil)
 
-func NewRegistry() *RegistryImpl {
+func NewRegistry(store Storage) *RegistryImpl {
 	return &RegistryImpl{
 		updates: make(map[string]*Update),
+		store:   store,
 	}
 }
 

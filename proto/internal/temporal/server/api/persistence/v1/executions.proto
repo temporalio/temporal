@@ -54,7 +54,7 @@ message ShardInfo {
     int32 stolen_since_renew = 6;
     google.protobuf.Timestamp update_time = 7 [(gogoproto.stdtime) = true];
     reserved 8;
-    int64 namespace_notification_version = 9;
+    reserved 9;
     reserved 10;
     reserved 11;
     reserved 12;
@@ -62,6 +62,7 @@ message ShardInfo {
     reserved 14;
     reserved 15;
     // Map from task category to ack levels of the corresponding queue processor
+    // Deprecated. Use queue_states instead.
     map<int32, QueueAckLevel> queue_ack_levels = 16;
     map<int32, QueueState> queue_states = 17;
 }
@@ -356,4 +357,13 @@ message Checksum {
     int32 version = 1;
     temporal.server.api.enums.v1.ChecksumFlavor flavor = 2;
     bytes value = 3;
+}
+
+message UpdateInfo {
+    oneof value {
+        // update has been accepted and this is the pointer to the accepted event
+        temporal.server.api.history.v1.HistoryEventPointer acceptance_pointer = 1;
+        // update has been completed and this is the pointer to the completion event
+        temporal.server.api.history.v1.HistoryEventPointer completed_pointer = 2;
+    }
 }

@@ -135,6 +135,16 @@ func applyWorkflowMutationBatch(
 		runID,
 	)
 
+	updateUpdateInfos(
+		batch,
+		workflowMutation.UpsertUpdateInfos,
+		workflowMutation.DeleteUpdateInfos,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	)
+
 	updateBufferedEvents(
 		batch,
 		workflowMutation.NewBufferedEvents,
@@ -247,6 +257,15 @@ func applyWorkflowSnapshotBatchAsReset(
 		runID,
 	)
 
+	resetUpdateInfos(
+		batch,
+		workflowSnapshot.UpdateInfos,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	)
+
 	deleteBufferedEvents(
 		batch,
 		shardID,
@@ -343,6 +362,16 @@ func applyWorkflowSnapshotBatchAsNew(
 	updateSignalsRequested(
 		batch,
 		workflowSnapshot.SignalRequestedIDs,
+		nil,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	)
+
+	updateUpdateInfos(
+		batch,
+		workflowSnapshot.UpdateInfos,
 		nil,
 		shardID,
 		namespaceID,
@@ -998,6 +1027,64 @@ func resetSignalRequested(
 		rowTypeExecutionTaskID)
 }
 
+func updateUpdateInfos(
+	batch gocql.Batch,
+	updateInfos map[string]*commonpb.DataBlob,
+	deletedUpdateInfos map[string]struct{},
+	shardID int32,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) {
+	for id, blob := range updateInfos {
+		batch.Query(templateUpdateUpdateInfoQuery,
+			id,
+			blob.Data,
+			blob.EncodingType.String(),
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID)
+	}
+
+	for deleteID := range deletedUpdateInfos {
+		batch.Query(templateDeleteUpdateInfoQuery,
+			deleteID,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID)
+	}
+}
+
+func resetUpdateInfos(
+	batch gocql.Batch,
+	updateInfos map[string]*commonpb.DataBlob,
+	shardID int32,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) {
+	uMap, uMapEncoding := resetBlobMap(updateInfos)
+
+	batch.Query(templateResetUpdateInfoQuery,
+		uMap,
+		uMapEncoding.String(),
+		shardID,
+		rowTypeExecution,
+		namespaceID,
+		workflowID,
+		runID,
+		defaultVisibilityTimestamp,
+		rowTypeExecutionTaskID)
+}
+
 func updateBufferedEvents(
 	batch gocql.Batch,
 	newBufferedEvents *commonpb.DataBlob,
@@ -1103,6 +1190,18 @@ func resetSignalInfoMap(
 	}
 
 	return sMap, encoding, nil
+}
+
+func resetBlobMap[K comparable](
+	m map[K]*commonpb.DataBlob,
+) (map[K][]byte, enumspb.EncodingType) {
+	out := make(map[K][]byte, len(m))
+	var encoding enumspb.EncodingType
+	for k, blob := range m {
+		encoding = blob.EncodingType
+		out[k] = blob.Data
+	}
+	return out, encoding
 }
 
 func createHistoryEventBatchBlob(
