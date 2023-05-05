@@ -1160,8 +1160,17 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 			// queue is not versioned and neither is worker, all good
 			return taskQueue, nil
 		}
-		// TODO: consider making an ephemeral set so we can match even if replication fails
-		return nil, errPollWithVersionOnUnversionedQueue
+		// A poller is using a build ID but we don't even think the queue is supposed to be
+		// versioned. This can happen in a replication scenario if pollers are running on the
+		// passive side before the data has been replicated. Instead of rejecting, we can guess
+		// a set id based on the build ID. If the build ID was the first in its set on the
+		// other side, then our guess is right and things will work out. If not, then we'll
+		// guess wrong, but when the versioning data replicates, we'll redirect the poll to the
+		// correct set id. In the meantime (e.g. during an ungraceful failover) we can at least
+		// match tasks using the exact same build ID.
+		guessedSetID := hashBuildID(workerVersionCapabilities.BuildId)
+		return newTaskQueueIDWithVersionSet(taskQueue, guessedSetID), nil
+		// TODO: consolidate this logic with lookupVersionSetForPoll
 	}
 	if workerVersionCapabilities == nil {
 		// TODO: We should leave this one on the unversioned queue for unversioned workflows to
@@ -1201,7 +1210,19 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 			// queue is not versioned and neither is workflow, all good
 			return taskQueue, nil
 		}
-		return nil, errVersionedTaskForUnversionedQueue
+
+		// A workflow has a build ID set, but we don't even think the queue is versioned. This
+		// can happen in replication scenario: the workflow itself was migrated and we failed
+		// over, but the versioning data hasn't been migrated yet. Instead of rejecting it, we
+		// can guess a set ID based on the build ID. If the build ID was the first in its set
+		// on the other side, then our guess is right and things will work out. If not, then
+		// we'll guess wrong, but when we get the replication event, we'll merge the sets and
+		// use both ids.
+		// TODO: this doesn't really work unless we persist the fact that we've created this
+		// set? we can do that on the root. on other partitions... let's notify the root?
+		guessedSetID := hashBuildID(stamp.BuildId)
+		return newTaskQueueIDWithVersionSet(taskQueue, guessedSetID), nil
+		// TODO: consolidate with logic in lookupVersionSetForAdd
 	}
 
 	// TODO: Here we have to distinguish between a new workflow (first wft), which we should
