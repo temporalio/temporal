@@ -3276,14 +3276,19 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(updResp *up
 
 func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdateIDs(
 	ctx context.Context,
-) ([]string, error) {
+) []string {
 	out := make([]string, 0)
 	for id, updateInfo := range ms.updateInfos {
 		if updateInfo.GetAcceptancePointer() != nil {
 			out = append(out, id)
 		}
 	}
-	return out, nil
+	return out
+}
+
+func (ms *MutableStateImpl) GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool) {
+	info, ok := ms.updateInfos[updateID]
+	return info, ok
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(

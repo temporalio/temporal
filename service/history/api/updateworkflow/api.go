@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -76,15 +77,20 @@ func Invoke(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
-	upd, duplicate, removeFn := weCtx.GetContext().UpdateRegistry().Add(req.GetRequest().GetRequest())
-	if removeFn != nil {
-		defer removeFn()
+	updateID := req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+	updateReg := weCtx.GetUpdateRegistry(ctx)
+	upd, newlyCreated, err := updateReg.FindOrCreate(ctx, updateID)
+	if err != nil {
+		return nil, err
+	}
+	if err := upd.OnMessage(ctx, req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+		return nil, err
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
 	// If WT has already started, new speculative WT will be created when started WT completes.
 	// If update is duplicate, then WT for this update was already created.
-	createNewWorkflowTask := !ms.HasPendingWorkflowTask() && duplicate == false
+	createNewWorkflowTask := !ms.HasPendingWorkflowTask() && newlyCreated
 
 	if createNewWorkflowTask {
 		// This will try not to add an event but will create speculative WT in mutable state.
