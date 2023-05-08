@@ -2315,7 +2315,7 @@ func (s *historyBuilderSuite) TestReorder() {
 	)
 }
 
-func (s *historyBuilderSuite) TestBufferSize() {
+func (s *historyBuilderSuite) TestBufferSize_Memory() {
 	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
 	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
 	s.historyBuilder.AddWorkflowExecutionSignaledEvent(
@@ -2329,6 +2329,26 @@ func (s *historyBuilderSuite) TestBufferSize() {
 	// the size of the proto  is non-deterministic, so just assert that it's non-zero, and it isn't really high
 	s.Assert().Greater(s.historyBuilder.SizeInBytesOfBufferedEvents(), 0)
 	s.Assert().Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
+	s.flush()
+	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
+	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+}
+
+func (s *historyBuilderSuite) TestBufferSize_DB() {
+	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
+	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{{
+		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}}
+	s.Assert().Equal(1, s.historyBuilder.NumBufferedEvents())
+	// the size of the proto  is non-deterministic, so just assert that it's non-zero, and it isn't really high
+	s.Assert().Greater(s.historyBuilder.SizeInBytesOfBufferedEvents(), 0)
+	s.Assert().Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
+	s.flush()
+	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
+	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
 }
 
 func (s *historyBuilderSuite) assertEventIDTaskID(

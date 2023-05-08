@@ -1125,7 +1125,10 @@ func (b *HistoryBuilder) NumBufferedEvents() int {
 
 func (b *HistoryBuilder) SizeInBytesOfBufferedEvents() int {
 	size := 0
-	for _, ev := range append(b.dbBufferBatch, b.memBufferBatch...) {
+	for _, ev := range b.dbBufferBatch {
+		size += ev.Size()
+	}
+	for _, ev := range b.memBufferBatch {
 		size += ev.Size()
 	}
 	return size
