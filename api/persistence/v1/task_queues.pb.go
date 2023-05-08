@@ -51,51 +51,51 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-type BuildID_State int32
+type BuildId_State int32
 
 const (
-	STATE_UNSPECIFIED BuildID_State = 0
-	STATE_ACTIVE      BuildID_State = 1
-	STATE_DELETED     BuildID_State = 2
+	STATE_UNSPECIFIED BuildId_State = 0
+	STATE_ACTIVE      BuildId_State = 1
+	STATE_DELETED     BuildId_State = 2
 )
 
-var BuildID_State_name = map[int32]string{
+var BuildId_State_name = map[int32]string{
 	0: "StateUnspecified",
 	1: "StateActive",
 	2: "StateDeleted",
 }
 
-var BuildID_State_value = map[string]int32{
+var BuildId_State_value = map[string]int32{
 	"StateUnspecified": 0,
 	"StateActive":      1,
 	"StateDeleted":     2,
 }
 
-func (BuildID_State) EnumDescriptor() ([]byte, []int) {
+func (BuildId_State) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_0cb9a0f256d1327d, []int{0, 0}
 }
 
-// BuildID is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
-type BuildID struct {
+// BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
+type BuildId struct {
 	Id    string        `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	State BuildID_State `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.persistence.v1.BuildID_State" json:"state,omitempty"`
+	State BuildId_State `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.persistence.v1.BuildId_State" json:"state,omitempty"`
 	// HLC timestamp representing when the state was updated or the when build ID was originally inserted.
 	// (-- api-linter: core::0142::time-field-type=disabled
 	//     aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	StateUpdateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=state_update_timestamp,json=stateUpdateTimestamp,proto3" json:"state_update_timestamp,omitempty"`
 }
 
-func (m *BuildID) Reset()      { *m = BuildID{} }
-func (*BuildID) ProtoMessage() {}
-func (*BuildID) Descriptor() ([]byte, []int) {
+func (m *BuildId) Reset()      { *m = BuildId{} }
+func (*BuildId) ProtoMessage() {}
+func (*BuildId) Descriptor() ([]byte, []int) {
 	return fileDescriptor_0cb9a0f256d1327d, []int{0}
 }
-func (m *BuildID) XXX_Unmarshal(b []byte) error {
+func (m *BuildId) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *BuildID) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *BuildId) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_BuildID.Marshal(b, m, deterministic)
+		return xxx_messageInfo_BuildId.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -105,33 +105,33 @@ func (m *BuildID) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (m *BuildID) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BuildID.Merge(m, src)
+func (m *BuildId) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BuildId.Merge(m, src)
 }
-func (m *BuildID) XXX_Size() int {
+func (m *BuildId) XXX_Size() int {
 	return m.Size()
 }
-func (m *BuildID) XXX_DiscardUnknown() {
-	xxx_messageInfo_BuildID.DiscardUnknown(m)
+func (m *BuildId) XXX_DiscardUnknown() {
+	xxx_messageInfo_BuildId.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_BuildID proto.InternalMessageInfo
+var xxx_messageInfo_BuildId proto.InternalMessageInfo
 
-func (m *BuildID) GetId() string {
+func (m *BuildId) GetId() string {
 	if m != nil {
 		return m.Id
 	}
 	return ""
 }
 
-func (m *BuildID) GetState() BuildID_State {
+func (m *BuildId) GetState() BuildId_State {
 	if m != nil {
 		return m.State
 	}
 	return STATE_UNSPECIFIED
 }
 
-func (m *BuildID) GetStateUpdateTimestamp() *v1.HybridLogicalClock {
+func (m *BuildId) GetStateUpdateTimestamp() *v1.HybridLogicalClock {
 	if m != nil {
 		return m.StateUpdateTimestamp
 	}
@@ -146,8 +146,8 @@ type CompatibleVersionSet struct {
 	// case a set might end up with more than one ID.
 	SetIds []string `protobuf:"bytes,1,rep,name=set_ids,json=setIds,proto3" json:"set_ids,omitempty"`
 	// All the compatible versions, unordered except for the last element, which is considered the set "default".
-	BuildIds []*BuildID `protobuf:"bytes,2,rep,name=build_ids,json=buildIds,proto3" json:"build_ids,omitempty"`
-	// HLC timestamp representing when the set default was updated. Different from BuildID.state_update_timestamp, which
+	BuildIds []*BuildId `protobuf:"bytes,2,rep,name=build_ids,json=buildIds,proto3" json:"build_ids,omitempty"`
+	// HLC timestamp representing when the set default was updated. Different from BuildId.state_update_timestamp, which
 	// refers to the build ID status.
 	// (-- api-linter: core::0142::time-field-type=disabled
 	//     aip.dev/not-precedent: Using HLC instead of wall clock. --)
@@ -193,7 +193,7 @@ func (m *CompatibleVersionSet) GetSetIds() []string {
 	return nil
 }
 
-func (m *CompatibleVersionSet) GetBuildIds() []*BuildID {
+func (m *CompatibleVersionSet) GetBuildIds() []*BuildId {
 	if m != nil {
 		return m.BuildIds
 	}
@@ -378,8 +378,8 @@ func (m *VersionedTaskQueueUserData) GetVersion() int64 {
 }
 
 func init() {
-	proto.RegisterEnum("temporal.server.api.persistence.v1.BuildID_State", BuildID_State_name, BuildID_State_value)
-	proto.RegisterType((*BuildID)(nil), "temporal.server.api.persistence.v1.BuildID")
+	proto.RegisterEnum("temporal.server.api.persistence.v1.BuildId_State", BuildId_State_name, BuildId_State_value)
+	proto.RegisterType((*BuildId)(nil), "temporal.server.api.persistence.v1.BuildId")
 	proto.RegisterType((*CompatibleVersionSet)(nil), "temporal.server.api.persistence.v1.CompatibleVersionSet")
 	proto.RegisterType((*VersioningData)(nil), "temporal.server.api.persistence.v1.VersioningData")
 	proto.RegisterType((*TaskQueueUserData)(nil), "temporal.server.api.persistence.v1.TaskQueueUserData")
@@ -431,21 +431,21 @@ var fileDescriptor_0cb9a0f256d1327d = []byte{
 	0x00,
 }
 
-func (x BuildID_State) String() string {
-	s, ok := BuildID_State_name[int32(x)]
+func (x BuildId_State) String() string {
+	s, ok := BuildId_State_name[int32(x)]
 	if ok {
 		return s
 	}
 	return strconv.Itoa(int(x))
 }
-func (this *BuildID) Equal(that interface{}) bool {
+func (this *BuildId) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*BuildID)
+	that1, ok := that.(*BuildId)
 	if !ok {
-		that2, ok := that.(BuildID)
+		that2, ok := that.(BuildId)
 		if ok {
 			that1 = &that2
 		} else {
@@ -594,12 +594,12 @@ func (this *VersionedTaskQueueUserData) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *BuildID) GoString() string {
+func (this *BuildId) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 7)
-	s = append(s, "&persistence.BuildID{")
+	s = append(s, "&persistence.BuildId{")
 	s = append(s, "Id: "+fmt.Sprintf("%#v", this.Id)+",\n")
 	s = append(s, "State: "+fmt.Sprintf("%#v", this.State)+",\n")
 	if this.StateUpdateTimestamp != nil {
@@ -675,7 +675,7 @@ func valueToGoStringTaskQueues(v interface{}, typ string) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
 }
-func (m *BuildID) Marshal() (dAtA []byte, err error) {
+func (m *BuildId) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -685,12 +685,12 @@ func (m *BuildID) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *BuildID) MarshalTo(dAtA []byte) (int, error) {
+func (m *BuildId) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *BuildID) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *BuildId) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -927,7 +927,7 @@ func encodeVarintTaskQueues(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-func (m *BuildID) Size() (n int) {
+func (m *BuildId) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1030,11 +1030,11 @@ func sovTaskQueues(x uint64) (n int) {
 func sozTaskQueues(x uint64) (n int) {
 	return sovTaskQueues(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (this *BuildID) String() string {
+func (this *BuildId) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&BuildID{`,
+	s := strings.Join([]string{`&BuildId{`,
 		`Id:` + fmt.Sprintf("%v", this.Id) + `,`,
 		`State:` + fmt.Sprintf("%v", this.State) + `,`,
 		`StateUpdateTimestamp:` + strings.Replace(fmt.Sprintf("%v", this.StateUpdateTimestamp), "HybridLogicalClock", "v1.HybridLogicalClock", 1) + `,`,
@@ -1046,9 +1046,9 @@ func (this *CompatibleVersionSet) String() string {
 	if this == nil {
 		return "nil"
 	}
-	repeatedStringForBuildIds := "[]*BuildID{"
+	repeatedStringForBuildIds := "[]*BuildId{"
 	for _, f := range this.BuildIds {
-		repeatedStringForBuildIds += strings.Replace(f.String(), "BuildID", "BuildID", 1) + ","
+		repeatedStringForBuildIds += strings.Replace(f.String(), "BuildId", "BuildId", 1) + ","
 	}
 	repeatedStringForBuildIds += "}"
 	s := strings.Join([]string{`&CompatibleVersionSet{`,
@@ -1105,7 +1105,7 @@ func valueToStringTaskQueues(v interface{}) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("*%v", pv)
 }
-func (m *BuildID) Unmarshal(dAtA []byte) error {
+func (m *BuildId) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1128,10 +1128,10 @@ func (m *BuildID) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: BuildID: wiretype end group for non-group")
+			return fmt.Errorf("proto: BuildId: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: BuildID: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: BuildId: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1180,7 +1180,7 @@ func (m *BuildID) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.State |= BuildID_State(b&0x7F) << shift
+				m.State |= BuildId_State(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1335,7 +1335,7 @@ func (m *CompatibleVersionSet) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.BuildIds = append(m.BuildIds, &BuildID{})
+			m.BuildIds = append(m.BuildIds, &BuildId{})
 			if err := m.BuildIds[len(m.BuildIds)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}

@@ -25,8 +25,8 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "temporal/server/api/clock/v1/message.proto";
 
-// BuildID is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
-message BuildID {
+// BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
+message BuildId {
     enum State {
         STATE_UNSPECIFIED = 0;
         STATE_ACTIVE = 1;
@@ -49,8 +49,8 @@ message CompatibleVersionSet {
     // case a set might end up with more than one ID.
     repeated string set_ids = 1;
     // All the compatible versions, unordered except for the last element, which is considered the set "default".
-    repeated BuildID build_ids = 2;
-    // HLC timestamp representing when the set default was updated. Different from BuildID.state_update_timestamp, which
+    repeated BuildId build_ids = 2;
+    // HLC timestamp representing when the set default was updated. Different from BuildId.state_update_timestamp, which
     // refers to the build ID status.
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)

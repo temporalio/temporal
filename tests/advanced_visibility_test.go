@@ -1817,7 +1817,7 @@ func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
-func (s *advancedVisibilitySuite) Test_BuildIDIndexedOnCompletion() {
+func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion() {
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
 	workflowType := "integration-build-id"

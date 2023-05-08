@@ -40,7 +40,7 @@ import (
 
 var (
 	// TODO: all of these errors are temporary, we'll handle all these cases in future PRs
-	errBuildIDNotFound                   = serviceerror.NewInvalidArgument("build ID not found")
+	errBuildIdNotFound                   = serviceerror.NewInvalidArgument("build ID not found")
 	errEmptyVersioningData               = serviceerror.NewInvalidArgument("versioning data is empty")
 	errPollWithVersionOnUnversionedQueue = serviceerror.NewInvalidArgument("poll with version capabilities on unversioned queue")
 	errPollOnVersionedQueueWithNoVersion = serviceerror.NewInvalidArgument("poll on versioned queue with no version capabilities")
@@ -123,7 +123,7 @@ func UpdateVersionSets(clock hlc.Clock, data *persistencespb.VersioningData, req
 	return data, nil
 }
 
-func hashBuildID(buildID string) string {
+func hashBuildId(buildID string) string {
 	bytes := []byte(buildID)
 	summed := sha256.Sum256(bytes)
 	// 20 base64 chars of entropy is enough for this case
@@ -155,8 +155,8 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 		}
 
 		modifiedData.VersionSets = append(modifiedData.VersionSets, &persistencespb.CompatibleVersionSet{
-			SetIds:   []string{hashBuildID(targetedVersion)},
-			BuildIds: []*persistencespb.BuildID{{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}},
+			SetIds:   []string{hashBuildId(targetedVersion)},
+			BuildIds: []*persistencespb.BuildId{{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}},
 		})
 		makeVersionInSetDefault(&modifiedData, len(modifiedData.VersionSets)-1, 0, &timestamp)
 		makeDefaultSet(&modifiedData, len(modifiedData.VersionSets)-1, &timestamp)
@@ -187,13 +187,13 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 		lastIdx := len(existingData.VersionSets[compatSetIdx].BuildIds)
 		modifiedData.VersionSets[compatSetIdx] = &persistencespb.CompatibleVersionSet{
 			SetIds:   existingData.VersionSets[compatSetIdx].SetIds,
-			BuildIds: make([]*persistencespb.BuildID, lastIdx+1),
+			BuildIds: make([]*persistencespb.BuildId, lastIdx+1),
 		}
 		copy(modifiedData.VersionSets[compatSetIdx].BuildIds, existingData.VersionSets[compatSetIdx].BuildIds)
 
 		// If the version doesn't exist, add it to the compatible set
 		modifiedData.VersionSets[compatSetIdx].BuildIds[lastIdx] =
-			&persistencespb.BuildID{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}
+			&persistencespb.BuildId{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}
 		makeVersionInSetDefault(&modifiedData, compatSetIdx, lastIdx, &timestamp)
 		if addNew.GetMakeSetDefault() {
 			makeDefaultSet(&modifiedData, compatSetIdx, &timestamp)
@@ -217,7 +217,7 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 		}
 		// We're gonna have to copy here to to avoid mutating the original
 		numBuildIds := len(existingData.GetVersionSets()[targetSetIdx].BuildIds)
-		buildIDsCopy := make([]*persistencespb.BuildID, numBuildIds)
+		buildIDsCopy := make([]*persistencespb.BuildId, numBuildIds)
 		copy(buildIDsCopy, existingData.VersionSets[targetSetIdx].BuildIds)
 		modifiedData.VersionSets[targetSetIdx] = &persistencespb.CompatibleVersionSet{
 			SetIds:   existingData.VersionSets[targetSetIdx].SetIds,
@@ -287,7 +287,7 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 	setIdx, _ := findVersion(data, caps.BuildId)
 	if setIdx < 0 {
 		// TODO: consider making an ephemeral set so we can match even if replication fails
-		return "", errBuildIDNotFound
+		return "", errBuildIdNotFound
 	}
 	set := data.VersionSets[setIdx]
 	latestInSet := set.BuildIds[len(set.BuildIds)-1].Id
@@ -314,7 +314,7 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb
 		setIdx, _ := findVersion(data, stamp.BuildId)
 		if setIdx < 0 {
 			// TODO: consider making an ephemeral set so we can match even if replication fails
-			return "", errBuildIDNotFound
+			return "", errBuildIdNotFound
 		}
 		set = data.VersionSets[setIdx]
 	}

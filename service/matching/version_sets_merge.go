@@ -70,13 +70,13 @@ func findSetWithSetIDs(sets []*persistencespb.CompatibleVersionSet, ids []string
 }
 
 type buildIDInfo struct {
-	state                persistencespb.BuildID_State
+	state                persistencespb.BuildId_State
 	stateUpdateTimestamp hlc.Clock
 	setIDs               []string
 	madeDefaultAt        hlc.Clock
 }
 
-func collectBuildIDInfo(sets []*persistencespb.CompatibleVersionSet) map[string]buildIDInfo {
+func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]buildIDInfo {
 	buildIDToInfo := make(map[string]buildIDInfo, 0)
 	for _, set := range sets {
 		lastIdx := len(set.BuildIds) - 1
@@ -125,7 +125,7 @@ func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []strin
 			defaultTimestamp := hlc.Zero(0)
 			set = &persistencespb.CompatibleVersionSet{
 				SetIds:                 info.setIDs,
-				BuildIds:               make([]*persistencespb.BuildID, 0),
+				BuildIds:               make([]*persistencespb.BuildId, 0),
 				DefaultUpdateTimestamp: &defaultTimestamp,
 			}
 			sets = append(sets, set)
@@ -133,7 +133,7 @@ func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []strin
 			set.SetIds = mergeSetIDs(set.SetIds, info.setIDs)
 		}
 		timestamp := info.stateUpdateTimestamp
-		buildID := &persistencespb.BuildID{
+		buildID := &persistencespb.BuildId{
 			Id:                   id,
 			State:                info.state,
 			StateUpdateTimestamp: &timestamp,
@@ -189,7 +189,7 @@ func MergeVersioningData(a *persistencespb.VersioningData, b *persistencespb.Ver
 	}
 
 	// Collect information about each build ID from both sources
-	buildIDToInfo := collectBuildIDInfo(append(a.VersionSets, b.VersionSets...))
+	buildIDToInfo := collectBuildIdInfo(append(a.VersionSets, b.VersionSets...))
 
 	maxDefaultTimestamp := hlc.Max(*b.DefaultUpdateTimestamp, *a.DefaultUpdateTimestamp)
 

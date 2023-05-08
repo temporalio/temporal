@@ -162,10 +162,10 @@ const (
 	// queue. Update requests which would cause the versioning data to exceed this number will fail with a
 	// FailedPrecondition error.
 	VersionCompatibleSetLimitPerQueue = "limit.versionCompatibleSetLimitPerQueue"
-	// VersionBuildIDLimitPerQueue is the max number of build IDs allowed to be defined in the versioning data for a
+	// VersionBuildIdLimitPerQueue is the max number of build IDs allowed to be defined in the versioning data for a
 	// task queue. Update requests which would cause the versioning data to exceed this number will fail with a
 	// FailedPrecondition error.
-	VersionBuildIDLimitPerQueue = "limit.versionBuildIDLimitPerQueue"
+	VersionBuildIdLimitPerQueue = "limit.versionBuildIdLimitPerQueue"
 
 	// keys for frontend
 

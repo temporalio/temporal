@@ -1964,7 +1964,7 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 }
 
 // Similar to (the to-be-deprecated) addBinaryCheckSumIfNotExists but works on build IDs.
-func (ms *MutableStateImpl) trackBuildIDFromCompletion(
+func (ms *MutableStateImpl) trackBuildIdFromCompletion(
 	buildID string,
 	eventID int64,
 	limits WorkflowTaskCompletionLimits,

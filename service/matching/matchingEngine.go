@@ -767,7 +767,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 			data.GetVersioningData(),
 			req.GetRequest(),
 			e.config.VersionCompatibleSetLimitPerQueue(),
-			e.config.VersionBuildIDLimitPerQueue(),
+			e.config.VersionBuildIdLimitPerQueue(),
 		)
 		if err != nil {
 			return nil, err

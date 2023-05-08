@@ -875,7 +875,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 
 	if len(request.GetWorkerVersionCapabilities().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		return nil, errBuildIDTooLong
+		return nil, errBuildIdTooLong
 	}
 
 	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
@@ -971,7 +971,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errIdentityTooLong
 	}
 	if len(request.GetWorkerVersionStamp().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		return nil, errBuildIDTooLong
+		return nil, errBuildIdTooLong
 	}
 
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
@@ -981,7 +981,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
 
 	if request.WorkerVersionStamp.GetUseVersioning() && len(request.WorkerVersionStamp.GetBuildId()) == 0 {
-		return nil, errUseVersioningWithoutBuildID
+		return nil, errUseVersioningWithoutBuildId
 	}
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
@@ -1131,7 +1131,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 
 	if len(request.GetWorkerVersionCapabilities().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		return nil, errBuildIDTooLong
+		return nil, errBuildIdTooLong
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))

@@ -1051,36 +1051,36 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 	}
 }
 
-func (s *mutableStateSuite) TestTrackBuildIDFromCompletion() {
+func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
 	dbState := s.buildWorkflowMutableState()
 	var err error
 	s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 	s.NoError(err)
 
 	// Max 0
-	err = s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxTrackedBuildIds: 0})
+	err = s.mutableState.trackBuildIdFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxTrackedBuildIds: 0})
 	s.NoError(err)
 	s.Equal([]string{}, s.getBuildIdsFromMutableState())
 	s.Equal([]string{}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-	err = s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+	err = s.mutableState.trackBuildIdFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
 	s.NoError(err)
 	s.Equal([]string{"0.1"}, s.getBuildIdsFromMutableState())
 	s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
 	// Add the same build ID
-	err = s.mutableState.trackBuildIDFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+	err = s.mutableState.trackBuildIdFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
 	s.NoError(err)
 	s.Equal([]string{"0.1"}, s.getBuildIdsFromMutableState())
 	s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-	err = s.mutableState.trackBuildIDFromCompletion("0.2", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+	err = s.mutableState.trackBuildIdFromCompletion("0.2", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
 	s.NoError(err)
 	s.Equal([]string{"0.1", "0.2"}, s.getBuildIdsFromMutableState())
 	s.Equal([]string{"0.1", "0.2"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
 	// Limit applies
-	err = s.mutableState.trackBuildIDFromCompletion("0.3", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+	err = s.mutableState.trackBuildIdFromCompletion("0.3", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
 	s.NoError(err)
 	s.Equal([]string{"0.2", "0.3"}, s.getBuildIdsFromMutableState())
 	s.Equal([]string{"0.2", "0.3"}, s.getResetPointsBinaryChecksumsFromMutableState())

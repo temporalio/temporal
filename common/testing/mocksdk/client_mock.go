@@ -213,10 +213,10 @@ func (mr *MockClientMockRecorder) GetSearchAttributes(arg0 interface{}) *gomock.
 }
 
 // GetWorkerBuildIdCompatibility mocks base method.
-func (m *MockClient) GetWorkerBuildIdCompatibility(arg0 context.Context, arg1 *client.GetWorkerBuildIdCompatibilityOptions) (*client.WorkerBuildIDVersionSets, error) {
+func (m *MockClient) GetWorkerBuildIdCompatibility(arg0 context.Context, arg1 *client.GetWorkerBuildIdCompatibilityOptions) (*client.WorkerBuildIdVersionSets, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkerBuildIdCompatibility", arg0, arg1)
-	ret0, _ := ret[0].(*client.WorkerBuildIDVersionSets)
+	ret0, _ := ret[0].(*client.WorkerBuildIdVersionSets)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

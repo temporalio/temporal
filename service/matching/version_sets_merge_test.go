@@ -37,23 +37,23 @@ func fromWallClock(wallclock int64) *hlc.Clock {
 	return &hlc.Clock{WallClock: wallclock, Version: 0, ClusterId: 1}
 }
 
-func buildID(wallclock int64, id string, optionalState ...persistencespb.BuildID_State) *persistencespb.BuildID {
+func buildID(wallclock int64, id string, optionalState ...persistencespb.BuildId_State) *persistencespb.BuildId {
 	state := persistencespb.STATE_ACTIVE
 	if len(optionalState) == 1 {
 		state = optionalState[0]
 	}
 
-	return &persistencespb.BuildID{
+	return &persistencespb.BuildId{
 		Id:                   id,
 		State:                state,
 		StateUpdateTimestamp: fromWallClock(wallclock),
 	}
 }
 
-func mkBuildIds(buildIDs ...*persistencespb.BuildID) []*persistencespb.BuildID {
-	buildIDStructs := make([]*persistencespb.BuildID, len(buildIDs))
+func mkBuildIds(buildIDs ...*persistencespb.BuildId) []*persistencespb.BuildId {
+	buildIDStructs := make([]*persistencespb.BuildId, len(buildIDs))
 	for i, buildID := range buildIDs {
-		buildIDStructs[i] = &persistencespb.BuildID{
+		buildIDStructs[i] = &persistencespb.BuildId{
 			Id:                   buildID.Id,
 			State:                persistencespb.STATE_ACTIVE,
 			StateUpdateTimestamp: buildID.StateUpdateTimestamp,
@@ -62,7 +62,7 @@ func mkBuildIds(buildIDs ...*persistencespb.BuildID) []*persistencespb.BuildID {
 	return buildIDStructs
 }
 
-func mkSet(setID string, buildIDs ...*persistencespb.BuildID) *persistencespb.CompatibleVersionSet {
+func mkSet(setID string, buildIDs ...*persistencespb.BuildId) *persistencespb.CompatibleVersionSet {
 	return &persistencespb.CompatibleVersionSet{
 		SetIds:                 []string{setID},
 		BuildIds:               mkBuildIds(buildIDs...),
@@ -70,7 +70,7 @@ func mkSet(setID string, buildIDs ...*persistencespb.BuildID) *persistencespb.Co
 	}
 }
 
-func mkSingleSetData(setID string, buildIDs ...*persistencespb.BuildID) *persistencespb.VersioningData {
+func mkSingleSetData(setID string, buildIDs ...*persistencespb.BuildId) *persistencespb.VersioningData {
 	return &persistencespb.VersioningData{
 		VersionSets:            []*persistencespb.CompatibleVersionSet{mkSet(setID, buildIDs...)},
 		DefaultUpdateTimestamp: buildIDs[len(buildIDs)-1].StateUpdateTimestamp,
@@ -93,7 +93,7 @@ func TestSetMerge_DataIsNil(t *testing.T) {
 	assert.Equal(t, nilData, MergeVersioningData(nil, nil))
 }
 
-func TestSetMerge_AdditionalBuildIDAndGreaterUpdateTimestamp_MergesBuildIdsAndSetsMaxUpdateTimestamp(t *testing.T) {
+func TestSetMerge_AdditionalBuildIdAndGreaterUpdateTimestamp_MergesBuildIdsAndSetsMaxUpdateTimestamp(t *testing.T) {
 	a := mkSingleSetData("0.1", buildID(6, "0.1"))
 	b := mkSingleSetData("0.1", buildID(1, "0.1"), buildID(3, "0.2"))
 	expected := mkSingleSetData("0.1", buildID(3, "0.2"), buildID(6, "0.1"))
@@ -171,7 +171,7 @@ func TestSetMerge_MultipleMatches_MergesSets(t *testing.T) {
 	assert.Equal(t, expected, MergeVersioningData(b, a))
 }
 
-func TestSetMerge_BuildIDPromoted_PreservesSetDefault(t *testing.T) {
+func TestSetMerge_BuildIdPromoted_PreservesSetDefault(t *testing.T) {
 	a := mkSingleSetData("0.1", buildID(2, "0.1"), buildID(1, "0.2"))
 	a.VersionSets[0].DefaultUpdateTimestamp = fromWallClock(3)
 	b := mkSingleSetData("0.1", buildID(2, "0.1"), buildID(1, "0.2"))
