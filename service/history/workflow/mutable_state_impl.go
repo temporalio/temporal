@@ -4606,7 +4606,7 @@ func (ms *MutableStateImpl) BufferSizeAcceptable() bool {
 		return false
 	}
 
-	if ms.hBuilder.SizeInBytesOfBufferedEvents() >= ms.config.MaximumBufferedEventsSizeInBytes() {
+	if ms.hBuilder.SizeInBytesOfBufferedEvents() > ms.config.MaximumBufferedEventsSizeInBytes() {
 		return false
 	}
 	return true
