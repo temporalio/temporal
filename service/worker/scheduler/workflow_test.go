@@ -27,6 +27,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -1405,9 +1406,10 @@ func (s *workflowSuite) TestLimitedActions() {
 
 func (s *workflowSuite) TestLotsOfIterations() {
 	// This is mostly testing getNextTime caching logic.
-	const iterations = 30
+	const runIterations = 30
+	const backfillIterations = 30
 
-	runs := make([]workflowRun, iterations)
+	runs := make([]workflowRun, runIterations)
 	for i := range runs {
 		t := time.Date(2022, 6, 1, i, 17+i%2, 0, 0, time.UTC)
 		runs[i] = workflowRun{
@@ -1418,36 +1420,48 @@ func (s *workflowSuite) TestLotsOfIterations() {
 		}
 	}
 
+	delayedCallbacks := make([]delayedCallback, backfillIterations)
+
+	expected := runIterations
+	// schedule a call back every hour to spray backfills among scheduled runs
+	// each call back adds random number of backfills up to 10
+	for i := range delayedCallbacks {
+
+		maxRuns := rand.Intn(10) + 1
+		expected += maxRuns
+		// a point in time to send the callback request
+		callbackTime := time.Date(2022, 6, 1, i, 2, 0, 0, time.UTC)
+		// start time for callback request
+		callBackRangeStartTime := time.Date(2022, 5, i, 0, 0, 0, 0, time.UTC)
+
+		// add/process maxRuns schedules
+		for j := 0; j < maxRuns; j++ {
+			runStartTime := time.Date(2022, 5, i, j, 17+j%2, 0, 0, time.UTC)
+			runs = append(runs, workflowRun{
+				id:     "myid-" + runStartTime.Format(time.RFC3339),
+				start:  callbackTime.Add(time.Duration(j) * time.Minute),
+				end:    callbackTime.Add(time.Duration(j+1) * time.Minute),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			})
+		}
+
+		delayedCallbacks[i] = delayedCallback{
+			at: callbackTime,
+			f: func() {
+				s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+					BackfillRequest: []*schedpb.BackfillRequest{{
+						StartTime:     timestamp.TimePtr(callBackRangeStartTime),
+						EndTime:       timestamp.TimePtr(callBackRangeStartTime.Add(time.Duration(maxRuns) * time.Hour)),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					}},
+				})
+			},
+		}
+	}
+
 	s.runAcrossContinue(
 		runs,
-		[]delayedCallback{
-			// 2 backfills at iteration 14 when cache is populated
-			{
-				at: time.Date(2022, 6, 1, 14, 0, 0, 0, time.UTC),
-				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
-						BackfillRequest: []*schedpb.BackfillRequest{{
-							StartTime:     timestamp.TimePtr(time.Date(2022, 5, 31, 12, 0, 0, 0, time.UTC)),
-							EndTime:       timestamp.TimePtr(time.Date(2022, 5, 31, 14, 0, 0, 0, time.UTC)),
-							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-						}},
-					})
-				},
-			},
-			// 2 iterations before cache is populated
-			{
-				at: time.Date(2022, 5, 31, 23, 0, 0, 0, time.UTC),
-				f: func() {
-					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
-						BackfillRequest: []*schedpb.BackfillRequest{{
-							StartTime:     timestamp.TimePtr(time.Date(2022, 5, 31, 12, 0, 0, 0, time.UTC)),
-							EndTime:       timestamp.TimePtr(time.Date(2022, 5, 31, 14, 0, 0, 0, time.UTC)),
-							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
-						}},
-					})
-				},
-			},
-		},
+		delayedCallbacks,
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Calendar: []*schedpb.CalendarSpec{
@@ -1456,6 +1470,6 @@ func (s *workflowSuite) TestLotsOfIterations() {
 				},
 			},
 		},
-		iterations+5,
+		expected+1,
 	)
 }
