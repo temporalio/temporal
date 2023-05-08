@@ -50,7 +50,7 @@ func buildID(wallclock int64, id string, optionalState ...persistencespb.BuildID
 	}
 }
 
-func mkBuildIDs(buildIDs ...*persistencespb.BuildID) []*persistencespb.BuildID {
+func mkBuildIds(buildIDs ...*persistencespb.BuildID) []*persistencespb.BuildID {
 	buildIDStructs := make([]*persistencespb.BuildID, len(buildIDs))
 	for i, buildID := range buildIDs {
 		buildIDStructs[i] = &persistencespb.BuildID{
@@ -65,7 +65,7 @@ func mkBuildIDs(buildIDs ...*persistencespb.BuildID) []*persistencespb.BuildID {
 func mkSet(setID string, buildIDs ...*persistencespb.BuildID) *persistencespb.CompatibleVersionSet {
 	return &persistencespb.CompatibleVersionSet{
 		SetIds:                 []string{setID},
-		BuildIds:               mkBuildIDs(buildIDs...),
+		BuildIds:               mkBuildIds(buildIDs...),
 		DefaultUpdateTimestamp: buildIDs[len(buildIDs)-1].StateUpdateTimestamp,
 	}
 }
@@ -77,7 +77,7 @@ func mkSingleSetData(setID string, buildIDs ...*persistencespb.BuildID) *persist
 	}
 }
 
-func TestSetMerge_IdenticalBuildIDsAndGreaterUpdateTimestamp_SetsMaxUpdateTimestamp(t *testing.T) {
+func TestSetMerge_IdenticalBuildIdsAndGreaterUpdateTimestamp_SetsMaxUpdateTimestamp(t *testing.T) {
 	//                                           look here 👇
 	a := mkSingleSetData("0.1", buildID(1, "0.1"), buildID(6, "0.2"))
 	b := mkSingleSetData("0.1", buildID(1, "0.1"), buildID(3, "0.2"))
@@ -93,7 +93,7 @@ func TestSetMerge_DataIsNil(t *testing.T) {
 	assert.Equal(t, nilData, MergeVersioningData(nil, nil))
 }
 
-func TestSetMerge_AdditionalBuildIDAndGreaterUpdateTimestamp_MergesBuildIDsAndSetsMaxUpdateTimestamp(t *testing.T) {
+func TestSetMerge_AdditionalBuildIDAndGreaterUpdateTimestamp_MergesBuildIdsAndSetsMaxUpdateTimestamp(t *testing.T) {
 	a := mkSingleSetData("0.1", buildID(6, "0.1"))
 	b := mkSingleSetData("0.1", buildID(1, "0.1"), buildID(3, "0.2"))
 	expected := mkSingleSetData("0.1", buildID(3, "0.2"), buildID(6, "0.1"))
@@ -134,7 +134,7 @@ func TestSetMerge_DifferentSetIDs_MergesSetIDs(t *testing.T) {
 	expected := &persistencespb.VersioningData{
 		VersionSets: []*persistencespb.CompatibleVersionSet{{
 			SetIds:                 []string{"0.1", "0.2"},
-			BuildIds:               mkBuildIDs(buildID(1, "0.1"), buildID(6, "0.2")),
+			BuildIds:               mkBuildIds(buildID(1, "0.1"), buildID(6, "0.2")),
 			DefaultUpdateTimestamp: fromWallClock(6),
 		}},
 		DefaultUpdateTimestamp: fromWallClock(6),
@@ -162,7 +162,7 @@ func TestSetMerge_MultipleMatches_MergesSets(t *testing.T) {
 	expected := &persistencespb.VersioningData{
 		VersionSets: []*persistencespb.CompatibleVersionSet{{
 			SetIds:                 []string{"0.1", "0.2"},
-			BuildIds:               mkBuildIDs(buildID(1, "0.1"), buildID(3, "0.2")),
+			BuildIds:               mkBuildIds(buildID(1, "0.1"), buildID(3, "0.2")),
 			DefaultUpdateTimestamp: fromWallClock(3),
 		}},
 		DefaultUpdateTimestamp: fromWallClock(3),

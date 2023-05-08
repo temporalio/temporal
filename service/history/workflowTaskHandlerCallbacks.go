@@ -412,7 +412,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	limits := workflow.WorkflowTaskCompletionLimits{
 		MaxResetPoints:     handler.config.MaxAutoResetPoints(namespaceEntry.Name().String()),
-		MaxTrackedBuildIDs: handler.config.MaxTrackedBuildIDs(namespaceEntry.Name().String()),
+		MaxTrackedBuildIds: handler.config.MaxTrackedBuildIds(namespaceEntry.Name().String()),
 	}
 	// TODO: this metric is inaccurate, it should only be emitted if a new binary checksum (or build ID) is added in this completion.
 	if ms.GetExecutionInfo().AutoResetPoints != nil && limits.MaxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {

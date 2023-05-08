@@ -1970,7 +1970,7 @@ func (ms *MutableStateImpl) trackBuildIDFromCompletion(
 	limits WorkflowTaskCompletionLimits,
 ) error {
 	ms.addResetPointFromCompletion(buildID, eventID, limits.MaxResetPoints)
-	if limits.MaxTrackedBuildIDs < 1 {
+	if limits.MaxTrackedBuildIds < 1 {
 		// Can't track this build ID
 		return nil
 	}
@@ -1981,7 +1981,7 @@ func (ms *MutableStateImpl) trackBuildIDFromCompletion(
 	}
 
 	var buildIDs []string
-	saPayload, found := searchAttributes[searchattribute.BuildIDs]
+	saPayload, found := searchAttributes[searchattribute.BuildIds]
 	if !found {
 		buildIDs = make([]string, 0, 1)
 	} else {
@@ -1992,15 +1992,15 @@ func (ms *MutableStateImpl) trackBuildIDFromCompletion(
 		var ok bool
 		buildIDs, ok = decoded.([]string)
 		if !ok {
-			return serviceerror.NewInternal("invalid search attribute value stored for BuildIDs")
+			return serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
 		}
 		for _, exisitingID := range buildIDs {
 			if exisitingID == buildID {
 				return nil
 			}
 		}
-		if len(buildIDs) >= limits.MaxTrackedBuildIDs {
-			buildIDs = buildIDs[len(buildIDs)-limits.MaxTrackedBuildIDs+1:]
+		if len(buildIDs) >= limits.MaxTrackedBuildIds {
+			buildIDs = buildIDs[len(buildIDs)-limits.MaxTrackedBuildIds+1:]
 		}
 	}
 
@@ -2010,7 +2010,7 @@ func (ms *MutableStateImpl) trackBuildIDFromCompletion(
 	if err != nil {
 		return err
 	}
-	searchAttributes[searchattribute.BuildIDs] = saPayload
+	searchAttributes[searchattribute.BuildIds] = saPayload
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 

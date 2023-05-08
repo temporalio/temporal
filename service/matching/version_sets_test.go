@@ -421,13 +421,13 @@ func TestLimitsMaxSets(t *testing.T) {
 	assert.ErrorAs(t, err, &failedPrecondition)
 }
 
-func TestLimitsMaxBuildIDs(t *testing.T) {
+func TestLimitsMaxBuildIds(t *testing.T) {
 	clock := hlc.Zero(1)
-	maxBuildIDs := 10
-	data := mkInitialData(maxBuildIDs, clock)
+	maxBuildIds := 10
+	data := mkInitialData(maxBuildIds, clock)
 
 	req := mkNewDefReq("10")
-	_, err := UpdateVersionSets(clock, data, req, 0, maxBuildIDs)
+	_, err := UpdateVersionSets(clock, data, req, 0, maxBuildIds)
 	var failedPrecondition *serviceerror.FailedPrecondition
 	assert.ErrorAs(t, err, &failedPrecondition)
 }

@@ -1839,7 +1839,7 @@ func (s *advancedVisibilitySuite) Test_BuildIDIndexedOnCompletion() {
 	})
 	s.NoError(err)
 
-	buildIDs := s.getBuildIDs(ctx, task.WorkflowExecution)
+	buildIDs := s.getBuildIds(ctx, task.WorkflowExecution)
 	s.Equal([]string{"1.0"}, buildIDs)
 
 	_, err = s.engine.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: s.namespace, WorkflowExecution: task.WorkflowExecution, SignalName: "continue"})
@@ -1865,14 +1865,14 @@ func (s *advancedVisibilitySuite) Test_BuildIDIndexedOnCompletion() {
 	})
 	s.NoError(err)
 
-	buildIDs = s.getBuildIDs(ctx, task.WorkflowExecution)
+	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
 	s.Equal([]string{"1.0", "1.1"}, buildIDs)
 
 	task, err = s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
 	s.Greater(len(task.TaskToken), 0)
 
-	buildIDs = s.getBuildIDs(ctx, task.WorkflowExecution)
+	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
 	s.Equal([]string{}, buildIDs)
 
 	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -1889,14 +1889,14 @@ func (s *advancedVisibilitySuite) Test_BuildIDIndexedOnCompletion() {
 	})
 	s.NoError(err)
 
-	buildIDs = s.getBuildIDs(ctx, task.WorkflowExecution)
+	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
 	s.Equal([]string{"1.2"}, buildIDs)
 
 	for minor := 1; minor <= 2; minor++ {
 		s.retryReasonably(func() error {
 			response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.namespace,
-				Query:     fmt.Sprintf("BuildIDs = '1.%d'", minor),
+				Query:     fmt.Sprintf("BuildIds = '1.%d'", minor),
 				PageSize:  defaultPageSize,
 			})
 			if err != nil {
@@ -1911,13 +1911,13 @@ func (s *advancedVisibilitySuite) Test_BuildIDIndexedOnCompletion() {
 	}
 }
 
-func (s *advancedVisibilitySuite) getBuildIDs(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
+func (s *advancedVisibilitySuite) getBuildIds(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
 	description, err := s.engine.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		Execution: execution,
 	})
 	s.NoError(err)
-	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.BuildIDs]
+	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.BuildIds]
 	if !found {
 		return []string{}
 	}

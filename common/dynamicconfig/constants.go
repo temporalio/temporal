@@ -604,8 +604,8 @@ const (
 	DefaultWorkflowRetryPolicy = "history.defaultWorkflowRetryPolicy"
 	// HistoryMaxAutoResetPoints is the key for max number of auto reset points stored in mutableState
 	HistoryMaxAutoResetPoints = "history.historyMaxAutoResetPoints"
-	// HistoryMaxTrackedBuildIDs indicates the max number of build IDs to store in the BuildIDs search attribute
-	HistoryMaxTrackedBuildIDs = "history.maxTrackedBuildIDs"
+	// HistoryMaxTrackedBuildIds indicates the max number of build IDs to store in the BuildIds search attribute
+	HistoryMaxTrackedBuildIds = "history.maxTrackedBuildIds"
 	// EnableParentClosePolicy whether to  ParentClosePolicy
 	EnableParentClosePolicy = "history.enableParentClosePolicy"
 	// ParentClosePolicyThreshold decides that parent close policy will be processed by sys workers(if enabled) if

@@ -101,7 +101,7 @@ type (
 
 	WorkflowTaskCompletionLimits struct {
 		MaxResetPoints     int
-		MaxTrackedBuildIDs int
+		MaxTrackedBuildIds int
 	}
 
 	MutableState interface {

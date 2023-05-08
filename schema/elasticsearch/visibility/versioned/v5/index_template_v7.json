@@ -78,7 +78,7 @@
       "HistorySizeBytes": {
         "type": "long"
       },
-      "BuildIDs": {
+      "BuildIds": {
         "type": "keyword"
       }
     }

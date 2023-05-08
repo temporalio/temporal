@@ -56,7 +56,7 @@ type Config struct {
 
 	EmitShardLagLog       dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxTrackedBuildIDs    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxTrackedBuildIds    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ThrottledLogRPS       dynamicconfig.IntPropertyFn
 	EnableStickyQuery     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration dynamicconfig.DurationPropertyFn
@@ -299,7 +299,7 @@ type Config struct {
 
 const (
 	DefaultHistoryMaxAutoResetPoints = 20
-	DefaultHistoryMaxTrackedBuildIDs = 20
+	DefaultHistoryMaxTrackedBuildIds = 20
 )
 
 // NewConfig returns new service config with default values
@@ -322,7 +322,7 @@ func NewConfig(
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistencePriorityRateLimiting, true),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0*time.Second),
 		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
-		MaxTrackedBuildIDs:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxTrackedBuildIDs, DefaultHistoryMaxTrackedBuildIDs),
+		MaxTrackedBuildIds:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxTrackedBuildIds, DefaultHistoryMaxTrackedBuildIds),
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
 
