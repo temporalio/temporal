@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"strconv"
@@ -1893,21 +1892,21 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion() {
 	s.Equal([]string{"1.2"}, buildIDs)
 
 	for minor := 1; minor <= 2; minor++ {
-		s.retryReasonably(func() error {
+		s.Eventually(func() bool {
 			response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.namespace,
 				Query:     fmt.Sprintf("BuildIds = '1.%d'", minor),
 				PageSize:  defaultPageSize,
 			})
 			if err != nil {
-				return err
+				return false
 			}
 			if len(response.Executions) == 0 {
-				return errors.New("No executions found")
+				return false
 			}
 			s.Equal(id, response.Executions[0].Execution.WorkflowId)
-			return nil
-		})
+			return true
+		}, 10*time.Second, 100*time.Millisecond)
 	}
 }
 

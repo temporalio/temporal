@@ -141,19 +141,3 @@ func (s *xdcBaseSuite) setupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
-
-func (s *xdcBaseSuite) retry(attempts int, interval time.Duration, fn func() error) {
-	var lastErr error
-	for attempt := 1; attempt <= attempts; attempt++ {
-		lastErr = fn()
-		if lastErr == nil {
-			return
-		}
-		time.Sleep(interval)
-	}
-	s.FailNow(fmt.Sprintf("%v after %v attempts", lastErr, attempts))
-}
-
-func (s *xdcBaseSuite) retryReasonably(fn func() error) {
-	s.retry(30, 500*time.Millisecond, fn)
-}
