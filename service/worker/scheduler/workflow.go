@@ -172,7 +172,7 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		Version:                           BatchandCacheTimeQueries,
+		Version:                           BatchAndCacheTimeQueries,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -394,7 +394,7 @@ func (s *scheduler) processTimeRange(
 	// A previous version would record a marker for each time which could make a workflow
 	// fail. With the new version, the entire time range is skipped if the workflow is paused
 	// or we are not going to take an action now
-	if s.tweakables.Version >= BatchandCacheTimeQueries {
+	if s.tweakables.Version >= BatchAndCacheTimeQueries {
 		// Peek at paused/remaining actions state and don't bother if we're not going to
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
@@ -405,7 +405,7 @@ func (s *scheduler) processTimeRange(
 
 	for {
 		var next getNextTimeResult
-		if s.tweakables.Version < BatchandCacheTimeQueries {
+		if s.tweakables.Version < BatchAndCacheTimeQueries {
 			// Run this logic in a SideEffect so that we can fix bugs there without breaking
 			// existing schedule workflows.
 			panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
@@ -418,7 +418,7 @@ func (s *scheduler) processTimeRange(
 		if t1.IsZero() || t1.After(t2) {
 			return t1
 		}
-		if s.tweakables.Version < BatchandCacheTimeQueries && !s.canTakeScheduledAction(manual, false) {
+		if s.tweakables.Version < BatchAndCacheTimeQueries && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
