@@ -40,6 +40,7 @@ type (
 		metricType MetricType // metric type
 		metricName MetricName // metric name
 		unit       MetricUnit
+		opts       []Option
 	}
 
 	// ServiceIdx is an index that uniquely identifies the service
@@ -84,22 +85,26 @@ func (md metricDefinition) GetMetricUnit() MetricUnit {
 	return md.unit
 }
 
-func NewTimerDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Timer, unit: Milliseconds}
+func (md metricDefinition) GetOptions() []Option {
+	return md.opts
 }
 
-func NewBytesHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Bytes}
+func NewTimerDef(name string, opts ...Option) metricDefinition {
+	return metricDefinition{metricName: MetricName(name), metricType: Timer, unit: Milliseconds, opts: opts}
 }
 
-func NewDimensionlessHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Dimensionless}
+func NewBytesHistogramDef(name string, opts ...Option) metricDefinition {
+	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Bytes, opts: opts}
 }
 
-func NewCounterDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Counter}
+func NewDimensionlessHistogramDef(name string, opts ...Option) metricDefinition {
+	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Dimensionless, opts: opts}
 }
 
-func NewGaugeDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Gauge}
+func NewCounterDef(name string, opts ...Option) metricDefinition {
+	return metricDefinition{metricName: MetricName(name), metricType: Counter, opts: opts}
+}
+
+func NewGaugeDef(name string, opts ...Option) metricDefinition {
+	return metricDefinition{metricName: MetricName(name), metricType: Gauge, opts: opts}
 }

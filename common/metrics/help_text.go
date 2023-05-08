@@ -27,15 +27,13 @@ package metrics
 // WithHelpText returns a HelpTextOption that sets the help text of a metric.
 // Metrics handlers are not required to use this option.
 func WithHelpText(helpText string) HelpTextOption {
-	return HelpTextOption{helpText: helpText}
+	return HelpTextOption(helpText)
 }
 
 // HelpTextOption stores the help text provided to the option.
-type HelpTextOption struct {
-	helpText string
-}
+type HelpTextOption string
 
 // apply sets the params.optionalHelpText field.
 func (h HelpTextOption) apply(p *params) {
-	p.optionalHelpText = &h.helpText
+	p.optionalHelpText = (*string)(&h)
 }
