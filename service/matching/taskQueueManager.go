@@ -133,6 +133,7 @@ type (
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
 		status               int32
+		engine               *matchingEngineImpl
 		taskQueueID          *taskQueueID
 		taskQueueKind        enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
 		config               *taskQueueConfig
@@ -158,7 +159,6 @@ type (
 		// prevent tasks being dispatched to zombie pollers.
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
-		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
 		initializedError     *future.FutureImpl[struct{}]
 		// metadataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
@@ -215,6 +215,7 @@ func newTaskQueueManager(
 	)
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
+		engine:               e,
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingClient,
 		metricsHandler:       e.metricsHandler,
@@ -227,7 +228,6 @@ func newTaskQueueManager(
 		config:               taskQueueConfig,
 		pollerHistory:        newPollerHistory(),
 		outstandingPollsMap:  make(map[string]context.CancelFunc),
-		signalFatalProblem:   e.unloadTaskQueue,
 		clusterMeta:          clusterMeta,
 		namespace:            nsName,
 		taggedMetricsHandler: taggedMetricsHandler,
@@ -244,7 +244,7 @@ func newTaskQueueManager(
 	tlMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
 		taskQueueConfig.IdleTaskqueueCheckInterval(),
-		func() { tlMgr.signalFatalProblem(tlMgr) },
+		tlMgr.unloadFromEngine,
 	)
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
@@ -260,7 +260,12 @@ func newTaskQueueManager(
 	return tlMgr, nil
 }
 
-// signalIfFatal calls signalFatalProblem on this taskQueueManagerImpl instance
+// unloadFromEngine asks the MatchingEngine to unload this task queue. It will cause Stop to be called.
+func (c *taskQueueManagerImpl) unloadFromEngine() {
+	c.engine.unloadTaskQueue(c)
+}
+
+// signalIfFatal calls unloadFromEngine on this taskQueueManagerImpl instance
 // if and only if the supplied error represents a fatal condition, e.g. the
 // existence of another taskQueueManager newer lease. Returns true if the signal
 // is emitted, false otherwise.
@@ -271,7 +276,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
 		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.GetMetricName()).Record(1)
-		c.signalFatalProblem(c)
+		c.unloadFromEngine()
 		return true
 	}
 	return false
@@ -624,7 +629,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.FullName()),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.signalFatalProblem(c)
+			c.unloadFromEngine()
 			return
 		}
 		c.taskReader.Signal()
