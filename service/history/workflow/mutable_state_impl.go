@@ -4601,6 +4601,17 @@ func (ms *MutableStateImpl) closeTransactionWithPolicyCheck(
 	}
 }
 
+func (ms *MutableStateImpl) BufferSizeAcceptable() bool {
+	if ms.hBuilder.NumBufferedEvents() > ms.config.MaximumBufferedEventsBatch() {
+		return false
+	}
+
+	if ms.hBuilder.SizeInBytesOfBufferedEvents() > ms.config.MaximumBufferedEventsSizeInBytes() {
+		return false
+	}
+	return true
+}
+
 func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 	transactionPolicy TransactionPolicy,
 ) error {
@@ -4610,7 +4621,7 @@ func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 		return nil
 	}
 
-	if ms.hBuilder.BufferEventSize() < ms.config.MaximumBufferedEventsBatch() {
+	if ms.BufferSizeAcceptable() {
 		return nil
 	}
 
