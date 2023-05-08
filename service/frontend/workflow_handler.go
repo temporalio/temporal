@@ -840,6 +840,10 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
+	if len(request.GetWorkerVersionCapabilities().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+		return nil, errBuildIdTooLong
+	}
+
 	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
 		return nil, err
 	}
@@ -928,6 +932,9 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
+	if len(request.GetWorkerVersionStamp().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+		return nil, errBuildIdTooLong
+	}
 
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
@@ -935,16 +942,8 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
 
-	if request.UseVersioning && len(request.WorkerVersionStamp.GetBuildId()) == 0 {
-		return nil, errUseVersioningWithoutBuildID
-	}
-
-	// Copy WorkerVersionStamp to BinaryChecksum if BinaryChecksum is missing (small
-	// optimization to save space in the request).
-	if request.WorkerVersionStamp != nil {
-		if len(request.WorkerVersionStamp.BuildId) > 0 && len(request.BinaryChecksum) == 0 {
-			request.BinaryChecksum = request.WorkerVersionStamp.BuildId
-		}
+	if request.WorkerVersionStamp.GetUseVersioning() && len(request.WorkerVersionStamp.GetBuildId()) == 0 {
+		return nil, errUseVersioningWithoutBuildId
 	}
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
@@ -1087,6 +1086,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	if len(request.GetWorkerVersionCapabilities().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+		return nil, errBuildIdTooLong
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))

@@ -125,6 +125,8 @@ type (
 	}
 )
 
+var defaultWorkflowTaskCompletionLimits = workflow.WorkflowTaskCompletionLimits{MaxResetPoints: configs.DefaultHistoryMaxAutoResetPoints, MaxTrackedBuildIds: configs.DefaultHistoryMaxTrackedBuildIds}
+
 func TestTransferQueueActiveTaskExecutorSuite(t *testing.T) {
 	s := new(transferQueueActiveTaskExecutorSuite)
 	suite.Run(t, s)
@@ -949,7 +951,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 				}},
 			},
 		},
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
@@ -1074,7 +1076,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",
 		Commands: commands,
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
 		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -1168,7 +1170,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",
 		Commands: commands,
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
 		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -1267,7 +1269,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 				}},
 			},
 		},
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",

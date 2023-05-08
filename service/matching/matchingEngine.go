@@ -275,7 +275,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -331,7 +331,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -585,7 +585,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, queryRequest.WorkerVersionStamp, taskQueueKind)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, queryRequest.WorkerVersionStamp, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
@@ -770,7 +770,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 			data.GetVersioningData(),
 			req.GetRequest(),
 			e.config.VersionCompatibleSetLimitPerQueue(),
-			e.config.VersionBuildIDLimitPerQueue(),
+			e.config.VersionBuildIdLimitPerQueue(),
 		)
 		if err != nil {
 			return nil, err
@@ -1186,6 +1186,9 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 ) (*taskQueueID, error) {
 	// sticky queues are unversioned
 	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		return taskQueue, nil
+	}
+	if !stamp.GetUseVersioning() {
 		return taskQueue, nil
 	}
 	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)

@@ -2010,49 +2010,18 @@ func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
 	if len(binChecksum) == 0 {
 		return nil
 	}
+	if !ms.addResetPointFromCompletion(binChecksum, event.GetEventId(), maxResetPoints) {
+		return nil
+	}
 	exeInfo := ms.executionInfo
-	var currResetPoints []*workflowpb.ResetPointInfo
-	if exeInfo.AutoResetPoints != nil && exeInfo.AutoResetPoints.Points != nil {
-		currResetPoints = ms.executionInfo.AutoResetPoints.Points
-	} else {
-		currResetPoints = make([]*workflowpb.ResetPointInfo, 0, 1)
-	}
-
+	resetPoints := exeInfo.AutoResetPoints.Points
 	// List of all recent binary checksums associated with the workflow.
-	var recentBinaryChecksums []string
+	recentBinaryChecksums := make([]string, len(resetPoints))
 
-	for _, rp := range currResetPoints {
-		recentBinaryChecksums = append(recentBinaryChecksums, rp.GetBinaryChecksum())
-		if rp.GetBinaryChecksum() == binChecksum {
-			// this checksum already exists
-			return nil
-		}
+	for i, rp := range resetPoints {
+		recentBinaryChecksums[i] = rp.GetBinaryChecksum()
 	}
 
-	if len(currResetPoints) == maxResetPoints {
-		// If exceeding the max limit, do rotation by taking the oldest one out.
-		currResetPoints = currResetPoints[1:]
-		recentBinaryChecksums = recentBinaryChecksums[1:]
-	}
-	// Adding current version of the binary checksum.
-	recentBinaryChecksums = append(recentBinaryChecksums, binChecksum)
-
-	resettable := true
-	err := ms.CheckResettable()
-	if err != nil {
-		resettable = false
-	}
-	info := &workflowpb.ResetPointInfo{
-		BinaryChecksum:               binChecksum,
-		RunId:                        ms.executionState.GetRunId(),
-		FirstWorkflowTaskCompletedId: event.GetEventId(),
-		CreateTime:                   timestamp.TimePtr(ms.timeSource.Now()),
-		Resettable:                   resettable,
-	}
-	currResetPoints = append(currResetPoints, info)
-	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
-		Points: currResetPoints,
-	}
 	checksumsPayload, err := searchattribute.EncodeValue(recentBinaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
@@ -2061,6 +2030,99 @@ func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+// Add a reset point for current task completion if needed.
+// Returns true if the reset point was added or false if there was no need or no ability to add.
+func (ms *MutableStateImpl) addResetPointFromCompletion(
+	binaryChecksum string,
+	eventID int64,
+	maxResetPoints int,
+) bool {
+	if maxResetPoints < 1 {
+		// Nothing to do here
+		return false
+	}
+	exeInfo := ms.executionInfo
+	var resetPoints []*workflowpb.ResetPointInfo
+	if exeInfo.AutoResetPoints != nil && exeInfo.AutoResetPoints.Points != nil {
+		resetPoints = ms.executionInfo.AutoResetPoints.Points
+		if len(resetPoints) >= maxResetPoints {
+			// If limit is exceeded, drop the oldest ones.
+			resetPoints = resetPoints[len(resetPoints)-maxResetPoints+1:]
+		}
+	} else {
+		resetPoints = make([]*workflowpb.ResetPointInfo, 0, 1)
+	}
+
+	for _, rp := range resetPoints {
+		if rp.GetBinaryChecksum() == binaryChecksum {
+			return false
+		}
+	}
+
+	info := &workflowpb.ResetPointInfo{
+		BinaryChecksum:               binaryChecksum,
+		RunId:                        ms.executionState.GetRunId(),
+		FirstWorkflowTaskCompletedId: eventID,
+		CreateTime:                   timestamp.TimePtr(ms.timeSource.Now()),
+		Resettable:                   ms.CheckResettable() == nil,
+	}
+	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
+		Points: append(resetPoints, info),
+	}
+	return true
+}
+
+// Similar to (the to-be-deprecated) addBinaryCheckSumIfNotExists but works on build IDs.
+func (ms *MutableStateImpl) trackBuildIdFromCompletion(
+	buildID string,
+	eventID int64,
+	limits WorkflowTaskCompletionLimits,
+) error {
+	ms.addResetPointFromCompletion(buildID, eventID, limits.MaxResetPoints)
+	if limits.MaxTrackedBuildIds < 1 {
+		// Can't track this build ID
+		return nil
+	}
+	searchAttributes := ms.executionInfo.SearchAttributes
+	if searchAttributes == nil {
+		searchAttributes = make(map[string]*commonpb.Payload, 1)
+		ms.executionInfo.SearchAttributes = searchAttributes
+	}
+
+	var buildIDs []string
+	saPayload, found := searchAttributes[searchattribute.BuildIds]
+	if !found {
+		buildIDs = make([]string, 0, 1)
+	} else {
+		decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+		if err != nil {
+			return err
+		}
+		var ok bool
+		buildIDs, ok = decoded.([]string)
+		if !ok {
+			return serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
+		}
+		for _, exisitingID := range buildIDs {
+			if exisitingID == buildID {
+				return nil
+			}
+		}
+		if len(buildIDs) >= limits.MaxTrackedBuildIds {
+			buildIDs = buildIDs[len(buildIDs)-limits.MaxTrackedBuildIds+1:]
+		}
+	}
+
+	buildIDs = append(buildIDs, buildID)
+
+	saPayload, err := searchattribute.EncodeValue(buildIDs, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		return err
+	}
+	searchAttributes[searchattribute.BuildIds] = saPayload
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -2083,13 +2145,13 @@ func (ms *MutableStateImpl) CheckResettable() error {
 func (ms *MutableStateImpl) AddWorkflowTaskCompletedEvent(
 	workflowTask *WorkflowTaskInfo,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-	maxResetPoints int,
+	limits WorkflowTaskCompletionLimits,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskCompleted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskCompletedEvent(workflowTask, request, maxResetPoints)
+	return ms.workflowTaskManager.AddWorkflowTaskCompletedEvent(workflowTask, request, limits)
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowTaskCompletedEvent(

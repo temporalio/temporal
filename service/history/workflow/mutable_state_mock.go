@@ -726,7 +726,7 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowPropertiesModifiedEvent(arg0,
 }
 
 // AddWorkflowTaskCompletedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowTaskCompletedEvent(arg0 *WorkflowTaskInfo, arg1 *v17.RespondWorkflowTaskCompletedRequest, arg2 int) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowTaskCompletedEvent(arg0 *WorkflowTaskInfo, arg1 *v17.RespondWorkflowTaskCompletedRequest, arg2 WorkflowTaskCompletionLimits) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowTaskCompletedEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*v13.HistoryEvent)

@@ -29,7 +29,6 @@
 package xdc
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"testing"
@@ -102,7 +101,7 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	})
 	s.Require().NoError(err)
 
-	s.retryReasonably(func() error {
+	s.Eventually(func() bool {
 		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
 		response, err := standbyMatchingClient.GetWorkerBuildIdCompatibility(tests.NewContext(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 			NamespaceId: description.GetNamespaceInfo().Id,
@@ -112,13 +111,10 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 			},
 		})
 		if err != nil {
-			return err
+			return false
 		}
-		if len(response.GetResponse().GetMajorVersionSets()) != 1 {
-			return errors.New("passive has no versioning data")
-		}
-		return nil
-	})
+		return len(response.GetResponse().GetMajorVersionSets()) == 1
+	}, 15*time.Second, 500*time.Millisecond)
 }
 
 func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
@@ -140,29 +136,26 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 	standbyFrontendClient := s.cluster2.GetFrontendClient()
 	s.cluster1.GetExecutionManager()
 
-	s.retryReasonably(func() error {
+	s.Eventually(func() bool {
 		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
 		_, err = standbyFrontendClient.UpdateWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 			Namespace: namespace,
 			TaskQueue: taskQueue,
 			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.1"},
 		})
-		return err
-	})
+		return err == nil
+	}, 15*time.Second, 500*time.Millisecond)
 
-	s.retryReasonably(func() error {
+	s.Eventually(func() bool {
 		response, err := activeFrontendClient.GetWorkerBuildIdCompatibility(tests.NewContext(), &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: namespace,
 			TaskQueue: taskQueue,
 		})
 		if err != nil {
-			return err
+			return false
 		}
-		if len(response.GetMajorVersionSets()) != 1 {
-			return errors.New("active has no versioning data")
-		}
-		return nil
-	})
+		return len(response.GetMajorVersionSets()) == 1
+	}, 15*time.Second, 500*time.Millisecond)
 }
 
 func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {

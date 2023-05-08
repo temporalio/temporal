@@ -5390,7 +5390,7 @@ func addWorkflowTaskCompletedEvent(s *suite.Suite, ms workflow.MutableState, sch
 
 	event, _ := ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: identity,
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	ms.FlushBufferedEvents()
 
