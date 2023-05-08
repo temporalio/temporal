@@ -361,6 +361,26 @@ func (mr *MockHistoryServiceClientMockRecorder) PollMutableState(ctx, in interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollMutableState", reflect.TypeOf((*MockHistoryServiceClient)(nil).PollMutableState), varargs...)
 }
 
+// PollWorkflowExecutionUpdate mocks base method.
+func (m *MockHistoryServiceClient) PollWorkflowExecutionUpdate(ctx context.Context, in *historyservice.PollWorkflowExecutionUpdateRequest, opts ...grpc.CallOption) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PollWorkflowExecutionUpdate", varargs...)
+	ret0, _ := ret[0].(*historyservice.PollWorkflowExecutionUpdateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollWorkflowExecutionUpdate indicates an expected call of PollWorkflowExecutionUpdate.
+func (mr *MockHistoryServiceClientMockRecorder) PollWorkflowExecutionUpdate(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowExecutionUpdate", reflect.TypeOf((*MockHistoryServiceClient)(nil).PollWorkflowExecutionUpdate), varargs...)
+}
+
 // PurgeDLQMessages mocks base method.
 func (m *MockHistoryServiceClient) PurgeDLQMessages(ctx context.Context, in *historyservice.PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*historyservice.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1384,6 +1404,21 @@ func (m *MockHistoryServiceServer) PollMutableState(arg0 context.Context, arg1 *
 func (mr *MockHistoryServiceServerMockRecorder) PollMutableState(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollMutableState", reflect.TypeOf((*MockHistoryServiceServer)(nil).PollMutableState), arg0, arg1)
+}
+
+// PollWorkflowExecutionUpdate mocks base method.
+func (m *MockHistoryServiceServer) PollWorkflowExecutionUpdate(arg0 context.Context, arg1 *historyservice.PollWorkflowExecutionUpdateRequest) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollWorkflowExecutionUpdate", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.PollWorkflowExecutionUpdateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollWorkflowExecutionUpdate indicates an expected call of PollWorkflowExecutionUpdate.
+func (mr *MockHistoryServiceServerMockRecorder) PollWorkflowExecutionUpdate(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowExecutionUpdate", reflect.TypeOf((*MockHistoryServiceServer)(nil).PollWorkflowExecutionUpdate), arg0, arg1)
 }
 
 // PurgeDLQMessages mocks base method.
