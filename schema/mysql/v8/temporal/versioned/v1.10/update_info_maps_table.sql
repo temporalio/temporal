@@ -4,7 +4,7 @@ CREATE TABLE update_info_maps (
   namespace_id BINARY(16) NOT NULL,
   workflow_id VARCHAR(255) NOT NULL,
   run_id BINARY(16) NOT NULL,
-  updat_id VARCHAR(255) NOT NULL,
+  update_id VARCHAR(255) NOT NULL,
 --
   data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16),
