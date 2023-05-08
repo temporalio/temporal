@@ -22,6 +22,7 @@ CREATE TABLE executions_visibility (
   TemporalScheduledById         VARCHAR(255)  GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalScheduledById")),
   TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalSchedulePaused")),
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalNamespaceDivision")),
+  BuildIds                      TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.BuildIds"))              STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.Bool01")),
@@ -114,6 +115,7 @@ CREATE VIRTUAL TABLE executions_visibility_fts_text USING fts5 (
 CREATE VIRTUAL TABLE executions_visibility_fts_keyword_list USING fts5 (
   TemporalChangeVersion,
   BinaryChecksums,
+  BuildIds,
   KeywordList01,
   KeywordList02,
   KeywordList03,
@@ -140,6 +142,7 @@ BEGIN
     rowid,
     TemporalChangeVersion,
     BinaryChecksums,
+    BuildIds,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -147,6 +150,7 @@ BEGIN
     NEW.rowid,
     NEW.TemporalChangeVersion,
     NEW.BinaryChecksums,
+    NEW.BuildIds,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03
@@ -175,6 +179,7 @@ BEGIN
     rowid,
     TemporalChangeVersion,
     BinaryChecksums,
+    BuildIds,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -183,6 +188,7 @@ BEGIN
     OLD.rowid,
     OLD.TemporalChangeVersion,
     OLD.BinaryChecksums,
+    OLD.BuildIds,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -222,6 +228,7 @@ BEGIN
     rowid,
     TemporalChangeVersion,
     BinaryChecksums,
+    BuildIds,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -230,6 +237,7 @@ BEGIN
     OLD.rowid,
     OLD.TemporalChangeVersion,
     OLD.BinaryChecksums,
+    OLD.BuildIds,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -238,6 +246,7 @@ BEGIN
     rowid,
     TemporalChangeVersion,
     BinaryChecksums,
+    BuildIds,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -245,6 +254,7 @@ BEGIN
     NEW.rowid,
     NEW.TemporalChangeVersion,
     NEW.BinaryChecksums,
+    NEW.BuildIds,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03

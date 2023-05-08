@@ -1816,6 +1816,116 @@ func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
+func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion() {
+	ctx := NewContext()
+	id := s.randomizeStr(s.T().Name())
+	workflowType := "integration-build-id"
+	taskQueue := s.randomizeStr(s.T().Name())
+
+	request := s.createStartWorkflowExecutionRequest(id, workflowType, taskQueue)
+	_, err := s.engine.StartWorkflowExecution(ctx, request)
+	s.NoError(err)
+
+	pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{Namespace: s.namespace, TaskQueue: request.TaskQueue, Identity: id}
+	task, err := s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
+	s.NoError(err)
+	s.Greater(len(task.TaskToken), 0)
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.namespace,
+		Identity:           id,
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.0"},
+		TaskToken:          task.TaskToken,
+	})
+	s.NoError(err)
+
+	buildIDs := s.getBuildIds(ctx, task.WorkflowExecution)
+	s.Equal([]string{"1.0"}, buildIDs)
+
+	_, err = s.engine.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: s.namespace, WorkflowExecution: task.WorkflowExecution, SignalName: "continue"})
+	s.NoError(err)
+
+	task, err = s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
+	s.NoError(err)
+	s.Greater(len(task.TaskToken), 0)
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.namespace,
+		Identity:           id,
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.1"},
+		TaskToken:          task.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+				ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType: task.WorkflowType,
+					TaskQueue:    request.TaskQueue,
+				},
+			},
+		}},
+	})
+	s.NoError(err)
+
+	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
+	s.Equal([]string{"1.0", "1.1"}, buildIDs)
+
+	task, err = s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
+	s.NoError(err)
+	s.Greater(len(task.TaskToken), 0)
+
+	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
+	s.Equal([]string{}, buildIDs)
+
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.namespace,
+		Identity:           id,
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.2"},
+		TaskToken:          task.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+			},
+		}},
+	})
+	s.NoError(err)
+
+	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
+	s.Equal([]string{"1.2"}, buildIDs)
+
+	for minor := 1; minor <= 2; minor++ {
+		s.Eventually(func() bool {
+			response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.namespace,
+				Query:     fmt.Sprintf("BuildIds = '1.%d'", minor),
+				PageSize:  defaultPageSize,
+			})
+			if err != nil {
+				return false
+			}
+			if len(response.Executions) == 0 {
+				return false
+			}
+			s.Equal(id, response.Executions[0].Execution.WorkflowId)
+			return true
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+}
+
+func (s *advancedVisibilitySuite) getBuildIds(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
+	description, err := s.engine.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: execution,
+	})
+	s.NoError(err)
+	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.BuildIds]
+	if !found {
+		return []string{}
+	}
+	var buildIDs []string
+	err = payload.Decode(attr, &buildIDs)
+	s.NoError(err)
+	return buildIDs
+}
+
 func (s *advancedVisibilitySuite) updateMaxResultWindow() {
 	esConfig := s.testClusterConfig.ESConfig
 
