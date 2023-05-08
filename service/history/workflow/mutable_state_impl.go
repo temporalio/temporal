@@ -4602,7 +4602,7 @@ func (ms *MutableStateImpl) closeTransactionWithPolicyCheck(
 }
 
 func (ms *MutableStateImpl) BufferSizeAcceptable() bool {
-	if ms.hBuilder.NumBufferedEvents() >= ms.config.MaximumBufferedEventsBatch() {
+	if ms.hBuilder.NumBufferedEvents() > ms.config.MaximumBufferedEventsBatch() {
 		return false
 	}
 

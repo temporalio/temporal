@@ -573,12 +573,10 @@ const (
 	ReplicatorProcessorUpdateAckIntervalJitterCoefficient = "history.replicatorProcessorUpdateAckIntervalJitterCoefficient"
 	// ReplicatorProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for ReplicatorProcessor
 	ReplicatorProcessorEnablePriorityTaskProcessor = "history.replicatorProcessorEnablePriorityTaskProcessor"
-	// MaximumBufferedEventsBatch is max number of buffer event in mutable state.
-	// This limit is exclusive, so the number of buffered events must be less than this amount.
+	// MaximumBufferedEventsBatch is the maximum permissible number of buffered events for any given mutable state.
 	MaximumBufferedEventsBatch = "history.maximumBufferedEventsBatch"
-	// MaximumBufferedEventsSizeInBytes is the maximum total size of all buffered events for a workflow execution.
-	// The total size is determined by the sum of the size, in bytes, of each HistoryEvent proto.
-	// This limit is inclusive, so the size of the buffered events must be less than or equal to this amount.
+	// MaximumBufferedEventsSizeInBytes is the maximum permissible size of all buffered events for any given mutable
+	// state. The total size is determined by the sum of the size, in bytes, of each HistoryEvent proto.
 	MaximumBufferedEventsSizeInBytes = "history.maximumBufferedEventsSizeInBytes"
 	// MaximumSignalsPerExecution is max number of signals supported by single execution
 	MaximumSignalsPerExecution = "history.maximumSignalsPerExecution"

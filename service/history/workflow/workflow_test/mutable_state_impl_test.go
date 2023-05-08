@@ -60,38 +60,39 @@ func TestMutableStateImpl_ForceFlushBufferedEvents(t *testing.T) {
 
 	for _, tc := range []mutationTestCase{
 		{
-			name:              "Number of events acceptable",
+			name:              "Number of events ok",
 			transactionPolicy: workflow.TransactionPolicyActive,
-			signals:           1,
+			signals:           2,
 			maxEvents:         2,
 			maxSizeInBytes:    math.MaxInt,
 			expectFlush:       false,
 		},
 		{
-			name:              "Number of events has reached limit",
+			name:              "Max number of events exceeded",
 			transactionPolicy: workflow.TransactionPolicyActive,
-			signals:           2,
+			signals:           3,
 			maxEvents:         2,
 			maxSizeInBytes:    math.MaxInt,
 			expectFlush:       true,
 		},
 		{
-			name:              "Number of events acceptable but byte size limit exceeded",
-			transactionPolicy: workflow.TransactionPolicyActive,
-			signals:           1,
-			maxEvents:         2,
-			maxSizeInBytes:    0,
-			expectFlush:       true,
-		},
-		{
-			name:              "Number of events limit reached and byte size limit exceeded",
+			name:              "Number of events ok but byte size limit exceeded",
 			transactionPolicy: workflow.TransactionPolicyActive,
 			signals:           2,
 			maxEvents:         2,
-			maxSizeInBytes:    0,
+			maxSizeInBytes:    25,
+			expectFlush:       true,
+		},
+		{
+			name:              "Max number of events and size of events both exceeded",
+			transactionPolicy: workflow.TransactionPolicyActive,
+			signals:           3,
+			maxEvents:         2,
+			maxSizeInBytes:    25,
 			expectFlush:       true,
 		},
 	} {
+		tc := tc
 		t.Run(tc.name, tc.Run)
 	}
 }
@@ -105,7 +106,7 @@ type mutationTestCase struct {
 	maxSizeInBytes    int
 }
 
-func (c mutationTestCase) Run(t *testing.T) {
+func (c *mutationTestCase) Run(t *testing.T) {
 	t.Parallel()
 
 	nsEntry := tests.LocalNamespaceEntry
@@ -131,7 +132,7 @@ func (c mutationTestCase) Run(t *testing.T) {
 	}
 }
 
-func (c mutationTestCase) startWFT(
+func (c *mutationTestCase) startWFT(
 	t *testing.T,
 	ms *workflow.MutableStateImpl,
 ) *workflow.WorkflowTaskInfo {
@@ -150,7 +151,7 @@ func (c mutationTestCase) startWFT(
 	return wft
 }
 
-func (c mutationTestCase) startWorkflowExecution(
+func (c *mutationTestCase) startWorkflowExecution(
 	t *testing.T,
 	ms *workflow.MutableStateImpl,
 	nsEntry *namespace.Namespace,
@@ -178,7 +179,7 @@ func (c mutationTestCase) startWorkflowExecution(
 	}
 }
 
-func (c mutationTestCase) addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableStateImpl) {
+func (c *mutationTestCase) addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableStateImpl) {
 	t.Helper()
 
 	payload := &commonpb.Payloads{}
@@ -197,7 +198,7 @@ func (c mutationTestCase) addWorkflowExecutionSignaled(t *testing.T, i int, ms *
 	}
 }
 
-func (c mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.Namespace) *workflow.MutableStateImpl {
+func (c *mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.Namespace) *workflow.MutableStateImpl {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
@@ -236,7 +237,7 @@ func (c mutationTestCase) createMutableState(t *testing.T, nsEntry *namespace.Na
 	return ms
 }
 
-func (c mutationTestCase) createConfig() *configs.Config {
+func (c *mutationTestCase) createConfig() *configs.Config {
 	cfg := tests.NewDynamicConfig()
 	cfg.MaximumBufferedEventsBatch = c.getMaxEvents
 	cfg.MaximumBufferedEventsSizeInBytes = c.getMaxSizeInBytes
@@ -244,15 +245,15 @@ func (c mutationTestCase) createConfig() *configs.Config {
 	return cfg
 }
 
-func (c mutationTestCase) getMaxEvents() int {
+func (c *mutationTestCase) getMaxEvents() int {
 	return c.maxEvents
 }
 
-func (c mutationTestCase) getMaxSizeInBytes() int {
+func (c *mutationTestCase) getMaxSizeInBytes() int {
 	return c.maxSizeInBytes
 }
 
-func (c mutationTestCase) testWFTFailedEvent(
+func (c *mutationTestCase) testWFTFailedEvent(
 	t *testing.T,
 	wft *workflow.WorkflowTaskInfo,
 	event *history.HistoryEvent,
@@ -276,7 +277,7 @@ func (c mutationTestCase) testWFTFailedEvent(
 	}
 }
 
-func (c mutationTestCase) findWFTEvent(eventType enumspb.EventType, workflowEvents []*persistence.WorkflowEvents) (
+func (c *mutationTestCase) findWFTEvent(eventType enumspb.EventType, workflowEvents []*persistence.WorkflowEvents) (
 	*history.HistoryEvent,
 	bool,
 ) {
@@ -291,7 +292,7 @@ func (c mutationTestCase) findWFTEvent(eventType enumspb.EventType, workflowEven
 	return nil, false
 }
 
-func (c mutationTestCase) testFailure(
+func (c *mutationTestCase) testFailure(
 	t *testing.T,
 	ms *workflow.MutableStateImpl,
 	wft *workflow.WorkflowTaskInfo,
@@ -330,7 +331,7 @@ func (c mutationTestCase) testFailure(
 	c.testWFTFailedEvent(t, wft, event)
 }
 
-func (c mutationTestCase) testSuccess(
+func (c *mutationTestCase) testSuccess(
 	t *testing.T,
 	ms *workflow.MutableStateImpl,
 	workflowEvents []*persistence.WorkflowEvents,
