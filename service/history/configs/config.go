@@ -410,7 +410,7 @@ func NewConfig(
 		ReplicationProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
 
 		MaximumBufferedEventsBatch:       dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
-		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 1<<20),
+		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 2*1024*1024),
 		MaximumSignalsPerExecution:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MaximumSignalsPerExecution, 0),
 		ShardUpdateMinInterval:           dc.GetDurationProperty(dynamicconfig.ShardUpdateMinInterval, 5*time.Minute),
 		ShardSyncMinInterval:             dc.GetDurationProperty(dynamicconfig.ShardSyncMinInterval, 5*time.Minute),
