@@ -364,6 +364,7 @@ func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
 	if ok {
 		return next
 	}
+	s.nextTimeResultCache = make(map[time.Time]getNextTimeResult)
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
