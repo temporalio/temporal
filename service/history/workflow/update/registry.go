@@ -38,9 +38,10 @@ import (
 
 type (
 	Registry interface {
-		// FindOrCrate finds an existing Update or creates a new one. The second
-		// return value (bool) indicates whether the Update returned is newly
-		// created (true) for an existing update (false).
+		// FindOrCreate finds an existing Update or creates a new one. The second
+		// return value (bool) indicates whether the Update returned already
+		// existed and was found (true) or was not found and has been newly
+		// created (false)
 		FindOrCreate(ctx context.Context, protocolInstanceID string) (*Update, bool, error)
 
 		// Find finds an existing update in this Registry but does not create a
@@ -132,11 +133,11 @@ func (r *RegistryImpl) FindOrCreate(ctx context.Context, id string) (*Update, bo
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if upd, ok := r.findLocked(ctx, id); ok {
-		return upd, false, nil
+		return upd, true, nil
 	}
 	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
-	return upd, true, nil
+	return upd, false, nil
 }
 
 func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool) {

@@ -79,7 +79,7 @@ func Invoke(
 
 	updateID := req.GetRequest().GetRequest().GetMeta().GetUpdateId()
 	updateReg := weCtx.GetUpdateRegistry(ctx)
-	upd, newlyCreated, err := updateReg.FindOrCreate(ctx, updateID)
+	upd, alreadyExisted, err := updateReg.FindOrCreate(ctx, updateID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func Invoke(
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
 	// If WT has already started, new speculative WT will be created when started WT completes.
 	// If update is duplicate, then WT for this update was already created.
-	createNewWorkflowTask := !ms.HasPendingWorkflowTask() && newlyCreated
+	createNewWorkflowTask := !ms.HasPendingWorkflowTask() && !alreadyExisted
 
 	if createNewWorkflowTask {
 		// This will try not to add an event but will create speculative WT in mutable state.

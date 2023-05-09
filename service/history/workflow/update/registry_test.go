@@ -84,9 +84,9 @@ func TestFind(t *testing.T) {
 	_, ok := reg.Find(context.TODO(), updateID)
 	require.False(t, ok)
 
-	_, created, err := reg.FindOrCreate(context.TODO(), updateID)
+	_, found, err := reg.FindOrCreate(context.TODO(), updateID)
 	require.NoError(t, err)
-	require.True(t, created)
+	require.False(t, found)
 
 	_, ok = reg.Find(context.TODO(), updateID)
 	require.True(t, ok)
@@ -171,18 +171,18 @@ func TestFindOrCreate(t *testing.T) {
 
 	t.Run("new update", func(t *testing.T) {
 		updateID := "a completely new update ID"
-		_, created, err := reg.FindOrCreate(context.TODO(), updateID)
+		_, found, err := reg.FindOrCreate(context.TODO(), updateID)
 		require.NoError(t, err)
-		require.True(t, created)
+		require.False(t, found)
 
-		_, created, err = reg.FindOrCreate(context.TODO(), updateID)
+		_, found, err = reg.FindOrCreate(context.TODO(), updateID)
 		require.NoError(t, err)
-		require.False(t, created, "second lookup for same updateID should not create new")
+		require.True(t, found, "second lookup for same updateID should find previous")
 	})
 	t.Run("find stored completed", func(t *testing.T) {
-		upd, created, err := reg.FindOrCreate(context.TODO(), completedUpdateID)
+		upd, found, err := reg.FindOrCreate(context.TODO(), completedUpdateID)
 		require.NoError(t, err)
-		require.False(t, created)
+		require.True(t, found)
 		acptOutcome, err := upd.WaitAccepted(context.TODO())
 		require.NoError(t, err, "completed update should also be accepted")
 		require.Equal(t, completedOutcome, acptOutcome, "completed update should have an outcome")
@@ -191,9 +191,9 @@ func TestFindOrCreate(t *testing.T) {
 		require.Equal(t, completedOutcome, got, "completed update should have an outcome")
 	})
 	t.Run("find stored accepted", func(t *testing.T) {
-		upd, created, err := reg.FindOrCreate(context.TODO(), acceptedUpdateID)
+		upd, found, err := reg.FindOrCreate(context.TODO(), acceptedUpdateID)
 		require.NoError(t, err)
-		require.False(t, created)
+		require.True(t, found)
 		acptOutcome, err := upd.WaitAccepted(context.TODO())
 		require.NoError(t, err)
 		require.Nil(t, acptOutcome)
@@ -212,9 +212,9 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 		reg = update.NewRegistry(regStore)
 	)
 
-	upd, created, err := reg.FindOrCreate(context.TODO(), storedAcceptedUpdateID)
+	upd, found, err := reg.FindOrCreate(context.TODO(), storedAcceptedUpdateID)
 	require.NoError(t, err)
-	require.False(t, created)
+	require.True(t, found)
 
 	var effects effect.Buffer
 	evStore := mockEventStore{Controller: &effects}
