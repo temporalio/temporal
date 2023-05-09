@@ -60,7 +60,7 @@ type (
 		// sent messages to a worker.
 		HasOutgoing() bool
 
-		// Len observes the number of updates in tis Registry.
+		// Len observes the number of updates in this Registry.
 		Len() int
 	}
 
