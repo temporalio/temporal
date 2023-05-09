@@ -32,6 +32,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -541,8 +542,14 @@ func (e *historyEngineImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.UpdateWorkflowExecutionRequest,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-
 	return updateworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker, e.matchingClient)
+}
+
+func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	req *historyservice.PollWorkflowExecutionUpdateRequest,
+) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	return nil, serviceerror.NewUnimplemented("PollWorkflowExecutionUpdate not implemented")
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
