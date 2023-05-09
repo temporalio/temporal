@@ -33,6 +33,7 @@ import (
 	_ "time/tzdata" // embed tzdata as a fallback
 
 	"github.com/urfave/cli/v2"
+	_ "go.uber.org/automaxprocs"
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/build"
