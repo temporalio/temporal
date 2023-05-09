@@ -175,7 +175,7 @@ func GrpcServerOptionsProvider(
 	if err != nil {
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
-	interceptors := []grpc.UnaryServerInterceptor{
+	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		// Service Error Interceptor should be the most outer interceptor on error handling
 		rpc.ServiceErrorInterceptor,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
@@ -183,7 +183,7 @@ func GrpcServerOptionsProvider(
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		redirectionInterceptor.Intercept,
-		telemetryInterceptor.Intercept,
+		telemetryInterceptor.UnaryIntercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -200,16 +200,21 @@ func GrpcServerOptionsProvider(
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
-		interceptors = append(interceptors, customInterceptors...)
+		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
 	// retry interceptor should be the most inner interceptor
-	interceptors = append(interceptors, retryableInterceptor.Intercept)
+	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
+
+	streamInterceptor := []grpc.StreamServerInterceptor{
+		telemetryInterceptor.StreamIntercept,
+	}
 
 	return append(
 		grpcServerOptions,
 		grpc.KeepaliveParams(kp),
 		grpc.KeepaliveEnforcementPolicy(kep),
-		grpc.ChainUnaryInterceptor(interceptors...),
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
 }
 
