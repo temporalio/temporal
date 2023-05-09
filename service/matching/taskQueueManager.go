@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	uberatomic "go.uber.org/atomic"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -241,6 +242,7 @@ func newTaskQueueManager(
 	tlMgr.metadataPoller.tqMgr = tlMgr
 
 	tlMgr.liveness = newLiveness(
+		clockwork.NewRealClock(),
 		taskQueueConfig.MaxTaskQueueIdleTime,
 		tlMgr.unloadFromEngine,
 	)

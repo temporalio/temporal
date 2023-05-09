@@ -27,39 +27,47 @@ package matching
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/jonboulle/clockwork"
 )
 
 type (
 	liveness struct {
+		clock  clockwork.Clock
 		ttl    func() time.Duration
 		onIdle func()
 		timer  atomic.Value
 	}
+
+	timerWrapper struct {
+		clockwork.Timer
+	}
 )
 
 func newLiveness(
+	clock clockwork.Clock,
 	ttl func() time.Duration,
 	onIdle func(),
 ) *liveness {
 	return &liveness{
+		clock:  clock,
 		ttl:    ttl,
 		onIdle: onIdle,
 	}
 }
 
 func (l *liveness) Start() {
-	l.timer.Store(time.AfterFunc(l.ttl(), l.onIdle))
+	l.timer.Store(timerWrapper{l.clock.AfterFunc(l.ttl(), l.onIdle)})
 }
 
 func (l *liveness) Stop() {
-	var nilTimer *time.Timer
-	if t, ok := l.timer.Swap(nilTimer).(*time.Timer); ok && t != nil {
+	if t, ok := l.timer.Swap(timerWrapper{}).(timerWrapper); ok && t.Timer != nil {
 		t.Stop()
 	}
 }
 
 func (l *liveness) markAlive() {
-	if t, ok := l.timer.Load().(*time.Timer); ok && t != nil {
+	if t, ok := l.timer.Load().(timerWrapper); ok && t.Timer != nil {
 		t.Reset(l.ttl())
 	}
 }
