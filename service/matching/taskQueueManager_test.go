@@ -742,7 +742,7 @@ func TestTaskQueueManagerWaitInitFailThenPass(t *testing.T) {
 	// call hasn't happened yet.
 	controller.Finish()
 	// Get the data and see it's set
-	newData, err := tq.GetUserData(ctx)
+	newData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, versionedData, newData)
 	tq.Stop()

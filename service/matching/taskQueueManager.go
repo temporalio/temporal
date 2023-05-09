@@ -117,7 +117,7 @@ type (
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		// GetUserData returns the verioned user data for this task queue
-		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error)
+		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
 		// UpdateUserData allows callers to update user data for this task queue
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, replicate bool, updateFn UserDataUpdateFunc) error
@@ -462,8 +462,8 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
-// GetVersioningData returns the versioning data for the task queue if any.
-func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error) {
+// GetUserData returns the user data for the task queue if any.
+func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	return c.db.GetUserData(ctx)
 }
 
@@ -710,7 +710,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	minWaitTime := startWaitTime
 
 	op := func(ctx context.Context) error {
-		knownUserData, err := c.db.GetUserData(ctx)
+		knownUserData, _, err := c.db.GetUserData(ctx)
 		if err != nil && !errors.Is(err, errUserDataNotPresentOnPartition) {
 			return err
 		}

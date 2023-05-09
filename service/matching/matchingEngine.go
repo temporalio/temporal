@@ -807,7 +807,7 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 		}
 		return nil, err
 	}
-	userData, err := tqMgr.GetUserData(ctx)
+	userData, _, err := tqMgr.GetUserData(ctx)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
@@ -838,7 +838,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
 	}
 	resp := &matchingservice.GetTaskQueueUserDataResponse{}
-	userData, err := tqMgr.GetUserData(ctx)
+	userData, _, err := tqMgr.GetUserData(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1141,7 +1141,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 	if err != nil {
 		return nil, err
 	}
-	userData, err := unversionedTQM.GetUserData(ctx)
+	userData, _, err := unversionedTQM.GetUserData(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1181,7 +1181,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	if err != nil {
 		return nil, err
 	}
-	userData, err := unversionedTQM.GetUserData(ctx)
+	userData, _, err := unversionedTQM.GetUserData(ctx)
 	if err != nil {
 		return nil, err
 	}
