@@ -34,6 +34,7 @@ import (
 )
 
 func TestLiveness(t *testing.T) {
+	t.Parallel()
 	var idleCalled atomic.Int32
 	ttl := func() time.Duration { return 2500 * time.Millisecond }
 	clock := clockwork.NewFakeClock()
@@ -60,6 +61,7 @@ func TestLiveness(t *testing.T) {
 }
 
 func TestLivenessStop(t *testing.T) {
+	t.Parallel()
 	var idleCalled atomic.Int32
 	ttl := func() time.Duration { return 1000 * time.Millisecond }
 	clock := clockwork.NewFakeClock()
