@@ -680,24 +680,23 @@ func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.taskQueueKind
 }
 
+func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
+	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
+}
+
 func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-
-	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
-
-	return ctx, cancel
+	return c.callerInfoContext(ctx), cancel
 }
 
 func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
+	ctx = c.callerInfoContext(ctx)
+
 	// root workflow partition reads data from db
 	if c.taskQueueID.OwnsUserData() {
 		return nil
 	}
-
-	// TODO: factor this out
-	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 
 	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute)
 
