@@ -32,6 +32,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
+	"go.uber.org/multierr"
+
 	"go.temporal.io/api/common/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -44,8 +47,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/history/configs"
-	"go.uber.org/fx"
-	"go.uber.org/multierr"
 )
 
 func TestArchiver(t *testing.T) {
@@ -182,24 +183,30 @@ func TestArchiver(t *testing.T) {
 
 			historyURI, err := carchiver.NewURI("test:///history/archival")
 			require.NoError(t, err)
+
 			if c.ExpectArchiveHistory {
 				archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(historyArchiver, nil)
 				historyArchiver.EXPECT().Archive(gomock.Any(), historyURI, gomock.Any()).Return(c.ArchiveHistoryErr)
 			}
+
 			visibilityURI, err := carchiver.NewURI("test:///visibility/archival")
 			require.NoError(t, err)
 			archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).
 				Return(visibilityArchiver, nil).AnyTimes()
+
 			if c.ExpectArchiveVisibility {
 				visibilityArchiver.EXPECT().Archive(gomock.Any(), visibilityURI, gomock.Any()).
 					Return(c.ArchiveVisibilityErr)
 			}
+
 			rateLimiter := quotas.NewMockRateLimiter(controller)
 			rateLimiter.EXPECT().WaitN(gomock.Any(), len(c.Targets)).Return(c.RateLimiterWaitErr)
+
 			searchAttributeProvider := searchattribute.NewMockProvider(controller)
 			searchAttributeProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(
 				c.NameTypeMap, c.NameTypeMapErr,
 			).AnyTimes()
+
 			visibilityManager := manager.NewMockVisibilityManager(controller)
 			visibilityManager.EXPECT().GetIndexName().Return("index-name").AnyTimes()
 
@@ -233,9 +240,11 @@ func TestArchiver(t *testing.T) {
 			require.NoError(t, app.Err())
 			// we need to start the app for fx.Invoke to be called, so that we can get the Archiver
 			require.NoError(t, app.Start(ctx))
+
 			defer func() {
 				require.NoError(t, app.Stop(ctx))
 			}()
+
 			archiver := <-archivers
 			searchAttributes := c.SearchAttributes
 			_, err = archiver.Archive(ctx, &Request{
@@ -248,6 +257,7 @@ func TestArchiver(t *testing.T) {
 			if len(c.ExpectedReturnErrors) > 0 {
 				require.Error(t, err)
 				assert.Len(t, multierr.Errors(err), len(c.ExpectedReturnErrors))
+
 				for _, e := range c.ExpectedReturnErrors {
 					assert.Contains(t, err.Error(), e)
 				}

@@ -136,20 +136,27 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 		tag.ArchivalRequestWorkflowID(request.WorkflowID),
 		tag.ArchivalRequestRunID(request.RunID),
 	)
+
 	defer func(start time.Time) {
 		metricsScope := a.metricsHandler
+
 		status := "ok"
 		if err != nil {
 			status = "err"
+
 			var rateLimitExceededErr *serviceerror.ResourceExhausted
+
 			if errors.As(err, &rateLimitExceededErr) {
 				status = "rate_limit_exceeded"
 			}
+
 			logger.Warn("failed to archive workflow", tag.Error(err))
 		}
+
 		metricsScope.Timer(metrics.ArchiverArchiveLatency.GetMetricName()).
 			Record(time.Since(start), metrics.StringTag("status", status))
 	}(time.Now())
+
 	numTargets := len(request.Targets)
 	if err := a.rateLimiter.WaitN(ctx, numTargets); err != nil {
 		return nil, &serviceerror.ResourceExhausted{
@@ -157,27 +164,36 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 			Message: fmt.Sprintf("archival rate limited: %s", err.Error()),
 		}
 	}
+
 	var wg sync.WaitGroup
+
 	errs := make([]error, numTargets)
+
 	for i, target := range request.Targets {
 		wg.Add(1)
+
 		i := i
+
 		switch target {
 		case TargetHistory:
 			go func() {
 				defer wg.Done()
+
 				errs[i] = a.archiveHistory(ctx, request, logger)
 			}()
 		case TargetVisibility:
 			go func() {
 				defer wg.Done()
+
 				errs[i] = a.archiveVisibility(ctx, request, logger)
 			}()
 		default:
 			return nil, fmt.Errorf("unknown archival target: %s", target)
 		}
 	}
+
 	wg.Wait()
+
 	return &Response{}, multierr.Combine(errs...)
 }
 
@@ -219,16 +235,18 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		return err
 	}
 
+	// The types of the search attributes may not be embedded in the request,
+	// so we fetch them from the search attributes provider here.
 	saTypeMap, err := a.searchAttributeProvider.GetSearchAttributes(a.visibilityManager.GetIndexName(), false)
 	if err != nil {
 		return err
 	}
 
-	// It is safe to pass nil to typeMap here because search attributes type must be embedded by caller.
 	searchAttributes, err := searchattribute.Stringify(request.SearchAttributes, &saTypeMap)
 	if err != nil {
 		return err
 	}
+
 	return visibilityArchiver.Archive(ctx, request.VisibilityURI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
@@ -250,11 +268,14 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 // statement (this would make the err always nil).
 func (a *archiver) recordArchiveTargetResult(logger log.Logger, startTime time.Time, target Target, err *error) {
 	duration := time.Since(startTime)
+
 	status := "ok"
 	if *err != nil {
 		status = "err"
+
 		logger.Error("failed to archive target", tag.NewStringTag("target", string(target)), tag.Error(*err))
 	}
+
 	tags := []metrics.Tag{
 		metrics.StringTag("target", string(target)),
 		metrics.StringTag("status", status),
