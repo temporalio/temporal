@@ -856,6 +856,14 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 		if err != nil && err != errUserDataNotPresentOnPartition {
 			return nil, err
 		}
+		if req.WaitNewData && (userData == nil || userData.Version == version) {
+			// long-poll: wait for data to change/appear
+			select {
+			case <-ctx.Done():
+			case <-userDataChanged:
+			}
+			continue
+		}
 		if userData != nil {
 			resp.TaskQueueHasUserData = true
 			if userData.Version > version {
@@ -865,13 +873,6 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 				// We rely on periodic refresh and client retries in this case to let the system eventually self-heal.
 				return nil, serviceerror.NewFailedPrecondition(
 					"requested task queue user data for version greater than known version")
-			} else if req.WaitNewData {
-				// long-poll: wait for data to change
-				select {
-				case <-hCtx.Done():
-				case <-userDataChanged:
-				}
-				continue
 			}
 		}
 		return resp, nil
