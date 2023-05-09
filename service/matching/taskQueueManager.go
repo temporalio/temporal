@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tqname"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
 )
@@ -698,6 +699,18 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		return nil
 	}
 
+	degree := c.config.ForwarderMaxChildrenPerNode()
+	var target string
+	if parent, err := c.taskQueueID.Parent(degree); err == nil {
+		target = parent.FullName()
+	} else if err == tqname.ErrNoParent {
+		// we're the root activity task queue, ask the root workflow task queue
+		target = c.taskQueueID.FullName()
+	} else {
+		// invalid degree
+		return err
+	}
+
 	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute)
 
 	const (
@@ -718,10 +731,9 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 		defer cancel()
 
-		rootTqName := c.taskQueueID.Root().FullName()
 		res, err := c.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              c.taskQueueID.namespaceID.String(),
-			TaskQueue:                rootTqName,
+			TaskQueue:                target,
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
 			WaitNewData:              true,
 		})
