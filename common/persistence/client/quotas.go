@@ -93,7 +93,11 @@ func newPerShardPerNamespaceRateLimiter(
 	return quotas.NewMapRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			if req.Caller != "" && req.Caller != headers.CallerNameSystem && req.CallerSegment > 0 && req.CallerSegment != headers.CallerSegmentSystem {
-				return quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return float64(perShardNamespaceMaxQPS(req.CallerSegment)) }))
+				if perShardNamespaceMaxQPS != nil && perShardNamespaceMaxQPS(req.CallerSegment) > 0 {
+					return quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+						return float64(perShardNamespaceMaxQPS(req.CallerSegment))
+					}))
+				}
 			}
 			return quotas.NoopRequestRateLimiter
 		},
