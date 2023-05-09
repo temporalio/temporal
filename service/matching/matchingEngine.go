@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -823,6 +824,18 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	ctx context.Context,
 	req *matchingservice.GetTaskQueueUserDataRequest,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+	if req.WaitNewData {
+		// shrink deadline so we have enough time to return
+		timeout := 5 * time.Minute
+		if deadline, ok := ctx.Deadline(); ok {
+			timeout = util.Min(timeout, time.Until(deadline))
+		}
+		timeout = util.Max(timeout-5*time.Second, 5*time.Second)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -837,23 +850,32 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	if version < 0 {
 		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
 	}
-	resp := &matchingservice.GetTaskQueueUserDataResponse{}
-	userData, _, err := tqMgr.GetUserData(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if userData != nil {
-		resp.TaskQueueHasUserData = true
-		if userData.Version > version {
-			resp.UserData = userData
+	for {
+		resp := &matchingservice.GetTaskQueueUserDataResponse{}
+		userData, userDataChanged, err := tqMgr.GetUserData(ctx)
+		if err != nil {
+			return nil, err
 		}
-		if userData.Version < version {
-			// This is highly unlikely but may happen due to an edge case in during ownership transfer.
-			// We rely on periodic refresh and client retries in this case to let the system eventually self-heal.
-			return nil, serviceerror.NewFailedPrecondition("Non-root partition requested task queue user data for version greater than known version")
+		if userData != nil {
+			resp.TaskQueueHasUserData = true
+			if userData.Version > version {
+				resp.UserData = userData
+			} else if userData.Version < version {
+				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
+				// We rely on periodic refresh and client retries in this case to let the system eventually self-heal.
+				return nil, serviceerror.NewFailedPrecondition(
+					"requested task queue user data for version greater than known version")
+			} else if req.WaitNewData {
+				// long-poll: wait for data to change
+				select {
+				case <-hCtx.Done():
+				case <-userDataChanged:
+				}
+				continue
+			}
 		}
+		return resp, nil
 	}
-	return resp, nil
 }
 
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
