@@ -819,29 +819,6 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	}, nil
 }
 
-func (e *matchingEngineImpl) InvalidateTaskQueueUserData(
-	ctx context.Context,
-	req *matchingservice.InvalidateTaskQueueUserDataRequest,
-) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
-	taskQueue, err := newTaskQueueID(namespace.ID(req.GetNamespaceId()), req.GetTaskQueue(), req.GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
-	if tqMgr == nil && err == nil {
-		// Task queue is not currently loaded, so nothing to do here
-		return &matchingservice.InvalidateTaskQueueUserDataResponse{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	err = tqMgr.InvalidateUserData(req)
-	if err != nil {
-		return nil, err
-	}
-	return &matchingservice.InvalidateTaskQueueUserDataResponse{}, nil
-}
-
 func (e *matchingEngineImpl) GetTaskQueueUserData(
 	ctx context.Context,
 	req *matchingservice.GetTaskQueueUserDataRequest,

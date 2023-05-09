@@ -122,8 +122,6 @@ type (
 		// UpdateUserData allows callers to update user data for this task queue
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, replicate bool, updateFn UserDataUpdateFunc) error
-		// InvalidateUserData allows callers to invalidate cached data on this task queue
-		InvalidateUserData(request *matchingservice.InvalidateTaskQueueUserDataRequest) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -516,47 +514,6 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, replicate boo
 			c.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
 			return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
 		}
-	}
-	// We will have errored already if this was not the root workflow partition.
-	// Now notify partitions that the user data has changed.
-	numParts := util.Max(c.config.NumReadPartitions(), c.config.NumWritePartitions())
-	wg := &sync.WaitGroup{}
-	for i := 0; i < numParts; i++ {
-		for _, tqt := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
-			if i == 0 && tqt == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-				continue // Root workflow partition owns the data, skip it.
-			}
-			wg.Add(1)
-			go func(i int, tqt enumspb.TaskQueueType) {
-				tq := c.taskQueueID.WithPartition(i).FullName()
-				_, err := c.matchingClient.InvalidateTaskQueueUserData(ctx,
-					&matchingservice.InvalidateTaskQueueUserDataRequest{
-						NamespaceId:   c.taskQueueID.namespaceID.String(),
-						TaskQueue:     tq,
-						TaskQueueType: tqt,
-						UserData:      newData,
-					})
-				if err != nil {
-					c.logger.Warn("Failed to notify partition of invalidated versioning data",
-						tag.WorkflowTaskQueueName(tq), tag.Error(err))
-				}
-				wg.Done()
-			}(i, tqt)
-		}
-	}
-	wg.Wait()
-	return nil
-}
-
-func (c *taskQueueManagerImpl) InvalidateUserData(request *matchingservice.InvalidateTaskQueueUserDataRequest) error {
-	if request.GetUserData() != nil {
-		if c.taskQueueID.OwnsUserData() {
-			// Should never happen. Root partitions do not get their user data invalidated.
-			c.logger.Warn("A root workflow partition was told to invalidate its user data, this should not happen")
-			return nil
-		}
-		c.db.setUserDataForNonRootPartition(request.GetUserData())
-		c.metadataPoller.StartIfUnstarted()
 	}
 	return nil
 }
