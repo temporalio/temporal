@@ -108,6 +108,7 @@ type (
 		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
 		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithShardIDFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		EnableBatcher                         dynamicconfig.BoolPropertyFn
 		BatcherRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -339,6 +340,10 @@ func NewConfig(
 		),
 		PersistenceNamespaceMaxQPS: dc.GetIntPropertyFilteredByNamespace(
 			dynamicconfig.WorkerPersistenceNamespaceMaxQPS,
+			0,
+		),
+		PersistencePerShardNamespaceMaxQPS: dc.GetIntPropertyFilteredByShardID(
+			dynamicconfig.WorkerPersistencePerShardNamespaceMaxQPS,
 			0,
 		),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(
