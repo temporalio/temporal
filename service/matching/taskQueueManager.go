@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	uberatomic "go.uber.org/atomic"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -49,7 +48,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -58,6 +56,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/internal/goro"
 )
 
 const (
@@ -163,19 +162,11 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 		clusterMeta          cluster.Metadata
+		goroGroup            goro.Group
 		initializedError     *future.FutureImpl[struct{}]
 		// userDataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
 		userDataInitialFetch *future.FutureImpl[struct{}]
-		metadataPoller       metadataPoller
-	}
-
-	metadataPoller struct {
-		// Ensures that we launch the goroutine for polling for updates only one time
-		running           *uberatomic.Bool
-		pollIntervalCfgFn dynamicconfig.DurationPropertyFn
-		stopChan          chan struct{}
-		tqMgr             *taskQueueManagerImpl
 	}
 )
 
@@ -237,13 +228,7 @@ func newTaskQueueManager(
 		taggedMetricsHandler:      taggedMetricsHandler,
 		initializedError:          future.NewFuture[struct{}](),
 		userDataInitialFetch:      future.NewFuture[struct{}](),
-		metadataPoller: metadataPoller{
-			running:           uberatomic.NewBool(false),
-			pollIntervalCfgFn: e.config.UserDataPollFrequency,
-			stopChan:          make(chan struct{}),
-		},
 	}
-	tlMgr.metadataPoller.tqMgr = tlMgr
 
 	tlMgr.liveness = newLiveness(
 		clockwork.NewRealClock(),
@@ -300,7 +285,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	go c.fetchUserDataFromRootPartitionOnInit(context.TODO())
+	c.goroGroup.Go(c.fetchUserDataLoop)
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
@@ -326,10 +311,10 @@ func (c *taskQueueManagerImpl) Stop() {
 		}
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
-	c.metadataPoller.Stop()
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
+	c.goroGroup.Cancel()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
@@ -341,9 +326,7 @@ func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// We don't really care if the initial fetch worked or not, anything that *requires* a bit of metadata should fail
-	// that operation if it's never fetched OK. If the initial fetch errored, the metadataPoller will have been started.
-	_, _ = c.userDataInitialFetch.Get(ctx)
+	_, err = c.userDataInitialFetch.Get(ctx)
 	return err
 }
 
@@ -479,17 +462,9 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
-// GetVersioningData returns the versioning data for the task queue if any. If this task queue is a non-root partition and
-// has no cached data, it will explicitly attempt a fetch from the root partition.
+// GetVersioningData returns the versioning data for the task queue if any.
 func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error) {
-	data, err := c.db.GetUserData(ctx)
-	if errors.Is(err, errUserDataNotPresentOnPartition) {
-		// If this is a non-root-partition with no versioning data, this call is indicating we might expect to find
-		// some. Since we may not have started the poller, we want to explicitly attempt to fetch now, because
-		// it's possible some was added to the root partition, but it failed to invalidate this partition.
-		return c.fetchUserDataFromRootPartition(ctx)
-	}
-	return data, err
+	return c.db.GetUserData(ctx)
 }
 
 //nolint:revive // control coupling
@@ -714,83 +689,75 @@ func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFu
 	return ctx, cancel
 }
 
-func (c *taskQueueManagerImpl) fetchUserDataFromRootPartitionOnInit(ctx context.Context) {
-	if c.userDataInitialFetch.Ready() {
-		return
-	}
-	_, err := c.fetchUserDataFromRootPartition(ctx)
-	c.userDataInitialFetch.Set(struct{}{}, err)
-}
-
-// fetchUserDataFromRootPartition fetches user data from root partition iff this partition is not a root partition.
-// Returns the fetched data, if fetching was necessary and successful.
-func (c *taskQueueManagerImpl) fetchUserDataFromRootPartition(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error) {
-	// Nothing to do if we are the root partition of a workflow queue, since we should own the data.
-	// (for versioning - any later added metadata may need to not abort so early)
+func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
+	// root workflow partition reads data from db
 	if c.taskQueueID.OwnsUserData() {
-		return nil, nil
+		return nil
 	}
 
-	knownUserData, err := c.db.GetUserData(ctx)
-	if err != nil && !errors.Is(err, errUserDataNotPresentOnPartition) {
-		return nil, err
+	// TODO: factor this out
+	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
+
+	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute)
+
+	const (
+		// TODO: dynamic config
+		callTimeout    = 5 * time.Minute
+		maxMinWaitTime = callTimeout / 2
+		startWaitTime  = 1 * time.Second
+	)
+
+	minWaitTime := startWaitTime
+
+	op := func(ctx context.Context) error {
+		knownUserData, err := c.db.GetUserData(ctx)
+		if err != nil && !errors.Is(err, errUserDataNotPresentOnPartition) {
+			return err
+		}
+
+		callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+		defer cancel()
+
+		rootTqName := c.taskQueueID.Root().FullName()
+		res, err := c.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              c.taskQueueID.namespaceID.String(),
+			TaskQueue:                rootTqName,
+			LastKnownUserDataVersion: knownUserData.GetVersion(),
+			WaitNewData:              true,
+		})
+		if err != nil {
+			return err
+		}
+		// If the root partition returns nil here, then that means our data matched, and we don't need to update.
+		// If it's nil because it never existed, then we'd never have any data.
+		// It can't be nil due to removing versions, as that would result in a non-nil container with
+		// nil inner fields.
+		if res.GetUserData() != nil {
+			c.db.setUserDataForNonOwningPartition(res.GetUserData())
+		}
+		return nil
 	}
 
-	rootTqName := c.taskQueueID.Root().FullName()
-	res, err := c.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:              c.taskQueueID.namespaceID.String(),
-		TaskQueue:                rootTqName,
-		LastKnownUserDataVersion: knownUserData.GetVersion(),
-	})
-	// If the root partition returns nil here, then that means our data matched, and we don't need to update.
-	// If it's nil because it never existed, then we'd never have any data.
-	// It can't be nil due to removing versions, as that would result in a non-nil container with
-	// nil inner fields.
-	if res.GetUserData() != nil {
-		c.db.setUserDataForNonRootPartition(res.GetUserData())
-	}
-	// We want to start the poller as long as the root partition has any kind of data (or fetching hasn't worked)
-	if res.GetUserData() != nil || err != nil {
-		c.metadataPoller.StartIfUnstarted()
-	}
-	if err != nil {
-		return nil, err
-	}
-	return res.GetUserData(), nil
-}
+	for ctx.Err() == nil {
+		start := time.Now()
+		backoff.ThrottleRetryContext(ctx, op, policy, nil)
+		elapsed := time.Since(start)
 
-// StartIfUnstarted starts the poller if it's not already started. The passed in function is called repeatedly
-// and if it returns true, the poller will shut down, at which point it may be started again.
-func (mp *metadataPoller) StartIfUnstarted() {
-	if mp.running.Load() {
-		return
-	}
-	go mp.pollLoop()
-}
-
-func (mp *metadataPoller) pollLoop() {
-	mp.running.Store(true)
-	defer mp.running.Store(false)
-	ticker := time.NewTicker(mp.pollIntervalCfgFn())
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-mp.stopChan:
-			return
-		case <-ticker.C:
-			// In case the interval has changed
-			ticker.Reset(mp.pollIntervalCfgFn())
-			data, err := mp.tqMgr.fetchUserDataFromRootPartition(context.TODO())
-			if data == nil && err == nil {
-				// Can stop polling since there is no versioning data. Loop will be restarted if we
-				// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
-				return
+		// In general we want to start a new call immediately on completion of the previous
+		// one. But if the remote is broken and returns success immediately, we might end up
+		// spinning. So enforce a minimum wait time that increases as long as we keep getting
+		// very fast replies.
+		if elapsed < minWaitTime {
+			select {
+			case <-ctx.Done():
+			case <-time.After(minWaitTime - elapsed):
 			}
+			minWaitTime = util.Min(minWaitTime*2, maxMinWaitTime)
+		} else {
+			minWaitTime = startWaitTime
 		}
 	}
-}
 
-func (mp *metadataPoller) Stop() {
-	close(mp.stopChan)
+	return ctx.Err()
 }

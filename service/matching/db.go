@@ -362,7 +362,7 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 	return db.userData, err
 }
 
-func (db *taskQueueDB) setUserDataForNonRootPartition(userData *persistencespb.VersionedTaskQueueUserData) {
+func (db *taskQueueDB) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
 	db.Lock()
 	defer db.Unlock()
 	db.userData = userData
