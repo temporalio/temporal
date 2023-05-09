@@ -196,8 +196,7 @@ func (h *Handler) PollActivityTaskQueue(
 		return nil, err
 	}
 
-	response, err := h.engine.PollActivityTaskQueue(ctx, request, opMetrics)
-	return response, err
+	return h.engine.PollActivityTaskQueue(ctx, request, opMetrics)
 }
 
 // PollWorkflowTaskQueue - long poll for a workflow task.
@@ -224,8 +223,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 		return nil, err
 	}
 
-	response, err := h.engine.PollWorkflowTaskQueue(ctx, request, opMetrics)
-	return response, err
+	return h.engine.PollWorkflowTaskQueue(ctx, request, opMetrics)
 }
 
 // QueryWorkflow queries a given workflow synchronously and return the query result.
@@ -244,8 +242,7 @@ func (h *Handler) QueryWorkflow(
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
 	}
 
-	response, err := h.engine.QueryWorkflow(ctx, request)
-	return response, err
+	return h.engine.QueryWorkflow(ctx, request)
 }
 
 // RespondQueryTaskCompleted responds a query task completed
@@ -280,8 +277,7 @@ func (h *Handler) DescribeTaskQueue(
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (_ *matchingservice.DescribeTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	response, err := h.engine.DescribeTaskQueue(ctx, request)
-	return response, err
+	return h.engine.DescribeTaskQueue(ctx, request)
 }
 
 // ListTaskQueuePartitions returns information about partitions for a taskQueue
@@ -290,8 +286,7 @@ func (h *Handler) ListTaskQueuePartitions(
 	request *matchingservice.ListTaskQueuePartitionsRequest,
 ) (_ *matchingservice.ListTaskQueuePartitionsResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	response, err := h.engine.ListTaskQueuePartitions(ctx, request)
-	return response, err
+	return h.engine.ListTaskQueuePartitions(ctx, request)
 }
 
 // UpdateWorkerBuildIdCompatibility allows changing the worker versioning graph for a task queue
