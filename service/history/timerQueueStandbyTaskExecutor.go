@@ -502,10 +502,6 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	startTime := time.Now()
 	defer func() { scope.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
-	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
-	if err != nil {
-		return err
-	}
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		t.logger.Error("Error re-replicating history from remote: timerQueueStandbyProcessor encountered empty historyResendInfo.",
 			tag.ShardID(t.shard.GetShardID()),
@@ -515,27 +511,6 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			tag.ClusterName(remoteClusterName))
 
 		return consts.ErrTaskRetry
-	}
-
-	if err = refreshTasks(
-		ctx,
-		adminClient,
-		namespace.ID(taskInfo.GetNamespaceID()),
-		taskInfo.GetWorkflowID(),
-		taskInfo.GetRunID(),
-	); err != nil {
-		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
-			return err
-		}
-
-		t.logger.Error("Error refresh tasks from remote.",
-			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-			tag.WorkflowID(taskInfo.GetWorkflowID()),
-			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.ClusterName(remoteClusterName),
-			tag.Error(err))
 	}
 
 	// NOTE: history resend may take long time and its timeout is currently

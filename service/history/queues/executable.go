@@ -212,10 +212,9 @@ func (e *executableImpl) Execute() (retErr error) {
 	e.taggedMetricsHandler = e.metricsHandler.WithTags(metricsTags...)
 
 	if isActive != e.lastActiveness {
-		// namespace did a failover, reset task attempt
-		e.Lock()
-		e.attempt = 0
-		e.Unlock()
+		// namespace did a failover,
+		// reset task attempt since the execution logic used will change
+		e.resetAttempt()
 	}
 	e.lastActiveness = isActive
 
@@ -533,6 +532,13 @@ func (e *executableImpl) updatePriority() {
 	if e.priority > e.lowestPriority {
 		e.lowestPriority = e.priority
 	}
+}
+
+func (e *executableImpl) resetAttempt() {
+	e.Lock()
+	defer e.Unlock()
+
+	e.attempt = 1
 }
 
 func (e *executableImpl) estimateTaskMetricTag() []metrics.Tag {

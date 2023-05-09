@@ -247,7 +247,7 @@ const (
 	FrontendClientListOpenWorkflowExecutionsScope = "FrontendClientListOpenWorkflowExecutions"
 	// FrontendClientPollActivityTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollActivityTaskQueueScope = "FrontendClientPollActivityTaskQueue"
-	//FrontendClientPollWorkflowExecutionUpdateScope tracks RPC calls to frontend service
+	// FrontendClientPollWorkflowExecutionUpdateScope tracks RPC calls to frontend service
 	FrontendClientPollWorkflowExecutionUpdateScope = "FrontendClientPollWorkflowExecutionUpdate"
 	// FrontendClientPollWorkflowTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollWorkflowTaskQueueScope = "FrontendClientPollWorkflowTaskQueue"
@@ -377,6 +377,8 @@ const (
 	HistoryClientTerminateWorkflowExecutionScope = "HistoryClientTerminateWorkflowExecution"
 	// HistoryClientUpdateWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientUpdateWorkflowExecutionScope = "HistoryClientUpdateWorkflowExecution"
+	// HistoryClientPollWorkflowExecutionUpdateScope tracks RPC calls to history service
+	HistoryClientPollWorkflowExecutionUpdateScope = "HistoryClientPollPollWorkflowExecutionUpdate"
 	// HistoryClientDeleteWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientDeleteWorkflowExecutionScope = "HistoryClientDeleteWorkflowExecution"
 	// HistoryClientResetWorkflowExecutionScope tracks RPC calls to history service
@@ -1166,6 +1168,7 @@ const (
 	TaskTypeTransferActiveTaskSignalExecution      = "TransferActiveTaskSignalExecution"
 	TaskTypeTransferActiveTaskStartChildExecution  = "TransferActiveTaskStartChildExecution"
 	TaskTypeTransferActiveTaskResetWorkflow        = "TransferActiveTaskResetWorkflow"
+	TaskTypeTransferActiveTaskDeleteExecution      = "TransferActiveTaskDeleteExecution"
 	TaskTypeTransferStandbyTaskActivity            = "TransferStandbyTaskActivity"
 	TaskTypeTransferStandbyTaskWorkflowTask        = "TransferStandbyTaskWorkflowTask"
 	TaskTypeTransferStandbyTaskCloseExecution      = "TransferStandbyTaskCloseExecution"
@@ -1173,6 +1176,7 @@ const (
 	TaskTypeTransferStandbyTaskSignalExecution     = "TransferStandbyTaskSignalExecution"
 	TaskTypeTransferStandbyTaskStartChildExecution = "TransferStandbyTaskStartChildExecution"
 	TaskTypeTransferStandbyTaskResetWorkflow       = "TransferStandbyTaskResetWorkflow"
+	TaskTypeTransferStandbyTaskDeleteExecution     = "TransferStandbyTaskDeleteExecution"
 	TaskTypeVisibilityTaskStartExecution           = "VisibilityTaskStartExecution"
 	TaskTypeVisibilityTaskUpsertExecution          = "VisibilityTaskUpsertExecution"
 	TaskTypeVisibilityTaskCloseExecution           = "VisibilityTaskCloseExecution"

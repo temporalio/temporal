@@ -29,6 +29,13 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+// TODO: task type tag value should be generated from enums.TaskType,
+// but this is a non-trivial change, we will need to
+// 1. Standardize existing naming in enums.TaskType definition
+// 2. In release X, double emit metrics with both old and new values, with different tag names
+// 3. Update all metrics dashboards & alerts to use new tag name & values
+// 4. In release X+1, remove old tag name & values
+
 func GetActiveTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
@@ -47,8 +54,10 @@ func GetActiveTransferTaskTypeTagValue(
 		return metrics.TaskTypeTransferActiveTaskStartChildExecution
 	case *tasks.ResetWorkflowTask:
 		return metrics.TaskTypeTransferActiveTaskResetWorkflow
+	case *tasks.DeleteExecutionTask:
+		return metrics.TaskTypeTransferActiveTaskDeleteExecution
 	default:
-		return ""
+		return "TransferActive" + task.GetType().String()
 	}
 }
 
@@ -70,8 +79,10 @@ func GetStandbyTransferTaskTypeTagValue(
 		return metrics.TaskTypeTransferStandbyTaskStartChildExecution
 	case *tasks.ResetWorkflowTask:
 		return metrics.TaskTypeTransferStandbyTaskResetWorkflow
+	case *tasks.DeleteExecutionTask:
+		return metrics.TaskTypeTransferStandbyTaskDeleteExecution
 	default:
-		return ""
+		return "TransferStandby" + task.GetType().String()
 	}
 }
 
@@ -94,7 +105,7 @@ func GetActiveTimerTaskTypeTagValue(
 	case *tasks.WorkflowBackoffTimerTask:
 		return metrics.TaskTypeTimerActiveTaskWorkflowBackoffTimer
 	default:
-		return ""
+		return "TimerActive" + task.GetType().String()
 	}
 }
 
@@ -117,7 +128,7 @@ func GetStandbyTimerTaskTypeTagValue(
 	case *tasks.WorkflowBackoffTimerTask:
 		return metrics.TaskTypeTimerStandbyTaskWorkflowBackoffTimer
 	default:
-		return ""
+		return "TimerStandby" + task.GetType().String()
 	}
 }
 
@@ -134,7 +145,7 @@ func GetVisibilityTaskTypeTagValue(
 	case *tasks.DeleteExecutionVisibilityTask:
 		return metrics.TaskTypeVisibilityTaskDeleteExecution
 	default:
-		return ""
+		return task.GetType().String()
 	}
 }
 
@@ -145,7 +156,7 @@ func GetArchivalTaskTypeTagValue(
 	case *tasks.ArchiveExecutionTask:
 		return metrics.TaskTypeArchivalTaskArchiveExecution
 	default:
-		return ""
+		return task.GetType().String()
 	}
 }
 
