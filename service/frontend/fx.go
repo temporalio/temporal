@@ -329,7 +329,7 @@ func NamespaceRateLimitInterceptorProvider(
 			namespace,
 		)
 	}
-	namespaceRateLimiter := quotas.NewNamespaceRateLimiter(
+	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),

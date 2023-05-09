@@ -83,7 +83,7 @@ func NewPriorityRateLimiter(
 		requestPriorityFn,
 	)
 
-	return quotas.NewNamespaceRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
+	return quotas.NewNamespaceRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if req.Caller != "" && req.Caller != headers.CallerNameSystem {
 			return quotas.NewMultiRequestRateLimiter(
 				newPriorityRateLimiter(

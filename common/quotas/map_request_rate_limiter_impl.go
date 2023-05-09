@@ -58,6 +58,16 @@ func NewMapRequestRateLimiter(
 	}
 }
 
+func NamespaceRequestRateLimiterKeyFn(req Request) string {
+	return req.Caller
+}
+
+func NewNamespaceRequestRateLimiter(
+	rateLimiterGenFn RequestRateLimiterFn,
+) *MapRequestRateLimiterImpl {
+	return NewMapRequestRateLimiter(rateLimiterGenFn, NamespaceRequestRateLimiterKeyFn)
+}
+
 // Allow attempts to allow a request to go through. The method returns
 // immediately with a true or false indicating if the request can make
 // progress
