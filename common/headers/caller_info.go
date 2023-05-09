@@ -36,6 +36,8 @@ const (
 	CallerTypePreemptable = "preemptable"
 
 	CallerNameSystem = "system"
+
+	CallerSegmentSystem = -1
 )
 
 var (
