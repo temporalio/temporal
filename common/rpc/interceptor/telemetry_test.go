@@ -105,7 +105,7 @@ func TestOperationOverwrite(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.methodName, func(t *testing.T) {
-			operation := telemetry.overrideOperationTag(tt.fullName, tt.methodName, nil)
+			operation := telemetry.overrideOperationTag(tt.fullName, tt.methodName)
 			assert.Equal(t, tt.expectedOperation, operation)
 		})
 	}
