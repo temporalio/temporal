@@ -291,7 +291,8 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 		// versioning data replicates, we'll redirect the poll to the correct set id.
 		// In the meantime (e.g. during an ungraceful failover) we can at least match tasks
 		// using the exact same build ID.
-		guessedSetId := hashBuildID(caps.BuildId)
+		// TODO: add metric and log to make this situation visible
+		guessedSetId := hashBuildId(caps.BuildId)
 		return guessedSetId, nil
 	}
 	set := data.VersionSets[setIdx]
@@ -328,7 +329,8 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb
 			// TODO: this doesn't really work unless we persist the fact that we've created
 			// this set? we can do that on the root. on other partitions... let's notify the
 			// root?
-			guessedSetId := hashBuildID(stamp.BuildId)
+			// TODO: add metric and log to make this situation visible
+			guessedSetId := hashBuildId(stamp.BuildId)
 			return guessedSetId, nil
 		}
 		set = data.VersionSets[setIdx]
