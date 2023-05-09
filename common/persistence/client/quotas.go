@@ -25,6 +25,7 @@
 package client
 
 import (
+	"fmt"
 	"go.temporal.io/server/common/headers"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
@@ -74,6 +75,34 @@ var (
 )
 
 func NewPriorityRateLimiter(
+	namespaceMaxQPS PersistenceNamespaceMaxQps,
+	hostMaxQPS PersistenceMaxQps,
+	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
+	requestPriorityFn quotas.RequestPriorityFn,
+) quotas.RequestRateLimiter {
+	return quotas.NewMultiRequestRateLimiter(
+		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		newPerShardPerNamespaceRateLimiter(perShardNamespaceMaxQPS),
+	)
+}
+
+func newPerShardPerNamespaceRateLimiter(
+	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
+) quotas.RequestRateLimiter {
+	return quotas.NewMapRequestRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			if req.Caller != "" && req.Caller != headers.CallerNameSystem && req.CallerSegment > 0 && req.CallerSegment != headers.CallerSegmentSystem {
+				return quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return float64(perShardNamespaceMaxQPS(req.CallerSegment)) }))
+			}
+			return quotas.NoopRequestRateLimiter
+		},
+		func(req quotas.Request) string {
+			return fmt.Sprintf("%d-%s", req.CallerSegment, req.Caller)
+		},
+	)
+}
+
+func newPriorityNamespaceRateLimiter(
 	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
