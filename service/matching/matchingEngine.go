@@ -853,7 +853,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	for {
 		resp := &matchingservice.GetTaskQueueUserDataResponse{}
 		userData, userDataChanged, err := tqMgr.GetUserData(ctx)
-		if err != nil {
+		if err != nil && err != errUserDataNotPresentOnPartition {
 			return nil, err
 		}
 		if userData != nil {
