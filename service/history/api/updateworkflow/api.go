@@ -26,12 +26,15 @@ package updateworkflow
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -51,6 +54,13 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (_ *historyservice.UpdateWorkflowExecutionResponse, retErr error) {
+
+	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
+	if waitStage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
+		waitStage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+		return nil, serviceerror.NewUnimplemented(
+			fmt.Sprintf("%v is not implemented", waitStage))
+	}
 
 	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
@@ -114,7 +124,11 @@ func Invoke(
 		weCtx.GetReleaseFn()(nil)
 	}
 
-	updOutcome, err := upd.WaitOutcome(ctx)
+	waitf := upd.WaitOutcome
+	if waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
+		waitf = upd.WaitAccepted
+	}
+	updOutcome, err := waitf(ctx)
 	if err != nil {
 		return nil, err
 	}
