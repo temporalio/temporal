@@ -551,7 +551,7 @@ func (e *executableImpl) estimateTaskMetricTag() []metrics.Tag {
 		isActive = namespace.ActiveInCluster(e.clusterMetadata.GetCurrentClusterName())
 	}
 
-	taskType := getTaskTypeTagValue(e.Task, isActive)
+	taskType := getTaskTypeTagValue(e, isActive)
 	return []metrics.Tag{
 		namespaceTag,
 		metrics.TaskTypeTag(taskType),

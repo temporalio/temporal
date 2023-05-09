@@ -233,20 +233,34 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskTimedOutEvent(
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
-	scheduledEventID int64,
+	workflowTask *WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
-	if m.ms.executionInfo.WorkflowTaskScheduledEventId != scheduledEventID || m.ms.executionInfo.WorkflowTaskStartedEventId > 0 {
+	if m.ms.executionInfo.WorkflowTaskScheduledEventId != workflowTask.ScheduledEventID || m.ms.executionInfo.WorkflowTaskStartedEventId > 0 {
 		m.ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowScheduledEventID(scheduledEventID),
+			tag.WorkflowScheduledEventID(workflowTask.ScheduledEventID),
 		)
 		return nil, m.ms.createInternalServerError(opTag)
 	}
 
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
+
+		// Create corresponding WorkflowTaskScheduled event for speculative WT.
+		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
+			m.ms.TaskQueue(),
+			workflowTask.WorkflowTaskTimeout,
+			workflowTask.Attempt,
+			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
+		)
+		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
+		m.ms.hBuilder.FlushAndCreateNewBatch()
+	}
+
 	event := m.ms.hBuilder.AddWorkflowTaskTimedOutEvent(
-		scheduledEventID,
+		workflowTask.ScheduledEventID,
 		common.EmptyEventID,
 		enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 	)
@@ -259,7 +273,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 // AddWorkflowTaskScheduledEventAsHeartbeat is to record the first scheduled workflow task during workflow task heartbeat.
 // If bypassTaskGeneration is specified, a transfer task will not be generated.
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
-	bypassTaskGeneration bool, // used only if WT type is not speculative. Speculative WT always bypass task generation.
+	bypassTaskGeneration bool,
 	originalScheduledTimestamp *time.Time,
 	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
@@ -341,10 +355,15 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 
 	// TODO merge active & passive task generation
 	// Always bypass task generation for speculative workflow task.
-	if !bypassTaskGeneration && workflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+	if !bypassTaskGeneration {
+		generateTimeoutTaskOnly := false
+		if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			generateTimeoutTaskOnly = true
+		}
+
 		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
 			scheduledEventID,
-			false,
+			generateTimeoutTaskOnly,
 		); err != nil {
 			return nil, err
 		}
@@ -417,6 +436,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		return nil, nil, m.ms.createInternalServerError(opTag)
 	}
 
+	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
+
 	scheduledEventID = workflowTask.ScheduledEventID
 	startedEventID := scheduledEventID + 1
 	startTime := m.ms.timeSource.Now()
@@ -429,10 +450,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 
 	workflowTaskScheduledEventCreated := !m.ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 
-	// If new events came since transient/speculative WT was scheduled
-	// or failover happened during lifetime of transient workflow task,
-	// transient/speculative workflow task needs to be converted to normal WT,
-	// i.e. WorkflowTaskScheduledEvent needs to be created now.
+	// If new events came since transient/speculative WT was scheduled or failover happened during lifetime of transient/speculative WT,
+	// transient/speculative WT needs to be converted to normal WT, i.e. WorkflowTaskScheduledEvent needs to be created now.
 	if !workflowTaskScheduledEventCreated &&
 		(workflowTask.ScheduledEventID != m.ms.GetNextEventID() || workflowTask.Version != m.ms.GetCurrentVersion()) {
 
@@ -471,14 +490,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 
 	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)
 
-	// Always bypass task generation for speculative WT.
-	if workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		// TODO merge active & passive task generation
-		if err := m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
-			scheduledEventID,
-		); err != nil {
-			return nil, nil, err
-		}
+	// TODO merge active & passive task generation
+	if err := m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
+		scheduledEventID,
+	); err != nil {
+		return nil, nil, err
 	}
 
 	return startedEvent, workflowTask, err
@@ -502,6 +518,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	maxResetPoints int,
 ) (*historypb.HistoryEvent, error) {
+
+	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 	// Capture if WorkflowTaskScheduled and WorkflowTaskStarted events were created
 	// before calling m.beforeAddWorkflowTaskCompletedEvent() because it will delete workflow task info from mutable state.
@@ -561,6 +579,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 ) (*historypb.HistoryEvent, error) {
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
+
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for speculative WT.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.TaskQueue(),
@@ -616,6 +636,30 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	workflowTask *WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
+
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
+
+		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for speculative WT.
+		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
+			m.ms.TaskQueue(),
+			workflowTask.WorkflowTaskTimeout,
+			workflowTask.Attempt,
+			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
+		)
+		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
+		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
+			workflowTask.ScheduledEventID,
+			workflowTask.RequestID,
+			"",
+			timestamp.TimeValue(workflowTask.StartedTime),
+			workflowTask.SuggestContinueAsNew,
+			workflowTask.HistorySizeBytes,
+		)
+		m.ms.hBuilder.FlushAndCreateNewBatch()
+		workflowTask.StartedEventID = startedEvent.GetEventId()
+	}
+
 	var event *historypb.HistoryEvent
 	// Avoid creating WorkflowTaskTimedOut history event when workflow task is transient.
 	if !m.ms.IsTransientWorkflowTask() {
@@ -948,9 +992,9 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	// convert it to normal workflow task before persisting.
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 
-	wt := m.getWorkflowTaskInfo()
+	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
-	// TODO (alex-update): cancel in-memory timer for this speculative WT.
+	wt := m.getWorkflowTaskInfo()
 
 	scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 		wt.TaskQueue,
@@ -983,15 +1027,11 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			return err
 		}
 	} else {
-		// If WT was only scheduled but not started yet, then SCHEDULE_TO_START timeout timer task is created only if using sticky task queue.
-		// Normal task queue doesn't have a timeout.
-		if m.ms.IsStickyTaskQueueEnabled() {
-			if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
-				scheduledEvent.EventId,
-				true, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching because WT was already pushed to matching.
-			); err != nil {
-				return err
-			}
+		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
+			scheduledEvent.EventId,
+			true, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching because WT was already pushed to matching.
+		); err != nil {
+			return err
 		}
 	}
 

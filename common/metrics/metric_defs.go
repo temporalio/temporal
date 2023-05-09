@@ -1068,6 +1068,8 @@ const (
 	OperationVisibilityQueueProcessorScope = "VisibilityQueueProcessor"
 	// OperationArchivalQueueProcessorScope is a scope for archival queue processor
 	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
+	// OperationMemoryScheduledQueueProcessorScope is a scope for memory scheduled queue processor.
+	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
 )
 
 // Matching Scope
@@ -1196,6 +1198,7 @@ const (
 	TaskTypeTimerStandbyTaskActivityRetryTimer     = "TimerStandbyTaskActivityRetryTimer"
 	TaskTypeTimerStandbyTaskWorkflowBackoffTimer   = "TimerStandbyTaskWorkflowBackoffTimer"
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
+	TaskTypeMemoryScheduledTaskWorkflowTaskTimeout = "MemoryScheduledTaskWorkflowTaskTimeout"
 )
 
 // Schedule action types

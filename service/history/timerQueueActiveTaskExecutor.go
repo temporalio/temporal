@@ -37,7 +37,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -90,28 +89,27 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) ([]metrics.Tag, bool, error) {
-	task := executable.GetTask()
-	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
+	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable)
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shard.GetNamespaceRegistry(),
-		task.GetNamespaceID(),
+		executable.GetNamespaceID(),
 	)
 	metricsTags := []metrics.Tag{
 		namespaceTag,
-		metrics.TaskTypeTag(taskType),
-		metrics.OperationTag(taskType), // for backward compatibility
+		metrics.TaskTypeTag(taskTypeTagValue),
+		metrics.OperationTag(taskTypeTagValue), // for backward compatibility
 	}
 
 	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
 		// TODO: exclude task types here if we believe it's safe & necessary to execute
-		// them during namespace handover.
+		//  them during namespace handover.
 		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
-		// be returned from task executor
+		//  be returned from task executor
 		return metricsTags, true, consts.ErrNamespaceHandover
 	}
 
 	var err error
-	switch task := task.(type) {
+	switch task := executable.GetTask().(type) {
 	case *tasks.UserTimerTask:
 		err = t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
@@ -314,13 +312,22 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	if workflowTask == nil {
 		return nil
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
-	if err != nil {
-		return err
-	}
 
-	if workflowTask.Attempt != task.ScheduleAttempt {
-		return nil
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Check if mutable state still points to this task.
+		// Mutable state can lost speculative WT or even has another one there if, for example, workflow was evicted from cache.
+		if !mutableState.CheckSpeculativeWorkflowTaskTimeoutTask(task) {
+			return nil
+		}
+	} else {
+		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
+		if err != nil {
+			return err
+		}
+
+		if workflowTask.Attempt != task.ScheduleAttempt {
+			return nil
+		}
 	}
 
 	scheduleWorkflowTask := false
@@ -349,7 +356,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		)
-		_, err := mutableState.AddWorkflowTaskScheduleToStartTimeoutEvent(task.EventID)
+		_, err := mutableState.AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask)
 		if err != nil {
 			return err
 		}

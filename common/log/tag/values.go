@@ -115,6 +115,7 @@ var (
 	ComponentVisibilityQueue          = component("visibility-queue-processor")
 	ComponentArchivalQueue            = component("archival-queue-processor")
 	ComponentTimerQueue               = component("timer-queue-processor")
+	ComponentMemoryScheduledQueue     = component("memory-scheduled-queue-processor")
 	ComponentTimerBuilder             = component("timer-builder")
 	ComponentReplicatorQueue          = component("replicator-queue-processor")
 	ComponentShardController          = component("shard-controller")

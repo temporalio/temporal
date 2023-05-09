@@ -25,12 +25,14 @@
 package tasks
 
 import (
+	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
+	ctasks "go.temporal.io/server/common/tasks"
 )
 
 var _ Task = (*WorkflowTaskTimeoutTask)(nil)
@@ -44,6 +46,9 @@ type (
 		ScheduleAttempt     int32
 		TimeoutType         enumspb.TimeoutType
 		Version             int64
+
+		// state is used by speculative WT only.
+		state atomic.Uint32 // of type ctasks.State
 	}
 )
 
@@ -81,4 +86,15 @@ func (d *WorkflowTaskTimeoutTask) GetCategory() Category {
 
 func (d *WorkflowTaskTimeoutTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT
+}
+
+// Cancel and State are used by in-memory WorkflowTaskTimeoutTask (for speculative WT) only.
+// TODO (alex): They need to be moved to speculativeWorkflowTaskTimeoutExecutable
+// and workflowTaskStateMachine should somehow signal that executable directly.
+// Major refactoring needs to be done to achieve that.
+func (d *WorkflowTaskTimeoutTask) Cancel() {
+	d.state.Store(uint32(ctasks.TaskStateCancelled))
+}
+func (d *WorkflowTaskTimeoutTask) State() ctasks.State {
+	return ctasks.State(d.state.Load())
 }

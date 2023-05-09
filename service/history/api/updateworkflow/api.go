@@ -88,8 +88,7 @@ func Invoke(
 
 	if createNewWorkflowTask {
 		// This will try not to add an event but will create speculative WT in mutable state.
-		// Task generation will be skipped if WT is created as speculative.
-		wt, err := ms.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+		wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 		if err != nil {
 			return nil, err
 		}
@@ -135,12 +134,12 @@ func addWorkflowTaskToMatching(
 	shardCtx shard.Context,
 	ms workflow.MutableState,
 	matchingClient matchingservice.MatchingServiceClient,
-	task *workflow.WorkflowTaskInfo,
+	wt *workflow.WorkflowTaskInfo,
 	nsID namespace.ID,
 ) error {
-	// TODO (alex-update): Timeout calculation is copied from somewhere else. Extract func instead?
+	// TODO (alex): Timeout calculation is copied from somewhere else. Extract func instead?
 	var taskScheduleToStartTimeout *time.Duration
-	if ms.TaskQueue().GetName() != task.TaskQueue.GetName() {
+	if ms.IsStickyTaskQueueEnabled() {
 		taskScheduleToStartTimeout = ms.GetExecutionInfo().StickyScheduleToStartTimeout
 	} else {
 		taskScheduleToStartTimeout = ms.GetExecutionInfo().WorkflowRunTimeout
@@ -158,8 +157,8 @@ func addWorkflowTaskToMatching(
 			WorkflowId: wfKey.WorkflowID,
 			RunId:      wfKey.RunID,
 		},
-		TaskQueue:              task.TaskQueue,
-		ScheduledEventId:       task.ScheduledEventID,
+		TaskQueue:              wt.TaskQueue,
+		ScheduledEventId:       wt.ScheduledEventID,
 		ScheduleToStartTimeout: taskScheduleToStartTimeout,
 		Clock:                  clock,
 	})
