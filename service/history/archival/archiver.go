@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.uber.org/multierr"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -92,10 +93,12 @@ type (
 	}
 
 	archiver struct {
-		archiverProvider provider.ArchiverProvider
-		metricsHandler   metrics.Handler
-		logger           log.Logger
-		rateLimiter      quotas.RateLimiter
+		archiverProvider        provider.ArchiverProvider
+		metricsHandler          metrics.Handler
+		logger                  log.Logger
+		rateLimiter             quotas.RateLimiter
+		searchAttributeProvider searchattribute.Provider
+		visibilityManager       manager.VisibilityManager
 	}
 )
 
@@ -110,12 +113,16 @@ func NewArchiver(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	rateLimiter quotas.RateLimiter,
+	searchAttributeProvider searchattribute.Provider,
+	visibilityManger manager.VisibilityManager,
 ) Archiver {
 	return &archiver{
-		archiverProvider: archiverProvider,
-		metricsHandler:   metricsHandler.WithTags(metrics.OperationTag(metrics.ArchiverClientScope)),
-		logger:           logger,
-		rateLimiter:      rateLimiter,
+		archiverProvider:        archiverProvider,
+		metricsHandler:          metricsHandler.WithTags(metrics.OperationTag(metrics.ArchiverClientScope)),
+		logger:                  logger,
+		rateLimiter:             rateLimiter,
+		searchAttributeProvider: searchAttributeProvider,
+		visibilityManager:       visibilityManger,
 	}
 }
 
@@ -212,8 +219,13 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		return err
 	}
 
+	saTypeMap, err := a.searchAttributeProvider.GetSearchAttributes(a.visibilityManager.GetIndexName(), false)
+	if err != nil {
+		return err
+	}
+
 	// It is safe to pass nil to typeMap here because search attributes type must be embedded by caller.
-	searchAttributes, err := searchattribute.Stringify(request.SearchAttributes, nil)
+	searchAttributes, err := searchattribute.Stringify(request.SearchAttributes, &saTypeMap)
 	if err != nil {
 		return err
 	}
