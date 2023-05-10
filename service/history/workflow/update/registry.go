@@ -193,8 +193,8 @@ func (r *RegistryImpl) CreateOutgoingMessages(
 }
 
 func (r *RegistryImpl) Len() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return len(r.updates)
 }
 
