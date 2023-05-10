@@ -26,7 +26,6 @@ package update
 
 import (
 	"context"
-	"sync/atomic"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
@@ -74,7 +73,7 @@ type (
 	Update struct {
 		// accessed only while holding workflow lock
 		id              string
-		request         *protocolpb.Message // nil when not in stateAdmitted
+		request         *protocolpb.Message // nil when not in stateRequested
 		onComplete      func()
 		instrumentation *instrumentation
 
@@ -84,19 +83,7 @@ type (
 		outcome  future.Future[*updatepb.Outcome]
 	}
 
-	state int32
-
 	updateOpt func(*Update)
-)
-
-const (
-	stateAdmitted state = iota
-	stateProvisionallyRequested
-	stateRequested
-	stateProvisionallyAccepted
-	stateAccepted
-	stateProvisionallyCompleted
-	stateCompleted
 )
 
 // New creates a new Update instance with the provided ID that will call the
@@ -372,46 +359,4 @@ func (u *Update) setState(newState state) state {
 	u.instrumentation.StateChange(u.id, currState, newState)
 	u.state.Set(newState)
 	return currState
-}
-
-func (s state) String() string {
-	switch s {
-	case stateAdmitted:
-		return "Admitted"
-	case stateProvisionallyRequested:
-		return "ProvisionallyRequested"
-	case stateRequested:
-		return "Requested"
-	case stateProvisionallyAccepted:
-		return "ProvisionallyAccepted"
-	case stateAccepted:
-		return "Accepted"
-	case stateProvisionallyCompleted:
-		return "ProvisionallyCompleted"
-	case stateCompleted:
-		return "Completed"
-	}
-	return "unrecognized state"
-}
-
-func (s *state) Is(other state) bool {
-	return state(atomic.LoadInt32((*int32)(s))) == other
-}
-
-func (s *state) Set(other state) {
-	atomic.StoreInt32((*int32)(s), int32(other))
-}
-
-func (s *state) Load() state {
-	return state(atomic.LoadInt32((*int32)(s)))
-}
-
-func (s *state) IsOneOf(ss ...state) bool {
-	actual := s.Load()
-	for _, s := range ss {
-		if s == actual {
-			return true
-		}
-	}
-	return false
 }
