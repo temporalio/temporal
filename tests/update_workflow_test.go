@@ -2296,5 +2296,7 @@ func (s *integrationSuite) TestUpdateWorkflow_TimeoutSpeculativeWorkflowTask() {
   9 WorkflowTaskScheduled
  10 WorkflowTaskStarted
  11 WorkflowTaskCompleted
- 12 WorkflowExecutionCompleted`, events)
+ 12 WorkflowExecutionUpdateAccepted
+ 13 WorkflowExecutionUpdateCompleted
+ 14 WorkflowExecutionCompleted`, events)
 }

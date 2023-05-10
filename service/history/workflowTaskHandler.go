@@ -162,6 +162,7 @@ func newWorkflowTaskHandler(
 func (handler *workflowTaskHandlerImpl) handleCommands(
 	ctx context.Context,
 	commands []*commandpb.Command,
+	earlyDeliverMessages func(context.Context) error,
 ) ([]workflowTaskResponseMutation, error) {
 	if err := handler.attrValidator.validateCommandSequence(
 		commands,
@@ -172,7 +173,7 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	var mutations []workflowTaskResponseMutation
 	var postActions []commandPostAction
 	for _, command := range commands {
-		response, err := handler.handleCommand(ctx, command)
+		response, err := handler.handleCommand(ctx, command, earlyDeliverMessages)
 		if err != nil || handler.stopProcessing {
 			return nil, err
 		}
@@ -199,12 +200,20 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	return mutations, nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, command *commandpb.Command) (*handleCommandResponse, error) {
+//revive:disable:cyclomatic grandfathered
+func (handler *workflowTaskHandlerImpl) handleCommand(
+	ctx context.Context,
+	command *commandpb.Command,
+	earlyDeliverMessages func(context.Context) error,
+) (*handleCommandResponse, error) {
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
+		if err := earlyDeliverMessages(ctx); err != nil {
+			return nil, err
+		}
 		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:

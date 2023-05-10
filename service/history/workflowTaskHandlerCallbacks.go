@@ -526,14 +526,30 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			hasBufferedEvents,
 		)
 
+		// roll message delivery up into a one-time-only func so that we can
+		// either call it as part of handling a workflow execution completed
+		// command or we can run it after all commands have been handled. This
+		// solves the problem of a single workflow task completion that contains
+		// _both_ the workflow execution completed command _and_ an update
+		// completed message.
+		msgsDelivered := false
+		handleMessages := func(ctx context.Context) error {
+			if !msgsDelivered {
+				msgsDelivered = true
+				return workflowTaskHandler.handleMessages(ctx, request.Messages)
+			}
+			return nil
+		}
+
 		if responseMutations, err = workflowTaskHandler.handleCommands(
 			ctx,
 			request.Commands,
+			handleMessages,
 		); err != nil {
 			return nil, err
 		}
 
-		if err = workflowTaskHandler.handleMessages(ctx, request.Messages); err != nil {
+		if err := handleMessages(ctx); err != nil {
 			return nil, err
 		}
 
