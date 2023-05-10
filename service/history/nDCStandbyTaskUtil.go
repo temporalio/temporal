@@ -29,7 +29,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -153,18 +152,12 @@ func newActivityTaskPostActionInfo(
 		return nil, err
 	}
 
-	// TODO: factor out
-	var directive taskqueuespb.TaskVersionDirective
-	if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetBuildId() != "" {
-		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
-	} else {
-		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
-	}
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp())
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
-		versionDirective:                   &directive,
+		versionDirective:                   directive,
 	}, nil
 }
 
@@ -178,19 +171,13 @@ func newActivityRetryTimePostActionInfo(
 		return nil, err
 	}
 
-	// TODO: factor out
-	var directive taskqueuespb.TaskVersionDirective
-	if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetBuildId() != "" {
-		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
-	} else { // use default
-		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
-	}
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp())
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
-		versionDirective:                   &directive,
+		versionDirective:                   directive,
 	}, nil
 }
 
@@ -204,20 +191,16 @@ func newWorkflowTaskPostActionInfo(
 		return nil, err
 	}
 
-	// TODO: factor out
-	var directive taskqueuespb.TaskVersionDirective
-	if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetBuildId() != "" {
-		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
-	} else if mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
-		// first workflow task
-		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
-	}
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		mutableState.GetWorkerVersionStamp(),
+		mutableState.GetLastWorkflowTaskStartedEventID(),
+	)
 
 	return &workflowTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
-		versionDirective:                   &directive,
+		versionDirective:                   directive,
 	}, nil
 }
 

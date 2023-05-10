@@ -28,7 +28,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
@@ -36,7 +35,6 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -242,14 +240,10 @@ func queryDirectlyThroughMatching(
 		metricsHandler.Timer(metrics.DirectQueryDispatchLatency.GetMetricName()).Record(time.Since(startTime))
 	}()
 
-	var directive taskqueuespb.TaskVersionDirective
-	if stamp := msResp.GetWorkerVersionStamp(); stamp.GetBuildId() != "" {
-		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
-	} else if msResp.GetPreviousStartedEventId() == common.EmptyEventID {
-		// TODO: is the condition above correct?
-		// first workflow task
-		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
-	}
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		msResp.GetWorkerVersionStamp(),
+		msResp.GetPreviousStartedEventId(),
+	)
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
@@ -259,7 +253,7 @@ func queryDirectlyThroughMatching(
 			NamespaceId:      namespaceID,
 			QueryRequest:     queryRequest,
 			TaskQueue:        msResp.GetStickyTaskQueue(),
-			VersionDirective: &directive,
+			VersionDirective: directive,
 		}
 
 		// using a clean new context in case customer provide a context which has
@@ -305,7 +299,7 @@ func queryDirectlyThroughMatching(
 		NamespaceId:      namespaceID,
 		QueryRequest:     queryRequest,
 		TaskQueue:        msResp.TaskQueue,
-		VersionDirective: &directive,
+		VersionDirective: directive,
 	}
 
 	nonStickyStartTime := time.Now().UTC()

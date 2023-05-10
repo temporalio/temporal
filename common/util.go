@@ -35,6 +35,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,6 +43,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -779,6 +781,33 @@ func OverrideWorkflowTaskTimeout(
 	}
 
 	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
+}
+
+func MakeVersionDirectiveForWorkflowTask(
+	stamp *commonpb.WorkerVersionStamp,
+	lastWorkflowTaskStartedEventID int64,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	if stamp.GetBuildId() != "" {
+		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
+		// first workflow task
+		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	}
+	return &directive
+}
+
+func MakeVersionDirectiveForActivityTask(
+	stamp *commonpb.WorkerVersionStamp,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	if stamp.GetBuildId() != "" {
+		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	} else {
+		// FIXME: when should this be "unversioned"?
+		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	}
+	return &directive
 }
 
 // CloneProto is a generic typed version of proto.Clone from gogoproto.

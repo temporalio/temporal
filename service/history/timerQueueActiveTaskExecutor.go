@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -38,7 +37,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -455,14 +453,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
-
-	// TODO: factor out
-	var directive taskqueuespb.TaskVersionDirective
-	if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetBuildId() != "" {
-		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
-	} else {
-		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
-	}
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp())
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
@@ -477,7 +468,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		ScheduledEventId:       task.EventID,
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
-		VersionDirective:       &directive,
+		VersionDirective:       directive,
 	})
 
 	return retError
