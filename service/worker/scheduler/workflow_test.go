@@ -1407,11 +1407,11 @@ func (s *workflowSuite) TestLimitedActions() {
 func (s *workflowSuite) TestLotsOfIterations() {
 	// This is mostly testing getNextTime caching logic.
 	const runIterations = 30
-	const backfillIterations = 30
+	const backfillIterations = 15
 
 	runs := make([]workflowRun, runIterations)
 	for i := range runs {
-		t := time.Date(2022, 6, 1, i, 17+i%2, 0, 0, time.UTC)
+		t := time.Date(2022, 6, 1, i, 27+i%2, 0, 0, time.UTC)
 		runs[i] = workflowRun{
 			id:     "myid-" + t.Format(time.RFC3339),
 			start:  t,
@@ -1424,19 +1424,20 @@ func (s *workflowSuite) TestLotsOfIterations() {
 
 	expected := runIterations
 	// schedule a call back every hour to spray backfills among scheduled runs
-	// each call back adds random number of backfills up to 10
+	// each call back adds random number of backfills in
+	// [maxNextTimeResultCacheSize, 2*maxNextTimeResultCacheSize) range
 	for i := range delayedCallbacks {
 
-		maxRuns := rand.Intn(10) + 1
+		maxRuns := rand.Intn(maxNextTimeResultCacheSize) + maxNextTimeResultCacheSize
 		expected += maxRuns
 		// a point in time to send the callback request
-		callbackTime := time.Date(2022, 6, 1, i, 2, 0, 0, time.UTC)
+		callbackTime := time.Date(2022, 6, 1, i+15, 2, 0, 0, time.UTC)
 		// start time for callback request
 		callBackRangeStartTime := time.Date(2022, 5, i, 0, 0, 0, 0, time.UTC)
 
 		// add/process maxRuns schedules
 		for j := 0; j < maxRuns; j++ {
-			runStartTime := time.Date(2022, 5, i, j, 17+j%2, 0, 0, time.UTC)
+			runStartTime := time.Date(2022, 5, i, j, 27+j%2, 0, 0, time.UTC)
 			runs = append(runs, workflowRun{
 				id:     "myid-" + runStartTime.Format(time.RFC3339),
 				start:  callbackTime.Add(time.Duration(j) * time.Minute),
@@ -1465,8 +1466,8 @@ func (s *workflowSuite) TestLotsOfIterations() {
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Calendar: []*schedpb.CalendarSpec{
-					{Minute: "17", Hour: "0/2"},
-					{Minute: "18", Hour: "1/2"},
+					{Minute: "27", Hour: "0/2"},
+					{Minute: "28", Hour: "1/2"},
 				},
 			},
 		},
