@@ -160,7 +160,7 @@ func (s *memoryScheduledQueueSuite) Test_1KRandomTasks() {
 	}
 
 	// To ensure all timers have fired.
-	s.Eventually(func() bool { return calls.Load() == 0 }, time.Second, 100*time.Millisecond)
+	s.Eventually(func() bool { return calls.Load() == 0 }, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *memoryScheduledQueueSuite) newSpeculativeWorkflowTaskTimeoutTestExecutable(

@@ -985,12 +985,11 @@ func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks() *gomock.Call {
 }
 
 // GetAcceptedWorkflowExecutionUpdateIDs mocks base method.
-func (m *MockMutableState) GetAcceptedWorkflowExecutionUpdateIDs(arg0 context.Context) ([]string, error) {
+func (m *MockMutableState) GetAcceptedWorkflowExecutionUpdateIDs(arg0 context.Context) []string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAcceptedWorkflowExecutionUpdateIDs", arg0)
 	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // GetAcceptedWorkflowExecutionUpdateIDs indicates an expected call of GetAcceptedWorkflowExecutionUpdateIDs.
@@ -1521,6 +1520,21 @@ func (m *MockMutableState) GetUpdateCondition() (int64, int64) {
 func (mr *MockMutableStateMockRecorder) GetUpdateCondition() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateCondition", reflect.TypeOf((*MockMutableState)(nil).GetUpdateCondition))
+}
+
+// GetUpdateInfo mocks base method.
+func (m *MockMutableState) GetUpdateInfo(ctx context.Context, updateID string) (*v112.UpdateInfo, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUpdateInfo", ctx, updateID)
+	ret0, _ := ret[0].(*v112.UpdateInfo)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetUpdateInfo indicates an expected call of GetUpdateInfo.
+func (mr *MockMutableStateMockRecorder) GetUpdateInfo(ctx, updateID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateInfo", reflect.TypeOf((*MockMutableState)(nil).GetUpdateInfo), ctx, updateID)
 }
 
 // GetUpdateOutcome mocks base method.

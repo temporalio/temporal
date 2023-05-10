@@ -33,6 +33,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -297,7 +298,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateMessages() {
 		},
 		{
 			Name:                     "complete-without-accept",
-			RespondWorkflowTaskError: "current state: pending",
+			RespondWorkflowTaskError: "invalid state transition attempted",
 			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
@@ -319,7 +320,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateMessages() {
 		},
 		{
 			Name:                     "accept-twice",
-			RespondWorkflowTaskError: "current state: accepted",
+			RespondWorkflowTaskError: "invalid state transition attempted",
 			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
@@ -436,10 +437,10 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateMessages() {
 			_, _, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, false, nil)
 			if len(tc.RespondWorkflowTaskError) > 0 {
 				// respond workflow task should return error
-				s.Error(err, "RespondWorkflowTaskCompleted should return an error contains`%v`", tc.RespondWorkflowTaskError)
-				s.Contains(err.Error(), tc.RespondWorkflowTaskError)
+				require.Error(t, err, "RespondWorkflowTaskCompleted should return an error contains`%v`", tc.RespondWorkflowTaskError)
+				require.Contains(t, err.Error(), tc.RespondWorkflowTaskError)
 			} else {
-				s.NoError(err)
+				require.NoError(t, err)
 			}
 
 		})
@@ -1819,8 +1820,10 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 			// Returning error will cause the poller to fail WT.
 			return nil, errors.New("malformed request")
 		case 4:
-			// 3rd attempt doesn't have any updates attached to it because UpdateWorkflowExecution call has timed out.
-			s.Empty(task.Messages)
+			// 3rd attempt UpdateWorkflowExecution call has timed out but the
+			// update is still running
+			updRequestMsg := task.Messages[0]
+			s.EqualValues(9, updRequestMsg.GetEventId())
 			wtHandlerCalls++ // because it won't be called for case 4 but counter should be in sync.
 			// Fail WT one more time. This is transient WT and shouldn't appear in the history.
 			// Returning error will cause the poller to fail WT.
@@ -2293,5 +2296,7 @@ func (s *integrationSuite) TestUpdateWorkflow_TimeoutSpeculativeWorkflowTask() {
   9 WorkflowTaskScheduled
  10 WorkflowTaskStarted
  11 WorkflowTaskCompleted
- 12 WorkflowExecutionCompleted`, events)
+ 12 WorkflowExecutionUpdateAccepted
+ 13 WorkflowExecutionUpdateCompleted
+ 14 WorkflowExecutionCompleted`, events)
 }
