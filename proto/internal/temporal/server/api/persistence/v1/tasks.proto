@@ -27,10 +27,10 @@ import "google/protobuf/timestamp.proto";
 
 import "dependencies/gogoproto/gogo.proto";
 
-import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 
 // task column
 message AllocatedTaskInfo {
@@ -46,11 +46,8 @@ message TaskInfo {
     google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
     temporal.server.api.clock.v1.VectorClock clock = 7;
-    // If using build-id based versioning: version stamp for this task.
-    // Used to dispatch to correct worker in matching.
-    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 8;
-    // True if this is a workflow task and the first workflow task for the workflow.
-    bool is_first_workflow_task = 9;
+    // How this task should be directed.
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
 }
 
 // task_queue column

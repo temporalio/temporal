@@ -38,6 +38,7 @@ import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 
@@ -110,11 +111,8 @@ message AddWorkflowTaskRequest {
     string forwarded_source = 6;
     temporal.server.api.enums.v1.TaskSource source = 7;
     temporal.server.api.clock.v1.VectorClock clock = 9;
-    // If using build-id based versioning: version stamp of last worker to complete a workflow
-    // task for this workflow. Used to dispatch to correct worker in matching.
-    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 10;
-    // True if this is the first workflow task for the workflow.
-    bool is_first_workflow_task = 11;
+    // How this task should be directed by matching.
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
 }
 
 message AddWorkflowTaskResponse {
@@ -132,9 +130,8 @@ message AddActivityTaskRequest {
     string forwarded_source = 7;
     temporal.server.api.enums.v1.TaskSource source = 8;
     temporal.server.api.clock.v1.VectorClock clock = 9;
-    // If using build-id based versioning: version stamp of last worker to complete a workflow
-    // task for this workflow. Used to dispatch to correct worker in matching.
-    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 10;
+    // How this task should be directed by matching.
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
 }
 
 message AddActivityTaskResponse {
@@ -145,9 +142,8 @@ message QueryWorkflowRequest {
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.api.workflowservice.v1.QueryWorkflowRequest query_request = 3;
     string forwarded_source = 4;
-    // If using build-id based versioning: version stamp of last worker to complete a workflow
-    // task for this workflow. Used to dispatch to correct worker in matching.
-    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 5;
+    // How this task should be directed by matching.
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
 }
 
 message QueryWorkflowResponse {
