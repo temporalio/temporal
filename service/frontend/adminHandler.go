@@ -1929,32 +1929,17 @@ func (adh *AdminHandler) getWorkflowCompletionEvent(
 		return nil, err
 	}
 
-	var historyEvents []*historypb.HistoryEvent
-	if adh.config.readEventsFromHistory(adh.metricsHandler) {
-		resp, err := adh.historyClient.ReadHistoryBranch(ctx, &historyservice.ReadHistoryBranchRequest{
-			NamespaceId: namespaceID.String(),
-			ShardId:     shardID,
-			BranchToken: currentVersionHistory.GetBranchToken(),
-			MinEventId:  executionInfo.CompletionEventBatchId,
-			MaxEventId:  completionEventID + 1,
-			PageSize:    1,
-		})
-		if err != nil {
-			return nil, err
-		}
-		historyEvents = resp.HistoryEvents
-	} else {
-		resp, err := adh.persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-			ShardID:     shardID,
-			BranchToken: currentVersionHistory.GetBranchToken(),
-			MinEventID:  executionInfo.CompletionEventBatchId,
-			MaxEventID:  completionEventID + 1,
-			PageSize:    1,
-		})
-		if err != nil {
-			return nil, err
-		}
-		historyEvents = resp.HistoryEvents
+	historyEvents, err := adh.readHistoryBranch(
+		ctx,
+		namespaceID,
+		shardID,
+		currentVersionHistory.GetBranchToken(),
+		executionInfo.CompletionEventBatchId,
+		completionEventID+1,
+		1,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	// find history event from batch and return back single event to caller
@@ -1965,6 +1950,43 @@ func (adh *AdminHandler) getWorkflowCompletionEvent(
 	}
 
 	return nil, serviceerror.NewInternal("Unable to find closed event for workflow")
+}
+
+func (adh *AdminHandler) readHistoryBranch(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	shardID int32,
+	branchToken []byte,
+	minEventId int64,
+	maxEventID int64,
+	pageSize int,
+) ([]*historypb.HistoryEvent, error) {
+	if adh.config.readEventsFromHistory(adh.metricsHandler) {
+		resp, err := adh.historyClient.ReadHistoryBranch(ctx, &historyservice.ReadHistoryBranchRequest{
+			NamespaceId: namespaceID.String(),
+			ShardId:     shardID,
+			BranchToken: branchToken,
+			MinEventId:  minEventId,
+			MaxEventId:  maxEventID,
+			PageSize:    int64(pageSize),
+		})
+		if err != nil {
+			return nil, err
+		}
+		return resp.HistoryEvents, nil
+	} else {
+		resp, err := adh.persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+			ShardID:     shardID,
+			BranchToken: branchToken,
+			MinEventID:  minEventId,
+			MaxEventID:  maxEventID,
+			PageSize:    pageSize,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return resp.HistoryEvents, nil
+	}
 }
 
 func (adh *AdminHandler) StreamWorkflowReplicationMessages(
