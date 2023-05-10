@@ -48,6 +48,7 @@ require (
 	go.temporal.io/sdk v1.22.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.10.0
+	go.uber.org/automaxprocs v1.5.2
 	go.uber.org/fx v1.19.1
 	go.uber.org/multierr v1.9.0
 	go.uber.org/zap v1.24.0
