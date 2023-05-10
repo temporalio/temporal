@@ -134,8 +134,9 @@ func (m *MetadataStore) CreateNamespace(
 	}
 
 	if !applied {
-		// if we are here, namespace handler already checked whether this namespace exists in 'namespaces' table and failed
-		// if this name exists in `namespaces_by_name` and not in `namespaces`, fall through and add the row there
+		// if the id with the same name exists in `namespaces_by_id`, fall through and either add a row in `namespaces` table
+		// or fail if name exists in that table already. This is to make sure we do not end up with a row in `namespaces_by_id`
+		// table and no entry in `namespaces` table
 		if name, ok := existingRow["name"]; !ok || name != request.Name {
 			return nil, serviceerror.NewNamespaceAlreadyExists("CreateNamespace operation failed because of uuid collision.")
 		}
@@ -167,22 +168,35 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
-	}
-	defer func() { _ = iter.Close() }()
-
-	if !applied {
-		// Namespace already exist.  Delete orphan namespace record before returning back to user
+	deleteOrphanNamespace := func() {
+		// Delete namespace from `namespaces_by_id`
 		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID).WithContext(ctx).Exec(); errDelete != nil {
 			m.logger.Warn("Unable to delete orphan namespace record. Error", tag.Error(errDelete))
 		}
+	}
 
-		if id, ok := previous["Id"].([]byte); ok {
-			msg := fmt.Sprintf("Namespace already exists.  NamespaceId: %v", primitives.UUIDString(id))
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
+	}
+
+	defer func() { _ = iter.Close() }()
+
+	if !applied {
+		if id, ok := previous["id"]; ok {
+			id = gocql.UUIDToString(id)
+			if id != request.ID {
+				// Namespace with the given name already exists with a different ID.
+				// Delete orphan namespace record before returning back to user
+				deleteOrphanNamespace()
+			}
+
+			msg := fmt.Sprintf("Namespace already exists.  NamespaceId: %v", id)
 			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 		}
 
+		// If namespace does not exist already and it failed to insert, there is a conditional failure.
+		// Delete orphan namespace record before returning back to user
+		deleteOrphanNamespace()
 		return nil, serviceerror.NewNamespaceAlreadyExists("CreateNamespace operation failed because of conditional failure.")
 	}
 
