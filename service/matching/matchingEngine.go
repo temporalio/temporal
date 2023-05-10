@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -275,8 +276,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind,
-		addRequest.IsFirstWorkflowTask)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.VersionDirective, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -300,15 +300,14 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId:         namespaceID.String(),
-		RunId:               addRequest.Execution.GetRunId(),
-		WorkflowId:          addRequest.Execution.GetWorkflowId(),
-		ScheduledEventId:    addRequest.GetScheduledEventId(),
-		Clock:               addRequest.GetClock(),
-		ExpiryTime:          expirationTime,
-		CreateTime:          now,
-		WorkerVersionStamp:  addRequest.WorkerVersionStamp,
-		IsFirstWorkflowTask: addRequest.IsFirstWorkflowTask,
+		NamespaceId:      namespaceID.String(),
+		RunId:            addRequest.Execution.GetRunId(),
+		WorkflowId:       addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId: addRequest.GetScheduledEventId(),
+		Clock:            addRequest.GetClock(),
+		ExpiryTime:       expirationTime,
+		CreateTime:       now,
+		VersionDirective: addRequest.VersionDirective,
 	}
 
 	return tqm.AddTask(hCtx.Context, addTaskParams{
@@ -334,7 +333,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind, false)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.VersionDirective, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -353,14 +352,14 @@ func (e *matchingEngineImpl) AddActivityTask(
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId:        namespaceID.String(),
-		RunId:              runID,
-		WorkflowId:         addRequest.Execution.GetWorkflowId(),
-		ScheduledEventId:   addRequest.GetScheduledEventId(),
-		Clock:              addRequest.GetClock(),
-		CreateTime:         now,
-		ExpiryTime:         expirationTime,
-		WorkerVersionStamp: addRequest.WorkerVersionStamp,
+		NamespaceId:      namespaceID.String(),
+		RunId:            runID,
+		WorkflowId:       addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId: addRequest.GetScheduledEventId(),
+		Clock:            addRequest.GetClock(),
+		CreateTime:       now,
+		ExpiryTime:       expirationTime,
+		VersionDirective: addRequest.VersionDirective,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{
@@ -587,7 +586,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, queryRequest.WorkerVersionStamp, taskQueueKind, false)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, queryRequest.VersionDirective, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
@@ -1178,22 +1177,22 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	ctx context.Context,
 	taskQueue *taskQueueID,
-	stamp *commonpb.WorkerVersionStamp,
+	directive *taskqueuespb.TaskVersionDirective,
 	kind enumspb.TaskQueueKind,
-	isFirstWorkflowTask bool,
 ) (*taskQueueID, error) {
 	// sticky queues are unversioned
 	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		return taskQueue, nil
 	}
-	if !stamp.GetUseVersioning() {
-		return taskQueue, nil
-	}
 
-	// If this is the first workflow task for a workflow, we need to assign it to the default
-	// version. If not, we leave it on the unversioned queue, even if the queue has versioning
-	// data. We can check this before loading versioning data.
-	if stamp == nil && !isFirstWorkflowTask {
+	var buildId string
+	switch dir := directive.Directive.(type) {
+	case *taskqueuespb.TaskVersionDirective_UseDefault:
+		// let buildId = ""
+	case *taskqueuespb.TaskVersionDirective_BuildId:
+		buildId = dir.BuildId
+	default:
+		// Unversioned task, leave on unversioned queue.
 		return taskQueue, nil
 	}
 
@@ -1208,12 +1207,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	}
 	data := userData.GetData().GetVersioningData()
 
-	if stamp == nil && data == nil {
-		// Unversioned workflow on unversioned queue.
-		return taskQueue, nil
-	}
-
-	versionSet, err := lookupVersionSetForAdd(data, stamp)
+	versionSet, err := lookupVersionSetForAdd(data, buildId)
 	if err != nil {
 		return nil, err
 	}

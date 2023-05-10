@@ -153,6 +153,11 @@ func addWorkflowTaskToMatching(
 		return err
 	}
 
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		ms.GetWorkerVersionStamp(),
+		ms.GetLastWorkflowTaskStartedEventID(),
+	)
+
 	_, err = matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: nsID.String(),
 		Execution: &commonpb.WorkflowExecution{
@@ -163,8 +168,7 @@ func addWorkflowTaskToMatching(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: taskScheduleToStartTimeout,
 		Clock:                  clock,
-		// TODO: is it ever possible that this is the first workflow task?
-		IsFirstWorkflowTask: ms.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID,
+		VersionDirective:       directive,
 	})
 	if err != nil {
 		return err

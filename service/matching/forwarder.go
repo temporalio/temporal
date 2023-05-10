@@ -154,8 +154,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			Source:                 task.source,
 			ScheduleToStartTimeout: &expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.FullName(),
-			WorkerVersionStamp:     task.event.Data.GetWorkerVersionStamp(),
-			IsFirstWorkflowTask:    task.event.Data.GetIsFirstWorkflowTask(),
+			VersionDirective:       task.event.Data.GetVersionDirective(),
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -170,7 +169,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			Source:                 task.source,
 			ScheduleToStartTimeout: &expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.FullName(),
-			WorkerVersionStamp:     task.event.Data.GetWorkerVersionStamp(),
+			VersionDirective:       task.event.Data.GetVersionDirective(),
 		})
 	default:
 		return errInvalidTaskQueueType

@@ -29,8 +29,10 @@ import (
 	"errors"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -108,7 +110,7 @@ type (
 
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
-		workerVersionStamp                 *commonpb.WorkerVersionStamp
+		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
 
 	workflowTaskPostActionInfo struct {
@@ -116,8 +118,7 @@ type (
 
 		workflowTaskScheduleToStartTimeout int64
 		taskqueue                          taskqueuepb.TaskQueue
-		workerVersionStamp                 *commonpb.WorkerVersionStamp
-		isFirstWorkflowTask                bool
+		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
 
 	startChildExecutionPostActionInfo struct {
@@ -152,10 +153,18 @@ func newActivityTaskPostActionInfo(
 		return nil, err
 	}
 
+	// TODO: factor out
+	var directive taskqueuespb.TaskVersionDirective
+	if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetBuildId() != "" {
+		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	} else {
+		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	}
+
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
-		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
+		versionDirective:                   &directive,
 	}, nil
 }
 
@@ -169,11 +178,19 @@ func newActivityRetryTimePostActionInfo(
 		return nil, err
 	}
 
+	// TODO: factor out
+	var directive taskqueuespb.TaskVersionDirective
+	if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetBuildId() != "" {
+		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	} else { // use default
+		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	}
+
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
-		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
+		versionDirective:                   &directive,
 	}, nil
 }
 
@@ -187,12 +204,20 @@ func newWorkflowTaskPostActionInfo(
 		return nil, err
 	}
 
+	// TODO: factor out
+	var directive taskqueuespb.TaskVersionDirective
+	if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetBuildId() != "" {
+		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	} else if mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
+		// first workflow task
+		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	}
+
 	return &workflowTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
-		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
-		isFirstWorkflowTask:                mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID,
+		versionDirective:                   &directive,
 	}, nil
 }
 

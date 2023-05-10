@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2647,6 +2649,15 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		timeout = timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout)
 	}
 
+	var directive taskqueuespb.TaskVersionDirective
+	if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetBuildId() != "" {
+		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	} else if mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
+		// first workflow task
+		// TODO: do we need the empty struct inside to get this to encode correctly?
+		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	}
+
 	return &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
@@ -2657,8 +2668,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: &timeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
-		WorkerVersionStamp:     mutableState.GetWorkerVersionStamp(),
-		IsFirstWorkflowTask:    mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID,
+		VersionDirective:       directive,
 	}
 }
 

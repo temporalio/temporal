@@ -303,9 +303,10 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 	return getSetID(set), nil
 }
 
-func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb.WorkerVersionStamp) (string, error) {
+// For this function, buildId == "" means "use default"
+func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string) (string, error) {
 	var set *persistencespb.CompatibleVersionSet
-	if stamp == nil {
+	if buildId == "" {
 		// If this is a new workflow, assign it to the latest version.
 		// (If it's an unversioned workflow that has already completed one or more tasks, then
 		// leave it on the unversioned one. That case is handled already before we get here.)
@@ -317,7 +318,7 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb
 	} else {
 		// For add, any version in the compatible set maps to the set.
 		// Note data may be nil here, findVersion will return -1 then.
-		setIdx, _ := findVersion(data, stamp.BuildId)
+		setIdx, _ := findVersion(data, buildId)
 		if setIdx < 0 {
 			// A workflow has a build ID set, but we don't know about that build ID. This can
 			// happen in replication scenario: the workflow itself was migrated and we failed
@@ -330,7 +331,7 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb
 			// this set? we can do that on the root. on other partitions... let's notify the
 			// root?
 			// TODO: add metric and log to make this situation visible
-			guessedSetId := hashBuildId(stamp.BuildId)
+			guessedSetId := hashBuildId(buildId)
 			return guessedSetId, nil
 		}
 		set = data.VersionSets[setIdx]
