@@ -282,13 +282,15 @@ func (mr *MockExecutableTaskTrackerMockRecorder) LowWatermark() *gomock.Call {
 }
 
 // TrackTasks mocks base method.
-func (m *MockExecutableTaskTracker) TrackTasks(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) {
+func (m *MockExecutableTaskTracker) TrackTasks(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{highWatermarkInfo}
 	for _, a := range tasks {
 		varargs = append(varargs, a)
 	}
-	m.ctrl.Call(m, "TrackTasks", varargs...)
+	ret := m.ctrl.Call(m, "TrackTasks", varargs...)
+	ret0, _ := ret[0].([]TrackableExecutableTask)
+	return ret0
 }
 
 // TrackTasks indicates an expected call of TrackTasks.
