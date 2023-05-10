@@ -39,27 +39,27 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
-type mockRegStore struct {
-	update.RegistryStore
+type mockUpdateStore struct {
+	update.UpdateStore
 	GetAcceptedWorkflowExecutionUpdateIDsFunc func(context.Context) []string
 	GetUpdateInfoFunc                         func(context.Context, string) (*persistencespb.UpdateInfo, bool)
 	GetUpdateOutcomeFunc                      func(context.Context, string) (*updatepb.Outcome, error)
 }
 
-func (m mockRegStore) GetAcceptedWorkflowExecutionUpdateIDs(
+func (m mockUpdateStore) GetAcceptedWorkflowExecutionUpdateIDs(
 	ctx context.Context,
 ) []string {
 	return m.GetAcceptedWorkflowExecutionUpdateIDsFunc(ctx)
 }
 
-func (m mockRegStore) GetUpdateInfo(
+func (m mockUpdateStore) GetUpdateInfo(
 	ctx context.Context,
 	updateID string,
 ) (*persistencespb.UpdateInfo, bool) {
 	return m.GetUpdateInfoFunc(ctx, updateID)
 }
 
-func (m mockRegStore) GetUpdateOutcome(
+func (m mockUpdateStore) GetUpdateOutcome(
 	ctx context.Context,
 	updateID string,
 ) (*updatepb.Outcome, error) {
@@ -69,7 +69,7 @@ func (m mockRegStore) GetUpdateOutcome(
 func TestFind(t *testing.T) {
 	t.Parallel()
 	updateID := t.Name() + "-update-id"
-	store := mockRegStore{
+	store := mockUpdateStore{
 		GetAcceptedWorkflowExecutionUpdateIDsFunc: func(context.Context) []string {
 			return nil
 		},
@@ -96,7 +96,7 @@ func TestHasOutgoing(t *testing.T) {
 	t.Parallel()
 	var (
 		updateID = t.Name() + "-update-id"
-		store    = mockRegStore{
+		store    = mockUpdateStore{
 			GetAcceptedWorkflowExecutionUpdateIDsFunc: func(context.Context) []string {
 				return nil
 			},
@@ -143,7 +143,7 @@ func TestFindOrCreate(t *testing.T) {
 			},
 		}
 		// make a store with 1 accepted and 1 completed update
-		store = mockRegStore{
+		store = mockUpdateStore{
 			GetAcceptedWorkflowExecutionUpdateIDsFunc: func(context.Context) []string {
 				return []string{acceptedUpdateID}
 			},
@@ -204,7 +204,7 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 	t.Parallel()
 	var (
 		storedAcceptedUpdateID = t.Name() + "-accepted-update-id"
-		regStore               = mockRegStore{
+		regStore               = mockUpdateStore{
 			GetAcceptedWorkflowExecutionUpdateIDsFunc: func(context.Context) []string {
 				return []string{storedAcceptedUpdateID}
 			},
@@ -234,7 +234,7 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 func TestMessageGathering(t *testing.T) {
 	t.Parallel()
 	var (
-		regStore = mockRegStore{
+		regStore = mockUpdateStore{
 			GetAcceptedWorkflowExecutionUpdateIDsFunc: func(context.Context) []string {
 				return nil
 			},

@@ -64,9 +64,9 @@ type (
 		Len() int
 	}
 
-	// RegistryStore represents the update package's requirements for writing
+	// UpdateStore represents the update package's requirements for writing
 	// events and restoring ephemeral state from an event index.
-	RegistryStore interface {
+	UpdateStore interface {
 		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
 		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
@@ -75,7 +75,7 @@ type (
 	RegistryImpl struct {
 		mu              sync.RWMutex
 		updates         map[string]*Update
-		store           RegistryStore
+		store           UpdateStore
 		instrumentation instrumentation
 	}
 
@@ -112,7 +112,7 @@ func WithTracerProvider(t trace.TracerProvider) regOpt {
 
 var _ Registry = (*RegistryImpl)(nil)
 
-func NewRegistry(store RegistryStore, opts ...regOpt) *RegistryImpl {
+func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 	r := &RegistryImpl{
 		updates:         make(map[string]*Update),
 		store:           store,
