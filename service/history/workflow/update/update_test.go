@@ -315,20 +315,20 @@ func TestMessageOutput(t *testing.T) {
 
 	t.Run("before request received", func(t *testing.T) {
 		msgs := make([]*protocolpb.Message, 0)
-		upd.PollOutboundMessages(&msgs)
+		upd.ReadOutgoingMessages(&msgs)
 		require.Empty(t, msgs)
 	})
 	t.Run("requested", func(t *testing.T) {
 		require.NoError(t, upd.OnMessage(context.TODO(), &req, store))
 		effects.Apply(context.TODO())
 		msgs := make([]*protocolpb.Message, 0)
-		upd.PollOutboundMessages(&msgs)
+		upd.ReadOutgoingMessages(&msgs)
 		require.Len(t, msgs, 1)
 	})
 	t.Run("after requested", func(t *testing.T) {
 		upd := update.NewAccepted(updateID, ignoreCompletion)
 		msgs := make([]*protocolpb.Message, 0)
-		upd.PollOutboundMessages(&msgs)
+		upd.ReadOutgoingMessages(&msgs)
 		require.Empty(t, msgs)
 	})
 }
@@ -399,7 +399,7 @@ func TestDuplicateRequestNoError(t *testing.T) {
 		"a second request message should be ignored, not cause an error")
 
 	msgs := make([]*protocolpb.Message, 0)
-	upd.PollOutboundMessages(&msgs)
+	upd.ReadOutgoingMessages(&msgs)
 	require.Empty(t, msgs)
 }
 

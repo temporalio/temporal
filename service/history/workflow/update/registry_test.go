@@ -252,7 +252,7 @@ func TestMessageGathering(t *testing.T) {
 	require.NoError(t, err)
 	wftStartedEventID := int64(123)
 
-	msgs, err := reg.CreateOutgoingMessages(wftStartedEventID)
+	msgs, err := reg.ReadOutgoingMessages(wftStartedEventID)
 	require.NoError(t, err)
 	require.Empty(t, msgs)
 
@@ -264,7 +264,7 @@ func TestMessageGathering(t *testing.T) {
 	}, evStore)
 	require.NoError(t, err)
 
-	msgs, err = reg.CreateOutgoingMessages(wftStartedEventID)
+	msgs, err = reg.ReadOutgoingMessages(wftStartedEventID)
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 
@@ -274,7 +274,7 @@ func TestMessageGathering(t *testing.T) {
 	}, evStore)
 	require.NoError(t, err)
 
-	msgs, err = reg.CreateOutgoingMessages(wftStartedEventID)
+	msgs, err = reg.ReadOutgoingMessages(wftStartedEventID)
 	require.NoError(t, err)
 	require.Len(t, msgs, 2)
 

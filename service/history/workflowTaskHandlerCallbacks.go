@@ -851,7 +851,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		}
 	}
 
-	response.Messages, err = updateRegistry.CreateOutgoingMessages(workflowTask.StartedEventID)
+	response.Messages, err = updateRegistry.ReadOutgoingMessages(workflowTask.StartedEventID)
 	if err != nil {
 		return nil, err
 	}

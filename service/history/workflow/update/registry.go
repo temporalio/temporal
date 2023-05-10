@@ -48,9 +48,9 @@ type (
 		// new update it is absent.
 		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
 
-		// CreateOutgoingMessages polls each registered Update for outbound
+		// ReadOutoundMessages polls each registered Update for outbound
 		// messages and returns them.
-		CreateOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
+		ReadOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
 
 		// HasIncomplete returns true if the registry has Updates that have not
 		// yet completed or are not at least provisionally complete.
@@ -168,14 +168,14 @@ func (r *RegistryImpl) HasOutgoing() bool {
 	return false
 }
 
-func (r *RegistryImpl) CreateOutgoingMessages(
+func (r *RegistryImpl) ReadOutgoingMessages(
 	startedEventID int64,
 ) ([]*protocolpb.Message, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var out []*protocolpb.Message
 	for _, upd := range r.updates {
-		upd.PollOutboundMessages(&out)
+		upd.ReadOutgoingMessages(&out)
 	}
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the

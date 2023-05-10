@@ -202,9 +202,9 @@ func (u *Update) OnMessage(
 	}
 }
 
-// PollOutboundMessages loads any oubound messages from this Update state
+// ReadOutgoingMessages loads any oubound messages from this Update state
 // machine into the output slice provided.
-func (u *Update) PollOutboundMessages(out *[]*protocolpb.Message) {
+func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message) {
 	if !u.state.Is(stateRequested) {
 		// Update only sends messages to the workflow when it is in
 		// stateRequested
@@ -217,7 +217,7 @@ func (u *Update) PollOutboundMessages(out *[]*protocolpb.Message) {
 // other than stateAdmitted then it just early returns a nil error. This
 // effectively gives us update request deduplication by update ID. If the Update
 // is in stateAdmitted then it builds a protocolpb.Message that will be sent on
-// ensuing calls to PollOutboundMessages until the update is accepted.
+// ensuing calls to PollOutgoingMessages until the update is accepted.
 func (u *Update) onRequestMsg(
 	ctx context.Context,
 	req *updatepb.Request,
