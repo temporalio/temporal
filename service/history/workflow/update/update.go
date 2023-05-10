@@ -316,7 +316,7 @@ func (u *Update) onResponseMsg(
 	res *updatepb.Response,
 	eventStore EventStore,
 ) error {
-	if err := u.checkState(res, stateProvisionallyAccepted, stateAccepted); err != nil {
+	if err := u.checkStateSet(res, stateSet(stateProvisionallyAccepted|stateAccepted)); err != nil {
 		return err
 	}
 	if err := validateResponseMsg(u.id, res); err != nil {
@@ -337,15 +337,19 @@ func (u *Update) onResponseMsg(
 }
 
 func (u *Update) completedOrProvisionallyCompleted() bool {
-	return u.state.IsOneOf(stateCompleted, stateProvisionallyCompleted)
+	return u.state.Matches(stateSet(stateCompleted | stateProvisionallyCompleted))
 }
 
 func (u *Update) hasOutgoingMessage() bool {
 	return u.state.Is(stateRequested)
 }
 
-func (u *Update) checkState(msg proto.Message, allowedStates ...state) error {
-	if u.state.IsOneOf(allowedStates...) {
+func (u *Update) checkState(msg proto.Message, expected state) error {
+	return u.checkStateSet(msg, stateSet(expected))
+}
+
+func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
+	if u.state.Matches(allowed) {
 		return nil
 	}
 	return invalidArgf("invalid state transition attempted: "+
@@ -355,8 +359,7 @@ func (u *Update) checkState(msg proto.Message, allowedStates ...state) error {
 // setState assigns the current state to a new value returning the original
 // value.
 func (u *Update) setState(newState state) state {
-	currState := u.state.Load()
-	u.instrumentation.StateChange(u.id, currState, newState)
-	u.state.Set(newState)
-	return currState
+	prevState := u.state.Set(newState)
+	u.instrumentation.StateChange(u.id, prevState, newState)
+	return prevState
 }

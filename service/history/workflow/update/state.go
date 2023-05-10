@@ -26,10 +26,13 @@ package update
 
 import "sync/atomic"
 
-type state int32
+type (
+	state    uint32
+	stateSet uint32
+)
 
 const (
-	stateAdmitted state = iota
+	stateAdmitted state = (1 << iota)
 	stateProvisionallyRequested
 	stateRequested
 	stateProvisionallyAccepted
@@ -59,23 +62,14 @@ func (s state) String() string {
 }
 
 func (s *state) Is(other state) bool {
-	return state(atomic.LoadInt32((*int32)(s))) == other
+	return state(atomic.LoadUint32((*uint32)(s))) == other
 }
 
-func (s *state) Set(other state) {
-	atomic.StoreInt32((*int32)(s), int32(other))
+func (s *state) Set(other state) state {
+	return state(atomic.SwapUint32((*uint32)(s), uint32(other)))
 }
 
-func (s *state) Load() state {
-	return state(atomic.LoadInt32((*int32)(s)))
-}
-
-func (s *state) IsOneOf(ss ...state) bool {
-	actual := s.Load()
-	for _, s := range ss {
-		if s == actual {
-			return true
-		}
-	}
-	return false
+func (s *state) Matches(mask stateSet) bool {
+	actual := atomic.LoadUint32((*uint32)(s))
+	return actual&uint32(mask) == actual
 }
