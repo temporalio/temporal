@@ -35,7 +35,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -792,7 +791,9 @@ func MakeVersionDirectiveForWorkflowTask(
 		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
 	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
 		// first workflow task
-		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+		// TODO: look at workflow execution started attributes to decide if we should use
+		// default or stay on existing version (for child workflow and continue-as-new)
+		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{}
 	}
 	return &directive
 }
@@ -801,11 +802,9 @@ func MakeVersionDirectiveForActivityTask(
 	stamp *commonpb.WorkerVersionStamp,
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
+	// TODO: look at activity task scheduled attributes to decide if we should do UseDefault
 	if stamp.GetBuildId() != "" {
 		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
-	} else {
-		// FIXME: when should this be "unversioned"?
-		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
 	}
 	return &directive
 }
