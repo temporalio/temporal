@@ -243,11 +243,14 @@ func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool
 
 	if info, ok := r.store.GetUpdateInfo(ctx, id); ok {
 		if info.GetCompletedPointer() != nil {
+			outcome, err := r.store.GetUpdateOutcome(ctx, id)
 			// Completed, create the Update object but do not add to registry. this
 			// should not happen often.
-			return newCompleted(id, func(ctx context.Context) (*updatepb.Outcome, error) {
-				return r.store.GetUpdateOutcome(ctx, id)
-			}, withInstrumentation(&r.instrumentation)), true
+			return newCompleted(
+				id,
+				outcomeOrErr{outcome: outcome, err: err},
+				withInstrumentation(&r.instrumentation),
+			), true
 		}
 	}
 	return nil, false

@@ -59,7 +59,8 @@ func Invoke(
 		if err != nil {
 			return nil, false, err
 		}
-		defer wfctx.GetReleaseFn()(nil)
+		release := wfctx.GetReleaseFn()
+		defer release(nil)
 		upd, found := wfctx.GetUpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
 		return upd, found, nil
 	}()

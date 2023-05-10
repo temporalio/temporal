@@ -126,15 +126,21 @@ func newAccepted(id string, onComplete func(), opts ...updateOpt) *Update {
 
 func newCompleted(
 	id string,
-	fetchOutcome func(ctx context.Context) (*updatepb.Outcome, error),
+	fetchResult outcomeOrErr,
 	opts ...updateOpt,
 ) *Update {
+	makeOutcomeFuture := func() future.Future[*updatepb.Outcome] {
+		if fetchResult.err != nil {
+			return future.NewReadyFuture[*updatepb.Outcome](nil, fetchResult.err)
+		}
+		return future.NewReadyFuture(fetchResult.outcome, nil)
+	}
 	upd := &Update{
 		id:              id,
 		state:           stateCompleted,
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
-		outcome:         lazyOutcome(fetchOutcome),
+		outcome:         makeOutcomeFuture(),
 	}
 	for _, opt := range opts {
 		opt(upd)
