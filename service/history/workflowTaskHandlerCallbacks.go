@@ -391,6 +391,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	var effects effect.Buffer
 	defer func() {
+		// code in this file and workflowTaskHandler is inconsistent in the way
+		// errors are returned - some functions which appear to return error
+		// actually return nil in all cases and instead set a member variable
+		// that should be observed by other collaborating code (e.g.
+		// workflowtaskHandler.workflowTaskFailedCause). That made me paranoid
+		// about the way this function exits so while we have this defer here
+		// there is _also_ code to call effects.Cancel at key points.
 		if retError != nil {
 			effects.Cancel(ctx)
 		}
