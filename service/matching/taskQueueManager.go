@@ -699,6 +699,12 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		return nil
 	}
 
+	var resolveInitialFetch func(error)
+	resolveInitialFetch = func(err error) {
+		c.userDataInitialFetch.Set(struct{}{}, err)
+		resolveInitialFetch = func(error) {}
+	}
+
 	degree := c.config.ForwarderMaxChildrenPerNode()
 	var target string
 	if parent, err := c.taskQueueID.Parent(degree); err == nil {
@@ -747,6 +753,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		if res.GetUserData() != nil {
 			c.db.setUserDataForNonOwningPartition(res.GetUserData())
 		}
+		resolveInitialFetch(nil)
 		return nil
 	}
 
