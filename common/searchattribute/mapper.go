@@ -124,11 +124,10 @@ func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 	if !m.enableMapperFromNamespace {
 		return &noopMapper{}, nil
 	}
-	ns, err := m.namespaceRegistry.GetNamespace(nsName)
+	saMapper, err := m.namespaceRegistry.GetCustomSearchAttributesMapper(nsName)
 	if err != nil {
 		return nil, err
 	}
-	saMapper := ns.CustomSearchAttributesMapper()
 	// if there's an error, it returns an empty object, which is expected here
 	emptyStringNameTypeMap, _ := m.searchAttributesProvider.GetSearchAttributes("", false)
 	return &backCompMapper_v1_20{

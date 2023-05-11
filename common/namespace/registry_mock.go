@@ -181,6 +181,21 @@ func (mr *MockRegistryMockRecorder) GetCacheSize() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCacheSize", reflect.TypeOf((*MockRegistry)(nil).GetCacheSize))
 }
 
+// GetCustomSearchAttributesMapper mocks base method.
+func (m *MockRegistry) GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCustomSearchAttributesMapper", name)
+	ret0, _ := ret[0].(CustomSearchAttributesMapper)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCustomSearchAttributesMapper indicates an expected call of GetCustomSearchAttributesMapper.
+func (mr *MockRegistryMockRecorder) GetCustomSearchAttributesMapper(name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomSearchAttributesMapper", reflect.TypeOf((*MockRegistry)(nil).GetCustomSearchAttributesMapper), name)
+}
+
 // GetNamespace mocks base method.
 func (m *MockRegistry) GetNamespace(name Name) (*Namespace, error) {
 	m.ctrl.T.Helper()
