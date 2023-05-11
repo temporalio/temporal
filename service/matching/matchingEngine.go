@@ -830,7 +830,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 		if deadline, ok := ctx.Deadline(); ok {
 			timeout = util.Min(timeout, time.Until(deadline))
 		}
-		timeout = util.Max(timeout-5*time.Second, 5*time.Second)
+		timeout = util.Max(timeout-5*time.Second, 1*time.Second)
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -860,9 +860,11 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 			// long-poll: wait for data to change/appear
 			select {
 			case <-ctx.Done():
+				resp.TaskQueueHasUserData = userData != nil
+				return resp, nil
 			case <-userDataChanged:
+				continue
 			}
-			continue
 		}
 		if userData != nil {
 			resp.TaskQueueHasUserData = true
