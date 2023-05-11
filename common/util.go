@@ -787,7 +787,7 @@ func MakeVersionDirectiveForWorkflowTask(
 	lastWorkflowTaskStartedEventID int64,
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
-	if stamp.GetBuildId() != "" {
+	if stamp.GetUseVersioning() && stamp.GetBuildId() != "" {
 		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
 	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
 		// first workflow task
