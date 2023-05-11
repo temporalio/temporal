@@ -489,6 +489,15 @@ func TestAddTaskStandby(t *testing.T) {
 	require.False(t, syncMatch)
 }
 
+/*
+does own and initial fetch fails
+does own and initial fetch succeeds
+doesn't own and fetches, fetch succeeds
+doesn't own and fetches, fetch fails then succeeds
+doesn't own and fetches, fetch succeeds immediately (back off slowly)
+chain of fetches up tree
+*/
+
 /* FIXME
 func TestTaskQueuePartitionFetchesUserDataFromRootPartitionOnInit(t *testing.T) {
 	controller := gomock.NewController(t)

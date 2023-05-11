@@ -691,6 +691,19 @@ func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFu
 	return c.callerInfoContext(ctx), cancel
 }
 
+func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
+	degree := c.config.ForwarderMaxChildrenPerNode()
+	parent, err := c.taskQueueID.Parent(degree)
+	if err == tqname.ErrNoParent {
+		// we're the root activity task queue, ask the root workflow task queue
+		return c.taskQueueID.FullName(), nil
+	} else if err != nil {
+		// invalid degree
+		return "", err
+	}
+	return parent.FullName(), nil
+}
+
 func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
@@ -705,15 +718,8 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		resolveInitialFetch = func(error) {}
 	}
 
-	degree := c.config.ForwarderMaxChildrenPerNode()
-	var target string
-	if parent, err := c.taskQueueID.Parent(degree); err == nil {
-		target = parent.FullName()
-	} else if err == tqname.ErrNoParent {
-		// we're the root activity task queue, ask the root workflow task queue
-		target = c.taskQueueID.FullName()
-	} else {
-		// invalid degree
+	fetchSource, err := c.userDataFetchSource()
+	if err != nil {
 		return err
 	}
 
@@ -721,12 +727,9 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 
 	const (
 		// TODO: dynamic config
-		callTimeout    = 5 * time.Minute
-		maxMinWaitTime = callTimeout / 2
-		startWaitTime  = 1 * time.Second
+		callTimeout   = 5 * time.Minute
+		startWaitTime = 1 * time.Second
 	)
-
-	minWaitTime := startWaitTime
 
 	op := func(ctx context.Context) error {
 		knownUserData, _, err := c.db.GetUserData(ctx)
@@ -739,7 +742,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 
 		res, err := c.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              c.taskQueueID.namespaceID.String(),
-			TaskQueue:                target,
+			TaskQueue:                fetchSource,
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
 			WaitNewData:              true,
 		})
@@ -757,9 +760,11 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		return nil
 	}
 
+	minWaitTime := startWaitTime
+
 	for ctx.Err() == nil {
 		start := time.Now()
-		backoff.ThrottleRetryContext(ctx, op, policy, nil)
+		_ = backoff.ThrottleRetryContext(ctx, op, policy, nil)
 		elapsed := time.Since(start)
 
 		// In general we want to start a new call immediately on completion of the previous
@@ -771,7 +776,9 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 			case <-ctx.Done():
 			case <-time.After(minWaitTime - elapsed):
 			}
-			minWaitTime = util.Min(minWaitTime*2, maxMinWaitTime)
+			// Don't let this get near callTimeout, otherwise we can't tell the difference
+			// between a fast reply and a timeout.
+			minWaitTime = util.Min(minWaitTime*2, callTimeout/2)
 		} else {
 			minWaitTime = startWaitTime
 		}

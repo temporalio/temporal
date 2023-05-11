@@ -830,6 +830,8 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 		if deadline, ok := ctx.Deadline(); ok {
 			timeout = util.Min(timeout, time.Until(deadline))
 		}
+		// TODO: dynamic config
+		timeout = util.Min(timeout, 5*time.Minute)
 		timeout = util.Max(timeout-5*time.Second, 1*time.Second)
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
