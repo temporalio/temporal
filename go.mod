@@ -12,7 +12,7 @@ require (
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.14.1
 	github.com/go-sql-driver/mysql v1.5.0
-	github.com/gocql/gocql v1.3.1
+	github.com/gocql/gocql v1.4.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.1
 	github.com/golang-jwt/jwt/v4 v4.4.3
@@ -21,7 +21,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/iancoleman/strcase v0.2.0
 	github.com/jmoiron/sqlx v1.3.4
-	github.com/jonboulle/clockwork v0.3.0
+	github.com/jonboulle/clockwork v0.4.0
 	github.com/lib/pq v1.10.7
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
@@ -48,6 +48,7 @@ require (
 	go.temporal.io/sdk v1.22.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.10.0
+	go.uber.org/automaxprocs v1.5.2
 	go.uber.org/fx v1.19.1
 	go.uber.org/multierr v1.9.0
 	go.uber.org/zap v1.24.0

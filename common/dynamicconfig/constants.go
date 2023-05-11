@@ -318,10 +318,8 @@ const (
 	MatchingSyncMatchWaitDuration = "matching.syncMatchWaitDuration"
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval = "matching.updateAckInterval"
-	// MatchingIdleTaskqueueCheckInterval is the IdleTaskqueueCheckInterval
-	MatchingIdleTaskqueueCheckInterval = "matching.idleTaskqueueCheckInterval"
-	// MaxTaskqueueIdleTime is the max time taskqueue being idle
-	MaxTaskqueueIdleTime = "matching.maxTaskqueueIdleTime"
+	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded
+	MatchingMaxTaskQueueIdleTime = "matching.maxTaskQueueIdleTime"
 	// MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends
 	MatchingOutstandingTaskAppendsThreshold = "matching.outstandingTaskAppendsThreshold"
 	// MatchingMaxTaskBatchSize is max batch size for task writer
@@ -462,6 +460,9 @@ const (
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 
+	// MemoryTimerProcessorSchedulerWorkerCount is the number of workers in the task scheduler for in memory timer processor.
+	MemoryTimerProcessorSchedulerWorkerCount = "history.memoryTimerProcessorSchedulerWorkerCount"
+
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -555,6 +556,9 @@ const (
 	// DurableArchivalEnabled is the flag to enable durable archival
 	DurableArchivalEnabled = "history.durableArchivalEnabled"
 
+	// WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.
+	WorkflowExecutionMaxInFlightUpdates = "history.maxInFlightUpdates"
+
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
 	// ReplicatorMaxSkipTaskCount is maximum number of tasks that can be skipped during tasks pagination due to not meeting filtering conditions (e.g. missed namespace).
@@ -573,8 +577,11 @@ const (
 	ReplicatorProcessorUpdateAckIntervalJitterCoefficient = "history.replicatorProcessorUpdateAckIntervalJitterCoefficient"
 	// ReplicatorProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for ReplicatorProcessor
 	ReplicatorProcessorEnablePriorityTaskProcessor = "history.replicatorProcessorEnablePriorityTaskProcessor"
-	// MaximumBufferedEventsBatch is max number of buffer event in mutable state
+	// MaximumBufferedEventsBatch is the maximum permissible number of buffered events for any given mutable state.
 	MaximumBufferedEventsBatch = "history.maximumBufferedEventsBatch"
+	// MaximumBufferedEventsSizeInBytes is the maximum permissible size of all buffered events for any given mutable
+	// state. The total size is determined by the sum of the size, in bytes, of each HistoryEvent proto.
+	MaximumBufferedEventsSizeInBytes = "history.maximumBufferedEventsSizeInBytes"
 	// MaximumSignalsPerExecution is max number of signals supported by single execution
 	MaximumSignalsPerExecution = "history.maximumSignalsPerExecution"
 	// ShardUpdateMinInterval is the minimal time interval which the shard info can be updated

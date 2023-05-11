@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
@@ -541,8 +542,14 @@ func (e *historyEngineImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.UpdateWorkflowExecutionRequest,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-
 	return updateworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker, e.matchingClient)
+}
+
+func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	req *historyservice.PollWorkflowExecutionUpdateRequest,
+) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	return pollupdate.Invoke(ctx, req, e.workflowConsistencyChecker)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
@@ -659,6 +666,10 @@ func (e *historyEngineImpl) NotifyNewTasks(
 			e.queueProcessors[category].NotifyNewTasks(tasksByCategory)
 		}
 	}
+}
+
+func (e *historyEngineImpl) AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	e.queueProcessors[tasks.CategoryMemoryTimer].NotifyNewTasks([]tasks.Task{task})
 }
 
 func (e *historyEngineImpl) GetReplicationMessages(

@@ -297,10 +297,6 @@ func (tr *taskReader) persistAckLevel(ctx context.Context) error {
 	return tr.tlMgr.db.UpdateState(ctx, ackLevel)
 }
 
-func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {
-	return time.Now().UTC().Sub(lastAddTime) <= tr.tlMgr.config.MaxTaskqueueIdleTime()
-}
-
 func (tr *taskReader) logger() log.Logger {
 	return tr.tlMgr.logger
 }

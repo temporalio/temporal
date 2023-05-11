@@ -117,7 +117,7 @@ type (
 		AddContinueAsNewEvent(context.Context, int64, int64, namespace.Name, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, MutableState, error)
 		AddWorkflowTaskCompletedEvent(*WorkflowTaskInfo, *workflowservice.RespondWorkflowTaskCompletedRequest, int) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskFailedEvent(workflowTask *WorkflowTaskInfo, cause enumspb.WorkflowTaskFailedCause, failure *failurepb.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*historypb.HistoryEvent, error)
-		AddWorkflowTaskScheduleToStartTimeoutEvent(int64) (*historypb.HistoryEvent, error)
+		AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddFirstWorkflowTaskScheduled(parentClock *clockspb.VectorClock, event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *time.Time, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
@@ -157,7 +157,7 @@ type (
 		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
-		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) ([]string, error)
+		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
 		GetWorkflowKey() definition.WorkflowKey
 		GetActivityByActivityID(string) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistencespb.ActivityInfo, bool)
@@ -200,6 +200,7 @@ type (
 		GetQueryRegistry() QueryRegistry
 		GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
@@ -280,6 +281,10 @@ type (
 		PopTasks() map[tasks.Category][]tasks.Task
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
+
+		SetSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error
+		CheckSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) bool
+		RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)

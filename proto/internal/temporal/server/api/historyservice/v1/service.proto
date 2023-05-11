@@ -284,6 +284,11 @@ service HistoryService {
     rpc UpdateWorkflowExecution(UpdateWorkflowExecutionRequest) returns (UpdateWorkflowExecutionResponse) {
     }
 
+    // (-- api-linter: core::0134=disabled
+    //     aip.dev/not-precedent: This service does not follow the update method API --)
+    rpc PollWorkflowExecutionUpdate(PollWorkflowExecutionUpdateRequest) returns (PollWorkflowExecutionUpdateResponse){
+    }
+
     rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
     }
 }

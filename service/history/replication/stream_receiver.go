@@ -228,11 +228,10 @@ func (r *StreamReceiver) processMessages(
 		)
 		highWatermark := streamResp.Resp.GetMessages().LastTaskId
 		highWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().LastTaskTime)
-		r.taskTracker.TrackTasks(WatermarkInfo{
+		for _, task := range r.taskTracker.TrackTasks(WatermarkInfo{
 			Watermark: highWatermark,
 			Timestamp: highWatermarkTime,
-		}, tasks...)
-		for _, task := range tasks {
+		}, tasks...) {
 			r.ProcessToolBox.TaskScheduler.Submit(task)
 		}
 	}

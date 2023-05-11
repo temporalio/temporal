@@ -162,6 +162,8 @@ type (
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
+		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
+
 		// do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
@@ -1999,13 +2001,13 @@ func (ms *MutableStateImpl) ReplicateWorkflowTaskTimedOutEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduleToStartTimeoutEvent(
-	scheduledEventID int64,
+	workflowTask *WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskScheduleToStartTimeoutEvent(scheduledEventID)
+	return ms.workflowTaskManager.AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
@@ -3274,14 +3276,19 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(updResp *up
 
 func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdateIDs(
 	ctx context.Context,
-) ([]string, error) {
+) []string {
 	out := make([]string, 0)
 	for id, updateInfo := range ms.updateInfos {
 		if updateInfo.GetAcceptancePointer() != nil {
 			out = append(out, id)
 		}
 	}
-	return out, nil
+	return out
+}
+
+func (ms *MutableStateImpl) GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool) {
+	info, ok := ms.updateInfos[updateID]
+	return info, ok
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
@@ -3992,6 +3999,27 @@ func (ms *MutableStateImpl) GetUpdateCondition() (int64, int64) {
 	return ms.nextEventIDInDB, ms.dbRecordVersion
 }
 
+func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
+	task *tasks.WorkflowTaskTimeoutTask,
+) error {
+	ms.speculativeWorkflowTaskTimeoutTask = task
+	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
+}
+
+func (ms *MutableStateImpl) CheckSpeculativeWorkflowTaskTimeoutTask(
+	task *tasks.WorkflowTaskTimeoutTask,
+) bool {
+	return ms.speculativeWorkflowTaskTimeoutTask == task
+}
+
+func (ms *MutableStateImpl) RemoveSpeculativeWorkflowTaskTimeoutTask() {
+	if ms.speculativeWorkflowTaskTimeoutTask != nil {
+		// Cancelling task prevents it from being submitted to scheduler in memoryScheduledQueue.
+		ms.speculativeWorkflowTaskTimeoutTask.Cancel()
+		ms.speculativeWorkflowTaskTimeoutTask = nil
+	}
+}
+
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
 	return ms.executionState.State, ms.executionState.Status
 }
@@ -4601,6 +4629,17 @@ func (ms *MutableStateImpl) closeTransactionWithPolicyCheck(
 	}
 }
 
+func (ms *MutableStateImpl) BufferSizeAcceptable() bool {
+	if ms.hBuilder.NumBufferedEvents() > ms.config.MaximumBufferedEventsBatch() {
+		return false
+	}
+
+	if ms.hBuilder.SizeInBytesOfBufferedEvents() > ms.config.MaximumBufferedEventsSizeInBytes() {
+		return false
+	}
+	return true
+}
+
 func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 	transactionPolicy TransactionPolicy,
 ) error {
@@ -4610,7 +4649,7 @@ func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 		return nil
 	}
 
-	if ms.hBuilder.BufferEventSize() < ms.config.MaximumBufferedEventsBatch() {
+	if ms.BufferSizeAcceptable() {
 		return nil
 	}
 

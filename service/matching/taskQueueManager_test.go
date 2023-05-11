@@ -352,17 +352,6 @@ func createTestTaskQueueManagerWithConfig(
 	return tlMgr.(*taskQueueManagerImpl), nil
 }
 
-func TestIsTaskAddedRecently(t *testing.T) {
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tlm := mustCreateTestTaskQueueManager(t, controller)
-	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC()))
-	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC().Add(-tlm.config.MaxTaskqueueIdleTime())))
-	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC().Add(1*time.Second)))
-	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Time{}))
-}
-
 func TestDescribeTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -425,7 +414,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	defer controller.Finish()
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
+	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 

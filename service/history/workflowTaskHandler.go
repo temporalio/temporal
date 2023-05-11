@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gogo/protobuf/types"
@@ -37,8 +38,8 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
-	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/workflow/update"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -69,13 +70,14 @@ type (
 
 		// internal state
 		hasBufferedEvents               bool
-		hasPendingUpdates               bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
 		newMutableState                 workflow.MutableState
 		stopProcessing                  bool // should stop processing any more commands
 		mutableState                    workflow.MutableState
+		effects                         effect.Controller
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
+		updateRegistry                  update.Registry
 
 		// validation
 		attrValidator                  *commandAttrValidator
@@ -114,6 +116,8 @@ func newWorkflowTaskHandler(
 	identity string,
 	workflowTaskCompletedID int64,
 	mutableState workflow.MutableState,
+	updateRegistry update.Registry,
+	effects effect.Controller,
 	attrValidator *commandAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
@@ -123,7 +127,6 @@ func newWorkflowTaskHandler(
 	shard shard.Context,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEvents bool,
-	hasPendingUpdates bool,
 ) *workflowTaskHandlerImpl {
 
 	return &workflowTaskHandlerImpl{
@@ -132,13 +135,14 @@ func newWorkflowTaskHandler(
 
 		// internal state
 		hasBufferedEvents:               hasBufferedEvents,
-		hasPendingUpdates:               hasPendingUpdates,
 		workflowTaskFailedCause:         nil,
 		activityNotStartedCancelled:     false,
 		newMutableState:                 nil,
 		stopProcessing:                  false,
 		mutableState:                    mutableState,
+		effects:                         effects,
 		initiatedChildExecutionsInBatch: make(map[string]struct{}),
+		updateRegistry:                  updateRegistry,
 
 		// validation
 		attrValidator:                  attrValidator,
@@ -157,6 +161,7 @@ func newWorkflowTaskHandler(
 func (handler *workflowTaskHandlerImpl) handleCommands(
 	ctx context.Context,
 	commands []*commandpb.Command,
+	earlyDeliverMessages func(context.Context) error,
 ) ([]workflowTaskResponseMutation, error) {
 	if err := handler.attrValidator.validateCommandSequence(
 		commands,
@@ -167,7 +172,7 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	var mutations []workflowTaskResponseMutation
 	var postActions []commandPostAction
 	for _, command := range commands {
-		response, err := handler.handleCommand(ctx, command)
+		response, err := handler.handleCommand(ctx, command, earlyDeliverMessages)
 		if err != nil || handler.stopProcessing {
 			return nil, err
 		}
@@ -194,12 +199,20 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	return mutations, nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, command *commandpb.Command) (*handleCommandResponse, error) {
+//revive:disable:cyclomatic grandfathered
+func (handler *workflowTaskHandlerImpl) handleCommand(
+	ctx context.Context,
+	command *commandpb.Command,
+	earlyDeliverMessages func(context.Context) error,
+) (*handleCommandResponse, error) {
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
+		if err := earlyDeliverMessages(ctx); err != nil {
+			return nil, err
+		}
 		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
@@ -249,7 +262,6 @@ func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, comma
 func (handler *workflowTaskHandlerImpl) handleMessages(
 	ctx context.Context,
 	messages []*protocolpb.Message,
-	updateRegistry update.Registry,
 ) error {
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		// Workflow might get completed within the same WT after processing corresponding command.
@@ -260,12 +272,8 @@ func (handler *workflowTaskHandlerImpl) handleMessages(
 		return nil
 	}
 
-	if err := updateRegistry.ValidateIncomingMessages(messages); err != nil {
-		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
-	}
-
 	for _, message := range messages {
-		err := handler.handleMessage(ctx, message)
+		err := handler.handleMessage(ctx, message, handler.updateRegistry)
 		if err != nil || handler.stopProcessing {
 			return err
 		}
@@ -274,29 +282,45 @@ func (handler *workflowTaskHandlerImpl) handleMessages(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleMessage(ctx context.Context, message *protocolpb.Message) error {
+func (handler *workflowTaskHandlerImpl) handleMessage(
+	ctx context.Context,
+	message *protocolpb.Message,
+	updateRegistry update.Registry,
+) error {
+	bodyTypeName, err := types.AnyMessageName(message.GetBody())
+	if err != nil {
+		return serviceerror.NewInvalidArgument(err.Error())
+	}
+	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
+		// TODO (alex-update): Should use MessageTypeTag here but then it needs to be another metric name too.
+		metrics.CommandTypeTag(bodyTypeName),
+		message.Body.Size(),
+		fmt.Sprintf("Message type %v exceeds size limit.", bodyTypeName),
+	); err != nil {
+		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
+	}
 
-	if types.Is(message.GetBody(), (*updatepb.Acceptance)(nil)) {
-		var acceptance updatepb.Acceptance
-		err := types.UnmarshalAny(message.GetBody(), &acceptance)
-		if err != nil {
-			return err
+	protocolTypeName := "__unknown"
+	if lastDot := strings.LastIndex(bodyTypeName, "."); lastDot > -1 {
+		protocolTypeName = bodyTypeName[0:lastDot]
+	}
+
+	switch protocolTypeName {
+	case update.ProtocolV1:
+		upd, ok := updateRegistry.Find(ctx, message.ProtocolInstanceId)
+		if !ok {
+			return handler.failWorkflowTask(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
+				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
 		}
-		return handler.handleMessageAcceptWorkflowExecutionUpdate(ctx, message.GetProtocolInstanceId(), &acceptance)
-	} else if types.Is(message.GetBody(), (*updatepb.Response)(nil)) {
-		var response updatepb.Response
-		err := types.UnmarshalAny(message.GetBody(), &response)
-		if err != nil {
-			return err
+		if err := upd.OnMessage(ctx, message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
+			return handler.failWorkflowTaskOnInvalidArgument(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 		}
-		return handler.handleMessageCompleteWorkflowExecutionUpdate(ctx, message.GetProtocolInstanceId(), &response)
-	} else if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
-		var rejection updatepb.Rejection
-		err := types.UnmarshalAny(message.GetBody(), &rejection)
-		if err != nil {
-			return err
-		}
-		return handler.handleMessageRejectWorkflowExecutionUpdate(ctx, message.GetProtocolInstanceId(), &rejection)
+	default:
+		return handler.failWorkflowTask(
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
+			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %q", protocolTypeName)))
 	}
 
 	return nil
@@ -528,7 +552,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	if handler.hasPendingUpdates {
+	if handler.updateRegistry.HasUndeliveredUpdates() {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE, nil)
 	}
 
@@ -590,7 +614,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	if handler.hasPendingUpdates {
+	if handler.updateRegistry.HasUndeliveredUpdates() {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE, nil)
 	}
 
@@ -696,7 +720,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	if handler.hasPendingUpdates {
+	if handler.updateRegistry.HasUndeliveredUpdates() {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE, nil)
 	}
 
@@ -803,7 +827,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	if handler.hasPendingUpdates {
+	if handler.updateRegistry.HasUndeliveredUpdates() {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE, nil)
 	}
 
@@ -1172,126 +1196,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 		handler.workflowTaskCompletedID, attr,
 	)
 	return err
-}
-
-func (handler *workflowTaskHandlerImpl) handleMessageAcceptWorkflowExecutionUpdate(
-	_ context.Context,
-	protocolInstanceID string,
-	updAcceptance *updatepb.Acceptance,
-) error {
-
-	handler.metricsHandler.Counter(metrics.MessageTypeAcceptWorkflowExecutionUpdateCounter.GetMetricName()).Record(1)
-
-	executionInfo := handler.mutableState.GetExecutionInfo()
-	nsID := namespace.ID(executionInfo.GetNamespaceId())
-
-	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
-		// TODO (alex-update): Should use MessageTypeTag here but then it needs to be another metric name too.
-		metrics.CommandTypeTag("MessageAcceptUpdate"),
-		updAcceptance.Size(),
-		"Message body of type update.Acceptance exceeds size limit.",
-	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
-	}
-
-	if err := handler.validateCommandAttr(
-		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateWorkflowExecutionUpdateAcceptanceMessage(
-				nsID,
-				protocolInstanceID,
-				updAcceptance,
-			)
-		},
-	); err != nil || handler.stopProcessing {
-		return err
-	}
-
-	_, err := handler.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID, updAcceptance)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (handler *workflowTaskHandlerImpl) handleMessageCompleteWorkflowExecutionUpdate(
-	_ context.Context,
-	protocolInstanceID string,
-	updResponse *updatepb.Response,
-) error {
-
-	handler.metricsHandler.Counter(metrics.MessageTypeCompleteWorkflowExecutionUpdateCounter.GetMetricName()).Record(1)
-
-	executionInfo := handler.mutableState.GetExecutionInfo()
-	nsID := namespace.ID(executionInfo.GetNamespaceId())
-
-	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
-		// TODO (alex-update): Should use MessageTypeTag here, but then it needs to be another metric name too.
-		metrics.CommandTypeTag("MessageCompleteUpdate"),
-		updResponse.Size(),
-		"Message body of type update.Response exceeds size limit.",
-	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
-	}
-
-	if err := handler.validateCommandAttr(
-		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateWorkflowExecutionUpdateResponseMessage(
-				nsID,
-				protocolInstanceID,
-				updResponse,
-			)
-		},
-	); err != nil || handler.stopProcessing {
-		return err
-	}
-
-	_, err := handler.mutableState.AddWorkflowExecutionUpdateCompletedEvent(updResponse)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (handler *workflowTaskHandlerImpl) handleMessageRejectWorkflowExecutionUpdate(
-	_ context.Context,
-	protocolInstanceID string,
-	updRejection *updatepb.Rejection,
-) error {
-
-	handler.metricsHandler.Counter(metrics.MessageTypeRejectWorkflowExecutionUpdateCounter.GetMetricName()).Record(1)
-
-	executionInfo := handler.mutableState.GetExecutionInfo()
-	nsID := namespace.ID(executionInfo.GetNamespaceId())
-
-	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
-		// TODO (alex-update): Should use MessageTypeTag here but then it needs to be another metric name too.
-		metrics.CommandTypeTag("MessageRejectUpdate"),
-		updRejection.Size(),
-		"Message body of type update.Rejection exceeds size limit.",
-	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
-	}
-
-	if err := handler.validateCommandAttr(
-		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.validateWorkflowExecutionUpdateRejectionMessage(
-				nsID,
-				protocolInstanceID,
-				updRejection,
-			)
-		},
-	); err != nil || handler.stopProcessing {
-		return err
-	}
-
-	err := handler.mutableState.RejectWorkflowExecutionUpdate(protocolInstanceID, updRejection)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func payloadsMapSize(fields map[string]*commonpb.Payload) int {

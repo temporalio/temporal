@@ -247,7 +247,7 @@ const (
 	FrontendClientListOpenWorkflowExecutionsScope = "FrontendClientListOpenWorkflowExecutions"
 	// FrontendClientPollActivityTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollActivityTaskQueueScope = "FrontendClientPollActivityTaskQueue"
-	//FrontendClientPollWorkflowExecutionUpdateScope tracks RPC calls to frontend service
+	// FrontendClientPollWorkflowExecutionUpdateScope tracks RPC calls to frontend service
 	FrontendClientPollWorkflowExecutionUpdateScope = "FrontendClientPollWorkflowExecutionUpdate"
 	// FrontendClientPollWorkflowTaskQueueScope tracks RPC calls to frontend service
 	FrontendClientPollWorkflowTaskQueueScope = "FrontendClientPollWorkflowTaskQueue"
@@ -377,6 +377,8 @@ const (
 	HistoryClientTerminateWorkflowExecutionScope = "HistoryClientTerminateWorkflowExecution"
 	// HistoryClientUpdateWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientUpdateWorkflowExecutionScope = "HistoryClientUpdateWorkflowExecution"
+	// HistoryClientPollWorkflowExecutionUpdateScope tracks RPC calls to history service
+	HistoryClientPollWorkflowExecutionUpdateScope = "HistoryClientPollPollWorkflowExecutionUpdate"
 	// HistoryClientDeleteWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientDeleteWorkflowExecutionScope = "HistoryClientDeleteWorkflowExecution"
 	// HistoryClientResetWorkflowExecutionScope tracks RPC calls to history service
@@ -1066,6 +1068,8 @@ const (
 	OperationVisibilityQueueProcessorScope = "VisibilityQueueProcessor"
 	// OperationArchivalQueueProcessorScope is a scope for archival queue processor
 	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
+	// OperationMemoryScheduledQueueProcessorScope is a scope for memory scheduled queue processor.
+	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
 )
 
 // Matching Scope
@@ -1194,6 +1198,7 @@ const (
 	TaskTypeTimerStandbyTaskActivityRetryTimer     = "TimerStandbyTaskActivityRetryTimer"
 	TaskTypeTimerStandbyTaskWorkflowBackoffTimer   = "TimerStandbyTaskWorkflowBackoffTimer"
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
+	TaskTypeMemoryScheduledTaskWorkflowTaskTimeout = "MemoryScheduledTaskWorkflowTaskTimeout"
 )
 
 // Schedule action types
@@ -1353,8 +1358,9 @@ var (
 	CommandTypeUpsertWorkflowSearchAttributesCounter  = NewCounterDef("upsert_workflow_search_attributes_command")
 	CommandTypeModifyWorkflowPropertiesCounter        = NewCounterDef("modify_workflow_properties_command")
 	CommandTypeChildWorkflowCounter                   = NewCounterDef("child_workflow_command")
+	MessageTypeRequestWorkflowExecutionUpdateCounter  = NewCounterDef("request_workflow_update_message")
 	MessageTypeAcceptWorkflowExecutionUpdateCounter   = NewCounterDef("accept_workflow_update_message")
-	MessageTypeCompleteWorkflowExecutionUpdateCounter = NewCounterDef("complete_workflow_update_message")
+	MessageTypeRespondWorkflowExecutionUpdateCounter  = NewCounterDef("respond_workflow_update_message")
 	MessageTypeRejectWorkflowExecutionUpdateCounter   = NewCounterDef("reject_workflow_update_message")
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")

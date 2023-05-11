@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -185,4 +186,16 @@ func FindAutoResetPoint(
 		}
 	}
 	return "", nil
+}
+
+func WithEffects(effects effect.Controller, ms MutableState) MutableStateWithEffects {
+	return MutableStateWithEffects{
+		MutableState: ms,
+		Controller:   effects,
+	}
+}
+
+type MutableStateWithEffects struct {
+	MutableState
+	effect.Controller
 }
