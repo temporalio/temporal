@@ -22,52 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package effect
 
-import (
-	"sync/atomic"
-	"time"
+import "context"
 
-	"github.com/jonboulle/clockwork"
-)
+type immediate struct{ context.Context }
 
-type (
-	liveness struct {
-		clock  clockwork.Clock
-		ttl    func() time.Duration
-		onIdle func()
-		timer  atomic.Value
-	}
+// Immediate returns an effects.Set that executes effects immdiately upon
+// insertion. Useful in contexts where you don't actually want to delay effect
+// application and in tests.
+func Immediate(ctx context.Context) Controller { return immediate{ctx} }
 
-	timerWrapper struct {
-		clockwork.Timer
-	}
-)
-
-func newLiveness(
-	clock clockwork.Clock,
-	ttl func() time.Duration,
-	onIdle func(),
-) *liveness {
-	return &liveness{
-		clock:  clock,
-		ttl:    ttl,
-		onIdle: onIdle,
-	}
-}
-
-func (l *liveness) Start() {
-	l.timer.Store(timerWrapper{l.clock.AfterFunc(l.ttl(), l.onIdle)})
-}
-
-func (l *liveness) Stop() {
-	if t, ok := l.timer.Swap(timerWrapper{}).(timerWrapper); ok && t.Timer != nil {
-		t.Stop()
-	}
-}
-
-func (l *liveness) markAlive() {
-	if t, ok := l.timer.Load().(timerWrapper); ok && t.Timer != nil {
-		t.Reset(l.ttl())
-	}
-}
+func (i immediate) OnAfterCommit(effect func(context.Context)) { effect(i) }
+func (i immediate) OnAfterRollback(func(context.Context))      {}

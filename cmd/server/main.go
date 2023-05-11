@@ -33,6 +33,7 @@ import (
 	_ "time/tzdata" // embed tzdata as a fallback
 
 	"github.com/urfave/cli/v2"
+	"go.uber.org/automaxprocs/maxprocs"
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/build"
@@ -118,6 +119,10 @@ func buildCLI() *cli.App {
 			Before: func(c *cli.Context) error {
 				if c.Args().Len() > 0 {
 					return cli.Exit("ERROR: start command doesn't support arguments. Use --service flag instead.", 1)
+				}
+
+				if _, err := maxprocs.Set(); err != nil {
+					stdlog.Println(fmt.Sprintf("WARNING: failed to set GOMAXPROCS: %v.", err))
 				}
 				return nil
 			},

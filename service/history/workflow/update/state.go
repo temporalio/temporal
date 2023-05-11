@@ -22,52 +22,54 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package update
 
-import (
-	"sync/atomic"
-	"time"
-
-	"github.com/jonboulle/clockwork"
-)
+import "sync/atomic"
 
 type (
-	liveness struct {
-		clock  clockwork.Clock
-		ttl    func() time.Duration
-		onIdle func()
-		timer  atomic.Value
-	}
-
-	timerWrapper struct {
-		clockwork.Timer
-	}
+	state    uint32
+	stateSet uint32
 )
 
-func newLiveness(
-	clock clockwork.Clock,
-	ttl func() time.Duration,
-	onIdle func(),
-) *liveness {
-	return &liveness{
-		clock:  clock,
-		ttl:    ttl,
-		onIdle: onIdle,
+const (
+	stateAdmitted state = (1 << iota)
+	stateProvisionallyRequested
+	stateRequested
+	stateProvisionallyAccepted
+	stateAccepted
+	stateProvisionallyCompleted
+	stateCompleted
+)
+
+func (s state) String() string {
+	switch s {
+	case stateAdmitted:
+		return "Admitted"
+	case stateProvisionallyRequested:
+		return "ProvisionallyRequested"
+	case stateRequested:
+		return "Requested"
+	case stateProvisionallyAccepted:
+		return "ProvisionallyAccepted"
+	case stateAccepted:
+		return "Accepted"
+	case stateProvisionallyCompleted:
+		return "ProvisionallyCompleted"
+	case stateCompleted:
+		return "Completed"
 	}
+	return "unrecognized state"
 }
 
-func (l *liveness) Start() {
-	l.timer.Store(timerWrapper{l.clock.AfterFunc(l.ttl(), l.onIdle)})
+func (s *state) Is(other state) bool {
+	return state(atomic.LoadUint32((*uint32)(s))) == other
 }
 
-func (l *liveness) Stop() {
-	if t, ok := l.timer.Swap(timerWrapper{}).(timerWrapper); ok && t.Timer != nil {
-		t.Stop()
-	}
+func (s *state) Set(other state) state {
+	return state(atomic.SwapUint32((*uint32)(s), uint32(other)))
 }
 
-func (l *liveness) markAlive() {
-	if t, ok := l.timer.Load().(timerWrapper); ok && t.Timer != nil {
-		t.Reset(l.ttl())
-	}
+func (s *state) Matches(mask stateSet) bool {
+	actual := atomic.LoadUint32((*uint32)(s))
+	return actual&uint32(mask) == actual
 }

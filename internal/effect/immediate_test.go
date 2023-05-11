@@ -22,40 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package effect_test
 
 import (
 	"context"
+	"testing"
 
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/internal/effect"
 )
 
-type handlerContext struct {
-	context.Context
-	metricsHandler metrics.Handler
-	logger         log.Logger
-}
+func TestImmediate(t *testing.T) {
+	var i int
+	immediate := effect.Immediate(context.TODO())
+	immediate.OnAfterCommit(func(context.Context) { i = 1 })
+	require.Equal(t, i, 1, "commit func should have run")
 
-func newHandlerContext(
-	ctx context.Context,
-	namespace namespace.Name,
-	taskQueue *taskqueuepb.TaskQueue,
-	metricsHandler metrics.Handler,
-	operation string,
-	logger log.Logger,
-) *handlerContext {
-	return &handlerContext{
-		Context: ctx,
-		metricsHandler: metrics.GetPerTaskQueueScope(
-			metricsHandler.WithTags(metrics.OperationTag(operation)),
-			namespace.String(),
-			taskQueue.GetName(),
-			taskQueue.GetKind(),
-		),
-		logger: logger,
-	}
+	immediate.OnAfterRollback(func(context.Context) { i = 2 })
+	require.Equal(t, i, 1, "rollback func should not run")
 }

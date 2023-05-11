@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -76,20 +77,24 @@ func Invoke(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
-	upd, duplicate, removeFn := weCtx.GetContext().UpdateRegistry().Add(req.GetRequest().GetRequest())
-	if removeFn != nil {
-		defer removeFn()
+	updateID := req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+	updateReg := weCtx.GetUpdateRegistry(ctx)
+	upd, alreadyExisted, err := updateReg.FindOrCreate(ctx, updateID)
+	if err != nil {
+		return nil, err
+	}
+	if err := upd.OnMessage(ctx, req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+		return nil, err
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
 	// If WT has already started, new speculative WT will be created when started WT completes.
 	// If update is duplicate, then WT for this update was already created.
-	createNewWorkflowTask := !ms.HasPendingWorkflowTask() && duplicate == false
+	createNewWorkflowTask := !ms.HasPendingWorkflowTask() && !alreadyExisted
 
 	if createNewWorkflowTask {
 		// This will try not to add an event but will create speculative WT in mutable state.
-		// Task generation will be skipped if WT is created as speculative.
-		wt, err := ms.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+		wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 		if err != nil {
 			return nil, err
 		}
@@ -135,12 +140,12 @@ func addWorkflowTaskToMatching(
 	shardCtx shard.Context,
 	ms workflow.MutableState,
 	matchingClient matchingservice.MatchingServiceClient,
-	task *workflow.WorkflowTaskInfo,
+	wt *workflow.WorkflowTaskInfo,
 	nsID namespace.ID,
 ) error {
-	// TODO (alex-update): Timeout calculation is copied from somewhere else. Extract func instead?
+	// TODO (alex): Timeout calculation is copied from somewhere else. Extract func instead?
 	var taskScheduleToStartTimeout *time.Duration
-	if ms.TaskQueue().GetName() != task.TaskQueue.GetName() {
+	if ms.IsStickyTaskQueueEnabled() {
 		taskScheduleToStartTimeout = ms.GetExecutionInfo().StickyScheduleToStartTimeout
 	} else {
 		taskScheduleToStartTimeout = ms.GetExecutionInfo().WorkflowRunTimeout
@@ -158,8 +163,8 @@ func addWorkflowTaskToMatching(
 			WorkflowId: wfKey.WorkflowID,
 			RunId:      wfKey.RunID,
 		},
-		TaskQueue:              task.TaskQueue,
-		ScheduledEventId:       task.ScheduledEventID,
+		TaskQueue:              wt.TaskQueue,
+		ScheduledEventId:       wt.ScheduledEventID,
 		ScheduleToStartTimeout: taskScheduleToStartTimeout,
 		Clock:                  clock,
 	})

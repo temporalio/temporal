@@ -22,52 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package update
 
-import (
-	"sync/atomic"
-	"time"
+var (
+	// while we *could* write the unit test code to walk an Update through a
+	// series of message deliveries to get to the right state, it's much faster
+	// just to instantiate directly into the desired state.
 
-	"github.com/jonboulle/clockwork"
+	NewAccepted  = newAccepted
+	NewCompleted = newCompleted
 )
-
-type (
-	liveness struct {
-		clock  clockwork.Clock
-		ttl    func() time.Duration
-		onIdle func()
-		timer  atomic.Value
-	}
-
-	timerWrapper struct {
-		clockwork.Timer
-	}
-)
-
-func newLiveness(
-	clock clockwork.Clock,
-	ttl func() time.Duration,
-	onIdle func(),
-) *liveness {
-	return &liveness{
-		clock:  clock,
-		ttl:    ttl,
-		onIdle: onIdle,
-	}
-}
-
-func (l *liveness) Start() {
-	l.timer.Store(timerWrapper{l.clock.AfterFunc(l.ttl(), l.onIdle)})
-}
-
-func (l *liveness) Stop() {
-	if t, ok := l.timer.Swap(timerWrapper{}).(timerWrapper); ok && t.Timer != nil {
-		t.Stop()
-	}
-}
-
-func (l *liveness) markAlive() {
-	if t, ok := l.timer.Load().(timerWrapper); ok && t.Timer != nil {
-		t.Reset(l.ttl())
-	}
-}

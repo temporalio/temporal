@@ -333,7 +333,7 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
-	generateTimeoutTaskOnly bool, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching.
+	generateTimeoutTaskOnly bool, // For non-speculative WT, generate only SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching.
 ) error {
 
 	workflowTask := r.mutableState.GetWorkflowTaskByID(
@@ -347,7 +347,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)
 		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 
-		r.mutableState.AddTasks(&tasks.WorkflowTaskTimeoutTask{
+		wttt := &tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: scheduledTime.Add(scheduleToStartTimeout),
@@ -355,7 +355,13 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 			EventID:             workflowTask.ScheduledEventID,
 			ScheduleAttempt:     workflowTask.Attempt,
 			Version:             workflowTask.Version,
-		})
+		}
+
+		if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+		}
+
+		r.mutableState.AddTasks(wttt)
 	}
 
 	if generateTimeoutTaskOnly {
@@ -387,7 +393,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	startedTime := timestamp.TimeValue(workflowTask.StartedTime)
 	workflowTaskTimeout := timestamp.DurationValue(workflowTask.WorkflowTaskTimeout)
 
-	r.mutableState.AddTasks(&tasks.WorkflowTaskTimeoutTask{
+	wttt := &tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
@@ -395,7 +401,12 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
 		Version:             workflowTask.Version,
-	})
+	}
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+	}
+
+	r.mutableState.AddTasks(wttt)
 
 	return nil
 }
