@@ -119,6 +119,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 
 	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier)
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	visibilityEnableManualPagination := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
@@ -134,6 +135,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		s.mockProcessor,
 		esProcessorAckTimeout,
 		visibilityDisableOrderByClause,
+		visibilityEnableManualPagination,
 		s.mockMetricsHandler,
 	)
 }
@@ -1385,6 +1387,124 @@ func (s *ESVisibilitySuite) Test_detailedErrorMessage() {
 		},
 	}
 	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type], root causes: some other reason1 [type=some other type1], some other reason2 [type=some other type2]", detailedErrorMessage(err))
+}
+
+func (s *ESVisibilitySuite) TestProcessPageToken() {
+	closeTime := time.Now().UTC()
+	startTime := closeTime.Add(-1 * time.Minute)
+	baseQuery := elastic.NewBoolQuery().
+		Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespace.String()))
+
+	testCases := []struct {
+		name             string
+		manualPagination bool
+		sorter           []elastic.Sorter
+		pageToken        *visibilityPageToken
+		resSearchAfter   []any
+		resQuery         elastic.Query
+		resError         error
+	}{
+		{
+			name:             "nil page token",
+			manualPagination: false,
+			sorter:           docSorter,
+			pageToken:        nil,
+			resSearchAfter:   nil,
+			resQuery:         baseQuery,
+			resError:         nil,
+		},
+		{
+			name:             "empty page token",
+			manualPagination: false,
+			sorter:           docSorter,
+			pageToken:        &visibilityPageToken{SearchAfter: []any{}},
+			resSearchAfter:   nil,
+			resQuery:         baseQuery,
+			resError:         nil,
+		},
+		{
+			name:             "page token doesn't match sorter size",
+			manualPagination: false,
+			sorter:           docSorter,
+			pageToken:        &visibilityPageToken{SearchAfter: []any{"foo", "bar"}},
+			resSearchAfter:   nil,
+			resQuery:         baseQuery,
+			resError:         serviceerror.NewInvalidArgument("Invalid page token for given sort fields: expected 1 fields, got 2"),
+		},
+		{
+			name:             "not using default sorter",
+			manualPagination: false,
+			sorter:           docSorter,
+			pageToken:        &visibilityPageToken{SearchAfter: []any{123}},
+			resSearchAfter:   []any{123},
+			resQuery:         baseQuery,
+			resError:         nil,
+		},
+		{
+			name:             "default sorter without manual pagination",
+			manualPagination: false,
+			sorter:           defaultSorter,
+			pageToken: &visibilityPageToken{
+				SearchAfter: []any{
+					json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+					json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+				},
+			},
+			resSearchAfter: []any{
+				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+			},
+			resQuery: baseQuery,
+			resError: nil,
+		},
+		{
+			name:             "default sorter with manual pagination",
+			manualPagination: true,
+			sorter:           defaultSorter,
+			pageToken: &visibilityPageToken{
+				SearchAfter: []any{
+					json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+					json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+				},
+			},
+			resSearchAfter: nil,
+			resQuery: baseQuery.MinimumNumberShouldMatch(1).Should(
+				elastic.NewBoolQuery().Filter(
+					elastic.NewRangeQuery(searchattribute.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+				),
+				elastic.NewBoolQuery().Filter(
+					elastic.NewTermQuery(searchattribute.CloseTime, closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+				),
+			),
+			resError: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			visibilityStore := NewVisibilityStore(
+				s.mockESClient,
+				testIndex,
+				searchattribute.NewTestProvider(),
+				searchattribute.NewTestMapperProvider(nil),
+				s.mockProcessor,
+				dynamicconfig.GetDurationPropertyFn(1*time.Minute*debug.TimeoutMultiplier),
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.manualPagination),
+				s.mockMetricsHandler,
+			)
+			params := &client.SearchParameters{
+				Index:  testIndex,
+				Query:  baseQuery,
+				Sorter: tc.sorter,
+			}
+			err := visibilityStore.processPageToken(params, tc.pageToken, testNamespace)
+			s.Equal(tc.resSearchAfter, params.SearchAfter)
+			s.Equal(tc.resQuery, params.Query)
+			s.Equal(tc.resError, err)
+		})
+	}
 }
 
 func (s *ESVisibilitySuite) Test_buildPaginationQuery() {

@@ -66,6 +66,7 @@ type (
 		processor                      Processor
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
 		disableOrderByClause           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		metricsHandler                 metrics.Handler
 	}
 
@@ -122,6 +123,7 @@ func NewVisibilityStore(
 	processor Processor,
 	processorAckTimeout dynamicconfig.DurationPropertyFn,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
 ) *visibilityStore {
 
@@ -133,6 +135,7 @@ func NewVisibilityStore(
 		processor:                      processor,
 		processorAckTimeout:            processorAckTimeout,
 		disableOrderByClause:           disableOrderByClause,
+		enableManualPagination:         enableManualPagination,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
 	}
 }
@@ -627,7 +630,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 	if err != nil {
 		return nil, err
 	}
-	err = s.processPageToken(params, pageToken)
+	err = s.processPageToken(params, pageToken, request.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -638,6 +641,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 func (s *visibilityStore) processPageToken(
 	params *client.SearchParameters,
 	pageToken *visibilityPageToken,
+	namespaceName namespace.Name,
 ) error {
 	if pageToken == nil || len(pageToken.SearchAfter) == 0 {
 		return nil
@@ -649,7 +653,7 @@ func (s *visibilityStore) processPageToken(
 			len(pageToken.SearchAfter),
 		))
 	}
-	if !isDefaultSorter(params.Sorter) {
+	if !s.enableManualPagination(namespaceName.String()) || !isDefaultSorter(params.Sorter) {
 		params.SearchAfter = pageToken.SearchAfter
 		return nil
 	}

@@ -66,6 +66,8 @@ const (
 	SecondaryVisibilityWritingMode = "system.secondaryVisibilityWritingMode"
 	// VisibilityDisableOrderByClause is the config to disable ORDERY BY clause for Elasticsearch
 	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
+	// VisibilityEnableManualPagination is the config to enable manual pagination for Elasticsearch
+	VisibilityEnableManualPagination = "system.visibilityEnableManualPagination"
 
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
