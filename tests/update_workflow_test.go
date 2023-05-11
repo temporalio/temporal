@@ -1895,7 +1895,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 
 	// Complete workflow.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
-	s.Errorf(err, "update was never successfully accepted so it prevents completion")
+	s.Error(err, "update was never successfully accepted so it prevents completion")
 
 	s.Equal(5, wtHandlerCalls)
 	s.Equal(5, msgHandlerCalls)
