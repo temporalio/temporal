@@ -297,6 +297,8 @@ type Config struct {
 	ArchivalProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	ArchivalProcessorArchiveDelay                       dynamicconfig.DurationPropertyFn
 	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
+
+	WorkflowExecutionMaxInFlightUpdates dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 const (
@@ -531,6 +533,9 @@ func NewConfig(
 		ArchivalProcessorPollBackoffInterval: dc.GetDurationProperty(dynamicconfig.ArchivalProcessorPollBackoffInterval, 5*time.Second),
 		ArchivalProcessorArchiveDelay:        dc.GetDurationProperty(dynamicconfig.ArchivalProcessorArchiveDelay, 5*time.Minute),
 		ArchivalBackendMaxRPS:                dc.GetFloat64Property(dynamicconfig.ArchivalBackendMaxRPS, 10000.0),
+
+		// workflow update related
+		WorkflowExecutionMaxInFlightUpdates: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 10),
 	}
 
 	return cfg

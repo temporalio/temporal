@@ -26,10 +26,14 @@ package update
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"sync"
 
 	"go.opentelemetry.io/otel/trace"
+	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -77,12 +81,19 @@ type (
 		updates         map[string]*Update
 		store           UpdateStore
 		instrumentation instrumentation
+		maxInFlight     func() int
 	}
 
 	regOpt func(*RegistryImpl)
 )
 
 //revive:disable:unexported-return I *want* it to be unexported
+
+func WithInFlightLimit(f func() int) regOpt {
+	return func(r *RegistryImpl) {
+		r.maxInFlight = f
+	}
+}
 
 // WithLogger sets the log.Logger to be used by an UpdateRegistry and its
 // Updates.
@@ -117,6 +128,7 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 		updates:         make(map[string]*Update),
 		store:           store,
 		instrumentation: noopInstrumentation,
+		maxInFlight:     func() int { return math.MaxInt },
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -134,6 +146,9 @@ func (r *RegistryImpl) FindOrCreate(ctx context.Context, id string) (*Update, bo
 	defer r.mu.Unlock()
 	if upd, ok := r.findLocked(ctx, id); ok {
 		return upd, true, nil
+	}
+	if err := r.admit(ctx); err != nil {
+		return nil, false, err
 	}
 	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
@@ -204,6 +219,17 @@ func (r *RegistryImpl) remover(id string) func() {
 		defer r.mu.Unlock()
 		delete(r.updates, id)
 	}
+}
+
+func (r *RegistryImpl) admit(context.Context) error {
+	max := r.maxInFlight()
+	if len(r.updates) >= max {
+		return serviceerror.NewResourceExhausted(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			fmt.Sprintf("update concurrent in-flight limit has been reached (%v)", max),
+		)
+	}
+	return nil
 }
 
 func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool) {
