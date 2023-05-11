@@ -556,6 +556,9 @@ const (
 	// DurableArchivalEnabled is the flag to enable durable archival
 	DurableArchivalEnabled = "history.durableArchivalEnabled"
 
+	// WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.
+	WorkflowExecutionMaxInFlightUpdates = "history.maxInFlightUpdates"
+
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
 	// ReplicatorMaxSkipTaskCount is maximum number of tasks that can be skipped during tasks pagination due to not meeting filtering conditions (e.g. missed namespace).
