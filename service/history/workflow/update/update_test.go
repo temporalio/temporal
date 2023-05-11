@@ -579,7 +579,8 @@ func TestRejectionWithAcceptanceWaiter(t *testing.T) {
 	require.NoError(t, upd.OnMessage(ctx, &req, store))
 	require.NoError(t, upd.OnMessage(ctx, &rej, store))
 
-	outcome, ok := (<-ch).(*updatepb.Outcome)
-	require.True(t, ok)
+	retVal := <-ch
+	outcome, ok := retVal.(*updatepb.Outcome)
+	require.Truef(t, ok, "WaitAccepted returned an unexpected type: %T", retVal)
 	require.Equal(t, rej.Failure, outcome.GetFailure())
 }
