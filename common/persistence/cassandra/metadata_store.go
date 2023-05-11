@@ -197,7 +197,7 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 		// If namespace does not exist already and it failed to insert, there is a conditional failure.
 		// Delete orphan namespace record before returning back to user
 		deleteOrphanNamespace()
-		return nil, serviceerror.NewNamespaceAlreadyExists("CreateNamespace operation failed because of conditional failure.")
+		return nil, serviceerror.NewUnavailable("CreateNamespace operation failed because of conditional failure.")
 	}
 
 	return &p.CreateNamespaceResponse{ID: request.ID}, nil
