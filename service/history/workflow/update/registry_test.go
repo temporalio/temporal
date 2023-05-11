@@ -26,6 +26,7 @@ package update_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
@@ -374,6 +375,43 @@ func TestInFlightLimit(t *testing.T) {
 			"third update should be rejected when limit = 2")
 		require.Equal(t, 2, reg.Len())
 	})
+}
+
+func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
+	t.Parallel()
+	completedUpdateID := t.Name() + "-completed-update-id"
+	expectError := fmt.Errorf("expected error in %s", t.Name())
+	regStore := mockUpdateStore{
+		GetAcceptedWorkflowExecutionUpdateIDsFunc: func(
+			context.Context,
+		) []string {
+			return nil
+		},
+		GetUpdateInfoFunc: func(
+			ctx context.Context,
+			updateID string,
+		) (*persistencespb.UpdateInfo, bool) {
+			if updateID == completedUpdateID {
+				return &persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_CompletedPointer{
+						CompletedPointer: &historyspb.HistoryEventPointer{EventId: 123},
+					},
+				}, true
+			}
+			return nil, false
+		},
+		GetUpdateOutcomeFunc: func(
+			ctx context.Context,
+			updateID string,
+		) (*updatepb.Outcome, error) {
+			return nil, expectError
+		},
+	}
+	reg := update.NewRegistry(regStore)
+	upd, found := reg.Find(context.TODO(), completedUpdateID)
+	require.True(t, found)
+	_, err := upd.WaitOutcome(context.TODO())
+	require.ErrorIs(t, expectError, err)
 }
 
 func mustMarshalAny(t *testing.T, pb proto.Message) *types.Any {

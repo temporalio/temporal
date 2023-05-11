@@ -126,7 +126,7 @@ func newAccepted(id string, onComplete func(), opts ...updateOpt) *Update {
 
 func newCompleted(
 	id string,
-	fetchOutcome func(ctx context.Context) (*updatepb.Outcome, error),
+	outcomeFuture *future.ReadyFutureImpl[*updatepb.Outcome],
 	opts ...updateOpt,
 ) *Update {
 	upd := &Update{
@@ -134,7 +134,7 @@ func newCompleted(
 		state:           stateCompleted,
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
-		outcome:         lazyOutcome(fetchOutcome),
+		outcome:         outcomeFuture,
 	}
 	for _, opt := range opts {
 		opt(upd)

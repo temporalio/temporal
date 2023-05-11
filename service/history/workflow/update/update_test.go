@@ -378,27 +378,6 @@ func TestAcceptanceAndResponseInSameMessageBatch(t *testing.T) {
 	require.True(t, completed)
 }
 
-func TestCompletedLazyOutcomeRead(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	updateID := t.Name() + "-update-id"
-	outcome := successOutcome(t, "success!")
-	fetched := false
-	upd := update.NewCompleted(updateID, func(context.Context) (*updatepb.Outcome, error) {
-		fetched = true
-		return outcome, nil
-	})
-	require.False(t, fetched)
-	acceptedOutcome, err := upd.WaitAccepted(ctx)
-	require.NoError(t, err)
-	require.Equal(t, outcome, acceptedOutcome)
-
-	got, err := upd.WaitOutcome(ctx)
-	require.True(t, fetched)
-	require.NoError(t, err)
-	require.Equal(t, outcome, got)
-}
-
 func TestDuplicateRequestNoError(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

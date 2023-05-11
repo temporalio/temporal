@@ -25,12 +25,10 @@
 package update
 
 import (
-	"context"
 	"fmt"
 
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
-	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -39,9 +37,6 @@ import (
 const libraryName = "go.temporal.io/service/history/workflow/update"
 
 type (
-	// lazyOutcome adapts a func to the future.Future[*updatepb.Outcome] interface
-	lazyOutcome func(context.Context) (*updatepb.Outcome, error)
-
 	instrumentation struct {
 		log     log.Logger
 		metrics metrics.Handler
@@ -56,14 +51,6 @@ var (
 		tracer:  trace.NewNoopTracerProvider().Tracer(libraryName),
 	}
 )
-
-func (lo lazyOutcome) Get(ctx context.Context) (*updatepb.Outcome, error) {
-	return lo(ctx)
-}
-
-func (lazyOutcome) Ready() bool {
-	return true
-}
 
 func invalidArgf(tmpl string, args ...any) error {
 	return serviceerror.NewInvalidArgument(fmt.Sprintf(tmpl, args...))
