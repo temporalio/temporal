@@ -243,7 +243,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// the correct logic should check whether the workflow task is a sticky workflowTask
 	// task or not.
 	var taskQueue *taskqueuepb.TaskQueue
-	taskScheduleToStartTimeoutSeconds := int64(0)
+	var taskScheduleToStartTimeout *time.Duration
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		// this workflowTask is an sticky workflowTask
 		// there shall already be an timer set
@@ -251,14 +251,14 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
 		}
-		taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
+		taskScheduleToStartTimeout = executionInfo.StickyScheduleToStartTimeout
 	} else {
 		taskQueue = &taskqueuepb.TaskQueue{
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
-		workflowRunTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
-		taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
+		workflowRunTimeout := executionInfo.WorkflowRunTimeout
+		taskScheduleToStartTimeout = workflowRunTimeout
 	}
 
 	originalTaskQueue := mutableState.GetExecutionInfo().TaskQueue
@@ -267,7 +267,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
+	err = t.pushWorkflowTask(ctx, task, taskQueue, taskScheduleToStartTimeout)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
 		// sticky worker is unavailable, switch to original task queue
@@ -282,7 +282,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
 		// will re-create a new non-sticky task and reset sticky.
-		err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
+		err = t.pushWorkflowTask(ctx, task, taskQueue, taskScheduleToStartTimeout)
 	}
 	return err
 }
