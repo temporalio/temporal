@@ -57,9 +57,10 @@ type (
 		// messages and returns them.
 		ReadOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
 
-		// HasIncomplete returns true if the registry has Updates that have not
-		// yet completed or are not at least provisionally complete.
-		HasIncomplete() bool
+		// HasUndeliveredUpdates returns true if the registry has Updates that
+		// are not known to have been seen by user workflow code. In practice
+		// this means updates that have not yet been accepted or rejected.
+		HasUndeliveredUpdates() bool
 
 		// HasOutgoing returns true if the registry has any Updates that want to
 		// sent messages to a worker.
@@ -135,7 +136,7 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 		opt(r)
 	}
 
-	// need to eager load here so that HasIncomplete is correct.
+	// need to eager load here so that Len and admit are correct.
 	for _, id := range store.GetAcceptedWorkflowExecutionUpdateIDs(context.Background()) {
 		r.updates[id] = newAccepted(id, r.remover(id), withInstrumentation(&r.instrumentation))
 	}
@@ -162,11 +163,11 @@ func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool) {
 	return r.findLocked(ctx, id)
 }
 
-func (r *RegistryImpl) HasIncomplete() bool {
+func (r *RegistryImpl) HasUndeliveredUpdates() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, upd := range r.updates {
-		if !upd.completedOrProvisionallyCompleted() {
+		if !upd.hasBeenSeenByWorkflowExecution() {
 			return true
 		}
 	}

@@ -70,7 +70,6 @@ type (
 
 		// internal state
 		hasBufferedEvents               bool
-		hasPendingUpdates               bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
 		newMutableState                 workflow.MutableState
@@ -553,7 +552,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	if handler.hasPendingUpdates {
+	if handler.updateRegistry.HasUndeliveredUpdates() {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE, nil)
 	}
 
@@ -615,7 +614,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	if handler.hasPendingUpdates {
+	if handler.updateRegistry.HasUndeliveredUpdates() {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE, nil)
 	}
 
@@ -721,7 +720,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	if handler.hasPendingUpdates {
+	if handler.updateRegistry.HasUndeliveredUpdates() {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE, nil)
 	}
 
@@ -828,7 +827,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	if handler.hasPendingUpdates {
+	if handler.updateRegistry.HasUndeliveredUpdates() {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE, nil)
 	}
 
