@@ -165,8 +165,8 @@ func TestPollOutcome(t *testing.T) {
 			Failure:                  &fail,
 		}
 
-		errCh := make(chan error)
-		respCh := make(chan *historyservice.PollWorkflowExecutionUpdateResponse)
+		errCh := make(chan error, 1)
+		respCh := make(chan *historyservice.PollWorkflowExecutionUpdateResponse, 1)
 		go func() {
 			resp, err := pollupdate.Invoke(context.TODO(), &req, wfcc)
 			errCh <- err
