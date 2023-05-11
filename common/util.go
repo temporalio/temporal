@@ -788,12 +788,12 @@ func MakeVersionDirectiveForWorkflowTask(
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
 	if stamp.GetBuildId() != "" {
-		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
 	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
 		// first workflow task
 		// TODO: look at workflow execution started attributes to decide if we should use
 		// default or stay on existing version (for child workflow and continue-as-new)
-		directive.Directive = &taskqueuespb.TaskVersionDirective_UseDefault{}
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{}
 	}
 	return &directive
 }
@@ -804,7 +804,7 @@ func MakeVersionDirectiveForActivityTask(
 	var directive taskqueuespb.TaskVersionDirective
 	// TODO: look at activity task scheduled attributes to decide if we should do UseDefault
 	if stamp.GetBuildId() != "" {
-		directive.Directive = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
 	}
 	return &directive
 }

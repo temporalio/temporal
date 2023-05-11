@@ -550,7 +550,8 @@ type AddWorkflowTaskRequest struct {
 	ForwardedSource        string           `protobuf:"bytes,6,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
 	Source                 v16.TaskSource   `protobuf:"varint,7,opt,name=source,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"source,omitempty"`
 	Clock                  *v17.VectorClock `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
-	// How this task should be directed by matching.
+	// How this task should be directed by matching. (Missing means the default
+	// for TaskVersionDirective, which is unversioned.)
 	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 }
 
@@ -695,7 +696,8 @@ type AddActivityTaskRequest struct {
 	ForwardedSource        string           `protobuf:"bytes,7,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
 	Source                 v16.TaskSource   `protobuf:"varint,8,opt,name=source,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"source,omitempty"`
 	Clock                  *v17.VectorClock `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
-	// How this task should be directed by matching.
+	// How this task should be directed by matching. (Missing means the default
+	// for TaskVersionDirective, which is unversioned.)
 	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 }
 
@@ -834,7 +836,8 @@ type QueryWorkflowRequest struct {
 	TaskQueue       *v14.TaskQueue           `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	QueryRequest    *v1.QueryWorkflowRequest `protobuf:"bytes,3,opt,name=query_request,json=queryRequest,proto3" json:"query_request,omitempty"`
 	ForwardedSource string                   `protobuf:"bytes,4,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
-	// How this task should be directed by matching.
+	// How this task should be directed by matching. (Missing means the default
+	// for TaskVersionDirective, which is unversioned.)
 	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,5,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 }
 

@@ -117,7 +117,8 @@ type TaskInfo struct {
 	CreateTime       *time.Time      `protobuf:"bytes,5,opt,name=create_time,json=createTime,proto3,stdtime" json:"create_time,omitempty"`
 	ExpiryTime       *time.Time      `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3,stdtime" json:"expiry_time,omitempty"`
 	Clock            *v1.VectorClock `protobuf:"bytes,7,opt,name=clock,proto3" json:"clock,omitempty"`
-	// How this task should be directed.
+	// How this task should be directed. (Missing means the default for
+	// TaskVersionDirective, which is unversioned.)
 	VersionDirective *v11.TaskVersionDirective `protobuf:"bytes,8,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 }
 

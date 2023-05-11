@@ -111,7 +111,8 @@ message AddWorkflowTaskRequest {
     string forwarded_source = 6;
     temporal.server.api.enums.v1.TaskSource source = 7;
     temporal.server.api.clock.v1.VectorClock clock = 9;
-    // How this task should be directed by matching.
+    // How this task should be directed by matching. (Missing means the default
+    // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
 }
 
@@ -130,7 +131,8 @@ message AddActivityTaskRequest {
     string forwarded_source = 7;
     temporal.server.api.enums.v1.TaskSource source = 8;
     temporal.server.api.clock.v1.VectorClock clock = 9;
-    // How this task should be directed by matching.
+    // How this task should be directed by matching. (Missing means the default
+    // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
 }
 
@@ -142,7 +144,8 @@ message QueryWorkflowRequest {
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.api.workflowservice.v1.QueryWorkflowRequest query_request = 3;
     string forwarded_source = 4;
-    // How this task should be directed by matching.
+    // How this task should be directed by matching. (Missing means the default
+    // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
 }
 

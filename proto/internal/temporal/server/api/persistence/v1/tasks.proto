@@ -46,7 +46,8 @@ message TaskInfo {
     google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
     temporal.server.api.clock.v1.VectorClock clock = 7;
-    // How this task should be directed.
+    // How this task should be directed. (Missing means the default for
+    // TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
 }
 

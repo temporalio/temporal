@@ -1186,7 +1186,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	}
 
 	var buildId string
-	switch dir := directive.GetDirective().(type) {
+	switch dir := directive.GetValue().(type) {
 	case *taskqueuespb.TaskVersionDirective_UseDefault:
 		// let buildId = ""
 	case *taskqueuespb.TaskVersionDirective_BuildId:
