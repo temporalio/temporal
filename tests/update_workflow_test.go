@@ -1885,7 +1885,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 	s.NoError(err)
 
 	// Wait for UpdateWorkflowExecution to timeout.
-	// This will also remove update from registry and next WT won't have any updates attached to it.
+	// This does NOT remove update from registry
 	<-updateResultCh
 
 	// Try to accept update in workflow 3rd time: get error. Poller will fail WT.
@@ -1895,7 +1895,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 
 	// Complete workflow.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
-	s.NoError(err)
+	s.Errorf(err, "update was never successfully accepted so it prevents completion")
 
 	s.Equal(5, wtHandlerCalls)
 	s.Equal(5, msgHandlerCalls)
@@ -1909,11 +1909,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskFailed
-  9 WorkflowTaskScheduled
- 10 WorkflowTaskStarted
- 11 WorkflowTaskCompleted
- 12 WorkflowExecutionCompleted`, events)
+  8 WorkflowTaskFailed`, events)
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_ConvertSpeculativeWorkflowTaskToNormal_BecauseOfBufferedSignal() {

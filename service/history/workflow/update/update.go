@@ -342,8 +342,9 @@ func (u *Update) onResponseMsg(
 	return nil
 }
 
-func (u *Update) completedOrProvisionallyCompleted() bool {
-	return u.state.Matches(stateSet(stateCompleted | stateProvisionallyCompleted))
+func (u *Update) hasBeenSeenByWorkflowExecution() bool {
+	const unseen = stateAdmitted | stateProvisionallyRequested | stateRequested
+	return !u.state.Matches(stateSet(unseen))
 }
 
 func (u *Update) hasOutgoingMessage() bool {
