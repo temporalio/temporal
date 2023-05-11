@@ -3601,6 +3601,51 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 	return matchingResponse.Response, err
 }
 
+func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
+	// NOTE: Default request subject is the empty build Id (unversioned)
+	if request.GetTaskQueue() != "" {
+		taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+		if err := wh.validateTaskQueue(taskQueue); err != nil {
+			return nil, err
+		}
+	} else if request.GetBuildId() != "" {
+		if len(request.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+			return nil, errBuildIdTooLong
+		}
+	} else if request.GetScope().GetTaskQueue() == "" {
+		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker in namespace scope")
+	}
+	if request.GetScope().GetTaskQueue() != "" {
+		taskQueue := &taskqueuepb.TaskQueue{Name: request.GetScope().GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+		if err := wh.validateTaskQueue(taskQueue); err != nil {
+			return nil, err
+		}
+	}
+
+	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// All validation happens before this call, treat all errors as internal errors
+	response, err := wh.getWorkerTaskReachabilityValidated(ctx, ns, request)
+	if err != nil {
+		wh.logger.Error("Failed getting worker task reachability", tag.Error(err))
+		return nil, serviceerror.NewInternal("Internal error")
+	}
+	return response, nil
+}
+
 func (wh *WorkflowHandler) StartBatchOperation(
 	ctx context.Context,
 	request *workflowservice.StartBatchOperationRequest,

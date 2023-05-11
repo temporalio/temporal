@@ -826,6 +826,21 @@ func (mr *MockTaskManagerMockRecorder) GetTaskQueueUserData(ctx, request interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueueUserData), ctx, request)
 }
 
+// GetTaskQueuesByBuildId mocks base method.
+func (m *MockTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueuesByBuildId", ctx, request)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueuesByBuildId indicates an expected call of GetTaskQueuesByBuildId.
+func (mr *MockTaskManagerMockRecorder) GetTaskQueuesByBuildId(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueuesByBuildId", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueuesByBuildId), ctx, request)
+}
+
 // GetTasks mocks base method.
 func (m *MockTaskManager) GetTasks(ctx context.Context, request *GetTasksRequest) (*GetTasksResponse, error) {
 	m.ctrl.T.Helper()

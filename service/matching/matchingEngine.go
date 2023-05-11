@@ -901,6 +901,17 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
 }
 
+func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
+	ctx context.Context,
+	req *matchingservice.GetBuildIdTaskQueueMappingRequest,
+) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
+	taskQueues, err := e.taskManager.GetTaskQueuesByBuildId(ctx, &persistence.GetTaskQueuesByBuildIdRequest{NamespaceID: req.NamespaceId, BuildID: req.BuildId})
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.GetBuildIdTaskQueueMappingResponse{TaskQueues: taskQueues}, nil
+}
+
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 	host, err := e.keyResolver.Lookup(partitionKey)
 	if err != nil {
@@ -1209,6 +1220,10 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 		return nil, err
 	}
 	data := userData.GetData().GetVersioningData()
+	// Task queue is unversioned
+	if data == nil {
+		return taskQueue, nil
+	}
 
 	versionSet, err := lookupVersionSetForAdd(data, buildId)
 	if err != nil {

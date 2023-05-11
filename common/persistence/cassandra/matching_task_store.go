@@ -139,16 +139,22 @@ const (
 	templateUpdateTaskQueueUserDataQuery = `UPDATE task_queue_user_data SET ` +
 		`data = ?, ` +
 		`data_encoding = ?, ` +
+		// Add and remove elements from the build_ids map to maintain a secondary index
+		`build_ids = build_ids + ?, build_ids = build_ids - ?, ` +
 		`version = ? ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
 		`IF version = ?`
 
 	templateInsertTaskQueueUserDataQuery = `INSERT INTO task_queue_user_data` +
-		`(namespace_id, task_queue_name, data, data_encoding, version) ` +
-		`VALUES (?, ?, ?, ?, 1) IF NOT EXISTS`
+		`(namespace_id, task_queue_name, data, data_encoding, build_ids, version) ` +
+		`VALUES (?, ?, ?, ?, ?, 1) IF NOT EXISTS`
 
-	templateListTaskQueueUserDataQuery = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ?`
+	templateListTaskQueueUserDataQuery  = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ?`
+	templateListTaskQueueNamesByBuildId = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_ids CONTAINS ?`
+
+	// Not much of a need to make this configurable, we're just reading some strings
+	listTaskQueueNamesByBuildIdPageSize = 100
 )
 
 type (
@@ -545,11 +551,14 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 			request.TaskQueue,
 			request.UserData.Data,
 			request.UserData.EncodingType.String(),
+			request.BuildIdsAdded,
 		).WithContext(ctx)
 	} else {
 		query = d.Session.Query(templateUpdateTaskQueueUserDataQuery,
 			request.UserData.Data,
 			request.UserData.EncodingType.String(),
+			request.BuildIdsAdded,
+			request.BuildIdsRemoved,
 			request.Version+1,
 			request.NamespaceID,
 			request.TaskQueue,
@@ -560,7 +569,7 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 	applied, err := query.MapScanCAS(previous)
 
 	if err != nil {
-		return gocql.ConvertError("UpdateTaskQueueData", err)
+		return gocql.ConvertError("UpdateTaskQueueUserData", err)
 	}
 
 	if !applied {
@@ -628,6 +637,40 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListTaskQueueUserDataEntries operation failed. Error: %v", err))
 	}
 	return response, nil
+}
+
+func (d *MatchingTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	query := d.Session.Query(templateListTaskQueueNamesByBuildId, request.NamespaceID, request.BuildID).WithContext(ctx)
+	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
+
+	var taskQueues []string
+	row := make(map[string]interface{})
+
+	for {
+		for iter.MapScan(row) {
+			taskQueueRaw, ok := row["task_queue_name"]
+			if !ok {
+				return nil, newFieldNotFoundError("task_queue_name", row)
+			}
+			taskQueue, ok := taskQueueRaw.(string)
+			if !ok {
+				var stringType string
+				return nil, newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row)
+			}
+
+			taskQueues = append(taskQueues, taskQueue)
+
+			row = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+		}
+		if len(iter.PageState()) == 0 {
+			break
+		}
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTaskQueuesByBuildId operation failed. Error: %v", err))
+	}
+	return taskQueues, nil
 }
 
 func (d *MatchingTaskStore) GetName() string {

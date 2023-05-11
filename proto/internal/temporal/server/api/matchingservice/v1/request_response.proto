@@ -248,3 +248,12 @@ message ApplyTaskQueueUserDataReplicationEventRequest {
 
 message ApplyTaskQueueUserDataReplicationEventResponse {
 }
+
+message GetBuildIdTaskQueueMappingRequest {
+    string namespace_id = 1;
+    string build_id = 2;
+}
+
+message GetBuildIdTaskQueueMappingResponse {
+    repeated string task_queues = 1;
+}

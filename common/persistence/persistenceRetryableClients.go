@@ -802,6 +802,18 @@ func (p *taskRetryablePersistenceClient) ListTaskQueueUserDataEntries(
 	return response, err
 }
 
+func (p *taskRetryablePersistenceClient) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	var response []string
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.GetTaskQueuesByBuildId(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
 func (p *taskRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }

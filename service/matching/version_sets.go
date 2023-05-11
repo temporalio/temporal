@@ -119,6 +119,36 @@ func UpdateVersionSets(clock hlc.Clock, data *persistencespb.VersioningData, req
 	return data, nil
 }
 
+func gatherBuildIds(data *persistencespb.VersioningData) map[string]struct{} {
+	buildIds := make(map[string]struct{}, 0)
+	for _, set := range data.GetVersionSets() {
+		for _, buildId := range set.BuildIds {
+			if buildId.State == persistencespb.STATE_ACTIVE {
+				buildIds[buildId.Id] = struct{}{}
+			}
+		}
+	}
+	return buildIds
+}
+
+// GetBuildIdDeltas compares all active build ids in prev and curr sets and returns sets of added and removed build ids.
+func GetBuildIdDeltas(prev *persistencespb.VersioningData, curr *persistencespb.VersioningData) (added []string, removed []string) {
+	prevBuildIds := gatherBuildIds(prev)
+	currBuildIds := gatherBuildIds(curr)
+
+	for buildId := range prevBuildIds {
+		if _, found := currBuildIds[buildId]; !found {
+			removed = append(removed, buildId)
+		}
+	}
+	for buildId := range currBuildIds {
+		if _, found := prevBuildIds[buildId]; !found {
+			added = append(added, buildId)
+		}
+	}
+	return added, removed
+}
+
 func hashBuildId(buildID string) string {
 	bytes := []byte(buildID)
 	summed := sha256.Sum256(bytes)

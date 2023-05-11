@@ -503,16 +503,42 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("failed to parse namespace ID as UUID: %v", err))
 	}
-	err = m.Db.UpdateTaskQueueUserData(ctx, &sqlplugin.UpdateTaskQueueDataRequest{
-		NamespaceID:   namespaceID,
-		TaskQueueName: request.TaskQueue,
-		Data:          request.UserData.Data,
-		DataEncoding:  request.UserData.EncodingType.String(),
-		Version:       request.Version,
+	err = m.txExecute(ctx, "UpdateTaskQueueUserData", func(tx sqlplugin.Tx) error {
+		err := tx.UpdateTaskQueueUserData(ctx, &sqlplugin.UpdateTaskQueueDataRequest{
+			NamespaceID:   namespaceID,
+			TaskQueueName: request.TaskQueue,
+			Data:          request.UserData.Data,
+			DataEncoding:  request.UserData.EncodingType.String(),
+			Version:       request.Version,
+		})
+		if m.Db.IsDupEntryError(err) {
+			return &persistence.ConditionFailedError{Msg: err.Error()}
+		}
+		if err != nil {
+			return err
+		}
+		if len(request.BuildIdsAdded) > 0 {
+			err = tx.AddBuildIdToTaskQueueMapping(ctx, sqlplugin.AddBuildIdToTaskQueueMapping{
+				NamespaceID:   namespaceID,
+				TaskQueueName: request.TaskQueue,
+				BuildIds:      request.BuildIdsAdded,
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if len(request.BuildIdsRemoved) > 0 {
+			err = tx.RemoveBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveBuildIdToTaskQueueMapping{
+				NamespaceID:   namespaceID,
+				TaskQueueName: request.TaskQueue,
+				BuildIds:      request.BuildIdsRemoved,
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	})
-	if m.Db.IsDupEntryError(err) {
-		return &persistence.ConditionFailedError{Msg: err.Error()}
-	}
 	return err
 }
 
@@ -558,6 +584,14 @@ func (m *sqlTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, reque
 	}
 
 	return response, nil
+}
+
+func (m *sqlTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, serviceerror.NewInternal(err.Error())
+	}
+	return m.Db.GetTaskQueuesByBuildId(ctx, &sqlplugin.GetTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
 }
 
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType

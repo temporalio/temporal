@@ -557,9 +557,11 @@ type (
 
 	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API
 	UpdateTaskQueueUserDataRequest struct {
-		NamespaceID string
-		TaskQueue   string
-		UserData    *persistencespb.VersionedTaskQueueUserData
+		NamespaceID     string
+		TaskQueue       string
+		UserData        *persistencespb.VersionedTaskQueueUserData
+		BuildIdsAdded   []string
+		BuildIdsRemoved []string
 	}
 
 	ListTaskQueueUserDataEntriesRequest struct {
@@ -576,6 +578,11 @@ type (
 	ListTaskQueueUserDataEntriesResponse struct {
 		NextPageToken []byte
 		Entries       []*TaskQueueUserDataEntry
+	}
+
+	GetTaskQueuesByBuildIdRequest struct {
+		NamespaceID string
+		BuildID     string
 	}
 
 	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
@@ -1164,6 +1171,7 @@ type (
 		// Fails with ConditionFailedError if the user data was updated concurrently.
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error)
+		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities

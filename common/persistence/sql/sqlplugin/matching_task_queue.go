@@ -64,6 +64,23 @@ type (
 		DataEncoding  string
 	}
 
+	AddBuildIdToTaskQueueMapping struct {
+		NamespaceID   []byte
+		TaskQueueName string
+		BuildIds      []string
+	}
+
+	RemoveBuildIdToTaskQueueMapping struct {
+		NamespaceID   []byte
+		TaskQueueName string
+		BuildIds      []string
+	}
+
+	GetTaskQueuesByBuildIdRequest struct {
+		NamespaceID []byte
+		BuildID     string
+	}
+
 	VersionedBlob struct {
 		Version      int64
 		Data         []byte
@@ -95,6 +112,9 @@ type (
 		LockTaskQueues(ctx context.Context, filter TaskQueuesFilter) (int64, error)
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*VersionedBlob, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueDataRequest) error
+		AddBuildIdToTaskQueueMapping(ctx context.Context, request AddBuildIdToTaskQueueMapping) error
+		RemoveBuildIdToTaskQueueMapping(ctx context.Context, request RemoveBuildIdToTaskQueueMapping) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) ([]TaskQueueUserDataEntry, error)
+		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
 	}
 )

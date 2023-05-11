@@ -35,6 +35,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -793,7 +794,7 @@ func MakeVersionDirectiveForWorkflowTask(
 		// first workflow task
 		// TODO: look at workflow execution started attributes to decide if we should use
 		// default or stay on existing version (for child workflow and continue-as-new)
-		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{}
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
 	}
 	return &directive
 }

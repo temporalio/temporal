@@ -105,6 +105,9 @@ task_queue_id = :task_queue_id
 		`VALUES (?, ?, ?, ?, 1)`
 
 	listTaskQueueUserDataQry = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ? AND task_queue_name > ? LIMIT ?`
+
+	addBuildIdToTaskQueueMappingQry = `INSERT INTO build_id_to_task_queue (namespace_id, build_id, task_queue_name) VALUES `
+	listTaskQueuesByBuildIdQry      = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = ? AND build_id = ?`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -336,8 +339,42 @@ func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.U
 	return nil
 }
 
+func (mdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddBuildIdToTaskQueueMapping) error {
+	query := addBuildIdToTaskQueueMappingQry
+	var params []any
+	for idx, buildId := range request.BuildIds {
+		if idx == len(request.BuildIds)-1 {
+			query += "(?, ?, ?)"
+		} else {
+			query += "(?, ?, ?), "
+		}
+		params = append(params, request.NamespaceID, buildId, request.TaskQueueName)
+	}
+
+	_, err := mdb.conn.ExecContext(ctx, query, params...)
+	return err
+}
+
+func (mdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveBuildIdToTaskQueueMapping) error {
+	// TODO(bergundy): implement when we support deletion
+	panic("not implemented")
+}
+
 func (mdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplugin.ListTaskQueueUserDataEntriesRequest) ([]sqlplugin.TaskQueueUserDataEntry, error) {
 	var rows []sqlplugin.TaskQueueUserDataEntry
 	err := mdb.conn.SelectContext(ctx, &rows, listTaskQueueUserDataQry, request.NamespaceID, request.LastTaskQueueName, request.Limit)
 	return rows, err
+}
+
+func (mdb *db) GetTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	var rows []struct {
+		TaskQueueName string
+	}
+
+	err := mdb.conn.SelectContext(ctx, &rows, listTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
+	taskQueues := make([]string, len(rows))
+	for i, row := range rows {
+		taskQueues[i] = row.TaskQueueName
+	}
+	return taskQueues, err
 }

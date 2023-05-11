@@ -351,10 +351,14 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 	if err != nil {
 		return nil, err
 	}
+	added, removed := GetBuildIdDeltas(preUpdateData.GetVersioningData(), updatedUserData.GetVersioningData())
+
 	err = db.store.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID: db.namespaceID.String(),
-		TaskQueue:   db.cachedQueueInfo().Name,
-		UserData:    &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion(), Data: updatedUserData},
+		NamespaceID:     db.namespaceID.String(),
+		TaskQueue:       db.cachedQueueInfo().Name,
+		UserData:        &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion(), Data: updatedUserData},
+		BuildIdsAdded:   added,
+		BuildIdsRemoved: removed,
 	})
 	if err == nil {
 		db.userData = &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData}

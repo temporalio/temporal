@@ -334,6 +334,14 @@ func (h *Handler) ApplyTaskQueueUserDataReplicationEvent(
 	return h.engine.ApplyTaskQueueUserDataReplicationEvent(ctx, request)
 }
 
+func (h *Handler) GetBuildIdTaskQueueMapping(
+	ctx context.Context,
+	request *matchingservice.GetBuildIdTaskQueueMappingRequest,
+) (_ *matchingservice.GetBuildIdTaskQueueMappingResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.GetBuildIdTaskQueueMapping(ctx, request)
+}
+
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {

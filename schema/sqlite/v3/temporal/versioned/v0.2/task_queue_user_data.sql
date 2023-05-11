@@ -7,3 +7,11 @@ CREATE TABLE task_queue_user_data (
   version         BIGINT NOT NULL,      -- Version of this row, used for optimistic concurrency
   PRIMARY KEY (namespace_id, task_queue_name)
 );
+
+-- Stores a mapping between build ids and task queues
+CREATE TABLE build_id_to_task_queue (
+  namespace_id    BINARY(16) NOT NULL,
+  build_id        VARCHAR(255) NOT NULL,
+  task_queue_name VARCHAR(255) NOT NULL,
+  PRIMARY KEY (namespace_id, build_id, task_queue_name)
+);

@@ -80,6 +80,21 @@ func (c *clientImpl) DescribeTaskQueue(
 	return client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetBuildIdTaskQueueMapping(
+	ctx context.Context,
+	request *matchingservice.GetBuildIdTaskQueueMappingRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
+
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetBuildIdTaskQueueMapping(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.GetTaskQueueUserDataRequest,

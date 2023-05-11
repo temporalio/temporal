@@ -93,4 +93,7 @@ service MatchingService {
     // Apply a user data replication event.
     rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns
     (ApplyTaskQueueUserDataReplicationEventResponse) {}
+
+    // Gets all task queue names mapped to a given build ID
+    rpc GetBuildIdTaskQueueMapping (GetBuildIdTaskQueueMappingRequest) returns (GetBuildIdTaskQueueMappingResponse) {}
 }

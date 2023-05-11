@@ -327,6 +327,8 @@ const (
 	FrontendClientUpdateWorkflowExecutionScope = "FrontendClientUpdateWorkflowExecution"
 	// FrontendClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
 	FrontendClientGetWorkerBuildIdCompatibilityScope = "FrontendClientGetWorkerBuildIdCompatibility"
+	// FrontendClientGetWorkerTaskReachabilityScope tracks RPC calls to frontend service
+	FrontendClientGetWorkerTaskReachabilityScope = "FrontendClientGetWorkerTaskReachability"
 	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
 	FrontendClientDescribeBatchOperationScope = "FrontendClientDescribeBatchOperation"
 	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
@@ -461,6 +463,8 @@ const (
 	MatchingClientCancelOutstandingPollScope = "MatchingClientCancelOutstandingPoll"
 	// MatchingClientDescribeTaskQueueScope tracks RPC calls to matching service
 	MatchingClientDescribeTaskQueueScope = "MatchingClientDescribeTaskQueue"
+	// MatchingClientGetBuildIdTaskQueueMappingScope tracks RPC calls to matching service
+	MatchingClientGetBuildIdTaskQueueMappingScope = "MatchingClientGetBuildIdTaskQueueMapping"
 	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskQueuePartitionsScope = "MatchingClientListTaskQueuePartitions"
 	// MatchingClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
@@ -638,6 +642,8 @@ const (
 	PersistenceUpdateTaskQueueUserDataScope = "UpdateTaskQueueUserData"
 	// PersistenceListTaskQueueUserDataEntriesScope is the metric scope for persistence.TaskManager.ListTaskQueueUserDataEntries API
 	PersistenceListTaskQueueUserDataEntriesScope = "ListTaskQueueUserDataEntries"
+	// PersistenceGetTaskQueuesByBuildIdScope is the metric scope for persistence.TaskManager.GetTaskQueuesByBuildId API
+	PersistenceGetTaskQueuesByBuildIdScope = "GetTaskQueuesByBuildId"
 	// PersistenceAppendHistoryEventsScope tracks AppendHistoryEvents calls made by service to persistence layer
 	PersistenceAppendHistoryEventsScope = "AppendHistoryEvents"
 	// PersistenceGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory calls made by service to persistence layer

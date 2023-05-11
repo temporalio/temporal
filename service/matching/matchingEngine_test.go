@@ -2454,6 +2454,12 @@ func (*testTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, reques
 	panic("unimplemented")
 }
 
+// GetTaskQueuesByBuildId implements persistence.TaskManager
+func (*testTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	// No need to implement this for unit tests
+	panic("unimplemented")
+}
+
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 	currentTime := time.Now().UTC()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())
