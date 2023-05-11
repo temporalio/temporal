@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
@@ -243,12 +244,12 @@ func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool
 
 	if info, ok := r.store.GetUpdateInfo(ctx, id); ok {
 		if info.GetCompletedPointer() != nil {
-			outcome, err := r.store.GetUpdateOutcome(ctx, id)
 			// Completed, create the Update object but do not add to registry. this
 			// should not happen often.
+			fut := future.NewReadyFuture(r.store.GetUpdateOutcome(ctx, id))
 			return newCompleted(
 				id,
-				outcomeOrErr{outcome: outcome, err: err},
+				fut,
 				withInstrumentation(&r.instrumentation),
 			), true
 		}
