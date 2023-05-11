@@ -159,8 +159,14 @@ func (u *Update) WaitAccepted(ctx context.Context) (*updatepb.Outcome, error) {
 		// here because we can.
 		return u.outcome.Get(ctx)
 	}
-	if _, err := u.accepted.Get(ctx); err != nil {
+	fail, err := u.accepted.Get(ctx)
+	if err != nil {
 		return nil, err
+	}
+	if fail != nil {
+		return &updatepb.Outcome{
+			Value: &updatepb.Outcome_Failure{Failure: fail},
+		}, nil
 	}
 	return nil, nil
 }

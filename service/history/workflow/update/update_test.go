@@ -489,7 +489,7 @@ func TestDoubleRollback(t *testing.T) {
 	require.NoError(t, upd.OnMessage(ctx, &resp, store))
 	require.False(t, completed)
 
-	// pretend MutalbeState write to DB fails - unwind effects
+	t.Log("pretend MutableState write to DB fails - unwind effects")
 	effects.Cancel(ctx)
 
 	t.Run("not accepted", func(t *testing.T) {
@@ -528,7 +528,7 @@ func TestRollbackCompletion(t *testing.T) {
 	require.NoError(t, upd.OnMessage(ctx, &resp, store))
 	require.False(t, completed)
 
-	// pretend MutalbeState write to DB fails - unwind effects
+	t.Log("pretend MutableState write to DB fails - unwind effects")
 	effects.Cancel(ctx)
 
 	t.Run("not completed", func(t *testing.T) {
@@ -542,4 +542,44 @@ func TestRollbackCompletion(t *testing.T) {
 		err := upd.OnMessage(ctx, &resp, store)
 		require.NoError(t, err, "update should be back in Accepted state")
 	})
+}
+
+func TestRejectionWithAcceptanceWaiter(t *testing.T) {
+	t.Parallel()
+	var (
+		ctx      = context.Background()
+		store    = mockEventStore{Controller: effect.Immediate(ctx)}
+		updateID = t.Name() + "-update-id"
+		upd      = update.New(updateID, ignoreCompletion)
+		req      = updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: updateID},
+			Input: &updatepb.Input{Name: "not_empty"},
+		}
+		rej = updatepb.Rejection{
+			RejectedRequestMessageId: "not_empty",
+			RejectedRequest:          &req,
+			Failure: &failurepb.Failure{
+				Message: "intentional falure from " + t.Name(),
+			},
+		}
+	)
+	ch := make(chan any, 1)
+	go func() {
+		fail, err := upd.WaitAccepted(ctx)
+		if err != nil {
+			ch <- err
+			return
+		}
+		ch <- fail
+	}()
+	t.Log("give 5ms for the goro to get to the Future.Get call in WaitAccepted")
+	time.Sleep(5 * time.Millisecond)
+
+	t.Log("deliver request and rejection messages")
+	require.NoError(t, upd.OnMessage(ctx, &req, store))
+	require.NoError(t, upd.OnMessage(ctx, &rej, store))
+
+	outcome, ok := (<-ch).(*updatepb.Outcome)
+	require.True(t, ok)
+	require.Equal(t, rej.Failure, outcome.GetFailure())
 }
