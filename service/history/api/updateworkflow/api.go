@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 func Invoke(
@@ -55,9 +56,24 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 ) (_ *historyservice.UpdateWorkflowExecutionResponse, retErr error) {
 
+	var waitLifecycleStage func(ctx context.Context, u *update.Update) (*updatepb.Outcome, error)
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
-	if waitStage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
-		waitStage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+	switch waitStage {
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
+		waitLifecycleStage = func(
+			ctx context.Context,
+			u *update.Update,
+		) (*updatepb.Outcome, error) {
+			return u.WaitAccepted(ctx)
+		}
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
+		waitLifecycleStage = func(
+			ctx context.Context,
+			u *update.Update,
+		) (*updatepb.Outcome, error) {
+			return u.WaitOutcome(ctx)
+		}
+	default:
 		return nil, serviceerror.NewUnimplemented(
 			fmt.Sprintf("%v is not implemented", waitStage))
 	}
@@ -124,11 +140,7 @@ func Invoke(
 		weCtx.GetReleaseFn()(nil)
 	}
 
-	waitf := upd.WaitOutcome
-	if waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
-		waitf = upd.WaitAccepted
-	}
-	updOutcome, err := waitf(ctx)
+	updOutcome, err := waitLifecycleStage(ctx, upd)
 	if err != nil {
 		return nil, err
 	}
