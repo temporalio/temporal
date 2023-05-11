@@ -182,17 +182,22 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 	defer func() { _ = iter.Close() }()
 
 	if !applied {
-		if id, ok := previous["id"]; ok {
-			id = gocql.UUIDToString(id)
-			if id != request.ID {
-				// Namespace with the given name already exists with a different ID.
-				// Delete orphan namespace record before returning back to user
-				deleteOrphanNamespace()
-			}
 
-			msg := fmt.Sprintf("Namespace already exists.  NamespaceId: %v", id)
-			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
+		// if conditional failure is due to a duplicate name in namespaces table
+		if name, ok := previous["name"]; ok && name == request.Name {
+			if id, ok := previous["id"]; ok {
+				id = gocql.UUIDToString(id)
+				if id != request.ID {
+					// Namespace with the given name already exists with a different ID.
+					// Delete orphan namespace record before returning back to user
+					deleteOrphanNamespace()
+				}
+
+				msg := fmt.Sprintf("Namespace already exists.  NamespaceId: %v", id)
+				return nil, serviceerror.NewNamespaceAlreadyExists(msg)
+			}
 		}
+		// otherwise notification_version does not match our expectations and the condition failed.
 
 		// If namespace does not exist already and it failed to insert, there is a conditional failure.
 		// Delete orphan namespace record before returning back to user
