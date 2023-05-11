@@ -81,7 +81,8 @@ func (s *executableTaskTrackerSuite) TestTrackTasks() {
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
 
-	s.taskTracker.TrackTasks(highWatermark0, task0)
+	tasks := s.taskTracker.TrackTasks(highWatermark0, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
 
 	taskIDs := []int64{}
 	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
@@ -99,7 +100,8 @@ func (s *executableTaskTrackerSuite) TestTrackTasks() {
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
 
-	s.taskTracker.TrackTasks(highWatermark2, task1, task2)
+	tasks = s.taskTracker.TrackTasks(highWatermark2, task1, task2)
+	s.Equal([]TrackableExecutableTask{task1, task2}, tasks)
 
 	taskIDs = []int64{}
 	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
@@ -116,8 +118,10 @@ func (s *executableTaskTrackerSuite) TestTrackTasks_Duplication() {
 		Watermark: task0.TaskID(),
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
-	s.taskTracker.TrackTasks(highWatermark0, task0)
-	s.taskTracker.TrackTasks(highWatermark0, task0)
+	tasks := s.taskTracker.TrackTasks(highWatermark0, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
+	tasks = s.taskTracker.TrackTasks(highWatermark0, task0)
+	s.Equal([]TrackableExecutableTask{}, tasks)
 
 	taskIDs := []int64{}
 	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
@@ -132,7 +136,8 @@ func (s *executableTaskTrackerSuite) TestTrackTasks_Duplication() {
 		Watermark: task1.TaskID() + 1,
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
-	s.taskTracker.TrackTasks(highWatermark1, task1)
+	tasks = s.taskTracker.TrackTasks(highWatermark1, task1)
+	s.Equal([]TrackableExecutableTask{task1}, tasks)
 
 	taskIDs = []int64{}
 	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
@@ -147,7 +152,8 @@ func (s *executableTaskTrackerSuite) TestTrackTasks_Duplication() {
 		Watermark: task2.TaskID() + 1,
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
-	s.taskTracker.TrackTasks(highWatermark2, task1, task2)
+	tasks = s.taskTracker.TrackTasks(highWatermark2, task1, task2)
+	s.Equal([]TrackableExecutableTask{task2}, tasks)
 
 	taskIDs = []int64{}
 	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
@@ -167,7 +173,8 @@ func (s *executableTaskTrackerSuite) TestTrackTasks_Cancellation() {
 	}
 
 	s.taskTracker.Cancel()
-	s.taskTracker.TrackTasks(highWatermark0, task0)
+	tasks := s.taskTracker.TrackTasks(highWatermark0, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
 
 	taskIDs := []int64{}
 	for element := s.taskTracker.taskQueue.Front(); element != nil; element = element.Next() {
@@ -197,7 +204,8 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_AckedTask() {
 		Watermark: task0.TaskID() + 1,
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
-	s.taskTracker.TrackTasks(highWatermark0, task0)
+	tasks := s.taskTracker.TrackTasks(highWatermark0, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
 
 	lowWatermark := s.taskTracker.LowWatermark()
 	s.Equal(highWatermark0, *lowWatermark)
@@ -220,7 +228,8 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_NackedTask_Success() {
 		Watermark: task0.TaskID() + 1,
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
-	s.taskTracker.TrackTasks(highWatermark0, task0)
+	tasks := s.taskTracker.TrackTasks(highWatermark0, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
 
 	lowWatermark := s.taskTracker.LowWatermark()
 	s.Equal(highWatermark0, *lowWatermark)
@@ -239,10 +248,11 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_NackedTask_Error() {
 	task0.EXPECT().State().Return(ctasks.TaskStateNacked).AnyTimes()
 	task0.EXPECT().MarkPoisonPill().Return(errors.New("random error"))
 
-	s.taskTracker.TrackTasks(WatermarkInfo{
+	tasks := s.taskTracker.TrackTasks(WatermarkInfo{
 		Watermark: task0.TaskID() + 1,
 		Timestamp: time.Unix(0, rand.Int63()),
 	}, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
 
 	lowWatermark := s.taskTracker.LowWatermark()
 	s.Equal(WatermarkInfo{
@@ -263,10 +273,11 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_AbortedTask() {
 	task0.EXPECT().TaskCreationTime().Return(time.Unix(0, rand.Int63())).AnyTimes()
 	task0.EXPECT().State().Return(ctasks.TaskStateAborted).AnyTimes()
 
-	s.taskTracker.TrackTasks(WatermarkInfo{
+	tasks := s.taskTracker.TrackTasks(WatermarkInfo{
 		Watermark: task0.TaskID() + 1,
 		Timestamp: time.Unix(0, rand.Int63()),
 	}, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
 
 	lowWatermark := s.taskTracker.LowWatermark()
 	s.Equal(WatermarkInfo{
@@ -287,10 +298,11 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_CancelledTask() {
 	task0.EXPECT().TaskCreationTime().Return(time.Unix(0, rand.Int63())).AnyTimes()
 	task0.EXPECT().State().Return(ctasks.TaskStateCancelled).AnyTimes()
 
-	s.taskTracker.TrackTasks(WatermarkInfo{
+	tasks := s.taskTracker.TrackTasks(WatermarkInfo{
 		Watermark: task0.TaskID() + 1,
 		Timestamp: time.Unix(0, rand.Int63()),
 	}, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
 
 	lowWatermark := s.taskTracker.LowWatermark()
 	s.Equal(WatermarkInfo{
@@ -311,10 +323,11 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_PendingTask() {
 	task0.EXPECT().TaskCreationTime().Return(time.Unix(0, rand.Int63())).AnyTimes()
 	task0.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 
-	s.taskTracker.TrackTasks(WatermarkInfo{
+	tasks := s.taskTracker.TrackTasks(WatermarkInfo{
 		Watermark: task0.TaskID() + 1,
 		Timestamp: time.Unix(0, rand.Int63()),
 	}, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
 
 	lowWatermark := s.taskTracker.LowWatermark()
 	s.Equal(WatermarkInfo{
@@ -338,7 +351,8 @@ func (s *executableTaskTrackerSuite) TestCancellation() {
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
 
-	s.taskTracker.TrackTasks(highWatermark0, task0)
+	tasks := s.taskTracker.TrackTasks(highWatermark0, task0)
+	s.Equal([]TrackableExecutableTask{task0}, tasks)
 	s.taskTracker.Cancel()
 
 	taskIDs := []int64{}

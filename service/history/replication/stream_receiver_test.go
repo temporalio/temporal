@@ -169,12 +169,13 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 	s.stream.respChan <- streamResp
 	close(s.stream.respChan)
 
-	s.taskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).Do(
-		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) {
+	s.taskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 			s.Equal(streamResp.Resp.GetMessages().LastTaskId, highWatermarkInfo.Watermark)
 			s.Equal(*streamResp.Resp.GetMessages().LastTaskTime, highWatermarkInfo.Timestamp)
 			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
+			return []TrackableExecutableTask{tasks[0]}
 		},
 	)
 
