@@ -29,7 +29,6 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
-	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -42,11 +41,6 @@ type (
 		log     log.Logger
 		metrics metrics.Handler
 		tracer  trace.Tracer
-	}
-
-	outcomeOrErr struct {
-		outcome *updatepb.Outcome
-		err     error
 	}
 )
 
