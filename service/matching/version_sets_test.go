@@ -580,3 +580,8 @@ func TestToBuildIdOrderingResponseTrimsResponse(t *testing.T) {
 	expected := []*taskqueuepb.CompatibleVersionSet{{BuildIds: []string{"1"}}, {BuildIds: []string{"2"}}}
 	assert.Equal(t, expected, actual.MajorVersionSets)
 }
+
+func TestHashBuildId(t *testing.T) {
+	// This function should never change.
+	assert.Equal(t, "ftrPuUeORv2JD4Wp2wTU", hashBuildId("my-build-id"))
+}

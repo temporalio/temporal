@@ -556,7 +556,7 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		ctx,
 		task.(*tasks.ActivityTask),
 		&timeout,
-		pushActivityInfo.workerVersionStamp,
+		pushActivityInfo.versionDirective,
 	)
 }
 
@@ -577,7 +577,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		task.(*tasks.WorkflowTask),
 		&pushwtInfo.taskqueue,
 		timestamp.DurationFromSeconds(timeout),
-		pushwtInfo.workerVersionStamp,
+		pushwtInfo.versionDirective,
 	)
 }
 

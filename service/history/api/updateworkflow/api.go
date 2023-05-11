@@ -35,6 +35,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/internal/effect"
@@ -157,6 +158,11 @@ func addWorkflowTaskToMatching(
 		return err
 	}
 
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		ms.GetWorkerVersionStamp(),
+		ms.GetLastWorkflowTaskStartedEventID(),
+	)
+
 	_, err = matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: nsID.String(),
 		Execution: &commonpb.WorkflowExecution{
@@ -167,6 +173,7 @@ func addWorkflowTaskToMatching(
 		ScheduledEventId:       wt.ScheduledEventID,
 		ScheduleToStartTimeout: taskScheduleToStartTimeout,
 		Clock:                  clock,
+		VersionDirective:       directive,
 	})
 	if err != nil {
 		return err

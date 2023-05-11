@@ -29,9 +29,10 @@ import (
 	"errors"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -106,7 +107,7 @@ type (
 
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
-		workerVersionStamp                 *commonpb.WorkerVersionStamp
+		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
 
 	workflowTaskPostActionInfo struct {
@@ -114,7 +115,7 @@ type (
 
 		workflowTaskScheduleToStartTimeout int64
 		taskqueue                          taskqueuepb.TaskQueue
-		workerVersionStamp                 *commonpb.WorkerVersionStamp
+		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
 
 	startChildExecutionPostActionInfo struct {
@@ -149,10 +150,12 @@ func newActivityTaskPostActionInfo(
 		return nil, err
 	}
 
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp())
+
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
-		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
+		versionDirective:                   directive,
 	}, nil
 }
 
@@ -166,11 +169,13 @@ func newActivityRetryTimePostActionInfo(
 		return nil, err
 	}
 
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp())
+
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
-		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
+		versionDirective:                   directive,
 	}, nil
 }
 
@@ -184,11 +189,16 @@ func newWorkflowTaskPostActionInfo(
 		return nil, err
 	}
 
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		mutableState.GetWorkerVersionStamp(),
+		mutableState.GetLastWorkflowTaskStartedEventID(),
+	)
+
 	return &workflowTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
-		workerVersionStamp:                 mutableState.GetWorkerVersionStamp(),
+		versionDirective:                   directive,
 	}, nil
 }
 

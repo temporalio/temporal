@@ -39,12 +39,8 @@ import (
 )
 
 var (
-	// TODO: all of these errors are temporary, we'll handle all these cases in future PRs
-	errBuildIdNotFound                   = serviceerror.NewInvalidArgument("build ID not found")
-	errEmptyVersioningData               = serviceerror.NewInvalidArgument("versioning data is empty")
-	errPollWithVersionOnUnversionedQueue = serviceerror.NewInvalidArgument("poll with version capabilities on unversioned queue")
-	errPollOnVersionedQueueWithNoVersion = serviceerror.NewInvalidArgument("poll on versioned queue with no version capabilities")
-	errVersionedTaskForUnversionedQueue  = serviceerror.NewInvalidArgument("got task with version stamp for unversioned queue")
+	// This shouldn't happen, if we have versioning data we should have at least one set.
+	errEmptyVersioningData = serviceerror.NewInternal("versioning data is empty")
 )
 
 // ToBuildIdOrderingResponse transforms the internal VersioningData representation to public representation.
@@ -280,14 +276,24 @@ func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, version
 	}
 }
 
-// Requires: data is not nil, caps is not nil
+// Requires: caps is not nil
 func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, error) {
-	// for poll, only the latest version in the compatible set can get tasks
-	// find the version set that this worker is in
+	// For poll, only the latest version in the compatible set can get tasks.
+	// Find the version set that this worker is in.
+	// Note data may be nil here, findVersion will return -1 then.
 	setIdx, _ := findVersion(data, caps.BuildId)
 	if setIdx < 0 {
-		// TODO: consider making an ephemeral set so we can match even if replication fails
-		return "", errBuildIdNotFound
+		// A poller is using a build ID but we don't know about that build ID. This can happen
+		// in a replication scenario if pollers are running on the passive side before the data
+		// has been replicated. Instead of rejecting, we can guess a set id based on the build
+		// ID. If the build ID was the first in its set on the other side, then our guess is
+		// right and things will work out. If not, then we'll guess wrong, but when the
+		// versioning data replicates, we'll redirect the poll to the correct set id.
+		// In the meantime (e.g. during an ungraceful failover) we can at least match tasks
+		// using the exact same build ID.
+		// TODO: add metric and log to make this situation visible
+		guessedSetId := hashBuildId(caps.BuildId)
+		return guessedSetId, nil
 	}
 	set := data.VersionSets[setIdx]
 	latestInSet := set.BuildIds[len(set.BuildIds)-1].Id
@@ -297,24 +303,36 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 	return getSetID(set), nil
 }
 
-// Requires: data is not nil
-func lookupVersionSetForAdd(data *persistencespb.VersioningData, stamp *commonpb.WorkerVersionStamp) (string, error) {
+// For this function, buildId == "" means "use default"
+func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string) (string, error) {
 	var set *persistencespb.CompatibleVersionSet
-	if stamp == nil {
-		// if this is a new workflow, assign it to the latest version.
-		// (if it's an unversioned workflow that has already completed one or more tasks, then
-		// leave it on the unversioned one. that case is handled already before we get here.)
-		setLen := len(data.VersionSets)
+	if buildId == "" {
+		// If this is a new workflow, assign it to the latest version.
+		// (If it's an unversioned workflow that has already completed one or more tasks, then
+		// leave it on the unversioned one. That case is handled already before we get here.)
+		setLen := len(data.GetVersionSets())
 		if setLen == 0 || data.VersionSets[setLen-1] == nil {
 			return "", errEmptyVersioningData
 		}
 		set = data.VersionSets[setLen-1]
 	} else {
-		// for add, any version in the compatible set maps to the set
-		setIdx, _ := findVersion(data, stamp.BuildId)
+		// For add, any version in the compatible set maps to the set.
+		// Note data may be nil here, findVersion will return -1 then.
+		setIdx, _ := findVersion(data, buildId)
 		if setIdx < 0 {
-			// TODO: consider making an ephemeral set so we can match even if replication fails
-			return "", errBuildIdNotFound
+			// A workflow has a build ID set, but we don't know about that build ID. This can
+			// happen in replication scenario: the workflow itself was migrated and we failed
+			// over, but the versioning data hasn't been migrated yet. Instead of rejecting it,
+			// we can guess a set ID based on the build ID. If the build ID was the first in
+			// its set on the other side, then our guess is right and things will work out. If
+			// not, then we'll guess wrong, but when we get the replication event, we'll merge
+			// the sets and use both ids.
+			// TODO: this doesn't really work unless we persist the fact that we've created
+			// this set? we can do that on the root. on other partitions... let's notify the
+			// root?
+			// TODO: add metric and log to make this situation visible
+			guessedSetId := hashBuildId(buildId)
+			return guessedSetId, nil
 		}
 		set = data.VersionSets[setIdx]
 	}

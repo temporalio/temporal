@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -275,7 +276,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -306,6 +307,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		Clock:            addRequest.GetClock(),
 		ExpiryTime:       expirationTime,
 		CreateTime:       now,
+		VersionDirective: addRequest.VersionDirective,
 	}
 
 	return tqm.AddTask(ctx, addTaskParams{
@@ -331,7 +333,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, addRequest.WorkerVersionStamp, taskQueueKind)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -357,6 +359,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		Clock:            addRequest.GetClock(),
 		CreateTime:       now,
 		ExpiryTime:       expirationTime,
+		VersionDirective: addRequest.VersionDirective,
 	}
 
 	return tlMgr.AddTask(ctx, addTaskParams{
@@ -585,7 +588,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForAdd(hCtx, origTaskQueue, queryRequest.WorkerVersionStamp, taskQueueKind)
+	taskQueue, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, queryRequest.VersionDirective, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
@@ -1150,6 +1153,13 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 		// (e.g. serviceerrors.StickyWorkerUnavailable) if there's a newer build id
 		return taskQueue, nil
 	}
+
+	if workerVersionCapabilities == nil {
+		// Either this task queue is versioned, or there are still some workflows running on
+		// the "unversioned" set.
+		return taskQueue, nil
+	}
+
 	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
 	if err != nil {
 		return nil, err
@@ -1158,20 +1168,9 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 	if err != nil {
 		return nil, err
 	}
-	if userData.GetData().GetVersioningData() == nil {
-		if workerVersionCapabilities == nil {
-			// queue is not versioned and neither is worker, all good
-			return taskQueue, nil
-		}
-		// TODO: consider making an ephemeral set so we can match even if replication fails
-		return nil, errPollWithVersionOnUnversionedQueue
-	}
-	if workerVersionCapabilities == nil {
-		// TODO: We should leave this one on the unversioned queue for unversioned workflows to
-		// continue running. Do that in the same PR as the first-wft switch below.
-		return nil, errPollOnVersionedQueueWithNoVersion
-	}
-	versionSet, err := lookupVersionSetForPoll(userData.Data.VersioningData, workerVersionCapabilities)
+	data := userData.GetData().GetVersioningData()
+
+	versionSet, err := lookupVersionSetForPoll(data, workerVersionCapabilities)
 	if err != nil {
 		return nil, err
 	}
@@ -1181,16 +1180,26 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	ctx context.Context,
 	taskQueue *taskQueueID,
-	stamp *commonpb.WorkerVersionStamp,
+	directive *taskqueuespb.TaskVersionDirective,
 	kind enumspb.TaskQueueKind,
 ) (*taskQueueID, error) {
 	// sticky queues are unversioned
 	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		return taskQueue, nil
 	}
-	if !stamp.GetUseVersioning() {
+
+	var buildId string
+	switch dir := directive.GetValue().(type) {
+	case *taskqueuespb.TaskVersionDirective_UseDefault:
+		// let buildId = ""
+	case *taskqueuespb.TaskVersionDirective_BuildId:
+		buildId = dir.BuildId
+	default:
+		// Unversioned task, leave on unversioned queue.
 		return taskQueue, nil
 	}
+
+	// Have to look up versioning data.
 	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
 	if err != nil {
 		return nil, err
@@ -1199,19 +1208,9 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	if err != nil {
 		return nil, err
 	}
-	if userData.GetData().GetVersioningData() == nil {
-		if stamp == nil {
-			// queue is not versioned and neither is workflow, all good
-			return taskQueue, nil
-		}
-		return nil, errVersionedTaskForUnversionedQueue
-	}
+	data := userData.GetData().GetVersioningData()
 
-	// TODO: Here we have to distinguish between a new workflow (first wft), which we should
-	// assign to the default version), and a later wft, which we should leave on the
-	// unversioned queue. Do that in a follow-up PR.
-
-	versionSet, err := lookupVersionSetForAdd(userData.Data.VersioningData, stamp)
+	versionSet, err := lookupVersionSetForAdd(data, buildId)
 	if err != nil {
 		return nil, err
 	}
