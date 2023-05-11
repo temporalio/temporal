@@ -197,13 +197,13 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
-	workerVersionStamp := mutableState.GetWorkerVersionStamp()
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp())
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushActivity(ctx, task, &timeout, workerVersionStamp)
+	return t.pushActivity(ctx, task, &timeout, directive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -244,14 +244,17 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
 
-	workerVersionStamp := mutableState.GetWorkerVersionStamp()
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		mutableState.GetWorkerVersionStamp(),
+		mutableState.GetLastWorkflowTaskStartedEventID(),
+	)
 
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
 	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
 	release(nil)
 
-	err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, workerVersionStamp)
+	err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, directive)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
 		// sticky worker is unavailable, switch to original normal task queue
@@ -266,7 +269,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
 		// will re-create a new non-sticky task and reset sticky.
-		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, workerVersionStamp)
+		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, directive)
 	}
 	return err
 }

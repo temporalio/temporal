@@ -251,15 +251,20 @@ func queryDirectlyThroughMatching(
 		metricsHandler.Timer(metrics.DirectQueryDispatchLatency.GetMetricName()).Record(time.Since(startTime))
 	}()
 
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		msResp.GetWorkerVersionStamp(),
+		msResp.GetPreviousStartedEventId(),
+	)
+
 	if msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
 		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace()) {
 
 		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-			NamespaceId:        namespaceID,
-			QueryRequest:       queryRequest,
-			TaskQueue:          msResp.GetStickyTaskQueue(),
-			WorkerVersionStamp: msResp.WorkerVersionStamp,
+			NamespaceId:      namespaceID,
+			QueryRequest:     queryRequest,
+			TaskQueue:        msResp.GetStickyTaskQueue(),
+			VersionDirective: directive,
 		}
 
 		// using a clean new context in case customer provide a context which has
@@ -302,10 +307,10 @@ func queryDirectlyThroughMatching(
 	}
 
 	nonStickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-		NamespaceId:        namespaceID,
-		QueryRequest:       queryRequest,
-		TaskQueue:          msResp.TaskQueue,
-		WorkerVersionStamp: msResp.WorkerVersionStamp,
+		NamespaceId:      namespaceID,
+		QueryRequest:     queryRequest,
+		TaskQueue:        msResp.TaskQueue,
+		VersionDirective: directive,
 	}
 
 	nonStickyStartTime := time.Now().UTC()

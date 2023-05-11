@@ -42,6 +42,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -790,6 +791,33 @@ func OverrideWorkflowTaskTimeout(
 	}
 
 	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
+}
+
+func MakeVersionDirectiveForWorkflowTask(
+	stamp *commonpb.WorkerVersionStamp,
+	lastWorkflowTaskStartedEventID int64,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	if stamp.GetUseVersioning() && stamp.GetBuildId() != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
+		// first workflow task
+		// TODO: look at workflow execution started attributes to decide if we should use
+		// default or stay on existing version (for child workflow and continue-as-new)
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{}
+	}
+	return &directive
+}
+
+func MakeVersionDirectiveForActivityTask(
+	stamp *commonpb.WorkerVersionStamp,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	// TODO: look at activity task scheduled attributes to decide if we should do UseDefault
+	if stamp.GetBuildId() != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	}
+	return &directive
 }
 
 // CloneProto is a generic typed version of proto.Clone from gogoproto.
