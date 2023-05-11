@@ -77,7 +77,7 @@ func NewExecutableTaskTracker(
 	}
 }
 
-// TrackTasks add tasks for tracking,
+// TrackTasks add tasks for tracking, return valid tasks (dedup)
 // if task tracker is cancelled, then newly added tasks will also be cancelled
 func (t *ExecutableTaskTrackerImpl) TrackTasks(
 	highWatermarkInfo WatermarkInfo,
