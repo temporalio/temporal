@@ -172,8 +172,6 @@ const (
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
 	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace on frontend host can query DB
 	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
-	// FrontendPersistencePerShardNamespaceMaxQPS is the max qps for each namespace in a single shard
-	FrontendPersistencePerShardNamespaceMaxQPS = "frontend.persistencePerShardNamespaceMaxQPS"
 	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
@@ -310,8 +308,6 @@ const (
 	MatchingPersistenceGlobalMaxQPS = "matching.persistenceGlobalMaxQPS"
 	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace on matching host can query DB
 	MatchingPersistenceNamespaceMaxQPS = "matching.persistenceNamespaceMaxQPS"
-	// MatchingPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB
-	MatchingPersistencePerShardNamespaceMaxQPS = "matching.persistencePerShardNamespaceMaxQPS"
 	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
 	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling
@@ -698,8 +694,6 @@ const (
 	WorkerPersistenceGlobalMaxQPS = "worker.persistenceGlobalMaxQPS"
 	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace on worker host can query DB
 	WorkerPersistenceNamespaceMaxQPS = "worker.persistenceNamespaceMaxQPS"
-	// WorkerPersistencePerShardNamespaceMaxQPS is the max qps each namespace per shard can query DB
-	WorkerPersistencePerShardNamespaceMaxQPS = "worker.persistencePerShardNamespaceMaxQPS"
 	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
 	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time

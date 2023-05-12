@@ -343,10 +343,6 @@ func NewConfig(
 			dynamicconfig.WorkerPersistenceNamespaceMaxQPS,
 			0,
 		),
-		PersistencePerShardNamespaceMaxQPS: dc.GetIntPropertyFilteredByShardID(
-			dynamicconfig.WorkerPersistencePerShardNamespaceMaxQPS,
-			0,
-		),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(
 			dynamicconfig.WorkerEnablePersistencePriorityRateLimiting,
 			true,
