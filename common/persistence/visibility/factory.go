@@ -58,6 +58,7 @@ func NewManager(
 	enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -72,6 +73,7 @@ func NewManager(
 		maxReadQPS,
 		maxWriteQPS,
 		visibilityDisableOrderByClause,
+		visibilityEnableManualPagination,
 		metricsHandler,
 		logger,
 	)
@@ -93,6 +95,7 @@ func NewManager(
 		maxReadQPS,
 		maxWriteQPS,
 		visibilityDisableOrderByClause,
+		visibilityEnableManualPagination,
 		metricsHandler,
 		logger,
 	)
@@ -173,6 +176,7 @@ func newVisibilityManagerFromDataStoreConfig(
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -185,6 +189,7 @@ func newVisibilityManagerFromDataStoreConfig(
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
 		visibilityDisableOrderByClause,
+		visibilityEnableManualPagination,
 		metricsHandler,
 		logger,
 	)
@@ -213,6 +218,7 @@ func newVisibilityStoreFromDataStoreConfig(
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -244,6 +250,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
 			visibilityDisableOrderByClause,
+			visibilityEnableManualPagination,
 			metricsHandler,
 			logger,
 		)
@@ -290,6 +297,7 @@ func newElasticsearchVisibilityStore(
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) store.VisibilityStore {
@@ -314,6 +322,7 @@ func newElasticsearchVisibilityStore(
 		esProcessor,
 		esProcessorAckTimeout,
 		visibilityDisableOrderByClause,
+		visibilityEnableManualPagination,
 		metricsHandler)
 	return s
 }
