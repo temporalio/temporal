@@ -33,10 +33,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-const (
-	CallerSegmentSystem = -1
-)
-
 var (
 	CallerTypeDefaultPriority = map[string]int{
 		headers.CallerTypeAPI:         1,
@@ -205,5 +201,5 @@ func hasCaller(req quotas.Request) bool {
 }
 
 func hasCallerSegment(req quotas.Request) bool {
-	return req.CallerSegment > 0 && req.CallerSegment != CallerSegmentSystem
+	return req.CallerSegment > 0 && req.CallerSegment != p.CallerSegmentSystem
 }
