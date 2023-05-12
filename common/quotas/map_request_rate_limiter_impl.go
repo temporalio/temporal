@@ -45,6 +45,8 @@ type (
 	}
 )
 
+var _ RequestRateLimiter = (*MapRequestRateLimiterImpl[string])(nil)
+
 func NewMapRequestRateLimiter[K comparable](
 	rateLimiterGenFn RequestRateLimiterFn,
 	rateLimiterKeyFn RequestRateLimiterKeyFn[K],
