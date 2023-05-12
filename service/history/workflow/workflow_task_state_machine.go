@@ -141,9 +141,9 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 		StartedEventID:      common.EmptyEventID,
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: m.ms.GetExecutionInfo().DefaultWorkflowTaskTimeout,
-		// Task queue is always of kind NORMAL because transient workflow task is created only for
-		// failed/timed out workflow task and fail/timeout clears stickiness.
-		TaskQueue:            m.ms.TaskQueue(),
+		// Task queue is always normal (not sticky) because transient workflow task is created only for
+		// failed/timed out workflow task and fail/timeout clears sticky task queue.
+		TaskQueue:            m.ms.CurrentTaskQueue(),
 		Attempt:              m.ms.GetExecutionInfo().WorkflowTaskAttempt,
 		ScheduledTime:        timestamp.TimePtr(m.ms.timeSource.Now()),
 		StartedTime:          timestamp.UnixOrZeroTimePtr(0),
@@ -250,7 +250,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 
 		// Create corresponding WorkflowTaskScheduled event for speculative WT.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
-			m.ms.TaskQueue(),
+			m.ms.CurrentTaskQueue(),
 			workflowTask.WorkflowTaskTimeout,
 			workflowTask.Attempt,
 			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
@@ -319,7 +319,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	scheduleTime := m.ms.timeSource.Now().UTC()
 	attempt := m.ms.executionInfo.WorkflowTaskAttempt
 	// TaskQueue should already be set from workflow execution started event.
-	taskQueue := m.ms.TaskQueue()
+	taskQueue := m.ms.CurrentTaskQueue()
 	// DefaultWorkflowTaskTimeout should already be set from workflow execution started event.
 	startToCloseTimeout := m.getStartToCloseTimeout(m.ms.executionInfo.DefaultWorkflowTaskTimeout, attempt)
 
@@ -533,7 +533,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	if !workflowTaskScheduledStartedEventsCreated {
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for transient/speculative workflow tasks.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
-			m.ms.TaskQueue(),
+			m.ms.CurrentTaskQueue(),
 			workflowTask.WorkflowTaskTimeout,
 			workflowTask.Attempt,
 			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
@@ -583,7 +583,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for speculative WT.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
-			m.ms.TaskQueue(),
+			m.ms.CurrentTaskQueue(),
 			workflowTask.WorkflowTaskTimeout,
 			workflowTask.Attempt,
 			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
@@ -642,7 +642,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for speculative WT.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
-			m.ms.TaskQueue(),
+			m.ms.CurrentTaskQueue(),
 			workflowTask.WorkflowTaskTimeout,
 			workflowTask.Attempt,
 			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
@@ -681,7 +681,7 @@ func (m *workflowTaskStateMachine) FailWorkflowTask(
 ) {
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
 	// If it was sticky task queue, clear sticky task queue first and try again before creating transient workflow task.
-	if m.ms.TaskQueue().Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+	if m.ms.IsStickyTaskQueueSet() {
 		incrementAttempt = false
 		m.ms.ClearStickyTaskQueue()
 	}
@@ -860,7 +860,7 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		Version:   m.ms.currentVersion,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-				TaskQueue:           m.ms.TaskQueue(),
+				TaskQueue:           m.ms.CurrentTaskQueue(),
 				StartToCloseTimeout: workflowTask.WorkflowTaskTimeout,
 				Attempt:             workflowTask.Attempt,
 			},
@@ -898,7 +898,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *WorkflowTaskInfo {
 		Attempt:               m.ms.executionInfo.WorkflowTaskAttempt,
 		StartedTime:           m.ms.executionInfo.WorkflowTaskStartedTime,
 		ScheduledTime:         m.ms.executionInfo.WorkflowTaskScheduledTime,
-		TaskQueue:             m.ms.TaskQueue(),
+		TaskQueue:             m.ms.CurrentTaskQueue(),
 		OriginalScheduledTime: m.ms.executionInfo.WorkflowTaskOriginalScheduledTime,
 		Type:                  m.ms.executionInfo.WorkflowTaskType,
 		SuggestContinueAsNew:  m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew,

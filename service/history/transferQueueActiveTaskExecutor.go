@@ -240,7 +240,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// because it used to be non-sticky when this transfer task was created .
 	taskQueue, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
 
-	normalTaskQueue := mutableState.GetExecutionInfo().TaskQueue
+	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
 
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
@@ -253,7 +253,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// sticky worker is unavailable, switch to original normal task queue
 		taskQueue = &taskqueuepb.TaskQueue{
 			// do not use task.TaskQueue which is sticky, use original normal task queue from mutable state
-			Name: normalTaskQueue,
+			Name: normalTaskQueueName,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 

@@ -27,7 +27,6 @@ package updateworkflow
 import (
 	"context"
 	"fmt"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -35,6 +34,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -169,14 +169,7 @@ func addWorkflowTaskToMatching(
 	wt *workflow.WorkflowTaskInfo,
 	nsID namespace.ID,
 ) error {
-	// TODO (alex): Timeout calculation is copied from somewhere else. Extract func instead?
-	var taskScheduleToStartTimeout *time.Duration
-	if ms.TaskQueue().Kind == enumspb.TASK_QUEUE_KIND_STICKY {
-		taskScheduleToStartTimeout = ms.GetExecutionInfo().StickyScheduleToStartTimeout
-	} else {
-		taskScheduleToStartTimeout = ms.GetExecutionInfo().WorkflowRunTimeout
-	}
-
+	_, scheduleToStartTimeout := ms.TaskQueueScheduleToStartTimeout(wt.TaskQueue.Name)
 	wfKey := ms.GetWorkflowKey()
 	clock, err := shardCtx.NewVectorClock()
 	if err != nil {
@@ -191,7 +184,7 @@ func addWorkflowTaskToMatching(
 		},
 		TaskQueue:              wt.TaskQueue,
 		ScheduledEventId:       wt.ScheduledEventID,
-		ScheduleToStartTimeout: taskScheduleToStartTimeout,
+		ScheduleToStartTimeout: scheduleToStartTimeout,
 		Clock:                  clock,
 	})
 	if err != nil {

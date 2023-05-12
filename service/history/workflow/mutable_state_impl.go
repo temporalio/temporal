@@ -632,9 +632,8 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 	return ms.namespaceEntry
 }
 
-// TaskQueue returns current TaskQueue struct.
-func (ms *MutableStateImpl) TaskQueue() *taskqueuepb.TaskQueue {
-	if ms.executionInfo.StickyTaskQueue != "" {
+func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
+	if ms.IsStickyTaskQueueSet() {
 		return &taskqueuepb.TaskQueue{
 			Name: ms.executionInfo.StickyTaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
@@ -654,6 +653,10 @@ func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeo
 func (ms *MutableStateImpl) ClearStickyTaskQueue() {
 	ms.executionInfo.StickyTaskQueue = ""
 	ms.executionInfo.StickyScheduleToStartTimeout = nil
+}
+
+func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
+	return ms.executionInfo.StickyTaskQueue != ""
 }
 
 // TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.

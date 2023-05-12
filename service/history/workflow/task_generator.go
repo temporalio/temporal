@@ -343,7 +343,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
-	if r.mutableState.TaskQueue().Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+	if r.mutableState.IsStickyTaskQueueSet() {
 		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)
 		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 

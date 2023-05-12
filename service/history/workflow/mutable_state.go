@@ -212,9 +212,10 @@ type (
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
 
-		TaskQueue() *taskqueuepb.TaskQueue
+		CurrentTaskQueue() *taskqueuepb.TaskQueue
 		SetStickyTaskQueue(name string, scheduleToStartTimeout *time.Duration)
 		ClearStickyTaskQueue()
+		IsStickyTaskQueueSet() bool
 		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *time.Duration)
 
 		IsWorkflowExecutionRunning() bool

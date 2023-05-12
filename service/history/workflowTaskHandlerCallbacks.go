@@ -233,7 +233,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			// We will clear the stickiness here when that task is delivered to another worker polling from normal queue.
 			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
-			currentTaskQueue := mutableState.TaskQueue()
+			currentTaskQueue := mutableState.CurrentTaskQueue()
 			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
 				currentTaskQueue.GetName() != req.PollRequest.TaskQueue.GetName() {
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
@@ -838,7 +838,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	// before it was started.
 	response.ScheduledEventId = workflowTask.ScheduledEventID
 	response.StartedEventId = workflowTask.StartedEventID
-	response.StickyExecutionEnabled = ms.TaskQueue().Kind == enumspb.TASK_QUEUE_KIND_STICKY
+	response.StickyExecutionEnabled = ms.IsStickyTaskQueueSet()
 	response.NextEventId = ms.GetNextEventID()
 	response.Attempt = workflowTask.Attempt
 	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
