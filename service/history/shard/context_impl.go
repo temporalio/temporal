@@ -1343,7 +1343,7 @@ func (s *ContextImpl) finishStop() {
 	}
 }
 
-func (s *ContextImpl) isValid() bool {
+func (s *ContextImpl) IsValid() bool {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 	return s.state < contextStateStopping
@@ -1732,7 +1732,7 @@ func (s *ContextImpl) acquireShard() {
 	ownershipChanged := false
 
 	op := func() error {
-		if !s.isValid() {
+		if !s.IsValid() {
 			return s.newShardClosedErrorWithShardID()
 		}
 

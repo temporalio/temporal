@@ -34,7 +34,9 @@ import (
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -58,6 +60,7 @@ type (
 		serverShardKey ClusterShardKey
 		taskTracker    ExecutableTaskTracker
 		shutdownChan   channel.ShutdownOnce
+		logger         log.Logger
 
 		sync.Mutex
 		streamCreationTime time.Time
@@ -80,7 +83,8 @@ func NewStreamReceiver(
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 ) *StreamReceiver {
-	taskTracker := NewExecutableTaskTracker(processToolBox.Logger)
+	logger := log.With(processToolBox.Logger, tag.ShardID(clientShardKey.ShardID))
+	taskTracker := NewExecutableTaskTracker(logger)
 	return &StreamReceiver{
 		ProcessToolBox: processToolBox,
 
@@ -89,6 +93,7 @@ func NewStreamReceiver(
 		serverShardKey: serverShardKey,
 		taskTracker:    taskTracker,
 		shutdownChan:   channel.NewShutdownOnce(),
+		logger:         logger,
 
 		streamCreationTime: time.Now().UTC(),
 		stream: newStream(
@@ -111,8 +116,9 @@ func (r *StreamReceiver) Start() {
 
 	go r.sendEventLoop()
 	go r.recvEventLoop()
+	go r.heartbeatLoop()
 
-	r.Logger.Info("StreamReceiver started.")
+	r.logger.Info("StreamReceiver started.")
 }
 
 // Stop stops the processor
@@ -129,7 +135,7 @@ func (r *StreamReceiver) Stop() {
 	r.stream.Close()
 	r.taskTracker.Cancel()
 
-	r.Logger.Info("StreamReceiver shutting down.")
+	r.logger.Info("StreamReceiver shutting down.")
 }
 
 func (r *StreamReceiver) IsValid() bool {
@@ -184,10 +190,31 @@ func (r *StreamReceiver) recvEventLoop() {
 	}
 }
 
+func (r *StreamReceiver) heartbeatLoop() {
+	defer r.Stop()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+Loop:
+	for {
+		select {
+		case <-ticker.C:
+			r.MetricsHandler.Counter(metrics.ReplicationHeartbeat.GetMetricName()).Record(
+				int64(1),
+				metrics.FromClusterIDTag(r.clientShardKey.ClusterID),
+				metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
+			)
+		case <-r.shutdownChan.Channel():
+			break Loop
+		}
+	}
+}
+
 func (r *StreamReceiver) ackMessage(
 	stream Stream,
 ) {
 	watermarkInfo := r.taskTracker.LowWatermark()
+	size := r.taskTracker.Size()
 	if watermarkInfo == nil {
 		return
 	}
@@ -199,8 +226,19 @@ func (r *StreamReceiver) ackMessage(
 			},
 		},
 	}); err != nil {
-		r.Logger.Error("StreamReceiver unable to send message, err", tag.Error(err))
+		r.logger.Error("StreamReceiver unable to send message, err", tag.Error(err))
 	}
+	r.MetricsHandler.Histogram(metrics.ReplicationTasksRecvBacklog.GetMetricName(), metrics.ReplicationTasksRecvBacklog.GetMetricUnit()).Record(
+		int64(size),
+		metrics.FromClusterIDTag(r.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(r.clientShardKey.ClusterID),
+	)
+	r.MetricsHandler.Counter(metrics.ReplicationTasksSend.GetMetricName()).Record(
+		int64(1),
+		metrics.FromClusterIDTag(r.clientShardKey.ClusterID),
+		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
+		metrics.OperationTag(metrics.SyncWatermarkScope),
+	)
 }
 
 func (r *StreamReceiver) processMessages(
@@ -214,16 +252,18 @@ func (r *StreamReceiver) processMessages(
 
 	streamRespChen, err := stream.Recv()
 	if err != nil {
-		r.Logger.Error("StreamReceiver unable to recv message, err", tag.Error(err))
+		r.logger.Error("StreamReceiver unable to recv message, err", tag.Error(err))
 		return err
 	}
 	for streamResp := range streamRespChen {
 		if streamResp.Err != nil {
-			r.Logger.Error("StreamReceiver recv stream encountered unexpected err", tag.Error(streamResp.Err))
+			r.logger.Error("StreamReceiver recv stream encountered unexpected err", tag.Error(streamResp.Err))
 			return streamResp.Err
 		}
 		tasks := r.ConvertTasks(
 			clusterName,
+			r.clientShardKey,
+			r.serverShardKey,
 			streamResp.Resp.GetMessages().ReplicationTasks...,
 		)
 		highWatermark := streamResp.Resp.GetMessages().LastTaskId
@@ -235,7 +275,7 @@ func (r *StreamReceiver) processMessages(
 			r.ProcessToolBox.TaskScheduler.Submit(task)
 		}
 	}
-	r.Logger.Error("StreamReceiver encountered channel close")
+	r.logger.Error("StreamReceiver encountered channel close")
 	return nil
 }
 
@@ -252,7 +292,7 @@ func newStream(
 	return NewBiDirectionStream(
 		clientProvider,
 		processToolBox.MetricsHandler,
-		processToolBox.Logger,
+		log.With(processToolBox.Logger, tag.ShardID(clientShardKey.ShardID)),
 	)
 }
 

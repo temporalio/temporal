@@ -610,7 +610,7 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 		time.Sleep(1 * time.Millisecond)
 	}
 	s.Equal(0, len(s.shardController.ShardIDs()))
-	s.False(shard.isValid())
+	s.False(shard.IsValid())
 }
 
 func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {

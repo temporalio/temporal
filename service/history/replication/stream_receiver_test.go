@@ -40,6 +40,7 @@ import (
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -98,6 +99,7 @@ func (s *streamReceiverSuite) SetupTest() {
 		ProcessToolBox{
 			ClusterMetadata: s.clusterMetadata,
 			TaskScheduler:   s.taskScheduler,
+			MetricsHandler:  metrics.NoopMetricsHandler,
 			Logger:          log.NewTestLogger(),
 		},
 		NewClusterShardKey(rand.Int31(), rand.Int31()),
@@ -124,6 +126,7 @@ func (s *streamReceiverSuite) TearDownTest() {
 
 func (s *streamReceiverSuite) TestAckMessage_Noop() {
 	s.taskTracker.EXPECT().LowWatermark().Return(nil)
+	s.taskTracker.EXPECT().Size().Return(0)
 	s.streamReceiver.ackMessage(s.stream)
 
 	s.Equal(0, len(s.stream.requests))
@@ -135,6 +138,8 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus() {
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
 	s.taskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
+	s.taskTracker.EXPECT().Size().Return(0)
+
 	s.streamReceiver.ackMessage(s.stream)
 
 	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{
