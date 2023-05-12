@@ -33,6 +33,10 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+const (
+	CallerSegmentSystem = -1
+)
+
 var (
 	CallerTypeDefaultPriority = map[string]int{
 		headers.CallerTypeAPI:         1,
@@ -81,26 +85,37 @@ func NewPriorityRateLimiter(
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	requestPriorityFn quotas.RequestPriorityFn,
 ) quotas.RequestRateLimiter {
+	hostRequestRateLimiter := newPriorityRateLimiter(
+		func() float64 { return float64(hostMaxQPS()) },
+		requestPriorityFn,
+	)
+
 	return quotas.NewMultiRequestRateLimiter(
-		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
-		newPerShardPerNamespaceRateLimiter(perShardNamespaceMaxQPS),
+		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn, hostRequestRateLimiter),
+		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn, hostRequestRateLimiter),
+		hostRequestRateLimiter,
 	)
 }
 
-func newPerShardPerNamespaceRateLimiter(
+func newPerShardPerNamespacePriorityRateLimiter(
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
+	hostMaxQPS PersistenceMaxQps,
+	requestPriorityFn quotas.RequestPriorityFn,
+	hostRequestRateLimiter quotas.RequestRateLimiter,
 ) quotas.RequestRateLimiter {
-	return quotas.NewMapRequestRateLimiter(
-		func(req quotas.Request) quotas.RequestRateLimiter {
-			if req.Caller != "" && req.Caller != headers.CallerNameSystem && req.CallerSegment > 0 && req.CallerSegment != headers.CallerSegmentSystem {
-				if perShardNamespaceMaxQPS != nil && perShardNamespaceMaxQPS(req.CallerSegment) > 0 {
-					return quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-						return float64(perShardNamespaceMaxQPS(req.CallerSegment))
-					}))
+	return quotas.NewMapRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
+		if hasCaller(req) && hasCallerSegment(req) {
+			return newPriorityRateLimiter(func() float64 {
+				if perShardNamespaceMaxQPS == nil || perShardNamespaceMaxQPS(req.CallerSegment) <= 0 {
+					return float64(hostMaxQPS())
 				}
-			}
-			return quotas.NoopRequestRateLimiter
-		},
+				return float64(perShardNamespaceMaxQPS(req.CallerSegment))
+			},
+				requestPriorityFn,
+			)
+		}
+		return hostRequestRateLimiter
+	},
 		func(req quotas.Request) string {
 			return fmt.Sprintf("%d-%s", req.CallerSegment, req.Caller)
 		},
@@ -111,34 +126,26 @@ func newPriorityNamespaceRateLimiter(
 	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
+	hostRequestRateLimiter quotas.RequestRateLimiter,
 ) quotas.RequestRateLimiter {
-	hostRequestRateLimiter := newPriorityRateLimiter(
-		func() float64 { return float64(hostMaxQPS()) },
-		requestPriorityFn,
-	)
-
 	return quotas.NewNamespaceRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
-		if req.Caller != "" && req.Caller != headers.CallerNameSystem {
-			return quotas.NewMultiRequestRateLimiter(
-				newPriorityRateLimiter(
-					func() float64 {
-						if namespaceMaxQPS == nil {
-							return float64(hostMaxQPS())
-						}
+		if hasCaller(req) {
+			return newPriorityRateLimiter(
+				func() float64 {
+					if namespaceMaxQPS == nil {
+						return float64(hostMaxQPS())
+					}
 
-						namespaceQPS := float64(namespaceMaxQPS(req.Caller))
-						if namespaceQPS <= 0 {
-							return float64(hostMaxQPS())
-						}
+					namespaceQPS := float64(namespaceMaxQPS(req.Caller))
+					if namespaceQPS <= 0 {
+						return float64(hostMaxQPS())
+					}
 
-						return namespaceQPS
-					},
-					requestPriorityFn,
-				),
-				hostRequestRateLimiter,
+					return namespaceQPS
+				},
+				requestPriorityFn,
 			)
 		}
-
 		return hostRequestRateLimiter
 	})
 }
@@ -191,4 +198,12 @@ func RequestPriorityFn(req quotas.Request) int {
 		// default requests to high priority to be consistent with existing behavior
 		return RequestPrioritiesOrdered[0]
 	}
+}
+
+func hasCaller(req quotas.Request) bool {
+	return req.Caller != "" && req.Caller != headers.CallerNameSystem
+}
+
+func hasCallerSegment(req quotas.Request) bool {
+	return req.CallerSegment > 0 && req.CallerSegment != CallerSegmentSystem
 }
