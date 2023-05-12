@@ -124,8 +124,6 @@ func TestCommandProtocolMessage(t *testing.T) {
 		)
 	}
 
-	emptyMessageSet := collection.NewIndexedTakeSet[string, *protocolpb.Message](nil, nil)
-
 	t.Run("missing message ID", func(t *testing.T) {
 		var tc testconf
 		setup(t, &tc, defaultBlobSizeLimit)
