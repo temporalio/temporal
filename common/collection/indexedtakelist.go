@@ -24,20 +24,18 @@
 
 package collection
 
-import "math/big"
-
 // IndexedTakeList holds a set of values that can only be observed by being
 // removed from the set. It is possible for this set to contain duplicate values
 // as long as each value maps to a distinct index.
 type (
 	IndexedTakeList[K comparable, V any] struct {
-		values  []kv[K, V]
-		removed big.Int
+		values []kv[K, V]
 	}
 
 	kv[K comparable, V any] struct {
-		key   K
-		value V
+		key     K
+		value   V
+		removed bool
 	}
 )
 
@@ -56,18 +54,19 @@ func NewIndexedTakeList[K comparable, V any](
 	return ret
 }
 
-// Take finds a value in this set by its index and removes it, returning the
+// Take finds a value in this set by its key and removes it, returning the
 // value.
 func (itl *IndexedTakeList[K, V]) Take(key K) (V, bool) {
 	var zero V
-	for i, kv := range itl.values {
+	for i := 0; i < len(itl.values); i++ {
+		kv := &itl.values[i]
 		if kv.key != key {
 			continue
 		}
-		if itl.removed.Bit(i) != 0 {
+		if kv.removed {
 			return zero, false
 		}
-		itl.removed.SetBit(&itl.removed, i, 1)
+		kv.removed = true
 		return kv.value, true
 	}
 	return zero, false
@@ -76,8 +75,9 @@ func (itl *IndexedTakeList[K, V]) Take(key K) (V, bool) {
 // TakeRemaining removes all remaining values from this set and returns them.
 func (itl *IndexedTakeList[K, V]) TakeRemaining() []V {
 	out := make([]V, 0, len(itl.values))
-	for i, kv := range itl.values {
-		if itl.removed.Bit(i) == 0 {
+	for i := 0; i < len(itl.values); i++ {
+		kv := &itl.values[i]
+		if !kv.removed {
 			out = append(out, kv.value)
 		}
 	}
