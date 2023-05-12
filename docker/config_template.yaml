@@ -279,6 +279,16 @@ global:
             prefix: "temporal"
     {{- else if .Env.PROMETHEUS_ENDPOINT }}
     metrics:
+        {{- if .Env.PROMETHEUS_PREFIX }}
+        prefix: {{ .Env.PROMETHEUS_PREFIX }}
+        {{- end }}
+        {{- if and (.Env.PROMETHEUS_TAGS_KEY1) (.Env.PROMETHEUS_TAGS_VALUE1) }}
+        tags:
+          {{ .Env.PROMETHEUS_TAGS_KEY1 }}: {{ .Env.PROMETHEUS_TAGS_VALUE1 }}
+          {{- if and .Env.PROMETHEUS_TAGS_KEY2 .Env.PROMETHEUS_TAGS_VALUE2 }}
+          {{ .Env.PROMETHEUS_TAGS_KEY2 }}: {{ .Env.PROMETHEUS_TAGS_VALUE2 }}
+          {{- end }}
+        {{- end}}
         prometheus:
             timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
             listenAddress: "{{ .Env.PROMETHEUS_ENDPOINT }}"
