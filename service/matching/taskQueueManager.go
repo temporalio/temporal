@@ -390,7 +390,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	childCtx, cancel := c.newChildContext(ctx, c.config.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	childCtx, cancel := newChildContext(ctx, c.config.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	pollerID, ok := ctx.Value(pollerIDKey).(string)
@@ -628,7 +628,7 @@ func executeWithRetry(
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
-	childCtx, cancel := c.newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
+	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 
 	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
 	fakeTaskIdWrapper := &persistencespb.AllocatedTaskInfo{
@@ -648,23 +648,21 @@ func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskP
 // method to create child context when childContext cannot use
 // all of parent's deadline but instead there is a need to leave
 // some time for parent to do some post-work
-func (c *taskQueueManagerImpl) newChildContext(
+func newChildContext(
 	parent context.Context,
 	timeout time.Duration,
 	tailroom time.Duration,
 ) (context.Context, context.CancelFunc) {
-	select {
-	case <-parent.Done():
+	if parent.Err() != nil {
 		return parent, func() {}
-	default:
 	}
 	deadline, ok := parent.Deadline()
 	if !ok {
 		return context.WithTimeout(parent, timeout)
 	}
-	remaining := deadline.Sub(time.Now().UTC()) - tailroom
+	remaining := time.Until(deadline) - tailroom
 	if remaining < timeout {
-		timeout = time.Duration(util.Max(0, int64(remaining)))
+		timeout = util.Max(0, remaining)
 	}
 	return context.WithTimeout(parent, timeout)
 }
