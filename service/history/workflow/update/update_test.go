@@ -172,7 +172,7 @@ func TestRequestAcceptComplete(t *testing.T) {
 		require.False(t, completed)
 
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		defer cncl()
+		t.Cleanup(cncl)
 		_, err = upd.WaitAccepted(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded,
 			"update acceptance should not be observable until effects are applied")
@@ -192,7 +192,7 @@ func TestRequestAcceptComplete(t *testing.T) {
 		require.False(t, completed)
 
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		defer cncl()
+		t.Cleanup(cncl)
 		_, err = upd.WaitOutcome(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded,
 			"update outcome should not be observable until effects are applied")
@@ -245,14 +245,14 @@ func TestRequestReject(t *testing.T) {
 
 		{
 			ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-			defer cncl()
+			t.Cleanup(cncl)
 			_, err := upd.WaitAccepted(ctx)
 			require.ErrorIs(t, err, context.DeadlineExceeded,
 				"update acceptance failure should not be observable until effects are applied")
 		}
 		{
 			ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-			defer cncl()
+			t.Cleanup(cncl)
 			_, err := upd.WaitOutcome(ctx)
 			require.ErrorIs(t, err, context.DeadlineExceeded,
 				"update acceptance failure should not be observable until effects are applied")
@@ -471,13 +471,13 @@ func TestDoubleRollback(t *testing.T) {
 
 	t.Run("not accepted", func(t *testing.T) {
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		defer cncl()
+		t.Cleanup(cncl)
 		_, err := upd.WaitAccepted(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 	t.Run("not completed", func(t *testing.T) {
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		defer cncl()
+		t.Cleanup(cncl)
 		_, err := upd.WaitOutcome(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
@@ -510,7 +510,7 @@ func TestRollbackCompletion(t *testing.T) {
 
 	t.Run("not completed", func(t *testing.T) {
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		defer cncl()
+		t.Cleanup(cncl)
 		_, err := upd.WaitOutcome(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		require.False(t, completed)
