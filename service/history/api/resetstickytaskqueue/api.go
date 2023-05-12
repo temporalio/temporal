@@ -62,7 +62,7 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			mutableState.ClearStickyness()
+			mutableState.ClearStickyTaskQueue()
 			return &api.UpdateWorkflowAction{
 				Noop:               true,
 				CreateWorkflowTask: false,

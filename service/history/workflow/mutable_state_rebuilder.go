@@ -138,8 +138,8 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 
-	// need to clear the stickiness since workflow turned to passive
-	b.mutableState.ClearStickyness()
+	// Need to clear the sticky task queue because workflow turned to passive.
+	b.mutableState.ClearStickyTaskQueue()
 	executionInfo := b.mutableState.GetExecutionInfo()
 	executionInfo.LastFirstEventId = firstEvent.GetEventId()
 

@@ -181,21 +181,17 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 			return nil, nil
 		}
 
-		executionInfo := mutableState.GetExecutionInfo()
-
+		_, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
+		// Task queue is ignored here because at standby, always use original normal task queue,
+		// disregards the transferTask.TaskQueue which could be sticky.
+		// NOTE: scheduleToStart timeout is respected. If workflow was sticky before namespace become standby,
+		// transferTask.TaskQueue is sticky, and there is timer already created for this timeout.
+		// Use this sticky timeout as TTL.
 		taskQueue := &taskqueuepb.TaskQueue{
-			// at standby, always use original task queue, disregards the task.TaskQueue which could be sticky
 			Name: mutableState.GetExecutionInfo().TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
-		workflowRunTimeout := executionInfo.WorkflowRunTimeout
-		taskScheduleToStartTimeout := workflowRunTimeout
-		if mutableState.GetExecutionInfo().TaskQueue != transferTask.TaskQueue {
-			// Experimental: try to push sticky task as regular task with sticky timeout as TTL.
-			// workflow might be sticky before namespace become standby
-			// there shall already be a schedule_to_start timer created
-			taskScheduleToStartTimeout = executionInfo.StickyScheduleToStartTimeout
-		}
+
 		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
@@ -204,7 +200,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		if wtInfo.StartedEventID == common.EmptyEventID {
 			return newWorkflowTaskPostActionInfo(
 				mutableState,
-				taskScheduleToStartTimeout,
+				scheduleToStartTimeout,
 				*taskQueue,
 			)
 		}
@@ -569,12 +565,11 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	}
 
 	pushwtInfo := postActionInfo.(*workflowTaskPostActionInfo)
-	timeout := pushwtInfo.workflowTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		ctx,
 		task.(*tasks.WorkflowTask),
 		&pushwtInfo.taskqueue,
-		timeout,
+		pushwtInfo.workflowTaskScheduleToStartTimeout,
 	)
 }
 

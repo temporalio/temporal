@@ -343,7 +343,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
-	if r.mutableState.IsStickyTaskQueueEnabled() {
+	if r.mutableState.IsStickyTaskQueueSet() {
 		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)
 		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 
@@ -370,7 +370,12 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 
 	r.mutableState.AddTasks(&tasks.WorkflowTask{
 		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:      r.mutableState.GetWorkflowKey(),
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		// Store current task queue to the transfer task.
+		// If current task queue becomes sticky in between when this transfer task is created and processed,
+		// it can't be used at process time, because timeout timer was not created for it,
+		// because it used to be non-sticky when this transfer task was created here.
+		// In short, task queue that was "current" when transfer task was created must be used when task is processed.
 		TaskQueue:        workflowTask.TaskQueue.GetName(),
 		ScheduledEventID: workflowTask.ScheduledEventID,
 		Version:          workflowTask.Version,
