@@ -219,12 +219,14 @@ func (r *RegistryImpl) Len() int {
 	return len(r.updates)
 }
 
-func (r *RegistryImpl) remover(id string) func() {
-	return func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		delete(r.updates, id)
-	}
+func (r *RegistryImpl) remover(id string) updateOpt {
+	return withCompletionCallback(
+		func() {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			delete(r.updates, id)
+		},
+	)
 }
 
 func (r *RegistryImpl) admit(context.Context) error {

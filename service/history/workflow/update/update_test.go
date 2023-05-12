@@ -49,8 +49,6 @@ func successOutcome(t *testing.T, s string) *updatepb.Outcome {
 	}
 }
 
-func ignoreCompletion() {}
-
 var eventStoreUnused update.EventStore
 
 type mockEventStore struct {
@@ -87,7 +85,7 @@ func (m mockEventStore) AddWorkflowExecutionUpdateCompletedEvent(
 func TestNilMessage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	upd := update.New(t.Name()+"update-id", ignoreCompletion)
+	upd := update.New(t.Name() + "update-id")
 	err := upd.OnMessage(ctx, nil, mockEventStore{})
 	var invalidArg *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArg)
@@ -96,7 +94,7 @@ func TestNilMessage(t *testing.T) {
 func TestUnsupportedMessageType(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	upd := update.New(t.Name()+"update-id", ignoreCompletion)
+	upd := update.New(t.Name() + "update-id")
 	notAMessageType := historypb.HistoryEvent{}
 	err := upd.OnMessage(ctx, &notAMessageType, mockEventStore{})
 	var invalidArg *serviceerror.InvalidArgument
@@ -139,7 +137,7 @@ func TestRequestAcceptComplete(t *testing.T) {
 				return nil, nil
 			},
 		}
-		upd = update.New(meta.UpdateId, func() { completed = true })
+		upd = update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 	)
 
 	t.Run("request", func(t *testing.T) {
@@ -221,7 +219,7 @@ func TestRequestReject(t *testing.T) {
 		effects   = effect.Buffer{}
 		store     = mockEventStore{Controller: &effects}
 		updateID  = t.Name() + "-update-id"
-		upd       = update.New(updateID, func() { completed = true })
+		upd       = update.New(updateID, update.ObserveCompletion(&completed))
 		req       = updatepb.Request{
 			Meta:  &updatepb.Meta{UpdateId: updateID},
 			Input: &updatepb.Input{Name: t.Name()},
@@ -281,7 +279,7 @@ func TestWithProtocolMessage(t *testing.T) {
 		ctx      = context.Background()
 		store    = mockEventStore{Controller: &effect.Buffer{}}
 		updateID = t.Name() + "-update-id"
-		upd      = update.New(updateID, ignoreCompletion)
+		upd      = update.New(updateID)
 		req      = updatepb.Request{
 			Meta:  &updatepb.Meta{UpdateId: updateID},
 			Input: &updatepb.Input{Name: t.Name()},
@@ -312,7 +310,7 @@ func TestMessageOutput(t *testing.T) {
 		effects  effect.Buffer
 		store    = mockEventStore{Controller: &effects}
 		updateID = t.Name() + "-update-id"
-		upd      = update.New(updateID, ignoreCompletion)
+		upd      = update.New(updateID)
 		req      = updatepb.Request{
 			Meta:  &updatepb.Meta{UpdateId: updateID},
 			Input: &updatepb.Input{Name: t.Name()},
@@ -332,7 +330,7 @@ func TestMessageOutput(t *testing.T) {
 		require.Len(t, msgs, 1)
 	})
 	t.Run("after requested", func(t *testing.T) {
-		upd := update.NewAccepted(updateID, ignoreCompletion)
+		upd := update.NewAccepted(updateID)
 		msgs := make([]*protocolpb.Message, 0)
 		upd.ReadOutgoingMessages(&msgs)
 		require.Empty(t, msgs)
@@ -343,7 +341,7 @@ func TestRejectAfterAcceptFails(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	updateID := t.Name() + "-update-id"
-	upd := update.NewAccepted(updateID, ignoreCompletion)
+	upd := update.NewAccepted(updateID)
 	err := upd.OnMessage(ctx, &updatepb.Rejection{}, eventStoreUnused)
 	var invalidArg *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArg)
@@ -364,7 +362,7 @@ func TestAcceptanceAndResponseInSameMessageBatch(t *testing.T) {
 		req       = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
 		acpt      = updatepb.Acceptance{AcceptedRequest: &req, AcceptedRequestMessageId: "x"}
 		resp      = updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}
-		upd       = update.New(meta.UpdateId, func() { completed = true })
+		upd       = update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 	)
 
 	require.NoError(t, upd.OnMessage(ctx, &req, store))
@@ -382,7 +380,7 @@ func TestDuplicateRequestNoError(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	updateID := t.Name() + "-update-id"
-	upd := update.NewAccepted(updateID, ignoreCompletion)
+	upd := update.NewAccepted(updateID)
 	err := upd.OnMessage(ctx, &updatepb.Request{}, eventStoreUnused)
 	require.NoError(t, err,
 		"a second request message should be ignored, not cause an error")
@@ -398,13 +396,13 @@ func TestMessageValidation(t *testing.T) {
 	var invalidArg *serviceerror.InvalidArgument
 	updateID := t.Name() + "-update-id"
 	t.Run("invalid request msg", func(t *testing.T) {
-		upd := update.New("", ignoreCompletion)
+		upd := update.New("")
 		err := upd.OnMessage(ctx, &updatepb.Request{}, eventStoreUnused)
 		require.ErrorAs(t, err, &invalidArg)
 		require.ErrorContains(t, err, "invalid")
 	})
 	t.Run("invalid acceptance msg", func(t *testing.T) {
-		upd := update.New(updateID, ignoreCompletion)
+		upd := update.New(updateID)
 		store := mockEventStore{Controller: effect.Immediate(ctx)}
 		validReq := updatepb.Request{
 			Meta:  &updatepb.Meta{UpdateId: updateID},
@@ -417,7 +415,7 @@ func TestMessageValidation(t *testing.T) {
 		require.ErrorContains(t, err, "invalid")
 	})
 	t.Run("invalid rejection msg", func(t *testing.T) {
-		upd := update.New(updateID, ignoreCompletion)
+		upd := update.New(updateID)
 		store := mockEventStore{
 			Controller: effect.Immediate(ctx),
 		}
@@ -432,7 +430,7 @@ func TestMessageValidation(t *testing.T) {
 		require.ErrorContains(t, err, "invalid")
 	})
 	t.Run("invalid response msg", func(t *testing.T) {
-		upd := update.NewAccepted("", ignoreCompletion)
+		upd := update.NewAccepted("")
 		err := upd.OnMessage(
 			ctx,
 			&updatepb.Response{},
@@ -460,7 +458,7 @@ func TestDoubleRollback(t *testing.T) {
 		resp      = updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}
 	)
 
-	upd := update.New(meta.UpdateId, func() { completed = true })
+	upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 	require.NoError(t, upd.OnMessage(ctx, &req, store))
 	effects.Apply(ctx)
 
@@ -497,7 +495,7 @@ func TestRollbackCompletion(t *testing.T) {
 		effects   = effect.Buffer{}
 		store     = mockEventStore{Controller: &effects}
 		updateID  = t.Name() + "-update-id"
-		upd       = update.NewAccepted(updateID, func() { completed = true })
+		upd       = update.NewAccepted(updateID, update.ObserveCompletion(&completed))
 		resp      = updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: updateID},
 			Outcome: successOutcome(t, "success!"),
@@ -529,7 +527,7 @@ func TestRejectionWithAcceptanceWaiter(t *testing.T) {
 		ctx      = context.Background()
 		store    = mockEventStore{Controller: effect.Immediate(ctx)}
 		updateID = t.Name() + "-update-id"
-		upd      = update.New(updateID, ignoreCompletion)
+		upd      = update.New(updateID)
 		req      = updatepb.Request{
 			Meta:  &updatepb.Meta{UpdateId: updateID},
 			Input: &updatepb.Input{Name: "not_empty"},

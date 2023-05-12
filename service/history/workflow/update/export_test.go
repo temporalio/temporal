@@ -32,3 +32,8 @@ var (
 	NewAccepted  = newAccepted
 	NewCompleted = newCompleted
 )
+
+// ObserveCompletion exporses withOnComplete to unit tests
+func ObserveCompletion(b *bool) updateOpt {
+	return withCompletionCallback(func() { *b = true })
+}

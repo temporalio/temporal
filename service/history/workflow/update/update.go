@@ -88,11 +88,11 @@ type (
 
 // New creates a new Update instance with the provided ID that will call the
 // onComplete callback when it completes.
-func New(id string, onComplete func(), opts ...updateOpt) *Update {
+func New(id string, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
 		state:           stateAdmitted,
-		onComplete:      onComplete,
+		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewFuture[*failurepb.Failure](),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
@@ -103,17 +103,23 @@ func New(id string, onComplete func(), opts ...updateOpt) *Update {
 	return upd
 }
 
+func withCompletionCallback(cb func()) updateOpt {
+	return func(u *Update) {
+		u.onComplete = cb
+	}
+}
+
 func withInstrumentation(i *instrumentation) updateOpt {
 	return func(u *Update) {
 		u.instrumentation = i
 	}
 }
 
-func newAccepted(id string, onComplete func(), opts ...updateOpt) *Update {
+func newAccepted(id string, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
 		state:           stateAccepted,
-		onComplete:      onComplete,
+		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
@@ -132,6 +138,7 @@ func newCompleted(
 	upd := &Update{
 		id:              id,
 		state:           stateCompleted,
+		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
 		outcome:         outcomeFuture,
