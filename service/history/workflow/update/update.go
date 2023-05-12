@@ -66,10 +66,10 @@ type (
 	// messages from the go.temporal.io/api/update/v1 package. The update state
 	// machine is straightforward except in that it provides "provisional"
 	// in-between states where the update has received a message that has
-	// updated its internal state but those updates have not been made visible
+	// modified its internal state but those changes have not been made visible
 	// to clients yet (e.g. accepted or outcome futures have not been set yet).
-	// The effects are bound to the EventStore's effect.Set and will be
-	// triggered withen those effects are applied.
+	// The observable changes are bound to the EventStore's effect.Controller
+	// and will be triggered when those effects are applied.
 	Update struct {
 		// accessed only while holding workflow lock
 		id              string
@@ -280,7 +280,7 @@ func (u *Update) onAcceptanceMsg(
 	return nil
 }
 
-// onRejectionMsg expectes the Update stae to be in stateRequested and returns
+// onRejectionMsg expectes the Update state to be stateRequested and returns
 // an error if it finds otherwise. On commit of buffered effects the state
 // machine transitions to stateCompleted and the accepted and outcome futures
 // are both completed with the failurepb.Failure value from the
@@ -312,7 +312,7 @@ func (u *Update) onRejectionMsg(
 	return nil
 }
 
-// onResponseMsg expectes the Update to be in either stateProvisionallyAccepted
+// onResponseMsg expects the Update to be in either stateProvisionallyAccepted
 // or stateAccepted and returns an error if it finds otherwise. On commit of
 // buffered effects the state machine will transtion to stateCompleted and the
 // outcome future is completed with the updatepb.Outcome from the
