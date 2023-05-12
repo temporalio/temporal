@@ -72,14 +72,20 @@ const (
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
+
+	getUserDataFastReturnStartWaitTime = 1 * time.Second
 )
 
 var (
 	// this retry policy is currenly only used for matching persistence operations
 	// that, if failed, the entire task queue needs to be reload
 	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithMaximumInterval(1 * time.Second).
-		WithExpirationInterval(30 * time.Second)
+					WithMaximumInterval(1 * time.Second).
+					WithExpirationInterval(30 * time.Second)
+
+	// Retry policy for getting user data from root partition. Should retry forever.
+	getUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
+				WithMaximumInterval(5 * time.Minute)
 )
 
 type (
@@ -721,13 +727,6 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		return err
 	}
 
-	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute)
-
-	const (
-		// TODO: dynamic config
-		startWaitTime = 1 * time.Second
-	)
-
 	op := func(ctx context.Context) error {
 		knownUserData, _, err := c.db.GetUserData(ctx)
 		if err != nil && !errors.Is(err, errUserDataNotPresentOnPartition) {
@@ -757,11 +756,11 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		return nil
 	}
 
-	minWaitTime := startWaitTime
+	minWaitTime := getUserDataFastReturnStartWaitTime
 
 	for ctx.Err() == nil {
 		start := time.Now()
-		_ = backoff.ThrottleRetryContext(ctx, op, policy, nil)
+		_ = backoff.ThrottleRetryContext(ctx, op, getUserDataRetryPolicy, nil)
 		elapsed := time.Since(start)
 
 		// In general we want to start a new call immediately on completion of the previous
@@ -777,7 +776,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 			// between a fast reply and a timeout.
 			minWaitTime = util.Min(minWaitTime*2, c.config.GetUserDataLongPollTimeout()/2)
 		} else {
-			minWaitTime = startWaitTime
+			minWaitTime = getUserDataFastReturnStartWaitTime
 		}
 	}
 
