@@ -25,8 +25,6 @@
 package client
 
 import (
-	"fmt"
-
 	"go.temporal.io/server/common/headers"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
@@ -112,8 +110,8 @@ func newPerShardPerNamespacePriorityRateLimiter(
 		}
 		return hostRequestRateLimiter
 	},
-		func(req quotas.Request) string {
-			return fmt.Sprintf("%d-%s", req.CallerSegment, req.Caller)
+		func(req quotas.Request) *quotas.RateLimiterKey {
+			return quotas.NewRateLimiterKey(quotas.WithNamespaceID(req.Caller), quotas.WithShardID(req.CallerSegment))
 		},
 	)
 }

@@ -31,8 +31,15 @@ import (
 )
 
 type (
+	RateLimiterKey struct {
+		namespaceID string
+		shardID     int32
+	}
+
+	KeyField func(k *RateLimiterKey)
+
 	// RequestRateLimiterKeyFn extracts the map key from the request
-	RequestRateLimiterKeyFn func(req Request) string
+	RequestRateLimiterKeyFn func(req Request) *RateLimiterKey
 
 	// MapRequestRateLimiterImpl is a generic wrapper rate limiter for a set of rate limiters
 	// identified by a key
@@ -41,9 +48,34 @@ type (
 		rateLimiterKeyFn RequestRateLimiterKeyFn
 
 		sync.RWMutex
-		rateLimiters map[string]RequestRateLimiter
+		rateLimiters map[*RateLimiterKey]RequestRateLimiter
 	}
 )
+
+func NewRateLimiterKey(fields ...KeyField) *RateLimiterKey {
+	key := &RateLimiterKey{
+		namespaceID: "",
+		shardID:     -1,
+	}
+
+	for _, field := range fields {
+		field(key)
+	}
+
+	return key
+}
+
+func WithNamespaceID(namespaceID string) KeyField {
+	return func(k *RateLimiterKey) {
+		k.namespaceID = namespaceID
+	}
+}
+
+func WithShardID(shardID int32) KeyField {
+	return func(k *RateLimiterKey) {
+		k.shardID = shardID
+	}
+}
 
 var _ RequestRateLimiter = (*MapRequestRateLimiterImpl)(nil)
 
@@ -54,12 +86,12 @@ func NewMapRequestRateLimiter(
 	return &MapRequestRateLimiterImpl{
 		rateLimiterGenFn: rateLimiterGenFn,
 		rateLimiterKeyFn: rateLimiterKeyFn,
-		rateLimiters:     make(map[string]RequestRateLimiter),
+		rateLimiters:     make(map[*RateLimiterKey]RequestRateLimiter),
 	}
 }
 
-func namespaceRequestRateLimiterKeyFn(req Request) string {
-	return req.Caller
+func namespaceRequestRateLimiterKeyFn(req Request) *RateLimiterKey {
+	return NewRateLimiterKey(WithNamespaceID(req.Caller))
 }
 
 func NewNamespaceRequestRateLimiter(
