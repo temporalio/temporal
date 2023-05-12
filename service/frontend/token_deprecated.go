@@ -30,6 +30,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 )
 
+// DEPRECATED
 func generatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *historyspb.VersionHistories,
@@ -49,6 +50,7 @@ func generatePaginationToken(
 	}
 }
 
+// DEPRECATED
 func validatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	token *tokenspb.RawHistoryContinuation,
@@ -67,6 +69,7 @@ func validatePaginationToken(
 	return nil
 }
 
+// DEPRECATED
 func serializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
@@ -75,12 +78,14 @@ func serializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, e
 	return token.Marshal()
 }
 
+// DEPRECATED
 func deserializeRawHistoryToken(bytes []byte) (*tokenspb.RawHistoryContinuation, error) {
 	token := &tokenspb.RawHistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	return token, err
 }
 
+// DEPRECATED
 func serializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
@@ -89,6 +94,7 @@ func serializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) 
 	return token.Marshal()
 }
 
+// DEPRECATED
 func deserializeHistoryToken(bytes []byte) (*tokenspb.HistoryContinuation, error) {
 	token := &tokenspb.HistoryContinuation{}
 	err := token.Unmarshal(bytes)
