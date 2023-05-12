@@ -77,6 +77,20 @@ func (m *MockContext) EXPECT() *MockContextMockRecorder {
 	return m.recorder
 }
 
+// AddSpeculativeWorkflowTaskTimeoutTask mocks base method.
+func (m *MockContext) AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSpeculativeWorkflowTaskTimeoutTask", task)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSpeculativeWorkflowTaskTimeoutTask indicates an expected call of AddSpeculativeWorkflowTaskTimeoutTask.
+func (mr *MockContextMockRecorder) AddSpeculativeWorkflowTaskTimeoutTask(task interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpeculativeWorkflowTaskTimeoutTask", reflect.TypeOf((*MockContext)(nil).AddSpeculativeWorkflowTaskTimeoutTask), task)
+}
+
 // AddTasks mocks base method.
 func (m *MockContext) AddTasks(ctx context.Context, request *persistence.AddHistoryTasksRequest) error {
 	m.ctrl.T.Helper()

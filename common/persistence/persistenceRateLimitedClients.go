@@ -431,6 +431,17 @@ func (p *executionRateLimitedPersistenceClient) RangeDeleteReplicationTaskFromDL
 	return p.persistence.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 }
 
+func (p *executionRateLimitedPersistenceClient) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *GetReplicationTasksFromDLQRequest,
+) (bool, error) {
+	if ok := allow(ctx, "IsReplicationDLQEmpty", p.rateLimiter); !ok {
+		return true, ErrPersistenceLimitExceeded
+	}
+
+	return p.persistence.IsReplicationDLQEmpty(ctx, request)
+}
+
 func (p *executionRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

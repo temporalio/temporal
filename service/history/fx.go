@@ -252,6 +252,7 @@ func VisibilityManagerProvider(
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.SecondaryVisibilityWritingMode,
 		serviceConfig.VisibilityDisableOrderByClause,
+		serviceConfig.VisibilityEnableManualPagination,
 		metricsHandler,
 		logger,
 	)

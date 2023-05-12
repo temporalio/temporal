@@ -1068,6 +1068,8 @@ const (
 	OperationVisibilityQueueProcessorScope = "VisibilityQueueProcessor"
 	// OperationArchivalQueueProcessorScope is a scope for archival queue processor
 	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
+	// OperationMemoryScheduledQueueProcessorScope is a scope for memory scheduled queue processor.
+	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
 )
 
 // Matching Scope
@@ -1196,6 +1198,7 @@ const (
 	TaskTypeTimerStandbyTaskActivityRetryTimer     = "TimerStandbyTaskActivityRetryTimer"
 	TaskTypeTimerStandbyTaskWorkflowBackoffTimer   = "TimerStandbyTaskWorkflowBackoffTimer"
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
+	TaskTypeMemoryScheduledTaskWorkflowTaskTimeout = "MemoryScheduledTaskWorkflowTaskTimeout"
 )
 
 // Schedule action types
@@ -1355,8 +1358,9 @@ var (
 	CommandTypeUpsertWorkflowSearchAttributesCounter  = NewCounterDef("upsert_workflow_search_attributes_command")
 	CommandTypeModifyWorkflowPropertiesCounter        = NewCounterDef("modify_workflow_properties_command")
 	CommandTypeChildWorkflowCounter                   = NewCounterDef("child_workflow_command")
+	MessageTypeRequestWorkflowExecutionUpdateCounter  = NewCounterDef("request_workflow_update_message")
 	MessageTypeAcceptWorkflowExecutionUpdateCounter   = NewCounterDef("accept_workflow_update_message")
-	MessageTypeCompleteWorkflowExecutionUpdateCounter = NewCounterDef("complete_workflow_update_message")
+	MessageTypeRespondWorkflowExecutionUpdateCounter  = NewCounterDef("respond_workflow_update_message")
 	MessageTypeRejectWorkflowExecutionUpdateCounter   = NewCounterDef("reject_workflow_update_message")
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
@@ -1451,6 +1455,7 @@ var (
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
+	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
 	GetReplicationMessagesForShardLatency          = NewTimerDef("get_replication_messages_for_shard")
 	GetDLQReplicationMessagesLatency               = NewTimerDef("get_dlq_replication_messages")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")

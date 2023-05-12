@@ -52,7 +52,7 @@ import (
 )
 
 const (
-	clusterCallbackKey = "%s-%d" // <cluster name>-<polling shard id>
+	dlqSizeCheckInterval = time.Minute * 5
 )
 
 type (
@@ -140,6 +140,7 @@ func (r *taskProcessorManagerImpl) Start() {
 		r.listenToClusterMetadataChange()
 	}
 	go r.completeReplicationTaskLoop()
+	go r.checkReplicationDLQEmptyLoop()
 }
 
 func (r *taskProcessorManagerImpl) Stop() {
@@ -261,6 +262,19 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 	}
 }
 
+func (r *taskProcessorManagerImpl) checkReplicationDLQEmptyLoop() {
+	for {
+		select {
+		case <-time.After(backoff.FullJitter(dlqSizeCheckInterval)):
+			if r.config.ReplicationEnableDLQMetrics() {
+				r.checkReplicationDLQSize()
+			}
+		case <-r.shutdownChan:
+			return
+		}
+	}
+}
+
 func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	clusterMetadata := r.shard.GetClusterMetadata()
 	allClusterInfo := clusterMetadata.GetAllClusterInfo()
@@ -326,6 +340,36 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 		r.minTxAckedTaskID = minAckedTaskID
 	}
 	return err
+}
+
+func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
+	defer cancel()
+	for clusterName := range r.shard.GetClusterMetadata().GetAllClusterInfo() {
+		if clusterName == r.shard.GetClusterMetadata().GetCurrentClusterName() {
+			continue
+		}
+
+		minTaskKey := r.shard.GetReplicatorDLQAckLevel(clusterName)
+		isEmpty, err := r.shard.GetExecutionManager().IsReplicationDLQEmpty(ctx, &persistence.GetReplicationTasksFromDLQRequest{
+			GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
+				ShardID:             r.shard.GetShardID(),
+				TaskCategory:        tasks.CategoryReplication,
+				InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskKey),
+			},
+			SourceClusterName: clusterName,
+		})
+		if err != nil {
+			r.logger.Error("Failed to check replication DLQ size.", tag.Error(err))
+			return
+		}
+		if !isEmpty {
+			r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
+			r.logger.Info("Replication DLQ is not empty.", tag.ShardID(r.shard.GetShardID()), tag.AckLevel(minTaskKey))
+			break
+		}
+	}
 }
 
 func targetReaderIDs(

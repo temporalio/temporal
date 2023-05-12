@@ -247,17 +247,17 @@ func (mr *MockContextMockRecorder) Unlock(lockPriority interface{}) *gomock.Call
 }
 
 // UpdateRegistry mocks base method.
-func (m *MockContext) UpdateRegistry() update.Registry {
+func (m *MockContext) UpdateRegistry(ctx context.Context) update.Registry {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateRegistry")
+	ret := m.ctrl.Call(m, "UpdateRegistry", ctx)
 	ret0, _ := ret[0].(update.Registry)
 	return ret0
 }
 
 // UpdateRegistry indicates an expected call of UpdateRegistry.
-func (mr *MockContextMockRecorder) UpdateRegistry() *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateRegistry(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRegistry", reflect.TypeOf((*MockContext)(nil).UpdateRegistry))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRegistry", reflect.TypeOf((*MockContext)(nil).UpdateRegistry), ctx)
 }
 
 // UpdateWorkflowExecutionAsActive mocks base method.

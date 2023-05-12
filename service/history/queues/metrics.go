@@ -87,8 +87,9 @@ func GetStandbyTransferTaskTypeTagValue(
 }
 
 func GetActiveTimerTaskTypeTagValue(
-	task tasks.Task,
+	executable Executable,
 ) string {
+	task := executable.GetTask()
 	switch task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
 		return metrics.TaskTypeTimerActiveTaskWorkflowTaskTimeout
@@ -97,7 +98,12 @@ func GetActiveTimerTaskTypeTagValue(
 	case *tasks.UserTimerTask:
 		return metrics.TaskTypeTimerActiveTaskUserTimer
 	case *tasks.WorkflowTimeoutTask:
-		return metrics.TaskTypeTimerActiveTaskWorkflowTimeout
+		switch executable.(type) {
+		case *speculativeWorkflowTaskTimeoutExecutable:
+			return metrics.TaskTypeMemoryScheduledTaskWorkflowTaskTimeout
+		default:
+			return metrics.TaskTypeTimerActiveTaskWorkflowTimeout
+		}
 	case *tasks.DeleteHistoryEventTask:
 		return metrics.TaskTypeTimerActiveTaskDeleteHistoryEvent
 	case *tasks.ActivityRetryTimerTask:
@@ -161,9 +167,10 @@ func GetArchivalTaskTypeTagValue(
 }
 
 func getTaskTypeTagValue(
-	task tasks.Task,
+	executable Executable,
 	isActive bool,
 ) string {
+	task := executable.GetTask()
 	switch task.GetCategory() {
 	case tasks.CategoryTransfer:
 		if isActive {
@@ -172,7 +179,7 @@ func getTaskTypeTagValue(
 		return GetStandbyTransferTaskTypeTagValue(task)
 	case tasks.CategoryTimer:
 		if isActive {
-			return GetActiveTimerTaskTypeTagValue(task)
+			return GetActiveTimerTaskTypeTagValue(executable)
 		}
 		return GetStandbyTimerTaskTypeTagValue(task)
 	case tasks.CategoryVisibility:

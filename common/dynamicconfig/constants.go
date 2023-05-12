@@ -66,6 +66,8 @@ const (
 	SecondaryVisibilityWritingMode = "system.secondaryVisibilityWritingMode"
 	// VisibilityDisableOrderByClause is the config to disable ORDERY BY clause for Elasticsearch
 	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
+	// VisibilityEnableManualPagination is the config to enable manual pagination for Elasticsearch
+	VisibilityEnableManualPagination = "system.visibilityEnableManualPagination"
 
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
@@ -322,10 +324,8 @@ const (
 	MatchingSyncMatchWaitDuration = "matching.syncMatchWaitDuration"
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval = "matching.updateAckInterval"
-	// MatchingIdleTaskqueueCheckInterval is the IdleTaskqueueCheckInterval
-	MatchingIdleTaskqueueCheckInterval = "matching.idleTaskqueueCheckInterval"
-	// MaxTaskqueueIdleTime is the max time taskqueue being idle
-	MaxTaskqueueIdleTime = "matching.maxTaskqueueIdleTime"
+	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded
+	MatchingMaxTaskQueueIdleTime = "matching.maxTaskQueueIdleTime"
 	// MatchingOutstandingTaskAppendsThreshold is the threshold for outstanding task appends
 	MatchingOutstandingTaskAppendsThreshold = "matching.outstandingTaskAppendsThreshold"
 	// MatchingMaxTaskBatchSize is max batch size for task writer
@@ -468,6 +468,9 @@ const (
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 
+	// MemoryTimerProcessorSchedulerWorkerCount is the number of workers in the task scheduler for in memory timer processor.
+	MemoryTimerProcessorSchedulerWorkerCount = "history.memoryTimerProcessorSchedulerWorkerCount"
+
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -560,6 +563,9 @@ const (
 	ArchivalBackendMaxRPS = "history.archivalBackendMaxRPS"
 	// DurableArchivalEnabled is the flag to enable durable archival
 	DurableArchivalEnabled = "history.durableArchivalEnabled"
+
+	// WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.
+	WorkflowExecutionMaxInFlightUpdates = "history.maxInFlightUpdates"
 
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
@@ -672,6 +678,8 @@ const (
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
 	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
+	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
+	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"

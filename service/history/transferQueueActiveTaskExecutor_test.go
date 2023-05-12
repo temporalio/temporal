@@ -2638,10 +2638,10 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	timeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
+	timeout := executionInfo.WorkflowRunTimeout
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-		timeout = timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout)
+		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
 	return &matchingservice.AddWorkflowTaskRequest{
@@ -2652,7 +2652,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		},
 		TaskQueue:              taskQueue,
 		ScheduledEventId:       task.ScheduledEventID,
-		ScheduleToStartTimeout: &timeout,
+		ScheduleToStartTimeout: timeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
 	}
 }

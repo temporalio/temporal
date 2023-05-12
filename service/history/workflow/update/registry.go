@@ -27,228 +27,233 @@ package update
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 
-	"github.com/gogo/protobuf/types"
-	historypb "go.temporal.io/api/history/v1"
+	"go.opentelemetry.io/otel/trace"
+	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
 	Registry interface {
-		Add(request *updatepb.Request) (*Update, Duplicate, RemoveFunc)
+		// FindOrCreate finds an existing Update or creates a new one. The second
+		// return value (bool) indicates whether the Update returned already
+		// existed and was found (true) or was not found and has been newly
+		// created (false)
+		FindOrCreate(ctx context.Context, protocolInstanceID string) (*Update, bool, error)
 
-		CreateOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
+		// Find finds an existing update in this Registry but does not create a
+		// new update it is absent.
+		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
 
-		HasPending(filterMessages []*protocolpb.Message) bool
-		ValidateIncomingMessages(messages []*protocolpb.Message) error
-		ProcessIncomingMessages(messages []*protocolpb.Message) error
+		// ReadOutoundMessages polls each registered Update for outbound
+		// messages and returns them.
+		ReadOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
+
+		// HasUndeliveredUpdates returns true if the registry has Updates that
+		// are not known to have been seen by user workflow code. In practice
+		// this means updates that have not yet been accepted or rejected.
+		HasUndeliveredUpdates() bool
+
+		// HasOutgoing returns true if the registry has any Updates that want to
+		// sent messages to a worker.
+		HasOutgoing() bool
+
+		// Len observes the number of updates in this Registry.
+		Len() int
 	}
 
-	Duplicate bool
-
-	RemoveFunc func()
-
-	// Storage represents the update package's requirements for writing
+	// UpdateStore represents the update package's requirements for writing
 	// events and restoring ephemeral state from an event index.
-	Storage interface {
-		// AddWorkflowExecutionUpdateAcceptedEvent writes an update accepted
-		// event.
-		AddWorkflowExecutionUpdateAcceptedEvent(updateID string, accpt *updatepb.Acceptance) (*historypb.HistoryEvent, error)
-
-		// AddWorkflowExecutionUpdateCompletedEvent writes an update completed
-		// event.
-		AddWorkflowExecutionUpdateCompletedEvent(resp *updatepb.Response) (*historypb.HistoryEvent, error)
-
-		// GetAcceptedWorkflowExecutionUpdateIDs reads from durable state the
-		// set of update IDs that are known to be in the accepted state.
-		GetAcceptedWorkflowExecutionUpdateIDs(ctx context.Context) ([]string, error)
+	UpdateStore interface {
+		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
+		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
+		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 	}
 
 	RegistryImpl struct {
-		sync.RWMutex
-		updates map[string]*Update
-		store   Storage
+		mu              sync.RWMutex
+		updates         map[string]*Update
+		store           UpdateStore
+		instrumentation instrumentation
+		maxInFlight     func() int
 	}
+
+	regOpt func(*RegistryImpl)
 )
+
+//revive:disable:unexported-return I *want* it to be unexported
+
+func WithInFlightLimit(f func() int) regOpt {
+	return func(r *RegistryImpl) {
+		r.maxInFlight = f
+	}
+}
+
+// WithLogger sets the log.Logger to be used by an UpdateRegistry and its
+// Updates.
+func WithLogger(l log.Logger) regOpt {
+	return func(r *RegistryImpl) {
+		r.instrumentation.log = l
+	}
+}
+
+// WithMetrics sets the metrics.Handler to be used by an UpdateRegistry and its
+// Updates.
+func WithMetrics(m metrics.Handler) regOpt {
+	return func(r *RegistryImpl) {
+		r.instrumentation.metrics = m
+	}
+}
+
+// WithTracerProvider sets the trace.TracerProvider (and by extension the
+// trace.Tracer) to be used by an UpdateRegistry and its Updates.
+func WithTracerProvider(t trace.TracerProvider) regOpt {
+	return func(r *RegistryImpl) {
+		r.instrumentation.tracer = t.Tracer(libraryName)
+	}
+}
+
+//revive:enable:unexported-return
 
 var _ Registry = (*RegistryImpl)(nil)
 
-func NewRegistry(store Storage) *RegistryImpl {
-	return &RegistryImpl{
-		updates: make(map[string]*Update),
-		store:   store,
+func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
+	r := &RegistryImpl{
+		updates:         make(map[string]*Update),
+		store:           store,
+		instrumentation: noopInstrumentation,
+		maxInFlight:     func() int { return math.MaxInt },
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	// need to eager load here so that Len and admit are correct.
+	for _, id := range store.GetAcceptedWorkflowExecutionUpdateIDs(context.Background()) {
+		r.updates[id] = newAccepted(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	}
+	return r
 }
 
-func (r *RegistryImpl) Add(request *updatepb.Request) (*Update, Duplicate, RemoveFunc) {
-	r.Lock()
-	defer r.Unlock()
-	protocolInstanceID := request.GetMeta().GetUpdateId()
-	upd, ok := r.updates[protocolInstanceID]
-	if ok {
+func (r *RegistryImpl) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if upd, ok := r.findLocked(ctx, id); ok {
 		return upd, true, nil
 	}
-	upd = newUpdate(request, protocolInstanceID)
-	r.updates[upd.protocolInstanceID] = upd
-	return upd, false, func() { r.remove(protocolInstanceID) }
+	if err := r.admit(ctx); err != nil {
+		return nil, false, err
+	}
+	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	r.updates[id] = upd
+	return upd, false, nil
 }
 
-func (r *RegistryImpl) HasPending(filterMessages []*protocolpb.Message) bool {
-	// Filter out updates which will be accepted or rejected by current workflow task messages.
-	// These updates have Pending state in the registry but in fact, they are already accepted or rejected by worker
-	// and shouldn't be counted as Pending.
-	notPendingUpdates := make(map[string]struct{})
-	for _, message := range filterMessages {
-		if types.Is(message.GetBody(), (*updatepb.Acceptance)(nil)) {
-			notPendingUpdates[message.GetProtocolInstanceId()] = struct{}{}
-		} else if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
-			notPendingUpdates[message.GetProtocolInstanceId()] = struct{}{}
-		}
-	}
+func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.findLocked(ctx, id)
+}
 
-	r.RLock()
-	defer r.RUnlock()
-
-	for _, update := range r.updates {
-		if _, notPending := notPendingUpdates[update.protocolInstanceID]; !notPending && update.state == statePending {
+func (r *RegistryImpl) HasUndeliveredUpdates() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, upd := range r.updates {
+		if !upd.hasBeenSeenByWorkflowExecution() {
 			return true
 		}
 	}
 	return false
 }
 
-func (r *RegistryImpl) CreateOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error) {
-	r.RLock()
-	defer r.RUnlock()
-	numPendingUpd := 0
+func (r *RegistryImpl) HasOutgoing() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for _, upd := range r.updates {
-		if upd.state == statePending {
-			numPendingUpd++
+		if upd.hasOutgoingMessage() {
+			return true
 		}
 	}
-	if numPendingUpd == 0 {
-		return nil, nil
+	return false
+}
+
+func (r *RegistryImpl) ReadOutgoingMessages(
+	startedEventID int64,
+) ([]*protocolpb.Message, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var out []*protocolpb.Message
+	for _, upd := range r.updates {
+		upd.ReadOutgoingMessages(&out)
 	}
 
-	// TODO (alex-update): currently sequencing_id is simply pointing to the event before WorkflowTaskStartedEvent.
-	//  SDKs are supposed to respect this and process messages (specifically, updates) after event with that ID.
-	//  In the future, sequencing_id could point to some specific event (specifically, signal) after which the update should be processed.
-	//  Currently, it is not possible due to buffered events reordering on server and events reordering in some SDKs.
+	// TODO (alex-update): currently sequencing_id is simply pointing to the
+	// event before WorkflowTaskStartedEvent.  SDKs are supposed to respect this
+	// and process messages (specifically, updates) after event with that ID.
+	// In the future, sequencing_id could point to some specific event
+	// (specifically, signal) after which the update should be processed.
+	// Currently, it is not possible due to buffered events reordering on server
+	// and events reordering in some SDKs.
 	sequencingEventID := startedEventID - 1
-
-	updMessages := make([]*protocolpb.Message, 0, numPendingUpd)
-	for _, upd := range r.updates {
-		if upd.state == statePending {
-			messageBody, err := types.MarshalAny(upd.request)
-			if err != nil {
-				return nil, err
-			}
-			updMessages = append(updMessages, &protocolpb.Message{
-				Id:                 upd.messageID,
-				ProtocolInstanceId: upd.protocolInstanceID,
-				SequencingId: &protocolpb.Message_EventId{
-					EventId: sequencingEventID,
-				},
-				Body: messageBody,
-			})
-		}
+	for _, msg := range out {
+		msg.SequencingId = &protocolpb.Message_EventId{EventId: sequencingEventID}
 	}
-	return updMessages, nil
+	return out, nil
 }
 
-func (r *RegistryImpl) ValidateIncomingMessages(messages []*protocolpb.Message) error {
-	r.RLock()
-	defer r.RUnlock()
-
-	// Valid message sequences:
-	//  pending -> reject
-	//  pending -> accept
-	//  accept -> complete
-
-	// make a shallow copy of updates for validation so that it does not alter the state which will be used
-	// by a retry of failed workflow task
-	updates := make(map[string]*Update, len(r.updates))
-	for k, v := range r.updates {
-		updates[k] = &Update{
-			state:              v.state,
-			request:            v.request,
-			messageID:          v.messageID,
-			protocolInstanceID: v.protocolInstanceID,
-			outcome:            nil, // we don't need it for validation
-		}
-	}
-
-	_, err := processIncomingMessages(updates, messages)
-	return err
+func (r *RegistryImpl) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.updates)
 }
 
-func (r *RegistryImpl) ProcessIncomingMessages(messages []*protocolpb.Message) error {
-	r.Lock()
-	defer r.Unlock()
-
-	closedUpdates, err := processIncomingMessages(r.updates, messages)
-	if err != nil {
-		return err
+func (r *RegistryImpl) remover(id string) func() {
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		delete(r.updates, id)
 	}
+}
 
-	// notify result to caller
-	for _, upd := range closedUpdates {
-		upd.notify()
+func (r *RegistryImpl) admit(context.Context) error {
+	max := r.maxInFlight()
+	if len(r.updates) >= max {
+		return serviceerror.NewResourceExhausted(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			fmt.Sprintf("update concurrent in-flight limit has been reached (%v)", max),
+		)
 	}
 	return nil
 }
 
-//nolint:revive // cognitive complexity
-func processIncomingMessages(updates map[string]*Update, messages []*protocolpb.Message) ([]*Update, error) {
-	var closedUpdates []*Update
-	for _, message := range messages {
-		instanceId := message.GetProtocolInstanceId()
-		upd, ok := updates[instanceId]
-		if !ok {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: update %s not found", instanceId))
-		}
+func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool) {
+	upd, ok := r.updates[id]
+	if ok {
+		return upd, true
+	}
 
-		if message.GetBody() == nil {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: message %s has empty body", instanceId))
-		}
+	// update not found in ephemeral state, but could have already completed so
+	// check in registry storage
 
-		if types.Is(message.GetBody(), (*updatepb.Acceptance)(nil)) {
-			if upd.state != statePending {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to accept update %s, current state: %s", instanceId, upd.state))
-			}
-			upd.accept()
-		} else if types.Is(message.GetBody(), (*updatepb.Response)(nil)) {
-			if upd.state != stateAccepted {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to complete update %s, current state: %s", instanceId, upd.state))
-			}
-			var response updatepb.Response
-			if err := types.UnmarshalAny(message.GetBody(), &response); err != nil {
-				return nil, err
-			}
-			upd.complete(response.GetOutcome())
-			closedUpdates = append(closedUpdates, upd)
-		} else if types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
-			if upd.state != statePending {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("BadUpdateWorkflowExecutionMessage: failed to reject update %s, current state: %s", instanceId, upd.state))
-			}
-			var rejection updatepb.Rejection
-			if err := types.UnmarshalAny(message.GetBody(), &rejection); err != nil {
-				return nil, err
-			}
-			upd.reject(rejection.GetFailure())
-			closedUpdates = append(closedUpdates, upd)
-		} else {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown message type: %s", message.GetBody().GetTypeUrl()))
+	if info, ok := r.store.GetUpdateInfo(ctx, id); ok {
+		if info.GetCompletedPointer() != nil {
+			// Completed, create the Update object but do not add to registry. this
+			// should not happen often.
+			fut := future.NewReadyFuture(r.store.GetUpdateOutcome(ctx, id))
+			return newCompleted(
+				id,
+				fut,
+				withInstrumentation(&r.instrumentation),
+			), true
 		}
 	}
-	return closedUpdates, nil
-}
-
-func (r *RegistryImpl) remove(id string) {
-	r.Lock()
-	defer r.Unlock()
-	delete(r.updates, id)
+	return nil, false
 }

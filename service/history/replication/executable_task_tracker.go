@@ -48,7 +48,7 @@ type (
 		Timestamp time.Time
 	}
 	ExecutableTaskTracker interface {
-		TrackTasks(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask)
+		TrackTasks(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask
 		LowWatermark() *WatermarkInfo
 		Cancel()
 	}
@@ -77,18 +77,20 @@ func NewExecutableTaskTracker(
 	}
 }
 
-// TrackTasks add tasks for tracking,
+// TrackTasks add tasks for tracking, return valid tasks (dedup)
 // if task tracker is cancelled, then newly added tasks will also be cancelled
 func (t *ExecutableTaskTrackerImpl) TrackTasks(
 	highWatermarkInfo WatermarkInfo,
 	tasks ...TrackableExecutableTask,
-) {
+) []TrackableExecutableTask {
+	filteredTasks := make([]TrackableExecutableTask, 0, len(tasks))
+
 	t.Lock()
 	defer t.Unlock()
 
 	// need to assume source side send replication tasks in order
 	if t.highWatermarkInfo != nil && highWatermarkInfo.Watermark <= t.highWatermarkInfo.Watermark {
-		return
+		return filteredTasks
 	}
 
 	lastTaskID := int64(-1)
@@ -103,6 +105,7 @@ Loop:
 		}
 		t.taskQueue.PushBack(task)
 		t.taskIDs[task.TaskID()] = struct{}{}
+		filteredTasks = append(filteredTasks, task)
 		lastTaskID = task.TaskID()
 	}
 
@@ -118,6 +121,7 @@ Loop:
 	if t.cancelled {
 		t.cancelLocked()
 	}
+	return filteredTasks
 }
 
 func (t *ExecutableTaskTrackerImpl) LowWatermark() *WatermarkInfo {

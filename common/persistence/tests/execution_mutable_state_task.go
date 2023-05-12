@@ -457,6 +457,36 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetVisibilityTasks_Multiple() {
 	s.Equal(visibilityTasks, loadedTasks)
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestIsReplicationDLQEmpty() {
+	testShardID := int32(1)
+	isEmpty, err := s.ExecutionManager.IsReplicationDLQEmpty(context.Background(), &p.GetReplicationTasksFromDLQRequest{
+		GetHistoryTasksRequest: p.GetHistoryTasksRequest{
+			ShardID:             testShardID,
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(0),
+		},
+		SourceClusterName: "test",
+	})
+	s.NoError(err)
+	s.True(isEmpty)
+	err = s.ExecutionManager.PutReplicationTaskToDLQ(context.Background(), &p.PutReplicationTaskToDLQRequest{
+		ShardID:           testShardID,
+		SourceClusterName: "test",
+		TaskInfo:          &persistencespb.ReplicationTaskInfo{},
+	})
+	s.NoError(err)
+	isEmpty, err = s.ExecutionManager.IsReplicationDLQEmpty(context.Background(), &p.GetReplicationTasksFromDLQRequest{
+		GetHistoryTasksRequest: p.GetHistoryTasksRequest{
+			ShardID:             testShardID,
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(0),
+		},
+		SourceClusterName: "test",
+	})
+	s.NoError(err)
+	s.False(isEmpty)
+}
+
 func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 	now := time.Now().Truncate(p.ScheduledTaskMinPrecision)
 	timerTasks := []tasks.Task{

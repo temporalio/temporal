@@ -414,7 +414,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	defer controller.Finish()
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
+	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 

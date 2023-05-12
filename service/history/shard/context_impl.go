@@ -182,7 +182,7 @@ const (
 	logWarnImmediateTaskLag = 3000000 // 3 million
 	logWarnScheduledTaskLag = time.Duration(30 * time.Minute)
 	historySizeLogThreshold = 10 * 1024 * 1024
-	minContextTimeout       = 2 * time.Second
+	minContextTimeout       = 2 * time.Second * debug.TimeoutMultiplier
 )
 
 func (s *ContextImpl) String() string {
@@ -506,6 +506,24 @@ func (s *ContextImpl) addTasksWithoutNotification(
 		return err
 	}
 	return s.addTasksLocked(ctx, request, namespaceEntry)
+}
+
+func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
+	task *tasks.WorkflowTaskTimeoutTask,
+) error {
+	// Use a cancelled context to avoid blocking if engineFuture is not ready.
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// err should never be returned here. engineFuture must always be ready.
+	engine, err := s.engineFuture.Get(cancelledCtx)
+	if err != nil {
+		return err
+	}
+
+	engine.AddSpeculativeWorkflowTaskTimeoutTask(task)
+
+	return nil
 }
 
 func (s *ContextImpl) CreateWorkflowExecution(
