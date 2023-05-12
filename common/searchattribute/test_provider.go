@@ -53,13 +53,27 @@ var (
 			"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
 
 			"Int01":         enumspb.INDEXED_VALUE_TYPE_INT,
+			"Int02":         enumspb.INDEXED_VALUE_TYPE_INT,
+			"Int03":         enumspb.INDEXED_VALUE_TYPE_INT,
 			"Text01":        enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"Keyword01":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"Keyword02":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"Keyword03":     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			"Datetime01":    enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			"Double01":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			"Bool01":        enumspb.INDEXED_VALUE_TYPE_BOOL,
 			"KeywordList01": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		},
+	}
+
+	TestAliases = map[string]string{
+		"Int01":         "CustomIntField",
+		"Text01":        "CustomTextField",
+		"Keyword01":     "CustomKeywordField",
+		"Datetime01":    "CustomDatetimeField",
+		"Double01":      "CustomDoubleField",
+		"Bool01":        "CustomBoolField",
+		"KeywordList01": "CustomKeywordListField",
 	}
 )
 

@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -505,7 +506,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 		).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.Equal(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
+				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
 				return nil
 			},
 		).Times(1),
@@ -579,7 +580,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 		).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.Equal(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
+				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
 				return nil
 			},
 		).Times(1),
@@ -655,7 +656,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.Equal(expectedPersistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
+				s.QueueStateEqual(expectedPersistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
 				return nil
 			},
 		).Times(1),
@@ -730,4 +731,22 @@ func (s *queueBaseSuite) TestUpdateReaderProgress() {
 		DefaultReaderId + 2: tasks.NewImmediateKey(25),
 		DefaultReaderId + 3: tasks.NewImmediateKey(25),
 	}, readerProgress)
+}
+
+func (s *queueBaseSuite) QueueStateEqual(
+	this *persistencespb.QueueState,
+	that *persistencespb.QueueState,
+) {
+	// ser/de so to equal will not take timezone into consideration
+	thisBlob, err := serialization.QueueStateToBlob(this)
+	s.NoError(err)
+	this, err = serialization.QueueStateFromBlob(thisBlob.Data, thisBlob.EncodingType.String())
+	s.NoError(err)
+
+	thatBlob, err := serialization.QueueStateToBlob(that)
+	s.NoError(err)
+	that, err = serialization.QueueStateFromBlob(thatBlob.Data, thatBlob.EncodingType.String())
+	s.NoError(err)
+
+	s.Equal(this, that)
 }

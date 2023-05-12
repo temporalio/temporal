@@ -26,21 +26,26 @@ package updateworkflow
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 func Invoke(
@@ -50,6 +55,28 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (_ *historyservice.UpdateWorkflowExecutionResponse, retErr error) {
+
+	var waitLifecycleStage func(ctx context.Context, u *update.Update) (*updatepb.Outcome, error)
+	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
+	switch waitStage {
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
+		waitLifecycleStage = func(
+			ctx context.Context,
+			u *update.Update,
+		) (*updatepb.Outcome, error) {
+			return u.WaitAccepted(ctx)
+		}
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
+		waitLifecycleStage = func(
+			ctx context.Context,
+			u *update.Update,
+		) (*updatepb.Outcome, error) {
+			return u.WaitOutcome(ctx)
+		}
+	default:
+		return nil, serviceerror.NewUnimplemented(
+			fmt.Sprintf("%v is not implemented", waitStage))
+	}
 
 	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
@@ -76,20 +103,24 @@ func Invoke(
 		return nil, consts.ErrWorkflowExecutionNotFound
 	}
 
-	upd, duplicate, removeFn := weCtx.GetContext().UpdateRegistry().Add(req.GetRequest().GetRequest())
-	if removeFn != nil {
-		defer removeFn()
+	updateID := req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+	updateReg := weCtx.GetUpdateRegistry(ctx)
+	upd, alreadyExisted, err := updateReg.FindOrCreate(ctx, updateID)
+	if err != nil {
+		return nil, err
+	}
+	if err := upd.OnMessage(ctx, req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+		return nil, err
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
 	// If WT has already started, new speculative WT will be created when started WT completes.
 	// If update is duplicate, then WT for this update was already created.
-	createNewWorkflowTask := !ms.HasPendingWorkflowTask() && duplicate == false
+	createNewWorkflowTask := !ms.HasPendingWorkflowTask() && !alreadyExisted
 
 	if createNewWorkflowTask {
 		// This will try not to add an event but will create speculative WT in mutable state.
-		// Task generation will be skipped if WT is created as speculative.
-		wt, err := ms.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+		wt, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +140,7 @@ func Invoke(
 		weCtx.GetReleaseFn()(nil)
 	}
 
-	updOutcome, err := upd.WaitOutcome(ctx)
+	updOutcome, err := waitLifecycleStage(ctx, upd)
 	if err != nil {
 		return nil, err
 	}
@@ -135,12 +166,12 @@ func addWorkflowTaskToMatching(
 	shardCtx shard.Context,
 	ms workflow.MutableState,
 	matchingClient matchingservice.MatchingServiceClient,
-	task *workflow.WorkflowTaskInfo,
+	wt *workflow.WorkflowTaskInfo,
 	nsID namespace.ID,
 ) error {
-	// TODO (alex-update): Timeout calculation is copied from somewhere else. Extract func instead?
+	// TODO (alex): Timeout calculation is copied from somewhere else. Extract func instead?
 	var taskScheduleToStartTimeout *time.Duration
-	if ms.TaskQueue().GetName() != task.TaskQueue.GetName() {
+	if ms.IsStickyTaskQueueEnabled() {
 		taskScheduleToStartTimeout = ms.GetExecutionInfo().StickyScheduleToStartTimeout
 	} else {
 		taskScheduleToStartTimeout = ms.GetExecutionInfo().WorkflowRunTimeout
@@ -158,8 +189,8 @@ func addWorkflowTaskToMatching(
 			WorkflowId: wfKey.WorkflowID,
 			RunId:      wfKey.RunID,
 		},
-		TaskQueue:              task.TaskQueue,
-		ScheduledEventId:       task.ScheduledEventID,
+		TaskQueue:              wt.TaskQueue,
+		ScheduledEventId:       wt.ScheduledEventID,
 		ScheduleToStartTimeout: taskScheduleToStartTimeout,
 		Clock:                  clock,
 	})

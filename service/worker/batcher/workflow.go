@@ -62,6 +62,8 @@ const (
 	BatchTypeSignal = "signal"
 	// BatchTypeDelete is batch type for deleting workflows
 	BatchTypeDelete = "delete"
+	// BatchTypeReset is batch type for resetting workflows
+	BatchTypeReset = "reset"
 )
 
 var (
@@ -92,6 +94,12 @@ type (
 	DeleteParams struct {
 	}
 
+	// ResetParams is the parameters for reseting workflow
+	ResetParams struct {
+		ResetType         enumspb.ResetType
+		ResetReapplytType enumspb.ResetReapplyType
+	}
+
 	// BatchParams is the parameters for batch operation workflow
 	BatchParams struct {
 		// Target namespace to execute batch operation
@@ -102,7 +110,7 @@ type (
 		Executions []*commonpb.WorkflowExecution
 		// Reason for the operation
 		Reason string
-		// Supporting: signal,cancel,terminate,delete
+		// Supporting: signal,cancel,terminate,delete,reset
 		BatchType string
 
 		// Below are all optional
@@ -114,6 +122,8 @@ type (
 		SignalParams SignalParams
 		// DeleteParams is params only for BatchTypeDelete
 		DeleteParams DeleteParams
+		// ResetParams is params only for BatchTypeReset
+		ResetParams ResetParams
 		// RPS of processing. Default to DefaultRPS
 		// This is moving to dynamic config.
 		// TODO: Remove it from BatchParams after 1.19+
@@ -221,7 +231,7 @@ func validateParams(params BatchParams) error {
 			return fmt.Errorf("must provide signal name")
 		}
 		return nil
-	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete:
+	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete, BatchTypeReset:
 		return nil
 	default:
 		return fmt.Errorf("not supported batch type: %v", params.BatchType)

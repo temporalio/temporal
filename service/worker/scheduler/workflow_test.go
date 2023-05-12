@@ -27,6 +27,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -1401,4 +1402,75 @@ func (s *workflowSuite) TestLimitedActions() {
 	}, 4)
 	s.True(s.env.IsWorkflowCompleted())
 	// doesn't end properly since it sleeps forever after pausing
+}
+
+func (s *workflowSuite) TestLotsOfIterations() {
+	// This is mostly testing getNextTime caching logic.
+	const runIterations = 30
+	const backfillIterations = 15
+
+	runs := make([]workflowRun, runIterations)
+	for i := range runs {
+		t := time.Date(2022, 6, 1, i, 27+i%2, 0, 0, time.UTC)
+		runs[i] = workflowRun{
+			id:     "myid-" + t.Format(time.RFC3339),
+			start:  t,
+			end:    t.Add(time.Duration(5+i%7) * time.Minute),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		}
+	}
+
+	delayedCallbacks := make([]delayedCallback, backfillIterations)
+
+	expected := runIterations
+	// schedule a call back every hour to spray backfills among scheduled runs
+	// each call back adds random number of backfills in
+	// [maxNextTimeResultCacheSize, 2*maxNextTimeResultCacheSize) range
+	for i := range delayedCallbacks {
+
+		maxRuns := rand.Intn(maxNextTimeResultCacheSize) + maxNextTimeResultCacheSize
+		expected += maxRuns
+		// a point in time to send the callback request
+		callbackTime := time.Date(2022, 6, 1, i+15, 2, 0, 0, time.UTC)
+		// start time for callback request
+		callBackRangeStartTime := time.Date(2022, 5, i, 0, 0, 0, 0, time.UTC)
+
+		// add/process maxRuns schedules
+		for j := 0; j < maxRuns; j++ {
+			runStartTime := time.Date(2022, 5, i, j, 27+j%2, 0, 0, time.UTC)
+			runs = append(runs, workflowRun{
+				id:     "myid-" + runStartTime.Format(time.RFC3339),
+				start:  callbackTime.Add(time.Duration(j) * time.Minute),
+				end:    callbackTime.Add(time.Duration(j+1) * time.Minute),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			})
+		}
+
+		delayedCallbacks[i] = delayedCallback{
+			at: callbackTime,
+			f: func() {
+				s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+					BackfillRequest: []*schedpb.BackfillRequest{{
+						StartTime:     timestamp.TimePtr(callBackRangeStartTime),
+						EndTime:       timestamp.TimePtr(callBackRangeStartTime.Add(time.Duration(maxRuns) * time.Hour)),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					}},
+				})
+			},
+		}
+	}
+
+	s.runAcrossContinue(
+		runs,
+		delayedCallbacks,
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Calendar: []*schedpb.CalendarSpec{
+					{Minute: "27", Hour: "0/2"},
+					{Minute: "28", Hour: "1/2"},
+				},
+			},
+		},
+		expected+1,
+	)
 }

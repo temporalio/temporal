@@ -72,7 +72,6 @@ var (
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
 	errCronNotAllowed                                     = serviceerror.NewInvalidArgument("Scheduled workflow must not contain CronSchedule")
 	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
-	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
 	errUnableDeleteSystemNamespace                        = serviceerror.NewInvalidArgument("Unable to delete system namespace.")
 	errBatchJobIDNotSet                                   = serviceerror.NewInvalidArgument("JobId is not set on request.")
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
@@ -117,5 +116,5 @@ var (
 	errBatchOpsMaxWorkflowExecutionCount = serviceerror.NewInvalidArgument("Workflow executions count exceeded.")
 
 	errUpdateWorkflowExecutionAPINotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
-	errWorkerVersioningNotAllowed           = serviceerror.NewPermissionDenied("Worker versioning operations is disabled on this namespace.", "")
+	errWorkerVersioningNotAllowed           = serviceerror.NewPermissionDenied("Worker versioning operations are disabled on this namespace.", "")
 )

@@ -47,18 +47,10 @@ type (
 		Count(ctx context.Context, index string, query elastic.Query) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 
-		OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error)
-		Scroll(ctx context.Context, scrollID string, keepAliveInterval string) (*elastic.SearchResult, error)
-		CloseScroll(ctx context.Context, id string) error
-
 		// TODO (alex): move this to some admin client (and join with IntegrationTestsClient)
 		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
 		WaitForYellowStatus(ctx context.Context, index string) (string, error)
 		GetMapping(ctx context.Context, index string) (map[string]string, error)
-
-		IsPointInTimeSupported(ctx context.Context) bool
-		OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error)
-		ClosePointInTime(ctx context.Context, id string) (bool, error)
 	}
 
 	CLIClient interface {
@@ -84,6 +76,5 @@ type (
 		Sorter   []elastic.Sorter
 
 		SearchAfter []interface{}
-		PointInTime *elastic.PointInTime
 	}
 )

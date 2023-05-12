@@ -212,10 +212,9 @@ func (e *executableImpl) Execute() (retErr error) {
 	e.taggedMetricsHandler = e.metricsHandler.WithTags(metricsTags...)
 
 	if isActive != e.lastActiveness {
-		// namespace did a failover, reset task attempt
-		e.Lock()
-		e.attempt = 0
-		e.Unlock()
+		// namespace did a failover,
+		// reset task attempt since the execution logic used will change
+		e.resetAttempt()
 	}
 	e.lastActiveness = isActive
 
@@ -535,6 +534,13 @@ func (e *executableImpl) updatePriority() {
 	}
 }
 
+func (e *executableImpl) resetAttempt() {
+	e.Lock()
+	defer e.Unlock()
+
+	e.attempt = 1
+}
+
 func (e *executableImpl) estimateTaskMetricTag() []metrics.Tag {
 	namespaceTag := metrics.NamespaceUnknownTag()
 	isActive := true
@@ -545,7 +551,7 @@ func (e *executableImpl) estimateTaskMetricTag() []metrics.Tag {
 		isActive = namespace.ActiveInCluster(e.clusterMetadata.GetCurrentClusterName())
 	}
 
-	taskType := getTaskTypeTagValue(e.Task, isActive)
+	taskType := getTaskTypeTagValue(e, isActive)
 	return []metrics.Tag{
 		namespaceTag,
 		metrics.TaskTypeTag(taskType),

@@ -175,7 +175,6 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
 ) error {
-	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 		wtInfo := mutableState.GetWorkflowTaskByID(transferTask.ScheduledEventID)
 		if wtInfo == nil {
@@ -189,13 +188,13 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 			Name: mutableState.GetExecutionInfo().TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
-		workflowRunTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
-		taskScheduleToStartTimeoutSeconds := int64(workflowRunTimeout.Round(time.Second).Seconds())
+		workflowRunTimeout := executionInfo.WorkflowRunTimeout
+		taskScheduleToStartTimeout := workflowRunTimeout
 		if mutableState.GetExecutionInfo().TaskQueue != transferTask.TaskQueue {
 			// Experimental: try to push sticky task as regular task with sticky timeout as TTL.
 			// workflow might be sticky before namespace become standby
 			// there shall already be a schedule_to_start timer created
-			taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
+			taskScheduleToStartTimeout = executionInfo.StickyScheduleToStartTimeout
 		}
 		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
@@ -205,7 +204,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		if wtInfo.StartedEventID == common.EmptyEventID {
 			return newWorkflowTaskPostActionInfo(
 				mutableState,
-				taskScheduleToStartTimeoutSeconds,
+				taskScheduleToStartTimeout,
 				*taskQueue,
 			)
 		}
@@ -215,7 +214,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 
 	return t.processTransfer(
 		ctx,
-		processTaskIfClosed,
+		false,
 		transferTask,
 		actionFn,
 		getStandbyPostActionFn(
@@ -575,7 +574,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		ctx,
 		task.(*tasks.WorkflowTask),
 		&pushwtInfo.taskqueue,
-		timestamp.DurationFromSeconds(timeout),
+		timeout,
 	)
 }
 
@@ -631,10 +630,6 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	startTime := time.Now().UTC()
 	defer func() { scope.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
-	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
-	if err != nil {
-		return err
-	}
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		t.logger.Error("Error re-replicating history from remote: transferQueueStandbyProcessor encountered empty historyResendInfo.",
 			tag.ShardID(t.shard.GetShardID()),
@@ -644,26 +639,6 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			tag.SourceCluster(remoteClusterName))
 
 		return consts.ErrTaskRetry
-	}
-
-	if err = refreshTasks(
-		ctx,
-		adminClient,
-		namespace.ID(taskInfo.GetNamespaceID()),
-		taskInfo.GetWorkflowID(),
-		taskInfo.GetRunID(),
-	); err != nil {
-		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
-			return err
-		}
-		t.logger.Error("Error refresh tasks from remote.",
-			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-			tag.WorkflowID(taskInfo.GetWorkflowID()),
-			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.ClusterName(remoteClusterName),
-			tag.Error(err))
 	}
 
 	// NOTE: history resend may take long time and its timeout is currently

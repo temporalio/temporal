@@ -131,6 +131,5 @@ func runAction(
 		return err
 	}
 
-	logger.Info("Queue action completed")
 	return nil
 }

@@ -420,6 +420,31 @@ func MapShardID(
 	}
 }
 
+func VerifyShardIDMapping(
+	thisShardCount int32,
+	thatShardCount int32,
+	thisShardID int32,
+	thatShardID int32,
+) error {
+	if thisShardCount%thatShardCount != 0 && thatShardCount%thisShardCount != 0 {
+		panic(fmt.Sprintf("cannot verify shard ID mapping between diff shard count: %v vs %v",
+			thisShardCount, thatShardCount))
+	}
+	shardCountMin := thisShardCount
+	if shardCountMin > thatShardCount {
+		shardCountMin = thatShardCount
+	}
+	if thisShardID%shardCountMin == thatShardID%shardCountMin {
+		return nil
+	}
+	return serviceerror.NewInternal(
+		fmt.Sprintf("shard ID mapping verification failed; shard count: %v vs %v, shard ID: %v vs %v",
+			thisShardCount, thatShardCount,
+			thisShardID, thatShardID,
+		),
+	)
+}
+
 func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	var sb strings.Builder
 	_, _ = sb.WriteString("==========================================================================\n")

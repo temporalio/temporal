@@ -70,6 +70,8 @@ type (
 
 	TaskIDGenerator func(number int) ([]int64, error)
 
+	BufferedEventFilter func(*historypb.HistoryEvent) bool
+
 	HistoryBuilder struct {
 		state           HistoryBuilderState
 		timeSource      clock.TimeSource
@@ -863,14 +865,16 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
+	skipGenerateWorkflowTask bool,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
 		WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
-			SignalName: signalName,
-			Input:      input,
-			Identity:   identity,
-			Header:     header,
+			SignalName:               signalName,
+			Input:                    input,
+			Identity:                 identity,
+			Header:                   header,
+			SkipGenerateWorkflowTask: skipGenerateWorkflowTask,
 		},
 	}
 
@@ -1100,8 +1104,34 @@ func (b *HistoryBuilder) HasBufferEvents() bool {
 	return len(b.dbBufferBatch) > 0 || len(b.memBufferBatch) > 0
 }
 
-func (b *HistoryBuilder) BufferEventSize() int {
+// HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
+func (b *HistoryBuilder) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
+	for _, event := range b.memBufferBatch {
+		if filter(event) {
+			return true
+		}
+	}
+	for _, event := range b.dbBufferBatch {
+		if filter(event) {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *HistoryBuilder) NumBufferedEvents() int {
 	return len(b.dbBufferBatch) + len(b.memBufferBatch)
+}
+
+func (b *HistoryBuilder) SizeInBytesOfBufferedEvents() int {
+	size := 0
+	for _, ev := range b.dbBufferBatch {
+		size += ev.Size()
+	}
+	for _, ev := range b.memBufferBatch {
+		size += ev.Size()
+	}
+	return size
 }
 
 func (b *HistoryBuilder) NextEventID() int64 {

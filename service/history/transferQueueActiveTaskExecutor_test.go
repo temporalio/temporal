@@ -2507,7 +2507,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 		Name                    string
 		EnsureCloseBeforeDelete bool
 		CloseTransferTaskIdSet  bool
-		MultiCursorQueue        bool
 		CloseTaskIsAcked        bool
 		ShouldDelete            bool
 	}{
@@ -2523,26 +2522,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			ShouldDelete:            true,
 		},
 		{
-			Name:                    "single cursor queue unacked",
-			EnsureCloseBeforeDelete: true,
-			CloseTransferTaskIdSet:  true,
-			MultiCursorQueue:        false,
-			CloseTaskIsAcked:        false,
-			ShouldDelete:            false,
-		},
-		{
-			Name:                    "single cursor queue acked",
-			EnsureCloseBeforeDelete: true,
-			CloseTransferTaskIdSet:  true,
-			MultiCursorQueue:        false,
-			CloseTaskIsAcked:        true,
-			ShouldDelete:            true,
-		},
-		{
 			Name:                    "multicursor queue unacked",
 			EnsureCloseBeforeDelete: true,
 			CloseTransferTaskIdSet:  true,
-			MultiCursorQueue:        true,
 			CloseTaskIsAcked:        false,
 			ShouldDelete:            false,
 		},
@@ -2550,7 +2532,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			Name:                    "multicursor queue acked",
 			EnsureCloseBeforeDelete: true,
 			CloseTransferTaskIdSet:  true,
-			MultiCursorQueue:        true,
 			CloseTaskIsAcked:        true,
 			ShouldDelete:            true,
 		},
@@ -2599,30 +2580,20 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
 			mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil)
 			mockShard.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
-			if c.MultiCursorQueue {
-				var highWatermarkTaskId int64
-				if c.CloseTaskIsAcked {
-					highWatermarkTaskId = closeTransferTaskId + 1
-				} else {
-					highWatermarkTaskId = closeTransferTaskId
-				}
-				mockShard.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(&persistencespb.QueueState{
-					ReaderStates: nil,
-					ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
-						FireTime: timestamp.TimePtr(tasks.DefaultFireTime),
-						TaskId:   highWatermarkTaskId,
-					},
-				}, true).AnyTimes()
+
+			var highWatermarkTaskId int64
+			if c.CloseTaskIsAcked {
+				highWatermarkTaskId = closeTransferTaskId + 1
 			} else {
-				var ackLevel int64
-				if c.CloseTaskIsAcked {
-					ackLevel = closeTransferTaskId
-				} else {
-					ackLevel = closeTransferTaskId - 1
-				}
-				mockShard.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(nil, false).AnyTimes()
-				mockShard.EXPECT().GetQueueAckLevel(tasks.CategoryTransfer).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
+				highWatermarkTaskId = closeTransferTaskId
 			}
+			mockShard.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(&persistencespb.QueueState{
+				ReaderStates: nil,
+				ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+					FireTime: timestamp.TimePtr(tasks.DefaultFireTime),
+					TaskId:   highWatermarkTaskId,
+				},
+			}, true).AnyTimes()
 
 			mockWorkflowDeleteManager := deletemanager.NewMockDeleteManager(ctrl)
 			if c.ShouldDelete {
@@ -2667,10 +2638,10 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	timeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
+	timeout := executionInfo.WorkflowRunTimeout
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-		timeout = timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout)
+		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
 	return &matchingservice.AddWorkflowTaskRequest{
@@ -2681,7 +2652,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		},
 		TaskQueue:              taskQueue,
 		ScheduledEventId:       task.ScheduledEventID,
-		ScheduleToStartTimeout: &timeout,
+		ScheduleToStartTimeout: timeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
 	}
 }

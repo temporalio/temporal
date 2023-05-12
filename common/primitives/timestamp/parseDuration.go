@@ -57,3 +57,13 @@ func ParseDurationDefaultDays(s string) (time.Duration, error) {
 	}
 	return ParseDuration(s)
 }
+
+// ParseDurationDefaultSeconds is like time.ParseDuration, but supports unit "d"
+// for days (always interpreted as exactly 24 hours), and also supports
+// unit-less numbers, which are interpreted as seconds.
+func ParseDurationDefaultSeconds(s string) (time.Duration, error) {
+	if reUnitless.MatchString(s) {
+		s += "s"
+	}
+	return ParseDuration(s)
+}

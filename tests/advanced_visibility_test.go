@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -80,6 +81,10 @@ type advancedVisibilitySuite struct {
 
 // This cluster use customized threshold for history config
 func (s *advancedVisibilitySuite) SetupSuite() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.VisibilityDisableOrderByClause: false,
+	}
+
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 		s.setupSuite("testdata/integration_test_cluster.yaml")
@@ -815,19 +820,19 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrderBy() {
 			s.NoError(err)
 			switch searchAttrKey {
 			case "CustomIntField":
-				v1, _ := prevVal.(json.Number).Int64()
-				v2, _ := currVal.(json.Number).Int64()
-				s.Greater(v1, v2)
+				val1, _ := prevVal.(json.Number).Int64()
+				val2, _ := currVal.(json.Number).Int64()
+				s.Greater(val1, val2)
 			case "CustomDoubleField":
-				v1, _ := prevVal.(json.Number).Float64()
-				v2, _ := currVal.(json.Number).Float64()
-				s.Greater(v1, v2)
+				val1, _ := prevVal.(json.Number).Float64()
+				val2, _ := currVal.(json.Number).Float64()
+				s.Greater(val1, val2)
 			case "CustomKeywordField":
 				s.Greater(prevVal.(string), currVal.(string))
 			case "CustomDatetimeField":
-				v1, _ := time.Parse(time.RFC3339Nano, prevVal.(string))
-				v2, _ := time.Parse(time.RFC3339Nano, currVal.(string))
-				s.Greater(v1, v2)
+				val1, _ := time.Parse(time.RFC3339Nano, prevVal.(string))
+				val2, _ := time.Parse(time.RFC3339Nano, currVal.(string))
+				s.Greater(val1, val2)
 			}
 			prevVal = currVal
 		}

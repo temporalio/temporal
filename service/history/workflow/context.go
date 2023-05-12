@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -138,7 +139,7 @@ type (
 			ctx context.Context,
 		) error
 		// TODO (alex-update): move this from workflow context.
-		UpdateRegistry() update.Registry
+		UpdateRegistry(ctx context.Context) update.Registry
 	}
 )
 
@@ -176,7 +177,6 @@ func NewContext(
 		timeSource:      shard.GetTimeSource(),
 		config:          shard.GetConfig(),
 		mutex:           locks.NewPriorityMutex(),
-		updateRegistry:  update.NewRegistry(),
 		transaction:     NewTransaction(shard),
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
@@ -849,7 +849,21 @@ func (c *ContextImpl) ReapplyEvents(
 	return err
 }
 
-func (c *ContextImpl) UpdateRegistry() update.Registry {
+func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
+	if c.updateRegistry == nil {
+		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
+		c.updateRegistry = update.NewRegistry(
+			c.MutableState,
+			update.WithLogger(c.logger),
+			update.WithMetrics(c.metricsHandler),
+			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
+			update.WithInFlightLimit(
+				func() int {
+					return c.config.WorkflowExecutionMaxInFlightUpdates(nsIDStr)
+				},
+			),
+		)
+	}
 	return c.updateRegistry
 }
 
