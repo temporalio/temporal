@@ -1358,6 +1358,7 @@ var (
 	CommandTypeUpsertWorkflowSearchAttributesCounter  = NewCounterDef("upsert_workflow_search_attributes_command")
 	CommandTypeModifyWorkflowPropertiesCounter        = NewCounterDef("modify_workflow_properties_command")
 	CommandTypeChildWorkflowCounter                   = NewCounterDef("child_workflow_command")
+	CommandTypeProtocolMessage                        = NewCounterDef("protocol_message_command")
 	MessageTypeRequestWorkflowExecutionUpdateCounter  = NewCounterDef("request_workflow_update_message")
 	MessageTypeAcceptWorkflowExecutionUpdateCounter   = NewCounterDef("accept_workflow_update_message")
 	MessageTypeRespondWorkflowExecutionUpdateCounter  = NewCounterDef("respond_workflow_update_message")

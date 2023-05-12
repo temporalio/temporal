@@ -31,6 +31,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -40,6 +41,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -531,30 +533,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			hasBufferedEvents,
 		)
 
-		// roll message delivery up into a one-time-only func so that we can
-		// either call it as part of handling a workflow execution completed
-		// command or we can run it after all commands have been handled. This
-		// solves the problem of a single workflow task completion that contains
-		// _both_ the workflow execution completed command _and_ an update
-		// completed message.
-		msgsDelivered := false
-		handleMessages := func(ctx context.Context) error {
-			if !msgsDelivered {
-				msgsDelivered = true
-				return workflowTaskHandler.handleMessages(ctx, request.Messages)
-			}
-			return nil
-		}
-
 		if responseMutations, err = workflowTaskHandler.handleCommands(
 			ctx,
 			request.Commands,
-			handleMessages,
+			collection.NewIndexedTakeList(
+				request.Messages,
+				func(msg *protocolpb.Message) string { return msg.Id },
+			),
 		); err != nil {
-			return nil, err
-		}
-
-		if err := handleMessages(ctx); err != nil {
 			return nil, err
 		}
 
