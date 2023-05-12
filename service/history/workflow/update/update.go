@@ -73,12 +73,12 @@ type (
 	Update struct {
 		// accessed only while holding workflow lock
 		id              string
+		state           state
 		request         *protocolpb.Message // nil when not in stateRequested
 		onComplete      func()
 		instrumentation *instrumentation
 
 		// these fields might be accessed while not holding the workflow lock
-		state    state
 		accepted future.Future[*failurepb.Failure]
 		outcome  future.Future[*updatepb.Outcome]
 	}
@@ -218,7 +218,7 @@ func (u *Update) OnMessage(
 // ReadOutgoingMessages loads any oubound messages from this Update state
 // machine into the output slice provided.
 func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message) {
-	if !u.state.Is(stateRequested) {
+	if u.state != (stateRequested) {
 		// Update only sends messages to the workflow when it is in
 		// stateRequested
 		return
@@ -236,7 +236,7 @@ func (u *Update) onRequestMsg(
 	req *updatepb.Request,
 	eventStore EventStore,
 ) error {
-	if !u.state.Is(stateAdmitted) {
+	if u.state != stateAdmitted {
 		return nil
 	}
 	if err := validateRequestMsg(u.id, req); err != nil {
@@ -355,7 +355,7 @@ func (u *Update) hasBeenSeenByWorkflowExecution() bool {
 }
 
 func (u *Update) hasOutgoingMessage() bool {
-	return u.state.Is(stateRequested)
+	return u.state == stateRequested
 }
 
 func (u *Update) checkState(msg proto.Message, expected state) error {
@@ -373,7 +373,8 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 // setState assigns the current state to a new value returning the original
 // value.
 func (u *Update) setState(newState state) state {
-	prevState := u.state.Set(newState)
+	prevState := u.state
+	u.state = newState
 	u.instrumentation.StateChange(u.id, prevState, newState)
 	return prevState
 }
