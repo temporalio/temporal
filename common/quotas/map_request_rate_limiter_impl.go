@@ -31,79 +31,45 @@ import (
 )
 
 type (
-	RateLimiterKey struct {
-		namespaceID string
-		shardID     int32
-	}
-
-	KeyField func(k *RateLimiterKey)
-
 	// RequestRateLimiterKeyFn extracts the map key from the request
-	RequestRateLimiterKeyFn func(req Request) *RateLimiterKey
+	RequestRateLimiterKeyFn[K comparable] func(req Request) K
 
 	// MapRequestRateLimiterImpl is a generic wrapper rate limiter for a set of rate limiters
 	// identified by a key
-	MapRequestRateLimiterImpl struct {
+	MapRequestRateLimiterImpl[K comparable] struct {
 		rateLimiterGenFn RequestRateLimiterFn
-		rateLimiterKeyFn RequestRateLimiterKeyFn
+		rateLimiterKeyFn RequestRateLimiterKeyFn[K]
 
 		sync.RWMutex
-		rateLimiters map[*RateLimiterKey]RequestRateLimiter
+		rateLimiters map[K]RequestRateLimiter
 	}
 )
 
-func NewRateLimiterKey(fields ...KeyField) *RateLimiterKey {
-	key := &RateLimiterKey{
-		namespaceID: "",
-		shardID:     -1,
-	}
-
-	for _, field := range fields {
-		field(key)
-	}
-
-	return key
-}
-
-func WithNamespaceID(namespaceID string) KeyField {
-	return func(k *RateLimiterKey) {
-		k.namespaceID = namespaceID
-	}
-}
-
-func WithShardID(shardID int32) KeyField {
-	return func(k *RateLimiterKey) {
-		k.shardID = shardID
-	}
-}
-
-var _ RequestRateLimiter = (*MapRequestRateLimiterImpl)(nil)
-
-func NewMapRequestRateLimiter(
+func NewMapRequestRateLimiter[K comparable](
 	rateLimiterGenFn RequestRateLimiterFn,
-	rateLimiterKeyFn RequestRateLimiterKeyFn,
-) *MapRequestRateLimiterImpl {
-	return &MapRequestRateLimiterImpl{
+	rateLimiterKeyFn RequestRateLimiterKeyFn[K],
+) *MapRequestRateLimiterImpl[K] {
+	return &MapRequestRateLimiterImpl[K]{
 		rateLimiterGenFn: rateLimiterGenFn,
 		rateLimiterKeyFn: rateLimiterKeyFn,
-		rateLimiters:     make(map[*RateLimiterKey]RequestRateLimiter),
+		rateLimiters:     make(map[K]RequestRateLimiter),
 	}
 }
 
-func namespaceRequestRateLimiterKeyFn(req Request) *RateLimiterKey {
-	return NewRateLimiterKey(WithNamespaceID(req.Caller))
+func namespaceRequestRateLimiterKeyFn(req Request) string {
+	return req.Caller
 }
 
 func NewNamespaceRequestRateLimiter(
 	rateLimiterGenFn RequestRateLimiterFn,
-) *MapRequestRateLimiterImpl {
-	return NewMapRequestRateLimiter(rateLimiterGenFn, namespaceRequestRateLimiterKeyFn)
+) *MapRequestRateLimiterImpl[string] {
+	return NewMapRequestRateLimiter[string](rateLimiterGenFn, namespaceRequestRateLimiterKeyFn)
 }
 
 // Allow attempts to allow a request to go through. The method returns
 // immediately with a true or false indicating if the request can make
 // progress
-func (r *MapRequestRateLimiterImpl) Allow(
+func (r *MapRequestRateLimiterImpl[_]) Allow(
 	now time.Time,
 	request Request,
 ) bool {
@@ -113,7 +79,7 @@ func (r *MapRequestRateLimiterImpl) Allow(
 
 // Reserve returns a Reservation that indicates how long the caller
 // must wait before event happen.
-func (r *MapRequestRateLimiterImpl) Reserve(
+func (r *MapRequestRateLimiterImpl[_]) Reserve(
 	now time.Time,
 	request Request,
 ) Reservation {
@@ -123,7 +89,7 @@ func (r *MapRequestRateLimiterImpl) Reserve(
 
 // Wait waits till the deadline for a rate limit token to allow the request
 // to go through.
-func (r *MapRequestRateLimiterImpl) Wait(
+func (r *MapRequestRateLimiterImpl[_]) Wait(
 	ctx context.Context,
 	request Request,
 ) error {
@@ -131,7 +97,7 @@ func (r *MapRequestRateLimiterImpl) Wait(
 	return rateLimiter.Wait(ctx, request)
 }
 
-func (r *MapRequestRateLimiterImpl) getOrInitRateLimiter(
+func (r *MapRequestRateLimiterImpl[_]) getOrInitRateLimiter(
 	req Request,
 ) RequestRateLimiter {
 	key := r.rateLimiterKeyFn(req)

@@ -31,6 +31,13 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+type (
+	perShardPerNamespaceKey struct {
+		namespaceID string
+		shardID     int32
+	}
+)
+
 var (
 	CallerTypeDefaultPriority = map[string]int{
 		headers.CallerTypeAPI:         1,
@@ -110,10 +117,15 @@ func newPerShardPerNamespacePriorityRateLimiter(
 		}
 		return hostRequestRateLimiter
 	},
-		func(req quotas.Request) *quotas.RateLimiterKey {
-			return quotas.NewRateLimiterKey(quotas.WithNamespaceID(req.Caller), quotas.WithShardID(req.CallerSegment))
-		},
+		perShardPerNamespaceKeyFn,
 	)
+}
+
+func perShardPerNamespaceKeyFn(req quotas.Request) perShardPerNamespaceKey {
+	return perShardPerNamespaceKey{
+		namespaceID: req.Caller,
+		shardID:     req.CallerSegment,
+	}
 }
 
 func newPriorityNamespaceRateLimiter(
