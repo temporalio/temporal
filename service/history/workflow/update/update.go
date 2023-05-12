@@ -218,7 +218,7 @@ func (u *Update) OnMessage(
 // ReadOutgoingMessages loads any oubound messages from this Update state
 // machine into the output slice provided.
 func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message) {
-	if u.state != (stateRequested) {
+	if u.state != stateRequested {
 		// Update only sends messages to the workflow when it is in
 		// stateRequested
 		return
