@@ -58,7 +58,7 @@ type (
 		ForwarderMaxChildrenPerNode       dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		VersionCompatibleSetLimitPerQueue dynamicconfig.IntPropertyFn
 		VersionBuildIdLimitPerQueue       dynamicconfig.IntPropertyFn
-		UserDataPollFrequency             dynamicconfig.DurationPropertyFn
+		GetUserDataLongPollTimeout        dynamicconfig.DurationPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -93,6 +93,7 @@ type (
 		MaxTaskQueueIdleTime       func() time.Duration
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
+		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold func() int
 		MaxTaskBatchSize                func() int
@@ -147,7 +148,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0*time.Second),
 		VersionCompatibleSetLimitPerQueue:     dc.GetIntProperty(dynamicconfig.VersionCompatibleSetLimitPerQueue, 10),
 		VersionBuildIdLimitPerQueue:           dc.GetIntProperty(dynamicconfig.VersionBuildIdLimitPerQueue, 1000),
-		UserDataPollFrequency:                 dc.GetDurationProperty(dynamicconfig.MatchingUserDataPollFrequency, 5*time.Minute),
+		GetUserDataLongPollTimeout:            dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),
@@ -181,6 +182,7 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		MaxTaskDeleteBatchSize: func() int {
 			return config.MaxTaskDeleteBatchSize(namespace.String(), taskQueueName, taskType)
 		},
+		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		OutstandingTaskAppendsThreshold: func() int {
 			return config.OutstandingTaskAppendsThreshold(namespace.String(), taskQueueName, taskType)
 		},

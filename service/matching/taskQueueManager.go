@@ -725,7 +725,6 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 
 	const (
 		// TODO: dynamic config
-		callTimeout   = 5 * time.Minute
 		startWaitTime = 1 * time.Second
 	)
 
@@ -735,7 +734,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 			return err
 		}
 
-		callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+		callCtx, cancel := context.WithTimeout(ctx, c.config.GetUserDataLongPollTimeout())
 		defer cancel()
 
 		res, err := c.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
@@ -774,9 +773,9 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 			case <-ctx.Done():
 			case <-time.After(minWaitTime - elapsed):
 			}
-			// Don't let this get near callTimeout, otherwise we can't tell the difference
+			// Don't let this get near our call timeout, otherwise we can't tell the difference
 			// between a fast reply and a timeout.
-			minWaitTime = util.Min(minWaitTime*2, callTimeout/2)
+			minWaitTime = util.Min(minWaitTime*2, c.config.GetUserDataLongPollTimeout()/2)
 		} else {
 			minWaitTime = startWaitTime
 		}
