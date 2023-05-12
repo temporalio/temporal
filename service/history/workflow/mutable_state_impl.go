@@ -632,12 +632,9 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 	return ms.namespaceEntry
 }
 
-func (ms *MutableStateImpl) IsStickyTaskQueueEnabled() bool {
-	return ms.executionInfo.StickyTaskQueue != ""
-}
-
+// TaskQueue returns current TaskQueue struct.
 func (ms *MutableStateImpl) TaskQueue() *taskqueuepb.TaskQueue {
-	if ms.IsStickyTaskQueueEnabled() {
+	if ms.executionInfo.StickyTaskQueue != "" {
 		return &taskqueuepb.TaskQueue{
 			Name: ms.executionInfo.StickyTaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
@@ -647,6 +644,32 @@ func (ms *MutableStateImpl) TaskQueue() *taskqueuepb.TaskQueue {
 		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
+}
+
+func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *time.Duration) {
+	ms.executionInfo.StickyTaskQueue = name
+	ms.executionInfo.StickyScheduleToStartTimeout = scheduleToStartTimeout
+}
+
+func (ms *MutableStateImpl) ClearStickyTaskQueue() {
+	ms.executionInfo.StickyTaskQueue = ""
+	ms.executionInfo.StickyScheduleToStartTimeout = nil
+}
+
+// TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.
+// Task queue kind (sticky or normal) and timeout are set based on comparison of normal task queue name
+// in mutable state and provided name.
+func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *time.Duration) {
+	if ms.executionInfo.TaskQueue != name {
+		return &taskqueuepb.TaskQueue{
+			Name: ms.executionInfo.StickyTaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+		}, ms.executionInfo.StickyScheduleToStartTimeout
+	}
+	return &taskqueuepb.TaskQueue{
+		Name: ms.executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal task queue.
 }
 
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
@@ -1407,11 +1430,6 @@ func (ms *MutableStateImpl) HasAnyBufferedEvent(filter BufferedEventFilter) bool
 // DeleteWorkflowTask deletes a workflow task.
 func (ms *MutableStateImpl) DeleteWorkflowTask() {
 	ms.workflowTaskManager.DeleteWorkflowTask()
-}
-
-func (ms *MutableStateImpl) ClearStickyness() {
-	ms.executionInfo.StickyTaskQueue = ""
-	ms.executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
 }
 
 // GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
@@ -2537,7 +2555,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionCompletedEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -2582,7 +2600,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionFailedEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -2626,7 +2644,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionTimedoutEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -2706,7 +2724,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionCanceledEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -3326,7 +3344,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionTerminatedEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -3488,7 +3506,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionContinuedAsNewEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = continueAsNewEvent.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(continueAsNewEvent)
 	return nil
 }

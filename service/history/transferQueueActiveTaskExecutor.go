@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -207,18 +206,18 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	ctx context.Context,
-	task *tasks.WorkflowTask,
+	transferTask *tasks.WorkflowTask,
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, transferTask)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, transferTask, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -226,54 +225,35 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		return nil
 	}
 
-	workflowTask := mutableState.GetWorkflowTaskByID(task.ScheduledEventID)
+	workflowTask := mutableState.GetWorkflowTaskByID(transferTask.ScheduledEventID)
 	if workflowTask == nil {
 		return nil
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
+	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, transferTask.Version, transferTask)
 	if err != nil {
 		return err
 	}
 
-	executionInfo := mutableState.GetExecutionInfo()
+	// Task queue from transfer task (not current one from mutable state) must be used here.
+	// If current task queue becomes sticky since this transfer task was created,
+	// it can't be used here, because timeout timer was not created for it,
+	// because it used to be non-sticky when this transfer task was created .
+	taskQueue, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
 
-	// NOTE: previously this section check whether mutable state has enabled
-	// sticky workflowTask, if so convert the workflowTask to a sticky workflowTask.
-	// that logic has a bug which timer task for that sticky workflowTask is not generated
-	// the correct logic should check whether the workflow task is a sticky workflowTask
-	// task or not.
-	var taskQueue *taskqueuepb.TaskQueue
-	var taskScheduleToStartTimeout *time.Duration
-	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
-		// this workflowTask is an sticky workflowTask
-		// there shall already be an timer set
-		taskQueue = &taskqueuepb.TaskQueue{
-			Name: task.TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
-		}
-		taskScheduleToStartTimeout = executionInfo.StickyScheduleToStartTimeout
-	} else {
-		taskQueue = &taskqueuepb.TaskQueue{
-			Name: task.TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}
-		workflowRunTimeout := executionInfo.WorkflowRunTimeout
-		taskScheduleToStartTimeout = workflowRunTimeout
-	}
+	normalTaskQueue := mutableState.GetExecutionInfo().TaskQueue
 
-	originalTaskQueue := mutableState.GetExecutionInfo().TaskQueue
-	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state and
-	// the rest of logic is making RPC call, which takes time.
+	// NOTE: Do not access mutableState after this lock is released.
+	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
+	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
 	release(nil)
 
-	err = t.pushWorkflowTask(ctx, task, taskQueue, taskScheduleToStartTimeout)
+	err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
-		// sticky worker is unavailable, switch to original task queue
+		// sticky worker is unavailable, switch to original normal task queue
 		taskQueue = &taskqueuepb.TaskQueue{
-			// do not use task.TaskQueue which is sticky, use original task queue from mutable state
-			Name: originalTaskQueue,
+			// do not use task.TaskQueue which is sticky, use original normal task queue from mutable state
+			Name: normalTaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 
@@ -282,7 +262,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
 		// will re-create a new non-sticky task and reset sticky.
-		err = t.pushWorkflowTask(ctx, task, taskQueue, taskScheduleToStartTimeout)
+		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout)
 	}
 	return err
 }

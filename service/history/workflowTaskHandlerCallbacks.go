@@ -233,11 +233,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			// We will clear the stickiness here when that task is delivered to another worker polling from normal queue.
 			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
-			if mutableState.IsStickyTaskQueueEnabled() &&
-				mutableState.TaskQueue().GetName() != req.PollRequest.TaskQueue.GetName() {
+			currentTaskQueue := mutableState.TaskQueue()
+			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
+				currentTaskQueue.GetName() != req.PollRequest.TaskQueue.GetName() {
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
 				// and sticky queue never has partition, so it does not matter.
-				mutableState.ClearStickyness()
+				mutableState.ClearStickyTaskQueue()
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
@@ -407,7 +408,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	weContext := workflowContext.GetContext()
 	ms := workflowContext.GetMutableState()
 
-	executionInfo := ms.GetExecutionInfo()
 	executionStats, err := weContext.LoadExecutionStats(ctx)
 	if err != nil {
 		return nil, err
@@ -448,7 +448,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			if err != nil {
 				return nil, err
 			}
-			ms.ClearStickyness()
+			ms.ClearStickyTaskQueue()
 		} else {
 			completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, maxResetPoints)
 			if err != nil {
@@ -468,14 +468,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		handler.metricsHandler.Counter(metrics.CompleteWorkflowTaskWithStickyDisabledCounter.GetMetricName()).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
-		executionInfo.StickyTaskQueue = ""
-		executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
+		ms.ClearStickyTaskQueue()
 	} else {
 		handler.metricsHandler.Counter(metrics.CompleteWorkflowTaskWithStickyEnabledCounter.GetMetricName()).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
-		executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
-		executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeout()
+		ms.SetStickyTaskQueue(request.StickyAttributes.WorkerTaskQueue.GetName(), request.StickyAttributes.GetScheduleToStartTimeout())
 	}
 
 	var (
@@ -840,9 +838,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	// before it was started.
 	response.ScheduledEventId = workflowTask.ScheduledEventID
 	response.StartedEventId = workflowTask.StartedEventID
-	if ms.IsStickyTaskQueueEnabled() {
-		response.StickyExecutionEnabled = true
-	}
+	response.StickyExecutionEnabled = ms.TaskQueue().Kind == enumspb.TASK_QUEUE_KIND_STICKY
 	response.NextEventId = ms.GetNextEventID()
 	response.Attempt = workflowTask.Attempt
 	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{

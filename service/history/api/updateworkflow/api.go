@@ -171,7 +171,7 @@ func addWorkflowTaskToMatching(
 ) error {
 	// TODO (alex): Timeout calculation is copied from somewhere else. Extract func instead?
 	var taskScheduleToStartTimeout *time.Duration
-	if ms.IsStickyTaskQueueEnabled() {
+	if ms.TaskQueue().Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		taskScheduleToStartTimeout = ms.GetExecutionInfo().StickyScheduleToStartTimeout
 	} else {
 		taskScheduleToStartTimeout = ms.GetExecutionInfo().WorkflowRunTimeout

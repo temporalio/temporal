@@ -149,7 +149,6 @@ type (
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, updAcceptance *updatepb.Acceptance) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
-		ClearStickyness()
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
@@ -212,8 +211,12 @@ type (
 		IsCancelRequested() bool
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
-		IsStickyTaskQueueEnabled() bool
+
 		TaskQueue() *taskqueuepb.TaskQueue
+		SetStickyTaskQueue(name string, scheduleToStartTimeout *time.Duration)
+		ClearStickyTaskQueue()
+		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *time.Duration)
+
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool

@@ -680,10 +680,10 @@ func (m *workflowTaskStateMachine) FailWorkflowTask(
 	incrementAttempt bool,
 ) {
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
-	// If it was stick task queue, clear stickiness first and try again before creating transient workflow task.
-	if m.ms.IsStickyTaskQueueEnabled() {
+	// If it was sticky task queue, clear sticky task queue first and try again before creating transient workflow task.
+	if m.ms.TaskQueue().Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		incrementAttempt = false
-		m.ms.ClearStickyness()
+		m.ms.ClearStickyTaskQueue()
 	}
 
 	failWorkflowTaskInfo := &WorkflowTaskInfo{

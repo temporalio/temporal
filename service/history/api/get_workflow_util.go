@@ -209,7 +209,7 @@ func MutableStateToGetResponse(
 		CurrentBranchToken:                    currentBranchToken,
 		WorkflowState:                         workflowState,
 		WorkflowStatus:                        workflowStatus,
-		IsStickyTaskQueueEnabled:              mutableState.IsStickyTaskQueueEnabled(),
+		IsStickyTaskQueueEnabled:              mutableState.TaskQueue().Kind == enumspb.TASK_QUEUE_KIND_STICKY,
 		VersionHistories: versionhistory.CopyVersionHistories(
 			mutableState.GetExecutionInfo().GetVersionHistories(),
 		),
