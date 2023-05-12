@@ -962,6 +962,21 @@ func (mr *MockExecutionStoreMockRecorder) InsertHistoryTree(ctx, request interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertHistoryTree", reflect.TypeOf((*MockExecutionStore)(nil).InsertHistoryTree), ctx, request)
 }
 
+// IsReplicationDLQEmpty mocks base method.
+func (m *MockExecutionStore) IsReplicationDLQEmpty(ctx context.Context, request *persistence.GetReplicationTasksFromDLQRequest) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsReplicationDLQEmpty", ctx, request)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsReplicationDLQEmpty indicates an expected call of IsReplicationDLQEmpty.
+func (mr *MockExecutionStoreMockRecorder) IsReplicationDLQEmpty(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsReplicationDLQEmpty", reflect.TypeOf((*MockExecutionStore)(nil).IsReplicationDLQEmpty), ctx, request)
+}
+
 // ListConcreteExecutions mocks base method.
 func (m *MockExecutionStore) ListConcreteExecutions(ctx context.Context, request *persistence.ListConcreteExecutionsRequest) (*persistence.InternalListConcreteExecutionsResponse, error) {
 	m.ctrl.T.Helper()

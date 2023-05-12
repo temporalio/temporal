@@ -670,6 +670,8 @@ const (
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
 	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
+	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
+	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
