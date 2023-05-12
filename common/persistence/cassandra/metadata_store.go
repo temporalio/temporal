@@ -183,6 +183,14 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 
 	if !applied {
 
+		// if both conditions fail, find the one related to the first query
+		if name, ok := previous["name"]; !ok || name != request.Name {
+			m := make(map[string]interface{})
+			if iter.MapScan(m) {
+				previous = m
+			}
+		}
+
 		// if conditional failure is due to a duplicate name in namespaces table
 		if name, ok := previous["name"]; ok && name == request.Name {
 			existingID := request.ID
