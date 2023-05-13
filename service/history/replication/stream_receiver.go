@@ -151,10 +151,10 @@ func (r *StreamReceiver) sendEventLoop() {
 		select {
 		case <-timer.C:
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
-			r.Lock()
-			stream := r.stream
-			r.Unlock()
-			r.ackMessage(stream)
+			streamCreationTime, stream := r.getStream()
+			if err := r.ackMessage(stream); err != nil {
+				r.recreateStream(streamCreationTime)
+			}
 		case <-r.shutdownChan.Channel():
 			return
 		}
@@ -165,28 +165,9 @@ func (r *StreamReceiver) recvEventLoop() {
 	defer r.Stop()
 
 	for !r.shutdownChan.IsShutdown() {
-		r.Lock()
-		streamCreationTime := r.streamCreationTime
-		stream := r.stream
-		r.Unlock()
-
+		streamCreationTime, stream := r.getStream()
 		_ = r.processMessages(stream)
-		delay := streamCreationTime.Add(r.Config.ReplicationStreamMinReconnectDuration()).Sub(time.Now().UTC())
-		if delay > 0 {
-			select {
-			case <-time.After(delay):
-			case <-r.shutdownChan.Channel():
-			}
-		}
-
-		r.Lock()
-		r.streamCreationTime = time.Now().UTC()
-		r.stream = newStream(
-			r.ProcessToolBox,
-			r.clientShardKey,
-			r.serverShardKey,
-		)
-		r.Unlock()
+		r.recreateStream(streamCreationTime)
 	}
 }
 
@@ -210,13 +191,40 @@ Loop:
 	}
 }
 
+func (r *StreamReceiver) getStream() (time.Time, Stream) {
+	r.Lock()
+	defer r.Unlock()
+	return r.streamCreationTime, r.stream
+}
+
+func (r *StreamReceiver) recreateStream(
+	streamCreationTime time.Time,
+) {
+	delay := streamCreationTime.Add(r.Config.ReplicationStreamMinReconnectDuration()).Sub(time.Now().UTC())
+	if delay > 0 {
+		select {
+		case <-time.After(delay):
+		case <-r.shutdownChan.Channel():
+		}
+	}
+
+	r.Lock()
+	defer r.Unlock()
+	r.streamCreationTime = time.Now().UTC()
+	r.stream = newStream(
+		r.ProcessToolBox,
+		r.clientShardKey,
+		r.serverShardKey,
+	)
+}
+
 func (r *StreamReceiver) ackMessage(
 	stream Stream,
-) {
+) error {
 	watermarkInfo := r.taskTracker.LowWatermark()
 	size := r.taskTracker.Size()
 	if watermarkInfo == nil {
-		return
+		return nil
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
@@ -227,6 +235,7 @@ func (r *StreamReceiver) ackMessage(
 		},
 	}); err != nil {
 		r.logger.Error("StreamReceiver unable to send message, err", tag.Error(err))
+		return err
 	}
 	r.MetricsHandler.Histogram(metrics.ReplicationTasksRecvBacklog.GetMetricName(), metrics.ReplicationTasksRecvBacklog.GetMetricUnit()).Record(
 		int64(size),
@@ -239,6 +248,7 @@ func (r *StreamReceiver) ackMessage(
 		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
 		metrics.OperationTag(metrics.SyncWatermarkScope),
 	)
+	return nil
 }
 
 func (r *StreamReceiver) processMessages(
