@@ -159,7 +159,7 @@ var (
 	// the workflow so that we can change them without breaking existing executions or having
 	// to use versioning.
 	currentTweakablePolicies = tweakablePolicies{
-		DefaultCatchupWindow:              60 * time.Second,
+		DefaultCatchupWindow:              365 * 24 * time.Hour,
 		MinCatchupWindow:                  10 * time.Second,
 		CanceledTerminatedCountAsFailures: false,
 		AlwaysAppendTimestamp:             true,

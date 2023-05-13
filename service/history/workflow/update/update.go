@@ -66,19 +66,19 @@ type (
 	// messages from the go.temporal.io/api/update/v1 package. The update state
 	// machine is straightforward except in that it provides "provisional"
 	// in-between states where the update has received a message that has
-	// updated its internal state but those updates have not been made visible
+	// modified its internal state but those changes have not been made visible
 	// to clients yet (e.g. accepted or outcome futures have not been set yet).
-	// The effects are bound to the EventStore's effect.Set and will be
-	// triggered withen those effects are applied.
+	// The observable changes are bound to the EventStore's effect.Controller
+	// and will be triggered when those effects are applied.
 	Update struct {
 		// accessed only while holding workflow lock
 		id              string
+		state           state
 		request         *protocolpb.Message // nil when not in stateRequested
 		onComplete      func()
 		instrumentation *instrumentation
 
 		// these fields might be accessed while not holding the workflow lock
-		state    state
 		accepted future.Future[*failurepb.Failure]
 		outcome  future.Future[*updatepb.Outcome]
 	}
@@ -88,11 +88,11 @@ type (
 
 // New creates a new Update instance with the provided ID that will call the
 // onComplete callback when it completes.
-func New(id string, onComplete func(), opts ...updateOpt) *Update {
+func New(id string, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
 		state:           stateAdmitted,
-		onComplete:      onComplete,
+		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewFuture[*failurepb.Failure](),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
@@ -103,17 +103,23 @@ func New(id string, onComplete func(), opts ...updateOpt) *Update {
 	return upd
 }
 
+func withCompletionCallback(cb func()) updateOpt {
+	return func(u *Update) {
+		u.onComplete = cb
+	}
+}
+
 func withInstrumentation(i *instrumentation) updateOpt {
 	return func(u *Update) {
 		u.instrumentation = i
 	}
 }
 
-func newAccepted(id string, onComplete func(), opts ...updateOpt) *Update {
+func newAccepted(id string, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
 		state:           stateAccepted,
-		onComplete:      onComplete,
+		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
@@ -132,6 +138,7 @@ func newCompleted(
 	upd := &Update{
 		id:              id,
 		state:           stateCompleted,
+		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
 		outcome:         outcomeFuture,
@@ -211,7 +218,7 @@ func (u *Update) OnMessage(
 // ReadOutgoingMessages loads any oubound messages from this Update state
 // machine into the output slice provided.
 func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message) {
-	if !u.state.Is(stateRequested) {
+	if u.state != stateRequested {
 		// Update only sends messages to the workflow when it is in
 		// stateRequested
 		return
@@ -229,7 +236,7 @@ func (u *Update) onRequestMsg(
 	req *updatepb.Request,
 	eventStore EventStore,
 ) error {
-	if !u.state.Is(stateAdmitted) {
+	if u.state != stateAdmitted {
 		return nil
 	}
 	if err := validateRequestMsg(u.id, req); err != nil {
@@ -280,7 +287,7 @@ func (u *Update) onAcceptanceMsg(
 	return nil
 }
 
-// onRejectionMsg expectes the Update stae to be in stateRequested and returns
+// onRejectionMsg expectes the Update state to be stateRequested and returns
 // an error if it finds otherwise. On commit of buffered effects the state
 // machine transitions to stateCompleted and the accepted and outcome futures
 // are both completed with the failurepb.Failure value from the
@@ -312,7 +319,7 @@ func (u *Update) onRejectionMsg(
 	return nil
 }
 
-// onResponseMsg expectes the Update to be in either stateProvisionallyAccepted
+// onResponseMsg expects the Update to be in either stateProvisionallyAccepted
 // or stateAccepted and returns an error if it finds otherwise. On commit of
 // buffered effects the state machine will transtion to stateCompleted and the
 // outcome future is completed with the updatepb.Outcome from the
@@ -348,7 +355,7 @@ func (u *Update) hasBeenSeenByWorkflowExecution() bool {
 }
 
 func (u *Update) hasOutgoingMessage() bool {
-	return u.state.Is(stateRequested)
+	return u.state == stateRequested
 }
 
 func (u *Update) checkState(msg proto.Message, expected state) error {
@@ -366,7 +373,8 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 // setState assigns the current state to a new value returning the original
 // value.
 func (u *Update) setState(newState state) state {
-	prevState := u.state.Set(newState)
+	prevState := u.state
+	u.state = newState
 	u.instrumentation.StateChange(u.id, prevState, newState)
 	return prevState
 }

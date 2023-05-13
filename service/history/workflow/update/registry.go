@@ -42,6 +42,8 @@ import (
 )
 
 type (
+	// Registry maintains a set of updates that have been admitted to run
+	// against a workflow execution.
 	Registry interface {
 		// FindOrCreate finds an existing Update or creates a new one. The second
 		// return value (bool) indicates whether the Update returned already
@@ -50,7 +52,7 @@ type (
 		FindOrCreate(ctx context.Context, protocolInstanceID string) (*Update, bool, error)
 
 		// Find finds an existing update in this Registry but does not create a
-		// new update it is absent.
+		// new update if no update is found.
 		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
 
 		// ReadOutoundMessages polls each registered Update for outbound
@@ -66,7 +68,7 @@ type (
 		// sent messages to a worker.
 		HasOutgoing() bool
 
-		// Len observes the number of updates in this Registry.
+		// Len observes the number of incomplete updates in this Registry.
 		Len() int
 	}
 
@@ -91,6 +93,8 @@ type (
 
 //revive:disable:unexported-return I *want* it to be unexported
 
+// WithInFlightLimit provides an optional limit to the number of incomplete
+// updates that a Registry instance will allow.
 func WithInFlightLimit(f func() int) regOpt {
 	return func(r *RegistryImpl) {
 		r.maxInFlight = f
@@ -215,12 +219,14 @@ func (r *RegistryImpl) Len() int {
 	return len(r.updates)
 }
 
-func (r *RegistryImpl) remover(id string) func() {
-	return func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		delete(r.updates, id)
-	}
+func (r *RegistryImpl) remover(id string) updateOpt {
+	return withCompletionCallback(
+		func() {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			delete(r.updates, id)
+		},
+	)
 }
 
 func (r *RegistryImpl) admit(context.Context) error {
