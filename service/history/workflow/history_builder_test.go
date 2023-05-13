@@ -257,6 +257,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 				OriginalExecutionRunId:          originalRunID,
 				Memo:                            testMemo,
 				SearchAttributes:                testSearchAttributes,
+				WorkflowId:                      testWorkflowID,
 
 				ParentWorkflowNamespace:   testParentNamespaceName,
 				ParentWorkflowNamespaceId: testParentNamespaceID,
