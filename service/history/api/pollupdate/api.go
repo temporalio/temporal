@@ -33,43 +33,40 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
-	ctxLookup api.WorkflowConsistencyChecker,
+	ctxGuard api.WorkflowContextWarden,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
-	updateRef := req.GetRequest().GetUpdateRef()
-	wfexec := updateRef.GetWorkflowExecution()
-	upd, ok, err := func() (*update.Update, bool, error) {
-		wfctx, err := ctxLookup.GetWorkflowContext(
-			ctx,
-			nil,
-			api.BypassMutableStateConsistencyPredicate,
-			definition.NewWorkflowKey(
-				req.GetNamespaceId(),
-				wfexec.GetWorkflowId(),
-				wfexec.GetRunId(),
-			),
-			workflow.LockPriorityHigh,
-		)
-		if err != nil {
-			return nil, false, err
+	var (
+		updateRef = req.GetRequest().GetUpdateRef()
+		wfexec    = updateRef.GetWorkflowExecution()
+		key       = definition.WorkflowKey{
+			NamespaceID: req.GetNamespaceId(),
+			WorkflowID:  wfexec.GetWorkflowId(),
+			RunID:       wfexec.GetRunId(),
 		}
-		release := wfctx.GetReleaseFn()
-		defer release(nil)
-		upd, found := wfctx.GetUpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
-		return upd, found, nil
-	}()
+		upd *update.Update
+	)
+
+	err := ctxGuard.DoLocked(ctx, key,
+		func(ctx context.Context, apiCtx api.WorkflowContext) error {
+			var found bool
+			reg := apiCtx.GetUpdateRegistry(ctx)
+			if upd, found = reg.Find(ctx, updateRef.GetUpdateId()); !found {
+				return serviceerror.NewNotFound(
+					fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
+			}
+			return nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
-	}
+
 	outcome, err := upd.WaitOutcome(ctx)
 	if err != nil {
 		return nil, err

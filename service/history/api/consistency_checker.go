@@ -45,9 +45,38 @@ import (
 )
 
 type (
+	wardenOpts struct {
+		reqClock              *clockspb.VectorClock
+		constistencyPredicate MutableStateConsistencyPredicate
+		lockPriority          workflow.LockPriority
+	}
+
+	ContextWardenOpt func(*wardenOpts)
+
+	ContextWardenFunc func(context.Context, WorkflowContext) error
+
+	// WorkflowContextWarden protects an api.WorkflowContext by providing
+	// limited access through a delegation interface that guarantees safe
+	// lock/unlock of the underlying workflow.Context.
+	WorkflowContextWarden interface {
+
+		// DoLocked executes the provided ContextWardenFunc with the
+		// api.WorkflowContext identified by the provided WorkflowKey.
+		// LockPriority, MutableStateConsistencyPredicate, and a request clock
+		// can be optionally specified but will default to High, Bypass, and nil
+		// respectively.
+		DoLocked(
+			context.Context,
+			definition.WorkflowKey,
+			ContextWardenFunc,
+			...ContextWardenOpt,
+		) error
+	}
+
 	MutableStateConsistencyPredicate func(mutableState workflow.MutableState) bool
 
 	WorkflowConsistencyChecker interface {
+		WorkflowContextWarden
 		GetWorkflowCache() wcache.Cache
 		GetCurrentRunID(
 			ctx context.Context,
@@ -323,6 +352,47 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 		return "", err
 	default:
 		return "", err
+	}
+}
+
+func (c *WorkflowConsistencyCheckerImpl) DoLocked(
+	ctx context.Context,
+	key definition.WorkflowKey,
+	ctxFunc ContextWardenFunc,
+	opts ...ContextWardenOpt,
+) (retErr error) {
+	cfg := wardenOpts{
+		constistencyPredicate: BypassMutableStateConsistencyPredicate,
+		lockPriority:          workflow.LockPriorityHigh,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	apiCtx, err := c.GetWorkflowContext(
+		ctx, cfg.reqClock, cfg.constistencyPredicate, key, cfg.lockPriority)
+	if err != nil {
+		return err
+	}
+	defer func() { apiCtx.GetReleaseFn()(retErr) }()
+	return ctxFunc(ctx, apiCtx)
+}
+
+func WithMutableStateConsistency(mspred MutableStateConsistencyPredicate) ContextWardenOpt {
+	return func(c *wardenOpts) {
+		c.constistencyPredicate = mspred
+	}
+}
+
+func WithLockPriority(prio workflow.LockPriority) ContextWardenOpt {
+	return func(c *wardenOpts) {
+		c.lockPriority = prio
+	}
+}
+
+func WithClock(clock *clockspb.VectorClock) ContextWardenOpt {
+	return func(c *wardenOpts) {
+		c.reqClock = clock
 	}
 }
 

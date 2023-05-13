@@ -35,30 +35,18 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/pollupdate"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type (
-	mockWFConsistencyChecker struct {
-		api.WorkflowConsistencyChecker
-		GetWorkflowContextFunc func(
-			ctx context.Context,
-			reqClock *clockspb.VectorClock,
-			consistencyPredicate api.MutableStateConsistencyPredicate,
-			workflowKey definition.WorkflowKey,
-			lockPriority workflow.LockPriority,
-		) (api.WorkflowContext, error)
-	}
-
 	mockAPICtx struct {
 		api.WorkflowContext
+		api.WorkflowContextWarden
 		GetUpdateRegistryFunc func(context.Context) update.Registry
 		GetReleaseFnFunc      func() wcache.ReleaseCacheFunc
 	}
@@ -76,14 +64,13 @@ type (
 func (mockUpdateEventStore) OnAfterCommit(f func(context.Context))   { f(context.TODO()) }
 func (mockUpdateEventStore) OnAfterRollback(f func(context.Context)) {}
 
-func (m mockWFConsistencyChecker) GetWorkflowContext(
+func (m mockAPICtx) DoLocked(
 	ctx context.Context,
-	clock *clockspb.VectorClock,
-	pred api.MutableStateConsistencyPredicate,
-	wfKey definition.WorkflowKey,
-	prio workflow.LockPriority,
-) (api.WorkflowContext, error) {
-	return m.GetWorkflowContextFunc(ctx, clock, pred, wfKey, prio)
+	key definition.WorkflowKey,
+	fun api.ContextWardenFunc,
+	opts ...api.ContextWardenOpt,
+) error {
+	return fun(ctx, m)
 }
 
 func (m mockAPICtx) GetReleaseFn() wcache.ReleaseCacheFunc {
@@ -106,18 +93,6 @@ func TestPollOutcome(t *testing.T) {
 			return reg
 		},
 	}
-	wfcc := mockWFConsistencyChecker{
-		GetWorkflowContextFunc: func(
-			ctx context.Context,
-			reqClock *clockspb.VectorClock,
-			consistencyPredicate api.MutableStateConsistencyPredicate,
-			workflowKey definition.WorkflowKey,
-			lockPriority workflow.LockPriority,
-		) (api.WorkflowContext, error) {
-			return apiCtx, nil
-		},
-	}
-
 	updateID := t.Name() + "-update-id"
 	req := historyservice.PollWorkflowExecutionUpdateRequest{
 		Request: &workflowservice.PollWorkflowExecutionUpdateRequest{
@@ -135,7 +110,7 @@ func TestPollOutcome(t *testing.T) {
 		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
 			return nil, false
 		}
-		_, err := pollupdate.Invoke(context.TODO(), &req, wfcc)
+		_, err := pollupdate.Invoke(context.TODO(), &req, apiCtx)
 		var notfound *serviceerror.NotFound
 		require.ErrorAs(t, err, &notfound)
 	})
@@ -145,7 +120,7 @@ func TestPollOutcome(t *testing.T) {
 		}
 		ctx, cncl := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer cncl()
-		_, err := pollupdate.Invoke(ctx, &req, wfcc)
+		_, err := pollupdate.Invoke(ctx, &req, apiCtx)
 		require.Error(t, err)
 	})
 	t.Run("get an outcome", func(t *testing.T) {
@@ -168,7 +143,7 @@ func TestPollOutcome(t *testing.T) {
 		errCh := make(chan error, 1)
 		respCh := make(chan *historyservice.PollWorkflowExecutionUpdateResponse, 1)
 		go func() {
-			resp, err := pollupdate.Invoke(context.TODO(), &req, wfcc)
+			resp, err := pollupdate.Invoke(context.TODO(), &req, apiCtx)
 			errCh <- err
 			respCh <- resp
 		}()
