@@ -169,18 +169,16 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
+	}
+	defer func() { _ = iter.Close() }()
 	deleteOrphanNamespace := func() {
 		// Delete namespace from `namespaces_by_id`
 		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID).WithContext(ctx).Exec(); errDelete != nil {
 			m.logger.Warn("Unable to delete orphan namespace record. Error", tag.Error(errDelete))
 		}
 	}
-
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
-	}
-
-	defer func() { _ = iter.Close() }()
 
 	if !applied {
 
