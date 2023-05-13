@@ -649,3 +649,12 @@ message StreamWorkflowReplicationMessagesResponse {
         temporal.server.api.replication.v1.WorkflowReplicationMessages messages = 1;
     }
 }
+
+message PollWorkflowExecutionUpdateRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateRequest request = 2;
+}
+
+message PollWorkflowExecutionUpdateResponse {
+    temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateResponse response = 1;
+}

@@ -102,6 +102,10 @@ var QueueModule = fx.Options(
 			Group:  QueueFactoryFxGroup,
 			Target: NewVisibilityQueueFactory,
 		},
+		fx.Annotated{
+			Group:  QueueFactoryFxGroup,
+			Target: NewMemoryScheduledQueueFactory,
+		},
 		getOptionalQueueFactories,
 	),
 	fx.Invoke(QueueFactoryLifetimeHooks),

@@ -249,7 +249,7 @@ func (e *matchingEngineImpl) updateTaskQueue(taskQueue *taskQueueID, mgr taskQue
 
 // AddWorkflowTask either delivers task directly to waiting poller or save it into task queue persistence.
 func (e *matchingEngineImpl) AddWorkflowTask(
-	hCtx *handlerContext,
+	ctx context.Context,
 	addRequest *matchingservice.AddWorkflowTaskRequest,
 ) (bool, error) {
 	namespaceID := namespace.ID(addRequest.GetNamespaceId())
@@ -263,7 +263,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 
 	sticky := taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	tqm, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, !sticky)
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, !sticky)
 	if err != nil {
 		return false, err
 	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
@@ -289,7 +289,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		CreateTime:       now,
 	}
 
-	return tqm.AddTask(hCtx.Context, addTaskParams{
+	return tqm.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
@@ -299,7 +299,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 
 // AddActivityTask either delivers task directly to waiting poller or save it into task queue persistence.
 func (e *matchingEngineImpl) AddActivityTask(
-	hCtx *handlerContext,
+	ctx context.Context,
 	addRequest *matchingservice.AddActivityTaskRequest,
 ) (bool, error) {
 	namespaceID := namespace.ID(addRequest.GetNamespaceId())
@@ -312,7 +312,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	tlMgr, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, true)
+	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
 	if err != nil {
 		return false, err
 	}
@@ -335,7 +335,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		ExpiryTime:       expirationTime,
 	}
 
-	return tlMgr.AddTask(hCtx.Context, addTaskParams{
+	return tlMgr.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
@@ -345,8 +345,9 @@ func (e *matchingEngineImpl) AddActivityTask(
 
 // PollWorkflowTaskQueue tries to get the workflow task using exponential backoff.
 func (e *matchingEngineImpl) PollWorkflowTaskQueue(
-	hCtx *handlerContext,
+	ctx context.Context,
 	req *matchingservice.PollWorkflowTaskQueueRequest,
+	opMetrics metrics.Handler,
 ) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	pollerID := req.GetPollerId()
@@ -355,13 +356,13 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	e.logger.Debug("Received PollWorkflowTaskQueue for taskQueue", tag.WorkflowTaskQueueName(taskQueueName))
 pollLoop:
 	for {
-		err := common.IsValidContext(hCtx.Context)
+		err := common.IsValidContext(ctx)
 		if err != nil {
 			return nil, err
 		}
 		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
-		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
+		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		if err != nil {
@@ -377,7 +378,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedSourceStats(hCtx.metricsHandler, task.isForwarded(), req.GetForwardedSource())
+		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -389,7 +390,7 @@ pollLoop:
 
 			// for query task, we don't need to update history to record workflow task started. but we need to know
 			// the NextEventID so front end knows what are the history events to load for this workflow task.
-			mutableStateResp, err := e.historyClient.GetMutableState(hCtx.Context, &historyservice.GetMutableStateRequest{
+			mutableStateResp, err := e.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 				NamespaceId: req.GetNamespaceId(),
 				Execution:   task.workflowExecution(),
 			})
@@ -413,10 +414,10 @@ pollLoop:
 				StartedEventId:             common.EmptyEventID,
 				Attempt:                    1,
 			}
-			return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.metricsHandler), nil
+			return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 		}
 
-		resp, err := e.recordWorkflowTaskStarted(hCtx.Context, request, task)
+		resp, err := e.recordWorkflowTaskStarted(ctx, request, task)
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
@@ -447,7 +448,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.metricsHandler), nil
+		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
 
@@ -455,8 +456,9 @@ pollLoop:
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
 func (e *matchingEngineImpl) PollActivityTaskQueue(
-	hCtx *handlerContext,
+	ctx context.Context,
 	req *matchingservice.PollActivityTaskQueueRequest,
+	opMetrics metrics.Handler,
 ) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	pollerID := req.GetPollerId()
@@ -465,7 +467,7 @@ func (e *matchingEngineImpl) PollActivityTaskQueue(
 	e.logger.Debug("Received PollActivityTaskQueue for taskQueue", tag.Name(taskQueueName))
 pollLoop:
 	for {
-		err := common.IsValidContext(hCtx.Context)
+		err := common.IsValidContext(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -481,7 +483,7 @@ pollLoop:
 		}
 		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
-		pollerCtx := context.WithValue(hCtx.Context, pollerIDKey, pollerID)
+		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		taskQueueKind := request.TaskQueue.GetKind()
 		task, err := e.getTask(pollerCtx, taskQueue, maxDispatch, taskQueueKind)
@@ -493,14 +495,14 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedSourceStats(hCtx.metricsHandler, task.isForwarded(), req.GetForwardedSource())
+		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
 			return task.pollActivityTaskQueueResponse(), nil
 		}
 
-		resp, err := e.recordActivityTaskStarted(hCtx.Context, request, task)
+		resp, err := e.recordActivityTaskStarted(ctx, request, task)
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
@@ -530,7 +532,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollActivityTaskQueueResponse(task, resp, hCtx.metricsHandler), nil
+		return e.createPollActivityTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
 
@@ -542,7 +544,7 @@ type queryResult struct {
 // QueryWorkflow creates a WorkflowTask with query data, send it through sync match channel, wait for that WorkflowTask
 // to be processed by worker, and then return the query result.
 func (e *matchingEngineImpl) QueryWorkflow(
-	hCtx *handlerContext,
+	ctx context.Context,
 	queryRequest *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	namespaceID := namespace.ID(queryRequest.GetNamespaceId())
@@ -555,7 +557,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 
 	sticky := taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	tqm, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, !sticky)
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, !sticky)
 	if err != nil {
 		return nil, err
 	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
@@ -563,7 +565,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	}
 
 	taskID := uuid.New()
-	resp, err := tqm.DispatchQueryTask(hCtx.Context, taskID, queryRequest)
+	resp, err := tqm.DispatchQueryTask(ctx, taskID, queryRequest)
 
 	// if get response or error it means that query task was handled by forwarding to another matching host
 	// this remote host's result can be returned directly
@@ -592,17 +594,18 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		default:
 			return nil, serviceerror.NewInternal("unknown query completed type")
 		}
-	case <-hCtx.Done():
-		return nil, hCtx.Err()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
 func (e *matchingEngineImpl) RespondQueryTaskCompleted(
-	hCtx *handlerContext,
+	ctx context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
+	opMetrics metrics.Handler,
 ) error {
 	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
-		hCtx.metricsHandler.Counter(metrics.RespondQueryTaskFailedPerTaskQueueCounter.GetMetricName()).Record(1)
+		opMetrics.Counter(metrics.RespondQueryTaskFailedPerTaskQueueCounter.GetMetricName()).Record(1)
 		return err
 	}
 	return nil
@@ -618,7 +621,7 @@ func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *quer
 }
 
 func (e *matchingEngineImpl) CancelOutstandingPoll(
-	hCtx *handlerContext,
+	ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest,
 ) error {
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -631,7 +634,7 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 		return err
 	}
 	taskQueueKind := request.TaskQueue.GetKind()
-	tlMgr, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, true)
+	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
 	if err != nil {
 		return err
 	}
@@ -641,7 +644,7 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueue(
-	hCtx *handlerContext,
+	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -652,7 +655,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		return nil, err
 	}
 	taskQueueKind := request.DescRequest.TaskQueue.GetKind()
-	tlMgr, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, true)
+	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
 	if err != nil {
 		return nil, err
 	}
@@ -661,7 +664,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 }
 
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
-	hCtx *handlerContext,
+	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
 ) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 	activityTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
@@ -707,7 +710,7 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 }
 
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
-	hCtx *handlerContext,
+	ctx context.Context,
 	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
 ) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
@@ -716,11 +719,11 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) error {
+	err = tqMgr.MutateVersioningData(ctx, func(data *persistencespb.VersioningData) error {
 		return UpdateVersionSets(data, req.GetRequest(), e.config.MaxVersionGraphSize())
 	})
 	if err != nil {
@@ -730,7 +733,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 }
 
 func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
-	hCtx *handlerContext,
+	ctx context.Context,
 	req *matchingservice.GetWorkerBuildIdCompatibilityRequest,
 ) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
@@ -739,14 +742,14 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
 		}
 		return nil, err
 	}
-	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
+	verDat, err := tqMgr.GetVersioningData(ctx)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
@@ -759,14 +762,14 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 }
 
 func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
-	hCtx *handlerContext,
+	ctx context.Context,
 	req *matchingservice.InvalidateTaskQueueMetadataRequest,
 ) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
 	taskQueue, err := newTaskQueueID(namespace.ID(req.GetNamespaceId()), req.GetTaskQueue(), req.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
+	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
 	if tqMgr == nil && err == nil {
 		// Task queue is not currently loaded, so nothing to do here
 		return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
@@ -782,7 +785,7 @@ func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
 }
 
 func (e *matchingEngineImpl) GetTaskQueueMetadata(
-	hCtx *handlerContext,
+	ctx context.Context,
 	req *matchingservice.GetTaskQueueMetadataRequest,
 ) (*matchingservice.GetTaskQueueMetadataResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
@@ -791,7 +794,7 @@ func (e *matchingEngineImpl) GetTaskQueueMetadata(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		return nil, err
 	}
@@ -800,7 +803,7 @@ func (e *matchingEngineImpl) GetTaskQueueMetadata(
 	// This isn't != nil, because gogoproto will round-trip serialize an empty byte array in a request
 	// into a nil field.
 	if len(verDatHash) > 0 {
-		vDat, err := tqMgr.GetVersioningData(hCtx)
+		vDat, err := tqMgr.GetVersioningData(ctx)
 		if err != nil {
 			return nil, err
 		}

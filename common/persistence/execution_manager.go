@@ -891,6 +891,13 @@ func (m *executionManagerImpl) RangeDeleteReplicationTaskFromDLQ(
 	return m.persistence.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 }
 
+func (m *executionManagerImpl) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *GetReplicationTasksFromDLQRequest,
+) (bool, error) {
+	return m.persistence.IsReplicationDLQEmpty(ctx, request)
+}
+
 func (m *executionManagerImpl) Close() {
 	m.persistence.Close()
 }

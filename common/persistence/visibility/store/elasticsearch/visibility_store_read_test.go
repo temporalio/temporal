@@ -119,6 +119,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 
 	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier)
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	visibilityEnableManualPagination := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
@@ -134,6 +135,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		s.mockProcessor,
 		esProcessorAckTimeout,
 		visibilityDisableOrderByClause,
+		visibilityEnableManualPagination,
 		s.mockMetricsHandler,
 	)
 }
@@ -1135,7 +1137,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 			Hits: []*elastic.SearchHit{
 				{
 					Source: source,
-					Sort:   []interface{}{json.Number("123"), "runId"},
+					Sort:   []interface{}{json.Number("123")},
 				},
 			},
 		},
@@ -1156,7 +1158,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	request.Query = `ExecutionStatus = "Terminated"`
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(searchResult, nil)
 
-	token := &visibilityPageToken{SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"}}
+	token := &visibilityPageToken{SearchAfter: []interface{}{json.Number("1528358645123456789")}}
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
@@ -1164,7 +1166,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	s.NoError(err)
 	responseToken, err := s.visibilityStore.deserializePageToken(result.NextPageToken)
 	s.NoError(err)
-	s.Equal([]interface{}{json.Number("123"), "runId"}, responseToken.SearchAfter)
+	s.Equal([]interface{}{json.Number("123")}, responseToken.SearchAfter)
 
 	// test last page
 	searchResult = &elastic.SearchResult{
@@ -1209,7 +1211,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions_OldPageToken() {
 			Hits: []*elastic.SearchHit{
 				{
 					Source: source,
-					Sort:   []interface{}{json.Number("123"), "runId"},
+					Sort:   []interface{}{json.Number("123")},
 				},
 			},
 		},
@@ -1224,7 +1226,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions_OldPageToken() {
 		ScrollID      string
 		PointInTimeID string
 	}{
-		SearchAfter:   []interface{}{json.Number("1528358645123456789"), "qwe"},
+		SearchAfter:   []interface{}{json.Number("1528358645123456789")},
 		ScrollID:      "random-scroll",
 		PointInTimeID: "random-pit",
 	}
@@ -1236,7 +1238,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions_OldPageToken() {
 	s.NoError(err)
 	responseToken, err := s.visibilityStore.deserializePageToken(result.NextPageToken)
 	s.NoError(err)
-	s.Equal([]interface{}{json.Number("123"), "runId"}, responseToken.SearchAfter)
+	s.Equal([]interface{}{json.Number("123")}, responseToken.SearchAfter)
 }
 
 func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
@@ -1385,4 +1387,411 @@ func (s *ESVisibilitySuite) Test_detailedErrorMessage() {
 		},
 	}
 	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type], root causes: some other reason1 [type=some other type1], some other reason2 [type=some other type2]", detailedErrorMessage(err))
+}
+
+func (s *ESVisibilitySuite) TestProcessPageToken() {
+	closeTime := time.Now().UTC()
+	startTime := closeTime.Add(-1 * time.Minute)
+	baseQuery := elastic.NewBoolQuery().
+		Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespace.String()))
+
+	testCases := []struct {
+		name             string
+		manualPagination bool
+		sorter           []elastic.Sorter
+		pageToken        *visibilityPageToken
+		resSearchAfter   []any
+		resQuery         elastic.Query
+		resError         error
+	}{
+		{
+			name:             "nil page token",
+			manualPagination: false,
+			sorter:           docSorter,
+			pageToken:        nil,
+			resSearchAfter:   nil,
+			resQuery:         baseQuery,
+			resError:         nil,
+		},
+		{
+			name:             "empty page token",
+			manualPagination: false,
+			sorter:           docSorter,
+			pageToken:        &visibilityPageToken{SearchAfter: []any{}},
+			resSearchAfter:   nil,
+			resQuery:         baseQuery,
+			resError:         nil,
+		},
+		{
+			name:             "page token doesn't match sorter size",
+			manualPagination: false,
+			sorter:           docSorter,
+			pageToken:        &visibilityPageToken{SearchAfter: []any{"foo", "bar"}},
+			resSearchAfter:   nil,
+			resQuery:         baseQuery,
+			resError:         serviceerror.NewInvalidArgument("Invalid page token for given sort fields: expected 1 fields, got 2"),
+		},
+		{
+			name:             "not using default sorter",
+			manualPagination: false,
+			sorter:           docSorter,
+			pageToken:        &visibilityPageToken{SearchAfter: []any{123}},
+			resSearchAfter:   []any{123},
+			resQuery:         baseQuery,
+			resError:         nil,
+		},
+		{
+			name:             "default sorter without manual pagination",
+			manualPagination: false,
+			sorter:           defaultSorter,
+			pageToken: &visibilityPageToken{
+				SearchAfter: []any{
+					json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+					json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+				},
+			},
+			resSearchAfter: []any{
+				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+			},
+			resQuery: baseQuery,
+			resError: nil,
+		},
+		{
+			name:             "default sorter with manual pagination",
+			manualPagination: true,
+			sorter:           defaultSorter,
+			pageToken: &visibilityPageToken{
+				SearchAfter: []any{
+					json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+					json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+				},
+			},
+			resSearchAfter: nil,
+			resQuery: baseQuery.MinimumNumberShouldMatch(1).Should(
+				elastic.NewBoolQuery().Filter(
+					elastic.NewRangeQuery(searchattribute.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+				),
+				elastic.NewBoolQuery().Filter(
+					elastic.NewTermQuery(searchattribute.CloseTime, closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+				),
+			),
+			resError: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			visibilityStore := NewVisibilityStore(
+				s.mockESClient,
+				testIndex,
+				searchattribute.NewTestProvider(),
+				searchattribute.NewTestMapperProvider(nil),
+				s.mockProcessor,
+				dynamicconfig.GetDurationPropertyFn(1*time.Minute*debug.TimeoutMultiplier),
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.manualPagination),
+				s.mockMetricsHandler,
+			)
+			params := &client.SearchParameters{
+				Index:  testIndex,
+				Query:  baseQuery,
+				Sorter: tc.sorter,
+			}
+			err := visibilityStore.processPageToken(params, tc.pageToken, testNamespace)
+			s.Equal(tc.resSearchAfter, params.SearchAfter)
+			s.Equal(tc.resQuery, params.Query)
+			s.Equal(tc.resError, err)
+		})
+	}
+}
+
+func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
+	startTime := time.Now().UTC()
+	closeTime := startTime.Add(1 * time.Minute)
+	datetimeNull := json.Number(fmt.Sprintf("%d", math.MaxInt64))
+
+	testCases := []struct {
+		name         string
+		sorterFields []fieldSort
+		searchAfter  []any
+		res          []elastic.Query
+		err          error
+	}{
+		{
+			name:         "one field",
+			sorterFields: []fieldSort{{searchattribute.StartTime, true, true}},
+			searchAfter:  []any{json.Number(fmt.Sprintf("%d", startTime.UnixNano()))},
+			res: []elastic.Query{
+				elastic.NewBoolQuery().Filter(
+					elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+				),
+			},
+			err: nil,
+		},
+		{
+			name: "two fields one null",
+			sorterFields: []fieldSort{
+				{searchattribute.CloseTime, true, true},
+				{searchattribute.StartTime, true, true},
+			},
+			searchAfter: []any{
+				datetimeNull,
+				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+			},
+			res: []elastic.Query{
+				elastic.NewBoolQuery().Filter(elastic.NewExistsQuery(searchattribute.CloseTime)),
+				elastic.NewBoolQuery().
+					MustNot(elastic.NewExistsQuery(searchattribute.CloseTime)).
+					Filter(
+						elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+					),
+			},
+			err: nil,
+		},
+		{
+			name: "two fields no null",
+			sorterFields: []fieldSort{
+				{searchattribute.CloseTime, true, true},
+				{searchattribute.StartTime, true, true},
+			},
+			searchAfter: []any{
+				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+			},
+			res: []elastic.Query{
+				elastic.NewBoolQuery().Filter(
+					elastic.NewRangeQuery(searchattribute.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+				),
+				elastic.NewBoolQuery().
+					Filter(
+						elastic.NewTermQuery(searchattribute.CloseTime, closeTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+					),
+			},
+			err: nil,
+		},
+		{
+			name: "three fields",
+			sorterFields: []fieldSort{
+				{searchattribute.CloseTime, true, true},
+				{searchattribute.StartTime, true, true},
+				{searchattribute.RunID, false, true},
+			},
+			searchAfter: []any{
+				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+				"random-run-id",
+			},
+			res: []elastic.Query{
+				elastic.NewBoolQuery().Filter(
+					elastic.NewRangeQuery(searchattribute.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+				),
+				elastic.NewBoolQuery().
+					Filter(
+						elastic.NewTermQuery(searchattribute.CloseTime, closeTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(searchattribute.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+					),
+				elastic.NewBoolQuery().
+					Filter(
+						elastic.NewTermQuery(searchattribute.CloseTime, closeTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(searchattribute.StartTime, startTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(searchattribute.RunID).Gt("random-run-id"),
+					),
+			},
+			err: nil,
+		},
+		{
+			name: "invalid token: wrong size",
+			sorterFields: []fieldSort{
+				{searchattribute.CloseTime, true, true},
+				{searchattribute.StartTime, true, true},
+				{searchattribute.RunID, false, true},
+			},
+			searchAfter: []any{
+				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+			},
+			res: nil,
+			err: serviceerror.NewInvalidArgument("Invalid page token for given sort fields: expected 3 fields, got 2"),
+		},
+		{
+			name: "invalid token: last value null",
+			sorterFields: []fieldSort{
+				{searchattribute.CloseTime, true, true},
+			},
+			searchAfter: []any{datetimeNull},
+			res:         nil,
+			err:         serviceerror.NewInternal("Last field of sorter cannot be a nullable field: \"CloseTime\" has null values"),
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			res, err := buildPaginationQuery(tc.sorterFields, tc.searchAfter, searchattribute.TestNameTypeMap)
+			s.Equal(tc.err, err)
+			s.Equal(tc.res, res)
+		})
+	}
+}
+
+func (s *ESVisibilitySuite) Test_parsePageTokenValue() {
+	testCases := []struct {
+		name  string
+		value any
+		tp    enumspb.IndexedValueType
+		res   any
+		err   error
+	}{
+		{
+			name:  "IntField",
+			value: 123,
+			tp:    enumspb.INDEXED_VALUE_TYPE_INT,
+			res:   int64(123),
+			err:   nil,
+		},
+		{
+			name:  "NullMaxIntField",
+			value: math.MaxInt64,
+			tp:    enumspb.INDEXED_VALUE_TYPE_INT,
+			res:   nil,
+			err:   nil,
+		},
+		{
+			name:  "NullMinIntField",
+			value: math.MinInt64,
+			tp:    enumspb.INDEXED_VALUE_TYPE_INT,
+			res:   nil,
+			err:   nil,
+		},
+		{
+			name:  "BoolFieldTrue",
+			value: 1,
+			tp:    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			res:   true,
+			err:   nil,
+		},
+		{
+			name:  "BoolFieldFalse",
+			value: 0,
+			tp:    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			res:   false,
+			err:   nil,
+		},
+		{
+			name:  "NullMaxBoolField",
+			value: math.MaxInt64,
+			tp:    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			res:   nil,
+			err:   nil,
+		},
+		{
+			name:  "NullMinBoolField",
+			value: math.MinInt64,
+			tp:    enumspb.INDEXED_VALUE_TYPE_BOOL,
+			res:   nil,
+			err:   nil,
+		},
+		{
+			name:  "DatetimeField",
+			value: 1683221689123456789,
+			tp:    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			res:   "2023-05-04T17:34:49.123456789Z",
+			err:   nil,
+		},
+		{
+			name:  "NullMaxDatetimeField",
+			value: math.MaxInt64,
+			tp:    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			res:   nil,
+			err:   nil,
+		},
+		{
+			name:  "NullMinDatetimeField",
+			value: math.MinInt64,
+			tp:    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			res:   nil,
+			err:   nil,
+		},
+		{
+			name:  "DoubleField",
+			value: 3.14,
+			tp:    enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			res:   float64(3.14),
+			err:   nil,
+		},
+		{
+			name:  "NullMaxDoubleField",
+			value: "Infinity",
+			tp:    enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			res:   nil,
+			err:   nil,
+		},
+		{
+			name:  "NullMinDoubleField",
+			value: "-Infinity",
+			tp:    enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			res:   nil,
+			err:   nil,
+		},
+		{
+			name:  "KeywordField",
+			value: "foo",
+			tp:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			res:   "foo",
+			err:   nil,
+		},
+		{
+			name:  "NullKeywordField",
+			value: nil,
+			tp:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			res:   nil,
+			err:   nil,
+		},
+		{
+			name:  "IntFieldError",
+			value: "123",
+			tp:    enumspb.INDEXED_VALUE_TYPE_INT,
+			res:   nil,
+			err:   serviceerror.NewInvalidArgument("Invalid page token: expected interger type, got \"123\""),
+		},
+		{
+			name:  "DoubleFieldError",
+			value: "foo",
+			tp:    enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			res:   nil,
+			err:   serviceerror.NewInvalidArgument("Invalid page token: expected float type, got \"foo\""),
+		},
+		{
+			name:  "KeywordFieldError",
+			value: 123,
+			tp:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			res:   nil,
+			err:   serviceerror.NewInvalidArgument("Invalid page token: expected string type, got 123"),
+		},
+		{
+			name:  "TextFieldError",
+			value: "foo",
+			tp:    enumspb.INDEXED_VALUE_TYPE_TEXT,
+			res:   nil,
+			err:   serviceerror.NewInvalidArgument("Invalid field type in sorter: cannot order by \"TextFieldError\""),
+		},
+	}
+
+	pageToken := &visibilityPageToken{}
+	for _, tc := range testCases {
+		pageToken.SearchAfter = append(pageToken.SearchAfter, tc.value)
+	}
+	jsonToken, _ := json.Marshal(pageToken)
+	pageToken, err := s.visibilityStore.deserializePageToken(jsonToken)
+	s.NoError(err)
+	s.Equal(len(testCases), len(pageToken.SearchAfter))
+	for i, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			res, err := parsePageTokenValue(tc.name, pageToken.SearchAfter[i], tc.tp)
+			s.Equal(tc.err, err)
+			s.Equal(tc.res, res)
+		})
+	}
 }

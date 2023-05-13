@@ -162,6 +162,8 @@ type (
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
+		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
+
 		// do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
@@ -630,12 +632,8 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 	return ms.namespaceEntry
 }
 
-func (ms *MutableStateImpl) IsStickyTaskQueueEnabled() bool {
-	return ms.executionInfo.StickyTaskQueue != ""
-}
-
-func (ms *MutableStateImpl) TaskQueue() *taskqueuepb.TaskQueue {
-	if ms.IsStickyTaskQueueEnabled() {
+func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
+	if ms.IsStickyTaskQueueSet() {
 		return &taskqueuepb.TaskQueue{
 			Name: ms.executionInfo.StickyTaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
@@ -645,6 +643,36 @@ func (ms *MutableStateImpl) TaskQueue() *taskqueuepb.TaskQueue {
 		Name: ms.executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
+}
+
+func (ms *MutableStateImpl) SetStickyTaskQueue(name string, scheduleToStartTimeout *time.Duration) {
+	ms.executionInfo.StickyTaskQueue = name
+	ms.executionInfo.StickyScheduleToStartTimeout = scheduleToStartTimeout
+}
+
+func (ms *MutableStateImpl) ClearStickyTaskQueue() {
+	ms.executionInfo.StickyTaskQueue = ""
+	ms.executionInfo.StickyScheduleToStartTimeout = nil
+}
+
+func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
+	return ms.executionInfo.StickyTaskQueue != ""
+}
+
+// TaskQueueScheduleToStartTimeout returns TaskQueue struct and corresponding StartToClose timeout.
+// Task queue kind (sticky or normal) and timeout are set based on comparison of normal task queue name
+// in mutable state and provided name.
+func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *time.Duration) {
+	if ms.executionInfo.TaskQueue != name {
+		return &taskqueuepb.TaskQueue{
+			Name: ms.executionInfo.StickyTaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+		}, ms.executionInfo.StickyScheduleToStartTimeout
+	}
+	return &taskqueuepb.TaskQueue{
+		Name: ms.executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}, ms.executionInfo.WorkflowRunTimeout // No WT ScheduleToStart timeout for normal task queue.
 }
 
 func (ms *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
@@ -1407,11 +1435,6 @@ func (ms *MutableStateImpl) DeleteWorkflowTask() {
 	ms.workflowTaskManager.DeleteWorkflowTask()
 }
 
-func (ms *MutableStateImpl) ClearStickyness() {
-	ms.executionInfo.StickyTaskQueue = ""
-	ms.executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
-}
-
 // GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
 // first event ID is the ID of a batch of events in a single history events record
 func (ms *MutableStateImpl) GetLastFirstEventIDTxnID() (int64, int64) {
@@ -1999,13 +2022,13 @@ func (ms *MutableStateImpl) ReplicateWorkflowTaskTimedOutEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduleToStartTimeoutEvent(
-	scheduledEventID int64,
+	workflowTask *WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskScheduleToStartTimeoutEvent(scheduledEventID)
+	return ms.workflowTaskManager.AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
@@ -2535,7 +2558,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionCompletedEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -2580,7 +2603,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionFailedEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -2624,7 +2647,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionTimedoutEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -2704,7 +2727,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionCanceledEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -3274,14 +3297,19 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(updResp *up
 
 func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdateIDs(
 	ctx context.Context,
-) ([]string, error) {
+) []string {
 	out := make([]string, 0)
 	for id, updateInfo := range ms.updateInfos {
 		if updateInfo.GetAcceptancePointer() != nil {
 			out = append(out, id)
 		}
 	}
-	return out, nil
+	return out
+}
+
+func (ms *MutableStateImpl) GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool) {
+	info, ok := ms.updateInfos[updateID]
+	return info, ok
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
@@ -3319,7 +3347,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionTerminatedEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = ""
 	ms.executionInfo.CloseTime = event.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -3481,7 +3509,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionContinuedAsNewEvent(
 	ms.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	ms.executionInfo.NewExecutionRunId = continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 	ms.executionInfo.CloseTime = continueAsNewEvent.GetEventTime()
-	ms.ClearStickyness()
+	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(continueAsNewEvent)
 	return nil
 }
@@ -3990,6 +4018,27 @@ func (ms *MutableStateImpl) SetUpdateCondition(
 
 func (ms *MutableStateImpl) GetUpdateCondition() (int64, int64) {
 	return ms.nextEventIDInDB, ms.dbRecordVersion
+}
+
+func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
+	task *tasks.WorkflowTaskTimeoutTask,
+) error {
+	ms.speculativeWorkflowTaskTimeoutTask = task
+	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
+}
+
+func (ms *MutableStateImpl) CheckSpeculativeWorkflowTaskTimeoutTask(
+	task *tasks.WorkflowTaskTimeoutTask,
+) bool {
+	return ms.speculativeWorkflowTaskTimeoutTask == task
+}
+
+func (ms *MutableStateImpl) RemoveSpeculativeWorkflowTaskTimeoutTask() {
+	if ms.speculativeWorkflowTaskTimeoutTask != nil {
+		// Cancelling task prevents it from being submitted to scheduler in memoryScheduledQueue.
+		ms.speculativeWorkflowTaskTimeoutTask.Cancel()
+		ms.speculativeWorkflowTaskTimeoutTask = nil
+	}
 }
 
 func (ms *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
@@ -4601,6 +4650,17 @@ func (ms *MutableStateImpl) closeTransactionWithPolicyCheck(
 	}
 }
 
+func (ms *MutableStateImpl) BufferSizeAcceptable() bool {
+	if ms.hBuilder.NumBufferedEvents() > ms.config.MaximumBufferedEventsBatch() {
+		return false
+	}
+
+	if ms.hBuilder.SizeInBytesOfBufferedEvents() > ms.config.MaximumBufferedEventsSizeInBytes() {
+		return false
+	}
+	return true
+}
+
 func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 	transactionPolicy TransactionPolicy,
 ) error {
@@ -4610,7 +4670,7 @@ func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 		return nil
 	}
 
-	if ms.hBuilder.BufferEventSize() < ms.config.MaximumBufferedEventsBatch() {
+	if ms.BufferSizeAcceptable() {
 		return nil
 	}
 

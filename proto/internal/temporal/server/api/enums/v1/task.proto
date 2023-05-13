@@ -45,6 +45,8 @@ enum TaskCategory {
     TASK_CATEGORY_VISIBILITY = 4;
     // Archival is the task type for workflow archival tasks.
     TASK_CATEGORY_ARCHIVAL = 5;
+    // Memory timer is the task type for in memory timer task. Currently used for speculative workflow task timeouts only.
+    TASK_CATEGORY_MEMORY_TIMER = 6;
 }
 
 enum TaskType {

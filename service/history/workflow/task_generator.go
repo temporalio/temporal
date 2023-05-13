@@ -333,7 +333,7 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
-	generateTimeoutTaskOnly bool, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching.
+	generateTimeoutTaskOnly bool, // For non-speculative WT, generate only SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching.
 ) error {
 
 	workflowTask := r.mutableState.GetWorkflowTaskByID(
@@ -343,11 +343,11 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
-	if r.mutableState.IsStickyTaskQueueEnabled() {
+	if r.mutableState.IsStickyTaskQueueSet() {
 		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)
 		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 
-		r.mutableState.AddTasks(&tasks.WorkflowTaskTimeoutTask{
+		wttt := &tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: scheduledTime.Add(scheduleToStartTimeout),
@@ -355,7 +355,13 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 			EventID:             workflowTask.ScheduledEventID,
 			ScheduleAttempt:     workflowTask.Attempt,
 			Version:             workflowTask.Version,
-		})
+		}
+
+		if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+		}
+
+		r.mutableState.AddTasks(wttt)
 	}
 
 	if generateTimeoutTaskOnly {
@@ -364,7 +370,12 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 
 	r.mutableState.AddTasks(&tasks.WorkflowTask{
 		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:      r.mutableState.GetWorkflowKey(),
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		// Store current task queue to the transfer task.
+		// If current task queue becomes sticky in between when this transfer task is created and processed,
+		// it can't be used at process time, because timeout timer was not created for it,
+		// because it used to be non-sticky when this transfer task was created here.
+		// In short, task queue that was "current" when transfer task was created must be used when task is processed.
 		TaskQueue:        workflowTask.TaskQueue.GetName(),
 		ScheduledEventID: workflowTask.ScheduledEventID,
 		Version:          workflowTask.Version,
@@ -387,7 +398,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	startedTime := timestamp.TimeValue(workflowTask.StartedTime)
 	workflowTaskTimeout := timestamp.DurationValue(workflowTask.WorkflowTaskTimeout)
 
-	r.mutableState.AddTasks(&tasks.WorkflowTaskTimeoutTask{
+	wttt := &tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
@@ -395,7 +406,12 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
 		Version:             workflowTask.Version,
-	})
+	}
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+	}
+
+	r.mutableState.AddTasks(wttt)
 
 	return nil
 }

@@ -308,11 +308,14 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 			if _, ok := cmCustomSearchAttributes[fieldName]; !ok {
 				continue
 			}
-			if _, ok := fieldToAliasMap[fieldName]; !ok {
+			if _, ok := fieldToAliasMap[fieldName]; ok {
+				cntUsed++
+			} else if _, ok := upsertFieldToAliasMap[fieldName]; ok {
+				cntUsed++
+			} else {
 				targetFieldName = fieldName
 				break
 			}
-			cntUsed++
 		}
 		if targetFieldName == "" {
 			return serviceerror.NewInvalidArgument(
@@ -349,17 +352,21 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(
 		return nil, errSearchAttributesNotSet
 	}
 
-	var err error
 	indexName := h.visibilityMgr.GetIndexName()
+	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+	}
+
 	// TODO (rodrigozhou): Remove condition `indexName == ""`.
 	// If indexName == "", then calling addSearchAttributesElasticsearch will
 	// register the search attributes in the cluster metadata if ES is up or if
 	// `skip-schema-update` is set. This is for backward compatibility using
 	// standard visibility.
 	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
-		err = h.removeSearchAttributesElasticsearch(ctx, request, indexName)
+		err = h.removeSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
 	} else {
-		err = h.removeSearchAttributesSQL(ctx, request)
+		err = h.removeSearchAttributesSQL(ctx, request, currentSearchAttributes)
 	}
 
 	if err != nil {
@@ -372,12 +379,8 @@ func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 	ctx context.Context,
 	request *operatorservice.RemoveSearchAttributesRequest,
 	indexName string,
+	currentSearchAttributes searchattribute.NameTypeMap,
 ) error {
-	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-
 	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
 	for _, saName := range request.GetSearchAttributes() {
 		if !currentSearchAttributes.IsDefined(saName) {
@@ -391,7 +394,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 		delete(newCustomSearchAttributes, saName)
 	}
 
-	err = h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
+	err := h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
 	}
@@ -401,6 +404,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 	ctx context.Context,
 	request *operatorservice.RemoveSearchAttributesRequest,
+	currentSearchAttributes searchattribute.NameTypeMap,
 ) error {
 	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
 		frontend.DefaultTimeout,
@@ -425,11 +429,16 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 	upsertFieldToAliasMap := make(map[string]string)
 	aliasToFieldMap := util.InverseMap(resp.Config.CustomSearchAttributeAliases)
 	for _, saName := range request.GetSearchAttributes() {
-		fieldName, ok := aliasToFieldMap[saName]
-		if !ok {
-			return serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
+		if fieldName, ok := aliasToFieldMap[saName]; ok {
+			upsertFieldToAliasMap[fieldName] = ""
+			continue
 		}
-		upsertFieldToAliasMap[fieldName] = ""
+		if currentSearchAttributes.IsDefined(saName) {
+			return serviceerror.NewInvalidArgument(
+				fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName),
+			)
+		}
+		return serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
 	}
 
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{

@@ -744,18 +744,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskFailedEvent(workflowTask,
 }
 
 // AddWorkflowTaskScheduleToStartTimeoutEvent mocks base method.
-func (m *MockMutableState) AddWorkflowTaskScheduleToStartTimeoutEvent(arg0 int64) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask *WorkflowTaskInfo) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowTaskScheduleToStartTimeoutEvent", arg0)
+	ret := m.ctrl.Call(m, "AddWorkflowTaskScheduleToStartTimeoutEvent", workflowTask)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowTaskScheduleToStartTimeoutEvent indicates an expected call of AddWorkflowTaskScheduleToStartTimeoutEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowTaskScheduleToStartTimeoutEvent(arg0 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskScheduleToStartTimeoutEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskScheduleToStartTimeoutEvent), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskScheduleToStartTimeoutEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskScheduleToStartTimeoutEvent), workflowTask)
 }
 
 // AddWorkflowTaskScheduledEvent mocks base method.
@@ -833,16 +833,30 @@ func (mr *MockMutableStateMockRecorder) CheckResettable() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckResettable", reflect.TypeOf((*MockMutableState)(nil).CheckResettable))
 }
 
-// ClearStickyness mocks base method.
-func (m *MockMutableState) ClearStickyness() {
+// CheckSpeculativeWorkflowTaskTimeoutTask mocks base method.
+func (m *MockMutableState) CheckSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ClearStickyness")
+	ret := m.ctrl.Call(m, "CheckSpeculativeWorkflowTaskTimeoutTask", task)
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
-// ClearStickyness indicates an expected call of ClearStickyness.
-func (mr *MockMutableStateMockRecorder) ClearStickyness() *gomock.Call {
+// CheckSpeculativeWorkflowTaskTimeoutTask indicates an expected call of CheckSpeculativeWorkflowTaskTimeoutTask.
+func (mr *MockMutableStateMockRecorder) CheckSpeculativeWorkflowTaskTimeoutTask(task interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyness", reflect.TypeOf((*MockMutableState)(nil).ClearStickyness))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckSpeculativeWorkflowTaskTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).CheckSpeculativeWorkflowTaskTimeoutTask), task)
+}
+
+// ClearStickyTaskQueue mocks base method.
+func (m *MockMutableState) ClearStickyTaskQueue() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ClearStickyTaskQueue")
+}
+
+// ClearStickyTaskQueue indicates an expected call of ClearStickyTaskQueue.
+func (mr *MockMutableStateMockRecorder) ClearStickyTaskQueue() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyTaskQueue", reflect.TypeOf((*MockMutableState)(nil).ClearStickyTaskQueue))
 }
 
 // ClearTransientWorkflowTask mocks base method.
@@ -919,6 +933,20 @@ func (mr *MockMutableStateMockRecorder) ContinueAsNewMinBackoff(backoffDuration 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContinueAsNewMinBackoff", reflect.TypeOf((*MockMutableState)(nil).ContinueAsNewMinBackoff), backoffDuration)
 }
 
+// CurrentTaskQueue mocks base method.
+func (m *MockMutableState) CurrentTaskQueue() *v14.TaskQueue {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CurrentTaskQueue")
+	ret0, _ := ret[0].(*v14.TaskQueue)
+	return ret0
+}
+
+// CurrentTaskQueue indicates an expected call of CurrentTaskQueue.
+func (mr *MockMutableStateMockRecorder) CurrentTaskQueue() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentTaskQueue", reflect.TypeOf((*MockMutableState)(nil).CurrentTaskQueue))
+}
+
 // DeleteSignalRequested mocks base method.
 func (m *MockMutableState) DeleteSignalRequested(requestID string) {
 	m.ctrl.T.Helper()
@@ -971,12 +999,11 @@ func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks() *gomock.Call {
 }
 
 // GetAcceptedWorkflowExecutionUpdateIDs mocks base method.
-func (m *MockMutableState) GetAcceptedWorkflowExecutionUpdateIDs(arg0 context.Context) ([]string, error) {
+func (m *MockMutableState) GetAcceptedWorkflowExecutionUpdateIDs(arg0 context.Context) []string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAcceptedWorkflowExecutionUpdateIDs", arg0)
 	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // GetAcceptedWorkflowExecutionUpdateIDs indicates an expected call of GetAcceptedWorkflowExecutionUpdateIDs.
@@ -1509,6 +1536,21 @@ func (mr *MockMutableStateMockRecorder) GetUpdateCondition() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateCondition", reflect.TypeOf((*MockMutableState)(nil).GetUpdateCondition))
 }
 
+// GetUpdateInfo mocks base method.
+func (m *MockMutableState) GetUpdateInfo(ctx context.Context, updateID string) (*v112.UpdateInfo, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUpdateInfo", ctx, updateID)
+	ret0, _ := ret[0].(*v112.UpdateInfo)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetUpdateInfo indicates an expected call of GetUpdateInfo.
+func (mr *MockMutableStateMockRecorder) GetUpdateInfo(ctx, updateID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateInfo", reflect.TypeOf((*MockMutableState)(nil).GetUpdateInfo), ctx, updateID)
+}
+
 // GetUpdateOutcome mocks base method.
 func (m *MockMutableState) GetUpdateOutcome(ctx context.Context, updateID string) (*v15.Outcome, error) {
 	m.ctrl.T.Helper()
@@ -1766,18 +1808,18 @@ func (mr *MockMutableStateMockRecorder) IsSignalRequested(requestID interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSignalRequested", reflect.TypeOf((*MockMutableState)(nil).IsSignalRequested), requestID)
 }
 
-// IsStickyTaskQueueEnabled mocks base method.
-func (m *MockMutableState) IsStickyTaskQueueEnabled() bool {
+// IsStickyTaskQueueSet mocks base method.
+func (m *MockMutableState) IsStickyTaskQueueSet() bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsStickyTaskQueueEnabled")
+	ret := m.ctrl.Call(m, "IsStickyTaskQueueSet")
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
-// IsStickyTaskQueueEnabled indicates an expected call of IsStickyTaskQueueEnabled.
-func (mr *MockMutableStateMockRecorder) IsStickyTaskQueueEnabled() *gomock.Call {
+// IsStickyTaskQueueSet indicates an expected call of IsStickyTaskQueueSet.
+func (mr *MockMutableStateMockRecorder) IsStickyTaskQueueSet() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStickyTaskQueueEnabled", reflect.TypeOf((*MockMutableState)(nil).IsStickyTaskQueueEnabled))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStickyTaskQueueSet", reflect.TypeOf((*MockMutableState)(nil).IsStickyTaskQueueSet))
 }
 
 // IsTransientWorkflowTask mocks base method.
@@ -1848,6 +1890,18 @@ func (m *MockMutableState) RejectWorkflowExecutionUpdate(protocolInstanceID stri
 func (mr *MockMutableStateMockRecorder) RejectWorkflowExecutionUpdate(protocolInstanceID, updRejection interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectWorkflowExecutionUpdate", reflect.TypeOf((*MockMutableState)(nil).RejectWorkflowExecutionUpdate), protocolInstanceID, updRejection)
+}
+
+// RemoveSpeculativeWorkflowTaskTimeoutTask mocks base method.
+func (m *MockMutableState) RemoveSpeculativeWorkflowTaskTimeoutTask() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RemoveSpeculativeWorkflowTaskTimeoutTask")
+}
+
+// RemoveSpeculativeWorkflowTaskTimeoutTask indicates an expected call of RemoveSpeculativeWorkflowTaskTimeoutTask.
+func (mr *MockMutableStateMockRecorder) RemoveSpeculativeWorkflowTaskTimeoutTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSpeculativeWorkflowTaskTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).RemoveSpeculativeWorkflowTaskTimeoutTask))
 }
 
 // ReplicateActivityInfo mocks base method.
@@ -2537,6 +2591,32 @@ func (mr *MockMutableStateMockRecorder) SetHistoryTree(ctx, executionTimeout, ru
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), ctx, executionTimeout, runTimeout, treeID)
 }
 
+// SetSpeculativeWorkflowTaskTimeoutTask mocks base method.
+func (m *MockMutableState) SetSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetSpeculativeWorkflowTaskTimeoutTask", task)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetSpeculativeWorkflowTaskTimeoutTask indicates an expected call of SetSpeculativeWorkflowTaskTimeoutTask.
+func (mr *MockMutableStateMockRecorder) SetSpeculativeWorkflowTaskTimeoutTask(task interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSpeculativeWorkflowTaskTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).SetSpeculativeWorkflowTaskTimeoutTask), task)
+}
+
+// SetStickyTaskQueue mocks base method.
+func (m *MockMutableState) SetStickyTaskQueue(name string, scheduleToStartTimeout *time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetStickyTaskQueue", name, scheduleToStartTimeout)
+}
+
+// SetStickyTaskQueue indicates an expected call of SetStickyTaskQueue.
+func (mr *MockMutableStateMockRecorder) SetStickyTaskQueue(name, scheduleToStartTimeout interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStickyTaskQueue", reflect.TypeOf((*MockMutableState)(nil).SetStickyTaskQueue), name, scheduleToStartTimeout)
+}
+
 // SetUpdateCondition mocks base method.
 func (m *MockMutableState) SetUpdateCondition(arg0, arg1 int64) {
 	m.ctrl.T.Helper()
@@ -2564,18 +2644,19 @@ func (mr *MockMutableStateMockRecorder) StartTransaction(entry interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransaction", reflect.TypeOf((*MockMutableState)(nil).StartTransaction), entry)
 }
 
-// TaskQueue mocks base method.
-func (m *MockMutableState) TaskQueue() *v14.TaskQueue {
+// TaskQueueScheduleToStartTimeout mocks base method.
+func (m *MockMutableState) TaskQueueScheduleToStartTimeout(name string) (*v14.TaskQueue, *time.Duration) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TaskQueue")
+	ret := m.ctrl.Call(m, "TaskQueueScheduleToStartTimeout", name)
 	ret0, _ := ret[0].(*v14.TaskQueue)
-	return ret0
+	ret1, _ := ret[1].(*time.Duration)
+	return ret0, ret1
 }
 
-// TaskQueue indicates an expected call of TaskQueue.
-func (mr *MockMutableStateMockRecorder) TaskQueue() *gomock.Call {
+// TaskQueueScheduleToStartTimeout indicates an expected call of TaskQueueScheduleToStartTimeout.
+func (mr *MockMutableStateMockRecorder) TaskQueueScheduleToStartTimeout(name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueue", reflect.TypeOf((*MockMutableState)(nil).TaskQueue))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueueScheduleToStartTimeout", reflect.TypeOf((*MockMutableState)(nil).TaskQueueScheduleToStartTimeout), name)
 }
 
 // UpdateActivity mocks base method.

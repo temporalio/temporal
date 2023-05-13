@@ -35,7 +35,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -543,84 +542,6 @@ func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes
 		return failedCause, serviceerror.NewInvalidArgument("SignalName is not set on command.")
 	}
 
-	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
-}
-
-// TODO (alex-update): Move this to messageValidator
-func (v *commandAttrValidator) validateWorkflowExecutionUpdateAcceptanceMessage(
-	_ namespace.ID,
-	protocolInstanceID string,
-	updAcceptance *updatepb.Acceptance,
-) (enumspb.WorkflowTaskFailedCause, error) {
-	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
-
-	if updAcceptance == nil {
-		return failedCause, serviceerror.NewInvalidArgument("Message body of type update.Acceptance is not set.")
-	}
-	if updAcceptance.GetAcceptedRequest() == nil {
-		return failedCause, serviceerror.NewInvalidArgument("accepted_request is not set on update.Acceptance message body.")
-	}
-	if updAcceptance.GetAcceptedRequest().GetMeta() == nil {
-		return failedCause, serviceerror.NewInvalidArgument("meta is not set on accepted_request of message body.")
-	}
-	if updAcceptance.GetAcceptedRequest().GetMeta().GetUpdateId() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("update_id is not set on accepted_request of message body.")
-	}
-	if updAcceptance.GetAcceptedRequest().GetMeta().GetUpdateId() != protocolInstanceID {
-		return failedCause, serviceerror.NewInvalidArgument("update_id of accepted_request of message body is not equal to protocol_instance_id of the message.")
-	}
-
-	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
-}
-
-// TODO (alex-update): Move this to messageValidator.
-func (v *commandAttrValidator) validateWorkflowExecutionUpdateResponseMessage(
-	_ namespace.ID,
-	protocolInstanceID string,
-	updResponse *updatepb.Response,
-) (enumspb.WorkflowTaskFailedCause, error) {
-
-	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
-
-	if updResponse == nil {
-		return failedCause, serviceerror.NewInvalidArgument("Message body of type update.Response is not set.")
-	}
-	if updResponse.GetMeta() == nil {
-		return failedCause, serviceerror.NewInvalidArgument("meta is not set on message body of update.Response type.")
-	}
-	if updResponse.GetMeta().GetUpdateId() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("update_id is not set on message body of update.Response type.")
-	}
-	if updResponse.GetMeta().GetUpdateId() != protocolInstanceID {
-		return failedCause, serviceerror.NewInvalidArgument("update_id of message body of update.Response type is not equal to protocol_instance_id of the message.")
-	}
-
-	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
-}
-
-// TODO (alex-update): Move this to messageValidator.
-func (v *commandAttrValidator) validateWorkflowExecutionUpdateRejectionMessage(
-	_ namespace.ID,
-	protocolInstanceID string,
-	updRejection *updatepb.Rejection,
-) (enumspb.WorkflowTaskFailedCause, error) {
-	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
-
-	if updRejection == nil {
-		return failedCause, serviceerror.NewInvalidArgument("Message body of type update.Rejection is not set.")
-	}
-	if updRejection.GetRejectedRequest() == nil {
-		return failedCause, serviceerror.NewInvalidArgument("rejected_request is not set on update.Rejection message body.")
-	}
-	if updRejection.GetRejectedRequest().GetMeta() == nil {
-		return failedCause, serviceerror.NewInvalidArgument("meta is not set on rejected_request of message body.")
-	}
-	if updRejection.GetRejectedRequest().GetMeta().GetUpdateId() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("update_id is not set on rejected_request of message body.")
-	}
-	if updRejection.GetRejectedRequest().GetMeta().GetUpdateId() != protocolInstanceID {
-		return failedCause, serviceerror.NewInvalidArgument("update_id of rejected_request of message body is not equal to protocol_instance_id of the message.")
-	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 

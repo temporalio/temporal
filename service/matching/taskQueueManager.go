@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	uberatomic "go.uber.org/atomic"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -45,7 +46,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -133,6 +133,7 @@ type (
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
 		status               int32
+		engine               *matchingEngineImpl
 		taskQueueID          *taskQueueID
 		taskQueueKind        enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
 		config               *taskQueueConfig
@@ -158,7 +159,6 @@ type (
 		// prevent tasks being dispatched to zombie pollers.
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
-		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
 		initializedError     *future.FutureImpl[struct{}]
 		// metadataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
@@ -215,6 +215,7 @@ func newTaskQueueManager(
 	)
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
+		engine:               e,
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingClient,
 		metricsHandler:       e.metricsHandler,
@@ -227,7 +228,6 @@ func newTaskQueueManager(
 		config:               taskQueueConfig,
 		pollerHistory:        newPollerHistory(),
 		outstandingPollsMap:  make(map[string]context.CancelFunc),
-		signalFatalProblem:   e.unloadTaskQueue,
 		clusterMeta:          clusterMeta,
 		namespace:            nsName,
 		taggedMetricsHandler: taggedMetricsHandler,
@@ -242,9 +242,9 @@ func newTaskQueueManager(
 	tlMgr.metadataPoller.tqMgr = tlMgr
 
 	tlMgr.liveness = newLiveness(
-		clock.NewRealTimeSource(),
-		taskQueueConfig.IdleTaskqueueCheckInterval(),
-		func() { tlMgr.signalFatalProblem(tlMgr) },
+		clockwork.NewRealClock(),
+		taskQueueConfig.MaxTaskQueueIdleTime,
+		tlMgr.unloadFromEngine,
 	)
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
@@ -260,7 +260,12 @@ func newTaskQueueManager(
 	return tlMgr, nil
 }
 
-// signalIfFatal calls signalFatalProblem on this taskQueueManagerImpl instance
+// unloadFromEngine asks the MatchingEngine to unload this task queue. It will cause Stop to be called.
+func (c *taskQueueManagerImpl) unloadFromEngine() {
+	c.engine.unloadTaskQueue(c)
+}
+
+// signalIfFatal calls unloadFromEngine on this taskQueueManagerImpl instance
 // if and only if the supplied error represents a fatal condition, e.g. the
 // existence of another taskQueueManager newer lease. Returns true if the signal
 // is emitted, false otherwise.
@@ -271,7 +276,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
 		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.GetMetricName()).Record(1)
-		c.signalFatalProblem(c)
+		c.unloadFromEngine()
 		return true
 	}
 	return false
@@ -320,6 +325,8 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
+	// This may call Stop again, but the status check above makes that a no-op.
+	c.unloadFromEngine()
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -342,7 +349,7 @@ func (c *taskQueueManagerImpl) AddTask(
 ) (bool, error) {
 	if params.forwardedFrom == "" {
 		// request sent by history service
-		c.liveness.markAlive(time.Now())
+		c.liveness.markAlive()
 	}
 
 	if c.QueueID().IsRoot() && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
@@ -386,7 +393,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	ctx context.Context,
 	maxDispatchPerSecond *float64,
 ) (*internalTask, error) {
-	c.liveness.markAlive(time.Now())
+	c.liveness.markAlive()
 
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
@@ -624,7 +631,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.FullName()),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.signalFatalProblem(c)
+			c.unloadFromEngine()
 			return
 		}
 		c.taskReader.Signal()
