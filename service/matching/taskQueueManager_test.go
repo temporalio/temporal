@@ -37,12 +37,14 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -63,6 +65,12 @@ type tqmTestOpts struct {
 	config             *Config
 	tqId               *taskQueueID
 	matchingClientMock *matchingservicemock.MockMatchingServiceClient
+}
+
+func setScoped[T any](ptr *T, val T) func() {
+	prev := *ptr
+	*ptr = val
+	return func() { *ptr = prev }
 }
 
 func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
@@ -491,15 +499,39 @@ func TestAddTaskStandby(t *testing.T) {
 	require.False(t, syncMatch)
 }
 
-/*
-does own and initial read fails
-does own and initial read succeeds
-doesn't own and fetches, fetch fails then succeeds
-doesn't own and fetches, fetch succeeds immediately (back off slowly)
-chain of fetches up tree
-*/
+func TestTQMLoadsUserDataFromPersistenceOnInit(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = tqId
 
-func TestTaskQueuePartitionFetchesUserDataFromRootPartitionOnInit(t *testing.T) {
+	data1 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    mkUserData(1),
+	}
+
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+
+	tq.engine.taskManager.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: defaultNamespaceId.String(),
+			TaskQueue:   defaultRootTqID,
+			UserData:    data1,
+		})
+	data1.Version++
+
+	tq.Start()
+	require.NoError(t, tq.WaitUntilInitialized(ctx))
+	userData, _, err := tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data1, userData)
+	tq.Stop()
+}
+
+func TestTQMFetchesUserDataFromOnInit(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
@@ -508,7 +540,7 @@ func TestTaskQueuePartitionFetchesUserDataFromRootPartitionOnInit(t *testing.T) 
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = tqId
 
-	data := &persistencespb.VersionedTaskQueueUserData{
+	data1 := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
 		Data:    mkUserData(1),
 	}
@@ -523,189 +555,211 @@ func TestTaskQueuePartitionFetchesUserDataFromRootPartitionOnInit(t *testing.T) 
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			TaskQueueHasUserData: true,
-			UserData:             data,
+			UserData:             data1,
 		}, nil)
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq.config.GetUserDataMinWaitTime = 10 * time.Second // only one fetch
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
-	require.Equal(t, data, userData)
+	require.Equal(t, data1, userData)
 	tq.Stop()
 }
 
-/* FIXME
-func TestTaskQueuePartitionSendsLastKnownVersionOfUserDataWhenFetching(t *testing.T) {
+func TestTQMFetchesUserDataAndFetchesAgain(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
-	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	// note: using activity here
+	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
-	tqCfg.tqId = subTqId
+	tqCfg.tqId = tqId
 
-	data := &persistencespb.VersionedTaskQueueUserData{
-		Version: 2,
+	data1 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
 		Data:    mkUserData(1),
 	}
-	asResp := &matchingservice.GetTaskQueueUserDataResponse{
-		TaskQueueHasUserData: true,
-		UserData:             data,
+	data2 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 2,
+		Data:    mkUserData(2),
 	}
 
-	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
-		func(tqm *taskQueueManagerImpl) {
-			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
-			mockMatchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(),
-				gomock.Eq(&matchingservice.GetTaskQueueUserDataRequest{
-					NamespaceId:              defaultNamespaceId.String(),
-					TaskQueue:                defaultRootTqID,
-					LastKnownUserDataVersion: 0,
-				})).
-				Return(asResp, nil)
-			tqm.matchingClient = mockMatchingClient
-		})
-	// Don't start it. Just explicitly call fetching function.
-	res, err := subTq.fetchUserDataFromRootPartition(ctx)
-	require.NotNil(t, res)
-	require.NoError(t, err)
-	assert.Equal(t, data, subTq.db.userData)
-}
-*/
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			LastKnownUserDataVersion: 0,
+			WaitNewData:              true,
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			TaskQueueHasUserData: true,
+			UserData:             data1,
+		}, nil)
 
-/* FIXME
-func TestTaskQueueManagerWaitInitFailThenPass(t *testing.T) {
-	controller := gomock.NewController(t)
-	ctx := context.Background()
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			LastKnownUserDataVersion: 1,
+			WaitNewData:              true,
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			TaskQueueHasUserData: true,
+			UserData:             data2,
+		}, nil)
 
-	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
-	require.NoError(t, err)
-	tqCfg := defaultTqmTestOpts(controller)
-	tqCfg.tqId = subTqId
-	tqCfg.config.UserDataPollFrequency = func() time.Duration {
-		return time.Millisecond * 10
-	}
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			LastKnownUserDataVersion: 2,
+			WaitNewData:              true,
+		}).
+		Return(nil, serviceerror.NewUnavailable("hold on")).AnyTimes()
 
-	data := mkUserData(1)
-	versionedData := &persistencespb.VersionedTaskQueueUserData{
-		Version: 1,
-		Data:    data,
-	}
-	asResp := &matchingservice.GetTaskQueueUserDataResponse{
-		TaskQueueHasUserData: true,
-		UserData:             versionedData,
-	}
-
-	mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
-		func(tqm *taskQueueManagerImpl) {
-			mockMatchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
-				Return(nil, errors.New("some error")).Times(1)
-			mockMatchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
-				Return(asResp, nil).Times(1)
-			tqm.matchingClient = mockMatchingClient
-		})
-
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq.config.GetUserDataMinWaitTime = 10 * time.Millisecond // fetch again quickly
 	tq.Start()
-	// This does not error even if initial user data fetch fails (and it does, here)
+	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	// Wait long enough for poller retry to happen
-	time.Sleep(time.Millisecond * 15)
-	// Need to make sure both calls have happened *before* calling to get data, as it would make a call if the second
-	// call hasn't happened yet.
-	controller.Finish()
-	// Get the data and see it's set
-	newData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
-	require.Equal(t, versionedData, newData)
+	require.Equal(t, data2, userData)
 	tq.Stop()
 }
-*/
 
-/* FIXME
-func TestFetchingUserDataErrorsIfNeverFetchedFromRootSuccessfully(t *testing.T) {
+func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
-	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
-	tqCfg.tqId = subTqId
-	tqCfg.config.UserDataPollFrequency = func() time.Duration {
-		return time.Millisecond * 10
-	}
+	tqCfg.tqId = tqId
 
-	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
-		func(tqm *taskQueueManagerImpl) {
-			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
-			mockMatchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
-				Return(nil, errors.New("fetching broken!")).AnyTimes()
-			tqm.matchingClient = mockMatchingClient
-		})
-	subTq.Start()
-	require.NoError(t, subTq.WaitUntilInitialized(ctx))
-	for i := 0; i < 10; i++ {
-		_, err := subTq.GetUserData(ctx)
-		require.Error(t, err)
-		time.Sleep(time.Millisecond * 2)
-	}
-}
-*/
+	// fast retry on failure
+	defer setScoped(&getUserDataRetryPolicy, backoff.NewExponentialRetryPolicy(10*time.Millisecond))()
 
-/* FIXME
-func TestActivityQueueGetsUserDataFromWorkflowQueue(t *testing.T) {
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-	ctx := context.Background()
-
-	data := mkUserData(1)
-	versionedData := &persistencespb.VersionedTaskQueueUserData{
+	data1 := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
-		Data:    data,
-	}
-	asResp := &matchingservice.GetTaskQueueUserDataResponse{
-		TaskQueueHasUserData: true,
-		UserData:             versionedData,
+		Data:    mkUserData(1),
 	}
 
-	tqCfg := defaultTqmTestOpts(controller)
-	tqCfg.tqId.taskType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
-	actTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
-		func(tqm *taskQueueManagerImpl) {
-			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
-			mockMatchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
-				Return(asResp, nil).Times(1)
-			tqm.matchingClient = mockMatchingClient
-		})
-	actTq.Start()
-	require.NoError(t, actTq.WaitUntilInitialized(ctx))
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			LastKnownUserDataVersion: 0,
+			WaitNewData:              true,
+		}).
+		Return(nil, serviceerror.NewUnavailable("wait a sec")).Times(3)
 
-	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
-	require.NoError(t, err)
-	tqCfg = defaultTqmTestOpts(controller)
-	tqCfg.tqId = subTqId
-	actTqPart := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
-		func(tqm *taskQueueManagerImpl) {
-			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
-			mockMatchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
-				Return(asResp, nil).Times(1)
-			tqm.matchingClient = mockMatchingClient
-		})
-	actTqPart.Start()
-	require.NoError(t, actTqPart.WaitUntilInitialized(ctx))
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			LastKnownUserDataVersion: 0,
+			WaitNewData:              true,
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			TaskQueueHasUserData: true,
+			UserData:             data1,
+		}, nil)
 
-	actTqData, err := actTq.GetUserData(ctx)
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
+	tq.Start()
+	time.Sleep(100 * time.Millisecond)
+	require.NoError(t, tq.WaitUntilInitialized(ctx))
+	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
-	require.Equal(t, versionedData, actTqData)
-	actTqData, err = actTqPart.GetUserData(ctx)
-	require.NoError(t, err)
-	require.Equal(t, versionedData, actTqData)
-
-	actTq.Stop()
-	actTqPart.Stop()
+	require.Equal(t, data1, userData)
+	tq.Stop()
 }
-*/
+
+func TestTQMFetchesUserDataUpTree(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 31)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(3)
+	tqCfg.tqId = tqId
+
+	data1 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    mkUserData(1),
+	}
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                tqId.Name.WithPartition(10).FullName(),
+			LastKnownUserDataVersion: 0,
+			WaitNewData:              true,
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			TaskQueueHasUserData: true,
+			UserData:             data1,
+		}, nil)
+
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
+	tq.Start()
+	require.NoError(t, tq.WaitUntilInitialized(ctx))
+	userData, _, err := tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data1, userData)
+	tq.Stop()
+}
+
+func TestTQMFetchesUserDataActivityToWorkflow(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	// note: activity root
+	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = tqId
+
+	data1 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    mkUserData(1),
+	}
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			LastKnownUserDataVersion: 0,
+			WaitNewData:              true,
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			TaskQueueHasUserData: true,
+			UserData:             data1,
+		}, nil)
+
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
+	tq.Start()
+	require.NoError(t, tq.WaitUntilInitialized(ctx))
+	userData, _, err := tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data1, userData)
+	tq.Stop()
+}
 
 func TestUpdateOnNonRootFails(t *testing.T) {
 	controller := gomock.NewController(t)

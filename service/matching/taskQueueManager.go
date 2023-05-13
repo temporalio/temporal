@@ -72,8 +72,6 @@ const (
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
-
-	getUserDataFastReturnStartWaitTime = 1 * time.Second
 )
 
 var (
@@ -756,7 +754,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		return nil
 	}
 
-	minWaitTime := getUserDataFastReturnStartWaitTime
+	minWaitTime := c.config.GetUserDataMinWaitTime
 
 	for ctx.Err() == nil {
 		start := time.Now()
@@ -776,7 +774,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 			// between a fast reply and a timeout.
 			minWaitTime = util.Min(minWaitTime*2, c.config.GetUserDataLongPollTimeout()/2)
 		} else {
-			minWaitTime = getUserDataFastReturnStartWaitTime
+			minWaitTime = c.config.GetUserDataMinWaitTime
 		}
 	}
 
