@@ -188,7 +188,9 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 		if name, ok := previous["name"]; !ok || name != request.Name {
 			m := make(map[string]interface{})
 			if iter.MapScan(m) {
-				previous = m
+				if applied, ok = m["[applied]"].(bool); ok && !applied {
+					previous = m
+				}
 			}
 		}
 
