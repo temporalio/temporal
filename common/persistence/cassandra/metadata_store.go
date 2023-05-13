@@ -138,7 +138,7 @@ func (m *MetadataStore) CreateNamespace(
 		// or fail if name exists in that table already. This is to make sure we do not end up with a row in `namespaces_by_id`
 		// table and no entry in `namespaces` table
 		if name, ok := existingRow["name"]; ok && name != request.Name {
-			msg := fmt.Sprint("CreateNamespace with name %v and id %v failed because another namespace with name %v already exists with the same id.", request.Name, request.ID, name)
+			msg := fmt.Sprintf("CreateNamespace with name %v and id %v failed because another namespace with name %v already exists with the same id.", request.Name, request.ID, name)
 			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 		}
 	}
