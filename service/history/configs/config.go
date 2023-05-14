@@ -182,20 +182,22 @@ type Config struct {
 	DurableArchivalEnabled    dynamicconfig.BoolPropertyFn
 
 	// Size limit related settings
-	BlobSizeLimitError               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	BlobSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitError               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitError            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitWarn             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeSuggestContinueAsNew  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitError           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitWarn            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountSuggestContinueAsNew dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingChildExecutionsLimit   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingActivitiesLimit        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingSignalsLimit           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingCancelsRequestLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitError                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitWarn                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeSuggestContinueAsNew           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitError                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitWarn                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountSuggestContinueAsNew          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingChildExecutionsLimit            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingActivitiesLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingSignalsLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingCancelsRequestLimit             dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
@@ -440,20 +442,22 @@ func NewConfig(
 		ArchiveSignalTimeout:      dc.GetDurationProperty(dynamicconfig.ArchiveSignalTimeout, 300*time.Millisecond),
 		DurableArchivalEnabled:    dc.GetBoolProperty(dynamicconfig.DurableArchivalEnabled, true),
 
-		BlobSizeLimitError:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
-		BlobSizeLimitWarn:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
-		MemoSizeLimitError:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitError, 2*1024*1024),
-		MemoSizeLimitWarn:                dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitWarn, 2*1024),
-		NumPendingChildExecutionsLimit:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingChildExecutionsLimitError, 2000),
-		NumPendingActivitiesLimit:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingActivitiesLimitError, 2000),
-		NumPendingSignalsLimit:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingSignalsLimitError, 2000),
-		NumPendingCancelsRequestLimit:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingCancelRequestsLimitError, 2000),
-		HistorySizeLimitError:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
-		HistorySizeLimitWarn:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
-		HistorySizeSuggestContinueAsNew:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeSuggestContinueAsNew, 4*1024*1024),
-		HistoryCountLimitError:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitError, 50*1024),
-		HistoryCountLimitWarn:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitWarn, 10*1024),
-		HistoryCountSuggestContinueAsNew: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountSuggestContinueAsNew, 4*1024),
+		BlobSizeLimitError:                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
+		BlobSizeLimitWarn:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
+		MemoSizeLimitError:                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitError, 2*1024*1024),
+		MemoSizeLimitWarn:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitWarn, 2*1024),
+		NumPendingChildExecutionsLimit:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingChildExecutionsLimitError, 2000),
+		NumPendingActivitiesLimit:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingActivitiesLimitError, 2000),
+		NumPendingSignalsLimit:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingSignalsLimitError, 2000),
+		NumPendingCancelsRequestLimit:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingCancelRequestsLimitError, 2000),
+		HistorySizeLimitError:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
+		HistorySizeLimitWarn:                      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
+		HistorySizeSuggestContinueAsNew:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeSuggestContinueAsNew, 4*1024*1024),
+		HistoryCountLimitError:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitError, 50*1024),
+		HistoryCountLimitWarn:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitWarn, 10*1024),
+		HistoryCountSuggestContinueAsNew:          dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountSuggestContinueAsNew, 4*1024),
+		MutableStateActivityFailureSizeLimitError: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateActivityFailureSizeLimitError, 32*1024),
+		MutableStateActivityFailureSizeLimitWarn:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateActivityFailureSizeLimitWarn, 16*1024),
 
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
