@@ -29,3 +29,6 @@
 
 # direnv
 .envrc
+
+# Git SPR: https://github.com/ejoffe/spr
+.spr.yml
