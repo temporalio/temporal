@@ -49,7 +49,7 @@ const (
 type (
 	// HistoryIterator is used to get history batches
 	HistoryIterator interface {
-		Next() (*archiverspb.HistoryBlob, error)
+		Next(context.Context) (*archiverspb.HistoryBlob, error)
 		HasNext() bool
 		GetState() ([]byte, error)
 	}
@@ -118,12 +118,14 @@ func newHistoryIterator(
 	}
 }
 
-func (i *historyIterator) Next() (*archiverspb.HistoryBlob, error) {
+func (i *historyIterator) Next(
+	ctx context.Context,
+) (*archiverspb.HistoryBlob, error) {
 	if !i.HasNext() {
 		return nil, errIteratorDepleted
 	}
 
-	historyBatches, newIterState, err := i.readHistoryBatches(i.NextEventID)
+	historyBatches, newIterState, err := i.readHistoryBatches(ctx, i.NextEventID)
 	if err != nil {
 		return nil, err
 	}
@@ -165,13 +167,16 @@ func (i *historyIterator) GetState() ([]byte, error) {
 	return json.Marshal(i.historyIteratorState)
 }
 
-func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*historypb.History, historyIteratorState, error) {
+func (i *historyIterator) readHistoryBatches(
+	ctx context.Context,
+	firstEventID int64,
+) ([]*historypb.History, historyIteratorState, error) {
 	size := 0
 	targetSize := i.targetHistoryBlobSize
 	var historyBatches []*historypb.History
 	newIterState := historyIteratorState{}
 	for size < targetSize {
-		currHistoryBatches, err := i.readHistory(firstEventID)
+		currHistoryBatches, err := i.readHistory(ctx, firstEventID)
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound && firstEventID != common.FirstEventID {
 			newIterState.FinishedIteration = true
 			return historyBatches, newIterState, nil
@@ -200,7 +205,7 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*historypb.H
 
 	// If you are here, it means the target size is met after adding the last batch of read history.
 	// We need to check if there's more history batches.
-	_, err := i.readHistory(firstEventID)
+	_, err := i.readHistory(ctx, firstEventID)
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound && firstEventID != common.FirstEventID {
 		newIterState.FinishedIteration = true
 		return historyBatches, newIterState, nil
@@ -213,7 +218,7 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*historypb.H
 	return historyBatches, newIterState, nil
 }
 
-func (i *historyIterator) readHistory(firstEventID int64) ([]*historypb.History, error) {
+func (i *historyIterator) readHistory(ctx context.Context, firstEventID int64) ([]*historypb.History, error) {
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken: i.request.BranchToken,
 		MinEventID:  firstEventID,
@@ -221,7 +226,7 @@ func (i *historyIterator) readHistory(firstEventID int64) ([]*historypb.History,
 		PageSize:    i.historyPageSize,
 		ShardID:     i.request.ShardID,
 	}
-	historyBatches, _, _, err := persistence.ReadFullPageEventsByBatch(context.TODO(), i.executionManager, req)
+	historyBatches, _, _, err := persistence.ReadFullPageEventsByBatch(ctx, i.executionManager, req)
 	return historyBatches, err
 }
 

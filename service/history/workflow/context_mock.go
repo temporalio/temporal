@@ -195,17 +195,17 @@ func (mr *MockContextMockRecorder) PersistWorkflowEvents(ctx interface{}, workfl
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockContext) ReapplyEvents(eventBatches []*persistence.WorkflowEvents) error {
+func (m *MockContext) ReapplyEvents(ctx context.Context, eventBatches []*persistence.WorkflowEvents) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReapplyEvents", eventBatches)
+	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, eventBatches)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReapplyEvents indicates an expected call of ReapplyEvents.
-func (mr *MockContextMockRecorder) ReapplyEvents(eventBatches interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) ReapplyEvents(ctx, eventBatches interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockContext)(nil).ReapplyEvents), eventBatches)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockContext)(nil).ReapplyEvents), ctx, eventBatches)
 }
 
 // SetHistorySize mocks base method.
