@@ -281,6 +281,20 @@ func (mr *MockExecutableTaskTrackerMockRecorder) LowWatermark() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LowWatermark", reflect.TypeOf((*MockExecutableTaskTracker)(nil).LowWatermark))
 }
 
+// Size mocks base method.
+func (m *MockExecutableTaskTracker) Size() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Size")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// Size indicates an expected call of Size.
+func (mr *MockExecutableTaskTrackerMockRecorder) Size() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Size", reflect.TypeOf((*MockExecutableTaskTracker)(nil).Size))
+}
+
 // TrackTasks mocks base method.
 func (m *MockExecutableTaskTracker) TrackTasks(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 	m.ctrl.T.Helper()
