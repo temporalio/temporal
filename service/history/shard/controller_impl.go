@@ -254,7 +254,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	}
 	c.RLock()
 	if shard, ok := c.historyShards[shardID]; ok {
-		if shard.isValid() {
+		if shard.IsValid() {
 			c.RUnlock()
 			return shard, nil
 		}
@@ -277,7 +277,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 
 	// Check again with exclusive lock
 	if shard, ok := c.historyShards[shardID]; ok {
-		if shard.isValid() {
+		if shard.IsValid() {
 			return shard, nil
 		}
 

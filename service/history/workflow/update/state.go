@@ -24,8 +24,6 @@
 
 package update
 
-import "sync/atomic"
-
 type (
 	state    uint32
 	stateSet uint32
@@ -61,15 +59,6 @@ func (s state) String() string {
 	return "unrecognized state"
 }
 
-func (s *state) Is(other state) bool {
-	return state(atomic.LoadUint32((*uint32)(s))) == other
-}
-
-func (s *state) Set(other state) state {
-	return state(atomic.SwapUint32((*uint32)(s), uint32(other)))
-}
-
-func (s *state) Matches(mask stateSet) bool {
-	actual := atomic.LoadUint32((*uint32)(s))
-	return actual&uint32(mask) == actual
+func (s state) Matches(mask stateSet) bool {
+	return uint32(s)&uint32(mask) == uint32(s)
 }

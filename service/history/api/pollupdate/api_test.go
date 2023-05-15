@@ -141,7 +141,7 @@ func TestPollOutcome(t *testing.T) {
 	})
 	t.Run("future timeout", func(t *testing.T) {
 		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
-			return update.New(updateID, func() {}), true
+			return update.New(updateID), true
 		}
 		ctx, cncl := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer cncl()
@@ -149,7 +149,7 @@ func TestPollOutcome(t *testing.T) {
 		require.Error(t, err)
 	})
 	t.Run("get an outcome", func(t *testing.T) {
-		upd := update.New(updateID, func() {})
+		upd := update.New(updateID)
 		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
 			return upd, true
 		}
