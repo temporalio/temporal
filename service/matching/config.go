@@ -39,7 +39,7 @@ type (
 		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
 		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithShardIDFilter
+		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		RPS                                   dynamicconfig.IntPropertyFn
@@ -125,6 +125,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 0),
+		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
 		SyncMatchWaitDuration:                 dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
 		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),

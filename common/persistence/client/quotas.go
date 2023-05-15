@@ -94,8 +94,8 @@ func NewPriorityRateLimiter(
 	)
 
 	return quotas.NewMultiRequestRateLimiter(
-		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn, hostRequestRateLimiter),
-		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn, hostRequestRateLimiter),
+		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
 		hostRequestRateLimiter,
 	)
 }
@@ -104,7 +104,6 @@ func newPerShardPerNamespacePriorityRateLimiter(
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
-	hostRequestRateLimiter quotas.RequestRateLimiter,
 ) quotas.RequestRateLimiter {
 	return quotas.NewMapRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if hasCaller(req) && hasCallerSegment(req) {
@@ -117,7 +116,7 @@ func newPerShardPerNamespacePriorityRateLimiter(
 				requestPriorityFn,
 			)
 		}
-		return hostRequestRateLimiter
+		return quotas.NoopRequestRateLimiter
 	},
 		perShardPerNamespaceKeyFn,
 	)
@@ -134,7 +133,6 @@ func newPriorityNamespaceRateLimiter(
 	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
-	hostRequestRateLimiter quotas.RequestRateLimiter,
 ) quotas.RequestRateLimiter {
 	return quotas.NewNamespaceRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if hasCaller(req) {
@@ -154,7 +152,7 @@ func newPriorityNamespaceRateLimiter(
 				requestPriorityFn,
 			)
 		}
-		return hostRequestRateLimiter
+		return quotas.NoopRequestRateLimiter
 	})
 }
 
@@ -213,5 +211,5 @@ func hasCaller(req quotas.Request) bool {
 }
 
 func hasCallerSegment(req quotas.Request) bool {
-	return req.CallerSegment > 0 && req.CallerSegment != p.CallerSegmentSystem
+	return req.CallerSegment > 0 && req.CallerSegment != p.CallerSegmentMissing
 }
