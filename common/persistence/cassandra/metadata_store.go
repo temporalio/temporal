@@ -137,7 +137,11 @@ func (m *MetadataStore) CreateNamespace(
 		// if the id with the same name exists in `namespaces_by_id`, fall through and either add a row in `namespaces` table
 		// or fail if name exists in that table already. This is to make sure we do not end up with a row in `namespaces_by_id`
 		// table and no entry in `namespaces` table
-		if !fieldMatches[string](existingRow, "name", request.Name) {
+		matched, err := fieldMatches[string](existingRow, "name", request.Name)
+		if err != nil {
+			return nil, err
+		}
+		if matched {
 			msg := fmt.Sprintf("CreateNamespace with name %v and id %v failed because another namespace with name %v already exists with the same id.", request.Name, request.ID, name)
 			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 		}
@@ -183,7 +187,11 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 	if !applied {
 
 		// if both conditions fail, find the one related to the first query
-		if !fieldMatches(previous, "name", request.Name) {
+		matches, err := fieldMatches(previous, "name", request.Name)
+		if err != nil {
+			return nil, err
+		}
+		if !matches {
 			m := make(map[string]interface{})
 			if iter.MapScan(m) {
 				if applied, ok := m["[applied]"].(bool); ok && !applied {
@@ -193,7 +201,11 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 		}
 
 		// if conditional failure is due to a duplicate name in namespaces table
-		if fieldMatches(previous, "name", request.Name) {
+		matches, err = fieldMatches(previous, "name", request.Name)
+		if err != nil {
+			return nil, err
+		}
+		if matches {
 			var existingID string
 			if id, ok := previous["id"]; ok {
 				existingID = gocql.UUIDToString(id)
@@ -520,9 +532,11 @@ func (m *MetadataStore) Close() {
 	}
 }
 
-func fieldMatches[T comparable](row map[string]interface{}, column string, value T) bool {
-	if exitingValue, ok := row[column]; ok && exitingValue == value {
-		return true
+func fieldMatches[T comparable](row map[string]interface{}, column string, value T) (bool, error) {
+	existingValue, ok := row[column]
+	if !ok {
+		msg := fmt.Sprintf("Unexpected error: column not found %q", column)
+		return false, serviceerror.NewUnavailable(msg)
 	}
-	return false
+	return existingValue == value, nil
 }
