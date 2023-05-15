@@ -25,7 +25,6 @@
 package protocol
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -40,11 +39,17 @@ type (
 
 	// MessageType is the type of a message within a protocol.
 	MessageType string
+
+	constErr string
 )
 
 const (
 	MessageTypeUnknown = MessageType("__message_type_unknown")
 	TypeUnknown        = Type("__protocol_type_unknown")
+
+	errNilMsg   = constErr("nil message")
+	errNilBody  = constErr("nil message body")
+	errProtoFmt = constErr("failed to extract protocol type")
 )
 
 // String transforms a MessageType into a string
@@ -62,10 +67,10 @@ func (pt Type) String() string {
 // belongs.
 func Identify(msg *protocolpb.Message) (Type, MessageType, error) {
 	if msg == nil {
-		return TypeUnknown, MessageTypeUnknown, errors.New("nil message")
+		return TypeUnknown, MessageTypeUnknown, errNilMsg
 	}
 	if msg.Body == nil {
-		return TypeUnknown, MessageTypeUnknown, errors.New("nil message body")
+		return TypeUnknown, MessageTypeUnknown, errNilBody
 	}
 	bodyTypeName, err := types.AnyMessageName(msg.Body)
 	if err != nil {
@@ -75,7 +80,7 @@ func Identify(msg *protocolpb.Message) (Type, MessageType, error) {
 
 	lastDot := strings.LastIndex(bodyTypeName, ".")
 	if lastDot < 0 {
-		err := fmt.Errorf("could not read protocol type from %q", bodyTypeName)
+		err := fmt.Errorf("%w: no . found in %q", errProtoFmt, bodyTypeName)
 		return TypeUnknown, msgType, err
 	}
 	return Type(bodyTypeName[0:lastDot]), msgType, nil
@@ -87,4 +92,8 @@ func Identify(msg *protocolpb.Message) (Type, MessageType, error) {
 func IdentifyOrUnknown(msg *protocolpb.Message) (Type, MessageType) {
 	pt, mt, _ := Identify(msg)
 	return pt, mt
+}
+
+func (cerr constErr) Error() string {
+	return string(cerr)
 }
