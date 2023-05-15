@@ -142,7 +142,7 @@ func (m *MetadataStore) CreateNamespace(
 			return nil, err
 		}
 		if !matched {
-			msg := fmt.Sprintf("CreateNamespace with name %v and id %v failed because another namespace with name %v already exists with the same id.", request.Name, request.ID, name)
+			msg := fmt.Sprintf("CreateNamespace with name %v and id %v failed because another namespace with name %v already exists with the same id.", request.Name, request.ID, existingRow["name"])
 			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 		}
 	}
