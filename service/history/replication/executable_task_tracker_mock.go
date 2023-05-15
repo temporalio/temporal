@@ -124,20 +124,6 @@ func (mr *MockTrackableExecutableTaskMockRecorder) HandleErr(err interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleErr", reflect.TypeOf((*MockTrackableExecutableTask)(nil).HandleErr), err)
 }
 
-// ID mocks base method.
-func (m *MockTrackableExecutableTask) ID() interface{} {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ID")
-	ret0, _ := ret[0].(interface{})
-	return ret0
-}
-
-// ID indicates an expected call of ID.
-func (mr *MockTrackableExecutableTaskMockRecorder) ID() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*MockTrackableExecutableTask)(nil).ID))
-}
-
 // IsRetryableError mocks base method.
 func (m *MockTrackableExecutableTask) IsRetryableError(err error) bool {
 	m.ctrl.T.Helper()
@@ -176,6 +162,20 @@ func (m *MockTrackableExecutableTask) Nack(err error) {
 func (mr *MockTrackableExecutableTaskMockRecorder) Nack(err interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nack", reflect.TypeOf((*MockTrackableExecutableTask)(nil).Nack), err)
+}
+
+// QueueID mocks base method.
+func (m *MockTrackableExecutableTask) QueueID() interface{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueueID")
+	ret0, _ := ret[0].(interface{})
+	return ret0
+}
+
+// QueueID indicates an expected call of QueueID.
+func (mr *MockTrackableExecutableTaskMockRecorder) QueueID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueID", reflect.TypeOf((*MockTrackableExecutableTask)(nil).QueueID))
 }
 
 // Reschedule mocks base method.

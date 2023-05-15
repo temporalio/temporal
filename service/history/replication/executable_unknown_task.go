@@ -71,7 +71,7 @@ func NewExecutableUnknownTask(
 	}
 }
 
-func (e *ExecutableUnknownTask) ID() interface{} {
+func (e *ExecutableUnknownTask) QueueID() interface{} {
 	return unknownTaskID
 }
 

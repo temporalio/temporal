@@ -90,7 +90,7 @@ func NewExecutableWorkflowStateTask(
 	}
 }
 
-func (e *ExecutableWorkflowStateTask) ID() interface{} {
+func (e *ExecutableWorkflowStateTask) QueueID() interface{} {
 	return e.WorkflowKey
 }
 

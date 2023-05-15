@@ -39,7 +39,7 @@ import (
 type (
 	TrackableExecutableTask interface {
 		ctasks.Task
-		ID() interface{}
+		QueueID() interface{}
 		TaskID() int64
 		TaskCreationTime() time.Time
 		MarkPoisonPill() error
