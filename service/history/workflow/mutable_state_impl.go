@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
+	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -3972,7 +3973,7 @@ func (ms *MutableStateImpl) RetryActivity(
 	ai.StartedTime = timestamp.TimePtr(time.Time{})
 	ai.TimerTaskStatus = TimerTaskStatusNone
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
-	ai.RetryLastFailure = failure
+	ai.RetryLastFailure = ms.truncateRetryableActivityFailure(failure)
 
 	if err := ms.taskGenerator.GenerateActivityRetryTasks(
 		ai.ScheduledEventId,
@@ -3983,6 +3984,41 @@ func (ms *MutableStateImpl) RetryActivity(
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
+}
+
+func (ms *MutableStateImpl) truncateRetryableActivityFailure(
+	activityFailure *failurepb.Failure,
+) *failurepb.Failure {
+	namespaceName := ms.namespaceEntry.Name().String()
+	failureSize := activityFailure.Size()
+
+	if failureSize <= ms.config.MutableStateActivityFailureSizeLimitWarn(namespaceName) {
+		return activityFailure
+	}
+
+	throttledLogger := log.With(
+		ms.shard.GetThrottledLogger(),
+		tag.WorkflowNamespace(namespaceName),
+		tag.WorkflowID(ms.executionInfo.WorkflowId),
+		tag.WorkflowRunID(ms.executionState.RunId),
+		tag.BlobSize(int64(failureSize)),
+		tag.BlobSizeViolationOperation("RetryActivity"),
+	)
+
+	sizeLimitError := ms.config.MutableStateActivityFailureSizeLimitError(namespaceName)
+	if failureSize <= sizeLimitError {
+		throttledLogger.Warn("Activity failure size exceeds warning limit for mutable state.")
+		return activityFailure
+	}
+
+	throttledLogger.Warn("Activity failure size exceeds error limit for mutable state, truncated.")
+
+	// nonRetryable is set to false here as only retryable failures are recorded in mutable state.
+	// also when this method is called, the check for isRetryable is already done, so the value
+	// is only for visibility/debugging purpose.
+	serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+	serverFailure.Cause = failure.Truncate(activityFailure, sizeLimitError)
+	return serverFailure
 }
 
 // TODO mutable state should generate corresponding transfer / timer tasks according to
