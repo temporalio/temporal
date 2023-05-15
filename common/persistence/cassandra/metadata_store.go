@@ -137,7 +137,7 @@ func (m *MetadataStore) CreateNamespace(
 		// if the id with the same name exists in `namespaces_by_id`, fall through and either add a row in `namespaces` table
 		// or fail if name exists in that table already. This is to make sure we do not end up with a row in `namespaces_by_id`
 		// table and no entry in `namespaces` table
-		if name, ok := existingRow["name"]; ok && name != request.Name {
+		if !fieldMatches[string](existingRow, "name", request.Name) {
 			msg := fmt.Sprintf("CreateNamespace with name %v and id %v failed because another namespace with name %v already exists with the same id.", request.Name, request.ID, name)
 			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 		}
@@ -183,17 +183,17 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 	if !applied {
 
 		// if both conditions fail, find the one related to the first query
-		if name, ok := previous["name"]; !ok || name != request.Name {
+		if !fieldMatches(previous, "name", request.Name) {
 			m := make(map[string]interface{})
 			if iter.MapScan(m) {
-				if applied, ok = m["[applied]"].(bool); ok && !applied {
+				if applied, ok := m["[applied]"].(bool); ok && !applied {
 					previous = m
 				}
 			}
 		}
 
 		// if conditional failure is due to a duplicate name in namespaces table
-		if name, ok := previous["name"]; ok && name == request.Name {
+		if fieldMatches(previous, "name", request.Name) {
 			var existingID string
 			if id, ok := previous["id"]; ok {
 				existingID = gocql.UUIDToString(id)
@@ -518,4 +518,11 @@ func (m *MetadataStore) Close() {
 	if m.session != nil {
 		m.session.Close()
 	}
+}
+
+func fieldMatches[T comparable](row map[string]interface{}, column string, value T) bool {
+	if exitingValue, ok := row[column]; ok && exitingValue == value {
+		return true
+	}
+	return false
 }
