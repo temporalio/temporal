@@ -691,3 +691,74 @@ message PollWorkflowExecutionUpdateRequest {
 message PollWorkflowExecutionUpdateResponse {
     temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateResponse response = 1;
 }
+
+message GetWorkflowExecutionHistoryRequest {
+    string namespace = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    int32 maximum_page_size = 3;
+    // If a `GetWorkflowExecutionHistoryResponse` or a `PollWorkflowTaskQueueResponse` had one of
+    // these, it should be passed here to fetch the next page.
+    bytes next_page_token = 4;
+    // If set to true, the RPC call will not resolve until there is a new event which matches
+    // the `history_event_filter_type`, or a timeout is hit.
+    bool wait_new_event = 5;
+    // Filter returned events such that they match the specified filter type.
+    // Default: HISTORY_EVENT_FILTER_TYPE_ALL_EVENT.
+    temporal.api.enums.v1.HistoryEventFilterType history_event_filter_type = 6;
+    bool skip_archival = 7;
+}
+
+message GetWorkflowExecutionHistoryResponse {
+    temporal.api.history.v1.History history = 1;
+    // Raw history is an alternate representation of history that may be returned if configured on
+    // the frontend. This is not supported by all SDKs. Either this or `history` will be set.
+    repeated temporal.api.common.v1.DataBlob raw_history = 2;
+    // Will be set if there are more history events than were included in this response
+    bytes next_page_token = 3;
+    bool archived = 4;
+}
+
+message GetWorkflowExecutionHistoryReverseRequest {
+    string namespace = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    int32 maximum_page_size = 3;
+    bytes next_page_token = 4;
+}
+
+message GetWorkflowExecutionHistoryReverseResponse {
+    temporal.api.history.v1.History history = 1;
+    // Will be set if there are more history events than were included in this response
+    bytes next_page_token = 3;
+}
+
+/**
+  * StartEventId defines the beginning of the event to fetch. The first event is exclusive.
+  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
+  **/
+message GetWorkflowExecutionRawHistoryV2Request {
+    reserved 1;
+    string namespace_id = 9;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    int64 start_event_id = 3;
+    int64 start_event_version = 4;
+    int64 end_event_id = 5;
+    int64 end_event_version = 6;
+    int32 maximum_page_size = 7;
+    bytes next_page_token = 8;
+}
+
+message GetWorkflowExecutionRawHistoryV2Response {
+    bytes next_page_token = 1;
+    repeated temporal.api.common.v1.DataBlob history_batches = 2;
+    temporal.server.api.history.v1.VersionHistory version_history = 3;
+    repeated int64 history_node_ids = 4;
+}
+
+message ForceDeleteWorkflowExecutionRequest {
+    string namespace = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+}
+
+message ForceDeleteWorkflowExecutionResponse {
+    repeated string warnings = 1;
+}

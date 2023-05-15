@@ -53,9 +53,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
-// TODO: port the following deprecated FE tests over to history service
-
-// DEPRECATED
+// DEPRECATED: TBD
 func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 	cfg := s.newConfig()
 	baseEvents := []*historypb.HistoryEvent{
@@ -134,7 +132,7 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 	}
 }
 
-// DEPRECATED
+// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/historyEngine_test.go
 func (s *workflowHandlerSuite) TestGetHistory() {
 	namespaceID := namespace.ID(uuid.New())
 	namespaceName := namespace.Name("test-namespace")
@@ -206,7 +204,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	s.EqualValues(`"random-data"`, history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
 }
 
-// DEPRECATED
+// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/historyEngine_test.go
 func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	namespaceID := namespace.ID(uuid.New())
 	namespace := namespace.Name("namespace")
@@ -308,7 +306,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	s.Equal("this workflow failed", attrs2.Failure.Message)
 }
 
-// DEPRECATED
+// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/historyEngine_test.go
 func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
 	namespaceID := namespace.ID(uuid.New())
 	namespace := namespace.Name("namespace")

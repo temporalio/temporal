@@ -22,39 +22,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package frontend
+package getworkflowexecutionrawhistoryv2
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"github.com/pborman/uuid"
 
 	commonpb "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/adminservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
+	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/getworkflowexecutionrawhistoryv2/api.go
-func (adh *AdminHandler) getWorkflowExecutionRawHistoryV2(
+func Invoke(
 	ctx context.Context,
-	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
+	shard shard.Context,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	eventNotifier events.Notifier,
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	ns, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -108,7 +103,7 @@ func (adh *AdminHandler) getWorkflowExecutionRawHistoryV2(
 
 	if pageToken.GetStartEventId()+1 == pageToken.GetEndEventId() {
 		// API is exclusive-exclusive. Return empty response here.
-		return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		return &historyservice.GetWorkflowExecutionRawHistoryV2Response{
 			HistoryBatches: []*commonpb.DataBlob{},
 			NextPageToken:  nil, // no further pagination
 			VersionHistory: targetVersionHistory,
@@ -134,7 +129,7 @@ func (adh *AdminHandler) getWorkflowExecutionRawHistoryV2(
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
-			return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+			return &historyservice.GetWorkflowExecutionRawHistoryV2Response{
 				HistoryBatches: []*commonpb.DataBlob{},
 				NextPageToken:  nil, // no further pagination
 				VersionHistory: targetVersionHistory,
@@ -151,7 +146,7 @@ func (adh *AdminHandler) getWorkflowExecutionRawHistoryV2(
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope),
 	)
 
-	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+	result := &historyservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
 		VersionHistory: targetVersionHistory,
 		HistoryNodeIds: rawHistoryResponse.NodeIDs,
@@ -168,140 +163,8 @@ func (adh *AdminHandler) getWorkflowExecutionRawHistoryV2(
 	return result, nil
 }
 
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/forcedeleteworkflowexecution/api.go
-func (adh *AdminHandler) deleteWorkflowExecution(
-	ctx context.Context,
-	request *adminservice.DeleteWorkflowExecutionRequest,
-) (_ *adminservice.DeleteWorkflowExecutionResponse, err error) {
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	execution := request.Execution
-
-	shardID := common.WorkflowIDToHistoryShard(
-		namespaceID.String(),
-		execution.GetWorkflowId(),
-		adh.numberOfHistoryShards,
-	)
-	logger := log.With(adh.logger,
-		tag.WorkflowNamespace(request.Namespace),
-		tag.WorkflowID(execution.WorkflowId),
-		tag.WorkflowRunID(execution.RunId),
-	)
-
-	if execution.RunId == "" {
-		resp, err := adh.persistenceExecutionManager.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
-			ShardID:     shardID,
-			NamespaceID: namespaceID.String(),
-			WorkflowID:  execution.WorkflowId,
-		})
-		if err != nil {
-			return nil, err
-		}
-		execution.RunId = resp.RunID
-	}
-
-	var warnings []string
-	var branchTokens [][]byte
-	var startTime, closeTime *time.Time
-	cassVisBackend := adh.visibilityMgr.HasStoreName(cassandra.CassandraPersistenceName)
-
-	resp, err := adh.persistenceExecutionManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
-		ShardID:     shardID,
-		NamespaceID: namespaceID.String(),
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
-	})
-	if err != nil {
-		if common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err) {
-			return nil, err
-		}
-		// continue to deletion
-		warnMsg := "Unable to load mutable state when deleting workflow execution, " +
-			"will skip deleting workflow history and cassandra visibility record"
-		logger.Warn(warnMsg, tag.Error(err))
-		warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
-	} else {
-		// load necessary information from mutable state
-		executionInfo := resp.State.GetExecutionInfo()
-		histories := executionInfo.GetVersionHistories().GetHistories()
-		branchTokens = make([][]byte, 0, len(histories))
-		for _, historyItem := range histories {
-			branchTokens = append(branchTokens, historyItem.GetBranchToken())
-		}
-
-		if cassVisBackend {
-			if resp.State.ExecutionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-				startTime = executionInfo.GetStartTime()
-			} else if executionInfo.GetCloseTime() != nil {
-				closeTime = executionInfo.GetCloseTime()
-			} else {
-				completionEvent, err := adh.getWorkflowCompletionEvent(ctx, shardID, resp.State)
-				if err != nil {
-					warnMsg := "Unable to load workflow completion event, will skip deleting visibility record"
-					adh.logger.Warn(warnMsg, tag.Error(err))
-					warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
-				} else {
-					closeTime = completionEvent.GetEventTime()
-				}
-			}
-		}
-	}
-
-	if !cassVisBackend || (startTime != nil || closeTime != nil) {
-		// if using cass visibility, then either start or close time should be non-nil
-		// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
-		// we can't guarantee there's no update or record close request for this workflow since
-		// visibility queue processing is async. Operator can call this api again to delete visibility
-		// record again if this happens.
-		if _, err := adh.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
-			NamespaceId:       namespaceID.String(),
-			Execution:         execution,
-			WorkflowStartTime: startTime,
-			WorkflowCloseTime: closeTime,
-		}); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := adh.persistenceExecutionManager.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{
-		ShardID:     shardID,
-		NamespaceID: namespaceID.String(),
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
-	}); err != nil {
-		return nil, err
-	}
-
-	if err := adh.persistenceExecutionManager.DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
-		ShardID:     shardID,
-		NamespaceID: namespaceID.String(),
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
-	}); err != nil {
-		return nil, err
-	}
-
-	for _, branchToken := range branchTokens {
-		if err := adh.persistenceExecutionManager.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-			ShardID:     shardID,
-			BranchToken: branchToken,
-		}); err != nil {
-			warnMsg := "Failed to delete history branch, skip"
-			adh.logger.Warn(warnMsg, tag.WorkflowBranchID(string(branchToken)), tag.Error(err))
-			warnings = append(warnings, fmt.Sprintf("%s. BranchToken: %v, Error: %v", warnMsg, branchToken, err.Error()))
-		}
-	}
-
-	return &adminservice.DeleteWorkflowExecutionResponse{
-		Warnings: warnings,
-	}, nil
-}
-
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/getworkflowexecutionrawhistoryv2/api.go
-func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
-	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
+func validateGetWorkflowExecutionRawHistoryV2Request(
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
 
 	execution := request.Execution
@@ -330,9 +193,8 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	return nil
 }
 
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/getworkflowexecutionrawhistoryv2/api.go
-func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
-	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
+func setRequestDefaultValueAndGetTargetVersionHistory(
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *historyspb.VersionHistories,
 ) (*historyspb.VersionHistory, error) {
 
@@ -409,43 +271,4 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 	}
 
 	return targetBranch, nil
-}
-
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/forcedeleteworkflowexecution/api.go
-func (adh *AdminHandler) getWorkflowCompletionEvent(
-	ctx context.Context,
-	shardID int32,
-	mutableState *persistencespb.WorkflowMutableState,
-) (*historypb.HistoryEvent, error) {
-	executionInfo := mutableState.GetExecutionInfo()
-	completionEventID := mutableState.GetNextEventId() - 1
-
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return nil, err
-	}
-	version, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, completionEventID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := adh.persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		ShardID:     shardID,
-		BranchToken: currentVersionHistory.GetBranchToken(),
-		MinEventID:  executionInfo.CompletionEventBatchId,
-		MaxEventID:  completionEventID + 1,
-		PageSize:    1,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// find history event from batch and return back single event to caller
-	for _, e := range resp.HistoryEvents {
-		if e.EventId == completionEventID && e.Version == version {
-			return e, nil
-		}
-	}
-
-	return nil, serviceerror.NewInternal("Unable to find closed event for workflow")
 }

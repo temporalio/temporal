@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
@@ -36,9 +37,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -53,6 +55,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -891,6 +894,145 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	}
 
 	return response, nil
+}
+
+func (handler *workflowTaskHandlerCallbacksImpl) createPollWorkflowTaskQueueResponse(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
+	branchToken []byte,
+) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
+
+	if matchingResp.WorkflowExecution == nil {
+		// this will happen if there is no workflow task to be send to worker / caller
+		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
+	}
+
+	var history *historypb.History
+	var continuation []byte
+	var err error
+
+	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
+		// meaning sticky query, we should not return any events to worker
+		// since query task only check the current status
+		history = &historypb.History{
+			Events: []*historypb.HistoryEvent{},
+		}
+	} else {
+		// here we have 3 cases:
+		// 1. sticky && non query task
+		// 2. non sticky &&  non query task
+		// 3. non sticky && query task
+		// for 1, partial history have to be send back
+		// for 2 and 3, full history have to be send back
+
+		var persistenceToken []byte
+
+		firstEventID := common.FirstEventID
+		nextEventID := matchingResp.GetNextEventId()
+		if matchingResp.GetStickyExecutionEnabled() {
+			firstEventID = matchingResp.GetPreviousStartedEventId() + 1
+		}
+		namespaceEntry, dErr := wh.namespaceRegistry.GetNamespaceByID(namespaceID)
+		if dErr != nil {
+			return nil, dErr
+		}
+
+		// TODO below is a temporal solution to guard against invalid event batch
+		//  when data inconsistency occurs
+		//  long term solution should check event batch pointing backwards within history store
+		defer func() {
+			if _, ok := retError.(*serviceerror.DataLoss); ok {
+				wh.trimHistoryNode(ctx, namespaceID.String(), matchingResp.WorkflowExecution.GetWorkflowId(), matchingResp.WorkflowExecution.GetRunId())
+			}
+		}()
+		history, persistenceToken, err = wh.getHistory(
+			ctx,
+			wh.metricsScope(ctx),
+			namespaceID,
+			namespaceEntry.Name(),
+			*matchingResp.GetWorkflowExecution(),
+			firstEventID,
+			nextEventID,
+			int32(wh.config.HistoryMaxPageSize(namespaceEntry.Name().String())),
+			nil,
+			matchingResp.GetTransientWorkflowTask(),
+			branchToken,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(persistenceToken) != 0 {
+			continuation, err = serializeHistoryToken(&tokenspb.HistoryContinuation{
+				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventId:          firstEventID,
+				NextEventId:           nextEventID,
+				PersistenceToken:      persistenceToken,
+				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
+				BranchToken:           branchToken,
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	resp := &workflowservice.PollWorkflowTaskQueueResponse{
+		TaskToken:                  matchingResp.TaskToken,
+		WorkflowExecution:          matchingResp.WorkflowExecution,
+		WorkflowType:               matchingResp.WorkflowType,
+		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
+		StartedEventId:             matchingResp.StartedEventId,
+		Query:                      matchingResp.Query,
+		BacklogCountHint:           matchingResp.BacklogCountHint,
+		Attempt:                    matchingResp.Attempt,
+		History:                    history,
+		NextPageToken:              continuation,
+		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
+		ScheduledTime:              matchingResp.ScheduledTime,
+		StartedTime:                matchingResp.StartedTime,
+		Queries:                    matchingResp.Queries,
+		Messages:                   matchingResp.Messages,
+	}
+
+	return resp, nil
+}
+
+func (handler *workflowTaskHandlerCallbacksImpl) withNewWorkflowTask(
+	ctx context.Context,
+) {
+	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
+	if err != nil {
+		return nil, err
+	}
+
+	taskToken := tasktoken.NewWorkflowTaskToken(
+		taskToken.GetNamespaceId(),
+		taskToken.GetWorkflowId(),
+		taskToken.GetRunId(),
+		histResp.StartedResponse.GetScheduledEventId(),
+		histResp.StartedResponse.GetStartedEventId(),
+		histResp.StartedResponse.GetStartedTime(),
+		histResp.StartedResponse.GetAttempt(),
+		histResp.StartedResponse.GetClock(),
+		histResp.StartedResponse.GetVersion(),
+	)
+	token, err := wh.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return nil, err
+	}
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: taskToken.GetWorkflowId(),
+		RunId:      taskToken.GetRunId(),
+	}
+	matchingResp := common.CreateMatchingPollWorkflowTaskQueueResponse(histResp.StartedResponse, workflowExecution, token)
+
+	newWorkflowTask, err := wh.createPollWorkflowTaskQueueResponse(ctx, namespaceId, matchingResp, matchingResp.GetBranchToken())
+	if err != nil {
+		return nil, err
+	}
+	completedResp.WorkflowTask = newWorkflowTask
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.Namespace, workflowTaskHeartbeating bool) {

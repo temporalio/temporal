@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -61,13 +63,17 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
@@ -5300,6 +5306,747 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 	s.NoError(err)
 	s.Nil(response.(*historyservice.StartWorkflowExecutionResponse).EagerWorkflowTask)
 	s.Equal(len(recordedTasks), 0)
+}
+
+func (s *engineSuite) TestGetHistory() {
+	namespaceID := namespace.ID(uuid.New())
+	namespaceName := namespace.Name("test-namespace")
+	firstEventID := int64(100)
+	nextEventID := int64(102)
+	branchToken := []byte{1}
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wid",
+		RunId:      "rid",
+	}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
+	req := &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      2,
+		NextPageToken: []byte{},
+		ShardID:       shardID,
+	}
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), req).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(100),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			{
+				EventId:   int64(101),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"TemporalChangeVersion": payload.EncodeString("random-data"),
+							},
+						},
+					},
+				},
+			},
+		},
+		NextPageToken: []byte{},
+		Size:          1,
+	}, nil)
+
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(namespaceName).
+		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
+
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	history, token, err := wh.getHistory(
+		context.Background(),
+		metrics.NoopMetricsHandler,
+		namespaceID,
+		namespaceName,
+		we,
+		firstEventID,
+		nextEventID,
+		2,
+		[]byte{},
+		nil,
+		branchToken,
+	)
+	s.NoError(err)
+	s.NotNil(history)
+	s.Equal([]byte{}, token)
+
+	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasForCustomKeywordField"].GetMetadata()["type"])
+	s.EqualValues(`"random-data"`, history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory() {
+	namespaceID := namespace.ID(uuid.New())
+	namespace := namespace.Name("namespace")
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	newRunID := uuid.New()
+
+	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:              namespace.String(),
+		Execution:              &we,
+		MaximumPageSize:        10,
+		NextPageToken:          nil,
+		WaitNewEvent:           true,
+		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+		SkipArchival:           true,
+	}
+
+	// set up mocks to simulate a failed workflow with a retry policy. the failure event is id 5.
+	branchToken := []byte{1, 2, 3}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), &historyservice.PollMutableStateRequest{
+		NamespaceId:         namespaceID.String(),
+		Execution:           &we,
+		ExpectedNextEventId: common.EndEventID,
+		CurrentBranchToken:  nil,
+	}).Return(&historyservice.PollMutableStateResponse{
+		Execution:           &we,
+		WorkflowType:        &commonpb.WorkflowType{Name: "mytype"},
+		NextEventId:         6,
+		LastFirstEventId:    5,
+		CurrentBranchToken:  branchToken,
+		VersionHistories:    nil,
+		WorkflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		LastFirstEventTxnId: 100,
+	}, nil).Times(2)
+
+	// GetWorkflowExecutionHistory will request the last event
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    5,
+		MaxEventID:    6,
+		PageSize:      10,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(5),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+					WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
+						Failure:                      &failurepb.Failure{Message: "this workflow failed"},
+						RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
+						WorkflowTaskCompletedEventId: 4,
+						NewExecutionRunId:            newRunID,
+					},
+				},
+			},
+		},
+		NextPageToken: []byte{},
+		Size:          1,
+	}, nil).Times(2)
+
+	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	oldGoSDKVersion := "1.9.1"
+	newGoSDKVersion := "1.10.1"
+
+	// new sdk: should see failed event
+	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
+	resp, err := wh.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	event := resp.History.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
+	attrs := event.GetWorkflowExecutionFailedEventAttributes()
+	s.Equal("this workflow failed", attrs.Failure.Message)
+	s.Equal(newRunID, attrs.NewExecutionRunId)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
+
+	// old sdk: should see continued-as-new event
+	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+	// See comment in workflowHandler.go:GetWorkflowExecutionHistory
+	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, "")
+	resp, err = wh.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	event = resp.History.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.EventType)
+	attrs2 := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(newRunID, attrs2.NewExecutionRunId)
+	s.Equal("this workflow failed", attrs2.Failure.Message)
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
+	namespaceID := namespace.ID(uuid.New())
+	namespace := namespace.Name("namespace")
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+
+	config := s.newConfig()
+	config.SendRawWorkflowHistory = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+
+	branchToken := []byte{1, 2, 3}
+	persistenceToken := []byte("some random persistence token")
+	nextPageToken, err := serializeHistoryToken(&tokenspb.HistoryContinuation{
+		RunId:            we.GetRunId(),
+		FirstEventId:     common.FirstEventID,
+		NextEventId:      5,
+		PersistenceToken: persistenceToken,
+		TransientWorkflowTask: &historyspb.TransientWorkflowTaskInfo{
+			HistorySuffix: []*historypb.HistoryEvent{
+				{
+					EventId:   5,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+				},
+				{
+					EventId:   6,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+				},
+			},
+		},
+		BranchToken: branchToken,
+	})
+	s.NoError(err)
+	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:              namespace.String(),
+		Execution:              &we,
+		MaximumPageSize:        10,
+		NextPageToken:          nextPageToken,
+		WaitNewEvent:           false,
+		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+		SkipArchival:           true,
+	}
+
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
+
+	historyBlob1, err := wh.payloadSerializer.SerializeEvent(
+		&historypb.HistoryEvent{
+			EventId:   int64(3),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		},
+		enumspb.ENCODING_TYPE_PROTO3,
+	)
+	s.NoError(err)
+	historyBlob2, err := wh.payloadSerializer.SerializeEvent(
+		&historypb.HistoryEvent{
+			EventId:   int64(4),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+		},
+		enumspb.ENCODING_TYPE_PROTO3,
+	)
+	s.NoError(err)
+	s.mockExecutionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    1,
+		MaxEventID:    5,
+		PageSize:      10,
+		NextPageToken: persistenceToken,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{historyBlob1, historyBlob2},
+		NextPageToken:     []byte{},
+		Size:              1,
+	}, nil).Times(1)
+
+	resp, err := wh.GetWorkflowExecutionHistory(context.Background(), req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	s.Empty(resp.History.Events)
+	s.Len(resp.RawHistory, 4)
+	event, err := wh.payloadSerializer.DeserializeEvent(resp.RawHistory[2])
+	s.NoError(err)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.EventType)
+	event, err = wh.payloadSerializer.DeserializeEvent(resp.RawHistory[3])
+	s.NoError(err)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.EventType)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {
+	ctx := context.Background()
+	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: s.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "",
+				RunId:      uuid.New(),
+			},
+			StartEventId:      1,
+			StartEventVersion: 100,
+			EndEventId:        10,
+			EndEventVersion:   100,
+			MaximumPageSize:   1,
+			NextPageToken:     nil,
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidRunID() {
+	ctx := context.Background()
+	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: s.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflowID",
+				RunId:      "runID",
+			},
+			StartEventId:      1,
+			StartEventVersion: 100,
+			EndEventId:        10,
+			EndEventVersion:   100,
+			MaximumPageSize:   1,
+			NextPageToken:     nil,
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidSize() {
+	ctx := context.Background()
+	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: s.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflowID",
+				RunId:      uuid.New(),
+			},
+			StartEventId:      1,
+			StartEventVersion: 100,
+			EndEventId:        10,
+			EndEventVersion:   100,
+			MaximumPageSize:   -1,
+			NextPageToken:     nil,
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCache() {
+	ctx := context.Background()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(nil, fmt.Errorf("test"))
+	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: s.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflowID",
+				RunId:      uuid.New(),
+			},
+			StartEventId:      1,
+			StartEventVersion: 100,
+			EndEventId:        10,
+			EndEventVersion:   100,
+			MaximumPageSize:   1,
+			NextPageToken:     nil,
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2() {
+	ctx := context.Background()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
+	branchToken := []byte{1}
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	mState := &historyservice.GetMutableStateResponse{
+		NextEventId:        11,
+		CurrentBranchToken: branchToken,
+		VersionHistories:   versionHistories,
+	}
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
+
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{},
+		NextPageToken:     []byte{},
+		Size:              0,
+	}, nil)
+	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: s.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflowID",
+				RunId:      uuid.New(),
+			},
+			StartEventId:      1,
+			StartEventVersion: 100,
+			EndEventId:        10,
+			EndEventVersion:   100,
+			MaximumPageSize:   10,
+			NextPageToken:     nil,
+		})
+	s.NoError(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID() {
+	ctx := context.Background()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
+	branchToken := []byte{1}
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	mState := &historyservice.GetMutableStateResponse{
+		NextEventId:        11,
+		CurrentBranchToken: branchToken,
+		VersionHistories:   versionHistories,
+	}
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
+
+	resp, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
+		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: s.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflowID",
+				RunId:      uuid.New(),
+			},
+			StartEventId:      10,
+			StartEventVersion: 100,
+			EndEventId:        common.EmptyEventID,
+			EndEventVersion:   common.EmptyVersion,
+			MaximumPageSize:   1,
+			NextPageToken:     nil,
+		})
+	s.Nil(resp.NextPageToken)
+	s.NoError(err)
+}
+
+func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedStartAndEnd() {
+	inputStartEventID := int64(1)
+	inputStartVersion := int64(10)
+	inputEndEventID := int64(100)
+	inputEndVersion := int64(11)
+	firstItem := versionhistory.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
+	endItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
+	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, endItem})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		NamespaceId: s.namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflowID",
+			RunId:      uuid.New(),
+		},
+		StartEventId:      inputStartEventID,
+		StartEventVersion: inputStartVersion,
+		EndEventId:        inputEndEventID,
+		EndEventVersion:   inputEndVersion,
+		MaximumPageSize:   10,
+		NextPageToken:     nil,
+	}
+
+	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
+		request,
+		versionHistories,
+	)
+	s.Equal(request.GetStartEventId(), inputStartEventID)
+	s.Equal(request.GetEndEventId(), inputEndEventID)
+	s.Equal(targetVersionHistory, versionHistory)
+	s.NoError(err)
+}
+
+func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedEndEvent() {
+	inputStartEventID := int64(1)
+	inputEndEventID := int64(100)
+	inputStartVersion := int64(10)
+	inputEndVersion := int64(11)
+	firstItem := versionhistory.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
+	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
+	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		NamespaceId: s.namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflowID",
+			RunId:      uuid.New(),
+		},
+		StartEventId:      common.EmptyEventID,
+		StartEventVersion: common.EmptyVersion,
+		EndEventId:        inputEndEventID,
+		EndEventVersion:   inputEndVersion,
+		MaximumPageSize:   10,
+		NextPageToken:     nil,
+	}
+
+	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
+		request,
+		versionHistories,
+	)
+	s.Equal(request.GetStartEventId(), inputStartEventID-1)
+	s.Equal(request.GetEndEventId(), inputEndEventID)
+	s.Equal(targetVersionHistory, versionHistory)
+	s.NoError(err)
+}
+
+func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedStartEvent() {
+	inputStartEventID := int64(1)
+	inputEndEventID := int64(100)
+	inputStartVersion := int64(10)
+	inputEndVersion := int64(11)
+	firstItem := versionhistory.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
+	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
+	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		NamespaceId: s.namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflowID",
+			RunId:      uuid.New(),
+		},
+		StartEventId:      inputStartEventID,
+		StartEventVersion: inputStartVersion,
+		EndEventId:        common.EmptyEventID,
+		EndEventVersion:   common.EmptyVersion,
+		MaximumPageSize:   10,
+		NextPageToken:     nil,
+	}
+
+	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
+		request,
+		versionHistories,
+	)
+	s.Equal(request.GetStartEventId(), inputStartEventID)
+	s.Equal(request.GetEndEventId(), inputEndEventID+1)
+	s.Equal(targetVersionHistory, versionHistory)
+	s.NoError(err)
+}
+
+func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonCurrentBranch() {
+	inputStartEventID := int64(1)
+	inputEndEventID := int64(100)
+	inputStartVersion := int64(10)
+	inputEndVersion := int64(101)
+	item1 := versionhistory.NewVersionHistoryItem(inputStartEventID, inputStartVersion)
+	item2 := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
+	versionHistory1 := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{item1, item2})
+	item3 := versionhistory.NewVersionHistoryItem(int64(10), int64(20))
+	item4 := versionhistory.NewVersionHistoryItem(int64(20), int64(51))
+	versionHistory2 := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{item1, item3, item4})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory1)
+	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory2)
+	s.NoError(err)
+	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		NamespaceId: s.namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflowID",
+			RunId:      uuid.New(),
+		},
+		StartEventId:      9,
+		StartEventVersion: 20,
+		EndEventId:        inputEndEventID,
+		EndEventVersion:   inputEndVersion,
+		MaximumPageSize:   10,
+		NextPageToken:     nil,
+	}
+
+	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
+		request,
+		versionHistories,
+	)
+	s.Equal(request.GetStartEventId(), inputStartEventID)
+	s.Equal(request.GetEndEventId(), inputEndEventID)
+	s.Equal(targetVersionHistory, versionHistory1)
+	s.NoError(err)
+}
+
+func (s *engineSuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "workflowID",
+	}
+
+	request := &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.namespace.String(),
+		Execution: &execution,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(false)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	resp, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.Nil(resp)
+	s.Error(err)
+
+	mutableState := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories: &historyspb.VersionHistories{
+				CurrentVersionHistoryIndex: 0,
+				Histories: []*historyspb.VersionHistory{
+					{BranchToken: []byte("branch1")},
+					{BranchToken: []byte("branch2")},
+					{BranchToken: []byte("branch3")},
+				},
+			},
+		},
+	}
+
+	shardID := common.WorkflowIDToHistoryShard(
+		s.namespaceID.String(),
+		execution.GetWorkflowId(),
+		s.handler.numberOfHistoryShards,
+	)
+	runID := uuid.New()
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetCurrentExecutionResponse{
+		StartRequestID: uuid.New(),
+		RunID:          runID,
+		State:          enums.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       runID,
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId: s.namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      runID,
+		},
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), &persistence.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       runID,
+	}).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), &persistence.DeleteWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       runID,
+	}).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+
+	_, err = s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *engineSuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "workflowID",
+		RunId:      uuid.New(),
+	}
+
+	request := &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.namespace.String(),
+		Execution: &execution,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(false)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+
+	_, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *engineSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "workflowID",
+		RunId:      uuid.New(),
+	}
+
+	request := &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.namespace.String(),
+		Execution: &execution,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true).AnyTimes()
+
+	// test delete open records
+	branchToken := []byte("branchToken")
+	version := int64(100)
+	mutableState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			CreateRequestId: uuid.New(),
+			RunId:           execution.RunId,
+			State:           enums.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 12,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			CompletionEventBatchId: 10,
+			StartTime:              timestamp.TimePtr(time.Now()),
+			VersionHistories: &historyspb.VersionHistories{
+				CurrentVersionHistoryIndex: 0,
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: branchToken,
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 11, Version: version},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId:       s.namespaceID.String(),
+		Execution:         &execution,
+		WorkflowStartTime: mutableState.ExecutionInfo.StartTime,
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+
+	_, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+
+	// test delete close records
+	mutableState.ExecutionState.State = enums.WORKFLOW_EXECUTION_STATE_COMPLETED
+	mutableState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+
+	shardID := common.WorkflowIDToHistoryShard(
+		s.namespaceID.String(),
+		execution.GetWorkflowId(),
+		s.handler.numberOfHistoryShards,
+	)
+	closeTime := time.Now()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		ShardID:     shardID,
+		BranchToken: branchToken,
+		MinEventID:  mutableState.ExecutionInfo.CompletionEventBatchId,
+		MaxEventID:  mutableState.NextEventId,
+		PageSize:    1,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{
+				EventId:   10,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+				Version:   version,
+				EventTime: timestamp.TimePtr(closeTime.Add(-time.Millisecond)),
+			},
+			{
+				EventId:   11,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+				Version:   version,
+				EventTime: timestamp.TimePtr(closeTime),
+			},
+		},
+	}, nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId:       s.namespaceID.String(),
+		Execution:         &execution,
+		WorkflowCloseTime: timestamp.TimePtr(closeTime),
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+
+	_, err = s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
 }
 
 func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
