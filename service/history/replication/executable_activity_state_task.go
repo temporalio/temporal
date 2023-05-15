@@ -98,6 +98,10 @@ func NewExecutableActivityStateTask(
 	}
 }
 
+func (e *ExecutableActivityStateTask) ID() interface{} {
+	return e.WorkflowKey
+}
+
 func (e *ExecutableActivityStateTask) Execute() error {
 	if e.TerminalState() {
 		return nil

@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
-	ctasks "go.temporal.io/server/common/tasks"
 )
 
 type (
@@ -64,7 +63,7 @@ type (
 		respChan chan StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]
 	}
 	mockScheduler struct {
-		tasks []ctasks.Task
+		tasks []TrackableExecutableTask
 	}
 )
 
@@ -215,11 +214,11 @@ func (s *mockStream) Recv() (<-chan StreamResp[*adminservice.StreamWorkflowRepli
 
 func (s *mockStream) Close() {}
 
-func (s *mockScheduler) Submit(task ctasks.Task) {
+func (s *mockScheduler) Submit(task TrackableExecutableTask) {
 	s.tasks = append(s.tasks, task)
 }
 
-func (s *mockScheduler) TrySubmit(task ctasks.Task) bool {
+func (s *mockScheduler) TrySubmit(task TrackableExecutableTask) bool {
 	s.tasks = append(s.tasks, task)
 	return true
 }

@@ -95,6 +95,10 @@ func NewExecutableHistoryTask(
 	}
 }
 
+func (e *ExecutableHistoryTask) ID() interface{} {
+	return e.WorkflowKey
+}
+
 func (e *ExecutableHistoryTask) Execute() error {
 	if e.TerminalState() {
 		return nil

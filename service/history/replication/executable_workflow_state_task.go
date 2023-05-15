@@ -90,6 +90,10 @@ func NewExecutableWorkflowStateTask(
 	}
 }
 
+func (e *ExecutableWorkflowStateTask) ID() interface{} {
+	return e.WorkflowKey
+}
+
 func (e *ExecutableWorkflowStateTask) Execute() error {
 	if e.TerminalState() {
 		return nil
