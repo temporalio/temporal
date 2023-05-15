@@ -2008,7 +2008,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 	namespaceID := namespace.ID(uuid.New())
-	tq := "makeToast"
+	tq := "tupac"
 
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
@@ -2022,7 +2022,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 	namespaceID := namespace.ID(uuid.New())
-	tq := "makeToast"
+	tq := "tupac"
 
 	userData := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
@@ -2048,7 +2048,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 	namespaceID := namespace.ID(uuid.New())
-	tq := "makeToast"
+	tq := "tupac"
 
 	userData := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
@@ -2074,7 +2074,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 	namespaceID := namespace.ID(uuid.New())
-	tq := "makeToast"
+	tq := "tupac"
 
 	userData := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
@@ -2108,7 +2108,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNothing() {
 	namespaceID := namespace.ID(uuid.New())
-	tq := "makeToast"
+	tq := "tupac"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -2142,7 +2142,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3() {
 	namespaceID := namespace.ID(uuid.New())
-	tq := "makeToast"
+	tq := "tupac"
 
 	userData := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,

@@ -866,7 +866,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 				resp.UserData = userData
 			} else if userData.Version < version {
 				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
-				// We rely on periodic refresh and client retries in this case to let the system eventually self-heal.
+				// We rely on client retries in this case to let the system eventually self-heal.
 				return nil, serviceerror.NewFailedPrecondition(
 					"requested task queue user data for version greater than known version")
 			}
