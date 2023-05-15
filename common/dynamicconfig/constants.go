@@ -151,6 +151,11 @@ const (
 	HistoryCountLimitError = "limit.historyCount.error"
 	// HistoryCountLimitWarn is the per workflow execution history event count limit for warning
 	HistoryCountLimitWarn = "limit.historyCount.warn"
+	// MutableStateActivityFailureSizeLimitError is the per activity failure size limit for workflow mutable state.
+	// If exceeded, failure will be truncated before being stored in mutable state.
+	MutableStateActivityFailureSizeLimitError = "limit.mutableStateActivityFailureSize.error"
+	// MutableStateActivityFailureSizeLimitWarn is the per activity failure size warning limit for workflow mutable state
+	MutableStateActivityFailureSizeLimitWarn = "limit.mutableStateActivityFailureSize.warn"
 	// HistoryCountSuggestContinueAsNew is the workflow execution history event count limit to
 	// suggest continue-as-new (in workflow task started event)
 	HistoryCountSuggestContinueAsNew = "limit.historyCount.suggestContinueAsNew"

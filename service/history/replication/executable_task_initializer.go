@@ -53,7 +53,7 @@ type (
 		ShardController    shard.Controller
 		NamespaceCache     namespace.Registry
 		NDCHistoryResender xdc.NDCHistoryResender
-		TaskScheduler      ctasks.Scheduler[ctasks.Task]
+		TaskScheduler      ctasks.Scheduler[TrackableExecutableTask]
 		MetricsHandler     metrics.Handler
 		Logger             log.Logger
 	}

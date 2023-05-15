@@ -78,19 +78,21 @@ func ReplicationTaskExecutorProvider() TaskExecutorProvider {
 func ReplicationStreamSchedulerProvider(
 	config *configs.Config,
 	logger log.Logger,
-) ctasks.Scheduler[ctasks.Task] {
-	return ctasks.NewFIFOScheduler[ctasks.Task](
-		&ctasks.FIFOSchedulerOptions{
+) ctasks.Scheduler[TrackableExecutableTask] {
+	return ctasks.NewSequentialScheduler[TrackableExecutableTask](
+		&ctasks.SequentialSchedulerOptions{
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
 			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
 		},
+		TaskHashFn,
+		NewSequentialTaskQueue,
 		logger,
 	)
 }
 
 func ReplicationStreamSchedulerLifetimeHooks(
 	lc fx.Lifecycle,
-	scheduler ctasks.Scheduler[ctasks.Task],
+	scheduler ctasks.Scheduler[TrackableExecutableTask],
 ) {
 	lc.Append(
 		fx.Hook{
