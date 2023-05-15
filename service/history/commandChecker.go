@@ -271,6 +271,24 @@ func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
 	return err
 }
 
+func (v *commandAttrValidator) validateProtocolMessageAttributes(
+	namespaceID namespace.ID,
+	attributes *commandpb.ProtocolMessageCommandAttributes,
+	runTimeout time.Duration,
+) (enumspb.WorkflowTaskFailedCause, error) {
+	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
+
+	if attributes == nil {
+		return failedCause, serviceerror.NewInvalidArgument("ProtocolMessageCommandAttributes is not set on command.")
+	}
+
+	if attributes.MessageId == "" {
+		return failedCause, serviceerror.NewInvalidArgument("MessageID is not set on command.")
+	}
+
+	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
+}
+
 func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	namespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
