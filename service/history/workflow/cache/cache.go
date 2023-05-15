@@ -28,13 +28,13 @@ package cache
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/cache"
@@ -200,13 +200,13 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext, lockPriority)
 
+	const tailTime = 500 * time.Millisecond
 	var timeout time.Time
 	if deadline, ok := ctx.Deadline(); ok {
-		// TODO: what is our tail time?
-		timeout = deadline
+		timeout = deadline.Add(-tailTime)
 	}
 
-	if headers.GetCallerInfo(ctx).CallerType == headers.CallerTypeBackground {
+	if headers.GetCallerInfo(ctx).CallerType != headers.CallerTypeAPI {
 		timeout = time.Now().Add(500 * time.Millisecond)
 	}
 	ctxWithDeadline, cancel := context.WithDeadline(ctx, timeout)
@@ -217,8 +217,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		c.Release(key)
 		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 		handler.Counter(metrics.AcquireLockFailedCounter.GetMetricName()).Record(1)
-		// TODO: what error return here?
-		return nil, nil, fmt.Errorf("Workflow is busy")
+		return nil, nil, serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow cannot be locked")
 	}
 	return workflowCtx, releaseFunc, nil
 }
