@@ -36,6 +36,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
@@ -105,6 +106,8 @@ func (s *mutableStateSuite) SetupTest() {
 	// set the checksum probabilities to 100% for exercising during test
 	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
 	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
+	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
+	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
 
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
@@ -838,27 +841,19 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 }
 
 func (s *mutableStateSuite) TestTotalEntitiesCount() {
-	namespaceEntry := s.newNamespaceCacheEntry()
-	mutableState := TestLocalMutableState(
-		s.mockShard,
-		s.mockEventsCache,
-		namespaceEntry,
-		s.logger,
-		uuid.New(),
-	)
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
 	// scheduling, starting & completing workflow task is omitted here
 
 	workflowTaskCompletedEventID := int64(4)
-	_, _, err := mutableState.AddActivityTaskScheduledEvent(
+	_, _, err := s.mutableState.AddActivityTaskScheduledEvent(
 		workflowTaskCompletedEventID,
 		&commandpb.ScheduleActivityTaskCommandAttributes{},
 		false,
 	)
 	s.NoError(err)
 
-	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
+	_, _, err = s.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		uuid.New(),
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{},
@@ -866,13 +861,13 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
-	_, _, err = mutableState.AddTimerStartedEvent(
+	_, _, err = s.mutableState.AddTimerStartedEvent(
 		workflowTaskCompletedEventID,
 		&commandpb.StartTimerCommandAttributes{},
 	)
 	s.NoError(err)
 
-	_, _, err = mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
+	_, _, err = s.mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		uuid.New(),
 		&commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{},
@@ -880,7 +875,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
-	_, _, err = mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
+	_, _, err = s.mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		uuid.New(),
 		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
@@ -893,7 +888,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
-	_, err = mutableState.AddWorkflowExecutionSignaled(
+	_, err = s.mutableState.AddWorkflowExecutionSignaled(
 		"signalName",
 		&commonpb.Payloads{},
 		"identity",
@@ -902,12 +897,12 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	s.NoError(err)
 
 	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
-		namespaceEntry.IsGlobalNamespace(),
-		mutableState.GetCurrentVersion(),
+		tests.LocalNamespaceEntry.IsGlobalNamespace(),
+		s.mutableState.GetCurrentVersion(),
 	).Return(cluster.TestCurrentClusterName)
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 
-	mutation, _, err := mutableState.CloseTransactionAsMutation(
+	mutation, _, err := s.mutableState.CloseTransactionAsMutation(
 		s.mockShard.GetTimeSource().Now(),
 		TransactionPolicyActive,
 	)
@@ -919,4 +914,63 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	s.Equal(int64(1), mutation.ExecutionInfo.RequestCancelExternalCount)
 	s.Equal(int64(1), mutation.ExecutionInfo.SignalExternalCount)
 	s.Equal(int64(1), mutation.ExecutionInfo.SignalCount)
+}
+
+func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// scheduling, starting & completing workflow task is omitted here
+
+	workflowTaskCompletedEventID := int64(4)
+	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "5",
+			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: timestamp.DurationFromSeconds(1),
+			},
+		},
+		false,
+	)
+	s.NoError(err)
+
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		activityInfo,
+		activityInfo.ScheduledEventId,
+		uuid.New(),
+		"worker-identity",
+	)
+	s.NoError(err)
+
+	failureSizeErrorLimit := s.mockConfig.MutableStateActivityFailureSizeLimitError(
+		s.mutableState.namespaceEntry.Name().String(),
+	)
+
+	activityFailure := &failurepb.Failure{
+		Message: "activity failure with large details",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "application-failure-type",
+			NonRetryable: false,
+			Details: &commonpb.Payloads{
+				Payloads: []*commonpb.Payload{
+					{
+						Data: make([]byte, failureSizeErrorLimit*2),
+					},
+				},
+			},
+		}},
+	}
+	s.Greater(activityFailure.Size(), failureSizeErrorLimit)
+
+	retryState, err := s.mutableState.RetryActivity(activityInfo, activityFailure)
+	s.NoError(err)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+
+	activityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+	s.True(ok)
+	s.LessOrEqual(activityInfo.RetryLastFailure.Size(), failureSizeErrorLimit)
+	s.Equal(activityFailure.GetMessage(), activityInfo.RetryLastFailure.Cause.GetMessage())
 }
