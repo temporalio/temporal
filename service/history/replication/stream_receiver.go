@@ -116,7 +116,6 @@ func (r *StreamReceiver) Start() {
 
 	go r.sendEventLoop()
 	go r.recvEventLoop()
-	go r.heartbeatLoop()
 
 	r.logger.Info("StreamReceiver started.")
 }
@@ -168,26 +167,6 @@ func (r *StreamReceiver) recvEventLoop() {
 		streamCreationTime, stream := r.getStream()
 		_ = r.processMessages(stream)
 		r.recreateStream(streamCreationTime)
-	}
-}
-
-func (r *StreamReceiver) heartbeatLoop() {
-	defer r.Stop()
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-Loop:
-	for {
-		select {
-		case <-ticker.C:
-			r.MetricsHandler.Counter(metrics.ReplicationHeartbeat.GetMetricName()).Record(
-				int64(1),
-				metrics.FromClusterIDTag(r.clientShardKey.ClusterID),
-				metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
-			)
-		case <-r.shutdownChan.Channel():
-			break Loop
-		}
 	}
 }
 

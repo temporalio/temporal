@@ -30,7 +30,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/sync/errgroup"
@@ -104,9 +103,6 @@ func StreamReplicationTasks(
 	})
 	errGroup.Go(func() error {
 		return sendLoop(ctx, server, shardContext, filter, clientClusterShardID, serverClusterShardID)
-	})
-	errGroup.Go(func() error {
-		return heartbeat(ctx, shardContext, clientClusterShardID, serverClusterShardID)
 	})
 	return errGroup.Wait()
 }
@@ -400,32 +396,6 @@ Loop:
 			},
 		},
 	})
-}
-
-func heartbeat(
-	ctx context.Context,
-	shardContext shard.Context,
-	clientClusterShardID historyclient.ClusterShardID,
-	serverClusterShardID historyclient.ClusterShardID,
-) error {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if !shardContext.IsValid() {
-				return &persistence.ShardOwnershipLostError{ShardID: shardContext.GetShardID()}
-			}
-			shardContext.GetMetricsHandler().Counter(metrics.ReplicationHeartbeat.GetMetricName()).Record(
-				int64(1),
-				metrics.FromClusterIDTag(clientClusterShardID.ClusterID),
-				metrics.ToClusterIDTag(serverClusterShardID.ClusterID),
-			)
-		case <-ctx.Done():
-			return nil
-		}
-	}
 }
 
 func (f *TaskConvertorImpl) Convert(

@@ -1448,7 +1448,6 @@ var (
 	ReplicationTasksSend                           = NewCounterDef("replication_tasks_send")
 	ReplicationTasksRecv                           = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog                    = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
-	ReplicationHeartbeat                           = NewCounterDef("replication_heartbeat")
 	ReplicationTasksApplied                        = NewCounterDef("replication_tasks_applied")
 	ReplicationTasksFailed                         = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksLag                            = NewTimerDef("replication_tasks_lag")
