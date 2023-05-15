@@ -1110,7 +1110,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	s.taskSequenceNumber = updatedShardInfo.GetRangeId() << s.config.RangeSizeBits
 	s.maxTaskSequenceNumber = (updatedShardInfo.GetRangeId() + 1) << s.config.RangeSizeBits
 	s.immediateTaskExclusiveMaxReadLevel = s.taskSequenceNumber
-	s.shardInfo = updatedShardInfo
+	s.shardInfo = loadShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(updatedShardInfo))
 
 	return nil
 }
@@ -1343,7 +1343,7 @@ func (s *ContextImpl) finishStop() {
 	}
 }
 
-func (s *ContextImpl) isValid() bool {
+func (s *ContextImpl) IsValid() bool {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 	return s.state < contextStateStopping
@@ -1732,7 +1732,7 @@ func (s *ContextImpl) acquireShard() {
 	ownershipChanged := false
 
 	op := func() error {
-		if !s.isValid() {
+		if !s.IsValid() {
 			return s.newShardClosedErrorWithShardID()
 		}
 

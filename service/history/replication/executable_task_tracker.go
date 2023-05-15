@@ -50,6 +50,7 @@ type (
 	ExecutableTaskTracker interface {
 		TrackTasks(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask
 		LowWatermark() *WatermarkInfo
+		Size() int
 		Cancel()
 	}
 	ExecutableTaskTrackerImpl struct {
@@ -172,6 +173,13 @@ Loop:
 	} else {
 		return nil
 	}
+}
+
+func (t *ExecutableTaskTrackerImpl) Size() int {
+	t.Lock()
+	defer t.Unlock()
+
+	return t.taskQueue.Len()
 }
 
 func (t *ExecutableTaskTrackerImpl) Cancel() {

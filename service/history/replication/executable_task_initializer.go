@@ -61,10 +61,18 @@ type (
 
 func (i *ProcessToolBox) ConvertTasks(
 	taskClusterName string,
+	clientShardKey ClusterShardKey,
+	serverShardKey ClusterShardKey,
 	replicationTasks ...*replicationspb.ReplicationTask,
 ) []TrackableExecutableTask {
 	tasks := make([]TrackableExecutableTask, len(replicationTasks))
 	for index, replicationTask := range replicationTasks {
+		i.MetricsHandler.Counter(metrics.ReplicationTasksRecv.GetMetricName()).Record(
+			int64(1),
+			metrics.FromClusterIDTag(serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(clientShardKey.ClusterID),
+			metrics.OperationTag(TaskOperationTag(replicationTask)),
+		)
 		tasks[index] = i.convertOne(taskClusterName, replicationTask)
 	}
 	return tasks
