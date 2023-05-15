@@ -619,6 +619,12 @@ func (s *visibilityStore) buildSearchParametersV2(
 		return nil, err
 	}
 
+	if len(fieldSorts) > 0 {
+		// If fieldSorts is not empty, then it's using custom order by.
+		s.metricsHandler.WithTags(metrics.NamespaceTag(request.Namespace.String())).
+			Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
+	}
+
 	params := &client.SearchParameters{
 		Index:    s.index,
 		Query:    boolQuery,
@@ -734,7 +740,6 @@ func (s *visibilityStore) getListFieldSorter(fieldSorts []*elastic.FieldSort) ([
 	if len(fieldSorts) == 0 {
 		return defaultSorter, nil
 	}
-	s.metricsHandler.Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
 	for i, fs := range fieldSorts {
 		res[i] = fs
