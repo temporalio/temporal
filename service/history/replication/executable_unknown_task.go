@@ -44,6 +44,10 @@ type (
 	}
 )
 
+const (
+	unknownTaskID = "unknown-task-id"
+)
+
 var _ ctasks.Task = (*ExecutableUnknownTask)(nil)
 var _ TrackableExecutableTask = (*ExecutableUnknownTask)(nil)
 
@@ -65,6 +69,10 @@ func NewExecutableUnknownTask(
 		),
 		task: task,
 	}
+}
+
+func (e *ExecutableUnknownTask) QueueID() interface{} {
+	return unknownTaskID
 }
 
 func (e *ExecutableUnknownTask) Execute() error {

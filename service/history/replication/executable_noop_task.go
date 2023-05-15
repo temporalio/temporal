@@ -37,6 +37,10 @@ type (
 	}
 )
 
+const (
+	noopTaskID = "noop-task-id"
+)
+
 var _ ctasks.Task = (*ExecutableNoopTask)(nil)
 var _ TrackableExecutableTask = (*ExecutableNoopTask)(nil)
 
@@ -54,6 +58,10 @@ func NewExecutableNoopTask(
 			time.Now().UTC(),
 		),
 	}
+}
+
+func (e *ExecutableNoopTask) QueueID() interface{} {
+	return noopTaskID
 }
 
 func (e *ExecutableNoopTask) Execute() error {
