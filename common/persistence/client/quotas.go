@@ -38,8 +38,6 @@ type (
 	}
 )
 
-var _ quotas.RequestRateLimiter = (*quotas.MapRequestRateLimiterImpl[perShardPerNamespaceKey])(nil)
-
 var (
 	CallerTypeDefaultPriority = map[string]int{
 		headers.CallerTypeAPI:         1,
