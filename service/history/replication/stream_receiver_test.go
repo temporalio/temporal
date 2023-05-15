@@ -144,8 +144,8 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus() {
 	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &repicationpb.SyncReplicationState{
-				LastProcessedMessageId:   watermarkInfo.Watermark,
-				LastProcessedMessageTime: timestamp.TimePtr(watermarkInfo.Timestamp),
+				InclusiveLowWatermark:     watermarkInfo.Watermark,
+				InclusiveLowWatermarkTime: timestamp.TimePtr(watermarkInfo.Timestamp),
 			},
 		},
 	},
@@ -162,9 +162,9 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &repicationpb.WorkflowReplicationMessages{
-					ReplicationTasks: []*repicationpb.ReplicationTask{replicationTask},
-					LastTaskId:       rand.Int63(),
-					LastTaskTime:     timestamp.TimePtr(time.Unix(0, rand.Int63())),
+					ReplicationTasks:           []*repicationpb.ReplicationTask{replicationTask},
+					ExclusiveHighWatermark:     rand.Int63(),
+					ExclusiveHighWatermarkTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
 				},
 			},
 		},
@@ -175,8 +175,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 
 	s.taskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
-			s.Equal(streamResp.Resp.GetMessages().LastTaskId, highWatermarkInfo.Watermark)
-			s.Equal(*streamResp.Resp.GetMessages().LastTaskTime, highWatermarkInfo.Timestamp)
+			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
+			s.Equal(*streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime, highWatermarkInfo.Timestamp)
 			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}

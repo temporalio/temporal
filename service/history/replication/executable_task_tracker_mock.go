@@ -310,9 +310,9 @@ func (mr *MockExecutableTaskTrackerMockRecorder) Size() *gomock.Call {
 }
 
 // TrackTasks mocks base method.
-func (m *MockExecutableTaskTracker) TrackTasks(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
+func (m *MockExecutableTaskTracker) TrackTasks(exclusiveHighWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{highWatermarkInfo}
+	varargs := []interface{}{exclusiveHighWatermarkInfo}
 	for _, a := range tasks {
 		varargs = append(varargs, a)
 	}
@@ -322,8 +322,8 @@ func (m *MockExecutableTaskTracker) TrackTasks(highWatermarkInfo WatermarkInfo, 
 }
 
 // TrackTasks indicates an expected call of TrackTasks.
-func (mr *MockExecutableTaskTrackerMockRecorder) TrackTasks(highWatermarkInfo interface{}, tasks ...interface{}) *gomock.Call {
+func (mr *MockExecutableTaskTrackerMockRecorder) TrackTasks(exclusiveHighWatermarkInfo interface{}, tasks ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{highWatermarkInfo}, tasks...)
+	varargs := append([]interface{}{exclusiveHighWatermarkInfo}, tasks...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrackTasks", reflect.TypeOf((*MockExecutableTaskTracker)(nil).TrackTasks), varargs...)
 }
