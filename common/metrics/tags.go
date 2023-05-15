@@ -45,6 +45,8 @@ const (
 	namespace      = "namespace"
 	namespaceState = "namespace_state"
 	targetCluster  = "target_cluster"
+	fromCluster    = "from_cluster"
+	toCluster      = "to_cluster"
 	taskQueue      = "taskqueue"
 	workflowType   = "workflowType"
 	activityType   = "activityType"
@@ -135,6 +137,16 @@ func TargetClusterTag(value string) Tag {
 		value = unknownValue
 	}
 	return &tagImpl{key: targetCluster, value: value}
+}
+
+// FromClusterIDTag returns a new from cluster tag.
+func FromClusterIDTag(value int32) Tag {
+	return &tagImpl{key: fromCluster, value: strconv.FormatInt(int64(value), 10)}
+}
+
+// ToClusterIDTag returns a new to cluster tag.
+func ToClusterIDTag(value int32) Tag {
+	return &tagImpl{key: toCluster, value: strconv.FormatInt(int64(value), 10)}
 }
 
 // TaskQueueTag returns a new task queue tag.

@@ -107,6 +107,7 @@ type (
 		// mutable data
 		taskState int32
 		attempt   int32
+		namespace atomic.Value
 	}
 )
 
@@ -237,13 +238,20 @@ func (e *ExecutableTaskImpl) Attempt() int {
 func (e *ExecutableTaskImpl) emitFinishMetrics(
 	now time.Time,
 ) {
+	nsTag := metrics.NamespaceUnknownTag()
+	item := e.namespace.Load()
+	if item != nil {
+		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
+	}
 	e.MetricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
 		now.Sub(e.taskReceivedTime),
 		metrics.OperationTag(e.metricsTag),
+		nsTag,
 	)
 	e.MetricsHandler.Timer(metrics.ReplicationLatency.GetMetricName()).Record(
 		e.taskReceivedTime.Sub(e.taskCreationTime),
 		metrics.OperationTag(e.metricsTag),
+		nsTag,
 	)
 	// TODO consider emit attempt metrics
 }
@@ -335,6 +343,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
+		e.namespace.Store(namespaceEntry.Name())
 		shouldProcessTask := false
 	FilterLoop:
 		for _, targetCluster := range namespaceEntry.ClusterNames() {

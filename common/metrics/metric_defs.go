@@ -1036,8 +1036,6 @@ const (
 	ReplicationTaskCleanupScope = "ReplicationTaskCleanup"
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
 	ReplicationDLQStatsScope = "ReplicationDLQStats"
-	// SyncWorkflowStateTaskScope is the scope used by closed workflow task replication processing
-	SyncWorkflowStateTaskScope = "SyncWorkflowStateTask"
 	// EventsCacheGetEventScope is the scope used by events cache
 	EventsCacheGetEventScope = "EventsCacheGetEvent"
 	// EventsCachePutEventScope is the scope used by events cache
@@ -1148,8 +1146,10 @@ const (
 	SyncShardTaskScope = "SyncShardTask"
 	// SyncActivityTaskScope is the scope used by sync activity
 	SyncActivityTaskScope = "SyncActivityTask"
-	// SyncWorkflowTaskScope is the scope used by sync workflow
-	SyncWorkflowTaskScope = "SyncWorkflowTask"
+	// SyncWorkflowStateTaskScope is the scope used by closed workflow task replication processing
+	SyncWorkflowStateTaskScope = "SyncWorkflowStateTask"
+	// SyncWatermarkScope is the scope used by closed workflow task replication processing
+	SyncWatermarkScope = "SyncWatermark"
 	// NoopTaskScope is the scope used by noop task
 	NoopTaskScope = "NoopTask"
 	// UnknownTaskScope is the scope used by unknown task
@@ -1445,6 +1445,9 @@ var (
 	WorkflowContinuedAsNewCount                    = NewCounterDef("workflow_continued_as_new")
 	LastRetrievedMessageID                         = NewGaugeDef("last_retrieved_message_id")
 	LastProcessedMessageID                         = NewGaugeDef("last_processed_message_id")
+	ReplicationTasksSend                           = NewCounterDef("replication_tasks_send")
+	ReplicationTasksRecv                           = NewCounterDef("replication_tasks_recv")
+	ReplicationTasksRecvBacklog                    = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
 	ReplicationTasksApplied                        = NewCounterDef("replication_tasks_applied")
 	ReplicationTasksFailed                         = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksLag                            = NewTimerDef("replication_tasks_lag")
