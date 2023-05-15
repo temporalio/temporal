@@ -536,7 +536,7 @@ func fieldMatches[T comparable](row map[string]interface{}, column string, value
 	existingValue, ok := row[column]
 	if !ok {
 		msg := fmt.Sprintf("Unexpected error: column not found %q", column)
-		return false, serviceerror.NewUnavailable(msg)
+		return false, serviceerror.NewInternal(msg)
 	}
 	return existingValue == value, nil
 }
