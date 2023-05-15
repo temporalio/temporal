@@ -108,10 +108,10 @@ func newPerShardPerNamespacePriorityRateLimiter(
 	return quotas.NewMapRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if hasCaller(req) && hasCallerSegment(req) {
 			return newPriorityRateLimiter(func() float64 {
-				if perShardNamespaceMaxQPS == nil || perShardNamespaceMaxQPS(req.CallerSegment) <= 0 {
+				if perShardNamespaceMaxQPS == nil || perShardNamespaceMaxQPS(req.Caller) <= 0 {
 					return float64(hostMaxQPS())
 				}
-				return float64(perShardNamespaceMaxQPS(req.CallerSegment))
+				return float64(perShardNamespaceMaxQPS(req.Caller))
 			},
 				requestPriorityFn,
 			)

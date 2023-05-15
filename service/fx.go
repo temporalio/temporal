@@ -54,7 +54,7 @@ func NewPersistenceRateLimitingParams(
 	maxQps dynamicconfig.IntPropertyFn,
 	globalMaxQps dynamicconfig.IntPropertyFn,
 	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithShardIDFilter,
+	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 ) PersistenceRateLimitingParams {
 	return PersistenceRateLimitingParams{

@@ -40,7 +40,7 @@ import (
 type (
 	PersistenceMaxQps                  dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQps         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithShardIDFilter
+	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
 	ClusterName                        string
 
