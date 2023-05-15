@@ -149,8 +149,9 @@ func Invoke(
 			}
 
 			scheduledEventID = newWorkflowTask.ScheduledEventID
-			_, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name)
-			scheduleToStartTimeout = *scheduleToStartTimeoutPtr
+			if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
+				scheduleToStartTimeout = *scheduleToStartTimeoutPtr
+			}
 			taskQueue = taskqueuepb.TaskQueue{
 				Name: newWorkflowTask.TaskQueue.Name,
 				Kind: newWorkflowTask.TaskQueue.Kind,
