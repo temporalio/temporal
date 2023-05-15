@@ -141,7 +141,7 @@ func (m *MetadataStore) CreateNamespace(
 		if err != nil {
 			return nil, err
 		}
-		if matched {
+		if !matched {
 			msg := fmt.Sprintf("CreateNamespace with name %v and id %v failed because another namespace with name %v already exists with the same id.", request.Name, request.ID, name)
 			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 		}
@@ -187,11 +187,11 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 	if !applied {
 
 		// if both conditions fail, find the one related to the first query
-		matches, err := fieldMatches(previous, "name", request.Name)
+		matched, err := fieldMatches(previous, "name", request.Name)
 		if err != nil {
 			return nil, err
 		}
-		if !matches {
+		if !matched {
 			m := make(map[string]interface{})
 			if iter.MapScan(m) {
 				if applied, ok := m["[applied]"].(bool); ok && !applied {
@@ -201,11 +201,11 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 		}
 
 		// if conditional failure is due to a duplicate name in namespaces table
-		matches, err = fieldMatches(previous, "name", request.Name)
+		matched, err = fieldMatches(previous, "name", request.Name)
 		if err != nil {
 			return nil, err
 		}
-		if matches {
+		if matched {
 			var existingID string
 			if id, ok := previous["id"]; ok {
 				existingID = gocql.UUIDToString(id)
