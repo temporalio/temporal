@@ -141,6 +141,9 @@ type (
 
 		hBuilder *HistoryBuilder
 
+		// running approximate total size of mutable state in bytes
+		approximateSize int
+
 		// in memory only attributes
 		// indicate the current version
 		currentVersion int64
@@ -225,6 +228,7 @@ func NewMutableState(
 
 		updateInfos: make(map[string]*persistencespb.UpdateInfo),
 
+		approximateSize:  0,
 		currentVersion:   namespaceEntry.FailoverVersion(),
 		bufferEventsInDB: nil,
 		stateInDB:        enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
@@ -294,6 +298,7 @@ func newMutableStateFromDB(
 	}
 	for _, activityInfo := range dbRecord.ActivityInfos {
 		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduledEventId
+		mutableState.approximateSize += activityInfo.Size()
 		if (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0 {
 			// Sets last pending timer heartbeat to year 2000.
 			// This ensures at least one heartbeat task will be processed for the pending activity.
@@ -306,22 +311,35 @@ func newMutableStateFromDB(
 	}
 	for _, timerInfo := range dbRecord.TimerInfos {
 		mutableState.pendingTimerEventIDToID[timerInfo.GetStartedEventId()] = timerInfo.GetTimerId()
+		mutableState.approximateSize += timerInfo.Size()
 	}
 
 	if dbRecord.ChildExecutionInfos != nil {
 		mutableState.pendingChildExecutionInfoIDs = dbRecord.ChildExecutionInfos
 	}
+	for _, childInfo := range dbRecord.ChildExecutionInfos {
+		mutableState.approximateSize += childInfo.Size()
+	}
 
 	if dbRecord.RequestCancelInfos != nil {
 		mutableState.pendingRequestCancelInfoIDs = dbRecord.RequestCancelInfos
+	}
+	for _, cancelInfo := range dbRecord.RequestCancelInfos {
+		mutableState.approximateSize += cancelInfo.Size()
 	}
 
 	if dbRecord.SignalInfos != nil {
 		mutableState.pendingSignalInfoIDs = dbRecord.SignalInfos
 	}
+	for _, signalInfo := range dbRecord.SignalInfos {
+		mutableState.approximateSize += signalInfo.Size()
+	}
 
 	if dbRecord.UpdateInfos != nil {
 		mutableState.updateInfos = dbRecord.UpdateInfos
+	}
+	for _, updateInfo := range dbRecord.UpdateInfos {
+		mutableState.approximateSize += updateInfo.Size()
 	}
 
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
@@ -336,6 +354,8 @@ func newMutableStateFromDB(
 		dbRecord.BufferedEvents,
 		mutableState.metricsHandler,
 	)
+
+	mutableState.approximateSize += mutableState.hBuilder.SizeInBytesOfBufferedEvents()
 
 	mutableState.currentVersion = common.EmptyVersion
 	mutableState.bufferEventsInDB = dbRecord.BufferedEvents
