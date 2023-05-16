@@ -79,6 +79,7 @@ func (i *RateLimitInterceptor) Intercept(
 		token,
 		"", // this interceptor layer does not throttle based on caller name
 		"", // this interceptor layer does not throttle based on caller type
+		0,  // this interceptor layer does not throttle based on caller segment
 		"", // this interceptor layer does not throttle based on call initiation
 	)) {
 		return nil, RateLimitServerBusy

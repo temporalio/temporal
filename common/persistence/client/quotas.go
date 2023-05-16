@@ -31,6 +31,13 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+type (
+	perShardPerNamespaceKey struct {
+		namespaceID string
+		shardID     int32
+	}
+)
+
 var (
 	CallerTypeDefaultPriority = map[string]int{
 		headers.CallerTypeAPI:         1,
@@ -76,6 +83,7 @@ var (
 func NewPriorityRateLimiter(
 	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
+	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	requestPriorityFn quotas.RequestPriorityFn,
 ) quotas.RequestRateLimiter {
 	hostRequestRateLimiter := newPriorityRateLimiter(
@@ -83,29 +91,66 @@ func NewPriorityRateLimiter(
 		requestPriorityFn,
 	)
 
-	return quotas.NewNamespaceRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
-		if req.Caller != "" && req.Caller != headers.CallerNameSystem {
-			return quotas.NewMultiRequestRateLimiter(
-				newPriorityRateLimiter(
-					func() float64 {
-						if namespaceMaxQPS == nil {
-							return float64(hostMaxQPS())
-						}
+	return quotas.NewMultiRequestRateLimiter(
+		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		hostRequestRateLimiter,
+	)
+}
 
-						namespaceQPS := float64(namespaceMaxQPS(req.Caller))
-						if namespaceQPS <= 0 {
-							return float64(hostMaxQPS())
-						}
-
-						return namespaceQPS
-					},
-					requestPriorityFn,
-				),
-				hostRequestRateLimiter,
+func newPerShardPerNamespacePriorityRateLimiter(
+	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
+	hostMaxQPS PersistenceMaxQps,
+	requestPriorityFn quotas.RequestPriorityFn,
+) quotas.RequestRateLimiter {
+	return quotas.NewMapRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
+		if hasCaller(req) && hasCallerSegment(req) {
+			return newPriorityRateLimiter(func() float64 {
+				if perShardNamespaceMaxQPS == nil || perShardNamespaceMaxQPS(req.Caller) <= 0 {
+					return float64(hostMaxQPS())
+				}
+				return float64(perShardNamespaceMaxQPS(req.Caller))
+			},
+				requestPriorityFn,
 			)
 		}
+		return quotas.NoopRequestRateLimiter
+	},
+		perShardPerNamespaceKeyFn,
+	)
+}
 
-		return hostRequestRateLimiter
+func perShardPerNamespaceKeyFn(req quotas.Request) perShardPerNamespaceKey {
+	return perShardPerNamespaceKey{
+		namespaceID: req.Caller,
+		shardID:     req.CallerSegment,
+	}
+}
+
+func newPriorityNamespaceRateLimiter(
+	namespaceMaxQPS PersistenceNamespaceMaxQps,
+	hostMaxQPS PersistenceMaxQps,
+	requestPriorityFn quotas.RequestPriorityFn,
+) quotas.RequestRateLimiter {
+	return quotas.NewNamespaceRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
+		if hasCaller(req) {
+			return newPriorityRateLimiter(
+				func() float64 {
+					if namespaceMaxQPS == nil {
+						return float64(hostMaxQPS())
+					}
+
+					namespaceQPS := float64(namespaceMaxQPS(req.Caller))
+					if namespaceQPS <= 0 {
+						return float64(hostMaxQPS())
+					}
+
+					return namespaceQPS
+				},
+				requestPriorityFn,
+			)
+		}
+		return quotas.NoopRequestRateLimiter
 	})
 }
 
@@ -157,4 +202,12 @@ func RequestPriorityFn(req quotas.Request) int {
 		// default requests to high priority to be consistent with existing behavior
 		return RequestPrioritiesOrdered[0]
 	}
+}
+
+func hasCaller(req quotas.Request) bool {
+	return req.Caller != "" && req.Caller != headers.CallerNameSystem
+}
+
+func hasCallerSegment(req quotas.Request) bool {
+	return req.CallerSegment > 0 && req.CallerSegment != p.CallerSegmentMissing
 }
