@@ -231,6 +231,20 @@ func (c *metricClient) GetWorkerBuildIdCompatibility(
 	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
+func (c *metricClient) GetWorkerTaskReachability(
+	ctx context.Context,
+	request *workflowservice.GetWorkerTaskReachabilityRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.FrontendClientGetWorkerTaskReachabilityScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetWorkerTaskReachability(ctx, request, opts...)
+}
+
 func (c *metricClient) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
