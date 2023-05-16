@@ -211,6 +211,7 @@ type (
 		IsCancelRequested() bool
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
+		GetApproximateSize() int
 
 		CurrentTaskQueue() *taskqueuepb.TaskQueue
 		SetStickyTaskQueue(name string, scheduleToStartTimeout *time.Duration)

@@ -872,25 +872,10 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 func (c *ContextImpl) enforceSizeCheck(
 	ctx context.Context,
 ) (bool, error) {
-	namespaceName := c.GetNamespace().String()
-	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
-	historySizeLimitError := c.config.HistorySizeLimitError(namespaceName)
-	historyCountLimitWarn := c.config.HistoryCountLimitWarn(namespaceName)
-	historyCountLimitError := c.config.HistoryCountLimitError(namespaceName)
-
-	historySize := int(c.GetHistorySize())
-	historyCount := int(c.MutableState.GetNextEventID() - 1)
-
-	// Hard terminate workflow if still running and breached size or count limit
-	if (historySize > historySizeLimitError || historyCount > historyCountLimitError) &&
-		c.MutableState.IsWorkflowExecutionRunning() {
-		c.logger.Error("history size exceeds error limit.",
-			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
-			tag.WorkflowID(c.workflowKey.WorkflowID),
-			tag.WorkflowRunID(c.workflowKey.RunID),
-			tag.WorkflowHistorySize(historySize),
-			tag.WorkflowEventCount(historyCount))
-
+	historyMaxExceeded := c.maxHistorySizeExceeded()
+	msMaxExceeded := c.maxMutableStateSizeExceeded()
+	// Hard terminate workflow if still running and breached history size, history count, or ms size limits
+	if historyMaxExceeded || msMaxExceeded {
 		// Discard pending changes in MutableState so we can apply terminate state transition
 		c.Clear()
 
@@ -902,11 +887,16 @@ func (c *ContextImpl) enforceSizeCheck(
 
 		// Terminate workflow is written as a separate batch and might result in more than one event as we close the
 		// outstanding workflow task before terminating the workflow
+		failureReason := common.FailureReasonHistorySizeExceedsLimit
+		if msMaxExceeded {
+			failureReason = common.FailureReasonMutableStateSizeExceedsLimit
+		}
+
 		eventBatchFirstEventID := mutableState.GetNextEventID()
 		if err := TerminateWorkflow(
 			mutableState,
 			eventBatchFirstEventID,
-			common.FailureReasonSizeExceedsLimit,
+			failureReason,
 			nil,
 			consts.IdentityHistoryService,
 			false,
@@ -918,6 +908,33 @@ func (c *ContextImpl) enforceSizeCheck(
 		return true, nil
 	}
 
+	return false, nil
+}
+
+// Returns true if the history size or event count should trigger a forced termination of the execution
+// Prints a warning log message if history size or event count are over the warn threshold but not forced termination
+func (c *ContextImpl) maxHistorySizeExceeded() bool {
+	namespaceName := c.GetNamespace().String()
+	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
+	historySizeLimitError := c.config.HistorySizeLimitError(namespaceName)
+	historyCountLimitWarn := c.config.HistoryCountLimitWarn(namespaceName)
+	historyCountLimitError := c.config.HistoryCountLimitError(namespaceName)
+
+	historySize := int(c.GetHistorySize())
+	historyCount := int(c.MutableState.GetNextEventID() - 1)
+
+	if (historySize > historySizeLimitError || historyCount > historyCountLimitError) &&
+		c.MutableState.IsWorkflowExecutionRunning() {
+		c.logger.Error("history size exceeds error limit.",
+			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+			tag.WorkflowID(c.workflowKey.WorkflowID),
+			tag.WorkflowRunID(c.workflowKey.RunID),
+			tag.WorkflowHistorySize(historySize),
+			tag.WorkflowEventCount(historyCount))
+
+		return true
+	}
+
 	if historySize > historySizeLimitWarn || historyCount > historyCountLimitWarn {
 		c.logger.Warn("history size exceeds warn limit.",
 			tag.WorkflowNamespaceID(c.MutableState.GetExecutionInfo().NamespaceId),
@@ -927,7 +944,34 @@ func (c *ContextImpl) enforceSizeCheck(
 			tag.WorkflowEventCount(historyCount))
 	}
 
-	return false, nil
+	return false
+}
+
+func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
+	mutableStateSizeLimitError := c.config.MutableStateSizeLimitError()
+	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
+
+	mutableStateSize := c.MutableState.GetApproximateSize()
+
+	if mutableStateSize > mutableStateSizeLimitError && c.MutableState.IsWorkflowExecutionRunning() {
+		c.logger.Error("mutable state size exceeds error limit.",
+			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+			tag.WorkflowID(c.workflowKey.WorkflowID),
+			tag.WorkflowRunID(c.workflowKey.RunID),
+			tag.WorkflowMutableStateSize(mutableStateSize))
+
+		return true
+	}
+
+	if mutableStateSize > mutableStateSizeLimitWarn {
+		c.logger.Warn("mutable state size exceeds warn limit.",
+			tag.WorkflowNamespaceID(c.MutableState.GetExecutionInfo().NamespaceId),
+			tag.WorkflowID(c.MutableState.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(c.MutableState.GetExecutionState().RunId),
+			tag.WorkflowMutableStateSize(mutableStateSize))
+	}
+
+	return false
 }
 
 func emitStateTransitionCount(

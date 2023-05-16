@@ -1514,6 +1514,10 @@ func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 	return false
 }
 
+func (ms *MutableStateImpl) GetApproximateSize() int {
+	return ms.approximateSize
+}
+
 func (ms *MutableStateImpl) AddSignalRequested(
 	requestID string,
 ) {
