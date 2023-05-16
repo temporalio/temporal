@@ -344,8 +344,6 @@ Loop:
 		if childWorkflowInfo.StartedEventId != common.EmptyEventID {
 			continue Loop
 		}
-
-		mutableState.GetChildExecutionInitiatedEvent(ctx, childWorkflowInfo.InitiatedEventId)
 		scheduleEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, childWorkflowInfo.InitiatedEventId)
 		if err != nil {
 			return err
