@@ -27,9 +27,11 @@ package client
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/quotas"
 	"golang.org/x/exp/slices"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -99,4 +101,58 @@ func (s *quotasSuite) TestCallOriginDefined() {
 		_, ok := definedAPIs[api]
 		s.True(ok)
 	}
+}
+
+func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
+	var namespaceMaxRPS = func(namespace string) int { return 1 }
+	var hostMaxRPS = func() int { return 1 }
+
+	var limiter = newPriorityNamespaceRateLimiter(namespaceMaxRPS, hostMaxRPS, RequestPriorityFn)
+
+	var request = quotas.NewRequest(
+		"test-api",
+		1,
+		"test-namespace",
+		"api",
+		-1,
+		"frontend",
+	)
+
+	requestTime := time.Now()
+	wasLimited := false
+
+	for i := 0; i < 2; i++ {
+		if !limiter.Allow(requestTime, request) {
+			wasLimited = true
+		}
+	}
+
+	s.True(wasLimited)
+}
+
+func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
+	var perShardNamespaceMaxRPS = func(namespace string) int { return 1 }
+	var hostMaxRPS = func() int { return 1 }
+
+	var limiter = newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxRPS, hostMaxRPS, RequestPriorityFn)
+
+	var request = quotas.NewRequest(
+		"test-api",
+		1,
+		"test-namespace",
+		"api",
+		1,
+		"frontend",
+	)
+
+	requestTime := time.Now()
+	wasLimited := false
+
+	for i := 0; i < 2; i++ {
+		if !limiter.Allow(requestTime, request) {
+			wasLimited = true
+		}
+	}
+
+	s.True(wasLimited)
 }

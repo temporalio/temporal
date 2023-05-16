@@ -3461,6 +3461,11 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 		return nil, errUpdateWorkflowExecutionAPINotAllowed
 	}
 
+	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
+		!wh.config.EnableUpdateWorkflowExecutionAsyncAccepted(request.Namespace) {
+		return nil, errUpdateWorkflowExecutionAsyncAcceptedNotAllowed
+	}
+
 	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{
 		NamespaceId: nsID.String(),
 		Request:     request,
