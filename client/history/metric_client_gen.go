@@ -119,6 +119,20 @@ func (c *metricClient) DescribeWorkflowExecution(
 	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) ForceDeleteWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.ForceDeleteWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientForceDeleteWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ForceDeleteWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) GenerateLastHistoryReplicationTasks(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
@@ -215,6 +229,48 @@ func (c *metricClient) GetShard(
 	}()
 
 	return c.client.GetShard(ctx, request, opts...)
+}
+
+func (c *metricClient) GetWorkflowExecutionHistory(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientGetWorkflowExecutionHistoryScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetWorkflowExecutionHistory(ctx, request, opts...)
+}
+
+func (c *metricClient) GetWorkflowExecutionHistoryReverse(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientGetWorkflowExecutionHistoryReverseScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetWorkflowExecutionHistoryReverse(ctx, request, opts...)
+}
+
+func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+	opts ...grpc.CallOption,
+) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientGetWorkflowExecutionRawHistoryV2Scope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
 }
 
 func (c *metricClient) IsActivityTaskValid(

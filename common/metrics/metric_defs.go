@@ -368,6 +368,14 @@ const (
 	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
 	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientStreamWorkflowReplicationMessagesScope = "HistoryClientStreamWorkflowReplicationMessages"
+	// HistoryClientGetWorkflowExecutionHistoryScope tracks RPC calls to history service
+	HistoryClientGetWorkflowExecutionHistoryScope = "HistoryClientGetWorkflowExecutionHistory"
+	// HistoryClientGetWorkflowExecutionHistoryReverseScope tracks RPC calls to history service
+	HistoryClientGetWorkflowExecutionHistoryReverseScope = "HistoryClientGetWorkflowExecutionHistoryReverse"
+	// HistoryClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to history service
+	HistoryClientGetWorkflowExecutionRawHistoryV2Scope = "HistoryClientGetWorkflowExecutionRawHistoryV2"
+	// HistoryClientForceDeleteWorkflowExecutionScope tracks RPC calls to history service
+	HistoryClientForceDeleteWorkflowExecutionScope = "HistoryClientForceDeleteWorkflowExecution"
 )
 
 // Matching Client Operations

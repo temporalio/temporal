@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
+
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 
@@ -57,6 +58,10 @@ import (
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionhistory"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionhistoryreverse"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
 	"go.temporal.io/server/service/history/api/isactivitytaskvalid"
 	"go.temporal.io/server/service/history/api/isworkflowtaskvalid"
 	"go.temporal.io/server/service/history/api/pollupdate"
@@ -808,4 +813,32 @@ func (e *historyEngineImpl) GetReplicationStatus(
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 	return replicationapi.GetStatus(ctx, request, e.shard, e.replicationAckMgr)
+}
+
+func (e *historyEngineImpl) GetWorkflowExecutionHistory(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryRequest,
+) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
+	return getworkflowexecutionhistory.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request)
+}
+
+func (e *historyEngineImpl) GetWorkflowExecutionHistoryReverse(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
+) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
+	return getworkflowexecutionhistoryreverse.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request)
+}
+
+func (e *historyEngineImpl) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
+	return getworkflowexecutionrawhistoryv2.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request)
+}
+
+func (e *historyEngineImpl) ForceDeleteWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.ForceDeleteWorkflowExecutionRequest,
+) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retError error) {
+	return forcedeleteworkflowexecution.Invoke(ctx, e.shard, request)
 }

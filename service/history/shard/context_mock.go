@@ -49,6 +49,7 @@ import (
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 	serialization "go.temporal.io/server/common/persistence/serialization"
+	manager "go.temporal.io/server/common/persistence/visibility/manager"
 	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
 	events "go.temporal.io/server/service/history/events"
@@ -577,6 +578,20 @@ func (m *MockContext) GetTimeSource() clock.TimeSource {
 func (mr *MockContextMockRecorder) GetTimeSource() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeSource", reflect.TypeOf((*MockContext)(nil).GetTimeSource))
+}
+
+// GetVisibilityManager mocks base method.
+func (m *MockContext) GetVisibilityManager() manager.VisibilityManager {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVisibilityManager")
+	ret0, _ := ret[0].(manager.VisibilityManager)
+	return ret0
+}
+
+// GetVisibilityManager indicates an expected call of GetVisibilityManager.
+func (mr *MockContextMockRecorder) GetVisibilityManager() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityManager", reflect.TypeOf((*MockContext)(nil).GetVisibilityManager))
 }
 
 // GetWorkflowExecution mocks base method.
@@ -1306,6 +1321,20 @@ func (m *MockControllableContext) GetTimeSource() clock.TimeSource {
 func (mr *MockControllableContextMockRecorder) GetTimeSource() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeSource", reflect.TypeOf((*MockControllableContext)(nil).GetTimeSource))
+}
+
+// GetVisibilityManager mocks base method.
+func (m *MockControllableContext) GetVisibilityManager() manager.VisibilityManager {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVisibilityManager")
+	ret0, _ := ret[0].(manager.VisibilityManager)
+	return ret0
+}
+
+// GetVisibilityManager indicates an expected call of GetVisibilityManager.
+func (mr *MockControllableContextMockRecorder) GetVisibilityManager() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityManager", reflect.TypeOf((*MockControllableContext)(nil).GetVisibilityManager))
 }
 
 // GetWorkflowExecution mocks base method.

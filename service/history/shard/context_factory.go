@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -66,6 +67,7 @@ type (
 		MetricsHandler              metrics.Handler
 		NamespaceRegistry           namespace.Registry
 		PayloadSerializer           serialization.Serializer
+		VisibilityManager           manager.VisibilityManager
 		PersistenceExecutionManager persistence.ExecutionManager
 		PersistenceShardManager     persistence.ShardManager
 		SaMapperProvider            searchattribute.MapperProvider
@@ -96,6 +98,7 @@ func (c *contextFactoryImpl) CreateContext(
 		closeCallback,
 		c.Logger,
 		c.ThrottledLogger,
+		c.VisibilityManager,
 		c.PersistenceExecutionManager,
 		c.PersistenceShardManager,
 		c.ClientBean,

@@ -2000,6 +2000,114 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	return nil
 }
 
+func (h *Handler) GetWorkflowExecutionHistory(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryRequest,
+) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.GetWorkflowExecutionHistory(ctx, request)
+}
+
+func (h *Handler) GetWorkflowExecutionHistoryReverse(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
+) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.GetWorkflowExecutionHistoryReverse(ctx, request)
+}
+
+func (h *Handler) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.GetWorkflowExecutionRawHistoryV2(ctx, request)
+}
+
+func (h *Handler) ForceDeleteWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.ForceDeleteWorkflowExecutionRequest,
+) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.ForceDeleteWorkflowExecution(ctx, request)
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

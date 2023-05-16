@@ -365,6 +365,9 @@ const (
 	FrontendMaxExecutionCountBatchOperationPerNamespace = "frontend.MaxExecutionCountBatchOperationPerNamespace"
 	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
 	FrontendEnableBatcher = "frontend.enableBatcher"
+	// FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
+	// service using the new RPCs. The remaining access history via the existing implementation.
+	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
 	//  UpdateWorkflowExecution API is under active development and is not ready for production use.

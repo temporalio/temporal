@@ -32,7 +32,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/collection"
@@ -88,6 +87,10 @@ type (
 		GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error)
 		UpdateWorkflowExecution(ctx context.Context, request *historyservice.UpdateWorkflowExecutionRequest) (*historyservice.UpdateWorkflowExecutionResponse, error)
 		PollWorkflowExecutionUpdate(ctx context.Context, request *historyservice.PollWorkflowExecutionUpdateRequest) (*historyservice.PollWorkflowExecutionUpdateResponse, error)
+		GetWorkflowExecutionHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponse, error)
+		GetWorkflowExecutionHistoryReverse(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryReverseRequest) (*historyservice.GetWorkflowExecutionHistoryReverseResponse, error)
+		GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryV2Request) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error)
+		ForceDeleteWorkflowExecution(ctx context.Context, request *historyservice.ForceDeleteWorkflowExecutionRequest) (*historyservice.ForceDeleteWorkflowExecutionResponse, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)

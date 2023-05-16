@@ -445,6 +445,29 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		}
 	}
 
+	if wh.config.accessHistory(wh.metricsScope(ctx)) {
+		response, err := wh.historyClient.GetWorkflowExecutionHistory(ctx,
+			&historyservice.GetWorkflowExecutionHistoryRequest{
+				NamespaceId:            namespaceID.String(),
+				Execution:              request.Execution,
+				MaximumPageSize:        request.MaximumPageSize,
+				NextPageToken:          request.NextPageToken,
+				WaitNewEvent:           request.WaitNewEvent,
+				HistoryEventFilterType: request.HistoryEventFilterType,
+				SkipArchival:           request.SkipArchival,
+				SendRawWorkflowHistory: wh.config.SendRawWorkflowHistory(request.GetNamespace()),
+				FollowsNextRunId:       wh.versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID),
+			})
+		if err != nil {
+			return nil, err
+		}
+		return &workflowservice.GetWorkflowExecutionHistoryResponse{
+			History:       response.History,
+			RawHistory:    response.RawHistory,
+			NextPageToken: response.NextPageToken,
+			Archived:      response.Archived,
+		}, nil
+	}
 	return wh.getWorkflowExecutionHistory(ctx, request)
 }
 
@@ -479,6 +502,22 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		request.MaximumPageSize = common.GetHistoryMaxPageSize
 	}
 
+	if wh.config.accessHistory(wh.metricsScope(ctx)) {
+		response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
+			&historyservice.GetWorkflowExecutionHistoryReverseRequest{
+				NamespaceId:     namespaceID.String(),
+				Execution:       request.Execution,
+				MaximumPageSize: request.MaximumPageSize,
+				NextPageToken:   request.NextPageToken,
+			})
+		if err != nil {
+			return nil, err
+		}
+		return &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
+			History:       response.History,
+			NextPageToken: response.NextPageToken,
+		}, nil
+	}
 	return wh.getWorkflowExecutionHistoryReverse(ctx, request)
 }
 
@@ -534,6 +573,30 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
+	if wh.config.accessHistory(wh.metricsScope(ctx)) {
+		namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+		if err != nil {
+			return nil, err
+		}
+
+		response, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx,
+			&historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId:         namespaceID.String(),
+				CompleteRequest:     request,
+				WithNewWorkflowTask: true,
+				MaximumPageSize:     int32(wh.config.HistoryMaxPageSize(request.GetNamespace())),
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		return &workflowservice.RespondWorkflowTaskCompletedResponse{
+			WorkflowTask:        response.NewWorkflowTask,
+			ActivityTasks:       response.ActivityTasks,
+			ResetHistoryEventId: response.ResetHistoryEventId,
+		}, nil
+	}
 	return wh.respondWorkflowTaskCompleted(ctx, request)
 }
 

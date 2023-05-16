@@ -79,6 +79,7 @@ func NewTestContext(
 		shardID:             shardInfo.GetShardId(),
 		owner:               shardInfo.GetOwner(),
 		stringRepr:          fmt.Sprintf("Shard(%d)", shardInfo.GetShardId()),
+		visibilityManager:   resourceTest.VisibilityManager,
 		executionManager:    resourceTest.ExecutionMgr,
 		metricsHandler:      resourceTest.MetricsHandler,
 		eventsCache:         eventsCache,

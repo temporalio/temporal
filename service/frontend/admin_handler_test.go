@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/testing/mocksdk"
 
@@ -135,7 +136,8 @@ func (s *adminHandlerSuite) SetupTest() {
 	}
 
 	cfg := &Config{
-		NumHistoryShards: 4,
+		NumHistoryShards:      4,
+		AccessHistoryFraction: dynamicconfig.GetFloatPropertyFn(0.0),
 	}
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
