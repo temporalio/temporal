@@ -1558,10 +1558,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// - command does not say to use latest build id
 	// - using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if !command.UseLatestBuildId &&
-		taskQueue == previousExecutionInfo.TaskQueue &&
-		previousExecutionInfo.WorkerVersionStamp.GetUseVersioning() {
-		sourceVersionStamp = previousExecutionInfo.WorkerVersionStamp
+	if !command.UseLatestBuildId {
+		sourceVersionStamp = common.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{

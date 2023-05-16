@@ -840,12 +840,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// - command does not say to use latest version
 	// - parent is using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if !attributes.UseLatestBuildId &&
-		task.NamespaceID == task.TargetNamespaceID &&
-		attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
-		if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetUseVersioning() {
-			sourceVersionStamp = stamp
-		}
+	if !attributes.UseLatestBuildId {
+		sourceVersionStamp = common.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
 	}
 
 	childRunID, childClock, err := t.startWorkflow(

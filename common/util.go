@@ -783,12 +783,21 @@ func OverrideWorkflowTaskTimeout(
 	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
 }
 
+// StampIfUsingVersioning returns the given WorkerVersionStamp if it is using versioning,
+// otherwise returns nil.
+func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.WorkerVersionStamp {
+	if stamp.GetUseVersioning() {
+		return stamp
+	}
+	return nil
+}
+
 func MakeVersionDirectiveForWorkflowTask(
 	stamp *commonpb.WorkerVersionStamp,
 	lastWorkflowTaskStartedEventID int64,
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
-	if stamp.GetUseVersioning() && stamp.GetBuildId() != "" {
+	if StampIfUsingVersioning(stamp).GetBuildId() != "" {
 		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
 	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
 		// first workflow task
@@ -804,8 +813,8 @@ func MakeVersionDirectiveForActivityTask(
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
 	if useLatestBuildId {
-		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{&types.Empty{}}
-	} else if stamp.GetUseVersioning() && stamp.GetBuildId() != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	} else if StampIfUsingVersioning(stamp).GetBuildId() != "" {
 		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
 	}
 	// else: unversioned queue
