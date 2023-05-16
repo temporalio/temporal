@@ -63,6 +63,9 @@ message StartWorkflowExecutionRequest {
     temporal.api.failure.v1.Failure continued_failure = 7;
     temporal.api.common.v1.Payloads last_completion_result = 8;
     google.protobuf.Duration first_workflow_task_backoff = 9 [(gogoproto.stdduration) = true];
+    // For child or continued-as-new workflows, including a version here from the source
+    // (parent/previous) will set the initial version stamp of this workflow.
+    temporal.api.common.v1.WorkerVersionStamp source_version_stamp = 10;
 }
 
 message StartWorkflowExecutionResponse {

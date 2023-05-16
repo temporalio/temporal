@@ -191,6 +191,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		OriginalExecutionRunId:          originalRunID,
 		Memo:                            req.Memo,
 		SearchAttributes:                req.SearchAttributes,
+		SourceVersionStamp:              request.SourceVersionStamp,
 	}
 	parentInfo := request.ParentExecutionInfo
 	if parentInfo != nil {
@@ -535,6 +536,7 @@ func (b *HistoryBuilder) AddContinuedAsNewEvent(
 		LastCompletionResult:         command.LastCompletionResult,
 		Memo:                         command.Memo,
 		SearchAttributes:             command.SearchAttributes,
+		UseLatestBuildId:             command.UseLatestBuildId,
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
