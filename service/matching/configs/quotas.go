@@ -44,6 +44,7 @@ var (
 		"InvalidateTaskQueueUserData":            0,
 		"GetTaskQueueUserData":                   0,
 		"ApplyTaskQueueUserDataReplicationEvent": 0,
+		"GetBuildIdTaskQueueMapping":             0,
 	}
 
 	APIPrioritiesOrdered = []int{0}
