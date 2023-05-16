@@ -35,6 +35,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -800,12 +801,15 @@ func MakeVersionDirectiveForWorkflowTask(
 
 func MakeVersionDirectiveForActivityTask(
 	stamp *commonpb.WorkerVersionStamp,
+	useLatestBuildId bool,
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
-	// TODO: look at activity task scheduled attributes to decide if we should do UseDefault
-	if stamp.GetBuildId() != "" {
+	if useLatestBuildId {
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{&types.Empty{}}
+	} else if stamp.GetUseVersioning() && stamp.GetBuildId() != "" {
 		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
 	}
+	// else: unversioned queue
 	return &directive
 }
 

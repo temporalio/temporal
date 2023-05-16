@@ -2168,6 +2168,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		TaskQueue:               attributes.TaskQueue.GetName(),
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
+		UseLatestBuildId:        attributes.UseLatestBuildId,
 	}
 	if ai.HasRetryPolicy {
 		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()
