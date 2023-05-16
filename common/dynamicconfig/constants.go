@@ -281,6 +281,11 @@ const (
 	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
+	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
+	// asynchronous workflow execution update that waits on the "Accepted"
+	// lifecycle stage. Default value is `false`.
+	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = "frontend.enableUpdateWorkflowExecutionAsyncAccepted"
+
 	// FrontendEnableUpdateWorkflowExecution enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
 
