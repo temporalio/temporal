@@ -1961,13 +1961,15 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 	ctx := NewContext()
 	tq1 := s.T().Name()
 	tq2 := s.T().Name() + "-2"
+	v0 := s.T().Name() + "v0"
+	v01 := s.T().Name() + "v0.1"
 	var err error
 
 	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq1,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "v0",
+			AddNewBuildIdInNewDefaultSet: v0,
 		},
 	})
 	s.Require().NoError(err)
@@ -1975,7 +1977,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 		Namespace: s.namespace,
 		TaskQueue: tq2,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "v0",
+			AddNewBuildIdInNewDefaultSet: v0,
 		},
 	})
 	s.Require().NoError(err)
@@ -1984,8 +1986,8 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 		TaskQueue: tq1,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
 			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-				ExistingCompatibleBuildId: "v0",
-				NewBuildId:                "v0.1",
+				ExistingCompatibleBuildId: v0,
+				NewBuildId:                v01,
 			},
 		},
 	})
@@ -1995,12 +1997,12 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 
 	reachabilityResponse, err = s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
 		Namespace: s.namespace,
-		Subject:   &workflowservice.GetWorkerTaskReachabilityRequest_BuildId{BuildId: "v0"},
+		Subject:   &workflowservice.GetWorkerTaskReachabilityRequest_BuildId{BuildId: v0},
 		Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_Namespace{Namespace: &types.Empty{}}},
 	})
 	s.Require().NoError(err)
 	s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
-		BuildId: "v0",
+		BuildId: v0,
 		TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{
 			{TaskQueue: tq1, Reachability: []enumspb.TaskReachability(nil)},
 			{TaskQueue: tq2, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_NEW_WORKFLOWS}},
@@ -2020,7 +2022,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 	s.Eventually(func() bool {
 		reachabilityResponse, err = s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
 			Namespace: s.namespace,
-			Subject:   &workflowservice.GetWorkerTaskReachabilityRequest_BuildId{BuildId: "v0.1"},
+			Subject:   &workflowservice.GetWorkerTaskReachabilityRequest_BuildId{BuildId: v01},
 			Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_Namespace{Namespace: &types.Empty{}}},
 		})
 		s.Require().NoError(err)
@@ -2028,7 +2030,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 			return false
 		}
 		s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
-			BuildId: "v0.1",
+			BuildId: v01,
 			TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{
 				{TaskQueue: tq1, Reachability: []enumspb.TaskReachability{
 					enumspb.TASK_REACHABILITY_NEW_WORKFLOWS,
@@ -2042,15 +2044,16 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 
 func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInNamespace() {
 	ctx := NewContext()
+	buildId := s.T().Name() + "v0"
 
 	reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
 		Namespace: s.namespace,
-		Subject:   &workflowservice.GetWorkerTaskReachabilityRequest_BuildId{BuildId: "v0.1"},
+		Subject:   &workflowservice.GetWorkerTaskReachabilityRequest_BuildId{BuildId: buildId},
 		Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_Namespace{Namespace: &types.Empty{}}},
 	})
 	s.Require().NoError(err)
 	s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
-		BuildId:               "v0.1",
+		BuildId:               buildId,
 		TaskQueueReachability: []*taskqueuepb.TaskQueueReachability(nil),
 	}}, reachabilityResponse.BuildIdReachability)
 }
@@ -2058,16 +2061,18 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInName
 func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTaskQueue() {
 	ctx := NewContext()
 	tq := s.T().Name()
+	v0 := s.T().Name() + "v0"
+	v01 := s.T().Name() + "v0.1"
 
 	checkReachability := func() {
 		reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
 			Namespace: s.namespace,
-			Subject:   &workflowservice.GetWorkerTaskReachabilityRequest_BuildId{BuildId: "v0.1"},
+			Subject:   &workflowservice.GetWorkerTaskReachabilityRequest_BuildId{BuildId: v01},
 			Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_TaskQueue{TaskQueue: tq}},
 		})
 		s.Require().NoError(err)
 		s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
-			BuildId: "v0.1",
+			BuildId: v01,
 			TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{
 				{TaskQueue: tq, Reachability: []enumspb.TaskReachability(nil)},
 			},
@@ -2082,7 +2087,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 		Namespace: s.namespace,
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "v0",
+			AddNewBuildIdInNewDefaultSet: v0,
 		},
 	})
 	s.Require().NoError(err)
@@ -2113,8 +2118,15 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 				Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_TaskQueue{TaskQueue: tq}},
 			})
 			s.Require().NoError(err)
-			if len(reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability) < len(expectedReachability) {
+			if len(reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability) != len(expectedReachability) {
 				return false
+			}
+			actualReachability := reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability
+			for i, expected := range expectedReachability {
+				actual := actualReachability[i]
+				if expected != actual {
+					return false
+				}
 			}
 			s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
 				BuildId: "",
@@ -2160,7 +2172,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 		Namespace: s.namespace,
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "v0",
+			AddNewBuildIdInNewDefaultSet: s.T().Name() + "-v0",
 		},
 	})
 	s.Require().NoError(err)
