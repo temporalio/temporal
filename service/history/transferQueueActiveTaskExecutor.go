@@ -836,6 +836,18 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName = namespaceEntry.Name()
 	}
 
+	// copy version stamp from parent to child if:
+	// - command does not say to use latest version
+	// - parent is using versioning
+	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	if !attributes.UseLatestBuildId &&
+		task.NamespaceID == task.TargetNamespaceID &&
+		attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
+		if stamp := mutableState.GetWorkerVersionStamp(); stamp.GetUseVersioning() {
+			sourceVersionStamp = stamp
+		}
+	}
+
 	childRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
@@ -843,6 +855,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName,
 		childInfo.CreateRequestId,
 		attributes,
+		sourceVersionStamp,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1327,6 +1340,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	targetNamespace namespace.Name,
 	childRequestID string,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
+	sourceVersionStamp *commonpb.WorkerVersionStamp,
 ) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1362,6 +1376,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		},
 		t.shard.GetTimeSource().Now(),
 	)
+
+	request.SourceVersionStamp = sourceVersionStamp
 
 	response, err := t.historyClient.StartWorkflowExecution(ctx, request)
 	if err != nil {

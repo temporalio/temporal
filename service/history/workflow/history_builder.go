@@ -912,6 +912,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 			Memo:                         command.Memo,
 			SearchAttributes:             command.SearchAttributes,
 			ParentClosePolicy:            command.GetParentClosePolicy(),
+			UseLatestBuildId:             command.UseLatestBuildId,
 		},
 	}
 
