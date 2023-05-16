@@ -40,44 +40,24 @@ import (
 
 // Little helper to concurrently map a function over input and fail fast on error.
 func raceMap[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([]OUT, error) {
-	var group sync.WaitGroup
-	group.Add(len(input))
 	errorsCh := make(chan error, len(input))
-	doneCh := make(chan OUT, len(input))
-	results := make([]OUT, 0, len(input))
+	results := make([]OUT, len(input))
 
-	defer func() {
-		go func() {
-			group.Wait()
-			close(doneCh)
-			close(errorsCh)
-		}()
-	}()
-
-	for _, in := range input {
+	for i, in := range input {
+		i := i
 		in := in
-		group.Add(1)
 		go func() {
-			defer group.Done()
-			result, err := mapper(in)
-			if err != nil {
-				errorsCh <- err
-				return
-			}
-			doneCh <- result
+			var err error
+			results[i], err = mapper(in)
+			errorsCh <- err
 		}()
 	}
-	for {
-		select {
-		case err := <-errorsCh:
+	for range input {
+		if err := <-errorsCh; err != nil {
 			return nil, err
-		case result := <-doneCh:
-			results = append(results, result)
-			if len(results) == len(input) {
-				return results, nil
-			}
 		}
 	}
+	return results, nil
 }
 
 // Helper for deduping GetWorkerBuildIdCompatibility matching requests.
