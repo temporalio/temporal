@@ -1087,7 +1087,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskqueue := "taskqueue"
 	activityID := "activity"
 	activityType := "activity type"
 	timerTimeout := 2 * time.Second
@@ -1096,7 +1095,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 		event.GetEventId(),
 		activityID,
 		activityType,
-		taskqueue,
+		taskQueueName,
 		nil,
 		timerTimeout,
 		timerTimeout,
