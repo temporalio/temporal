@@ -99,7 +99,6 @@ func NewStateRebuilder(
 			shard,
 			shard.GetConfig(),
 			shard.GetNamespaceRegistry(),
-			shard.GetEventsCache(),
 			logger,
 		),
 		rebuiltHistorySize: 0,
