@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/utils"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -46,7 +47,8 @@ func Invoke(
 	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
 ) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -57,12 +59,18 @@ func Invoke(
 		expectedNextEventID int64,
 		currentBranchToken []byte,
 	) ([]byte, string, int64, error) {
-		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-			NamespaceId:         namespaceUUID.String(),
-			Execution:           execution,
-			ExpectedNextEventId: expectedNextEventID,
-			CurrentBranchToken:  currentBranchToken,
-		})
+		response, err := api.GetOrPollMutableState(
+			ctx,
+			&historyservice.GetMutableStateRequest{
+				NamespaceId:         namespaceUUID.String(),
+				Execution:           execution,
+				ExpectedNextEventId: expectedNextEventID,
+				CurrentBranchToken:  currentBranchToken,
+			},
+			shard,
+			workflowConsistencyChecker,
+			eventNotifier,
+		)
 
 		if err != nil {
 			return nil, "", 0, err
@@ -94,12 +102,12 @@ func Invoke(
 		continuationToken.NextEventId = common.EmptyEventID
 		continuationToken.PersistenceToken = nil
 	} else {
-		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
+		continuationToken, err = utils.DeserializeHistoryToken(request.NextPageToken)
 		if err != nil {
-			return nil, errInvalidNextPageToken
+			return nil, utils.ErrInvalidNextPageToken
 		}
 		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
-			return nil, errNextPageTokenRunIDMismatch
+			return nil, utils.ErrNextPageTokenRunIDMismatch
 		}
 
 		execution.RunId = continuationToken.GetRunId()
@@ -110,18 +118,25 @@ func Invoke(
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
 		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			wh.trimHistoryNode(ctx, namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
+			utils.TrimHistoryNode(
+				ctx,
+				shard,
+				workflowConsistencyChecker,
+				eventNotifier,
+				namespaceID.String(),
+				execution.GetWorkflowId(),
+				execution.GetRunId(),
+			)
 		}
 	}()
 
 	history := &historypb.History{}
 	history.Events = []*historypb.HistoryEvent{}
 	// return all events
-	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = wh.getHistoryReverse(
+	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = utils.GetHistoryReverse(
 		ctx,
-		wh.metricsScope(ctx),
+		shard,
 		namespaceID,
-		namespace.Name(request.GetNamespace()),
 		*execution,
 		continuationToken.NextEventId,
 		lastFirstTxnID,
@@ -138,7 +153,7 @@ func Invoke(
 		continuationToken = nil
 	}
 
-	nextToken, err := serializeHistoryToken(continuationToken)
+	nextToken, err := utils.SerializeHistoryToken(continuationToken)
 	if err != nil {
 		return nil, err
 	}

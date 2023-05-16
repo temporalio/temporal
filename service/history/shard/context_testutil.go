@@ -106,6 +106,7 @@ func NewTestContext(
 		saProvider:              resourceTest.GetSearchAttributesProvider(),
 		saMapperProvider:        resourceTest.GetSearchAttributesMapperProvider(),
 		historyClient:           resourceTest.GetHistoryClient(),
+		payloadSerializer:       resourceTest.GetPayloadSerializer(),
 		archivalMetadata:        resourceTest.GetArchivalMetadata(),
 		hostInfoProvider:        hostInfoProvider,
 	}

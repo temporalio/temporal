@@ -205,12 +205,15 @@ message RecordActivityTaskStartedResponse {
 message RespondWorkflowTaskCompletedRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest complete_request = 2;
+    bool with_new_workflow_task = 3 [deprecated = true];
+    int32 maximum_page_size = 4;
 }
 
 message RespondWorkflowTaskCompletedResponse {
     RecordWorkflowTaskStartedResponse started_response = 1;
     repeated temporal.api.workflowservice.v1.PollActivityTaskQueueResponse activity_tasks = 2;
     int64 reset_history_event_id = 3;
+    temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse new_workflow_task = 4;
 }
 
 message RespondWorkflowTaskFailedRequest {
@@ -693,7 +696,7 @@ message PollWorkflowExecutionUpdateResponse {
 }
 
 message GetWorkflowExecutionHistoryRequest {
-    string namespace = 1;
+    string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int32 maximum_page_size = 3;
     // If a `GetWorkflowExecutionHistoryResponse` or a `PollWorkflowTaskQueueResponse` had one of
@@ -706,6 +709,8 @@ message GetWorkflowExecutionHistoryRequest {
     // Default: HISTORY_EVENT_FILTER_TYPE_ALL_EVENT.
     temporal.api.enums.v1.HistoryEventFilterType history_event_filter_type = 6;
     bool skip_archival = 7;
+    bool send_raw_workflow_history = 8;
+    bool follows_next_run_id = 9;
 }
 
 message GetWorkflowExecutionHistoryResponse {
@@ -719,7 +724,7 @@ message GetWorkflowExecutionHistoryResponse {
 }
 
 message GetWorkflowExecutionHistoryReverseRequest {
-    string namespace = 1;
+    string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int32 maximum_page_size = 3;
     bytes next_page_token = 4;
@@ -755,7 +760,7 @@ message GetWorkflowExecutionRawHistoryV2Response {
 }
 
 message ForceDeleteWorkflowExecutionRequest {
-    string namespace = 1;
+    string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 

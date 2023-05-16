@@ -207,12 +207,12 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/historyEngine_test.go
 func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	namespaceID := namespace.ID(uuid.New())
-	namespace := namespace.Name("namespace")
+	namespaceName := namespace.Name("namespace")
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 	newRunID := uuid.New()
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:              namespace.String(),
+		Namespace:              namespaceName.String(),
 		Execution:              &we,
 		MaximumPageSize:        10,
 		NextPageToken:          nil,
@@ -225,7 +225,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	branchToken := []byte{1, 2, 3}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespaceName).Return(namespaceID, nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), &historyservice.PollMutableStateRequest{
 		NamespaceId:         namespaceID.String(),
 		Execution:           &we,
@@ -309,7 +309,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/historyEngine_test.go
 func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
 	namespaceID := namespace.ID(uuid.New())
-	namespace := namespace.Name("namespace")
+	namespaceName := namespace.Name("namespace")
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 
 	config := s.newConfig()
@@ -339,7 +339,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTra
 	})
 	s.NoError(err)
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:              namespace.String(),
+		Namespace:              namespaceName.String(),
 		Execution:              &we,
 		MaximumPageSize:        10,
 		NextPageToken:          nextPageToken,
@@ -350,7 +350,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTra
 
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespaceName).Return(namespaceID, nil).AnyTimes()
 
 	historyBlob1, err := wh.payloadSerializer.SerializeEvent(
 		&historypb.HistoryEvent{

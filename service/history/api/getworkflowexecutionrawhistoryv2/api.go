@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/utils"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -50,7 +51,7 @@ func Invoke(
 	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 ) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
-	ns, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+	ns, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -59,15 +60,15 @@ func Invoke(
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
 	if request.NextPageToken == nil {
-		response, err := adh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		response, err := api.GetOrPollMutableState(ctx, &historyservice.GetMutableStateRequest{
 			NamespaceId: ns.ID().String(),
 			Execution:   execution,
-		})
+		}, shard, workflowConsistencyChecker, eventNotifier)
 		if err != nil {
 			return nil, err
 		}
 
-		targetVersionHistory, err = adh.setRequestDefaultValueAndGetTargetVersionHistory(
+		targetVersionHistory, err = SetRequestDefaultValueAndGetTargetVersionHistory(
 			request,
 			response.GetVersionHistories(),
 		)
@@ -75,17 +76,17 @@ func Invoke(
 			return nil, err
 		}
 
-		pageToken = generatePaginationToken(request, response.GetVersionHistories())
+		pageToken = utils.GeneratePaginationToken(request, response.GetVersionHistories())
 	} else {
-		pageToken, err = deserializeRawHistoryToken(request.NextPageToken)
+		pageToken, err = utils.DeserializeRawHistoryToken(request.NextPageToken)
 		if err != nil {
 			return nil, err
 		}
 		versionHistories := pageToken.GetVersionHistories()
 		if versionHistories == nil {
-			return nil, errInvalidVersionHistories
+			return nil, utils.ErrInvalidVersionHistories
 		}
-		targetVersionHistory, err = adh.setRequestDefaultValueAndGetTargetVersionHistory(
+		targetVersionHistory, err = SetRequestDefaultValueAndGetTargetVersionHistory(
 			request,
 			versionHistories,
 		)
@@ -94,7 +95,7 @@ func Invoke(
 		}
 	}
 
-	if err := validatePaginationToken(
+	if err := utils.ValidatePaginationToken(
 		request,
 		pageToken,
 	); err != nil {
@@ -113,9 +114,9 @@ func Invoke(
 	shardID := common.WorkflowIDToHistoryShard(
 		ns.ID().String(),
 		execution.GetWorkflowId(),
-		adh.numberOfHistoryShards,
+		shard.GetConfig().NumberOfShards,
 	)
-	rawHistoryResponse, err := adh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+	rawHistoryResponse, err := shard.GetExecutionManager().ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken: targetVersionHistory.GetBranchToken(),
 		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
 		// ReadRawHistoryBranch is inclusive exclusive.
@@ -140,7 +141,7 @@ func Invoke(
 
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
-	adh.metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(
+	shard.GetMetricsHandler().Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(
 		int64(size),
 		metrics.NamespaceTag(ns.Name().String()),
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope),
@@ -154,7 +155,7 @@ func Invoke(
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
 	} else {
-		result.NextPageToken, err = serializeRawHistoryToken(pageToken)
+		result.NextPageToken, err = utils.SerializeRawHistoryToken(pageToken)
 		if err != nil {
 			return nil, err
 		}
@@ -169,31 +170,31 @@ func validateGetWorkflowExecutionRawHistoryV2Request(
 
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
+		return utils.ErrWorkflowIDNotSet
 	}
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
 	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
 	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
-		return errInvalidRunID
+		return utils.ErrInvalidRunID
 	}
 
 	pageSize := int(request.GetMaximumPageSize())
 	if pageSize <= 0 {
-		return errInvalidPageSize
+		return utils.ErrInvalidPageSize
 	}
 
 	if request.GetStartEventId() == common.EmptyEventID &&
 		request.GetStartEventVersion() == common.EmptyVersion &&
 		request.GetEndEventId() == common.EmptyEventID &&
 		request.GetEndEventVersion() == common.EmptyVersion {
-		return errInvalidEventQueryRange
+		return utils.ErrInvalidEventQueryRange
 	}
 
 	return nil
 }
 
-func setRequestDefaultValueAndGetTargetVersionHistory(
+func SetRequestDefaultValueAndGetTargetVersionHistory(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *historyspb.VersionHistories,
 ) (*historyspb.VersionHistory, error) {
@@ -225,7 +226,7 @@ func setRequestDefaultValueAndGetTargetVersionHistory(
 	}
 
 	if request.GetStartEventId() < 0 {
-		return nil, errInvalidFirstNextEventCombination
+		return nil, utils.ErrInvalidFirstNextEventCombination
 	}
 
 	// get branch based on the end event if end event is defined in the request

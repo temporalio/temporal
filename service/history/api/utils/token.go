@@ -62,7 +62,7 @@ func ValidatePaginationToken(
 		request.GetStartEventVersion() != token.GetStartEventVersion() ||
 		request.GetEndEventId() != token.GetEndEventId() ||
 		request.GetEndEventVersion() != token.GetEndEventVersion() {
-		return errInvalidPaginationToken
+		return ErrInvalidPaginationToken
 	}
 	return nil
 }

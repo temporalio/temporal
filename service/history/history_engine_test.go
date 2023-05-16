@@ -38,6 +38,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -47,9 +49,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -63,21 +62,22 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
+	"go.temporal.io/server/service/history/api/utils"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -88,6 +88,10 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+)
+
+const (
+	esIndexName = ""
 )
 
 type (
@@ -113,6 +117,10 @@ type (
 		mockHistoryEngine *historyEngineImpl
 		mockExecutionMgr  *persistence.MockExecutionManager
 		mockShardManager  *persistence.MockShardManager
+		mockVisibilityMgr *manager.MockVisibilityManager
+
+		mockSearchAttributesProvider       *searchattribute.MockProvider
+		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
 
 		eventsCache events.Cache
 		config      *configs.Config
@@ -180,6 +188,9 @@ func (s *engineSuite) SetupTest() {
 	s.mockHistoryClient = s.mockShard.Resource.HistoryClient
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockShardManager = s.mockShard.Resource.ShardMgr
+	s.mockVisibilityMgr = s.mockShard.Resource.VisibilityManager
+	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
+	s.mockSearchAttributesMapperProvider = s.mockShard.Resource.SearchAttributesMapperProvider
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
@@ -5309,8 +5320,6 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 }
 
 func (s *engineSuite) TestGetHistory() {
-	namespaceID := namespace.ID(uuid.New())
-	namespaceName := namespace.Name("test-namespace")
 	firstEventID := int64(100)
 	nextEventID := int64(102)
 	branchToken := []byte{1}
@@ -5318,16 +5327,15 @@ func (s *engineSuite) TestGetHistory() {
 		WorkflowId: "wid",
 		RunId:      "rid",
 	}
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      2,
 		NextPageToken: []byte{},
-		ShardID:       shardID,
+		ShardID:       1,
 	}
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), req).Return(&persistence.ReadHistoryBranchResponse{
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), req).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   int64(100),
@@ -5353,17 +5361,19 @@ func (s *engineSuite) TestGetHistory() {
 	}, nil)
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
-	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(namespaceName).
-		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 
-	wh := s.getWorkflowHandler(s.newConfig())
-
-	history, token, err := wh.getHistory(
+	history, token, err := utils.GetHistory(
 		context.Background(),
-		metrics.NoopMetricsHandler,
-		namespaceID,
-		namespaceName,
-		we,
+		s.mockShard,
+		tests.NamespaceID,
+		commonpb.WorkflowExecution{
+			WorkflowId: we.WorkflowId,
+			RunId:      we.RunId,
+		},
 		firstEventID,
 		nextEventID,
 		2,
@@ -5380,51 +5390,59 @@ func (s *engineSuite) TestGetHistory() {
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory() {
-	namespaceID := namespace.ID(uuid.New())
-	namespace := namespace.Name("namespace")
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 	newRunID := uuid.New()
 
-	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:              namespace.String(),
+	req := &historyservice.GetWorkflowExecutionHistoryRequest{
+		NamespaceId:            tests.NamespaceID.String(),
 		Execution:              &we,
 		MaximumPageSize:        10,
 		NextPageToken:          nil,
 		WaitNewEvent:           true,
 		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
 		SkipArchival:           true,
+		SendRawWorkflowHistory: false,
+		FollowsNextRunId:       true,
 	}
 
 	// set up mocks to simulate a failed workflow with a retry policy. the failure event is id 5.
 	branchToken := []byte{1, 2, 3}
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), &historyservice.PollMutableStateRequest{
-		NamespaceId:         namespaceID.String(),
-		Execution:           &we,
-		ExpectedNextEventId: common.EndEventID,
-		CurrentBranchToken:  nil,
-	}).Return(&historyservice.PollMutableStateResponse{
-		Execution:           &we,
-		WorkflowType:        &commonpb.WorkflowType{Name: "mytype"},
-		NextEventId:         6,
-		LastFirstEventId:    5,
-		CurrentBranchToken:  branchToken,
-		VersionHistories:    nil,
-		WorkflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		LastFirstEventTxnId: 100,
-	}, nil).Times(2)
-
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil).AnyTimes()
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	mState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  we.RunId,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		},
+		NextEventId: 6,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:         tests.NamespaceID.String(),
+			WorkflowId:          we.WorkflowId,
+			VersionHistories:    versionHistories,
+			WorkflowTypeName:    "mytype",
+			LastFirstEventId:    5,
+			LastFirstEventTxnId: 100,
+		},
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     1,
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  we.WorkflowId,
+		RunID:       we.RunId,
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
 	// GetWorkflowExecutionHistory will request the last event
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    5,
 		MaxEventID:    6,
 		PageSize:      10,
 		NextPageToken: nil,
-		ShardID:       shardID,
+		ShardID:       1,
 	}).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
@@ -5444,17 +5462,19 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 		Size:          1,
 	}, nil).Times(2)
 
-	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 
-	wh := s.getWorkflowHandler(s.newConfig())
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
 
 	oldGoSDKVersion := "1.9.1"
 	newGoSDKVersion := "1.10.1"
 
 	// new sdk: should see failed event
 	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
-	resp, err := wh.GetWorkflowExecutionHistory(ctx, req)
+	resp, err := engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Archived)
 	event := resp.History.Events[0]
@@ -5469,7 +5489,8 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
 	// See comment in workflowHandler.go:GetWorkflowExecutionHistory
 	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, "")
-	resp, err = wh.GetWorkflowExecutionHistory(ctx, req)
+	req.FollowsNextRunId = false
+	resp, err = engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Archived)
 	event = resp.History.Events[0]
@@ -5481,17 +5502,14 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
-	namespaceID := namespace.ID(uuid.New())
-	namespace := namespace.Name("namespace")
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 
-	config := s.newConfig()
-	config.SendRawWorkflowHistory = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	wh := s.getWorkflowHandler(config)
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
 
 	branchToken := []byte{1, 2, 3}
 	persistenceToken := []byte("some random persistence token")
-	nextPageToken, err := serializeHistoryToken(&tokenspb.HistoryContinuation{
+	nextPageToken, err := utils.SerializeHistoryToken(&tokenspb.HistoryContinuation{
 		RunId:            we.GetRunId(),
 		FirstEventId:     common.FirstEventID,
 		NextEventId:      5,
@@ -5511,21 +5529,20 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 		BranchToken: branchToken,
 	})
 	s.NoError(err)
-	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:              namespace.String(),
+	req := &historyservice.GetWorkflowExecutionHistoryRequest{
+		NamespaceId:            tests.NamespaceID.String(),
 		Execution:              &we,
 		MaximumPageSize:        10,
 		NextPageToken:          nextPageToken,
 		WaitNewEvent:           false,
 		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
 		SkipArchival:           true,
+		SendRawWorkflowHistory: true,
+		FollowsNextRunId:       true,
 	}
 
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
-
-	historyBlob1, err := wh.payloadSerializer.SerializeEvent(
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
+	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvent(
 		&historypb.HistoryEvent{
 			EventId:   int64(3),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
@@ -5533,7 +5550,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
-	historyBlob2, err := wh.payloadSerializer.SerializeEvent(
+	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvent(
 		&historypb.HistoryEvent{
 			EventId:   int64(4),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
@@ -5541,37 +5558,51 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
-	s.mockExecutionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    1,
 		MaxEventID:    5,
 		PageSize:      10,
 		NextPageToken: persistenceToken,
-		ShardID:       shardID,
+		ShardID:       1,
 	}).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{historyBlob1, historyBlob2},
 		NextPageToken:     []byte{},
 		Size:              1,
 	}, nil).Times(1)
 
-	resp, err := wh.GetWorkflowExecutionHistory(context.Background(), req)
+	resp, err := engine.GetWorkflowExecutionHistory(context.Background(), req)
 	s.NoError(err)
 	s.False(resp.Archived)
 	s.Empty(resp.History.Events)
 	s.Len(resp.RawHistory, 4)
-	event, err := wh.payloadSerializer.DeserializeEvent(resp.RawHistory[2])
+	event, err := s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.RawHistory[2])
 	s.NoError(err)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.EventType)
-	event, err = wh.payloadSerializer.DeserializeEvent(resp.RawHistory[3])
+	event, err = s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.RawHistory[3])
 	s.NoError(err)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.EventType)
 }
 
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
+
 	ctx := context.Background()
-	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId: s.namespaceID.String(),
+	namespaceID := namespace.ID(uuid.New())
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id: namespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "",
 				RunId:      uuid.New(),
@@ -5587,10 +5618,24 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkf
 }
 
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidRunID() {
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
+
 	ctx := context.Background()
-	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId: s.namespaceID.String(),
+	namespaceID := namespace.ID(uuid.New())
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id: namespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      "runID",
@@ -5605,31 +5650,16 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidRunID
 	s.Error(err)
 }
 
-func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidSize() {
-	ctx := context.Background()
-	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId: s.namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
-			},
-			StartEventId:      1,
-			StartEventVersion: 100,
-			EndEventId:        10,
-			EndEventVersion:   100,
-			MaximumPageSize:   -1,
-			NextPageToken:     nil,
-		})
-	s.Error(err)
-}
-
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCache() {
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
+
 	ctx := context.Background()
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(nil, fmt.Errorf("test"))
-	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId: s.namespaceID.String(),
+	namespaceID := namespace.ID(uuid.New())
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(nil, fmt.Errorf("test"))
+	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -5645,28 +5675,47 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCac
 }
 
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2() {
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
+
 	ctx := context.Background()
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name: tests.Namespace.String(),
+			Id:   tests.NamespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
 	branchToken := []byte{1}
 	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
 		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
 	})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	mState := &historyservice.GetMutableStateResponse{
-		NextEventId:        11,
-		CurrentBranchToken: branchToken,
-		VersionHistories:   versionHistories,
+	mState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 11,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:      tests.NamespaceID.String(),
+			VersionHistories: versionHistories,
+		},
 	}
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
 
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{},
 		NextPageToken:     []byte{},
 		Size:              0,
 	}, nil)
-	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId: s.namespaceID.String(),
+	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: tests.NamespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -5682,23 +5731,42 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 }
 
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID() {
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
+
 	ctx := context.Background()
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name: tests.Namespace.String(),
+			Id:   tests.NamespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
 	branchToken := []byte{1}
 	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
 		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
 	})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	mState := &historyservice.GetMutableStateResponse{
-		NextEventId:        11,
-		CurrentBranchToken: branchToken,
-		VersionHistories:   versionHistories,
+	mState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 11,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:      tests.NamespaceID.String(),
+			VersionHistories: versionHistories,
+		},
 	}
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
 
-	resp, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
-		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId: s.namespaceID.String(),
+	resp, err := engine.GetWorkflowExecutionRawHistoryV2(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: tests.NamespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -5723,8 +5791,9 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	endItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, endItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		NamespaceId: s.namespaceID.String(),
+	namespaceID := namespace.ID(uuid.New())
+	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
+		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -5737,7 +5806,7 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 		NextPageToken:     nil,
 	}
 
-	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
+	targetVersionHistory, err := getworkflowexecutionrawhistoryv2.SetRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
@@ -5756,8 +5825,9 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		NamespaceId: s.namespaceID.String(),
+	namespaceID := namespace.ID(uuid.New())
+	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
+		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -5770,7 +5840,7 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 		NextPageToken:     nil,
 	}
 
-	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
+	targetVersionHistory, err := getworkflowexecutionrawhistoryv2.SetRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
@@ -5789,8 +5859,9 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	targetItem := versionhistory.NewVersionHistoryItem(inputEndEventID, inputEndVersion)
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		NamespaceId: s.namespaceID.String(),
+	namespaceID := namespace.ID(uuid.New())
+	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
+		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -5803,7 +5874,7 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 		NextPageToken:     nil,
 	}
 
-	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
+	targetVersionHistory, err := getworkflowexecutionrawhistoryv2.SetRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
@@ -5827,8 +5898,9 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 	versionHistories := versionhistory.NewVersionHistories(versionHistory1)
 	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory2)
 	s.NoError(err)
-	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		NamespaceId: s.namespaceID.String(),
+	namespaceID := namespace.ID(uuid.New())
+	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
+		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -5841,7 +5913,7 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 		NextPageToken:     nil,
 	}
 
-	targetVersionHistory, err := s.handler.setRequestDefaultValueAndGetTargetVersionHistory(
+	targetVersionHistory, err := getworkflowexecutionrawhistoryv2.SetRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
@@ -5852,20 +5924,24 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 }
 
 func (s *engineSuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
+
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "workflowID",
 	}
 
-	request := &adminservice.DeleteWorkflowExecutionRequest{
-		Namespace: s.namespace.String(),
-		Execution: &execution,
+	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Execution:   &execution,
 	}
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(false)
+	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
-	resp, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	resp, err := engine.ForceDeleteWorkflowExecution(context.Background(), request)
 	s.Nil(resp)
 	s.Error(err)
 
@@ -5883,68 +5959,64 @@ func (s *engineSuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 	}
 
 	shardID := common.WorkflowIDToHistoryShard(
-		s.namespaceID.String(),
+		tests.NamespaceID.String(),
 		execution.GetWorkflowId(),
-		s.handler.numberOfHistoryShards,
+		1,
 	)
 	runID := uuid.New()
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetCurrentExecutionResponse{
 		StartRequestID: uuid.New(),
 		RunID:          runID,
-		State:          enums.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		State:          enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		Status:         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	}, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
-		NamespaceID: s.namespaceID.String(),
+		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  execution.WorkflowId,
 		RunID:       runID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
-	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
-		NamespaceId: s.namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      runID,
-		},
-	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), &persistence.DeleteCurrentWorkflowExecutionRequest{
 		ShardID:     shardID,
-		NamespaceID: s.namespaceID.String(),
+		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  execution.WorkflowId,
 		RunID:       runID,
 	}).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), &persistence.DeleteWorkflowExecutionRequest{
 		ShardID:     shardID,
-		NamespaceID: s.namespaceID.String(),
+		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  execution.WorkflowId,
 		RunID:       runID,
 	}).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
 
-	_, err = s.handler.DeleteWorkflowExecution(context.Background(), request)
+	_, err = engine.ForceDeleteWorkflowExecution(context.Background(), request)
 	s.NoError(err)
 }
 
 func (s *engineSuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
+
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "workflowID",
 		RunId:      uuid.New(),
 	}
 
-	request := &adminservice.DeleteWorkflowExecutionRequest{
-		Namespace: s.namespace.String(),
-		Execution: &execution,
+	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Execution:   &execution,
 	}
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(false)
+	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
-	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 
-	_, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	_, err = engine.ForceDeleteWorkflowExecution(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -5954,12 +6026,12 @@ func (s *engineSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
 		RunId:      uuid.New(),
 	}
 
-	request := &adminservice.DeleteWorkflowExecutionRequest{
-		Namespace: s.namespace.String(),
-		Execution: &execution,
+	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Execution:   &execution,
 	}
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true).AnyTimes()
 
 	// test delete open records
@@ -5969,7 +6041,7 @@ func (s *engineSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			CreateRequestId: uuid.New(),
 			RunId:           execution.RunId,
-			State:           enums.WORKFLOW_EXECUTION_STATE_RUNNING,
+			State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 		NextEventId: 12,
@@ -5991,26 +6063,24 @@ func (s *engineSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
-	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
-		NamespaceId:       s.namespaceID.String(),
-		Execution:         &execution,
-		WorkflowStartTime: mutableState.ExecutionInfo.StartTime,
-	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes()
 
-	_, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	engine, err := s.mockHistoryEngine.shard.GetEngine(context.Background())
+	s.NoError(err)
+	_, err = engine.ForceDeleteWorkflowExecution(context.Background(), request)
 	s.NoError(err)
 
 	// test delete close records
-	mutableState.ExecutionState.State = enums.WORKFLOW_EXECUTION_STATE_COMPLETED
+	mutableState.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	mutableState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 
 	shardID := common.WorkflowIDToHistoryShard(
-		s.namespaceID.String(),
+		tests.NamespaceID.String(),
 		execution.GetWorkflowId(),
-		s.handler.numberOfHistoryShards,
+		1,
 	)
 	closeTime := time.Now()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
@@ -6036,16 +6106,11 @@ func (s *engineSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
 			},
 		},
 	}, nil)
-	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
-		NamespaceId:       s.namespaceID.String(),
-		Execution:         &execution,
-		WorkflowCloseTime: timestamp.TimePtr(closeTime),
-	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
 
-	_, err = s.handler.DeleteWorkflowExecution(context.Background(), request)
+	_, err = engine.ForceDeleteWorkflowExecution(context.Background(), request)
 	s.NoError(err)
 }
 

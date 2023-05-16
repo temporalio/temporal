@@ -35,9 +35,9 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/utils"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -49,7 +49,8 @@ func Invoke(
 	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
 ) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -68,12 +69,18 @@ func Invoke(
 		expectedNextEventID int64,
 		currentBranchToken []byte,
 	) ([]byte, string, int64, int64, bool, error) {
-		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-			NamespaceId:         namespaceUUID.String(),
-			Execution:           execution,
-			ExpectedNextEventId: expectedNextEventID,
-			CurrentBranchToken:  currentBranchToken,
-		})
+		response, err := api.GetOrPollMutableState(
+			ctx,
+			&historyservice.GetMutableStateRequest{
+				NamespaceId:         namespaceUUID.String(),
+				Execution:           execution,
+				ExpectedNextEventId: expectedNextEventID,
+				CurrentBranchToken:  currentBranchToken,
+			},
+			shard,
+			workflowConsistencyChecker,
+			eventNotifier,
+		)
 
 		if err != nil {
 			return nil, "", 0, 0, false, err
@@ -101,12 +108,12 @@ func Invoke(
 	// process the token for paging
 	queryNextEventID := common.EndEventID
 	if request.NextPageToken != nil {
-		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
+		continuationToken, err = utils.DeserializeHistoryToken(request.NextPageToken)
 		if err != nil {
-			return nil, errInvalidNextPageToken
+			return nil, utils.ErrInvalidNextPageToken
 		}
 		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
-			return nil, errNextPageTokenRunIDMismatch
+			return nil, utils.ErrNextPageTokenRunIDMismatch
 		}
 
 		execution.RunId = continuationToken.GetRunId()
@@ -150,21 +157,27 @@ func Invoke(
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
 		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			wh.trimHistoryNode(ctx, namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
+			utils.TrimHistoryNode(
+				ctx,
+				shard,
+				workflowConsistencyChecker,
+				eventNotifier,
+				namespaceID.String(),
+				execution.GetWorkflowId(),
+				execution.GetRunId(),
+			)
 		}
 	}()
-
-	rawHistoryQueryEnabled := wh.config.SendRawWorkflowHistory(request.GetNamespace())
 
 	history := &historypb.History{}
 	history.Events = []*historypb.HistoryEvent{}
 	var historyBlob []*commonpb.DataBlob
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
-			if rawHistoryQueryEnabled {
-				historyBlob, _, err = wh.getRawHistory(
+			if request.SendRawWorkflowHistory {
+				historyBlob, _, err = utils.GetRawHistory(
 					ctx,
-					wh.metricsScope(ctx),
+					shard,
 					namespaceID,
 					*execution,
 					lastFirstEventID,
@@ -181,11 +194,10 @@ func Invoke(
 				// since getHistory func will not return empty history, so the below is safe
 				historyBlob = historyBlob[len(historyBlob)-1:]
 			} else {
-				history, _, err = wh.getHistory(
+				history, _, err = utils.GetHistory(
 					ctx,
-					wh.metricsScope(ctx),
+					shard,
 					namespaceID,
-					namespace.Name(request.GetNamespace()),
 					*execution,
 					lastFirstEventID,
 					nextEventID,
@@ -216,10 +228,10 @@ func Invoke(
 				continuationToken = nil
 			}
 		} else {
-			if rawHistoryQueryEnabled {
-				historyBlob, continuationToken.PersistenceToken, err = wh.getRawHistory(
+			if request.SendRawWorkflowHistory {
+				historyBlob, continuationToken.PersistenceToken, err = utils.GetRawHistory(
 					ctx,
-					wh.metricsScope(ctx),
+					shard,
 					namespaceID,
 					*execution,
 					continuationToken.FirstEventId,
@@ -230,11 +242,10 @@ func Invoke(
 					continuationToken.BranchToken,
 				)
 			} else {
-				history, continuationToken.PersistenceToken, err = wh.getHistory(
+				history, continuationToken.PersistenceToken, err = utils.GetHistory(
 					ctx,
-					wh.metricsScope(ctx),
+					shard,
 					namespaceID,
-					namespace.Name(request.GetNamespace()),
 					*execution,
 					continuationToken.FirstEventId,
 					continuationToken.NextEventId,
@@ -258,7 +269,7 @@ func Invoke(
 		}
 	}
 
-	nextToken, err := serializeHistoryToken(continuationToken)
+	nextToken, err := utils.SerializeHistoryToken(continuationToken)
 	if err != nil {
 		return nil, err
 	}
@@ -276,11 +287,9 @@ func Invoke(
 	//
 	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
 	// Revisit this once we have an SDK deprecation policy.
-	if isCloseEventOnly &&
-		!wh.versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID) &&
-		len(history.Events) > 0 {
+	if isCloseEventOnly && !request.FollowsNextRunId && len(history.Events) > 0 {
 		lastEvent := history.Events[len(history.Events)-1]
-		fakeEvent, err := wh.makeFakeContinuedAsNewEvent(ctx, lastEvent)
+		fakeEvent, err := makeFakeContinuedAsNewEvent(ctx, lastEvent)
 		if err != nil {
 			return nil, err
 		}
