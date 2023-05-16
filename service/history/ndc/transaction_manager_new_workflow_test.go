@@ -415,7 +415,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
 	).Return(nil)
-	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)
@@ -484,7 +484,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
 	).Return(nil)
-	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)
@@ -553,7 +553,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
 	).Return(&persistence.WorkflowConditionFailedError{})
-	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)
@@ -622,7 +622,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
 	).Return(&persistence.WorkflowConditionFailedError{})
-	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)

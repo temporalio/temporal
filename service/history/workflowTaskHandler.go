@@ -27,10 +27,8 @@ package history
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -40,12 +38,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/internal/protocol"
 	"go.temporal.io/server/service/history/workflow/update"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -161,7 +161,7 @@ func newWorkflowTaskHandler(
 func (handler *workflowTaskHandlerImpl) handleCommands(
 	ctx context.Context,
 	commands []*commandpb.Command,
-	earlyDeliverMessages func(context.Context) error,
+	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) ([]workflowTaskResponseMutation, error) {
 	if err := handler.attrValidator.validateCommandSequence(
 		commands,
@@ -172,7 +172,7 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	var mutations []workflowTaskResponseMutation
 	var postActions []commandPostAction
 	for _, command := range commands {
-		response, err := handler.handleCommand(ctx, command, earlyDeliverMessages)
+		response, err := handler.handleCommand(ctx, command, msgs)
 		if err != nil || handler.stopProcessing {
 			return nil, err
 		}
@@ -182,6 +182,15 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 			}
 			if response.commandPostAction != nil {
 				postActions = append(postActions, response.commandPostAction)
+			}
+		}
+	}
+
+	if handler.mutableState.IsWorkflowExecutionRunning() {
+		for _, msg := range msgs.TakeRemaining() {
+			err := handler.handleMessage(ctx, msg)
+			if err != nil || handler.stopProcessing {
+				return nil, err
 			}
 		}
 	}
@@ -203,17 +212,14 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 func (handler *workflowTaskHandlerImpl) handleCommand(
 	ctx context.Context,
 	command *commandpb.Command,
-	earlyDeliverMessages func(context.Context) error,
+	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) (*handleCommandResponse, error) {
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-		if err := earlyDeliverMessages(ctx); err != nil {
-			return nil, err
-		}
-		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
+		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes(), msgs)
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
 		return nil, handler.handleCommandFailWorkflow(ctx, command.GetFailWorkflowExecutionCommandAttributes())
@@ -252,62 +258,33 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 		return nil, handler.handleCommandModifyWorkflowProperties(ctx, command.GetModifyWorkflowPropertiesCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE:
-		return nil, nil
+		return nil, handler.handleCommandProtocolMessage(ctx, command.GetProtocolMessageCommandAttributes(), msgs)
 
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
 	}
 }
 
-func (handler *workflowTaskHandlerImpl) handleMessages(
-	ctx context.Context,
-	messages []*protocolpb.Message,
-) error {
-	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		// Workflow might get completed within the same WT after processing corresponding command.
-		// Currently, messages are used to transport updates only and updates should not be processed after workflow is completed.
-		// Therefore, just ignore all messages.
-		// If later, there are messages which can be processed after workflow is completed,
-		// then this check should be moved down to specific message handler.
-		return nil
-	}
-
-	for _, message := range messages {
-		err := handler.handleMessage(ctx, message, handler.updateRegistry)
-		if err != nil || handler.stopProcessing {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (handler *workflowTaskHandlerImpl) handleMessage(
 	ctx context.Context,
 	message *protocolpb.Message,
-	updateRegistry update.Registry,
 ) error {
-	bodyTypeName, err := types.AnyMessageName(message.GetBody())
+	protocolType, msgType, err := protocol.Identify(message)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(err.Error())
 	}
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		// TODO (alex-update): Should use MessageTypeTag here but then it needs to be another metric name too.
-		metrics.CommandTypeTag(bodyTypeName),
+		metrics.CommandTypeTag(msgType.String()),
 		message.Body.Size(),
-		fmt.Sprintf("Message type %v exceeds size limit.", bodyTypeName),
+		fmt.Sprintf("Message type %v exceeds size limit.", msgType),
 	); err != nil {
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 	}
 
-	protocolTypeName := "__unknown"
-	if lastDot := strings.LastIndex(bodyTypeName, "."); lastDot > -1 {
-		protocolTypeName = bodyTypeName[0:lastDot]
-	}
-
-	switch protocolTypeName {
+	switch protocolType {
 	case update.ProtocolV1:
-		upd, ok := updateRegistry.Find(ctx, message.ProtocolInstanceId)
+		upd, ok := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
 		if !ok {
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
@@ -320,10 +297,41 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 	default:
 		return handler.failWorkflowTask(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
-			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %q", protocolTypeName)))
+			serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported protocol type %q", protocolType)))
 	}
 
 	return nil
+}
+
+func (handler *workflowTaskHandlerImpl) handleCommandProtocolMessage(
+	ctx context.Context,
+	attr *commandpb.ProtocolMessageCommandAttributes,
+	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
+) error {
+	handler.metricsHandler.Counter(metrics.CommandTypeProtocolMessage.GetMetricName()).Record(1)
+
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	namespaceID := namespace.ID(executionInfo.NamespaceId)
+
+	if err := handler.validateCommandAttr(
+		func() (enumspb.WorkflowTaskFailedCause, error) {
+			return handler.attrValidator.validateProtocolMessageAttributes(
+				namespaceID,
+				attr,
+				timestamp.DurationValue(executionInfo.WorkflowRunTimeout),
+			)
+		},
+	); err != nil || handler.stopProcessing {
+		return err
+	}
+
+	if msg, ok := msgs.Take(attr.MessageId); ok {
+		return handler.handleMessage(ctx, msg)
+	}
+	return handler.failWorkflowTask(
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
+		serviceerror.NewInvalidArgument(fmt.Sprintf("ProtocolMessageCommand referenced absent message ID %q", attr.MessageId)),
+	)
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
@@ -544,7 +552,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	ctx context.Context,
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
+	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) error {
+
+	for _, msg := range msgs.TakeRemaining() {
+		err := handler.handleMessage(ctx, msg)
+		if err != nil || handler.stopProcessing {
+			return err
+		}
+	}
 
 	handler.metricsHandler.Counter(metrics.CommandTypeCompleteWorkflowCounter.GetMetricName()).Record(1)
 

@@ -151,6 +151,11 @@ const (
 	HistoryCountLimitError = "limit.historyCount.error"
 	// HistoryCountLimitWarn is the per workflow execution history event count limit for warning
 	HistoryCountLimitWarn = "limit.historyCount.warn"
+	// MutableStateActivityFailureSizeLimitError is the per activity failure size limit for workflow mutable state.
+	// If exceeded, failure will be truncated before being stored in mutable state.
+	MutableStateActivityFailureSizeLimitError = "limit.mutableStateActivityFailureSize.error"
+	// MutableStateActivityFailureSizeLimitWarn is the per activity failure size warning limit for workflow mutable state
+	MutableStateActivityFailureSizeLimitWarn = "limit.mutableStateActivityFailureSize.warn"
 	// HistoryCountSuggestContinueAsNew is the workflow execution history event count limit to
 	// suggest continue-as-new (in workflow task started event)
 	HistoryCountSuggestContinueAsNew = "limit.historyCount.suggestContinueAsNew"
@@ -276,6 +281,11 @@ const (
 	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
+	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
+	// asynchronous workflow execution update that waits on the "Accepted"
+	// lifecycle stage. Default value is `false`.
+	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = "frontend.enableUpdateWorkflowExecutionAsyncAccepted"
+
 	// FrontendEnableUpdateWorkflowExecution enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
 
@@ -361,6 +371,8 @@ const (
 	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
+	// HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB
+	HistoryPersistencePerShardNamespaceMaxQPS = "history.persistencePerShardNamespaceMaxQPS"
 	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
 	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service

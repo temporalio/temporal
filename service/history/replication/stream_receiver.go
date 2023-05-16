@@ -208,8 +208,8 @@ func (r *StreamReceiver) ackMessage(
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &repicationpb.SyncReplicationState{
-				LastProcessedMessageId:   watermarkInfo.Watermark,
-				LastProcessedMessageTime: timestamp.TimePtr(watermarkInfo.Timestamp),
+				InclusiveLowWatermark:     watermarkInfo.Watermark,
+				InclusiveLowWatermarkTime: timestamp.TimePtr(watermarkInfo.Timestamp),
 			},
 		},
 	}); err != nil {
@@ -255,11 +255,11 @@ func (r *StreamReceiver) processMessages(
 			r.serverShardKey,
 			streamResp.Resp.GetMessages().ReplicationTasks...,
 		)
-		highWatermark := streamResp.Resp.GetMessages().LastTaskId
-		highWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().LastTaskTime)
+		exclusiveHighWatermark := streamResp.Resp.GetMessages().ExclusiveHighWatermark
+		exclusiveHighWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime)
 		for _, task := range r.taskTracker.TrackTasks(WatermarkInfo{
-			Watermark: highWatermark,
-			Timestamp: highWatermarkTime,
+			Watermark: exclusiveHighWatermark,
+			Timestamp: exclusiveHighWatermarkTime,
 		}, tasks...) {
 			r.ProcessToolBox.TaskScheduler.Submit(task)
 		}

@@ -44,3 +44,5 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 		Value: 4,
 	},
 }
+
+var DefaultPerShardNamespaceRPSMax = func(namespace string) int { return 0 }

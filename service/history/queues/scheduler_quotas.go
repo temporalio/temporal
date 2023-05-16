@@ -106,7 +106,7 @@ func newHighPriorityTaskRequestRateLimiter(
 	}
 
 	return quotas.NewMultiRequestRateLimiter(
-		quotas.NewNamespaceRateLimiter(namespaceRequestRateLimiterFn),
+		quotas.NewNamespaceRequestRateLimiter(namespaceRequestRateLimiterFn),
 		hostRequestRateLimiter,
 	)
 }

@@ -95,6 +95,10 @@ func NewExecutableHistoryTask(
 	}
 }
 
+func (e *ExecutableHistoryTask) QueueID() interface{} {
+	return e.WorkflowKey
+}
+
 func (e *ExecutableHistoryTask) Execute() error {
 	if e.TerminalState() {
 		return nil

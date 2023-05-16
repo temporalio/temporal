@@ -29,6 +29,7 @@
 package archiver
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -88,18 +89,18 @@ func (mr *MockHistoryIteratorMockRecorder) HasNext() *gomock.Call {
 }
 
 // Next mocks base method.
-func (m *MockHistoryIterator) Next() (*archiver.HistoryBlob, error) {
+func (m *MockHistoryIterator) Next(arg0 context.Context) (*archiver.HistoryBlob, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Next")
+	ret := m.ctrl.Call(m, "Next", arg0)
 	ret0, _ := ret[0].(*archiver.HistoryBlob)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Next indicates an expected call of Next.
-func (mr *MockHistoryIteratorMockRecorder) Next() *gomock.Call {
+func (mr *MockHistoryIteratorMockRecorder) Next(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockHistoryIterator)(nil).Next))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockHistoryIterator)(nil).Next), arg0)
 }
 
 // MockSizeEstimator is a mock of SizeEstimator interface.

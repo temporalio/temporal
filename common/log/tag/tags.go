@@ -307,6 +307,11 @@ func WorkflowTaskQueueName(taskQueueName string) ZapTag {
 
 // size limit
 
+// BlobSize returns tag for BlobSize
+func BlobSize(blobSize int64) ZapTag {
+	return NewInt64("blob-size", blobSize)
+}
+
 // WorkflowSize returns tag for WorkflowSize
 func WorkflowSize(workflowSize int64) ZapTag {
 	return NewInt64("wf-size", workflowSize)

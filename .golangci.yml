@@ -2,8 +2,10 @@
 linters:
   disable-all: true
   enable:
+    - goerr113
     - errcheck
     - goimports
+    - paralleltest
     - revive # revive supersedes golint, which is now archived
     - staticcheck
     - vet

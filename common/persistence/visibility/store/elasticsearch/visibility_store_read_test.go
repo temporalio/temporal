@@ -425,7 +425,6 @@ func (s *ESVisibilitySuite) TestGetListFieldSorter() {
 
 	// test passing non-empty fieldSorts
 	testFieldSorts := [2]*elastic.FieldSort{elastic.NewFieldSort("_test"), elastic.NewFieldSort("_second_tes")}
-	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	sorter, err = s.visibilityStore.getListFieldSorter(testFieldSorts[:])
 	expectedSorter := make([]elastic.Sorter, len(testFieldSorts)+1)
 	expectedSorter[0] = testFieldSorts[0]
@@ -494,6 +493,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	// test custom sort
 	request.Query = `Order bY WorkflowId`
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).MustNot(namespaceDivisionExists)
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	p, err = s.visibilityStore.buildSearchParametersV2(request, s.visibilityStore.getListFieldSorter)
 	s.NoError(err)
