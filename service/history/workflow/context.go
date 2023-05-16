@@ -911,8 +911,8 @@ func (c *ContextImpl) enforceSizeCheck(
 	return false, nil
 }
 
-// Returns true if the history size or event count should trigger a forced termination of the execution
-// Prints a warning log message if history size or event count are over the warn threshold but not forced termination
+// Returns true if the workflow is running and history size or event count should trigger a forced termination
+// Prints a warning log message if history size or event count are over the error or warn limits
 func (c *ContextImpl) maxHistorySizeExceeded() bool {
 	namespaceName := c.GetNamespace().String()
 	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
@@ -947,6 +947,8 @@ func (c *ContextImpl) maxHistorySizeExceeded() bool {
 	return false
 }
 
+// Returns true if the workflow is running and mutable state size should trigger a forced termination
+// Prints a warning log message if mutable state size is over the error or warn limits
 func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 	mutableStateSizeLimitError := c.config.MutableStateSizeLimitError()
 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
