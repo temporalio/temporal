@@ -1073,18 +1073,18 @@ func (mr *MockMutableStateMockRecorder) GetActivityScheduledEvent(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityScheduledEvent", reflect.TypeOf((*MockMutableState)(nil).GetActivityScheduledEvent), arg0, arg1)
 }
 
-// GetApproximateSize mocks base method.
-func (m *MockMutableState) GetApproximateSize() int {
+// GetApproximatePersistedSize mocks base method.
+func (m *MockMutableState) GetApproximatePersistedSize() int {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetApproximateSize")
+	ret := m.ctrl.Call(m, "GetApproximatePersistedSize")
 	ret0, _ := ret[0].(int)
 	return ret0
 }
 
-// GetApproximateSize indicates an expected call of GetApproximateSize.
-func (mr *MockMutableStateMockRecorder) GetApproximateSize() *gomock.Call {
+// GetApproximatePersistedSize indicates an expected call of GetApproximatePersistedSize.
+func (mr *MockMutableStateMockRecorder) GetApproximatePersistedSize() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApproximateSize", reflect.TypeOf((*MockMutableState)(nil).GetApproximateSize))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApproximatePersistedSize", reflect.TypeOf((*MockMutableState)(nil).GetApproximatePersistedSize))
 }
 
 // GetBaseWorkflowInfo mocks base method.

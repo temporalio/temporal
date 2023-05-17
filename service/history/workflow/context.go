@@ -953,7 +953,7 @@ func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 	mutableStateSizeLimitError := c.config.MutableStateSizeLimitError()
 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
 
-	mutableStateSize := c.MutableState.GetApproximateSize()
+	mutableStateSize := c.MutableState.GetApproximatePersistedSize()
 
 	if mutableStateSize > mutableStateSizeLimitError && c.MutableState.IsWorkflowExecutionRunning() {
 		c.logger.Error("mutable state size exceeds error limit.",

@@ -141,12 +141,11 @@ type (
 
 		hBuilder *HistoryBuilder
 
-		// running approximate total size of mutable state in bytes
-		approximateSize int
-
 		// in memory only attributes
 		// indicate the current version
 		currentVersion int64
+		// running approximate total size of mutable state fields when written to DB in bytes
+		approximateSize int
 		// buffer events from DB
 		bufferEventsInDB []*historypb.HistoryEvent
 		// indicates the workflow state in DB, can be used to calculate
@@ -276,7 +275,6 @@ func NewMutableState(
 		s.bufferEventsInDB,
 		s.metricsHandler,
 	)
-	s.approximateSize += s.hBuilder.SizeInBytesOfBufferedEvents()
 	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s)
 
@@ -349,7 +347,6 @@ func newMutableStateFromDB(
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
-	mutableState.approximateSize -= mutableState.hBuilder.SizeInBytesOfBufferedEvents()
 	mutableState.hBuilder = NewMutableHistoryBuilder(
 		mutableState.timeSource,
 		mutableState.shard.GenerateTaskIDs,
@@ -358,7 +355,6 @@ func newMutableStateFromDB(
 		dbRecord.BufferedEvents,
 		mutableState.metricsHandler,
 	)
-	mutableState.approximateSize += mutableState.hBuilder.SizeInBytesOfBufferedEvents()
 
 	mutableState.currentVersion = common.EmptyVersion
 	mutableState.bufferEventsInDB = dbRecord.BufferedEvents
@@ -503,9 +499,7 @@ func (ms *MutableStateImpl) SetCurrentBranchToken(
 }
 
 func (ms *MutableStateImpl) SetHistoryBuilder(hBuilder *HistoryBuilder) {
-	ms.approximateSize -= ms.hBuilder.SizeInBytesOfBufferedEvents()
 	ms.hBuilder = hBuilder
-	ms.approximateSize += hBuilder.SizeInBytesOfBufferedEvents()
 }
 
 func (ms *MutableStateImpl) SetBaseWorkflow(
@@ -572,7 +566,6 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.currentVersion = version
 	}
 
-	ms.approximateSize -= ms.hBuilder.SizeInBytesOfBufferedEvents()
 	ms.hBuilder = NewMutableHistoryBuilder(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
@@ -581,7 +574,6 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
 	)
-	ms.approximateSize += ms.hBuilder.SizeInBytesOfBufferedEvents()
 
 	return nil
 }
@@ -1530,8 +1522,10 @@ func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 	return false
 }
 
-func (ms *MutableStateImpl) GetApproximateSize() int {
-	return ms.approximateSize
+// GetApproximatePersistedSize returns approximate size of in-memory objects that will be written to
+// persistence + size of buffered events in history builder
+func (ms *MutableStateImpl) GetApproximatePersistedSize() int {
+	return ms.approximateSize + ms.hBuilder.SizeInBytesOfBufferedEvents()
 }
 
 func (ms *MutableStateImpl) AddSignalRequested(
