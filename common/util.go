@@ -797,8 +797,8 @@ func MakeVersionDirectiveForWorkflowTask(
 	lastWorkflowTaskStartedEventID int64,
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
-	if StampIfUsingVersioning(stamp).GetBuildId() != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
 	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
 		// first workflow task
 		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
@@ -814,8 +814,8 @@ func MakeVersionDirectiveForActivityTask(
 	var directive taskqueuespb.TaskVersionDirective
 	if useLatestBuildId {
 		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
-	} else if StampIfUsingVersioning(stamp).GetBuildId() != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
 	}
 	// else: unversioned queue
 	return &directive
