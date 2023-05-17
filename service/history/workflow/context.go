@@ -885,13 +885,13 @@ func (c *ContextImpl) enforceSizeCheck(
 			return false, err
 		}
 
-		// Terminate workflow is written as a separate batch and might result in more than one event as we close the
-		// outstanding workflow task before terminating the workflow
 		failureReason := common.FailureReasonHistorySizeExceedsLimit
 		if msMaxExceeded {
 			failureReason = common.FailureReasonMutableStateSizeExceedsLimit
 		}
 
+		// Terminate workflow is written as a separate batch and might result in more than one event as we close the
+		// outstanding workflow task before terminating the workflow
 		eventBatchFirstEventID := mutableState.GetNextEventID()
 		if err := TerminateWorkflow(
 			mutableState,
