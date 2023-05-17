@@ -43,9 +43,10 @@ type (
 	PersistenceRateLimitingParams struct {
 		fx.Out
 
-		PersistenceMaxQps          persistenceClient.PersistenceMaxQps
-		PersistenceNamespaceMaxQps persistenceClient.PersistenceNamespaceMaxQps
-		EnablePriorityRateLimiting persistenceClient.EnablePriorityRateLimiting
+		PersistenceMaxQps                  persistenceClient.PersistenceMaxQps
+		PersistenceNamespaceMaxQps         persistenceClient.PersistenceNamespaceMaxQps
+		PersistencePerShardNamespaceMaxQPS persistenceClient.PersistencePerShardNamespaceMaxQPS
+		EnablePriorityRateLimiting         persistenceClient.EnablePriorityRateLimiting
 	}
 )
 
@@ -53,12 +54,14 @@ func NewPersistenceRateLimitingParams(
 	maxQps dynamicconfig.IntPropertyFn,
 	globalMaxQps dynamicconfig.IntPropertyFn,
 	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 ) PersistenceRateLimitingParams {
 	return PersistenceRateLimitingParams{
-		PersistenceMaxQps:          PersistenceMaxQpsFn(maxQps, globalMaxQps),
-		PersistenceNamespaceMaxQps: persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
-		EnablePriorityRateLimiting: persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
+		PersistenceMaxQps:                  PersistenceMaxQpsFn(maxQps, globalMaxQps),
+		PersistenceNamespaceMaxQps:         persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
+		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
+		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
 	}
 }
 

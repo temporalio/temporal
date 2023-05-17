@@ -1042,7 +1042,9 @@ func (ms *MutableStateImpl) GetStartEvent(
 	return event, nil
 }
 
-func (ms *MutableStateImpl) GetFirstRunID() (string, error) {
+func (ms *MutableStateImpl) GetFirstRunID(
+	ctx context.Context,
+) (string, error) {
 	firstRunID := ms.executionInfo.FirstExecutionRunId
 	// This is needed for backwards compatibility.  Workflow execution create with Temporal release v0.28.0 or earlier
 	// does not have FirstExecutionRunID stored as part of mutable state.  If this is not set then load it from
@@ -1050,7 +1052,7 @@ func (ms *MutableStateImpl) GetFirstRunID() (string, error) {
 	if len(firstRunID) != 0 {
 		return firstRunID, nil
 	}
-	currentStartEvent, err := ms.GetStartEvent(context.TODO())
+	currentStartEvent, err := ms.GetStartEvent(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -3424,7 +3426,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		command,
 	)
 
-	firstRunID, err := ms.GetFirstRunID()
+	firstRunID, err := ms.GetFirstRunID(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

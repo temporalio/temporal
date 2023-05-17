@@ -171,7 +171,7 @@ type (
 		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetSignalExternalInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
-		GetFirstRunID() (string, error)
+		GetFirstRunID(ctx context.Context) (string, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo

@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -51,7 +50,6 @@ type (
 		shard             shard.Context
 		config            *configs.Config
 		namespaceRegistry namespace.Registry
-		eventsCache       events.Cache
 		logger            log.Logger
 	}
 )
@@ -60,7 +58,6 @@ func NewTaskRefresher(
 	shard shard.Context,
 	config *configs.Config,
 	namespaceRegistry namespace.Registry,
-	eventsCache events.Cache,
 	logger log.Logger,
 ) *TaskRefresherImpl {
 
@@ -68,7 +65,6 @@ func NewTaskRefresher(
 		shard:             shard,
 		config:            config,
 		namespaceRegistry: namespaceRegistry,
-		eventsCache:       eventsCache,
 		logger:            logger,
 	}
 }
@@ -269,14 +265,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 	taskGenerator TaskGenerator,
 ) error {
 
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
 	pendingActivityInfos := mutableState.GetPendingActivityInfos()
-
-	currentBranchToken, err := mutableState.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
 
 Loop:
 	for _, activityInfo := range pendingActivityInfos {
@@ -294,18 +283,7 @@ Loop:
 			continue Loop
 		}
 
-		scheduleEvent, err := r.eventsCache.GetEvent(
-			ctx,
-			events.EventKey{
-				NamespaceID: namespace.ID(executionInfo.NamespaceId),
-				WorkflowID:  executionInfo.WorkflowId,
-				RunID:       executionState.RunId,
-				EventID:     activityInfo.ScheduledEventId,
-				Version:     activityInfo.Version,
-			},
-			activityInfo.ScheduledEventBatchId,
-			currentBranchToken,
-		)
+		scheduleEvent, err := mutableState.GetActivityScheduledEvent(ctx, activityInfo.ScheduledEventId)
 		if err != nil {
 			return err
 		}
@@ -359,33 +337,14 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	taskGenerator TaskGenerator,
 ) error {
 
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
 	pendingChildWorkflowInfos := mutableState.GetPendingChildExecutionInfos()
-
-	currentBranchToken, err := mutableState.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
 
 Loop:
 	for _, childWorkflowInfo := range pendingChildWorkflowInfos {
 		if childWorkflowInfo.StartedEventId != common.EmptyEventID {
 			continue Loop
 		}
-
-		scheduleEvent, err := r.eventsCache.GetEvent(
-			ctx,
-			events.EventKey{
-				NamespaceID: namespace.ID(executionInfo.NamespaceId),
-				WorkflowID:  executionInfo.WorkflowId,
-				RunID:       executionState.RunId,
-				EventID:     childWorkflowInfo.InitiatedEventId,
-				Version:     childWorkflowInfo.Version,
-			},
-			childWorkflowInfo.InitiatedEventBatchId,
-			currentBranchToken,
-		)
+		scheduleEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, childWorkflowInfo.InitiatedEventId)
 		if err != nil {
 			return err
 		}
@@ -406,28 +365,10 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	taskGenerator TaskGenerator,
 ) error {
 
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
 	pendingRequestCancelInfos := mutableState.GetPendingRequestCancelExternalInfos()
 
-	currentBranchToken, err := mutableState.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
-
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
-		initiateEvent, err := r.eventsCache.GetEvent(
-			ctx,
-			events.EventKey{
-				NamespaceID: namespace.ID(executionInfo.NamespaceId),
-				WorkflowID:  executionInfo.WorkflowId,
-				RunID:       executionState.RunId,
-				EventID:     requestCancelInfo.GetInitiatedEventId(),
-				Version:     requestCancelInfo.GetVersion(),
-			},
-			requestCancelInfo.GetInitiatedEventBatchId(),
-			currentBranchToken,
-		)
+		initiateEvent, err := mutableState.GetRequesteCancelExternalInitiatedEvent(ctx, requestCancelInfo.GetInitiatedEventId())
 		if err != nil {
 			return err
 		}
@@ -448,28 +389,11 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	taskGenerator TaskGenerator,
 ) error {
 
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
 	pendingSignalInfos := mutableState.GetPendingSignalExternalInfos()
 
-	currentBranchToken, err := mutableState.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
-
 	for _, signalInfo := range pendingSignalInfos {
-		initiateEvent, err := r.eventsCache.GetEvent(
-			ctx,
-			events.EventKey{
-				NamespaceID: namespace.ID(executionInfo.NamespaceId),
-				WorkflowID:  executionInfo.WorkflowId,
-				RunID:       executionState.RunId,
-				EventID:     signalInfo.GetInitiatedEventId(),
-				Version:     signalInfo.GetVersion(),
-			},
-			signalInfo.GetInitiatedEventBatchId(),
-			currentBranchToken,
-		)
+
+		initiateEvent, err := mutableState.GetSignalExternalInitiatedEvent(ctx, signalInfo.GetInitiatedEventId())
 		if err != nil {
 			return err
 		}

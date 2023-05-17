@@ -292,7 +292,7 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 		WorkflowTaskTimeout:      workflowTaskTimeout,
 		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
-	signalCtx, cancel := context.WithTimeout(context.Background(), c.signalTimeout())
+	signalCtx, cancel := context.WithTimeout(ctx, c.signalTimeout())
 	defer cancel()
 
 	sdkClient := c.sdkClientFactory.GetSystemClient()

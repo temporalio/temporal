@@ -108,9 +108,9 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	streamClient.EXPECT().Recv().Return(&adminservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
 			Messages: &repicationpb.WorkflowReplicationMessages{
-				ReplicationTasks: []*repicationpb.ReplicationTask{},
-				LastTaskId:       100,
-				LastTaskTime:     timestamp.TimePtr(time.Unix(0, 100)),
+				ReplicationTasks:           []*repicationpb.ReplicationTask{},
+				ExclusiveHighWatermark:     100,
+				ExclusiveHighWatermarkTime: timestamp.TimePtr(time.Unix(0, 100)),
 			},
 		},
 	}, nil).AnyTimes()

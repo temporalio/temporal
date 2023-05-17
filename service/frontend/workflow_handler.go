@@ -79,6 +79,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -3460,6 +3461,11 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 		return nil, errUpdateWorkflowExecutionAPINotAllowed
 	}
 
+	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
+		!wh.config.EnableUpdateWorkflowExecutionAsyncAccepted(request.Namespace) {
+		return nil, errUpdateWorkflowExecutionAsyncAcceptedNotAllowed
+	}
+
 	histResp, err := wh.historyClient.UpdateWorkflowExecution(ctx, &historyservice.UpdateWorkflowExecutionRequest{
 		NamespaceId: nsID.String(),
 		Request:     request,
@@ -4479,12 +4485,16 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceI
 	}
 	// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
 	// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
-	_, err := wh.matchingClient.CancelOutstandingPoll(context.Background(), &matchingservice.CancelOutstandingPollRequest{
-		NamespaceId:   namespaceID.String(),
-		TaskQueueType: taskQueueType,
-		TaskQueue:     taskQueue,
-		PollerId:      pollerID,
-	})
+	// TODO: specify a reasonable timeout for CancelOutstandingPoll.
+	_, err := wh.matchingClient.CancelOutstandingPoll(
+		rpc.CopyContextValues(context.TODO(), ctx),
+		&matchingservice.CancelOutstandingPollRequest{
+			NamespaceId:   namespaceID.String(),
+			TaskQueueType: taskQueueType,
+			TaskQueue:     taskQueue,
+			PollerId:      pollerID,
+		},
+	)
 	// We can not do much if this call fails.  Just log the error and move on.
 	if err != nil {
 		wh.logger.Warn("Failed to cancel outstanding poller.",

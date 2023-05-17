@@ -370,6 +370,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	// case 2
 	//  find the current & active workflow to reapply
 	if err := targetWorkflow.GetContext().ReapplyEvents(
+		ctx,
 		targetWorkflowEventsSlice,
 	); err != nil {
 		return 0, workflow.TransactionPolicyActive, err

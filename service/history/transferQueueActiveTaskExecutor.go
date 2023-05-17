@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
@@ -978,6 +979,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	// NOTE: reset need to go through history which may take a longer time,
 	// so it's using its own timeout
 	return t.resetWorkflow(
+		ctx,
 		task,
 		reason,
 		resetPoint,
@@ -1343,6 +1345,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 }
 
 func (t *transferQueueActiveTaskExecutor) resetWorkflow(
+	ctx context.Context,
 	task *tasks.ResetWorkflowTask,
 	reason string,
 	resetPoint *workflowpb.ResetPointInfo,
@@ -1351,8 +1354,10 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	currentMutableState workflow.MutableState,
 	logger log.Logger,
 ) error {
-	var err error
-	ctx, cancel := context.WithTimeout(context.Background(), taskHistoryOpTimeout)
+	// the actual reset operation needs to read history and may not be able to completed within
+	// the original context timeout.
+	// create a new context with a longer timeout, but retain all existing context values.
+	resetWorkflowCtx, cancel := rpc.ResetContextTimeout(ctx, taskHistoryOpTimeout)
 	defer cancel()
 
 	namespaceID := namespace.ID(task.NamespaceID)
@@ -1374,7 +1379,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	baseNextEventID := baseMutableState.GetNextEventID()
 
 	err = t.workflowResetter.ResetWorkflow(
-		ctx,
+		resetWorkflowCtx,
 		namespaceID,
 		workflowID,
 		baseRunID,
@@ -1385,7 +1390,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		resetRunID,
 		uuid.New(),
 		ndc.NewWorkflow(
-			ctx,
+			resetWorkflowCtx,
 			t.registry,
 			t.shard.GetClusterMetadata(),
 			currentContext,

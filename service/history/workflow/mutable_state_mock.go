@@ -1205,18 +1205,18 @@ func (mr *MockMutableStateMockRecorder) GetExecutionState() *gomock.Call {
 }
 
 // GetFirstRunID mocks base method.
-func (m *MockMutableState) GetFirstRunID() (string, error) {
+func (m *MockMutableState) GetFirstRunID(ctx context.Context) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetFirstRunID")
+	ret := m.ctrl.Call(m, "GetFirstRunID", ctx)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetFirstRunID indicates an expected call of GetFirstRunID.
-func (mr *MockMutableStateMockRecorder) GetFirstRunID() *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GetFirstRunID(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFirstRunID", reflect.TypeOf((*MockMutableState)(nil).GetFirstRunID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFirstRunID", reflect.TypeOf((*MockMutableState)(nil).GetFirstRunID), ctx)
 }
 
 // GetLastFirstEventIDTxnID mocks base method.

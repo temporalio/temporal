@@ -70,6 +70,7 @@ type (
 	// to clients yet (e.g. accepted or outcome futures have not been set yet).
 	// The observable changes are bound to the EventStore's effect.Controller
 	// and will be triggered when those effects are applied.
+	// State transitions (OnMessage calls) must be done while holding the workflow lock.
 	Update struct {
 		// accessed only while holding workflow lock
 		id              string
@@ -151,7 +152,7 @@ func newCompleted(
 
 // WaitOutcome observes this Update's completion, returning the Outcome when it
 // is available. This call will block until the Outcome is known or the provided
-// context.Context expires.
+// context.Context expires. It is safe to call this method outside of workflow lock.
 func (u *Update) WaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
 	return u.outcome.Get(ctx)
 }
@@ -160,6 +161,7 @@ func (u *Update) WaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
 // been accepted but not yet completed or the overall Outcome if the update has
 // been completed (including completed by rejection). This call will block until
 // the acceptance occurs or the provided context.Context expires.
+// It is safe to call this method outside of workflow lock.
 func (u *Update) WaitAccepted(ctx context.Context) (*updatepb.Outcome, error) {
 	if u.outcome.Ready() {
 		// being complete implies being accepted, return the completed outcome

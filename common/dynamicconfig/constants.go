@@ -281,6 +281,11 @@ const (
 	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
+	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
+	// asynchronous workflow execution update that waits on the "Accepted"
+	// lifecycle stage. Default value is `false`.
+	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = "frontend.enableUpdateWorkflowExecutionAsyncAccepted"
+
 	// FrontendEnableUpdateWorkflowExecution enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
 
@@ -366,6 +371,8 @@ const (
 	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
+	// HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB
+	HistoryPersistencePerShardNamespaceMaxQPS = "history.persistencePerShardNamespaceMaxQPS"
 	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
 	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
