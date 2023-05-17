@@ -263,8 +263,10 @@ func NewMutableState(
 		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		ExecutionStats:   &persistencespb.ExecutionStats{HistorySize: 0},
 	}
+	s.approximateSize += s.executionInfo.Size()
 	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	s.approximateSize += s.executionState.Size()
 
 	s.hBuilder = NewMutableHistoryBuilder(
 		s.timeSource,
@@ -274,6 +276,7 @@ func NewMutableState(
 		s.bufferEventsInDB,
 		s.metricsHandler,
 	)
+	s.approximateSize += s.hBuilder.SizeInBytesOfBufferedEvents()
 	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s)
 
@@ -346,6 +349,7 @@ func newMutableStateFromDB(
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
+	mutableState.approximateSize -= mutableState.hBuilder.SizeInBytesOfBufferedEvents()
 	mutableState.hBuilder = NewMutableHistoryBuilder(
 		mutableState.timeSource,
 		mutableState.shard.GenerateTaskIDs,
@@ -354,7 +358,6 @@ func newMutableStateFromDB(
 		dbRecord.BufferedEvents,
 		mutableState.metricsHandler,
 	)
-
 	mutableState.approximateSize += mutableState.hBuilder.SizeInBytesOfBufferedEvents()
 
 	mutableState.currentVersion = common.EmptyVersion
@@ -500,7 +503,9 @@ func (ms *MutableStateImpl) SetCurrentBranchToken(
 }
 
 func (ms *MutableStateImpl) SetHistoryBuilder(hBuilder *HistoryBuilder) {
+	ms.approximateSize -= ms.hBuilder.SizeInBytesOfBufferedEvents()
 	ms.hBuilder = hBuilder
+	ms.approximateSize += hBuilder.SizeInBytesOfBufferedEvents()
 }
 
 func (ms *MutableStateImpl) SetBaseWorkflow(
@@ -567,6 +572,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.currentVersion = version
 	}
 
+	ms.approximateSize -= ms.hBuilder.SizeInBytesOfBufferedEvents()
 	ms.hBuilder = NewMutableHistoryBuilder(
 		ms.timeSource,
 		ms.shard.GenerateTaskIDs,
@@ -575,6 +581,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
 	)
+	ms.approximateSize += ms.hBuilder.SizeInBytesOfBufferedEvents()
 
 	return nil
 }
