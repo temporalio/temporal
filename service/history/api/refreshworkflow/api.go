@@ -63,7 +63,6 @@ func Invoke(
 		shard,
 		shard.GetConfig(),
 		shard.GetNamespaceRegistry(),
-		shard.GetEventsCache(),
 		shard.GetLogger(),
 	)
 

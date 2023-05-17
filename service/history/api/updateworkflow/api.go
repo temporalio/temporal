@@ -117,6 +117,10 @@ func Invoke(
 			return consts.ErrWorkflowCompleted
 		}
 
+		// wfKey built from request may have blank RunID so assign a fully
+		// populated version
+		wfKey = ms.GetWorkflowKey()
+
 		if req.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != req.GetRequest().GetFirstExecutionRunId() {
 			return consts.ErrWorkflowExecutionNotFound
 		}
