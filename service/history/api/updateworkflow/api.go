@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -92,6 +93,7 @@ func Invoke(
 	var (
 		upd                    *update.Update
 		taskQueue              taskqueuepb.TaskQueue
+		normalTaskQueueName    string
 		scheduledEventID       int64
 		scheduleToStartTimeout time.Duration
 	)
@@ -156,6 +158,7 @@ func Invoke(
 				Name: newWorkflowTask.TaskQueue.Name,
 				Kind: newWorkflowTask.TaskQueue.Kind,
 			}
+			normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
 		}
 		return nil
 	}
@@ -164,9 +167,21 @@ func Invoke(
 		return nil, err
 	}
 
-	// WT was created.
+	// WT was created and needs to be added directly to matching w/o transfer task.
+	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
+	//   Helper function needs to be extracted to avoid code duplication.
 	if scheduledEventID != common.EmptyEventID {
 		err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), shardCtx, matchingClient)
+
+		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
+			// If sticky worker is unavailable, switch to original normal task queue.
+			taskQueue = taskqueuepb.TaskQueue{
+				Name: normalTaskQueueName,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			}
+			err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), shardCtx, matchingClient)
+		}
+
 		if err != nil {
 			return nil, err
 		}
