@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/util"
 )
 
 // TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
@@ -272,7 +273,12 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 
 	switch err.(type) {
 	case nil:
-		_ = rateLimiter.ReserveN(time.Now(), int(resp.StateTransitionCount))
+		stateTransitionCount := resp.StateTransitionCount
+		for stateTransitionCount > 0 {
+			token := util.Min(int(stateTransitionCount), rateLimiter.Burst())
+			stateTransitionCount -= int64(token)
+			_ = rateLimiter.ReserveN(time.Now(), token)
+		}
 		return nil
 	case *serviceerror.NotFound:
 		return nil
