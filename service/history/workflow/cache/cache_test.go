@@ -402,7 +402,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 
 func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 
-	tests := []struct {
+	testSets := []struct {
 		name             string
 		shouldLockBefore bool
 		callerType       string
@@ -431,7 +431,7 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 			wantErr:          true,
 		},
 	}
-	for _, tt := range tests {
+	for _, tt := range testSets {
 		s.Run(tt.name, func() {
 			c := NewCache(s.mockShard).(*CacheImpl)
 			namespaceID := namespace.ID("test_namespace_id")
@@ -442,7 +442,8 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 			key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
 			workflowCtx := workflow.NewContext(c.shard, key, c.logger)
 			ctx := headers.SetCallerType(context.Background(), tt.callerType)
-			ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
 
 			if tt.shouldLockBefore {
 				// lock the workflow to allow it to time out
