@@ -87,8 +87,10 @@ type (
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
 
 const (
-	cacheNotReleased int32 = 0
-	cacheReleased    int32 = 1
+	cacheNotReleased            int32 = 0
+	cacheReleased               int32 = 1
+	workflowLockTimeoutTailTime       = 500 * time.Millisecond
+	nonApiContextLockTimeout          = 500 * time.Millisecond
 )
 
 func NewCache(shard shard.Context) Cache {
@@ -200,26 +202,37 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext, lockPriority)
 
-	const tailTime = 500 * time.Millisecond
-	var timeout time.Time
-	if deadline, ok := ctx.Deadline(); ok {
-		timeout = deadline.Add(-tailTime)
-	}
-
-	if headers.GetCallerInfo(ctx).CallerType != headers.CallerTypeAPI {
-		timeout = time.Now().Add(500 * time.Millisecond)
-	}
-	ctxWithDeadline, cancel := context.WithDeadline(ctx, timeout)
-	defer cancel()
-
-	if err := workflowCtx.Lock(ctxWithDeadline, lockPriority); err != nil {
-		// ctx is done before lock can be acquired
-		c.Release(key)
+	if err := c.lockWorkflowExecution(ctx, workflowCtx, key, lockPriority); err != nil {
 		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 		handler.Counter(metrics.AcquireLockFailedCounter.GetMetricName()).Record(1)
-		return nil, nil, serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow cannot be locked")
+		return nil, nil, err
 	}
+
 	return workflowCtx, releaseFunc, nil
+}
+
+func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
+	workflowCtx workflow.Context,
+	key definition.WorkflowKey,
+	lockPriority workflow.LockPriority) error {
+
+	var cancel context.CancelFunc
+	if headers.GetCallerInfo(ctx).CallerType != headers.CallerTypeAPI {
+		timeout := time.Now().Add(nonApiContextLockTimeout)
+		ctx, cancel = context.WithDeadline(ctx, timeout)
+		defer cancel()
+	} else if deadline, ok := ctx.Deadline(); ok {
+		timeout := deadline.Add(-workflowLockTimeoutTailTime)
+		ctx, cancel = context.WithDeadline(ctx, timeout)
+		defer cancel()
+	}
+
+	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
+		// ctx is done before lock can be acquired
+		c.Release(key)
+		return serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow cannot be locked")
+	}
+	return nil
 }
 
 func (c *CacheImpl) makeReleaseFunc(
