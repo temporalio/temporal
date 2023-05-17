@@ -1095,6 +1095,7 @@ func (ms *MutableStateImpl) DeletePendingChildExecution(
 		ms.logDataInconsistency()
 	}
 
+	ms.approximateSize -= ms.updateChildExecutionInfos[initiatedEventID].Size()
 	delete(ms.updateChildExecutionInfos, initiatedEventID)
 	ms.deleteChildExecutionInfos[initiatedEventID] = struct{}{}
 	return nil
@@ -1116,6 +1117,7 @@ func (ms *MutableStateImpl) DeletePendingRequestCancel(
 		ms.logDataInconsistency()
 	}
 
+	ms.approximateSize -= ms.updateRequestCancelInfos[initiatedEventID].Size()
 	delete(ms.updateRequestCancelInfos, initiatedEventID)
 	ms.deleteRequestCancelInfos[initiatedEventID] = struct{}{}
 	return nil
@@ -1137,6 +1139,7 @@ func (ms *MutableStateImpl) DeletePendingSignal(
 		ms.logDataInconsistency()
 	}
 
+	ms.approximateSize -= ms.updateSignalInfos[initiatedEventID].Size()
 	delete(ms.updateSignalInfos, initiatedEventID)
 	ms.deleteSignalInfos[initiatedEventID] = struct{}{}
 	return nil
@@ -1176,6 +1179,7 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	now := ms.timeSource.Now()
 	ai.LastHeartbeatUpdateTime = &now
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
 
@@ -1212,6 +1216,7 @@ func (ms *MutableStateImpl) ReplicateActivityInfo(
 	}
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -1230,6 +1235,7 @@ func (ms *MutableStateImpl) UpdateActivity(
 
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -1276,6 +1282,7 @@ func (ms *MutableStateImpl) DeleteActivity(
 		ms.logDataInconsistency()
 	}
 
+	ms.approximateSize -= ms.updateActivityInfos[scheduledEventID].Size()
 	delete(ms.updateActivityInfos, scheduledEventID)
 	delete(ms.syncActivityTasks, scheduledEventID)
 	ms.deleteActivityInfos[scheduledEventID] = struct{}{}
@@ -1327,6 +1334,7 @@ func (ms *MutableStateImpl) UpdateUserTimer(
 
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
 	ms.updateTimerInfos[ti.TimerId] = ti
+	ms.approximateSize += ti.Size()
 	return nil
 }
 
@@ -1357,6 +1365,7 @@ func (ms *MutableStateImpl) DeleteUserTimer(
 		ms.logDataInconsistency()
 	}
 
+	ms.approximateSize -= ms.updateTimerInfos[timerID].Size()
 	delete(ms.updateTimerInfos, timerID)
 	ms.deleteTimerInfos[timerID] = struct{}{}
 	return nil
@@ -2169,6 +2178,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	ms.executionInfo.ActivityCount++
 
 	ms.writeEventToCache(event)
@@ -2259,6 +2269,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskStartedEvent(
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -2483,6 +2494,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskCancelRequestedEvent(
 
 	ai.CancelRequestId = event.GetEventId()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -2802,6 +2814,7 @@ func (ms *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionIniti
 
 	ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
 	ms.updateRequestCancelInfos[rci.InitiatedEventId] = rci
+	ms.approximateSize += rci.Size()
 	ms.executionInfo.RequestCancelExternalCount++
 
 	ms.writeEventToCache(event)
@@ -2942,6 +2955,7 @@ func (ms *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEve
 
 	ms.pendingSignalInfoIDs[si.InitiatedEventId] = si
 	ms.updateSignalInfos[si.InitiatedEventId] = si
+	ms.approximateSize += si.Size()
 	ms.executionInfo.SignalExternalCount++
 
 	ms.writeEventToCache(event)
@@ -3147,6 +3161,7 @@ func (ms *MutableStateImpl) ReplicateTimerStartedEvent(
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
 	ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
 	ms.updateTimerInfos[ti.TimerId] = ti
+	ms.approximateSize += ti.Size()
 	ms.executionInfo.UserTimerCount++
 
 	return ti, nil
@@ -3302,11 +3317,13 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateAcceptedEvent(
 	if attrs == nil {
 		return serviceerror.NewInternal("wrong event type in call to ReplicateworkflowExecutionUpdateAcceptedEvent")
 	}
-	ms.updateInfos[attrs.GetAcceptedRequest().GetMeta().GetUpdateId()] = &persistencespb.UpdateInfo{
+	ui := &persistencespb.UpdateInfo{
 		Value: &persistencespb.UpdateInfo_AcceptancePointer{
 			AcceptancePointer: &historyspb.HistoryEventPointer{EventId: event.GetEventId()},
 		},
 	}
+	ms.updateInfos[attrs.GetAcceptedRequest().GetMeta().GetUpdateId()] = ui
+	ms.approximateSize += ui.Size()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -3346,11 +3363,13 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
 	if attrs == nil {
 		return serviceerror.NewInternal("wrong event type in call to ReplicateworkflowExecutionUpdateCompletedEvent")
 	}
-	ms.updateInfos[attrs.GetMeta().GetUpdateId()] = &persistencespb.UpdateInfo{
+	ui := &persistencespb.UpdateInfo{
 		Value: &persistencespb.UpdateInfo_CompletedPointer{
 			CompletedPointer: &historyspb.HistoryEventPointer{EventId: event.GetEventId()},
 		},
 	}
+	ms.updateInfos[attrs.GetMeta().GetUpdateId()] = ui
+	ms.approximateSize += ui.Size()
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -3590,6 +3609,7 @@ func (ms *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 
 	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
+	ms.approximateSize += ci.Size()
 	ms.executionInfo.ChildExecutionCount++
 
 	ms.writeEventToCache(event)
@@ -3654,6 +3674,7 @@ func (ms *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 	ci.StartedRunId = attributes.GetWorkflowExecution().GetRunId()
 	ci.Clock = clock
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
+	ms.approximateSize += ci.Size()
 
 	return nil
 }
@@ -4008,6 +4029,7 @@ func (ms *MutableStateImpl) RetryActivity(
 	}
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
@@ -4503,11 +4525,13 @@ func (ms *MutableStateImpl) updatePendingEventIDs(
 		if activityInfo, ok := ms.GetActivityInfo(scheduledEventID); ok {
 			activityInfo.StartedEventId = startedEventID
 			ms.updateActivityInfos[activityInfo.ScheduledEventId] = activityInfo
+			ms.approximateSize += activityInfo.Size()
 			continue
 		}
 		if childInfo, ok := ms.GetChildExecutionInfo(scheduledEventID); ok {
 			childInfo.StartedEventId = startedEventID
 			ms.updateChildExecutionInfos[childInfo.InitiatedEventId] = childInfo
+			ms.approximateSize += childInfo.Size()
 			continue
 		}
 	}
