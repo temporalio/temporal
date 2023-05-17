@@ -714,16 +714,12 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		return nil
 	}
 
-	var resolveInitialFetch func(error)
-	resolveInitialFetch = func(err error) {
-		c.userDataInitialFetch.Set(struct{}{}, err)
-		resolveInitialFetch = func(error) {}
-	}
-
 	fetchSource, err := c.userDataFetchSource()
 	if err != nil {
 		return err
 	}
+
+	firstCall := true
 
 	op := func(ctx context.Context) error {
 		knownUserData, _, err := c.db.GetUserData(ctx)
@@ -738,7 +734,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 			NamespaceId:              c.taskQueueID.namespaceID.String(),
 			TaskQueue:                fetchSource,
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
-			WaitNewData:              true,
+			WaitNewData:              !firstCall,
 		})
 		if err != nil {
 			return err
@@ -750,7 +746,10 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		if res.GetUserData() != nil {
 			c.db.setUserDataForNonOwningPartition(res.GetUserData())
 		}
-		resolveInitialFetch(nil)
+		if firstCall {
+			c.userDataInitialFetch.Set(struct{}{}, err)
+			firstCall = false
+		}
 		return nil
 	}
 

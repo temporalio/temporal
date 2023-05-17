@@ -850,7 +850,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 		if err != nil && err != errUserDataNotPresentOnPartition {
 			return nil, err
 		}
-		if req.WaitNewData && (userData == nil || userData.Version == version) {
+		if req.WaitNewData && userData.GetVersion() == version {
 			// long-poll: wait for data to change/appear
 			select {
 			case <-ctx.Done():

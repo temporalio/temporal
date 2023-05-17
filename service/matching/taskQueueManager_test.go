@@ -551,7 +551,7 @@ func TestTQMFetchesUserDataFromOnInit(t *testing.T) {
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
 			LastKnownUserDataVersion: 0,
-			WaitNewData:              true,
+			WaitNewData:              false, // first fetch is not long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			TaskQueueHasUserData: true,
@@ -593,7 +593,7 @@ func TestTQMFetchesUserDataAndFetchesAgain(t *testing.T) {
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
 			LastKnownUserDataVersion: 0,
-			WaitNewData:              true,
+			WaitNewData:              false, // first is not long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			TaskQueueHasUserData: true,
@@ -606,7 +606,7 @@ func TestTQMFetchesUserDataAndFetchesAgain(t *testing.T) {
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
 			LastKnownUserDataVersion: 1,
-			WaitNewData:              true,
+			WaitNewData:              true, // second is long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			TaskQueueHasUserData: true,
@@ -657,7 +657,7 @@ func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
 			LastKnownUserDataVersion: 0,
-			WaitNewData:              true,
+			WaitNewData:              false,
 		}).
 		Return(nil, serviceerror.NewUnavailable("wait a sec")).Times(3)
 
@@ -667,7 +667,7 @@ func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
 			LastKnownUserDataVersion: 0,
-			WaitNewData:              true,
+			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			TaskQueueHasUserData: true,
@@ -706,7 +706,7 @@ func TestTQMFetchesUserDataUpTree(t *testing.T) {
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                tqId.Name.WithPartition(10).FullName(),
 			LastKnownUserDataVersion: 0,
-			WaitNewData:              true,
+			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			TaskQueueHasUserData: true,
@@ -744,7 +744,7 @@ func TestTQMFetchesUserDataActivityToWorkflow(t *testing.T) {
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
 			LastKnownUserDataVersion: 0,
-			WaitNewData:              true,
+			WaitNewData:              false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			TaskQueueHasUserData: true,
