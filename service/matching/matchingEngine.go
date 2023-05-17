@@ -905,7 +905,11 @@ func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
 	ctx context.Context,
 	req *matchingservice.GetBuildIdTaskQueueMappingRequest,
 ) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
-	taskQueues, err := e.taskManager.GetTaskQueuesByBuildId(ctx, &persistence.GetTaskQueuesByBuildIdRequest{NamespaceID: req.NamespaceId, BuildID: req.BuildId})
+	taskQueues, err := e.taskManager.GetTaskQueuesByBuildId(ctx, &persistence.GetTaskQueuesByBuildIdRequest{
+		NamespaceID: req.NamespaceId,
+		BuildID:     req.BuildId,
+		Limit:       e.config.TaskQueueFetchByBuildIdLimit(),
+	})
 	if err != nil {
 		return nil, err
 	}

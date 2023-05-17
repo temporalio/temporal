@@ -583,6 +583,7 @@ type (
 	GetTaskQueuesByBuildIdRequest struct {
 		NamespaceID string
 		BuildID     string
+		Limit       int
 	}
 
 	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API

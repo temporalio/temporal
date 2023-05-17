@@ -646,6 +646,7 @@ func (d *MatchingTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request 
 	var taskQueues []string
 	row := make(map[string]interface{})
 
+OUTER:
 	for {
 		for iter.MapScan(row) {
 			taskQueueRaw, ok := row["task_queue_name"]
@@ -659,6 +660,9 @@ func (d *MatchingTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request 
 			}
 
 			taskQueues = append(taskQueues, taskQueue)
+			if len(taskQueues) > request.Limit {
+				break OUTER
+			}
 
 			row = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
 		}

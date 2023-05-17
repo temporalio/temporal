@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -36,10 +35,11 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/util"
 )
 
 // Little helper to concurrently map a function over input and fail fast on error.
-func raceMap[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([]OUT, error) {
+func mapConcurrent[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([]OUT, error) {
 	errorsCh := make(chan error, len(input))
 	results := make([]OUT, len(input))
 
@@ -60,179 +60,45 @@ func raceMap[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([]OUT, 
 	return results, nil
 }
 
-// Helper for deduping GetWorkerBuildIdCompatibility matching requests.
-type versionSetFetcher struct {
-	sync.Mutex
-	matchingClient  matchingservice.MatchingServiceClient
-	notificationChs map[string]chan struct{}
-	responses       map[string]versionSetFetcherResponse
-}
-
-type versionSetFetcherResponse struct {
-	value *matchingservice.GetWorkerBuildIdCompatibilityResponse
-	err   error
-}
-
-func newVersionSetFetcher(matchingClient matchingservice.MatchingServiceClient) *versionSetFetcher {
-	return &versionSetFetcher{
-		matchingClient:  matchingClient,
-		notificationChs: make(map[string]chan struct{}),
-		responses:       make(map[string]versionSetFetcherResponse),
-	}
-}
-
-func (f *versionSetFetcher) getStoredResponse(taskQueue string) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
-	f.Lock()
-	defer f.Unlock()
-	if response, found := f.responses[taskQueue]; found {
-		return response.value, response.err
-	}
-	return nil, nil
-}
-
-func (f *versionSetFetcher) fetchTaskQueueVersions(ctx context.Context, ns *namespace.Namespace, taskQueue string) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
-	response, err := f.getStoredResponse(taskQueue)
-	if err != nil || response != nil {
-		return response, err
-	}
-
-	f.Lock()
-	var waitCh chan struct{}
-	if ch, found := f.notificationChs[taskQueue]; found {
-		waitCh = ch
-	} else {
-		waitCh = make(chan struct{})
-		f.notificationChs[taskQueue] = waitCh
-
-		go func() {
-			value, err := f.matchingClient.GetWorkerBuildIdCompatibility(ctx, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
-				NamespaceId: ns.ID().String(),
-				Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
-					Namespace: ns.Name().String(),
-					TaskQueue: taskQueue,
-				},
-			})
-			f.Lock()
-			defer f.Unlock()
-			f.responses[taskQueue] = versionSetFetcherResponse{value: value, err: err}
-			close(waitCh)
-		}()
-	}
-	f.Unlock()
-
-	<-waitCh
-	return f.getStoredResponse(taskQueue)
-}
-
 // Implementation of the GetWorkerTaskReachability API. Expects an already validated request.
 func (wh *WorkflowHandler) getWorkerTaskReachabilityValidated(
 	ctx context.Context,
 	ns *namespace.Namespace,
 	request *workflowservice.GetWorkerTaskReachabilityRequest,
 ) (*workflowservice.GetWorkerTaskReachabilityResponse, error) {
-	var buildIds []string
 
-	if request.GetTaskQueue() != "" {
-		var err error
-		buildIds, err = wh.getAllTaskQueuePollerBuildIds(ctx, ns, request.GetTaskQueue())
+	var taskQueues []string
+	if request.GetScope().GetTaskQueue() != "" {
+		taskQueues = []string{request.GetScope().GetTaskQueue()}
+	} else {
+		// Namespace scope implicitly assumed unless task queue is requested
+		response, err := wh.matchingClient.GetBuildIdTaskQueueMapping(ctx, &matchingservice.GetBuildIdTaskQueueMappingRequest{
+			NamespaceId: ns.ID().String(),
+			BuildId:     request.GetBuildId(),
+		})
 		if err != nil {
 			return nil, err
 		}
-		if len(buildIds) == 0 {
-			return &workflowservice.GetWorkerTaskReachabilityResponse{}, nil
-		}
-	} else {
-		buildIds = []string{request.GetBuildId()}
+		taskQueues = response.TaskQueues
 	}
 
-	versionFetcher := newVersionSetFetcher(wh.matchingClient)
+	numTaskQueuesToQuery := util.Min(len(taskQueues), wh.config.ReachabilityTaskQueueScanLimit())
+	taskQueuesToQuery, taskQueuesToSkip := taskQueues[:numTaskQueuesToQuery], taskQueues[numTaskQueuesToQuery:]
 
-	buildIdReachability, err := raceMap(buildIds, func(buildId string) (*taskqueuepb.BuildIdReachability, error) {
-		var taskQueues []string
-		if request.GetScope().GetTaskQueue() != "" {
-			taskQueues = []string{request.GetScope().GetTaskQueue()}
-		} else {
-			// Namespace scope implicitly assumed unless task queue is requested
-			response, err := wh.matchingClient.GetBuildIdTaskQueueMapping(ctx, &matchingservice.GetBuildIdTaskQueueMappingRequest{
-				NamespaceId: ns.ID().String(),
-				BuildId:     buildId,
-			})
-			if err != nil {
-				return nil, err
-			}
-			taskQueues = response.TaskQueues
-		}
-
-		return wh.getBuildIdReachability(ctx, buildIdReachabilityRequest{
-			versionFetcher: versionFetcher,
-			namespace:      ns,
-			buildId:        buildId,
-			taskQueues:     taskQueues,
-		})
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &workflowservice.GetWorkerTaskReachabilityResponse{BuildIdReachability: buildIdReachability}, nil
-}
-
-// Extract the set of build ids used to identify all task queue pollers.
-func (wh *WorkflowHandler) getAllTaskQueuePollerBuildIds(ctx context.Context, ns *namespace.Namespace, taskQueueName string) ([]string, error) {
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	taskQueueTypes := []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY, enumspb.TASK_QUEUE_TYPE_WORKFLOW}
-
-	describeResponses, err := raceMap(taskQueueTypes, func(taskQueueType enumspb.TaskQueueType) (*matchingservice.DescribeTaskQueueResponse, error) {
-		return wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+	taskQueueReachability, err := mapConcurrent(taskQueuesToQuery, func(taskQueue string) (*taskqueuepb.TaskQueueReachability, error) {
+		compatibilityResponse, err := wh.matchingClient.GetWorkerBuildIdCompatibility(ctx, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 			NamespaceId: ns.ID().String(),
-			DescRequest: &workflowservice.DescribeTaskQueueRequest{
-				Namespace:     ns.Name().String(),
-				TaskQueue:     taskQueue,
-				TaskQueueType: taskQueueType,
+			Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+				Namespace: ns.Name().String(),
+				TaskQueue: taskQueue,
 			},
 		})
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	seenBuildIds := make(map[string]struct{}, 0)
-	for _, response := range describeResponses {
-		for _, poller := range response.Pollers {
-			seenBuildIds[poller.GetWorkerVersionCapabilities().GetBuildId()] = struct{}{}
-		}
-	}
-	buildIds := make([]string, 0, len(seenBuildIds))
-	for buildId := range seenBuildIds {
-		buildIds = append(buildIds, buildId)
-	}
-	return buildIds, nil
-}
-
-type buildIdReachabilityRequest struct {
-	versionFetcher *versionSetFetcher
-	namespace      *namespace.Namespace
-	buildId        string
-	taskQueues     []string
-}
-
-// Get the reachability of a single build ID in namespace or task queue scope.
-// Expects a pre-popluated list of associated task queues.
-func (wh *WorkflowHandler) getBuildIdReachability(
-	ctx context.Context,
-	request buildIdReachabilityRequest,
-) (*taskqueuepb.BuildIdReachability, error) {
-	buildIdReachability := taskqueuepb.BuildIdReachability{BuildId: request.buildId}
-	if len(request.taskQueues) == 0 {
-		return &buildIdReachability, nil
-	}
-	taskQueueReachability, err := raceMap(request.taskQueues, func(taskQueue string) (*taskqueuepb.TaskQueueReachability, error) {
-		compatibilityResponse, err := request.versionFetcher.fetchTaskQueueVersions(ctx, request.namespace, taskQueue)
 		if err != nil {
 			return nil, err
 		}
 		return wh.getTaskQueueReachability(ctx, taskQueueReachabilityRequest{
-			buildId:     request.buildId,
-			namespace:   request.namespace,
+			buildId:     request.GetBuildId(),
+			namespace:   ns,
 			taskQueue:   taskQueue,
 			versionSets: compatibilityResponse.Response.GetMajorVersionSets(),
 		})
@@ -240,8 +106,13 @@ func (wh *WorkflowHandler) getBuildIdReachability(
 	if err != nil {
 		return nil, err
 	}
-	buildIdReachability.TaskQueueReachability = taskQueueReachability
-	return &buildIdReachability, nil
+	for _, taskQueue := range taskQueuesToSkip {
+		taskQueueReachability = append(taskQueueReachability, &taskqueuepb.TaskQueueReachability{TaskQueue: taskQueue, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_UNSPECIFIED}})
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.GetWorkerTaskReachabilityResponse{TaskQueueReachability: taskQueueReachability}, nil
 }
 
 type taskQueueReachabilityRequest struct {
@@ -342,7 +213,7 @@ func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
 			taskReachability: enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS,
 		},
 	}
-	reachabilityResponses, err := raceMap(queries, func(query reachabilityQuery) (enumspb.TaskReachability, error) {
+	reachabilityResponses, err := mapConcurrent(queries, func(query reachabilityQuery) (enumspb.TaskReachability, error) {
 		req := manager.CountWorkflowExecutionsRequest{
 			NamespaceID: ns.ID(),
 			Namespace:   ns.Name(),

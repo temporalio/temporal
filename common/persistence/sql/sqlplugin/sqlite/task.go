@@ -111,7 +111,7 @@ task_queue_id = :task_queue_id
 
 	addBuildIdToTaskQueueMappingQry    = `INSERT INTO build_id_to_task_queue (namespace_id, build_id, task_queue_name) VALUES `
 	removeBuildIdToTaskQueueMappingQry = `DELETE FROM build_id_to_task_queue WHERE `
-	listTaskQueuesByBuildIdQry         = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = ? AND build_id = ?`
+	listTaskQueuesByBuildIdQry         = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = ? AND build_id = ? LIMIT ?`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -391,7 +391,7 @@ func (mdb *db) GetTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.Ge
 		TaskQueueName string
 	}
 
-	err := mdb.conn.SelectContext(ctx, &rows, listTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
+	err := mdb.conn.SelectContext(ctx, &rows, listTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID, request.Limit)
 	taskQueues := make([]string, len(rows))
 	for i, row := range rows {
 		taskQueues[i] = row.TaskQueueName

@@ -591,7 +591,7 @@ func (m *sqlTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *pe
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
-	return m.Db.GetTaskQueuesByBuildId(ctx, &sqlplugin.GetTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
+	return m.Db.GetTaskQueuesByBuildId(ctx, &sqlplugin.GetTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID, Limit: request.Limit})
 }
 
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType

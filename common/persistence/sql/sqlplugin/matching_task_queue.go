@@ -79,6 +79,7 @@ type (
 	GetTaskQueuesByBuildIdRequest struct {
 		NamespaceID []byte
 		BuildID     string
+		Limit       int
 	}
 
 	VersionedBlob struct {

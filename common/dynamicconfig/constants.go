@@ -168,6 +168,12 @@ const (
 	// task queue. Update requests which would cause the versioning data to exceed this number will fail with a
 	// FailedPrecondition error.
 	VersionBuildIdLimitPerQueue = "limit.versionBuildIdLimitPerQueue"
+	// ReachabilityTaskQueueScanLimit limits the number of task queues to scan when responding to a
+	// GetWorkerTaskReachability query.
+	ReachabilityTaskQueueScanLimit = "limit.reachabilityTaskQueueScan"
+	// TaskQueueFetchByBuildIdLimit limits the number of task queue names to fetch when when scanning the build id to
+	// task queue mapping.
+	TaskQueueFetchByBuildIdLimit = "limit.taskQueueFetchByBuildId"
 
 	// keys for frontend
 

@@ -3612,13 +3612,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 		return nil, errWorkerVersioningNotAllowed
 	}
 
-	// NOTE: Default request subject is the empty build Id (unversioned)
-	if request.GetTaskQueue() != "" {
-		taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-		if err := wh.validateTaskQueue(taskQueue); err != nil {
-			return nil, err
-		}
-	} else if request.GetBuildId() != "" {
+	if request.GetBuildId() != "" {
 		if len(request.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
 			return nil, errBuildIdTooLong
 		}
