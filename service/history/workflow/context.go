@@ -481,7 +481,11 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 ) error {
 
 	// We only perform this check on active cluster for the namespace
-	forceTerminate, err := c.enforceSizeCheck(ctx)
+	historyForceTerminate, err := c.enforceHistorySizeCheck(ctx)
+	if err != nil {
+		return err
+	}
+	msForceTerminate, err := c.enforceMutableStateSizeCheck(ctx)
 	if err != nil {
 		return err
 	}
@@ -497,11 +501,13 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		return err
 	}
 
-	if forceTerminate {
-		// Returns ResourceExhausted error back to caller after workflow execution is forced terminated
-		// Retrying the operation will give appropriate semantics operation should expect in the case of workflow
-		// execution being closed.
-		return consts.ErrSizeExceedsLimit
+	// Returns ResourceExhausted error back to caller after workflow execution is forced terminated
+	// Retrying the operation will give appropriate semantics operation should expect in the case of workflow
+	// execution being closed.
+	if historyForceTerminate {
+		return consts.ErrHistorySizeExceedsLimit
+	} else if msForceTerminate {
+		return consts.ErrMutableStateSizeExceedsLimit
 	}
 
 	return nil
@@ -869,45 +875,17 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 }
 
 // Returns true if execution is forced terminated
-func (c *ContextImpl) enforceSizeCheck(
+func (c *ContextImpl) enforceHistorySizeCheck(
 	ctx context.Context,
 ) (bool, error) {
-	historyMaxExceeded := c.maxHistorySizeExceeded()
-	msMaxExceeded := c.maxMutableStateSizeExceeded()
 	// Hard terminate workflow if still running and breached history size, history count, or ms size limits
-	if historyMaxExceeded || msMaxExceeded {
-		// Discard pending changes in MutableState so we can apply terminate state transition
-		c.Clear()
-
-		// Reload mutable state
-		mutableState, err := c.LoadMutableState(ctx)
-		if err != nil {
+	if c.maxHistorySizeExceeded() {
+		if err := c.forceTerminateWorkflow(ctx, common.FailureReasonHistorySizeExceedsLimit); err != nil {
 			return false, err
 		}
-
-		failureReason := common.FailureReasonHistorySizeExceedsLimit
-		if msMaxExceeded {
-			failureReason = common.FailureReasonMutableStateSizeExceedsLimit
-		}
-
-		// Terminate workflow is written as a separate batch and might result in more than one event as we close the
-		// outstanding workflow task before terminating the workflow
-		eventBatchFirstEventID := mutableState.GetNextEventID()
-		if err := TerminateWorkflow(
-			mutableState,
-			eventBatchFirstEventID,
-			failureReason,
-			nil,
-			consts.IdentityHistoryService,
-			false,
-		); err != nil {
-			return false, err
-		}
-
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
 		return true, nil
 	}
-
 	return false, nil
 }
 
@@ -947,6 +925,18 @@ func (c *ContextImpl) maxHistorySizeExceeded() bool {
 	return false
 }
 
+// Returns true if execution is forced terminated
+func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context) (bool, error) {
+	if c.maxMutableStateSizeExceeded() {
+		if err := c.forceTerminateWorkflow(ctx, common.FailureReasonMutableStateSizeExceedsLimit); err != nil {
+			return false, err
+		}
+		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
+		return true, nil
+	}
+	return false, nil
+}
+
 // Returns true if the workflow is running and mutable state size should trigger a forced termination
 // Prints a log message if mutable state size is over the error or warn limits
 func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
@@ -974,6 +964,36 @@ func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 	}
 
 	return false
+}
+
+func (c *ContextImpl) forceTerminateWorkflow(
+	ctx context.Context,
+	failureReason string,
+) error {
+	// Discard pending changes in MutableState so we can apply terminate state transition
+	c.Clear()
+
+	// Reload mutable state
+	mutableState, err := c.LoadMutableState(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Terminate workflow is written as a separate batch and might result in more than one event as we close the
+	// outstanding workflow task before terminating the workflow
+	eventBatchFirstEventID := mutableState.GetNextEventID()
+	if err := TerminateWorkflow(
+		mutableState,
+		eventBatchFirstEventID,
+		failureReason,
+		nil,
+		consts.IdentityHistoryService,
+		false,
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func emitStateTransitionCount(
