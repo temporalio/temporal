@@ -984,12 +984,13 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 }
 
 // GenerateMigrationTasks mocks base method.
-func (m *MockMutableState) GenerateMigrationTasks() (tasks.Task, error) {
+func (m *MockMutableState) GenerateMigrationTasks() (tasks.Task, int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateMigrationTasks")
 	ret0, _ := ret[0].(tasks.Task)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(int64)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GenerateMigrationTasks indicates an expected call of GenerateMigrationTasks.
