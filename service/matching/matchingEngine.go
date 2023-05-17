@@ -847,7 +847,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	for {
 		resp := &matchingservice.GetTaskQueueUserDataResponse{}
 		userData, userDataChanged, err := tqMgr.GetUserData(ctx)
-		if err != nil && err != errUserDataNotPresentOnPartition {
+		if err != nil {
 			return nil, err
 		}
 		if req.WaitNewData && userData.GetVersion() == version {
