@@ -50,10 +50,15 @@ type versioningIntegSuite struct {
 	sdkClient sdkclient.Client
 }
 
+const (
+	partitionTreeDegree = 3
+)
+
 func (s *versioningIntegSuite) SetupSuite() {
 	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	s.dynamicConfigOverrides[dynamicconfig.MatchingMaxTaskQueueIdleTime] = 5 * time.Second
 	s.dynamicConfigOverrides[dynamicconfig.FrontendEnableWorkerVersioningDataAPIs] = true
+	s.dynamicConfigOverrides[dynamicconfig.MatchingForwarderMaxChildrenPerNode] = partitionTreeDegree
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
 
@@ -198,70 +203,42 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	s.Equal("foo", getCurrentDefault(res2))
 }
 
-func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() {
+func (s *versioningIntegSuite) TestVersioningChangesPropagate() {
 	ctx := NewContext()
-	tq := "integration-versioning-sub-partitions"
+	tq := "integration-versioning-propagate"
 
-	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "foo",
-		},
-	})
-	s.NoError(err)
-	s.NotNil(res)
+	// ensure at least two hops
+	partCount := 1 + partitionTreeDegree + partitionTreeDegree*partitionTreeDegree
 
-	res2, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-	})
-	s.NoError(err)
-	s.NotNil(res2)
-	s.Equal("foo", getCurrentDefault(res2))
-
-	// Verify partitions have data
-	dcCol := dynamicconfig.NewCollection(s.testCluster.GetHost().dcClient, s.Logger)
-	partCount := dcCol.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions)(s.namespace, tq, 0)
-	if partCount <= 1 {
-		s.T().Skip("This test makes no sense unless there are >1 partitions")
-	}
-
-	for i := 1; i < partCount; i++ {
-		subPartName, err := tqname.FromBaseName(tq)
-		s.NoError(err)
-		subPartName = subPartName.WithPartition(i)
-		res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+	for _, buildId := range []string{"foo", "foo-v2"} {
+		res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 			Namespace: s.namespace,
-			TaskQueue: subPartName.FullName(),
+			TaskQueue: tq,
+			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+				AddNewBuildIdInNewDefaultSet: buildId,
+			},
 		})
 		s.NoError(err)
 		s.NotNil(res)
-		s.Equal("foo", getCurrentDefault(res2))
-	}
 
-	// Make a modification, verify it propagates to partitions
-	res, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "foo-2",
-		},
-	})
-	s.NoError(err)
-	s.NotNil(res)
-
-	for i := 1; i < partCount; i++ {
-		subPartName, err := tqname.FromBaseName(tq)
-		s.NoError(err)
-		subPartName = subPartName.WithPartition(i)
-		res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
-			Namespace: s.namespace,
-			TaskQueue: subPartName.FullName(),
-		})
-		s.NoError(err)
-		s.NotNil(res)
-		s.Equal("foo-2", getCurrentDefault(res))
+		// Verify partitions have data
+		s.Eventually(func() bool {
+			for i := 0; i < partCount; i++ {
+				partName, err := tqname.FromBaseName(tq)
+				s.NoError(err)
+				partName = partName.WithPartition(i)
+				res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+					Namespace: s.namespace,
+					TaskQueue: partName.FullName(),
+				})
+				s.NoError(err)
+				s.NotNil(res)
+				if getCurrentDefault(res) != buildId {
+					return false
+				}
+			}
+			return true
+		}, 10*time.Second, 100*time.Millisecond)
 	}
 }
 

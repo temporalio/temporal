@@ -48,6 +48,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -56,6 +57,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -1900,7 +1902,6 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 }
 
 func (s *matchingEngineSuite) TestGetVersioningData() {
-	s.mockMatchingClient.EXPECT().InvalidateTaskQueueUserData(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
 
@@ -2005,44 +2006,185 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.Equal("5", majorSets[0].GetBuildIds()[0])
 }
 
-func (s *matchingEngineSuite) TestActivityQueueMetadataInvalidate() {
-	// Overwrite the matching mock - we expect one and only one fetch call here, after the activity queue is invalidated
-	mockMatch := matchingservicemock.NewMockMatchingServiceClient(s.controller)
-	mockMatch.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{}, nil).
-		Times(1)
-	s.matchingEngine.matchingClient = mockMatch
-
+func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
 
-	res, err := s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
-		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
-			Namespace: namespaceID.String(),
-			TaskQueue: tq,
-		},
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID.String(),
+		TaskQueue:                tq,
+		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
-	s.NotNil(res)
+	s.False(res.TaskQueueHasUserData)
+	s.Nil(res.UserData.GetData())
+}
 
-	// Force the activity queue to be loaded (invalidate won't load it - so we have to load it for invalidate to care
-	// about fetching)
-	actTqId := newTestTaskQueueID(namespaceID, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	ttqm, err := s.matchingEngine.getTaskQueueManager(context.Background(), actTqId, enumspb.TASK_QUEUE_KIND_NORMAL, true)
-	s.NoError(err)
-	s.NotNil(ttqm)
+func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
 
-	_, err = s.matchingEngine.InvalidateTaskQueueUserData(context.Background(), &matchingservice.InvalidateTaskQueueUserDataRequest{
-		NamespaceId:   namespaceID.String(),
-		TaskQueue:     tq,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Version: 1,
-			Data:    mkUserData(1),
-		},
+	userData := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
+	}
+	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: namespaceID.String(),
+			TaskQueue:   tq,
+			UserData:    userData,
+		})
+	userData.Version++
+
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID.String(),
+		TaskQueue:                tq,
+		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
+	s.True(res.TaskQueueHasUserData)
+	s.Equal(res.UserData, userData)
+}
+
+func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
+
+	userData := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
+	}
+	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: namespaceID.String(),
+			TaskQueue:   tq,
+			UserData:    userData,
+		})
+	userData.Version++
+
+	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID.String(),
+		TaskQueue:                tq,
+		LastKnownUserDataVersion: userData.Version,
+	})
+	s.NoError(err)
+	s.True(res.TaskQueueHasUserData)
+	s.Nil(res.UserData.GetData())
+}
+
+func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
+
+	userData := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
+	}
+	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: namespaceID.String(),
+			TaskQueue:   tq,
+			UserData:    userData,
+		})
+	userData.Version++
+
+	// GetTaskQueueUserData will try to return 5s with a min of 1s before the deadline, so this will block 1s
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID.String(),
+		TaskQueue:                tq,
+		LastKnownUserDataVersion: userData.Version,
+		WaitNewData:              true,
+	})
+	s.NoError(err)
+	s.True(res.TaskQueueHasUserData)
+	s.Nil(res.UserData.GetData())
+	elapsed := time.Since(start)
+	s.Greater(elapsed, 900*time.Millisecond)
+}
+
+func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNothing() {
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+
+		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+				Namespace: namespaceID.String(),
+				TaskQueue: tq,
+				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+					AddNewBuildIdInNewDefaultSet: "v1",
+				},
+			},
+		})
+		s.NoError(err)
+	}()
+
+	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID.String(),
+		TaskQueue:                tq,
+		LastKnownUserDataVersion: 0, // must be zero to start
+		WaitNewData:              true,
+	})
+	s.NoError(err)
+	s.True(res.TaskQueueHasUserData)
+	s.NotNil(res.UserData.Data.VersioningData)
+}
+
+func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3() {
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
+
+	userData := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
+	}
+	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: namespaceID.String(),
+			TaskQueue:   tq,
+			UserData:    userData,
+		})
+	userData.Version++
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+
+		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+				Namespace: namespaceID.String(),
+				TaskQueue: tq,
+				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+					AddNewBuildIdInNewDefaultSet: "v1",
+				},
+			},
+		})
+		s.NoError(err)
+	}()
+
+	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:              namespaceID.String(),
+		TaskQueue:                tq,
+		LastKnownUserDataVersion: userData.Version,
+		WaitNewData:              true,
+	})
+	s.NoError(err)
+	s.True(res.TaskQueueHasUserData)
+	s.True(hybrid_logical_clock.Greater(*res.UserData.Data.Clock, *userData.Data.Clock))
+	s.NotNil(res.UserData.Data.VersioningData)
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
@@ -2444,7 +2586,9 @@ func (m *testTaskManager) GetTaskQueueUserData(ctx context.Context, request *per
 // UpdateTaskQueueUserData implements persistence.TaskManager
 func (m *testTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *persistence.UpdateTaskQueueUserDataRequest) error {
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
-	tlm.userData = request.UserData
+	newData := *request.UserData
+	newData.Version++
+	tlm.userData = &newData
 	return nil
 }
 
