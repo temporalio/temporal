@@ -294,7 +294,6 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 
 	// wait for workflow task to fail 3 times
 	time.Sleep(time.Second * 3) // 1st_attempt, 0_delay, 2nd_attempt, 1s_delay, 3rd_attempt
-	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
 	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
 	s.Error(err)
 	s.IsType(&serviceerror.FailedPrecondition{}, err)
