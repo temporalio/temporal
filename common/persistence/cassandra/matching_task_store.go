@@ -132,26 +132,31 @@ const (
 		`AND task_id = ? ` +
 		`IF range_id = ?`
 
-	templateGetTaskQueueUserDataQuery = `SELECT data, data_encoding, version FROM task_queue_user_data ` +
-		`WHERE namespace_id = ? ` +
-		`AND task_queue_name = ? `
+	templateGetTaskQueueUserDataQuery = `SELECT data, data_encoding, version
+	    FROM task_queue_user_data
+		WHERE namespace_id = ? AND build_id_if_row_is_an_index = ''
+		AND task_queue_name = ?`
 
-	templateUpdateTaskQueueUserDataQuery = `UPDATE task_queue_user_data SET ` +
-		`data = ?, ` +
-		`data_encoding = ?, ` +
-		// Add and remove elements from the build_ids map to maintain a secondary index
-		`build_ids = build_ids + ?, build_ids = build_ids - ?, ` +
-		`version = ? ` +
-		`WHERE namespace_id = ? ` +
-		`AND task_queue_name = ? ` +
-		`IF version = ?`
+	templateUpdateTaskQueueUserDataQuery = `UPDATE task_queue_user_data SET
+		data = ?,
+		data_encoding = ?,
+		version = ?
+		WHERE namespace_id = ?
+		AND build_id_if_row_is_an_index = ''
+		AND task_queue_name = ?
+		IF version = ?`
 
-	templateInsertTaskQueueUserDataQuery = `INSERT INTO task_queue_user_data` +
-		`(namespace_id, task_queue_name, data, data_encoding, build_ids, version) ` +
-		`VALUES (?, ?, ?, ?, ?, 1) IF NOT EXISTS`
+	templateInsertTaskQueueUserDataQuery = `INSERT INTO task_queue_user_data
+		(namespace_id, build_id_if_row_is_an_index, task_queue_name, data, data_encoding, version) VALUES
+		(?           , ''                         , ?              , ?   , ?            , 1      ) IF NOT EXISTS`
 
-	templateListTaskQueueUserDataQuery  = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ?`
-	templateListTaskQueueNamesByBuildId = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_ids CONTAINS ?`
+	templateInsertBuildIdTaskQueueMappingQuery = `INSERT INTO task_queue_user_data
+	(namespace_id, build_id_if_row_is_an_index, task_queue_name) VALUES
+	(?           , ?                          , ?)`
+	templateDeleteBuildIdTaskQueueMappingQuery = `DELETE FROM task_queue_user_data
+	WHERE namespace_id = ? AND build_id_if_row_is_an_index = ? AND task_queue_name = ?`
+	templateListTaskQueueUserDataQuery       = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ? AND build_id_if_row_is_an_index = ''`
+	templateListTaskQueueNamesByBuildIdQuery = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_id_if_row_is_an_index = ?`
 
 	// Not much of a need to make this configurable, we're just reading some strings
 	listTaskQueueNamesByBuildIdPageSize = 100
@@ -543,31 +548,41 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 	ctx context.Context,
 	request *p.InternalUpdateTaskQueueUserDataRequest,
 ) error {
-	var query gocql.Query
+	batch := d.Session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
 
 	if request.Version == 0 {
-		query = d.Session.Query(templateInsertTaskQueueUserDataQuery,
+		batch.Query(templateInsertTaskQueueUserDataQuery,
 			request.NamespaceID,
 			request.TaskQueue,
 			request.UserData.Data,
 			request.UserData.EncodingType.String(),
-			request.BuildIdsAdded,
-		).WithContext(ctx)
+		)
 	} else {
-		query = d.Session.Query(templateUpdateTaskQueueUserDataQuery,
+		batch.Query(templateUpdateTaskQueueUserDataQuery,
 			request.UserData.Data,
 			request.UserData.EncodingType.String(),
-			request.BuildIdsAdded,
-			request.BuildIdsRemoved,
 			request.Version+1,
 			request.NamespaceID,
 			request.TaskQueue,
 			request.Version,
-		).WithContext(ctx)
+		)
 	}
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
+	for _, buildId := range request.BuildIdsAdded {
+		batch.Query(templateInsertBuildIdTaskQueueMappingQuery, request.NamespaceID, buildId, request.TaskQueue)
+	}
+	for _, buildId := range request.BuildIdsRemoved {
+		batch.Query(templateDeleteBuildIdTaskQueueMappingQuery, request.NamespaceID, buildId, request.TaskQueue)
+	}
 
+	previous := make(map[string]interface{})
+	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, previous)
+
+	if err != nil {
+		return gocql.ConvertError("UpdateTaskQueueUserData", err)
+	}
+
+	// We only care about the conflict in the first query
+	err = iter.Close()
 	if err != nil {
 		return gocql.ConvertError("UpdateTaskQueueUserData", err)
 	}
@@ -640,7 +655,7 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 }
 
 func (d *MatchingTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.GetTaskQueuesByBuildIdRequest) ([]string, error) {
-	query := d.Session.Query(templateListTaskQueueNamesByBuildId, request.NamespaceID, request.BuildID).WithContext(ctx)
+	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
 	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
 
 	var taskQueues []string
