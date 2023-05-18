@@ -154,7 +154,7 @@ func TaskQueueTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: taskQueue, value: sanitizer.Value(value)}
+	return &tagImpl{key: taskQueue, value: value}
 }
 
 func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
