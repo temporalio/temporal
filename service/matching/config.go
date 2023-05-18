@@ -59,7 +59,7 @@ type (
 		VersionCompatibleSetLimitPerQueue dynamicconfig.IntPropertyFn
 		VersionBuildIdLimitPerQueue       dynamicconfig.IntPropertyFn
 		UserDataPollFrequency             dynamicconfig.DurationPropertyFn
-		TaskQueueFetchByBuildIdLimit      dynamicconfig.IntPropertyFn
+		TaskQueueLimitPerBuildId          dynamicconfig.IntPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -149,7 +149,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		VersionCompatibleSetLimitPerQueue:     dc.GetIntProperty(dynamicconfig.VersionCompatibleSetLimitPerQueue, 10),
 		VersionBuildIdLimitPerQueue:           dc.GetIntProperty(dynamicconfig.VersionBuildIdLimitPerQueue, 1000),
 		UserDataPollFrequency:                 dc.GetDurationProperty(dynamicconfig.MatchingUserDataPollFrequency, 5*time.Minute),
-		TaskQueueFetchByBuildIdLimit:          dc.GetIntProperty(dynamicconfig.TaskQueueFetchByBuildIdLimit, 1000),
+		TaskQueueLimitPerBuildId:              dc.GetIntProperty(dynamicconfig.TaskQueuesPerBuildIdLimit, 20),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),

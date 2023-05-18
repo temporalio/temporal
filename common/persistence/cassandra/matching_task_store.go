@@ -157,6 +157,7 @@ const (
 	WHERE namespace_id = ? AND build_id_if_row_is_an_index = ? AND task_queue_name = ?`
 	templateListTaskQueueUserDataQuery       = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ? AND build_id_if_row_is_an_index = ''`
 	templateListTaskQueueNamesByBuildIdQuery = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_id_if_row_is_an_index = ?`
+	templateCountTaskQueueByBuildIdQuery     = `SELECT COUNT(*) FROM task_queue_user_data WHERE namespace_id = ? AND build_id_if_row_is_an_index = ?`
 
 	// Not much of a need to make this configurable, we're just reading some strings
 	listTaskQueueNamesByBuildIdPageSize = 100
@@ -661,7 +662,6 @@ func (d *MatchingTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request 
 	var taskQueues []string
 	row := make(map[string]interface{})
 
-OUTER:
 	for {
 		for iter.MapScan(row) {
 			taskQueueRaw, ok := row["task_queue_name"]
@@ -675,9 +675,6 @@ OUTER:
 			}
 
 			taskQueues = append(taskQueues, taskQueue)
-			if len(taskQueues) > request.Limit {
-				break OUTER
-			}
 
 			row = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
 		}
@@ -690,6 +687,13 @@ OUTER:
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTaskQueuesByBuildId operation failed. Error: %v", err))
 	}
 	return taskQueues, nil
+}
+
+func (d *MatchingTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *p.CountTaskQueuesByBuildIdRequest) (int, error) {
+	var count int
+	query := d.Session.Query(templateCountTaskQueueByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
+	err := query.Scan(&count)
+	return count, err
 }
 
 func (d *MatchingTaskStore) GetName() string {

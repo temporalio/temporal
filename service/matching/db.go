@@ -331,7 +331,7 @@ func (db *taskQueueDB) getUserDataLocked(
 // metadata and the cluster ID can be obtained.
 //
 // On success returns a pointer to the updated data, which must *not* be mutated.
-func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) (*persistencespb.VersionedTaskQueueUserData, error) {
+func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error), taskQueueLimitPerBuildId int) (*persistencespb.VersionedTaskQueueUserData, error) {
 	if !db.taskQueue.OwnsUserData() {
 		return nil, errUserDataNoMutateNonRoot
 	}
@@ -352,6 +352,22 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 		return nil, err
 	}
 	added, removed := GetBuildIdDeltas(preUpdateData.GetVersioningData(), updatedUserData.GetVersioningData())
+	if taskQueueLimitPerBuildId > 0 && len(added) > 0 {
+		// We iterate here but in practice there should only be a single build Id added when the limit is enforced.
+		// We do not enforce the limit when applying replication events.
+		for _, buildId := range added {
+			numTaskQueues, err := db.store.CountTaskQueuesByBuildId(ctx, &persistence.GetTaskQueuesByBuildIdRequest{
+				NamespaceID: db.namespaceID.String(),
+				BuildID:     buildId,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if numTaskQueues >= taskQueueLimitPerBuildId {
+				return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build id: %d", taskQueueLimitPerBuildId))
+			}
+		}
+	}
 
 	err = db.store.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID:     db.namespaceID.String(),

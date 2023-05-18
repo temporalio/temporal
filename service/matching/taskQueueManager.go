@@ -97,6 +97,10 @@ type (
 		forwardedFrom string
 	}
 
+	UserDataUpdateOptions struct {
+		Replicate                bool
+		TaskQueueLimitPerBuildId int
+	}
 	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)
 
 	taskQueueManager interface {
@@ -121,7 +125,7 @@ type (
 		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error)
 		// UpdateUserData allows callers to update user data for this task queue
 		// Extra care should be taken to avoid mutating the existing data in the update function.
-		UpdateUserData(ctx context.Context, replicate bool, updateFn UserDataUpdateFunc) error
+		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
 		// InvalidateUserData allows callers to invalidate cached data on this task queue
 		InvalidateUserData(request *matchingservice.InvalidateTaskQueueUserDataRequest) error
 		CancelPoller(pollerID string)
@@ -495,13 +499,13 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 }
 
 //nolint:revive // control coupling
-func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, replicate bool, updateFn UserDataUpdateFunc) error {
-	newData, err := c.db.UpdateUserData(ctx, updateFn)
+func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
+	newData, err := c.db.UpdateUserData(ctx, updateFn, options.TaskQueueLimitPerBuildId)
 	c.signalIfFatal(err)
 	if err != nil {
 		return err
 	}
-	if replicate && c.namespaceReplicationQueue != nil {
+	if options.Replicate && c.namespaceReplicationQueue != nil {
 		err = c.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
 			TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
 			Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{

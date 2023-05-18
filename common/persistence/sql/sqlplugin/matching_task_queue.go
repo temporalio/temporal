@@ -79,8 +79,9 @@ type (
 	GetTaskQueuesByBuildIdRequest struct {
 		NamespaceID []byte
 		BuildID     string
-		Limit       int
 	}
+
+	CountTaskQueuesByBuildIdRequest = GetTaskQueuesByBuildIdRequest
 
 	VersionedBlob struct {
 		Version      int64
@@ -117,5 +118,6 @@ type (
 		RemoveBuildIdToTaskQueueMapping(ctx context.Context, request RemoveBuildIdToTaskQueueMapping) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) ([]TaskQueueUserDataEntry, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
+		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
 	}
 )

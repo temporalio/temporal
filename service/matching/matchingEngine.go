@@ -761,7 +761,11 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.UpdateUserData(ctx, true, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+	updateOptions := UserDataUpdateOptions{
+		Replicate:                true,
+		TaskQueueLimitPerBuildId: e.config.TaskQueueLimitPerBuildId(),
+	}
+	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		clock := data.GetClock()
 		if clock == nil {
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
@@ -893,7 +897,12 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.UpdateUserData(ctx, false, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+	updateOptions := UserDataUpdateOptions{
+		Replicate: true,
+		// Avoid setting a limit to allow the replication event to always be applied
+		TaskQueueLimitPerBuildId: 0,
+	}
+	err = tqMgr.UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		mergedUserData := *current
 		mergedUserData.VersioningData = MergeVersioningData(current.GetVersioningData(), req.GetUserData().GetVersioningData())
 		return &mergedUserData, nil
@@ -908,7 +917,6 @@ func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
 	taskQueues, err := e.taskManager.GetTaskQueuesByBuildId(ctx, &persistence.GetTaskQueuesByBuildIdRequest{
 		NamespaceID: req.NamespaceId,
 		BuildID:     req.BuildId,
-		Limit:       e.config.TaskQueueFetchByBuildIdLimit(),
 	})
 	if err != nil {
 		return nil, err

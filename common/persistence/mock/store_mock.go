@@ -207,6 +207,21 @@ func (mr *MockTaskStoreMockRecorder) CompleteTasksLessThan(ctx, request interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTasksLessThan", reflect.TypeOf((*MockTaskStore)(nil).CompleteTasksLessThan), ctx, request)
 }
 
+// CountTaskQueuesByBuildId mocks base method.
+func (m *MockTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountTaskQueuesByBuildId", ctx, request)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountTaskQueuesByBuildId indicates an expected call of CountTaskQueuesByBuildId.
+func (mr *MockTaskStoreMockRecorder) CountTaskQueuesByBuildId(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountTaskQueuesByBuildId", reflect.TypeOf((*MockTaskStore)(nil).CountTaskQueuesByBuildId), ctx, request)
+}
+
 // CreateTaskQueue mocks base method.
 func (m *MockTaskStore) CreateTaskQueue(ctx context.Context, request *persistence.InternalCreateTaskQueueRequest) error {
 	m.ctrl.T.Helper()

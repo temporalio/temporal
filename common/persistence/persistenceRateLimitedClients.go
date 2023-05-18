@@ -567,6 +567,13 @@ func (p taskRateLimitedPersistenceClient) GetTaskQueuesByBuildId(ctx context.Con
 	return p.persistence.GetTaskQueuesByBuildId(ctx, request)
 }
 
+func (p taskRateLimitedPersistenceClient) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
+	if ok := allow(ctx, "CountTaskQueuesByBuildId", p.rateLimiter); !ok {
+		return 0, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.CountTaskQueuesByBuildId(ctx, request)
+}
+
 func (p *taskRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

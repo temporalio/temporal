@@ -85,7 +85,6 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
 		dynamicconfig.ReachabilityTaskQueueScanLimit:         2,
-		dynamicconfig.TaskQueueFetchByBuildIdLimit:           3,
 	}
 
 	switch TestFlags.PersistenceDriver {
@@ -1958,13 +1957,12 @@ func (s *advancedVisibilitySuite) updateMaxResultWindow() {
 	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
 }
 
-// TODO: Clean some of the duplication here with the commented tests below this once we have the matching functionality in place
+// TODO(bergundy): Clean some of the duplication here with the commented tests below this once we have the matching functionality in place
 func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuildId() {
 	ctx := NewContext()
 	tq1 := s.T().Name()
 	tq2 := s.T().Name() + "-2"
 	tq3 := s.T().Name() + "-3"
-	tq4 := s.T().Name() + "-4"
 	v0 := s.T().Name() + "v0"
 	v01 := s.T().Name() + "v0.1"
 	var err error
@@ -1997,18 +1995,10 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 	})
 	s.Require().NoError(err)
 
-	// Map v0 to a third and fourth queue to test limit enforcement on persistence and handler layers
+	// Map v0 to a third queue to test limit enforcement
 	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq3,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: v0,
-		},
-	})
-	s.Require().NoError(err)
-	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq4,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
 		},

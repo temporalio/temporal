@@ -644,6 +644,8 @@ const (
 	PersistenceListTaskQueueUserDataEntriesScope = "ListTaskQueueUserDataEntries"
 	// PersistenceGetTaskQueuesByBuildIdScope is the metric scope for persistence.TaskManager.GetTaskQueuesByBuildId API
 	PersistenceGetTaskQueuesByBuildIdScope = "GetTaskQueuesByBuildId"
+	// PersistenceCountTaskQueuesByBuildIdScope is the metric scope for persistence.TaskManager.CountTaskQueuesByBuildId API
+	PersistenceCountTaskQueuesByBuildIdScope = "CountTaskQueuesByBuildId"
 	// PersistenceAppendHistoryEventsScope tracks AppendHistoryEvents calls made by service to persistence layer
 	PersistenceAppendHistoryEventsScope = "AppendHistoryEvents"
 	// PersistenceGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory calls made by service to persistence layer

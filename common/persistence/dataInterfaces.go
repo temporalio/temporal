@@ -583,8 +583,9 @@ type (
 	GetTaskQueuesByBuildIdRequest struct {
 		NamespaceID string
 		BuildID     string
-		Limit       int
 	}
+
+	CountTaskQueuesByBuildIdRequest = GetTaskQueuesByBuildIdRequest
 
 	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
 	ListTaskQueueRequest struct {
@@ -1173,6 +1174,7 @@ type (
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
+		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities

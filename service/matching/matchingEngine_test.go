@@ -2460,6 +2460,12 @@ func (*testTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *per
 	panic("unimplemented")
 }
 
+// CountTaskQueuesByBuildId implements persistence.TaskManager
+func (*testTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) (int, error) {
+	// This is only used to validate that the build id to task queue mapping is enforced (at the time of writing), report 0.
+	return 0, nil
+}
+
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 	currentTime := time.Now().UTC()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())

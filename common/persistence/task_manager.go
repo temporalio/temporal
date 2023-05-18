@@ -304,3 +304,7 @@ func (m *taskManagerImpl) ListTaskQueueUserDataEntries(ctx context.Context, requ
 func (m *taskManagerImpl) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
 	return m.taskStore.GetTaskQueuesByBuildId(ctx, request)
 }
+
+func (m *taskManagerImpl) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
+	return m.taskStore.CountTaskQueuesByBuildId(ctx, request)
+}
