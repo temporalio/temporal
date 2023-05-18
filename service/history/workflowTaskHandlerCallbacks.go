@@ -421,7 +421,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
-	if ms.GetWorkerVersionStamp().GetUseVersioning() && !request.GetWorkerVersionStamp().UseVersioning {
+	if ms.GetWorkerVersionStamp().GetUseVersioning() && !request.GetWorkerVersionStamp().GetUseVersioning() {
 		return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
 	}
 

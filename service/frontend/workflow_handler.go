@@ -3533,6 +3533,10 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 	return histResp.GetResponse(), nil
 }
 
+func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("later")
+}
+
 func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 

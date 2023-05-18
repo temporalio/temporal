@@ -1539,7 +1539,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		WorkflowId:               execution.WorkflowId,
 		TaskQueue:                tq,
 		WorkflowType:             wType,
-		WorkflowExecutionTimeout: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
+		WorkflowExecutionTimeout: previousExecutionInfo.WorkflowExecutionTimeout,
 		WorkflowRunTimeout:       runTimeout,
 		WorkflowTaskTimeout:      taskTimeout,
 		Input:                    command.Input,
@@ -1554,6 +1554,14 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
 
+	// Copy version stamp to new workflow only if:
+	// - command does not say to use latest build id
+	// - using versioning
+	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	if !command.UseLatestBuildId {
+		sourceVersionStamp = common.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
+	}
+
 	req := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            ms.namespaceEntry.ID().String(),
 		StartRequest:           createRequest,
@@ -1563,6 +1571,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		ContinueAsNewInitiator: command.Initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
 		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
+		SourceVersionStamp:       sourceVersionStamp,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -1785,6 +1794,8 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	if event.SearchAttributes != nil {
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
+
+	ms.executionInfo.WorkerVersionStamp = event.SourceVersionStamp
 
 	ms.writeEventToCache(startEvent)
 	return nil
@@ -2168,6 +2179,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		TaskQueue:               attributes.TaskQueue.GetName(),
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
+		UseLatestBuildId:        attributes.UseLatestBuildId,
 	}
 	if ai.HasRetryPolicy {
 		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()

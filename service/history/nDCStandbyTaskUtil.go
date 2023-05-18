@@ -144,13 +144,14 @@ func newHistoryResendInfo(
 func newActivityTaskPostActionInfo(
 	mutableState workflow.MutableState,
 	activityScheduleToStartTimeout time.Duration,
+	useLatestBuildId bool,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
-	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp())
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useLatestBuildId)
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
@@ -163,13 +164,14 @@ func newActivityRetryTimePostActionInfo(
 	mutableState workflow.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
+	useLatestBuildId bool,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
-	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp())
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useLatestBuildId)
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
