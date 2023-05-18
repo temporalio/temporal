@@ -70,8 +70,8 @@ message SyncShardStatus {
 }
 
 message SyncReplicationState {
-    int64 last_processed_message_id = 1;
-    google.protobuf.Timestamp  last_processed_message_time = 2 [(gogoproto.stdtime) = true];
+    int64 inclusive_low_watermark = 1;
+    google.protobuf.Timestamp  inclusive_low_watermark_time = 2 [(gogoproto.stdtime) = true];
 }
 
 message ReplicationMessages {
@@ -86,8 +86,8 @@ message ReplicationMessages {
 message WorkflowReplicationMessages {
     repeated ReplicationTask replication_tasks = 1;
     // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
-    int64 last_task_id = 2;
-    google.protobuf.Timestamp  last_task_time = 3 [(gogoproto.stdtime) = true];
+    int64 exclusive_high_watermark = 2;
+    google.protobuf.Timestamp  exclusive_high_watermark_time = 3 [(gogoproto.stdtime) = true];
 }
 
 message ReplicationTaskInfo {

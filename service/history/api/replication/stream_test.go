@@ -42,7 +42,11 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	historyclient "go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -97,20 +101,22 @@ func (s *streamSuite) SetupTest() {
 		ShardID:   rand.Int31(),
 	}
 	s.shardContext.EXPECT().GetEngine(gomock.Any()).Return(s.historyEngine, nil).AnyTimes()
+	s.shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
+	s.shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
 }
 
 func (s *streamSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *streamSuite) TestRecvSyncReplicationState() {
+func (s *streamSuite) TestRecvSyncReplicationState_Success() {
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
 		int64(s.clientClusterShardID.ClusterID),
 		s.clientClusterShardID.ShardID,
 	)
 	replicationState := &replicationspb.SyncReplicationState{
-		LastProcessedMessageId:   rand.Int63(),
-		LastProcessedMessageTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		InclusiveLowWatermark:     rand.Int63(),
+		InclusiveLowWatermarkTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
 	}
 
 	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
@@ -119,7 +125,7 @@ func (s *streamSuite) TestRecvSyncReplicationState() {
 			Scopes: []*persistencespb.QueueSliceScope{{
 				Range: &persistencespb.QueueSliceRange{
 					InclusiveMin: shard.ConvertToPersistenceTaskKey(
-						tasks.NewImmediateKey(replicationState.LastProcessedMessageId + 1),
+						tasks.NewImmediateKey(replicationState.InclusiveLowWatermark),
 					),
 					ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 						tasks.NewImmediateKey(math.MaxInt64),
@@ -134,12 +140,54 @@ func (s *streamSuite) TestRecvSyncReplicationState() {
 	).Return(nil)
 	s.shardContext.EXPECT().UpdateRemoteClusterInfo(
 		string(s.clientClusterShardID.ClusterID),
-		replicationState.LastProcessedMessageId,
-		*replicationState.LastProcessedMessageTime,
+		replicationState.InclusiveLowWatermark-1,
+		*replicationState.InclusiveLowWatermarkTime,
 	)
 
 	err := recvSyncReplicationState(s.shardContext, replicationState, s.clientClusterShardID)
 	s.NoError(err)
+}
+
+func (s *streamSuite) TestRecvSyncReplicationState_Error() {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientClusterShardID.ClusterID),
+		s.clientClusterShardID.ShardID,
+	)
+	replicationState := &replicationspb.SyncReplicationState{
+		InclusiveLowWatermark:     rand.Int63(),
+		InclusiveLowWatermarkTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
+	}
+
+	var ownershipLost error
+	if rand.Float64() < 0.5 {
+		ownershipLost = &persistence.ShardOwnershipLostError{}
+	} else {
+		ownershipLost = serviceerrors.NewShardOwnershipLost("", "")
+	}
+
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(
+		readerID,
+		&persistencespb.QueueReaderState{
+			Scopes: []*persistencespb.QueueSliceScope{{
+				Range: &persistencespb.QueueSliceRange{
+					InclusiveMin: shard.ConvertToPersistenceTaskKey(
+						tasks.NewImmediateKey(replicationState.InclusiveLowWatermark),
+					),
+					ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+						tasks.NewImmediateKey(math.MaxInt64),
+					),
+				},
+				Predicate: &persistencespb.Predicate{
+					PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+					Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+				},
+			}},
+		},
+	).Return(ownershipLost)
+
+	err := recvSyncReplicationState(s.shardContext, replicationState, s.clientClusterShardID)
+	s.Error(err)
+	s.Equal(ownershipLost, err)
 }
 
 func (s *streamSuite) TestSendCatchUp() {
@@ -188,8 +236,8 @@ func (s *streamSuite) TestSendCatchUp() {
 		endExclusiveWatermark,
 	).Return(iter, nil)
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark-1, resp.GetMessages().LastTaskId)
-		s.NotNil(resp.GetMessages().LastTaskTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
+		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
 		return nil
 	})
 
@@ -199,6 +247,7 @@ func (s *streamSuite) TestSendCatchUp() {
 		s.shardContext,
 		s.taskConvertor,
 		s.clientClusterShardID,
+		s.serverClusterShardID,
 	)
 	s.NoError(err)
 	s.Equal(endExclusiveWatermark, taskID)
@@ -239,13 +288,13 @@ func (s *streamSuite) TestSendLive() {
 	)
 	gomock.InOrder(
 		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-			s.Equal(watermark1-1, resp.GetMessages().LastTaskId)
-			s.NotNil(resp.GetMessages().LastTaskTime)
+			s.Equal(watermark1, resp.GetMessages().ExclusiveHighWatermark)
+			s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
 			return nil
 		}),
 		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-			s.Equal(watermark2-1, resp.GetMessages().LastTaskId)
-			s.NotNil(resp.GetMessages().LastTaskTime)
+			s.Equal(watermark2, resp.GetMessages().ExclusiveHighWatermark)
+			s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
 			return nil
 		}),
 	)
@@ -260,6 +309,7 @@ func (s *streamSuite) TestSendLive() {
 		s.shardContext,
 		s.taskConvertor,
 		s.clientClusterShardID,
+		s.serverClusterShardID,
 		channel,
 		watermark0,
 	)
@@ -270,12 +320,19 @@ func (s *streamSuite) TestSendTasks_Noop() {
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark
 
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
+		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+		return nil
+	})
+
 	err := sendTasks(
 		s.ctx,
 		s.server,
 		s.shardContext,
 		s.taskConvertor,
 		s.clientClusterShardID,
+		s.serverClusterShardID,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)
@@ -298,8 +355,8 @@ func (s *streamSuite) TestSendTasks_WithoutTasks() {
 		endExclusiveWatermark,
 	).Return(iter, nil)
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-		s.Equal(endExclusiveWatermark-1, resp.GetMessages().LastTaskId)
-		s.NotNil(resp.GetMessages().LastTaskTime)
+		s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
+		s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
 		return nil
 	})
 
@@ -309,6 +366,7 @@ func (s *streamSuite) TestSendTasks_WithoutTasks() {
 		s.shardContext,
 		s.taskConvertor,
 		s.clientClusterShardID,
+		s.serverClusterShardID,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)
@@ -348,24 +406,24 @@ func (s *streamSuite) TestSendTasks_WithTasks() {
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks: []*replicationspb.ReplicationTask{task0},
-					LastTaskId:       task0.SourceTaskId,
-					LastTaskTime:     task0.VisibilityTime,
+					ReplicationTasks:           []*replicationspb.ReplicationTask{task0},
+					ExclusiveHighWatermark:     task0.SourceTaskId + 1,
+					ExclusiveHighWatermarkTime: task0.VisibilityTime,
 				},
 			},
 		}).Return(nil),
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks: []*replicationspb.ReplicationTask{task2},
-					LastTaskId:       task2.SourceTaskId,
-					LastTaskTime:     task2.VisibilityTime,
+					ReplicationTasks:           []*replicationspb.ReplicationTask{task2},
+					ExclusiveHighWatermark:     task2.SourceTaskId + 1,
+					ExclusiveHighWatermarkTime: task2.VisibilityTime,
 				},
 			},
 		}).Return(nil),
 		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
-			s.Equal(endExclusiveWatermark-1, resp.GetMessages().LastTaskId)
-			s.NotNil(resp.GetMessages().LastTaskTime)
+			s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
+			s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
 			return nil
 		}),
 	)
@@ -376,6 +434,7 @@ func (s *streamSuite) TestSendTasks_WithTasks() {
 		s.shardContext,
 		s.taskConvertor,
 		s.clientClusterShardID,
+		s.serverClusterShardID,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)

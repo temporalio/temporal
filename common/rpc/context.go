@@ -55,9 +55,10 @@ func CopyContextValues(dst context.Context, src context.Context) context.Context
 	}
 }
 
-// NewContextWithTimeout creates context with timeout.
-func NewContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), timeout)
+// ResetContextTimeout creates new context with specified timeout and copies values from source Context.
+func ResetContextTimeout(ctx context.Context, newTimeout time.Duration) (context.Context, context.CancelFunc) {
+	newContext, cancel := context.WithTimeout(context.Background(), newTimeout)
+	return CopyContextValues(newContext, ctx), cancel
 }
 
 // NewContextWithTimeoutAndVersionHeaders creates context with timeout and version headers.

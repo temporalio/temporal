@@ -42,9 +42,10 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -100,7 +101,7 @@ func StreamReplicationTasks(
 		return recvLoop(ctx, server, shardContext, clientClusterShardID, serverClusterShardID)
 	})
 	errGroup.Go(func() error {
-		return sendLoop(ctx, server, shardContext, filter, clientClusterShardID)
+		return sendLoop(ctx, server, shardContext, filter, clientClusterShardID, serverClusterShardID)
 	})
 	return errGroup.Wait()
 }
@@ -136,6 +137,12 @@ func recvLoop(
 				)
 				return err
 			}
+			shardContext.GetMetricsHandler().Counter(metrics.ReplicationTasksRecv.GetMetricName()).Record(
+				int64(1),
+				metrics.FromClusterIDTag(clientClusterShardID.ClusterID),
+				metrics.ToClusterIDTag(serverClusterShardID.ClusterID),
+				metrics.OperationTag(metrics.SyncWatermarkScope),
+			)
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf(
 				"StreamReplicationMessages encountered unknown type: %T %v", attr, attr,
@@ -150,11 +157,8 @@ func recvSyncReplicationState(
 	attr *replicationspb.SyncReplicationState,
 	clientClusterShardID historyclient.ClusterShardID,
 ) error {
-	lastProcessedMessageID := attr.GetLastProcessedMessageId()
-	lastProcessedMessageIDTime := attr.GetLastProcessedMessageTime()
-	if lastProcessedMessageID == persistence.EmptyQueueMessageID {
-		return nil
-	}
+	inclusiveLowWatermark := attr.GetInclusiveLowWatermark()
+	inclusiveLowWatermarkTime := attr.GetInclusiveLowWatermarkTime()
 
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
 		int64(clientClusterShardID.ClusterID),
@@ -164,7 +168,7 @@ func recvSyncReplicationState(
 		Scopes: []*persistencespb.QueueSliceScope{{
 			Range: &persistencespb.QueueSliceRange{
 				InclusiveMin: shard.ConvertToPersistenceTaskKey(
-					tasks.NewImmediateKey(lastProcessedMessageID + 1),
+					tasks.NewImmediateKey(inclusiveLowWatermark),
 				),
 				ExclusiveMax: shard.ConvertToPersistenceTaskKey(
 					tasks.NewImmediateKey(math.MaxInt64),
@@ -180,16 +184,12 @@ func recvSyncReplicationState(
 		readerID,
 		readerState,
 	); err != nil {
-		shardContext.GetLogger().Error(
-			"error updating replication level for shard",
-			tag.Error(err),
-			tag.OperationFailed,
-		)
+		return err
 	}
 	shardContext.UpdateRemoteClusterInfo(
 		string(clientClusterShardID.ClusterID),
-		lastProcessedMessageID,
-		*lastProcessedMessageIDTime,
+		inclusiveLowWatermark-1,
+		*inclusiveLowWatermarkTime,
 	)
 	return nil
 }
@@ -200,6 +200,7 @@ func sendLoop(
 	shardContext shard.Context,
 	taskConvertor TaskConvertor,
 	clientClusterShardID historyclient.ClusterShardID,
+	serverClusterShardID historyclient.ClusterShardID,
 ) error {
 	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
@@ -214,6 +215,7 @@ func sendLoop(
 		shardContext,
 		taskConvertor,
 		clientClusterShardID,
+		serverClusterShardID,
 	)
 	if err != nil {
 		shardContext.GetLogger().Error(
@@ -228,6 +230,7 @@ func sendLoop(
 		shardContext,
 		taskConvertor,
 		clientClusterShardID,
+		serverClusterShardID,
 		newTaskNotificationChan,
 		catchupEndExclusiveWatermark,
 	); err != nil {
@@ -247,6 +250,7 @@ func sendCatchUp(
 	shardContext shard.Context,
 	taskConvertor TaskConvertor,
 	clientClusterShardID historyclient.ClusterShardID,
+	serverClusterShardID historyclient.ClusterShardID,
 ) (int64, error) {
 
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
@@ -275,6 +279,7 @@ func sendCatchUp(
 		shardContext,
 		taskConvertor,
 		clientClusterShardID,
+		serverClusterShardID,
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
 	); err != nil {
@@ -289,6 +294,7 @@ func sendLive(
 	shardContext shard.Context,
 	taskConvertor TaskConvertor,
 	clientClusterShardID historyclient.ClusterShardID,
+	serverClusterShardID historyclient.ClusterShardID,
 	newTaskNotificationChan <-chan struct{},
 	beginInclusiveWatermark int64,
 ) error {
@@ -302,6 +308,7 @@ func sendLive(
 				shardContext,
 				taskConvertor,
 				clientClusterShardID,
+				serverClusterShardID,
 				beginInclusiveWatermark,
 				endExclusiveWatermark,
 			); err != nil {
@@ -320,11 +327,28 @@ func sendTasks(
 	shardContext shard.Context,
 	taskConvertor TaskConvertor,
 	clientClusterShardID historyclient.ClusterShardID,
+	serverClusterShardID historyclient.ClusterShardID,
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
 ) error {
-	if beginInclusiveWatermark >= endExclusiveWatermark {
-		return nil
+	if beginInclusiveWatermark > endExclusiveWatermark {
+		err := serviceerror.NewInternal(fmt.Sprintf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
+			beginInclusiveWatermark,
+			endExclusiveWatermark,
+		))
+		shardContext.GetLogger().Error("StreamWorkflowReplication unable to", tag.Error(err))
+		return err
+	}
+	if beginInclusiveWatermark == endExclusiveWatermark {
+		return server.Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
+			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ReplicationTasks:           nil,
+					ExclusiveHighWatermark:     endExclusiveWatermark,
+					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
+				},
+			},
+		})
 	}
 
 	engine, err := shardContext.GetEngine(ctx)
@@ -360,21 +384,27 @@ Loop:
 		if err := server.Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{
-					ReplicationTasks: []*replicationspb.ReplicationTask{task},
-					LastTaskId:       task.SourceTaskId,
-					LastTaskTime:     task.VisibilityTime,
+					ReplicationTasks:           []*replicationspb.ReplicationTask{task},
+					ExclusiveHighWatermark:     task.SourceTaskId + 1,
+					ExclusiveHighWatermarkTime: task.VisibilityTime,
 				},
 			},
 		}); err != nil {
 			return err
 		}
+		shardContext.GetMetricsHandler().Counter(metrics.ReplicationTasksSend.GetMetricName()).Record(
+			int64(1),
+			metrics.FromClusterIDTag(serverClusterShardID.ClusterID),
+			metrics.ToClusterIDTag(clientClusterShardID.ClusterID),
+			metrics.OperationTag(replication.TaskOperationTag(task)),
+		)
 	}
 	return server.Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 			Messages: &replicationspb.WorkflowReplicationMessages{
-				ReplicationTasks: nil,
-				LastTaskId:       endExclusiveWatermark - 1,
-				LastTaskTime:     timestamp.TimeNowPtrUtc(),
+				ReplicationTasks:           nil,
+				ExclusiveHighWatermark:     endExclusiveWatermark,
+				ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 			},
 		},
 	})

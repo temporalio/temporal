@@ -1908,9 +1908,13 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	}
 	shardContext, err := h.controller.GetShardByID(serverClusterShardID.ShardID)
 	if err != nil {
-		return err
+		return h.convertError(err)
 	}
-	return replicationapi.StreamReplicationTasks(server, shardContext, clientClusterShardID, serverClusterShardID)
+	err = replicationapi.StreamReplicationTasks(server, shardContext, clientClusterShardID, serverClusterShardID)
+	if err != nil {
+		return h.convertError(err)
+	}
+	return nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

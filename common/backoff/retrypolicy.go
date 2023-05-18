@@ -62,7 +62,8 @@ type (
 	}
 
 	// ExponentialRetryPolicy provides the implementation for retry policy using a coefficient to compute the next delay.
-	// Formula used to compute the next delay is: initialInterval * math.Pow(backoffCoefficient, currentAttempt)
+	// Formula used to compute the next delay is:
+	// 	min(initialInterval * pow(backoffCoefficient, currentAttempt), maximumInterval)
 	ExponentialRetryPolicy struct {
 		initialInterval    time.Duration
 		backoffCoefficient float64
@@ -131,7 +132,9 @@ func (p *ExponentialRetryPolicy) WithBackoffCoefficient(backoffCoefficient float
 	return p
 }
 
-// WithMaximumInterval sets the maximum interval for each retry
+// WithMaximumInterval sets the maximum interval for each retry.
+// This does *not* cause the policy to stop retrying when the interval between retries reaches the supplied duration.
+// That is what WithExpirationInterval does. Instead, this prevents the interval from exceeding maximumInterval.
 func (p *ExponentialRetryPolicy) WithMaximumInterval(maximumInterval time.Duration) *ExponentialRetryPolicy {
 	p.maximumInterval = maximumInterval
 	return p

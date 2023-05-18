@@ -36,10 +36,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/internal/goro"
 
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -96,6 +98,7 @@ type (
 		ackNotificationChan chan bool
 		done                chan bool
 		status              int32
+		gorogrp             goro.Group
 		serializer          serialization.Serializer
 	}
 
@@ -131,7 +134,8 @@ func (q *namespaceReplicationQueueImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&q.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
-	go q.purgeProcessor(context.TODO())
+
+	q.gorogrp.Go(q.purgeProcessor)
 }
 
 func (q *namespaceReplicationQueueImpl) Stop() {
@@ -139,6 +143,8 @@ func (q *namespaceReplicationQueueImpl) Stop() {
 		return
 	}
 	close(q.done)
+
+	q.gorogrp.Cancel()
 }
 
 func (q *namespaceReplicationQueueImpl) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
@@ -408,14 +414,16 @@ func (q *namespaceReplicationQueueImpl) purgeAckedMessages(
 
 func (q *namespaceReplicationQueueImpl) purgeProcessor(
 	ctx context.Context,
-) {
+) error {
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
+
 	ticker := time.NewTicker(purgeInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-q.done:
-			return
+			return nil
 		case <-ticker.C:
 			if q.ackLevelUpdated {
 				err := q.purgeAckedMessages(ctx)

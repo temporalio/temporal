@@ -40,8 +40,8 @@ import (
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
-	ctasks "go.temporal.io/server/common/tasks"
 )
 
 type (
@@ -63,7 +63,7 @@ type (
 		respChan chan StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]
 	}
 	mockScheduler struct {
-		tasks []ctasks.Task
+		tasks []TrackableExecutableTask
 	}
 )
 
@@ -98,6 +98,7 @@ func (s *streamReceiverSuite) SetupTest() {
 		ProcessToolBox{
 			ClusterMetadata: s.clusterMetadata,
 			TaskScheduler:   s.taskScheduler,
+			MetricsHandler:  metrics.NoopMetricsHandler,
 			Logger:          log.NewTestLogger(),
 		},
 		NewClusterShardKey(rand.Int31(), rand.Int31()),
@@ -124,6 +125,7 @@ func (s *streamReceiverSuite) TearDownTest() {
 
 func (s *streamReceiverSuite) TestAckMessage_Noop() {
 	s.taskTracker.EXPECT().LowWatermark().Return(nil)
+	s.taskTracker.EXPECT().Size().Return(0)
 	s.streamReceiver.ackMessage(s.stream)
 
 	s.Equal(0, len(s.stream.requests))
@@ -135,13 +137,15 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus() {
 		Timestamp: time.Unix(0, rand.Int63()),
 	}
 	s.taskTracker.EXPECT().LowWatermark().Return(watermarkInfo)
+	s.taskTracker.EXPECT().Size().Return(0)
+
 	s.streamReceiver.ackMessage(s.stream)
 
 	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &repicationpb.SyncReplicationState{
-				LastProcessedMessageId:   watermarkInfo.Watermark,
-				LastProcessedMessageTime: timestamp.TimePtr(watermarkInfo.Timestamp),
+				InclusiveLowWatermark:     watermarkInfo.Watermark,
+				InclusiveLowWatermarkTime: timestamp.TimePtr(watermarkInfo.Timestamp),
 			},
 		},
 	},
@@ -158,9 +162,9 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &repicationpb.WorkflowReplicationMessages{
-					ReplicationTasks: []*repicationpb.ReplicationTask{replicationTask},
-					LastTaskId:       rand.Int63(),
-					LastTaskTime:     timestamp.TimePtr(time.Unix(0, rand.Int63())),
+					ReplicationTasks:           []*repicationpb.ReplicationTask{replicationTask},
+					ExclusiveHighWatermark:     rand.Int63(),
+					ExclusiveHighWatermarkTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
 				},
 			},
 		},
@@ -171,8 +175,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 
 	s.taskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
-			s.Equal(streamResp.Resp.GetMessages().LastTaskId, highWatermarkInfo.Watermark)
-			s.Equal(*streamResp.Resp.GetMessages().LastTaskTime, highWatermarkInfo.Timestamp)
+			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
+			s.Equal(*streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime, highWatermarkInfo.Timestamp)
 			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
@@ -210,11 +214,11 @@ func (s *mockStream) Recv() (<-chan StreamResp[*adminservice.StreamWorkflowRepli
 
 func (s *mockStream) Close() {}
 
-func (s *mockScheduler) Submit(task ctasks.Task) {
+func (s *mockScheduler) Submit(task TrackableExecutableTask) {
 	s.tasks = append(s.tasks, task)
 }
 
-func (s *mockScheduler) TrySubmit(task ctasks.Task) bool {
+func (s *mockScheduler) TrySubmit(task TrackableExecutableTask) bool {
 	s.tasks = append(s.tasks, task)
 	return true
 }

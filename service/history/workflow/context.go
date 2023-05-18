@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -84,6 +83,7 @@ type (
 		SetHistorySize(size int64)
 
 		ReapplyEvents(
+			ctx context.Context,
 			eventBatches []*persistence.WorkflowEvents,
 		) error
 
@@ -436,6 +436,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	}
 
 	if err := c.conflictResolveEventReapply(
+		ctx,
 		conflictResolveMode,
 		resetWorkflowEventsSeq,
 		newWorkflowEventsSeq,
@@ -606,6 +607,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	}
 
 	if err := c.updateWorkflowExecutionEventReapply(
+		ctx,
 		updateMode,
 		currentWorkflowEventsSeq,
 		newWorkflowEventsSeq,
@@ -723,6 +725,7 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 }
 
 func (c *ContextImpl) updateWorkflowExecutionEventReapply(
+	ctx context.Context,
 	updateMode persistence.UpdateWorkflowMode,
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
@@ -735,10 +738,11 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 	var eventBatches []*persistence.WorkflowEvents
 	eventBatches = append(eventBatches, eventBatch1...)
 	eventBatches = append(eventBatches, eventBatch2...)
-	return c.ReapplyEvents(eventBatches)
+	return c.ReapplyEvents(ctx, eventBatches)
 }
 
 func (c *ContextImpl) conflictResolveEventReapply(
+	ctx context.Context,
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
@@ -751,10 +755,11 @@ func (c *ContextImpl) conflictResolveEventReapply(
 	var eventBatches []*persistence.WorkflowEvents
 	eventBatches = append(eventBatches, eventBatch1...)
 	eventBatches = append(eventBatches, eventBatch2...)
-	return c.ReapplyEvents(eventBatches)
+	return c.ReapplyEvents(ctx, eventBatches)
 }
 
 func (c *ContextImpl) ReapplyEvents(
+	ctx context.Context,
 	eventBatches []*persistence.WorkflowEvents,
 ) error {
 
@@ -800,10 +805,6 @@ func (c *ContextImpl) ReapplyEvents(
 		return err
 	}
 
-	// TODO: should we pass in a context instead of using the default one?
-	ctx, cancel := context.WithTimeout(context.Background(), defaultRemoteCallTimeout)
-	defer cancel()
-
 	activeCluster := namespaceEntry.ActiveClusterName()
 	if activeCluster == c.shard.GetClusterMetadata().GetCurrentClusterName() {
 		engine, err := c.shard.GetEngine(ctx)
@@ -828,17 +829,17 @@ func (c *ContextImpl) ReapplyEvents(
 	// The active cluster of the namespace is differ from the current cluster
 	// Use frontend client to route this request to the active cluster
 	// Reapplication only happens in active cluster
-	sourceCluster, err := c.shard.GetRemoteAdminClient(activeCluster)
+	sourceAdminClient, err := c.shard.GetRemoteAdminClient(activeCluster)
 	if err != nil {
 		return err
 	}
-	if sourceCluster == nil {
+	if sourceAdminClient == nil {
+		// TODO: will this ever happen?
 		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
 	}
-	ctx2, cancel2 := rpc.NewContextWithTimeoutAndVersionHeaders(defaultRemoteCallTimeout)
-	defer cancel2()
-	_, err = sourceCluster.ReapplyEvents(
-		ctx2,
+
+	_, err = sourceAdminClient.ReapplyEvents(
+		ctx,
 		&adminservice.ReapplyEventsRequest{
 			NamespaceId:       namespaceEntry.ID().String(),
 			WorkflowExecution: execution,

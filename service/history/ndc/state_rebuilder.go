@@ -99,7 +99,6 @@ func NewStateRebuilder(
 			shard,
 			shard.GetConfig(),
 			shard.GetNamespaceRegistry(),
-			shard.GetEventsCache(),
 			logger,
 		),
 		rebuiltHistorySize: 0,
@@ -149,6 +148,7 @@ func (r *StateRebuilderImpl) Rebuild(
 		}
 
 		if err := r.applyEvents(
+			ctx,
 			targetWorkflowIdentifier,
 			stateBuilder,
 			history.History.Events,
@@ -221,6 +221,7 @@ func (r *StateRebuilderImpl) initializeBuilders(
 }
 
 func (r *StateRebuilderImpl) applyEvents(
+	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	stateBuilder workflow.MutableStateRebuilder,
 	events []*historypb.HistoryEvent,
@@ -228,7 +229,7 @@ func (r *StateRebuilderImpl) applyEvents(
 ) error {
 
 	_, err := stateBuilder.ApplyEvents(
-		context.Background(),
+		ctx,
 		namespace.ID(workflowKey.NamespaceID),
 		requestID,
 		commonpb.WorkflowExecution{
