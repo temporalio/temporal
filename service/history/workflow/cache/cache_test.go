@@ -411,6 +411,17 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 	}{
 
 		{
+			name:       "API context without timeout without locking beforehand should not return an error",
+			callerType: headers.CallerTypeAPI,
+		},
+		{
+			name:             "API context without timeout with locking beforehand should not return an error",
+			shouldLockBefore: true,
+			callerType:       headers.CallerTypeAPI,
+			wantErr:          true,
+		},
+
+		{
 			name:       "API context with timeout without locking beforehand should not return an error",
 			callerType: headers.CallerTypeAPI,
 		},

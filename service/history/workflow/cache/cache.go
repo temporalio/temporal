@@ -216,15 +216,22 @@ func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
 	key definition.WorkflowKey,
 	lockPriority workflow.LockPriority) error {
 
-	var cancel context.CancelFunc
-	if headers.GetCallerInfo(ctx).CallerType != headers.CallerTypeAPI {
-		timeout := time.Now().Add(nonApiContextLockTimeout)
-		ctx, cancel = context.WithDeadline(ctx, timeout)
-		defer cancel()
-	} else if deadline, ok := ctx.Deadline(); ok {
-		timeout := deadline.Add(-workflowLockTimeoutTailTime)
-		ctx, cancel = context.WithDeadline(ctx, timeout)
-		defer cancel()
+	// skip if there is no deadline
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		if headers.GetCallerInfo(ctx).CallerType != headers.CallerTypeAPI {
+			newDeadline := time.Now().Add(nonApiContextLockTimeout)
+			if newDeadline.Before(deadline) {
+				ctx, cancel = context.WithDeadline(ctx, newDeadline)
+				defer cancel()
+			}
+		} else {
+			newDeadline := deadline.Add(-workflowLockTimeoutTailTime)
+			if newDeadline.After(time.Now()) {
+				ctx, cancel = context.WithDeadline(ctx, newDeadline)
+				defer cancel()
+			}
+		}
 	}
 
 	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
