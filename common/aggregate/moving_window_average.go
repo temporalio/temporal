@@ -24,7 +24,11 @@
 
 package aggregate
 
-import "time"
+import (
+	"container/ring"
+	"sync"
+	"time"
+)
 
 type (
 	MovingWindowAverage interface {
@@ -36,4 +40,69 @@ type (
 		value     int64
 		timestamp time.Time
 	}
+
+	MovingWindowAvgImpl struct {
+		sync.RWMutex
+		windowSize    time.Duration
+		maxBufferSize int
+		head          *ring.Ring
+		tail          *ring.Ring
+		sum           int64
+		count         int
+	}
 )
+
+func NewMovingWindowAvgImpl(
+	windowSize time.Duration,
+	maxBufferSize int,
+) *MovingWindowAvgImpl {
+	buffer := ring.New(maxBufferSize)
+	return &MovingWindowAvgImpl{
+		windowSize:    windowSize,
+		maxBufferSize: maxBufferSize,
+		head:          buffer,
+		tail:          buffer,
+	}
+}
+
+func (a *MovingWindowAvgImpl) Record(val int64) {
+	a.Lock()
+	defer a.Unlock()
+
+	a.expireOldValuesLocked()
+	if a.count == a.maxBufferSize {
+		a.expireOneLocked()
+	}
+
+	a.tail.Value = timestampedData{value: val, timestamp: time.Now()}
+	a.tail = a.tail.Next()
+
+	a.sum += val
+	a.count++
+}
+
+func (a *MovingWindowAvgImpl) Average() float64 {
+	a.RLock()
+	defer a.RUnlock()
+	if a.count == 0 {
+		return 0
+	}
+	return float64(a.sum / int64(a.count))
+}
+
+func (a *MovingWindowAvgImpl) expireOldValuesLocked() {
+	for ; a.head != a.tail; a.head = a.head.Next() {
+		if data, ok := a.head.Value.(timestampedData); ok && time.Since(data.timestamp) > a.windowSize {
+			a.sum -= data.value
+			a.count--
+		}
+	}
+}
+
+func (a *MovingWindowAvgImpl) expireOneLocked() {
+	if data, ok := a.head.Value.(timestampedData); ok {
+		a.sum -= data.value
+		a.count--
+	}
+	a.head = a.head.Next()
+}
