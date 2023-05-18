@@ -468,6 +468,7 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 }
 
 // GetUserData returns the user data for the task queue if any.
+// Note: can return nil value with no error.
 func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	return c.db.GetUserData(ctx)
 }
@@ -723,7 +724,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 
 	op := func(ctx context.Context) error {
 		knownUserData, _, err := c.db.GetUserData(ctx)
-		if err != nil && !errors.Is(err, errUserDataNotPresentOnPartition) {
+		if err != nil {
 			return err
 		}
 

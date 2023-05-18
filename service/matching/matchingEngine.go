@@ -847,7 +847,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	for {
 		resp := &matchingservice.GetTaskQueueUserDataResponse{}
 		userData, userDataChanged, err := tqMgr.GetUserData(ctx)
-		if err != nil && err != errUserDataNotPresentOnPartition {
+		if err != nil {
 			return nil, err
 		}
 		if req.WaitNewData && userData.GetVersion() == version {
@@ -1165,7 +1165,6 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 		return nil, err
 	}
 	data := userData.GetData().GetVersioningData()
-
 	versionSet, err := lookupVersionSetForPoll(data, workerVersionCapabilities)
 	if err != nil {
 		return nil, err
@@ -1205,9 +1204,11 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 		return nil, err
 	}
 	data := userData.GetData().GetVersioningData()
-
 	versionSet, err := lookupVersionSetForAdd(data, buildId)
-	if err != nil {
+	if err == errEmptyVersioningData {
+		// default was requested for an unversioned queue
+		return taskQueue, nil
+	} else if err != nil {
 		return nil, err
 	}
 	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), nil

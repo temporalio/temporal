@@ -245,6 +245,21 @@ func (c *retryableClient) GetWorkerBuildIdCompatibility(
 	return resp, err
 }
 
+func (c *retryableClient) GetWorkerTaskReachability(
+	ctx context.Context,
+	request *workflowservice.GetWorkerTaskReachabilityRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerTaskReachabilityResponse, error) {
+	var resp *workflowservice.GetWorkerTaskReachabilityResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetWorkerTaskReachability(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,

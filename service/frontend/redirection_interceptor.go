@@ -105,6 +105,7 @@ var (
 		"ListScheduleMatchingTimes":        func() any { return &workflowservice.ListScheduleMatchingTimesResponse{} },
 		"UpdateWorkerBuildIdCompatibility": func() any { return &workflowservice.UpdateWorkerBuildIdCompatibilityResponse{} },
 		"GetWorkerBuildIdCompatibility":    func() any { return &workflowservice.GetWorkerBuildIdCompatibilityResponse{} },
+		"GetWorkerTaskReachability":        func() any { return &workflowservice.GetWorkerTaskReachabilityResponse{} },
 
 		"StartBatchOperation":    func() any { return &workflowservice.StartBatchOperationResponse{} },
 		"StopBatchOperation":     func() any { return &workflowservice.StopBatchOperationResponse{} },

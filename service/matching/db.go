@@ -67,8 +67,7 @@ type (
 )
 
 var (
-	errUserDataNotPresentOnPartition = errors.New("user data is only present on root workflow partition")
-	errUserDataNoMutateNonRoot       = errors.New("can only mutate user data on root workflow task queue")
+	errUserDataNoMutateNonRoot = errors.New("can only mutate user data on root workflow task queue")
 )
 
 // newTaskQueueDB returns an instance of an object that represents
@@ -143,9 +142,6 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		db.ackLevel = response.TaskQueueInfo.AckLevel
 		db.rangeID = response.RangeID + 1
 		_, _, err = db.getUserDataLocked(ctx)
-		if errors.Is(err, errUserDataNotPresentOnPartition) {
-			return nil
-		}
 		return err
 
 	case *serviceerror.NotFound:
@@ -157,9 +153,6 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		}
 		db.rangeID = initialRangeID
 		_, _, err = db.getUserDataLocked(ctx)
-		if errors.Is(err, errUserDataNotPresentOnPartition) {
-			return nil
-		}
 		return err
 
 	default:
@@ -308,12 +301,13 @@ func (db *taskQueueDB) setUserDataLocked(userData *persistencespb.VersionedTaskQ
 
 // db.Lock() must be held before calling.
 // Returns in-memory cached value or reads from DB and updates the cached value.
+// Note: can return nil value with no error.
 func (db *taskQueueDB) getUserDataLocked(
 	ctx context.Context,
 ) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	if db.userData == nil {
 		if !db.taskQueue.OwnsUserData() {
-			return nil, db.userDataChanged, errUserDataNotPresentOnPartition
+			return nil, db.userDataChanged, nil
 		}
 
 		response, err := db.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{

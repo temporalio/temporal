@@ -192,6 +192,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		Memo:                            req.Memo,
 		SearchAttributes:                req.SearchAttributes,
 		WorkflowId:                      req.WorkflowId,
+		SourceVersionStamp:              request.SourceVersionStamp,
 	}
 	parentInfo := request.ParentExecutionInfo
 	if parentInfo != nil {
@@ -336,6 +337,7 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 			StartToCloseTimeout:          command.StartToCloseTimeout,
 			HeartbeatTimeout:             command.HeartbeatTimeout,
 			RetryPolicy:                  command.RetryPolicy,
+			UseLatestBuildId:             command.UseLatestBuildId,
 		},
 	}
 
@@ -535,6 +537,7 @@ func (b *HistoryBuilder) AddContinuedAsNewEvent(
 		LastCompletionResult:         command.LastCompletionResult,
 		Memo:                         command.Memo,
 		SearchAttributes:             command.SearchAttributes,
+		UseLatestBuildId:             command.UseLatestBuildId,
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
@@ -910,6 +913,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 			Memo:                         command.Memo,
 			SearchAttributes:             command.SearchAttributes,
 			ParentClosePolicy:            command.GetParentClosePolicy(),
+			UseLatestBuildId:             command.UseLatestBuildId,
 		},
 	}
 

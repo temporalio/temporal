@@ -173,6 +173,16 @@ func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetWorkerTaskReachability(
+	ctx context.Context,
+	request *workflowservice.GetWorkerTaskReachabilityRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerTaskReachabilityResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetWorkerTaskReachability(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,

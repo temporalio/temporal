@@ -1402,11 +1402,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskqueue := "taskqueue"
 	activityID := "activity"
 	activityType := "activity type"
 	timerTimeout := 2 * time.Second
-	scheduledEvent, _ := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskqueue, nil,
+	scheduledEvent, _ := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, nil,
 		timerTimeout, timerTimeout, timerTimeout, timerTimeout)
 
 	timerSequence := workflow.NewTimerSequence(mutableState)
@@ -1464,7 +1463,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 			NamespaceId: s.namespaceID.String(),
 			Execution:   &execution,
 			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskqueue,
+				Name: taskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			ScheduledEventId:       scheduledEvent.EventId,
