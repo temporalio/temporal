@@ -860,6 +860,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	if err != nil {
 		return nil, err
 	}
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
+		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
+	}
 
 	return response, nil
 }
@@ -977,7 +980,6 @@ func failWorkflowTask(
 	if err != nil {
 		return nil, common.EmptyEventID, err
 	}
-	nextEventBatchId := mutableState.GetNextEventID()
 	if _, err = mutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		wtFailedCause.failedCause,
@@ -987,9 +989,10 @@ func failWorkflowTask(
 		"",
 		"",
 		0); err != nil {
-		return nil, nextEventBatchId, err
+		return nil, common.EmptyEventID, err
 	}
 
+	nextEventBatchId := mutableState.GetNextEventID() - 1
 	// Return new mutable state back to the caller for further updates
 	return mutableState, nextEventBatchId, nil
 }
