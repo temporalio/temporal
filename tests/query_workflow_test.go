@@ -296,6 +296,6 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	time.Sleep(time.Second * 3) // 1st_attempt, 0_delay, 2nd_attempt, 1s_delay, 3rd_attempt
 	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
 	s.Error(err)
-	s.IsType(&serviceerror.FailedPrecondition{}, err)
+	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
 }
