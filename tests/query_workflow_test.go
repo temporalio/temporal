@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -269,6 +270,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 		if err != nil {
 			s.T().Fatalf("SetQueryHandler failed: %s", err.Error())
 		}
+		fmt.Printf("yimindebug: %v running workflow task.\n", time.Now())
 		// force workflow task to fail
 		panic("Workflow failed")
 	}
@@ -279,7 +281,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
 		TaskQueue:          s.taskQueue,
-		WorkflowRunTimeout: 20 * time.Second,
+		WorkflowRunTimeout: 30 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -291,9 +293,11 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
-	// wait for workflow to fail
-	time.Sleep(time.Second * 2)
+	// wait for workflow task to fail 3 times
+	time.Sleep(time.Second * 15) // 1st_attempt, 0_delay, 2nd_attempt, 10s_delay, 3rd_attempt
+	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
 	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
 	s.Error(err)
 	s.IsType(&serviceerror.FailedPrecondition{}, err)
+
 }
