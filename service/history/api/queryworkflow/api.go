@@ -128,7 +128,7 @@ func Invoke(
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID))
-		return nil, serviceerror.NewFailedPrecondition("Cannot query workflow due to Workflow Task in failed state.")
+		return nil, serviceerror.NewWorkflowNotReady("Cannot query workflow due to Workflow Task in failed state.")
 	}
 
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
