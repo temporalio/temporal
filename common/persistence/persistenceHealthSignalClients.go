@@ -22,14 +22,4 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package aggregate
-
-type (
-	SignalKeyMapperFn[T any, K comparable] func(signalOrigin T) K
-
-	SignalAggregator[T any] interface {
-		GetRecordFn(key T) func(err error)
-		AverageLatency(key T) float64
-		ErrorRatio(key T) float64
-	}
-)
+package persistence

@@ -84,15 +84,16 @@ func perShardPerNsKeyMapperFn(req quotas.Request) perShardPerNsHealthSignalKey {
 	}
 }
 
-func (s *PersistenceHealthSignalAggregator[_]) Record(req quotas.Request, latency int64, errored bool) {
-	latencyAvg := s.getOrInitLatencyAverage(req)
-	latencyAvg.Record(latency)
-
-	errorRatio := s.getOrInitErrorRatio(req)
-	if errored {
-		errorRatio.Record(1)
-	} else {
-		errorRatio.Record(0)
+func (s *PersistenceHealthSignalAggregator[_]) GetRecordFn(req quotas.Request) func(err error) {
+	start := time.Now()
+	return func(err error) {
+		s.getOrInitLatencyAverage(req).Record(time.Since(start).Milliseconds())
+		errorRatio := s.getOrInitErrorRatio(req)
+		if err != nil {
+			errorRatio.Record(1)
+		} else {
+			errorRatio.Record(0)
+		}
 	}
 }
 
