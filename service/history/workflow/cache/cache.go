@@ -34,7 +34,6 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/cache"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -237,7 +237,7 @@ func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
 	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
 		// ctx is done before lock can be acquired
 		c.Release(key)
-		return serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow cannot be locked")
+		return consts.ErrResourceExhaustedBusyWorkflow
 	}
 	return nil
 }
