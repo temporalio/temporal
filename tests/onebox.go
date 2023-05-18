@@ -123,12 +123,14 @@ type (
 
 	// HistoryConfig contains configs for history service
 	HistoryConfig struct {
-		NumHistoryShards       int32
-		NumHistoryHosts        int
-		HistoryCountLimitError int
-		HistoryCountLimitWarn  int
-		BlobSizeLimitError     int
-		BlobSizeLimitWarn      int
+		NumHistoryShards           int32
+		NumHistoryHosts            int
+		HistoryCountLimitError     int
+		HistoryCountLimitWarn      int
+		BlobSizeLimitError         int
+		BlobSizeLimitWarn          int
+		MutableStateSizeLimitError int
+		MutableStateSizeLimitWarn  int
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -706,6 +708,12 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	}
 	if c.historyConfig.BlobSizeLimitWarn != 0 {
 		client.OverrideValue(dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
+	}
+	if c.historyConfig.MutableStateSizeLimitError != 0 {
+		client.OverrideValue(dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
+	}
+	if c.historyConfig.MutableStateSizeLimitWarn != 0 {
+		client.OverrideValue(dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
 	}
 
 	// For DeleteWorkflowExecution tests

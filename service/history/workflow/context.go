@@ -490,14 +490,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		return err
 	}
 
-	if err := c.UpdateWorkflowExecutionWithNew(
+	err = c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
 		TransactionPolicyActive,
 		nil,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
@@ -506,7 +507,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 	// execution being closed.
 	if historyForceTerminate {
 		return consts.ErrHistorySizeExceedsLimit
-	} else if msForceTerminate {
+	}
+	if msForceTerminate {
 		return consts.ErrMutableStateSizeExceedsLimit
 	}
 
@@ -982,18 +984,14 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	// Terminate workflow is written as a separate batch and might result in more than one event as we close the
 	// outstanding workflow task before terminating the workflow
 	eventBatchFirstEventID := mutableState.GetNextEventID()
-	if err := TerminateWorkflow(
+	return TerminateWorkflow(
 		mutableState,
 		eventBatchFirstEventID,
 		failureReason,
 		nil,
 		consts.IdentityHistoryService,
 		false,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func emitStateTransitionCount(

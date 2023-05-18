@@ -5,8 +5,10 @@ historyconfig:
   numhistoryhosts: 1
   historycountlimiterror: 20
   historycountlimitwarn: 10
-  blobsizelimiterror: 100
+  blobsizelimiterror: 1000
   blobsizelimitwarn: 1
+  mutablestatesizelimiterror: 3000
+  mutablestatesizelimitwarn: 900
 workerconfig:
   enablearchiver: false
   enablereplicator: false
