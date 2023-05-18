@@ -860,6 +860,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	if err != nil {
 		return nil, err
 	}
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
+		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
+	}
 
 	return response, nil
 }
