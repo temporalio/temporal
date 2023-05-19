@@ -117,18 +117,21 @@ func (s *biDirectionStreamSuite) TestLazyInit() {
 	s.biDirectionStream.Unlock()
 	s.NoError(err)
 	s.Equal(s.streamClient, s.biDirectionStream.streamingClient)
+	s.True(s.biDirectionStream.IsValid())
 
 	s.biDirectionStream.Lock()
 	err = s.biDirectionStream.lazyInitLocked()
 	s.biDirectionStream.Unlock()
 	s.NoError(err)
 	s.Equal(s.streamClient, s.biDirectionStream.streamingClient)
+	s.True(s.biDirectionStream.IsValid())
 
 	s.biDirectionStream.Close()
 	s.biDirectionStream.Lock()
 	err = s.biDirectionStream.lazyInitLocked()
 	s.biDirectionStream.Unlock()
 	s.Error(err)
+	s.False(s.biDirectionStream.IsValid())
 }
 
 func (s *biDirectionStreamSuite) TestSend() {
@@ -140,9 +143,7 @@ func (s *biDirectionStreamSuite) TestSend() {
 		s.NoError(err)
 	}
 	s.Equal(reqs, s.streamClient.requests)
-	s.biDirectionStream.Lock()
-	defer s.biDirectionStream.Unlock()
-	s.Equal(streamStatusOpen, s.biDirectionStream.status)
+	s.True(s.biDirectionStream.IsValid())
 }
 
 func (s *biDirectionStreamSuite) TestSend_Err() {
@@ -152,9 +153,7 @@ func (s *biDirectionStreamSuite) TestSend_Err() {
 
 	err := s.biDirectionStream.Send(rand.Int())
 	s.Error(err)
-	s.biDirectionStream.Lock()
-	defer s.biDirectionStream.Unlock()
-	s.Equal(streamStatusClosed, s.biDirectionStream.status)
+	s.False(s.biDirectionStream.IsValid())
 }
 
 func (s *biDirectionStreamSuite) TestRecv() {
@@ -168,9 +167,7 @@ func (s *biDirectionStreamSuite) TestRecv() {
 		resps = append(resps, streamResp.Resp)
 	}
 	s.Equal(s.streamClient.responses, resps)
-	s.biDirectionStream.Lock()
-	defer s.biDirectionStream.Unlock()
-	s.Equal(streamStatusClosed, s.biDirectionStream.status)
+	s.False(s.biDirectionStream.IsValid())
 }
 
 func (s *biDirectionStreamSuite) TestRecv_Err() {
@@ -183,9 +180,8 @@ func (s *biDirectionStreamSuite) TestRecv_Err() {
 	s.Error(streamResp.Err)
 	_, ok := <-streamRespChan
 	s.False(ok)
-	s.biDirectionStream.Lock()
-	defer s.biDirectionStream.Unlock()
-	s.Equal(streamStatusClosed, s.biDirectionStream.status)
+	s.False(s.biDirectionStream.IsValid())
+
 }
 
 func (p *mockStreamClientProvider) Get(
