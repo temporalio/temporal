@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"testing"
@@ -36,6 +37,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -240,6 +243,79 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagate() {
 			return true
 		}, 10*time.Second, 100*time.Millisecond)
 	}
+}
+
+func (s *versioningIntegSuite) testWithMatchingBehavior(subtest func()) {
+	dc := s.testCluster.host.dcClient
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+	// defer dc.RemoveOverride(dynamicconfig.MatchingLBForceReadPartition)
+	// defer dc.RemoveOverride(dynamicconfig.MatchingLBForceWritePartition)
+	for _, forceForward := range []bool{false, true} {
+		for _, forceAsync := range []bool{false, true} {
+			name := ""
+			if forceForward {
+				// force two levels of forwarding
+				dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+				dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+				// dc.OverrideValue(dynamicconfig.MatchingLBForceReadPartition, 5)
+				// dc.OverrideValue(dynamicconfig.MatchingLBForceWritePartition, 11)
+				name += "ForceForward"
+			} else {
+				// force single partition
+				dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+				dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+				name += "NoForward"
+			}
+			if forceAsync {
+				// disallow sync match to force to db
+				dc.OverrideValue(dynamicconfig.MatchingSyncMatchWaitDuration, 0)
+				name += "ForceAsync"
+			} else {
+				// default value
+				dc.OverrideValue(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond)
+				name += "AllowSync"
+			}
+			s.Run(name, subtest)
+		}
+	}
+}
+
+func (s *versioningIntegSuite) TestDispatchNewWorkflow() {
+	s.testWithMatchingBehavior(s.dispatchNewWorkflow)
+}
+
+func (s *versioningIntegSuite) dispatchNewWorkflow() {
+	tq := s.randomizeStr(s.T().Name())
+
+	wf := func(ctx workflow.Context) error {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: "v1",
+		},
+	})
+	s.NoError(err)
+	// time.Sleep(3 * time.Second) // propagation. FIXME: use eventually
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v1",
+		UseBuildIDForVersioning: true,
+	})
+	w1.RegisterWorkflow(wf)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	s.NoError(err)
+	s.NoError(run.Get(ctx, nil))
 }
 
 func getCurrentDefault(resp *workflowservice.GetWorkerBuildIdCompatibilityResponse) string {
