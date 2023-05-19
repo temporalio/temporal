@@ -32,6 +32,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/log/tag"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -47,6 +48,9 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
+
+// Fail query fast if workflow task keeps failing (attempt >= 3).
+const failQueryWorkflowTaskAttemptCount = 3
 
 func Invoke(
 	ctx context.Context,
@@ -117,10 +121,15 @@ func Invoke(
 		return nil, consts.ErrWorkflowTaskNotScheduled
 	}
 
-	if mutableState.IsTransientWorkflowTask() {
+	if mutableState.GetExecutionInfo().WorkflowTaskAttempt >= failQueryWorkflowTaskAttemptCount {
 		// while workflow task is failing, the query to that workflow will also fail. Failing fast here to prevent wasting
 		// resources to load history for a query that will fail.
-		return nil, serviceerror.NewFailedPrecondition("Cannot query workflow due to Workflow Task in failed state.")
+		shard.GetLogger().Info("Fail query fast due to WorkflowTask in failed state.",
+			tag.WorkflowNamespace(request.Request.Namespace),
+			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID))
+		return nil, serviceerror.NewWorkflowNotReady("Cannot query workflow due to Workflow Task in failed state.")
 	}
 
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
