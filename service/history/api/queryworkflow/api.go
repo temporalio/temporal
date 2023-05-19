@@ -32,6 +32,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/log/tag"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -129,7 +130,7 @@ func Invoke(
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID))
-		return nil, serviceerror.NewWorkflowNotReady("Cannot query workflow due to Workflow Task in failed state.")
+		return nil, serviceerror.NewWorkflowNotReady("Unable to query workflow due to Workflow Task in failed state.")
 	}
 
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
