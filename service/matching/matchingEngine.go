@@ -861,8 +861,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	req *matchingservice.GetTaskQueueUserDataRequest,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
-	taskQueueName := req.GetTaskQueue()
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	taskQueue, err := newTaskQueueID(namespaceID, req.GetTaskQueue(), req.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}

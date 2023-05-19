@@ -750,6 +750,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		res, err := c.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              c.taskQueueID.namespaceID.String(),
 			TaskQueue:                fetchSource,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
 			WaitNewData:              !firstCall,
 		})

@@ -2013,6 +2013,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
@@ -2039,6 +2040,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0,
 	})
 	s.NoError(err)
@@ -2065,6 +2067,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: userData.Version,
 	})
 	s.NoError(err)
@@ -2096,6 +2099,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: userData.Version,
 		WaitNewData:              true,
 	})
@@ -2132,6 +2136,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: 0, // must be zero to start
 		WaitNewData:              true,
 	})
@@ -2178,6 +2183,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 		NamespaceId:              namespaceID.String(),
 		TaskQueue:                tq,
+		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		LastKnownUserDataVersion: userData.Version,
 		WaitNewData:              true,
 	})

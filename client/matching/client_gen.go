@@ -86,7 +86,7 @@ func (c *clientImpl) GetTaskQueueUserData(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}

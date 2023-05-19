@@ -35,12 +35,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/tqname"
@@ -431,34 +434,43 @@ func (s *versioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBu
 	partCount, ok := v.(int)
 	s.True(ok, "partition count is not an int")
 
-	remaining := make(map[int]struct{})
-	for i := 0; i < partCount; i++ {
-		remaining[i] = struct{}{}
+	type partAndType struct {
+		part int
+		tp   enumspb.TaskQueueType
 	}
+	remaining := make(map[partAndType]struct{})
+	for i := 0; i < partCount; i++ {
+		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_ACTIVITY}] = struct{}{}
+		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_WORKFLOW}] = struct{}{}
+	}
+	nsId := s.getNamespaceID(s.namespace)
 	s.Eventually(func() bool {
-		for i := range remaining {
+		for pt := range remaining {
 			partName, err := tqname.FromBaseName(tq)
 			s.NoError(err)
-			partName = partName.WithPartition(i)
-			// FIXME: need to check activity queues also
-			res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
-				Namespace: s.namespace,
-				TaskQueue: partName.FullName(),
-			})
+			partName = partName.WithPartition(pt.part)
+			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
+			// here so that we can target activity queues.
+			res, err := s.testCluster.host.matchingClient.GetTaskQueueUserData(
+				ctx,
+				&matchingservice.GetTaskQueueUserDataRequest{
+					NamespaceId:   nsId,
+					TaskQueue:     partName.FullName(),
+					TaskQueueType: pt.tp,
+				})
 			s.NoError(err)
-			s.NotNil(res)
-			if containsBuildId(res, newBuildId) {
-				delete(remaining, i)
+			if containsBuildId(res.GetUserData().GetData().GetVersioningData(), newBuildId) {
+				delete(remaining, pt)
 			}
 		}
 		return len(remaining) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func containsBuildId(res *workflowservice.GetWorkerBuildIdCompatibilityResponse, buildId string) bool {
-	for _, set := range res.MajorVersionSets {
+func containsBuildId(data *persistencespb.VersioningData, buildId string) bool {
+	for _, set := range data.GetVersionSets() {
 		for _, id := range set.BuildIds {
-			if id == buildId {
+			if id.Id == buildId {
 				return true
 			}
 		}
