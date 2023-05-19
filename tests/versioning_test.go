@@ -314,6 +314,73 @@ func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	s.Equal("done!", out)
 }
 
+func (s *versioningIntegSuite) TestDispatchUpgrade() {
+	s.testWithMatchingBehavior(s.dispatchUpgrade)
+}
+
+func (s *versioningIntegSuite) dispatchUpgrade() {
+	tq := s.randomizeStr(s.T().Name())
+
+	var started sync.WaitGroup
+	started.Add(1)
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		started.Done()
+		wait := workflow.GetSignalChannel(ctx, "wait")
+		wait.Receive(ctx, nil)
+		return "done!", nil
+	}
+
+	wf2 := func(ctx workflow.Context) (string, error) {
+		wait := workflow.GetSignalChannel(ctx, "wait")
+		wait.Receive(ctx, nil)
+		return "done from two!", nil
+	}
+
+	// TODO: reduce after fixing sticky
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v1",
+		UseBuildIDForVersioning: true,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	started.Wait()
+
+	// Stop w1 to break stickiness
+	// TODO: this shouldn't be necessary, add behavior cases that disable stickiness
+	w1.Stop()
+	time.Sleep(11 * time.Second) // > sticky poller unavailable timeout
+
+	// now add v2 as compatible so the next workflow task runs there
+	s.addCompatibleBuildId(ctx, tq, "v2", "v1", false)
+	s.waitForPropagation(ctx, tq, "v2")
+
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v2",
+		UseBuildIDForVersioning: true,
+	})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// unblock the workflow
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done from two!", out)
+}
+
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
 func (s *versioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, newBuildId string) {
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
@@ -321,6 +388,23 @@ func (s *versioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, new
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: newBuildId,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(res)
+}
+
+// addCompatibleBuildId updates build id info on a task queue with a new compatible build id.
+func (s *versioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, newBuildId, existing string, makeSetDefault bool) {
+	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
+				NewBuildId:                newBuildId,
+				ExistingCompatibleBuildId: existing,
+				MakeSetDefault:            makeSetDefault,
+			},
 		},
 	})
 	s.NoError(err)
