@@ -28,6 +28,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -246,8 +247,8 @@ func (s *versioningIntegSuite) TestDispatchNewWorkflow() {
 func (s *versioningIntegSuite) dispatchNewWorkflow() {
 	tq := s.randomizeStr(s.T().Name())
 
-	wf := func(ctx workflow.Context) error {
-		return nil
+	wf := func(ctx workflow.Context) (string, error) {
+		return "done!", nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -266,7 +267,51 @@ func (s *versioningIntegSuite) dispatchNewWorkflow() {
 
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
-	s.NoError(run.Get(ctx, nil))
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
+}
+
+func (s *versioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
+	s.testWithMatchingBehavior(s.dispatchUnversionedRemainsUnversioned)
+}
+
+func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
+	tq := s.randomizeStr(s.T().Name())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var started sync.WaitGroup
+	started.Add(1)
+
+	wf := func(ctx workflow.Context) (string, error) {
+		started.Done()
+		wait := workflow.GetSignalChannel(ctx, "wait")
+		wait.Receive(ctx, nil)
+		return "done!", nil
+	}
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		// no build id
+	})
+	w1.RegisterWorkflow(wf)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	s.NoError(err)
+
+	started.Wait()
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	// unblock the workflow
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
