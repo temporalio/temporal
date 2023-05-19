@@ -58,10 +58,11 @@ const (
 )
 
 func (s *versioningIntegSuite) SetupSuite() {
-	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
-	s.dynamicConfigOverrides[dynamicconfig.MatchingMaxTaskQueueIdleTime] = 5 * time.Second
-	s.dynamicConfigOverrides[dynamicconfig.FrontendEnableWorkerVersioningDataAPIs] = true
-	s.dynamicConfigOverrides[dynamicconfig.MatchingForwarderMaxChildrenPerNode] = partitionTreeDegree
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.MatchingMaxTaskQueueIdleTime:           5 * time.Second,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
+		dynamicconfig.MatchingForwarderMaxChildrenPerNode:    partitionTreeDegree,
+	}
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
 
@@ -100,15 +101,7 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	ctx := NewContext()
 	tq := "integration-versioning-basic"
 
-	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "foo",
-		},
-	})
-	s.NoError(err)
-	s.NotNil(res)
+	s.addNewDefaultBuildId(ctx, tq, "foo")
 
 	res2, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
@@ -124,15 +117,7 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	tq := "integration-versioning-series"
 
 	for i := 0; i < 10; i++ {
-		res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-			Namespace: s.namespace,
-			TaskQueue: tq,
-			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-				AddNewBuildIdInNewDefaultSet: fmt.Sprintf("foo-%d", i),
-			},
-		})
-		s.NoError(err)
-		s.NotNil(res)
+		s.addNewDefaultBuildId(ctx, tq, fmt.Sprintf("foo-%d", i))
 	}
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
@@ -183,27 +168,19 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
 
-	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+	s.addNewDefaultBuildId(ctx, tq, "foo")
+
+	// The idle interval has been lowered to 5s in this suite, so sleep 6s to ensure
+	// that the task queue is unloaded.
+	time.Sleep(6 * time.Second)
+
+	res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "foo",
-		},
 	})
 	s.NoError(err)
 	s.NotNil(res)
-
-	// The idle interval has been lowered to 5s in this suite, so we can sleep > 10s to ensure
-	// that the task queue is unloaded.
-	time.Sleep(11 * time.Second)
-
-	res2, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-	})
-	s.NoError(err)
-	s.NotNil(res2)
-	s.Equal("foo", getCurrentDefault(res2))
+	s.Equal("foo", getCurrentDefault(res))
 }
 
 func (s *versioningIntegSuite) TestVersioningChangesPropagate() {
@@ -211,37 +188,17 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagate() {
 	tq := "integration-versioning-propagate"
 
 	// ensure at least two hops
-	partCount := 1 + partitionTreeDegree + partitionTreeDegree*partitionTreeDegree
+	const partCount = 1 + partitionTreeDegree + partitionTreeDegree*partitionTreeDegree
 
-	for _, buildId := range []string{"foo", "foo-v2"} {
-		res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-			Namespace: s.namespace,
-			TaskQueue: tq,
-			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-				AddNewBuildIdInNewDefaultSet: buildId,
-			},
-		})
-		s.NoError(err)
-		s.NotNil(res)
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, partCount)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, partCount)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
 
-		// Verify partitions have data
-		s.Eventually(func() bool {
-			for i := 0; i < partCount; i++ {
-				partName, err := tqname.FromBaseName(tq)
-				s.NoError(err)
-				partName = partName.WithPartition(i)
-				res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
-					Namespace: s.namespace,
-					TaskQueue: partName.FullName(),
-				})
-				s.NoError(err)
-				s.NotNil(res)
-				if getCurrentDefault(res) != buildId {
-					return false
-				}
-			}
-			return true
-		}, 10*time.Second, 100*time.Millisecond)
+	for _, buildId := range []string{"foo", "foo-v2", "foo-v3"} {
+		s.addNewDefaultBuildId(ctx, tq, buildId)
+		s.waitForPropagation(ctx, tq, buildId)
 	}
 }
 
@@ -296,15 +253,8 @@ func (s *versioningIntegSuite) dispatchNewWorkflow() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: "v1",
-		},
-	})
-	s.NoError(err)
-	time.Sleep(2 * time.Second) // propagation. FIXME: use eventually
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                 "v1",
@@ -319,10 +269,64 @@ func (s *versioningIntegSuite) dispatchNewWorkflow() {
 	s.NoError(run.Get(ctx, nil))
 }
 
-func getCurrentDefault(resp *workflowservice.GetWorkerBuildIdCompatibilityResponse) string {
-	if resp == nil {
+// addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
+func (s *versioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, newBuildId string) {
+	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: newBuildId,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(res)
+}
+
+// waitForPropagation waits for all partitions of tq to mention newBuildId in their versioning data (in any position).
+func (s *versioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBuildId string) {
+	v, ok := s.testCluster.host.dcClient.getRawValue(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	s.True(ok, "versioning tests require setting explicit number of partitions")
+	partCount, ok := v.(int)
+	s.True(ok, "partition count is not an int")
+
+	remaining := make(map[int]struct{})
+	for i := 0; i < partCount; i++ {
+		remaining[i] = struct{}{}
+	}
+	s.Eventually(func() bool {
+		for i := range remaining {
+			partName, err := tqname.FromBaseName(tq)
+			s.NoError(err)
+			partName = partName.WithPartition(i)
+			res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+				Namespace: s.namespace,
+				TaskQueue: partName.FullName(),
+			})
+			s.NoError(err)
+			s.NotNil(res)
+			if containsBuildId(res, newBuildId) {
+				delete(remaining, i)
+			}
+		}
+		return len(remaining) == 0
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func containsBuildId(res *workflowservice.GetWorkerBuildIdCompatibilityResponse, buildId string) bool {
+	for _, set := range res.MajorVersionSets {
+		for _, id := range set.BuildIds {
+			if id == buildId {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func getCurrentDefault(res *workflowservice.GetWorkerBuildIdCompatibilityResponse) string {
+	if res == nil {
 		return ""
 	}
-	curMajorSet := resp.GetMajorVersionSets()[len(resp.GetMajorVersionSets())-1]
+	curMajorSet := res.GetMajorVersionSets()[len(res.GetMajorVersionSets())-1]
 	return curMajorSet.GetBuildIds()[len(curMajorSet.GetBuildIds())-1]
 }
