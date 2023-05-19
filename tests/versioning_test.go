@@ -60,7 +60,6 @@ const (
 
 func (s *versioningIntegSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingMaxTaskQueueIdleTime:           5 * time.Second,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode:    partitionTreeDegree,
 	}
@@ -166,13 +165,14 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 
 // This test verifies that user data persists across unload/reload.
 func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
+	s.T().Skip("disabled until we have tq force unload")
+
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
 
 	s.addNewDefaultBuildId(ctx, tq, "foo")
 
-	// The idle interval has been lowered to 5s in this suite, so sleep 6s to ensure
-	// that the task queue is unloaded.
+	// TODO: force unload task queue here
 	time.Sleep(6 * time.Second)
 
 	res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
@@ -314,11 +314,14 @@ func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchUpgrade() {
-	s.testWithMatchingBehavior(s.dispatchUpgrade)
+func (s *versioningIntegSuite) TestDispatchUpgradeStickyTimeout() {
+	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(true) })
+}
+func (s *versioningIntegSuite) TestDispatchUpgradeStickyUnavailable() {
+	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(false) })
 }
 
-func (s *versioningIntegSuite) dispatchUpgrade() {
+func (s *versioningIntegSuite) dispatchUpgrade(letStickyWftTimeout bool) {
 	tq := s.randomizeStr(s.T().Name())
 
 	var started sync.WaitGroup
@@ -359,7 +362,17 @@ func (s *versioningIntegSuite) dispatchUpgrade() {
 	// Stop w1 to break stickiness
 	// TODO: this shouldn't be necessary, add behavior cases that disable stickiness
 	w1.Stop()
-	time.Sleep(11 * time.Second) // > sticky poller unavailable timeout
+
+	// two methods of breaking stickiness:
+	if letStickyWftTimeout {
+		// in this case we just start the new worker and kick the workflow immediately. the new
+		// wft will go to the sticky queue, be spooled, but eventually timeout and we'll get a
+		// new wft.
+	} else {
+		// in this case we sleep for more than stickyPollerUnavailableWindow. matching will
+		// return StickyWorkerUnavailable immediately after that.
+		time.Sleep(11 * time.Second)
+	}
 
 	// now add v2 as compatible so the next workflow task runs there
 	s.addCompatibleBuildId(ctx, tq, "v2", "v1", false)
@@ -427,6 +440,7 @@ func (s *versioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBu
 			partName, err := tqname.FromBaseName(tq)
 			s.NoError(err)
 			partName = partName.WithPartition(i)
+			// FIXME: need to check activity queues also
 			res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 				Namespace: s.namespace,
 				TaskQueue: partName.FullName(),
