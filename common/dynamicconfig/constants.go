@@ -171,6 +171,9 @@ const (
 	// ReachabilityTaskQueueScanLimit limits the number of task queues to scan when responding to a
 	// GetWorkerTaskReachability query.
 	ReachabilityTaskQueueScanLimit = "limit.reachabilityTaskQueueScan"
+	// ReachabilityQueryBuildIdLimit limits the number of build ids that can be requested in a single call to the
+	// GetWorkerTaskReachability API.
+	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
 

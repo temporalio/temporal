@@ -185,7 +185,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	var tqtPath string
 	switch t.Name() {
 	case "GetBuildIdTaskQueueMappingRequest":
-		tqPath = "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"
+		// Pick a random node for this request, it's not associated with a specific task queue.
+		tqPath = "&taskqueuepb.TaskQueue{Name: fmt.Sprintf(\"not-applicable-%%s\", rand.Int())}"
 		tqtPath = "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"
 		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
 	case "GetWorkerBuildIdCompatibilityRequest",
@@ -335,6 +336,8 @@ package {{.ServiceName}}
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"

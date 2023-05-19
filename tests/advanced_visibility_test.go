@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -85,6 +84,7 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
 		dynamicconfig.ReachabilityTaskQueueScanLimit:         2,
+		dynamicconfig.ReachabilityQueryBuildIdLimit:          1,
 	}
 
 	switch TestFlags.PersistenceDriver {
@@ -2008,16 +2008,19 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 	var reachabilityResponse *workflowservice.GetWorkerTaskReachabilityResponse
 
 	reachabilityResponse, err = s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.namespace,
-		BuildId:   v0,
-		Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_Namespace{Namespace: &types.Empty{}}},
+		Namespace:    s.namespace,
+		BuildIds:     []string{v0},
+		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
 	s.Require().NoError(err)
-	s.Require().Equal([]*taskqueuepb.TaskQueueReachability{
-		{TaskQueue: tq1, Reachability: []enumspb.TaskReachability(nil)},
-		{TaskQueue: tq2, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_NEW_WORKFLOWS}},
-		{TaskQueue: tq3, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_UNSPECIFIED}},
-	}, reachabilityResponse.TaskQueueReachability)
+	s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+		BuildId: v0,
+		TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{
+			{TaskQueue: tq1, Reachability: []enumspb.TaskReachability(nil)},
+			{TaskQueue: tq2, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_NEW_WORKFLOWS}},
+			{TaskQueue: tq3, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_UNSPECIFIED}},
+		},
+	}}, reachabilityResponse.BuildIdReachability)
 
 	// Start a workflow on tq1 and verify it affects the reachability of v0.1
 	_, err = s.engine.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -2031,20 +2034,23 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 
 	s.Eventually(func() bool {
 		reachabilityResponse, err = s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-			Namespace: s.namespace,
-			BuildId:   v01,
-			Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_Namespace{Namespace: &types.Empty{}}},
+			Namespace:    s.namespace,
+			BuildIds:     []string{v01},
+			Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 		})
 		s.Require().NoError(err)
-		if len(reachabilityResponse.TaskQueueReachability[0].Reachability) < 2 {
+		if len(reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability) < 2 {
 			return false
 		}
-		s.Require().Equal([]*taskqueuepb.TaskQueueReachability{
-			{TaskQueue: tq1, Reachability: []enumspb.TaskReachability{
-				enumspb.TASK_REACHABILITY_NEW_WORKFLOWS,
-				enumspb.TASK_REACHABILITY_OPEN_WORKFLOWS,
-			}},
-		}, reachabilityResponse.TaskQueueReachability)
+		s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+			BuildId: v01,
+			TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{
+				{TaskQueue: tq1, Reachability: []enumspb.TaskReachability{
+					enumspb.TASK_REACHABILITY_NEW_WORKFLOWS,
+					enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+				}},
+			},
+		}}, reachabilityResponse.BuildIdReachability)
 		return true
 	}, 15*time.Second, 100*time.Millisecond)
 }
@@ -2054,12 +2060,15 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInName
 	buildId := s.T().Name() + "v0"
 
 	reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.namespace,
-		BuildId:   buildId,
-		Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_Namespace{Namespace: &types.Empty{}}},
+		Namespace:    s.namespace,
+		BuildIds:     []string{buildId},
+		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
 	s.Require().NoError(err)
-	s.Require().Equal([]*taskqueuepb.TaskQueueReachability(nil), reachabilityResponse.TaskQueueReachability)
+	s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+		BuildId:               buildId,
+		TaskQueueReachability: []*taskqueuepb.TaskQueueReachability(nil),
+	}}, reachabilityResponse.BuildIdReachability)
 }
 
 func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTaskQueue() {
@@ -2070,14 +2079,16 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 
 	checkReachability := func() {
 		reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-			Namespace: s.namespace,
-			BuildId:   v01,
-			Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_TaskQueue{TaskQueue: tq}},
+			Namespace:    s.namespace,
+			BuildIds:     []string{v01},
+			TaskQueues:   []string{tq},
+			Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 		})
 		s.Require().NoError(err)
-		s.Require().Equal([]*taskqueuepb.TaskQueueReachability{
-			{TaskQueue: tq, Reachability: []enumspb.TaskReachability(nil)},
-		}, reachabilityResponse.TaskQueueReachability)
+		s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+			BuildId:               v01,
+			TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{{TaskQueue: tq, Reachability: []enumspb.TaskReachability(nil)}},
+		}}, reachabilityResponse.BuildIdReachability)
 	}
 
 	// Check once with an unversioned task queue
@@ -2095,13 +2106,36 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 	checkReachability()
 }
 
+func (s *advancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds() {
+	ctx := NewContext()
+
+	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace:    s.namespace,
+		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *advancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
+	ctx := NewContext()
+
+	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace:    s.namespace,
+		BuildIds:     []string{"", "v1"},
+		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
 func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNamespace() {
 	ctx := NewContext()
 
 	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.namespace,
-		BuildId:   "",
-		Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_Namespace{Namespace: &types.Empty{}}},
+		Namespace:    s.namespace,
+		BuildIds:     []string{""},
+		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.Require().ErrorAs(err, &invalidArgument)
@@ -2114,24 +2148,29 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	checkReachability := func(expectedReachability ...enumspb.TaskReachability) {
 		s.Require().Eventually(func() bool {
 			reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-				Namespace: s.namespace,
-				BuildId:   "",
-				Scope:     &taskqueuepb.TaskReachabilityScope{Variant: &taskqueuepb.TaskReachabilityScope_TaskQueue{TaskQueue: tq}},
+				Namespace:    s.namespace,
+				BuildIds:     []string{""},
+				TaskQueues:   []string{tq},
+				Reachability: expectedReachability[len(expectedReachability)-1],
 			})
 			s.Require().NoError(err)
-			if len(reachabilityResponse.TaskQueueReachability[0].Reachability) != len(expectedReachability) {
+			if len(reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability) != len(expectedReachability) {
 				return false
 			}
-			actualReachability := reachabilityResponse.TaskQueueReachability[0].Reachability
+			actualReachability := reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability
 			for i, expected := range expectedReachability {
 				actual := actualReachability[i]
 				if expected != actual {
 					return false
 				}
 			}
-			s.Require().Equal([]*taskqueuepb.TaskQueueReachability{
-				{TaskQueue: tq, Reachability: expectedReachability},
-			}, reachabilityResponse.TaskQueueReachability)
+			s.Require().Equal(
+				[]*taskqueuepb.BuildIdReachability{{
+					BuildId: "",
+					TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{
+						{TaskQueue: tq, Reachability: expectedReachability},
+					},
+				}}, reachabilityResponse.BuildIdReachability)
 			return true
 		}, 15*time.Second, 100*time.Millisecond)
 	}

@@ -3612,15 +3612,26 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 		return nil, errWorkerVersioningNotAllowed
 	}
 
-	if request.GetBuildId() != "" {
-		if len(request.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+	if len(request.GetBuildIds()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("Must query at least one build id (or empty string for unversioned worker)")
+	}
+	if len(request.GetBuildIds()) > wh.config.ReachabilityQueryBuildIdLimit() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Too many build ids queried at once, limit: %d", wh.config.ReachabilityQueryBuildIdLimit()))
+	}
+	gotUnversionedRequest := false
+	for _, buildId := range request.GetBuildIds() {
+		if buildId == "" {
+			gotUnversionedRequest = true
+		}
+		if len(buildId) > wh.config.WorkerBuildIdSizeLimit() {
 			return nil, errBuildIdTooLong
 		}
-	} else if request.GetScope().GetTaskQueue() == "" {
-		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker in namespace scope")
 	}
-	if request.GetScope().GetTaskQueue() != "" {
-		taskQueue := &taskqueuepb.TaskQueue{Name: request.GetScope().GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	if gotUnversionedRequest && len(request.GetTaskQueues()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue")
+	}
+	for _, taskQueue := range request.GetTaskQueues() {
+		taskQueue := &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 		if err := wh.validateTaskQueue(taskQueue); err != nil {
 			return nil, err
 		}
