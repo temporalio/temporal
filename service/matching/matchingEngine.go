@@ -931,7 +931,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		return nil, err
 	}
 	updateOptions := UserDataUpdateOptions{
-		Replicate: true,
+		Replicate: false,
 		// Avoid setting a limit to allow the replication event to always be applied
 		TaskQueueLimitPerBuildId: 0,
 	}
