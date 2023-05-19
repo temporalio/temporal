@@ -933,6 +933,27 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
 }
 
+func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+	ctx context.Context,
+	req *matchingservice.ForceUnloadTaskQueueRequest,
+) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueue, err := newTaskQueueID(namespaceID, req.TaskQueue, req.TaskQueueType)
+	if err != nil {
+		return nil, err
+	}
+	// kind is only used if we want to create a new tqm
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_UNSPECIFIED, false)
+	if err != nil {
+		return nil, err
+	}
+	if tqm == nil {
+		return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: false}, nil
+	}
+	e.unloadTaskQueue(tqm)
+	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: true}, nil
+}
+
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 	host, err := e.keyResolver.Lookup(partitionKey)
 	if err != nil {

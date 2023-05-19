@@ -31,7 +31,6 @@ import "temporal/server/api/matchingservice/v1/request_response.proto";
 // commands.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back
 // with completion or failure.
 service MatchingService {
-
     // PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
     // WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
     rpc PollWorkflowTaskQueue (PollWorkflowTaskQueueRequest) returns (PollWorkflowTaskQueueResponse) {
@@ -89,6 +88,8 @@ service MatchingService {
     rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
 
     // Apply a user data replication event.
-    rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns
-    (ApplyTaskQueueUserDataReplicationEventResponse) {}
+    rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns (ApplyTaskQueueUserDataReplicationEventResponse) {}
+
+    // Force unloading a task queue. Used for testing only.
+    rpc ForceUnloadTaskQueue (ForceUnloadTaskQueueRequest) returns (ForceUnloadTaskQueueResponse) {}
 }

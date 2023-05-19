@@ -168,15 +168,16 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 
 // This test verifies that user data persists across unload/reload.
 func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
-	s.T().Skip("disabled until we have tq force unload")
-
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
 
 	s.addNewDefaultBuildId(ctx, tq, "foo")
 
-	// TODO: force unload task queue here
-	time.Sleep(6 * time.Second)
+	_, err := s.testCluster.host.matchingClient.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
+		NamespaceId:   s.getNamespaceID(s.namespace),
+		TaskQueue:     tq,
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	})
 
 	res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
