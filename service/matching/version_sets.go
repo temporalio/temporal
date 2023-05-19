@@ -54,9 +54,11 @@ func ToBuildIdOrderingResponse(data *persistencespb.VersioningData, maxSets int)
 	versionSets := make([]*taskqueuepb.CompatibleVersionSet, numSets)
 	for i := range versionSets {
 		set := data.GetVersionSets()[i+lenSets-numSets]
-		buildIds := make([]string, len(set.GetBuildIds()))
-		for j, version := range set.GetBuildIds() {
-			buildIds[j] = version.Id
+		buildIds := make([]string, 0, len(set.GetBuildIds()))
+		for _, version := range set.GetBuildIds() {
+			if version.State == persistencespb.STATE_ACTIVE {
+				buildIds = append(buildIds, version.Id)
+			}
 		}
 		versionSets[i] = &taskqueuepb.CompatibleVersionSet{BuildIds: buildIds}
 	}

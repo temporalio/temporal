@@ -581,6 +581,26 @@ func TestToBuildIdOrderingResponseTrimsResponse(t *testing.T) {
 	assert.Equal(t, expected, actual.MajorVersionSets)
 }
 
+func TestToBuildIdOrderingResponseOmitsDeleted(t *testing.T) {
+	clock := hlc.Zero(1)
+	data := &persistencespb.VersioningData{
+		DefaultUpdateTimestamp: &clock,
+		VersionSets: []*persistencespb.CompatibleVersionSet{
+			{
+				SetIds: []string{hashBuildId("0")},
+				BuildIds: []*persistencespb.BuildId{
+					{Id: "0", State: persistencespb.STATE_DELETED, StateUpdateTimestamp: &clock},
+					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
+				},
+				DefaultUpdateTimestamp: &clock,
+			},
+		},
+	}
+	actual := ToBuildIdOrderingResponse(data, 0)
+	expected := []*taskqueuepb.CompatibleVersionSet{{BuildIds: []string{"0.1"}}}
+	assert.Equal(t, expected, actual.MajorVersionSets)
+}
+
 func TestHashBuildId(t *testing.T) {
 	// This function should never change.
 	assert.Equal(t, "ftrPuUeORv2JD4Wp2wTU", hashBuildId("my-build-id"))
