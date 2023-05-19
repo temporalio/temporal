@@ -26,6 +26,7 @@ package client
 
 import (
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/aggregate"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -69,6 +70,7 @@ type (
 		logger           log.Logger
 		clusterName      string
 		ratelimiter      quotas.RequestRateLimiter
+		healthSignals    aggregate.SignalAggregator[quotas.Request]
 	}
 )
 
@@ -87,6 +89,7 @@ func NewFactory(
 	clusterName string,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	healthSignals aggregate.SignalAggregator[quotas.Request],
 ) Factory {
 	return &factoryImpl{
 		dataStoreFactory: dataStoreFactory,
@@ -96,6 +99,7 @@ func NewFactory(
 		logger:           logger,
 		clusterName:      clusterName,
 		ratelimiter:      ratelimiter,
+		healthSignals:    healthSignals,
 	}
 }
 
@@ -113,6 +117,9 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	if f.metricsHandler != nil {
 		result = p.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.logger)
 	}
+	if f.healthSignals != nil {
+		result = p.NewTaskPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
+	}
 	return result, nil
 }
 
@@ -129,6 +136,9 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	}
 	if f.metricsHandler != nil {
 		result = p.NewShardPersistenceMetricsClient(result, f.metricsHandler, f.logger)
+	}
+	if f.healthSignals != nil {
+		result = p.NewShardPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
 	}
 	result = p.NewShardPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
@@ -148,6 +158,9 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 	if f.metricsHandler != nil {
 		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsHandler, f.logger)
 	}
+	if f.healthSignals != nil {
+		result = p.NewMetadataPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
+	}
 	result = p.NewMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
@@ -165,6 +178,9 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 	}
 	if f.metricsHandler != nil {
 		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsHandler, f.logger)
+	}
+	if f.healthSignals != nil {
+		result = p.NewClusterMetadataPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
 	}
 	result = p.NewClusterMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
@@ -184,6 +200,9 @@ func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 	if f.metricsHandler != nil {
 		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.logger)
 	}
+	if f.healthSignals != nil {
+		result = p.NewExecutionPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
+	}
 	result = p.NewExecutionPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
@@ -199,6 +218,9 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 	}
 	if f.metricsHandler != nil {
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsHandler, f.logger)
+	}
+	if f.healthSignals != nil {
+		result = p.NewQueuePersistenceHealthSignalClient(result, f.healthSignals, f.logger)
 	}
 	result = p.NewQueuePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return p.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsHandler, f.logger)

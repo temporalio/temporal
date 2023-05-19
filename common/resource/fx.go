@@ -31,6 +31,7 @@ import (
 	"os"
 	"time"
 
+	"go.temporal.io/server/common/aggregate"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -105,6 +106,7 @@ var Module = fx.Options(
 		func(p namespace.Registry) common.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
+	fx.Provide(PersistenceHealthSignalAggregatorProvider),
 	fx.Provide(serialization.NewSerializer),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
@@ -212,6 +214,15 @@ func NamespaceRegistryProvider(
 		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
 		metricsHandler,
 		logger,
+	)
+}
+
+func PersistenceHealthSignalAggregatorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+) aggregate.SignalAggregator[quotas.Request] {
+	return aggregate.NewPerShardPerNsHealthSignalAggregator(
+		dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 3*time.Second),
+		dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 500),
 	)
 }
 

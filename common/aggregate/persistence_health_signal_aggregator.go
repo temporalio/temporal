@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -67,13 +68,13 @@ func NewPersistenceHealthSignalAggregator[K comparable](
 }
 
 func NewPerShardPerNsHealthSignalAggregator(
-	windowSize time.Duration,
-	maxBufferSize int,
+	windowSize dynamicconfig.DurationPropertyFn,
+	maxBufferSize dynamicconfig.IntPropertyFn,
 ) *PersistenceHealthSignalAggregator[perShardPerNsHealthSignalKey] {
 	return NewPersistenceHealthSignalAggregator[perShardPerNsHealthSignalKey](
 		perShardPerNsKeyMapperFn,
-		windowSize,
-		maxBufferSize,
+		windowSize(),
+		maxBufferSize(),
 	)
 }
 

@@ -25,6 +25,7 @@
 package client
 
 import (
+	"go.temporal.io/server/common/aggregate"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -57,6 +58,7 @@ type (
 		ServiceName                        primitives.ServiceName
 		MetricsHandler                     metrics.Handler
 		Logger                             log.Logger
+		HealthSignals                      aggregate.SignalAggregator[quotas.Request]
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -97,5 +99,6 @@ func FactoryProvider(
 		string(params.ClusterName),
 		params.MetricsHandler,
 		params.Logger,
+		params.HealthSignals,
 	)
 }
