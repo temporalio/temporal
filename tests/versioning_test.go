@@ -55,10 +55,12 @@ const (
 )
 
 func (s *versioningIntegSuite) SetupSuite() {
-	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
-	s.dynamicConfigOverrides[dynamicconfig.MatchingMaxTaskQueueIdleTime] = 5 * time.Second
-	s.dynamicConfigOverrides[dynamicconfig.FrontendEnableWorkerVersioningDataAPIs] = true
-	s.dynamicConfigOverrides[dynamicconfig.MatchingForwarderMaxChildrenPerNode] = partitionTreeDegree
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.MatchingMaxTaskQueueIdleTime:           5 * time.Second,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
+		dynamicconfig.MatchingForwarderMaxChildrenPerNode:    partitionTreeDegree,
+		dynamicconfig.TaskQueuesPerBuildIdLimit:              3,
+	}
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
 
@@ -240,6 +242,36 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagate() {
 			return true
 		}, 10*time.Second, 100*time.Millisecond)
 	}
+}
+
+func (s *versioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
+	ctx := NewContext()
+	buildId := fmt.Sprintf("b-%s", s.T().Name())
+	// Map a 3 task queues to this build id and verify success
+	for i := 1; i <= 3; i++ {
+		taskQueue := fmt.Sprintf("q-%s-%d", s.T().Name(), i)
+		_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+			Namespace: s.namespace,
+			TaskQueue: taskQueue,
+			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+				AddNewBuildIdInNewDefaultSet: buildId,
+			},
+		})
+		s.NoError(err)
+	}
+
+	// Map a fourth task queue to this build id and verify it errors
+	taskQueue := fmt.Sprintf("q-%s-%d", s.T().Name(), 4)
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: buildId,
+		},
+	})
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPreconditionError)
+	s.Equal("Exceeded max task queues allowed to be mapped to a single build id: 3", failedPreconditionError.Message)
 }
 
 func getCurrentDefault(resp *workflowservice.GetWorkerBuildIdCompatibilityResponse) string {
