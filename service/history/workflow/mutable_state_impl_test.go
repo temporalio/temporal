@@ -808,6 +808,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 }
 
 func (s *mutableStateSuite) TestUpdateInfos() {
+	ctx := context.Background()
 	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
 	dbstate := s.buildWorkflowMutableState()
 	var err error
@@ -852,19 +853,23 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	)
 	s.Require().NoError(err)
 
-	// should now have one completed update and two accepted in MS
-	s.Require().Len(cacheStore, 3)
+	s.Require().Len(cacheStore, 3, "expected 1 completed update + 2 accepted in cache")
 
-	outcome, err := s.mutableState.GetUpdateOutcome(context.TODO(), completedUpdateID)
+	outcome, err := s.mutableState.GetUpdateOutcome(ctx, completedUpdateID)
 	s.Require().NoError(err)
 	s.Require().Equal(completedOutcome, outcome)
 
-	_, err = s.mutableState.GetUpdateOutcome(context.TODO(), "not_an_update_id")
+	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
 	s.Require().Error(err)
 	s.Require().IsType((*serviceerror.NotFound)(nil), err)
 
-	incompletes := s.mutableState.GetAcceptedWorkflowExecutionUpdateIDs(context.TODO())
+	incompletes := s.mutableState.GetAcceptedWorkflowExecutionUpdateIDs(ctx)
 	s.Require().Len(incompletes, 2)
+
+	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
+	s.NoError(err)
+	s.Require().Len(mutation.UpsertUpdateInfos, 3,
+		"expected 1 completed update + 2 accepted in mutation")
 }
 
 func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
@@ -954,6 +959,9 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
+	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(&updatepb.Response{})
+	s.NoError(err)
+
 	_, err = s.mutableState.AddWorkflowExecutionSignaled(
 		"signalName",
 		&commonpb.Payloads{},
@@ -980,6 +988,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	s.Equal(int64(1), mutation.ExecutionInfo.RequestCancelExternalCount)
 	s.Equal(int64(1), mutation.ExecutionInfo.SignalExternalCount)
 	s.Equal(int64(1), mutation.ExecutionInfo.SignalCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.UpdateCount)
 }
 
 func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
