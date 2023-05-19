@@ -358,7 +358,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 	time.Sleep(10 * time.Millisecond)
 	task := newInternalTask(randomTaskInfo(), nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	err := t.matcher.MustOffer(ctx, task)
+	err := t.matcher.MustOffer(ctx, task, nil)
 	cancel()
 	t.NoError(err)
 }
@@ -420,7 +420,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	// fail the test as the PollWorkflowTaskQueue and the 2nd AddWorkflowTask expectations would then never be met.
 	wg.Wait()
 
-	t.NoError(t.matcher.MustOffer(ctx, task))
+	t.NoError(t.matcher.MustOffer(ctx, task, nil))
 	cancel()
 
 	t.NotNil(req)
