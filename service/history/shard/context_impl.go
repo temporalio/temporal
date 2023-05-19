@@ -1168,6 +1168,7 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 	transferExclusiveMaxReadLevel *int64,
 ) error {
 	now := s.timeSource.Now()
+	minScheduledTaskTS := util.MaxTime(s.scheduledTaskMaxReadLevel, now)
 	for category, tasksByCategory := range newTasks {
 		for _, task := range tasksByCategory {
 			// set taskID
@@ -1185,28 +1186,28 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 				task.SetVisibilityTime(now)
 			}
 
-			// if scheduled task, check if fire time is in the past
+			// if scheduled task, move task timestamp forward if needed
 			if category.Type() == tasks.CategoryTypeScheduled {
 				ts := task.GetVisibilityTime()
-				readCursorTS := s.scheduledTaskMaxReadLevel
-				if ts.Truncate(persistence.ScheduledTaskMinPrecision).Before(readCursorTS) {
-					// make sure scheduled task timestamp is higher than max read level after truncation
-					// as persistence layer may lose precision when persisting the task.
-					// This can happen if shard move and new host have a time SKU, or there is db write delay.
-					// We generate a new timer ID using timerMaxReadLevel.
-					s.contextTaggedLogger.Debug("New timer generated is less than read level",
+				if ts.Truncate(persistence.ScheduledTaskMinPrecision).Before(minScheduledTaskTS) {
+					// make sure scheduled task timestamp is higher than
+					// 1. max read level, so that queue processor can read the task back.
+					// 2. current time. Otherwise the task timestamp is in the past and causes aritical load latency in queue processor metrics.
+					// Above cases can happen if shard move and new host have a time SKU,
+					// or there is db write delay, or we are simply (re-)generating tasks for an old workflow.
+					s.contextTaggedLogger.Debug("New timer generated has scheduled time earilier than queue read level or current time",
 						tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
 						tag.WorkflowID(workflowID),
 						tag.Timestamp(ts),
-						tag.CursorTimestamp(readCursorTS),
+						tag.CursorTimestamp(s.scheduledTaskMaxReadLevel),
 						tag.ValueShardAllocateTimerBeforeRead)
-					task.SetVisibilityTime(s.scheduledTaskMaxReadLevel.Add(persistence.ScheduledTaskMinPrecision))
+					task.SetVisibilityTime(minScheduledTaskTS.Add(persistence.ScheduledTaskMinPrecision))
 				}
 
 				s.contextTaggedLogger.Debug("Assigning new timer",
 					tag.Timestamp(task.GetVisibilityTime()),
 					tag.TaskID(task.GetTaskID()),
-					tag.MaxQueryLevel(readCursorTS),
+					tag.MaxQueryLevel(s.scheduledTaskMaxReadLevel),
 				)
 			}
 		}
