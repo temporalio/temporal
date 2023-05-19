@@ -66,9 +66,11 @@ type (
 	}
 
 	defaultLoadBalancer struct {
-		nReadPartitions   dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		nWritePartitions  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		namespaceIDToName func(id namespace.ID) (namespace.Name, error)
+		namespaceIDToName   func(id namespace.ID) (namespace.Name, error)
+		nReadPartitions     dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		nWritePartitions    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		forceReadPartition  dynamicconfig.IntPropertyFn
+		forceWritePartition dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -78,11 +80,14 @@ func NewLoadBalancer(
 	namespaceIDToName func(id namespace.ID) (namespace.Name, error),
 	dc *dynamicconfig.Collection,
 ) LoadBalancer {
-	return &defaultLoadBalancer{
-		namespaceIDToName: namespaceIDToName,
-		nReadPartitions:   dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions),
-		nWritePartitions:  dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
+	lb := &defaultLoadBalancer{
+		namespaceIDToName:   namespaceIDToName,
+		nReadPartitions:     dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions),
+		nWritePartitions:    dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
+		forceReadPartition:  dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
+		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
 	}
+	return lb
 }
 
 func (lb *defaultLoadBalancer) PickWritePartition(
@@ -91,7 +96,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
 ) string {
-	return lb.pickPartition(namespaceID, taskQueue, taskQueueType, forwardedFrom, lb.nWritePartitions)
+	return lb.pickPartition(namespaceID, taskQueue, taskQueueType, forwardedFrom, lb.nWritePartitions, lb.forceWritePartition)
 }
 
 func (lb *defaultLoadBalancer) PickReadPartition(
@@ -100,7 +105,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
 ) string {
-	return lb.pickPartition(namespaceID, taskQueue, taskQueueType, forwardedFrom, lb.nReadPartitions)
+	return lb.pickPartition(namespaceID, taskQueue, taskQueueType, forwardedFrom, lb.nReadPartitions, lb.forceReadPartition)
 }
 
 func (lb *defaultLoadBalancer) pickPartition(
@@ -109,6 +114,7 @@ func (lb *defaultLoadBalancer) pickPartition(
 	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
 	nPartitions dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters,
+	force dynamicconfig.IntPropertyFn,
 ) string {
 	if forwardedFrom != "" || taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		return taskQueue.GetName()
@@ -119,6 +125,10 @@ func (lb *defaultLoadBalancer) pickPartition(
 	// this should never happen when forwardedFrom is empty
 	if err != nil {
 		return taskQueue.GetName()
+	}
+
+	if n := force(); n >= 0 {
+		return tqName.WithPartition(n).FullName()
 	}
 
 	nsName, err := lb.namespaceIDToName(namespaceID)

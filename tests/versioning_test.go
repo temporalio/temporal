@@ -249,8 +249,9 @@ func (s *versioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 	dc := s.testCluster.host.dcClient
 	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
 	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
-	// defer dc.RemoveOverride(dynamicconfig.MatchingLBForceReadPartition)
-	// defer dc.RemoveOverride(dynamicconfig.MatchingLBForceWritePartition)
+	defer dc.RemoveOverride(dynamicconfig.TestMatchingLBForceReadPartition)
+	defer dc.RemoveOverride(dynamicconfig.TestMatchingLBForceWritePartition)
+	defer dc.RemoveOverride(dynamicconfig.TestMatchingDisableSyncMatch)
 	for _, forceForward := range []bool{false, true} {
 		for _, forceAsync := range []bool{false, true} {
 			name := ""
@@ -258,8 +259,8 @@ func (s *versioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 				// force two levels of forwarding
 				dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
 				dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-				// dc.OverrideValue(dynamicconfig.MatchingLBForceReadPartition, 5)
-				// dc.OverrideValue(dynamicconfig.MatchingLBForceWritePartition, 11)
+				dc.OverrideValue(dynamicconfig.TestMatchingLBForceReadPartition, 5)
+				dc.OverrideValue(dynamicconfig.TestMatchingLBForceWritePartition, 11)
 				name += "ForceForward"
 			} else {
 				// force single partition
@@ -269,11 +270,11 @@ func (s *versioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 			}
 			if forceAsync {
 				// disallow sync match to force to db
-				dc.OverrideValue(dynamicconfig.MatchingSyncMatchWaitDuration, 0)
+				dc.OverrideValue(dynamicconfig.TestMatchingDisableSyncMatch, true)
 				name += "ForceAsync"
 			} else {
 				// default value
-				dc.OverrideValue(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond)
+				dc.OverrideValue(dynamicconfig.TestMatchingDisableSyncMatch, false)
 				name += "AllowSync"
 			}
 			s.Run(name, subtest)
@@ -303,7 +304,7 @@ func (s *versioningIntegSuite) dispatchNewWorkflow() {
 		},
 	})
 	s.NoError(err)
-	// time.Sleep(3 * time.Second) // propagation. FIXME: use eventually
+	time.Sleep(2 * time.Second) // propagation. FIXME: use eventually
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                 "v1",

@@ -647,11 +647,10 @@ func executeWithRetry(
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
-	waitDuration := c.config.SyncMatchWaitDuration()
-	if waitDuration == 0 {
+	if params.forwardedFrom == "" && c.config.TestDisableSyncMatch() {
 		return false, nil
 	}
-	childCtx, cancel := newChildContext(ctx, waitDuration, time.Second)
+	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
 	// Use fake TaskId for sync match as it hasn't been allocated yet
