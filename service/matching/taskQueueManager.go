@@ -443,10 +443,10 @@ func (c *taskQueueManagerImpl) GetTask(
 	c.matcher.UpdateRatelimit(pollMetadata.ratePerSecond)
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		return c.matcher.PollForQuery(childCtx)
+		return c.matcher.PollForQuery(childCtx, pollMetadata)
 	}
 
-	task, err := c.matcher.Poll(childCtx)
+	task, err := c.matcher.Poll(childCtx, pollMetadata)
 	if err != nil {
 		return nil, err
 	}
