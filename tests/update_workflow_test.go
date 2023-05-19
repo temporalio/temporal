@@ -40,6 +40,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -2497,4 +2498,303 @@ func (s *integrationSuite) TestUpdateWorkflow_TimeoutSpeculativeWorkflowTask() {
  12 WorkflowExecutionUpdateAccepted
  13 WorkflowExecutionUpdateCompleted
  14 WorkflowExecutionCompleted`, events)
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_TerminateWorkflow() {
+	id := "integration-update-workflow-test-sswt1"
+	wt := "integration-update-workflow-test-sswt1-type"
+	tq := "integration-update-workflow-test-sswt1-task-queue"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    uuid.New(),
+		Namespace:    s.namespace,
+		WorkflowId:   id,
+		WorkflowType: workflowType,
+		TaskQueue:    taskQueue,
+	}
+
+	startResp, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      startResp.GetRunId(),
+	}
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Completes first WT with update unrelated command.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: "activity_type_1"},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					ScheduleToCloseTimeout: timestamp.DurationPtr(10 * time.Hour),
+				}},
+			}}, nil
+		case 2:
+			// Terminate workflow while speculative WT is running.
+			_, err := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+				Namespace:         s.namespace,
+				WorkflowExecution: we,
+				Reason:            "test-reason",
+			})
+			s.NoError(err)
+
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted`, history)
+			return nil, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		case 2:
+			updRequestMsg := task.Messages[0]
+			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+
+			s.Equal(payloads.EncodeString("update args"), updRequest.GetInput().GetArgs())
+			s.Equal("update_handler", updRequest.GetInput().GetName())
+			s.EqualValues(6, updRequestMsg.GetEventId())
+
+			return []*protocolpb.Message{
+				{
+					Id:                 uuid.New(),
+					ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+					SequencingId:       nil,
+					Body: marshalAny(s, &updatepb.Acceptance{
+						AcceptedRequestMessageId:         updRequestMsg.GetId(),
+						AcceptedRequestSequencingEventId: updRequestMsg.GetEventId(),
+						AcceptedRequest:                  updRequest,
+					}),
+				},
+				{
+					Id:                 uuid.New(),
+					ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
+					SequencingId:       nil,
+					Body: marshalAny(s, &updatepb.Response{
+						Meta: updRequest.GetMeta(),
+						Outcome: &updatepb.Outcome{
+							Value: &updatepb.Outcome_Success{
+								Success: payloads.EncodeString("update success"),
+							},
+						},
+					}),
+				},
+			}, nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Start activity using existing workflow task.
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(err)
+
+	type UpdateResult struct {
+		Response *workflowservice.UpdateWorkflowExecutionResponse
+		Err      error
+	}
+	updateResultCh := make(chan UpdateResult)
+	updateWorkflowFn := func() {
+		oneSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
+		defer cancel()
+
+		updateResponse, err1 := s.engine.UpdateWorkflowExecution(oneSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.namespace,
+			WorkflowExecution: we,
+			Request: &updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: uuid.New()},
+				Input: &updatepb.Input{
+					Name: "update_handler",
+					Args: payloads.EncodeString("update args"),
+				},
+			},
+		})
+		assert.Error(s.T(), err1)
+		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+		assert.Nil(s.T(), updateResponse)
+		updateResultCh <- UpdateResult{Response: updateResponse, Err: err1}
+	}
+	go updateWorkflowFn()
+	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
+
+	// Process update in workflow.
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	s.Error(err)
+	s.IsType(err, (*serviceerror.NotFound)(nil))
+	s.ErrorContains(err, "Workflow task not found.")
+	s.Nil(updateResp)
+	<-updateResultCh
+
+	s.Equal(2, wtHandlerCalls)
+	s.Equal(2, msgHandlerCalls)
+
+	events := s.getHistory(s.namespace, we)
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskFailed
+  9 WorkflowExecutionTerminated`, events)
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_TerminateWorkflow() {
+	id := "integration-update-workflow-test-sswt2"
+	wt := "integration-update-workflow-test-sswt2-type"
+	tq := "integration-update-workflow-test-sswt2-task-queue"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    uuid.New(),
+		Namespace:    s.namespace,
+		WorkflowId:   id,
+		WorkflowType: workflowType,
+		TaskQueue:    taskQueue,
+	}
+
+	startResp, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	we := &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      startResp.GetRunId(),
+	}
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Completes first WT with update unrelated command.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             strconv.Itoa(1),
+					ActivityType:           &commonpb.ActivityType{Name: "activity_type_1"},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					ScheduleToCloseTimeout: timestamp.DurationPtr(10 * time.Hour),
+				}},
+			}}, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Start activity using existing workflow task.
+	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(err)
+
+	type UpdateResult struct {
+		Response *workflowservice.UpdateWorkflowExecutionResponse
+		Err      error
+	}
+	updateResultCh := make(chan UpdateResult)
+	updateWorkflowFn := func() {
+		oneSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
+		defer cancel()
+
+		updateResponse, err1 := s.engine.UpdateWorkflowExecution(oneSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.namespace,
+			WorkflowExecution: we,
+			Request: &updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: uuid.New()},
+				Input: &updatepb.Input{
+					Name: "update_handler",
+					Args: payloads.EncodeString("update args"),
+				},
+			},
+		})
+		assert.Error(s.T(), err1)
+		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+		assert.Nil(s.T(), updateResponse)
+		updateResultCh <- UpdateResult{Response: updateResponse, Err: err1}
+	}
+	go updateWorkflowFn()
+	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
+
+	// Terminate workflow after speculative WT is scheduled but not started.
+	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         s.namespace,
+		WorkflowExecution: we,
+		Reason:            "test-reason",
+	})
+	s.NoError(err)
+
+	// Wait for update context to timeout.
+	time.Sleep(1 * time.Second)
+
+	s.Equal(1, wtHandlerCalls)
+	s.Equal(1, msgHandlerCalls)
+
+	events := s.getHistory(s.namespace, we)
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowExecutionTerminated`, events)
 }
