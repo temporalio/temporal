@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"math"
 	"sync"
 	"time"
@@ -67,6 +68,11 @@ type TaskMatcher struct {
 const (
 	defaultTaskDispatchRPS    = 100000.0
 	defaultTaskDispatchRPSTTL = time.Minute
+)
+
+var (
+	// Sentinel error to redirect while blocked in matcher.
+	errInterrupted = errors.New("interrupted offer")
 )
 
 // newTaskMatcher returns an task matcher instance. The returned instance can be
@@ -231,7 +237,7 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 // MustOffer blocks until a consumer is found to handle this task
 // Returns error only when context is canceled or the ratelimit is set to zero (allow nothing)
 // The passed in context MUST NOT have a deadline associated with it
-func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask) error {
+func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh chan struct{}) error {
 	if err := tm.rateLimiter.Wait(ctx); err != nil {
 		return err
 	}
@@ -269,6 +275,9 @@ forLoop:
 				case <-ctx.Done():
 					cancel()
 					return ctx.Err()
+				case <-interruptCh:
+					cancel()
+					return errInterrupted
 				}
 				cancel()
 				continue forLoop
@@ -281,6 +290,8 @@ forLoop:
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-interruptCh:
+			return errInterrupted
 		}
 	}
 }

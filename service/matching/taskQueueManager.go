@@ -119,9 +119,9 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
-		// DispatchTask dispatches a task to a poller. When there are no pollers to pick
+		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
-		DispatchTask(ctx context.Context, task *internalTask) error
+		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged chan struct{}) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
@@ -450,14 +450,15 @@ func (c *taskQueueManagerImpl) GetTask(
 	return task, nil
 }
 
-// DispatchTask dispatches a task to a poller. When there are no pollers to pick
+// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 // up the task or if rate limit is exceeded, this method will return error. Task
 // *will not* be persisted to db
-func (c *taskQueueManagerImpl) DispatchTask(
+func (c *taskQueueManagerImpl) DispatchSpooledTask(
 	ctx context.Context,
 	task *internalTask,
+	userDataChanged chan struct{},
 ) error {
-	return c.matcher.MustOffer(ctx, task)
+	return c.matcher.MustOffer(ctx, task, userDataChanged)
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
