@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/util"
 )
 
 // TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
@@ -252,12 +254,16 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	return readyShardCount == len(resp.Shards), nil
 }
 
-func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey definition.WorkflowKey) error {
+func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLimiter quotas.RateLimiter, wKey definition.WorkflowKey) error {
+	if err := rateLimiter.WaitN(ctx, 1); err != nil {
+		return err
+	}
+
 	// will generate replication task
 	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 
-	_, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
+	resp, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: wKey.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wKey.WorkflowID,
@@ -265,11 +271,20 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey d
 		},
 	})
 
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
-		// ignore NotFound error
+	switch err.(type) {
+	case nil:
+		stateTransitionCount := resp.StateTransitionCount
+		for stateTransitionCount > 0 {
+			token := util.Min(int(stateTransitionCount), rateLimiter.Burst())
+			stateTransitionCount -= int64(token)
+			_ = rateLimiter.ReserveN(time.Now(), token)
+		}
 		return nil
+	case *serviceerror.NotFound:
+		return nil
+	default:
+		return err
 	}
-	return err
 }
 
 func (a *activities) UpdateNamespaceState(ctx context.Context, req updateStateRequest) error {
@@ -359,11 +374,8 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	}
 
 	for i := startIndex; i < len(request.Executions); i++ {
-		if err := rateLimiter.Wait(ctx); err != nil {
-			return err
-		}
 		we := request.Executions[i]
-		err := a.generateWorkflowReplicationTask(ctx, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
+		err := a.generateWorkflowReplicationTask(ctx, rateLimiter, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
 		if err != nil {
 			a.logger.Info("Force replicate failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
 			return err

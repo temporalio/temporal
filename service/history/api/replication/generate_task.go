@@ -65,7 +65,8 @@ func GenerateTask(
 	}
 	defer func() { wfContext.GetReleaseFn()(retError) }()
 
-	task, err := wfContext.GetMutableState().GenerateMigrationTasks()
+	mutableState := wfContext.GetMutableState()
+	task, stateTransitionCount, err := mutableState.GenerateMigrationTasks()
 	if err != nil {
 		return nil, err
 	}
@@ -83,5 +84,7 @@ func GenerateTask(
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil
+	return &historyservice.GenerateLastHistoryReplicationTasksResponse{
+		StateTransitionCount: stateTransitionCount,
+	}, nil
 }

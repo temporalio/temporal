@@ -102,7 +102,7 @@ type (
 		GenerateHistoryReplicationTasks(
 			events []*historypb.HistoryEvent,
 		) error
-		GenerateMigrationTasks() (tasks.Task, error)
+		GenerateMigrationTasks() (tasks.Task, int64, error)
 	}
 
 	TaskGeneratorImpl struct {
@@ -614,15 +614,15 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, error) {
+func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, int64, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	lastItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
@@ -630,7 +630,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, error) {
 			// TaskID, VisibilityTimestamp is set by shard
 			WorkflowKey: r.mutableState.GetWorkflowKey(),
 			Version:     lastItem.GetVersion(),
-		}, nil
+		}, 1, nil
 	} else {
 		return &tasks.HistoryReplicationTask{
 			// TaskID, VisibilityTimestamp is set by shard
@@ -638,7 +638,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, error) {
 			FirstEventID: executionInfo.LastFirstEventId,
 			NextEventID:  lastItem.GetEventId() + 1,
 			Version:      lastItem.GetVersion(),
-		}, nil
+		}, executionInfo.StateTransitionCount, nil
 	}
 }
 
