@@ -4141,6 +4141,9 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, nil, err
 	}
 
+	// It is important to convert speculative WT to normal before prepareEventsAndReplicationTasks,
+	// because prepareEventsAndReplicationTasks will move internal buffered events to the history,
+	// and WT related events (WTScheduled, in particular) need to go first.
 	if err := ms.workflowTaskManager.convertSpeculativeWorkflowTaskToNormal(); err != nil {
 		return nil, nil, err
 	}
