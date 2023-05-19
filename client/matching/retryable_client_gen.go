@@ -155,21 +155,6 @@ func (c *retryableClient) GetWorkerBuildIdCompatibility(
 	return resp, err
 }
 
-func (c *retryableClient) InvalidateTaskQueueUserData(
-	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueUserDataRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
-	var resp *matchingservice.InvalidateTaskQueueUserDataResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.InvalidateTaskQueueUserData(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,

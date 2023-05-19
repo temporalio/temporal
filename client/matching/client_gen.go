@@ -125,21 +125,6 @@ func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	return client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
-func (c *clientImpl) InvalidateTaskQueueUserData(
-	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueUserDataRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
-
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.InvalidateTaskQueueUserData(ctx, request, opts...)
-}
-
 func (c *clientImpl) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,

@@ -41,7 +41,6 @@ var (
 		"RespondQueryTaskCompleted":              0,
 		"GetWorkerBuildIdCompatibility":          0,
 		"UpdateWorkerBuildIdCompatibility":       0,
-		"InvalidateTaskQueueUserData":            0,
 		"GetTaskQueueUserData":                   0,
 		"ApplyTaskQueueUserDataReplicationEvent": 0,
 		"GetBuildIdTaskQueueMapping":             0,

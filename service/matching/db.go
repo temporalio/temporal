@@ -50,14 +50,15 @@ const (
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		namespaceID   namespace.ID
-		taskQueue     *taskQueueID
-		taskQueueKind enumspb.TaskQueueKind
-		rangeID       int64
-		ackLevel      int64
-		userData      *persistencespb.VersionedTaskQueueUserData
-		store         persistence.TaskManager
-		logger        log.Logger
+		namespaceID     namespace.ID
+		taskQueue       *taskQueueID
+		taskQueueKind   enumspb.TaskQueueKind
+		rangeID         int64
+		ackLevel        int64
+		userData        *persistencespb.VersionedTaskQueueUserData
+		userDataChanged chan struct{}
+		store           persistence.TaskManager
+		logger          log.Logger
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -66,8 +67,7 @@ type (
 )
 
 var (
-	errUserDataNotPresentOnPartition = errors.New("user data is only present on root workflow partition")
-	errUserDataNoMutateNonRoot       = errors.New("can only mutate user data on root workflow task queue")
+	errUserDataNoMutateNonRoot = errors.New("can only mutate user data on root workflow task queue")
 )
 
 // newTaskQueueDB returns an instance of an object that represents
@@ -82,11 +82,12 @@ var (
 //     spread out and happen in background routines
 func newTaskQueueDB(store persistence.TaskManager, namespaceID namespace.ID, taskQueue *taskQueueID, kind enumspb.TaskQueueKind, logger log.Logger) *taskQueueDB {
 	return &taskQueueDB{
-		namespaceID:   namespaceID,
-		taskQueue:     taskQueue,
-		taskQueueKind: kind,
-		store:         store,
-		logger:        logger,
+		namespaceID:     namespaceID,
+		taskQueue:       taskQueue,
+		taskQueueKind:   kind,
+		store:           store,
+		logger:          logger,
+		userDataChanged: make(chan struct{}),
 	}
 }
 
@@ -140,10 +141,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		}
 		db.ackLevel = response.TaskQueueInfo.AckLevel
 		db.rangeID = response.RangeID + 1
-		_, err = db.getUserDataLocked(ctx)
-		if errors.Is(err, errUserDataNotPresentOnPartition) {
-			return nil
-		}
+		_, _, err = db.getUserDataLocked(ctx)
 		return err
 
 	case *serviceerror.NotFound:
@@ -154,10 +152,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			return err
 		}
 		db.rangeID = initialRangeID
-		_, err = db.getUserDataLocked(ctx)
-		if errors.Is(err, errUserDataNotPresentOnPartition) {
-			return nil
-		}
+		_, _, err = db.getUserDataLocked(ctx)
 		return err
 
 	default:
@@ -292,20 +287,27 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 // will cause cache inconsistency.
 func (db *taskQueueDB) GetUserData(
 	ctx context.Context,
-) (*persistencespb.VersionedTaskQueueUserData, error) {
+) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	db.Lock()
 	defer db.Unlock()
 	return db.getUserDataLocked(ctx)
 }
 
+func (db *taskQueueDB) setUserDataLocked(userData *persistencespb.VersionedTaskQueueUserData) {
+	db.userData = userData
+	close(db.userDataChanged)
+	db.userDataChanged = make(chan struct{})
+}
+
 // db.Lock() must be held before calling.
 // Returns in-memory cached value or reads from DB and updates the cached value.
+// Note: can return nil value with no error.
 func (db *taskQueueDB) getUserDataLocked(
 	ctx context.Context,
-) (*persistencespb.VersionedTaskQueueUserData, error) {
+) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	if db.userData == nil {
 		if !db.taskQueue.OwnsUserData() {
-			return nil, errUserDataNotPresentOnPartition
+			return nil, db.userDataChanged, nil
 		}
 
 		response, err := db.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
@@ -315,14 +317,14 @@ func (db *taskQueueDB) getUserDataLocked(
 		if err != nil {
 			var notFoundError *serviceerror.NotFound
 			if errors.As(err, &notFoundError) {
-				return nil, nil
+				return nil, db.userDataChanged, nil
 			}
-			return nil, err
+			return nil, nil, err
 		}
-		db.userData = response.UserData
+		db.setUserDataLocked(response.UserData)
 	}
 
-	return db.userData, nil
+	return db.userData, db.userDataChanged, nil
 }
 
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed
@@ -338,7 +340,7 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 	db.Lock()
 	defer db.Unlock()
 
-	userData, err := db.getUserDataLocked(ctx)
+	userData, _, err := db.getUserDataLocked(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -377,15 +379,15 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 		BuildIdsRemoved: removed,
 	})
 	if err == nil {
-		db.userData = &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData}
+		db.setUserDataLocked(&persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData})
 	}
 	return db.userData, err
 }
 
-func (db *taskQueueDB) setUserDataForNonRootPartition(userData *persistencespb.VersionedTaskQueueUserData) {
+func (db *taskQueueDB) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
 	db.Lock()
 	defer db.Unlock()
-	db.userData = userData
+	db.setUserDataLocked(userData)
 }
 
 func (db *taskQueueDB) expiryTime() *time.Time {

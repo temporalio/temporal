@@ -471,8 +471,6 @@ const (
 	MatchingClientUpdateWorkerBuildIdCompatibilityScope = "MatchingClientUpdateWorkerBuildIdCompatibility"
 	// MatchingClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
 	MatchingClientGetWorkerBuildIdCompatibilityScope = "MatchingClientGetWorkerBuildIdCompatibility"
-	// MatchingClientInvalidateTaskQueueUserDataScope tracks RPC calls to matching service
-	MatchingClientInvalidateTaskQueueUserDataScope = "MatchingClientInvalidateTaskQueueUserData"
 	// MatchingClientGetTaskQueueUserDataScope tracks RPC calls to matching service
 	MatchingClientGetTaskQueueUserDataScope = "MatchingClientGetTaskQueueUserData"
 	// MatchingClientApplyTaskQueueUserDataReplicationEventScope tracks RPC calls to matching service
@@ -1116,8 +1114,6 @@ const (
 	MatchingUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
 	// MatchingGetWorkerBuildIdCompatibilityScope tracks GetWorkerBuildIdCompatibility API calls received by service
 	MatchingGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
-	// MatchingInvalidateTaskQueueUserDataScope tracks InvalidateTaskQueueUserData API calls received by service
-	MatchingInvalidateTaskQueueUserDataScope = "InvalidateTaskQueueUserData"
 	// MatchingGetTaskQueueUserDataScope tracks GetTaskQueueUserData API calls received by service
 	MatchingGetTaskQueueUserDataScope = "GetTaskQueueUserData"
 	// MatchingApplyTaskQueueUserDataReplicationEventScope tracks ApplyTaskQueueUserDataReplicationEvent API calls received by service

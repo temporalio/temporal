@@ -300,22 +300,13 @@ func (h *Handler) UpdateWorkerBuildIdCompatibility(
 	return h.engine.UpdateWorkerBuildIdCompatibility(ctx, request)
 }
 
-// GetWorkerBuildIdCompatibility fetches the worker versioning graph for a task queue
+// GetWorkerBuildIdCompatibility fetches the worker versioning data for a task queue
 func (h *Handler) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *matchingservice.GetWorkerBuildIdCompatibilityRequest,
 ) (_ *matchingservice.GetWorkerBuildIdCompatibilityResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.GetWorkerBuildIdCompatibility(ctx, request)
-}
-
-// InvalidateTaskQueueMetadata notifies a task queue that some data has changed, and should be invalidated/refreshed
-func (h *Handler) InvalidateTaskQueueUserData(
-	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueUserDataRequest,
-) (_ *matchingservice.InvalidateTaskQueueUserDataResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.InvalidateTaskQueueUserData(ctx, request)
 }
 
 func (h *Handler) GetTaskQueueUserData(

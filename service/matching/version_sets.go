@@ -39,7 +39,7 @@ import (
 )
 
 var (
-	// This shouldn't happen, if we have versioning data we should have at least one set.
+	// Error used to signal that a queue has no versioning data. This shouldn't escape matching.
 	errEmptyVersioningData = serviceerror.NewInternal("versioning data is empty")
 )
 

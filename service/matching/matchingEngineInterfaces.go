@@ -46,7 +46,6 @@ type (
 		ListTaskQueuePartitions(ctx context.Context, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error)
 		UpdateWorkerBuildIdCompatibility(ctx context.Context, request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error)
 		GetWorkerBuildIdCompatibility(ctx context.Context, request *matchingservice.GetWorkerBuildIdCompatibilityRequest) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error)
-		InvalidateTaskQueueUserData(ctx context.Context, request *matchingservice.InvalidateTaskQueueUserDataRequest) (*matchingservice.InvalidateTaskQueueUserDataResponse, error)
 		GetTaskQueueUserData(ctx context.Context, request *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 		ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error)
 		GetBuildIdTaskQueueMapping(ctx context.Context, request *matchingservice.GetBuildIdTaskQueueMappingRequest) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error)

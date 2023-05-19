@@ -85,8 +85,6 @@ service MatchingService {
     //     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
     rpc UpdateWorkerBuildIdCompatibility (UpdateWorkerBuildIdCompatibilityRequest) returns (UpdateWorkerBuildIdCompatibilityResponse) {}
     rpc GetWorkerBuildIdCompatibility (GetWorkerBuildIdCompatibilityRequest) returns (GetWorkerBuildIdCompatibilityResponse) {}
-    // Tell a task queue that the associated user data has changed.
-    rpc InvalidateTaskQueueUserData (InvalidateTaskQueueUserDataRequest) returns (InvalidateTaskQueueUserDataResponse) {}
     // Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
     rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
 

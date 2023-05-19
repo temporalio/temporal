@@ -197,7 +197,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
-	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp())
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), ai.UseLatestBuildId)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -836,6 +836,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName = namespaceEntry.Name()
 	}
 
+	// copy version stamp from parent to child if:
+	// - command does not say to use latest version
+	// - parent is using versioning
+	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	if !attributes.UseLatestBuildId {
+		sourceVersionStamp = common.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
+	}
+
 	childRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
@@ -843,6 +851,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName,
 		childInfo.CreateRequestId,
 		attributes,
+		sourceVersionStamp,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1327,6 +1336,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	targetNamespace namespace.Name,
 	childRequestID string,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
+	sourceVersionStamp *commonpb.WorkerVersionStamp,
 ) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1362,6 +1372,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		},
 		t.shard.GetTimeSource().Now(),
 	)
+
+	request.SourceVersionStamp = sourceVersionStamp
 
 	response, err := t.historyClient.StartWorkflowExecution(ctx, request)
 	if err != nil {

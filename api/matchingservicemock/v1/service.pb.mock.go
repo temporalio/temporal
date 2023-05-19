@@ -220,26 +220,6 @@ func (mr *MockMatchingServiceClientMockRecorder) GetWorkerBuildIdCompatibility(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerBuildIdCompatibility), varargs...)
 }
 
-// InvalidateTaskQueueUserData mocks base method.
-func (m *MockMatchingServiceClient) InvalidateTaskQueueUserData(ctx context.Context, in *matchingservice.InvalidateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "InvalidateTaskQueueUserData", varargs...)
-	ret0, _ := ret[0].(*matchingservice.InvalidateTaskQueueUserDataResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// InvalidateTaskQueueUserData indicates an expected call of InvalidateTaskQueueUserData.
-func (mr *MockMatchingServiceClientMockRecorder) InvalidateTaskQueueUserData(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvalidateTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).InvalidateTaskQueueUserData), varargs...)
-}
-
 // ListTaskQueuePartitions mocks base method.
 func (m *MockMatchingServiceClient) ListTaskQueuePartitions(ctx context.Context, in *matchingservice.ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -501,21 +481,6 @@ func (m *MockMatchingServiceServer) GetWorkerBuildIdCompatibility(arg0 context.C
 func (mr *MockMatchingServiceServerMockRecorder) GetWorkerBuildIdCompatibility(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerBuildIdCompatibility), arg0, arg1)
-}
-
-// InvalidateTaskQueueUserData mocks base method.
-func (m *MockMatchingServiceServer) InvalidateTaskQueueUserData(arg0 context.Context, arg1 *matchingservice.InvalidateTaskQueueUserDataRequest) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InvalidateTaskQueueUserData", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.InvalidateTaskQueueUserDataResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// InvalidateTaskQueueUserData indicates an expected call of InvalidateTaskQueueUserData.
-func (mr *MockMatchingServiceServerMockRecorder) InvalidateTaskQueueUserData(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvalidateTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).InvalidateTaskQueueUserData), arg0, arg1)
 }
 
 // ListTaskQueuePartitions mocks base method.

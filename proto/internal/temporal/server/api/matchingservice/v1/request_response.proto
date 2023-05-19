@@ -213,15 +213,6 @@ message GetWorkerBuildIdCompatibilityResponse {
     temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse response = 1;
 }
 
-message InvalidateTaskQueueUserDataRequest {
-    string namespace_id = 1;
-    string task_queue = 2;
-    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
-    // The partition's cached user data should be invalidated and replaced with this data, if set.
-    temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 4;
-}
-message InvalidateTaskQueueUserDataResponse {}
-
 message GetTaskQueueUserDataRequest {
     string namespace_id = 1;
     // The task queue to fetch data from. Is always considered as a workflow queue, since root
@@ -231,6 +222,9 @@ message GetTaskQueueUserDataRequest {
     // If the requester has no data, it should set this to 0.
     // This value must not be set to a negative number (note that our linter suggests avoiding uint64).
     int64 last_known_user_data_version = 3;
+    // If set and last_known_user_data_version is the current version, block until new data is
+    // available (or timeout).
+    bool wait_new_data = 4;
 }
 message GetTaskQueueUserDataResponse {
     // Whether this task queue has any stored user data

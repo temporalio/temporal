@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	uberatomic "go.uber.org/atomic"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -49,7 +48,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -57,7 +55,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tqname"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/internal/goro"
 )
 
 const (
@@ -78,8 +78,12 @@ var (
 	// this retry policy is currenly only used for matching persistence operations
 	// that, if failed, the entire task queue needs to be reload
 	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithMaximumInterval(1 * time.Second).
-		WithExpirationInterval(30 * time.Second)
+					WithMaximumInterval(1 * time.Second).
+					WithExpirationInterval(30 * time.Second)
+
+	// Retry policy for getting user data from root partition. Should retry forever.
+	getUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
+				WithMaximumInterval(5 * time.Minute)
 )
 
 type (
@@ -122,12 +126,10 @@ type (
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		// GetUserData returns the verioned user data for this task queue
-		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error)
+		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
 		// UpdateUserData allows callers to update user data for this task queue
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
-		// InvalidateUserData allows callers to invalidate cached data on this task queue
-		InvalidateUserData(request *matchingservice.InvalidateTaskQueueUserDataRequest) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -169,19 +171,11 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 		clusterMeta          cluster.Metadata
+		goroGroup            goro.Group
 		initializedError     *future.FutureImpl[struct{}]
 		// userDataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
 		userDataInitialFetch *future.FutureImpl[struct{}]
-		metadataPoller       metadataPoller
-	}
-
-	metadataPoller struct {
-		// Ensures that we launch the goroutine for polling for updates only one time
-		running           *uberatomic.Bool
-		pollIntervalCfgFn dynamicconfig.DurationPropertyFn
-		stopChan          chan struct{}
-		tqMgr             *taskQueueManagerImpl
 	}
 )
 
@@ -243,13 +237,7 @@ func newTaskQueueManager(
 		taggedMetricsHandler:      taggedMetricsHandler,
 		initializedError:          future.NewFuture[struct{}](),
 		userDataInitialFetch:      future.NewFuture[struct{}](),
-		metadataPoller: metadataPoller{
-			running:           uberatomic.NewBool(false),
-			pollIntervalCfgFn: e.config.UserDataPollFrequency,
-			stopChan:          make(chan struct{}),
-		},
 	}
-	tlMgr.metadataPoller.tqMgr = tlMgr
 
 	tlMgr.liveness = newLiveness(
 		clockwork.NewRealClock(),
@@ -306,7 +294,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	go c.fetchUserDataFromRootPartitionOnInit(context.TODO())
+	c.goroGroup.Go(c.fetchUserDataLoop)
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
@@ -332,10 +320,10 @@ func (c *taskQueueManagerImpl) Stop() {
 		}
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
-	c.metadataPoller.Stop()
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
+	c.goroGroup.Cancel()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
@@ -347,9 +335,7 @@ func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// We don't really care if the initial fetch worked or not, anything that *requires* a bit of metadata should fail
-	// that operation if it's never fetched OK. If the initial fetch errored, the metadataPoller will have been started.
-	_, _ = c.userDataInitialFetch.Get(ctx)
+	_, err = c.userDataInitialFetch.Get(ctx)
 	return err
 }
 
@@ -412,7 +398,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	childCtx, cancel := c.newChildContext(ctx, c.config.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	childCtx, cancel := newChildContext(ctx, c.config.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	pollerID, ok := ctx.Value(pollerIDKey).(string)
@@ -485,17 +471,10 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
-// GetVersioningData returns the versioning data for the task queue if any. If this task queue is a non-root partition and
-// has no cached data, it will explicitly attempt a fetch from the root partition.
-func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error) {
-	data, err := c.db.GetUserData(ctx)
-	if errors.Is(err, errUserDataNotPresentOnPartition) {
-		// If this is a non-root-partition with no versioning data, this call is indicating we might expect to find
-		// some. Since we may not have started the poller, we want to explicitly attempt to fetch now, because
-		// it's possible some was added to the root partition, but it failed to invalidate this partition.
-		return c.fetchUserDataFromRootPartition(ctx)
-	}
-	return data, err
+// GetUserData returns the user data for the task queue if any.
+// Note: can return nil value with no error.
+func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+	return c.db.GetUserData(ctx)
 }
 
 //nolint:revive // control coupling
@@ -520,47 +499,6 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 			c.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
 			return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
 		}
-	}
-	// We will have errored already if this was not the root workflow partition.
-	// Now notify partitions that the user data has changed.
-	numParts := util.Max(c.config.NumReadPartitions(), c.config.NumWritePartitions())
-	wg := &sync.WaitGroup{}
-	for i := 0; i < numParts; i++ {
-		for _, tqt := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
-			if i == 0 && tqt == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-				continue // Root workflow partition owns the data, skip it.
-			}
-			wg.Add(1)
-			go func(i int, tqt enumspb.TaskQueueType) {
-				tq := c.taskQueueID.WithPartition(i).FullName()
-				_, err := c.matchingClient.InvalidateTaskQueueUserData(ctx,
-					&matchingservice.InvalidateTaskQueueUserDataRequest{
-						NamespaceId:   c.taskQueueID.namespaceID.String(),
-						TaskQueue:     tq,
-						TaskQueueType: tqt,
-						UserData:      newData,
-					})
-				if err != nil {
-					c.logger.Warn("Failed to notify partition of invalidated versioning data",
-						tag.WorkflowTaskQueueName(tq), tag.Error(err))
-				}
-				wg.Done()
-			}(i, tqt)
-		}
-	}
-	wg.Wait()
-	return nil
-}
-
-func (c *taskQueueManagerImpl) InvalidateUserData(request *matchingservice.InvalidateTaskQueueUserDataRequest) error {
-	if request.GetUserData() != nil {
-		if c.taskQueueID.OwnsUserData() {
-			// Should never happen. Root partitions do not get their user data invalidated.
-			c.logger.Warn("A root workflow partition was told to invalidate its user data, this should not happen")
-			return nil
-		}
-		c.db.setUserDataForNonRootPartition(request.GetUserData())
-		c.metadataPoller.StartIfUnstarted()
 	}
 	return nil
 }
@@ -699,7 +637,7 @@ func executeWithRetry(
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
-	childCtx, cancel := c.newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
+	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 
 	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
 	fakeTaskIdWrapper := &persistencespb.AllocatedTaskInfo{
@@ -719,23 +657,21 @@ func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskP
 // method to create child context when childContext cannot use
 // all of parent's deadline but instead there is a need to leave
 // some time for parent to do some post-work
-func (c *taskQueueManagerImpl) newChildContext(
+func newChildContext(
 	parent context.Context,
 	timeout time.Duration,
 	tailroom time.Duration,
 ) (context.Context, context.CancelFunc) {
-	select {
-	case <-parent.Done():
+	if parent.Err() != nil {
 		return parent, func() {}
-	default:
 	}
 	deadline, ok := parent.Deadline()
 	if !ok {
 		return context.WithTimeout(parent, timeout)
 	}
-	remaining := deadline.Sub(time.Now().UTC()) - tailroom
+	remaining := time.Until(deadline) - tailroom
 	if remaining < timeout {
-		timeout = time.Duration(util.Max(0, int64(remaining)))
+		timeout = util.Max(0, remaining)
 	}
 	return context.WithTimeout(parent, timeout)
 }
@@ -752,92 +688,99 @@ func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.taskQueueKind
 }
 
+func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
+	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
+}
+
 func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-
-	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
-
-	return ctx, cancel
+	return c.callerInfoContext(ctx), cancel
 }
 
-func (c *taskQueueManagerImpl) fetchUserDataFromRootPartitionOnInit(ctx context.Context) {
-	if c.userDataInitialFetch.Ready() {
-		return
+func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
+	degree := c.config.ForwarderMaxChildrenPerNode()
+	parent, err := c.taskQueueID.Parent(degree)
+	if err == tqname.ErrNoParent {
+		// we're the root activity task queue, ask the root workflow task queue
+		return c.taskQueueID.FullName(), nil
+	} else if err != nil {
+		// invalid degree
+		return "", err
 	}
-	_, err := c.fetchUserDataFromRootPartition(ctx)
-	c.userDataInitialFetch.Set(struct{}{}, err)
+	return parent.FullName(), nil
 }
 
-// fetchUserDataFromRootPartition fetches user data from root partition iff this partition is not a root partition.
-// Returns the fetched data, if fetching was necessary and successful.
-func (c *taskQueueManagerImpl) fetchUserDataFromRootPartition(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, error) {
-	// Nothing to do if we are the root partition of a workflow queue, since we should own the data.
-	// (for versioning - any later added metadata may need to not abort so early)
+func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
+	ctx = c.callerInfoContext(ctx)
+
+	// root workflow partition reads data from db
 	if c.taskQueueID.OwnsUserData() {
-		return nil, nil
+		return nil
 	}
 
-	knownUserData, err := c.db.GetUserData(ctx)
-	if err != nil && !errors.Is(err, errUserDataNotPresentOnPartition) {
-		return nil, err
-	}
-
-	rootTqName := c.taskQueueID.Root().FullName()
-	res, err := c.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:              c.taskQueueID.namespaceID.String(),
-		TaskQueue:                rootTqName,
-		LastKnownUserDataVersion: knownUserData.GetVersion(),
-	})
-	// If the root partition returns nil here, then that means our data matched, and we don't need to update.
-	// If it's nil because it never existed, then we'd never have any data.
-	// It can't be nil due to removing versions, as that would result in a non-nil container with
-	// nil inner fields.
-	if res.GetUserData() != nil {
-		c.db.setUserDataForNonRootPartition(res.GetUserData())
-	}
-	// We want to start the poller as long as the root partition has any kind of data (or fetching hasn't worked)
-	if res.GetUserData() != nil || err != nil {
-		c.metadataPoller.StartIfUnstarted()
-	}
+	fetchSource, err := c.userDataFetchSource()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return res.GetUserData(), nil
-}
 
-// StartIfUnstarted starts the poller if it's not already started. The passed in function is called repeatedly
-// and if it returns true, the poller will shut down, at which point it may be started again.
-func (mp *metadataPoller) StartIfUnstarted() {
-	if mp.running.Load() {
-		return
+	firstCall := true
+
+	op := func(ctx context.Context) error {
+		knownUserData, _, err := c.db.GetUserData(ctx)
+		if err != nil {
+			return err
+		}
+
+		callCtx, cancel := context.WithTimeout(ctx, c.config.GetUserDataLongPollTimeout())
+		defer cancel()
+
+		res, err := c.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              c.taskQueueID.namespaceID.String(),
+			TaskQueue:                fetchSource,
+			LastKnownUserDataVersion: knownUserData.GetVersion(),
+			WaitNewData:              !firstCall,
+		})
+		if err != nil {
+			return err
+		}
+		// If the root partition returns nil here, then that means our data matched, and we don't need to update.
+		// If it's nil because it never existed, then we'd never have any data.
+		// It can't be nil due to removing versions, as that would result in a non-nil container with
+		// nil inner fields.
+		if res.GetUserData() != nil {
+			c.db.setUserDataForNonOwningPartition(res.GetUserData())
+		}
+		if firstCall {
+			c.userDataInitialFetch.Set(struct{}{}, err)
+			firstCall = false
+		}
+		return nil
 	}
-	go mp.pollLoop()
-}
 
-func (mp *metadataPoller) pollLoop() {
-	mp.running.Store(true)
-	defer mp.running.Store(false)
-	ticker := time.NewTicker(mp.pollIntervalCfgFn())
-	defer ticker.Stop()
+	minWaitTime := c.config.GetUserDataMinWaitTime
 
-	for {
-		select {
-		case <-mp.stopChan:
-			return
-		case <-ticker.C:
-			// In case the interval has changed
-			ticker.Reset(mp.pollIntervalCfgFn())
-			data, err := mp.tqMgr.fetchUserDataFromRootPartition(context.TODO())
-			if data == nil && err == nil {
-				// Can stop polling since there is no versioning data. Loop will be restarted if we
-				// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
-				return
+	for ctx.Err() == nil {
+		start := time.Now()
+		_ = backoff.ThrottleRetryContext(ctx, op, getUserDataRetryPolicy, nil)
+		elapsed := time.Since(start)
+
+		// In general we want to start a new call immediately on completion of the previous
+		// one. But if the remote is broken and returns success immediately, we might end up
+		// spinning. So enforce a minimum wait time that increases as long as we keep getting
+		// very fast replies.
+		if elapsed < minWaitTime {
+			select {
+			case <-ctx.Done():
+			case <-time.After(minWaitTime - elapsed):
 			}
+			// Don't let this get near our call timeout, otherwise we can't tell the difference
+			// between a fast reply and a timeout.
+			minWaitTime = util.Min(minWaitTime*2, c.config.GetUserDataLongPollTimeout()/2)
+		} else {
+			minWaitTime = c.config.GetUserDataMinWaitTime
 		}
 	}
-}
 
-func (mp *metadataPoller) Stop() {
-	close(mp.stopChan)
+	return ctx.Err()
 }

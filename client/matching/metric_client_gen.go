@@ -119,20 +119,6 @@ func (c *metricClient) GetWorkerBuildIdCompatibility(
 	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
-func (c *metricClient) InvalidateTaskQueueUserData(
-	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueUserDataRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.InvalidateTaskQueueUserDataResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientInvalidateTaskQueueUserDataScope)
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.InvalidateTaskQueueUserData(ctx, request, opts...)
-}
-
 func (c *metricClient) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,

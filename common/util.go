@@ -783,30 +783,41 @@ func OverrideWorkflowTaskTimeout(
 	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
 }
 
+// StampIfUsingVersioning returns the given WorkerVersionStamp if it is using versioning,
+// otherwise returns nil.
+func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.WorkerVersionStamp {
+	if stamp.GetUseVersioning() {
+		return stamp
+	}
+	return nil
+}
+
 func MakeVersionDirectiveForWorkflowTask(
 	stamp *commonpb.WorkerVersionStamp,
 	lastWorkflowTaskStartedEventID int64,
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
-	if stamp.GetUseVersioning() && stamp.GetBuildId() != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
 	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
 		// first workflow task
-		// TODO: look at workflow execution started attributes to decide if we should use
-		// default or stay on existing version (for child workflow and continue-as-new)
 		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
 	}
+	// else: unversioned queue
 	return &directive
 }
 
 func MakeVersionDirectiveForActivityTask(
 	stamp *commonpb.WorkerVersionStamp,
+	useLatestBuildId bool,
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
-	// TODO: look at activity task scheduled attributes to decide if we should do UseDefault
-	if stamp.GetBuildId() != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: stamp.BuildId}
+	if useLatestBuildId {
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
 	}
+	// else: unversioned queue
 	return &directive
 }
 

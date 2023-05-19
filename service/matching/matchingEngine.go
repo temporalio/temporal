@@ -811,7 +811,7 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 		}
 		return nil, err
 	}
-	userData, err := tqMgr.GetUserData(ctx)
+	userData, _, err := tqMgr.GetUserData(ctx)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
@@ -821,29 +821,6 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	return &matchingservice.GetWorkerBuildIdCompatibilityResponse{
 		Response: ToBuildIdOrderingResponse(userData.GetData().GetVersioningData(), int(req.GetRequest().GetMaxSets())),
 	}, nil
-}
-
-func (e *matchingEngineImpl) InvalidateTaskQueueUserData(
-	ctx context.Context,
-	req *matchingservice.InvalidateTaskQueueUserDataRequest,
-) (*matchingservice.InvalidateTaskQueueUserDataResponse, error) {
-	taskQueue, err := newTaskQueueID(namespace.ID(req.GetNamespaceId()), req.GetTaskQueue(), req.GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
-	if tqMgr == nil && err == nil {
-		// Task queue is not currently loaded, so nothing to do here
-		return &matchingservice.InvalidateTaskQueueUserDataResponse{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	err = tqMgr.InvalidateUserData(req)
-	if err != nil {
-		return nil, err
-	}
-	return &matchingservice.InvalidateTaskQueueUserDataResponse{}, nil
 }
 
 func (e *matchingEngineImpl) GetTaskQueueUserData(
@@ -864,23 +841,42 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	if version < 0 {
 		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
 	}
-	resp := &matchingservice.GetTaskQueueUserDataResponse{}
-	userData, err := tqMgr.GetUserData(ctx)
-	if err != nil {
-		return nil, err
+
+	if req.WaitNewData {
+		var cancel context.CancelFunc
+		ctx, cancel = newChildContext(ctx, e.config.GetUserDataLongPollTimeout(), returnEmptyTaskTimeBudget)
+		defer cancel()
 	}
-	if userData != nil {
-		resp.TaskQueueHasUserData = true
-		if userData.Version > version {
-			resp.UserData = userData
+
+	for {
+		resp := &matchingservice.GetTaskQueueUserDataResponse{}
+		userData, userDataChanged, err := tqMgr.GetUserData(ctx)
+		if err != nil {
+			return nil, err
 		}
-		if userData.Version < version {
-			// This is highly unlikely but may happen due to an edge case in during ownership transfer.
-			// We rely on periodic refresh and client retries in this case to let the system eventually self-heal.
-			return nil, serviceerror.NewFailedPrecondition("Non-root partition requested task queue user data for version greater than known version")
+		if req.WaitNewData && userData.GetVersion() == version {
+			// long-poll: wait for data to change/appear
+			select {
+			case <-ctx.Done():
+				resp.TaskQueueHasUserData = userData != nil
+				return resp, nil
+			case <-userDataChanged:
+				continue
+			}
 		}
+		if userData != nil {
+			resp.TaskQueueHasUserData = true
+			if userData.Version > version {
+				resp.UserData = userData
+			} else if userData.Version < version {
+				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
+				// We rely on client retries in this case to let the system eventually self-heal.
+				return nil, serviceerror.NewFailedPrecondition(
+					"requested task queue user data for version greater than known version")
+			}
+		}
+		return resp, nil
 	}
-	return resp, nil
 }
 
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
@@ -1187,12 +1183,11 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 	if err != nil {
 		return nil, err
 	}
-	userData, err := unversionedTQM.GetUserData(ctx)
+	userData, _, err := unversionedTQM.GetUserData(ctx)
 	if err != nil {
 		return nil, err
 	}
 	data := userData.GetData().GetVersioningData()
-
 	versionSet, err := lookupVersionSetForPoll(data, workerVersionCapabilities)
 	if err != nil {
 		return nil, err
@@ -1227,18 +1222,16 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	if err != nil {
 		return nil, err
 	}
-	userData, err := unversionedTQM.GetUserData(ctx)
+	userData, _, err := unversionedTQM.GetUserData(ctx)
 	if err != nil {
 		return nil, err
 	}
 	data := userData.GetData().GetVersioningData()
-	// Task queue is unversioned
-	if data == nil {
-		return taskQueue, nil
-	}
-
 	versionSet, err := lookupVersionSetForAdd(data, buildId)
-	if err != nil {
+	if err == errEmptyVersioningData {
+		// default was requested for an unversioned queue
+		return taskQueue, nil
+	} else if err != nil {
 		return nil, err
 	}
 	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), nil
