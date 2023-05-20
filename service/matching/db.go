@@ -310,7 +310,7 @@ func (db *taskQueueDB) getUserDataLocked(
 	ctx context.Context,
 ) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	if db.userData == nil {
-		if !db.taskQueue.OwnsUserData() {
+		if !db.taskQueue.OwnsUserData() || db.taskQueueKind != enumspb.TASK_QUEUE_KIND_NORMAL {
 			return nil, db.userDataChanged, nil
 		}
 

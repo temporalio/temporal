@@ -336,6 +336,11 @@ func (c *taskQueueManagerImpl) isVersioned() bool {
 	return c.taskQueueID.VersionSet() != ""
 }
 
+// FIXME: better name
+func (c *taskQueueManagerImpl) shouldNotFetchUserData() bool {
+	return c.taskQueueID.OwnsUserData() || c.isVersioned() || c.taskQueueKind != enumspb.TASK_QUEUE_KIND_NORMAL
+}
+
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
 	if err != nil {
@@ -726,8 +731,8 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
-	// root workflow partition reads data from db; versioned tqm has no user data
-	if c.taskQueueID.OwnsUserData() || c.isVersioned() {
+	// root workflow partition reads data from db; versioned tqm has no user data; sticky has no user data
+	if c.shouldNotFetchUserData() {
 		return nil
 	}
 
