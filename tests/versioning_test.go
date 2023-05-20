@@ -30,6 +30,7 @@ import (
 	"flag"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -792,6 +793,84 @@ func (s *versioningIntegSuite) dispatchRetry() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("done!", out)
+}
+
+func (s *versioningIntegSuite) TestDispatchCron() {
+	s.testWithMatchingBehavior(s.dispatchCron)
+}
+
+func (s *versioningIntegSuite) dispatchCron() {
+	tq := s.randomizeStr(s.T().Name())
+
+	var runs1 atomic.Int32
+	var runs11 atomic.Int32
+	var runs2 atomic.Int32
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		runs1.Add(1)
+		return "ok", nil
+	}
+	wf11 := func(ctx workflow.Context) (string, error) {
+		runs11.Add(1)
+		return "ok", nil
+	}
+	wf2 := func(ctx workflow.Context) (string, error) {
+		runs2.Add(1)
+		return "ok", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v1",
+		UseBuildIDForVersioning: true,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	_, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue:                tq,
+		CronSchedule:             "@every 1s",
+		WorkflowExecutionTimeout: 7 * time.Second,
+	}, "wf")
+	s.NoError(err)
+
+	// give it ~3 runs on v1
+	time.Sleep(3500 * time.Millisecond)
+
+	// now register v11 as newer compatible with v1 AND v2 as a new default.
+	// it will run on v2 instead of v11 because cron always starts on default.
+	s.addCompatibleBuildId(ctx, tq, "v11", "v1", false)
+	s.addNewDefaultBuildId(ctx, tq, "v2")
+
+	// start workers for v11 and v2
+	w11 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v11",
+		UseBuildIDForVersioning: true,
+	})
+	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w11.Start())
+	defer w11.Stop()
+
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v2",
+		UseBuildIDForVersioning: true,
+	})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// give it ~3 runs on v2
+	time.Sleep(3500 * time.Millisecond)
+
+	s.GreaterOrEqual(runs1.Load(), int32(3))
+	s.Zero(runs11.Load())
+	s.GreaterOrEqual(runs2.Load(), int32(3))
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
