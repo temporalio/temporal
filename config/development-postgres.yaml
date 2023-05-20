@@ -83,7 +83,6 @@ clusterMetadata:
 
 dcRedirectionPolicy:
   policy: "noop"
-  toDC: ""
 
 archival:
   history:
