@@ -1222,13 +1222,6 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 	kind enumspb.TaskQueueKind,
 	normalName string,
 ) (*taskQueueID, error) {
-	// Since sticky queues are pinned to a particular worker, we don't need to redirect
-	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
-		// TODO: we may need to kick the workflow off of the sticky queue here
-		// (e.g. serviceerrors.StickyWorkerUnavailable) if there's a newer build id
-		return taskQueue, nil
-	}
-
 	if !workerVersionCapabilities.GetUseVersioning() {
 		// Either this task queue is versioned, or there are still some workflows running on
 		// the "unversioned" set.
@@ -1247,6 +1240,14 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 		return nil, err
 	}
 	data := userData.GetData().GetVersioningData()
+
+	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// In the sticky case we don't redirect, but we may kick off this worker if there's a
+		// newer one.
+		err := checkVersionForStickyPoll(data, workerVersionCapabilities)
+		return taskQueue, err
+	}
+
 	versionSet, err := lookupVersionSetForPoll(data, workerVersionCapabilities)
 	if err != nil {
 		return nil, err
@@ -1261,11 +1262,6 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	kind enumspb.TaskQueueKind,
 	normalName string,
 ) (*taskQueueID, chan struct{}, error) {
-	// sticky queues are unversioned
-	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
-		return taskQueue, nil, nil
-	}
-
 	var buildId string
 	switch dir := directive.GetValue().(type) {
 	case *taskqueuespb.TaskVersionDirective_UseDefault:
@@ -1287,6 +1283,14 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 		return nil, nil, err
 	}
 	data := userData.GetData().GetVersioningData()
+
+	if kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// In the sticky case we don't redirect, but we may kick off this worker if there's a
+		// newer one.
+		err := checkVersionForStickyAdd(data, buildId)
+		return taskQueue, userDataChanged, err
+	}
+
 	versionSet, err := lookupVersionSetForAdd(data, buildId)
 	if err == errEmptyVersioningData {
 		// default was requested for an unversioned queue
