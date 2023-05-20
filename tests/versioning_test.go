@@ -481,6 +481,83 @@ func (s *versioningIntegSuite) dispatchActivity() {
 	s.Equal("v1v2", out)
 }
 
+func (s *versioningIntegSuite) TestDispatchChildWorkflow() {
+	s.testWithMatchingBehavior(s.dispatchChildWorkflow)
+}
+
+func (s *versioningIntegSuite) dispatchChildWorkflow() {
+	// This also implicitly tests that a workflow stays on a compatible version set if a new
+	// incompatible set is registered, because wf2 just panics. It further tests that
+	// stickiness on v1 is not broken by registering v2, because `started.Done()` will panic on
+	// replay.
+
+	tq := s.randomizeStr(s.T().Name())
+
+	var started sync.WaitGroup
+	started.Add(1)
+
+	child1 := func(workflow.Context) (string, error) { return "v1", nil }
+	child2 := func(workflow.Context) (string, error) { return "v2", nil }
+	wf1 := func(ctx workflow.Context) (string, error) {
+		started.Done()
+		// wait for signal
+		wait := workflow.GetSignalChannel(ctx, "wait")
+		wait.Receive(ctx, nil)
+		// run two child workflows
+		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{}), "child")
+		fut2 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			UseLatestBuildID: true, // this one should go to latest
+		}), "child")
+		var val1, val2 string
+		s.NoError(fut1.Get(ctx, &val1))
+		s.NoError(fut2.Get(ctx, &val2))
+		return val1 + val2, nil
+	}
+	wf2 := func(ctx workflow.Context) (string, error) {
+		panic("workflow should not run on v2")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v1",
+		UseBuildIDForVersioning: true,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterWorkflowWithOptions(child1, workflow.RegisterOptions{Name: "child"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	// wait for it to start on v1
+	started.Wait()
+
+	// now register v2 as default
+	s.addNewDefaultBuildId(ctx, tq, "v2")
+	s.waitForPropagation(ctx, tq, "v2")
+	// start worker for v2
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v2",
+		UseBuildIDForVersioning: true,
+	})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	w2.RegisterWorkflowWithOptions(child2, workflow.RegisterOptions{Name: "child"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// unblock the workflow
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("v1v2", out)
+}
+
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
 func (s *versioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, newBuildId string) {
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
