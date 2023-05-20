@@ -426,7 +426,6 @@ type (
 	// DCRedirectionPolicy contains the frontend datacenter redirection policy
 	DCRedirectionPolicy struct {
 		Policy string `yaml:"policy"`
-		ToDC   string `yaml:"toDC"`
 	}
 
 	// Archival contains the config for archival
