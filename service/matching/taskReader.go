@@ -131,7 +131,8 @@ dispatchLoop:
 					// Don't try to set read level here because it may have been advanced already.
 					break
 				}
-				err := tr.tlMgr.engine.DispatchSpooledTask(ctx, task, tr.tlMgr.taskQueueID, tr.tlMgr.taskQueueKind)
+				err := tr.tlMgr.engine.DispatchSpooledTask(
+					ctx, task, tr.tlMgr.taskQueueID, tr.tlMgr.taskQueueKind, tr.tlMgr.normalName)
 				if err == nil {
 					break
 				}

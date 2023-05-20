@@ -142,6 +142,7 @@ type (
 		engine                    *matchingEngineImpl
 		taskQueueID               *taskQueueID
 		taskQueueKind             enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		normalName                string                // if this is sticky, name of normal queue
 		config                    *taskQueueConfig
 		db                        *taskQueueDB
 		taskWriter                *taskWriter
@@ -177,7 +178,10 @@ type (
 
 var _ taskQueueManager = (*taskQueueManagerImpl)(nil)
 
-var errRemoteSyncMatchFailed = serviceerror.NewCanceled("remote sync match failed")
+var (
+	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
+	errMissingNormalQueueName = errors.New("missing normal queue name")
+)
 
 func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	return func(tqm *taskQueueManagerImpl) {
@@ -189,6 +193,7 @@ func newTaskQueueManager(
 	e *matchingEngineImpl,
 	taskQueue *taskQueueID,
 	taskQueueKind enumspb.TaskQueueKind,
+	normalName string,
 	config *Config,
 	clusterMeta cluster.Metadata,
 	opts ...taskQueueManagerOpt,
@@ -221,6 +226,7 @@ func newTaskQueueManager(
 		metricsHandler:            e.metricsHandler,
 		taskQueueID:               taskQueue,
 		taskQueueKind:             taskQueueKind,
+		normalName:                normalName,
 		logger:                    logger,
 		db:                        db,
 		taskAckManager:            newAckManager(e.logger),
@@ -290,7 +296,9 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	c.goroGroup.Go(c.fetchUserDataLoop)
+	if !c.shouldNotFetchUserData() {
+		c.goroGroup.Go(c.fetchUserDataLoop)
+	}
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
@@ -336,9 +344,21 @@ func (c *taskQueueManagerImpl) isVersioned() bool {
 	return c.taskQueueID.VersionSet() != ""
 }
 
-// FIXME: better name
 func (c *taskQueueManagerImpl) shouldNotFetchUserData() bool {
-	return c.taskQueueID.OwnsUserData() || c.isVersioned() || c.taskQueueKind != enumspb.TASK_QUEUE_KIND_NORMAL
+	// root workflow partition reads data from db; versioned tqm has no user data
+	return c.taskQueueID.OwnsUserData() || c.isVersioned()
+}
+
+// checkNormalName verifies that the "normal_name" field in TaskQueue is being set
+// consistently.
+func (c *taskQueueManagerImpl) checkNormalName(normalName string) {
+	if normalName != c.normalName {
+		c.logger.Warn("task queue normal name set inconsistently",
+			tag.NewStringTag("sticky-queue-name", c.taskQueueID.BaseNameString()),
+			tag.NewStringTag("first-normal-name", c.normalName),
+			tag.NewStringTag("second-normal-name", normalName),
+		)
+	}
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -716,6 +736,15 @@ func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFu
 }
 
 func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
+	if c.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// Sticky queues get data from their corresponding normal queue
+		if c.normalName == "" {
+			// Older SDKs don't send the normal name. That's okay, they just can't use versioning.
+			return "", errMissingNormalQueueName
+		}
+		return c.normalName, nil
+	}
+
 	degree := c.config.ForwarderMaxChildrenPerNode()
 	parent, err := c.taskQueueID.Parent(degree)
 	if err == tqname.ErrNoParent {
@@ -731,13 +760,12 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
-	// root workflow partition reads data from db; versioned tqm has no user data; sticky has no user data
-	if c.shouldNotFetchUserData() {
-		return nil
-	}
-
 	fetchSource, err := c.userDataFetchSource()
 	if err != nil {
+		if err == errMissingNormalQueueName {
+			// pretend we have no user data
+			c.userDataInitialFetch.Set(struct{}{}, nil)
+		}
 		return err
 	}
 
