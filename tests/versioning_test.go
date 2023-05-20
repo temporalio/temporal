@@ -558,6 +558,140 @@ func (s *versioningIntegSuite) dispatchChildWorkflow() {
 	s.Equal("v1v2", out)
 }
 
+func (s *versioningIntegSuite) TestDispatchContinueAsNew() {
+	s.testWithMatchingBehavior(s.dispatchContinueAsNew)
+}
+
+func (s *versioningIntegSuite) dispatchContinueAsNew() {
+	// TODO: this test will need updating after fixing stickiness, see comments below
+	tq := s.randomizeStr(s.T().Name())
+
+	var started1, started11, started2 sync.WaitGroup
+	started1.Add(1)
+	started11.Add(1)
+	started2.Add(1)
+
+	wf1 := func(ctx workflow.Context, attempt int) (string, error) {
+		started1.Done()
+		// wait for signal
+		wait := workflow.GetSignalChannel(ctx, "wait")
+		wait.Receive(ctx, nil)
+		// TODO: shouldn't be WithChildOptions
+		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			UseLatestBuildID: true,
+		})
+		_ = newCtx
+		switch attempt {
+		case 0:
+			// TODO: after fixing stickiness, comment this out:
+			return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
+		case 1:
+			// return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
+		case 2:
+			// return "done!", nil
+		}
+		panic("oops")
+	}
+	wf11 := func(ctx workflow.Context, attempt int) (string, error) {
+		started11.Done()
+		// wait for signal
+		wait := workflow.GetSignalChannel(ctx, "wait")
+		wait.Receive(ctx, nil)
+		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			UseLatestBuildID: true,
+		})
+		_ = newCtx
+		switch attempt {
+		case 0:
+			// TODO: after fixing stickiness, uncomment this:
+			// return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
+		case 1:
+			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
+		case 2:
+			// return "done!", nil
+		}
+		panic("oops")
+	}
+	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
+		started2.Done()
+		// wait for signal
+		wait := workflow.GetSignalChannel(ctx, "wait")
+		wait.Receive(ctx, nil)
+		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			UseLatestBuildID: true,
+		})
+		_ = newCtx
+		switch attempt {
+		case 0:
+			// return "",workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
+		case 1:
+			// return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
+		case 2:
+			return "done!", nil
+		}
+		panic("oops")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v1",
+		UseBuildIDForVersioning: true,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	// wait for it to start on v1
+	started1.Wait()
+
+	// now register v11 as newer compatible with v1 AND v2 as a new default
+	// FIXME: test both orders
+	s.addCompatibleBuildId(ctx, tq, "v11", "v1", false)
+	s.addNewDefaultBuildId(ctx, tq, "v2")
+	s.waitForPropagation(ctx, tq, "v2")
+
+	// start workers for v11 and v2
+	w11 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v11",
+		UseBuildIDForVersioning: true,
+	})
+	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w11.Start())
+	defer w11.Stop()
+
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v2",
+		UseBuildIDForVersioning: true,
+	})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// unblock the workflow. it should continue on v1 then continue-as-new onto v11
+	// TODO: after fixing stickiness, it should continue on v11 and the continue-as-new onto v11.
+	// will also need to mess with waitgroups then.
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+
+	// wait for it to start on v11 then unblock. it should continue on v11 then continue-as-new onto v2.
+	started11.Wait()
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+
+	// wait for it to start on v2 and unblock. it should return.
+	started2.Wait()
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
+}
+
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
 func (s *versioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, newBuildId string) {
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
