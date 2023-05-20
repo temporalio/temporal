@@ -280,6 +280,42 @@ func (s *versioningIntegSuite) dispatchNewWorkflow() {
 	s.Equal("done!", out)
 }
 
+func (s *versioningIntegSuite) TestDispatchNewWorkflowStartWorkerFirst() {
+	s.testWithMatchingBehavior(s.dispatchNewWorkflowStartWorkerFirst)
+}
+
+func (s *versioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
+	tq := s.randomizeStr(s.T().Name())
+
+	wf := func(ctx workflow.Context) (string, error) {
+		return "done!", nil
+	}
+
+	// run worker before registering build. it will use guessed set id
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 "v1",
+		UseBuildIDForVersioning: true,
+	})
+	w1.RegisterWorkflow(wf)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// wait for it to start polling
+	time.Sleep(200 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	s.NoError(err)
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
+}
+
 func (s *versioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
 	s.testWithMatchingBehavior(s.dispatchUnversionedRemainsUnversioned)
 }
