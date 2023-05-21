@@ -171,7 +171,7 @@ func convertActivityStateReplicationTask(
 						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
-						BaseExecutionInfo:  copyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
+						BaseExecutionInfo:  persistence.CopyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
 						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
 					},
 				},
@@ -214,6 +214,7 @@ func convertHistoryReplicationTask(
 	taskInfo *tasks.HistoryReplicationTask,
 	shardID int32,
 	workflowCache wcache.Cache,
+	eventBlobCache persistence.XDCCache,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) (*replicationspb.ReplicationTask, error) {
@@ -225,6 +226,7 @@ func convertHistoryReplicationTask(
 		taskInfo.FirstEventID,
 		taskInfo.NextEventID,
 		workflowCache,
+		eventBlobCache,
 		executionManager,
 		logger,
 	)
@@ -244,6 +246,7 @@ func convertHistoryReplicationTask(
 			common.FirstEventID,
 			common.FirstEventID+1,
 			workflowCache,
+			eventBlobCache,
 			executionManager,
 			logger,
 		)
@@ -312,9 +315,20 @@ func getVersionHistoryAndEvents(
 	firstEventID int64,
 	nextEventID int64,
 	workflowCache wcache.Cache,
+	eventBlobCache persistence.XDCCache,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) ([]*historyspb.VersionHistoryItem, *commonpb.DataBlob, *workflowspb.BaseExecutionInfo, error) {
+	if eventBlobCache != nil {
+		if xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(
+			workflowKey,
+			firstEventID,
+			nextEventID,
+			eventVersion,
+		)); ok {
+			return xdcCacheValue.VersionHistoryItems, xdcCacheValue.EventBlob, xdcCacheValue.BaseWorkflowInfo, nil
+		}
+	}
 	versionHistory, branchToken, baseWorkflowInfo, err := getBranchToken(
 		ctx,
 		workflowKey,
@@ -359,7 +373,7 @@ func getBranchToken(
 	ms, err := wfContext.LoadMutableState(ctx)
 	switch err.(type) {
 	case nil:
-		return getVersionHistoryItems(ms, eventID, eventVersion)
+		return persistence.GetXDCCacheValue(ms.GetExecutionInfo(), eventID, eventVersion)
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil, nil, nil
 	default:
@@ -375,7 +389,6 @@ func getEventsBlob(
 	nextEventID int64,
 	executionManager persistence.ExecutionManager,
 ) (*commonpb.DataBlob, error) {
-
 	var eventBatchBlobs []*commonpb.DataBlob
 	var pageToken []byte
 	req := &persistence.ReadHistoryBranchRequest{
@@ -408,31 +421,6 @@ func getEventsBlob(
 	return eventBatchBlobs[0], nil
 }
 
-func getVersionHistoryItems(
-	mutableState workflow.MutableState,
-	eventID int64,
-	version int64,
-) ([]*historyspb.VersionHistoryItem, []byte, *workflowspb.BaseExecutionInfo, error) {
-	baseWorkflowInfo := copyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo())
-	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		versionHistories,
-		versionhistory.NewVersionHistoryItem(
-			eventID,
-			version,
-		),
-	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	versionHistoryBranch, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), baseWorkflowInfo, nil
-}
-
 func convertGetHistoryError(
 	workflowKey definition.WorkflowKey,
 	logger log.Logger,
@@ -457,18 +445,5 @@ func convertGetHistoryError(
 		return nil
 	default:
 		return err
-	}
-}
-
-func copyBaseWorkflowInfo(
-	baseWorkflowInfo *workflowspb.BaseExecutionInfo,
-) *workflowspb.BaseExecutionInfo {
-	if baseWorkflowInfo == nil {
-		return nil
-	}
-	return &workflowspb.BaseExecutionInfo{
-		RunId:                            baseWorkflowInfo.RunId,
-		LowestCommonAncestorEventId:      baseWorkflowInfo.LowestCommonAncestorEventId,
-		LowestCommonAncestorEventVersion: baseWorkflowInfo.LowestCommonAncestorEventVersion,
 	}
 }
