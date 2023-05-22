@@ -98,9 +98,7 @@ func (m *MetadataPersistenceSuiteV2) TearDownSuite() {
 	m.TearDownWorkflowStore()
 }
 
-func (m *MetadataPersistenceSuiteV2) createPartialNamespace() (string, string) {
-	id := uuid.New()
-	name := "create-partial-namespace-test-name"
+func (m *MetadataPersistenceSuiteV2) createPartialNamespace(id string, name string) {
 	const constNamespacePartition = 0
 	const templateCreateNamespaceQuery = `INSERT INTO namespaces_by_id (` +
 		`id, name) ` +
@@ -109,11 +107,13 @@ func (m *MetadataPersistenceSuiteV2) createPartialNamespace() (string, string) {
 	err := query.Exec()
 	m.NoError(err)
 
-	return id, name
 }
 
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameID() {
-	id, name := m.createPartialNamespace()
+	id := uuid.New()
+	name := "create-partial-namespace-test-name"
+	m.createPartialNamespace(id, name)
+
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "create-namespace-test-description"
 	owner := "create-namespace-test-owner"
@@ -123,7 +123,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 	historyArchivalURI := "test://history/uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	visibilityArchivalURI := "test://visibility/uri"
-	badBinaries := &namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
+	badBinaries := &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
 	isGlobalNamespace := false
 	configVersion := int64(0)
 	failoverVersion := int64(0)
@@ -182,7 +182,9 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDifferentID() {
 	id := uuid.New()
-	_, name := m.createPartialNamespace()
+	partialID := uuid.New()
+	name := "create-partial-namespace-test-name"
+	m.createPartialNamespace(partialID, name)
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "create-namespace-test-description"
 	owner := "create-namespace-test-owner"
@@ -192,7 +194,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 	historyArchivalURI := "test://history/uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	visibilityArchivalURI := "test://visibility/uri"
-	badBinaries := &namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
+	badBinaries := &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
 	isGlobalNamespace := false
 	configVersion := int64(0)
 	failoverVersion := int64(0)
@@ -250,8 +252,10 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 }
 
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentNameSameID() {
+	id := uuid.New()
 	name := "create-namespace-test-name"
-	id, _ := m.createPartialNamespace()
+	partialName := "create-partial-namespace-test-name"
+	m.createPartialNamespace(id, partialName)
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "create-namespace-test-description"
 	owner := "create-namespace-test-owner"
@@ -261,7 +265,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentName
 	historyArchivalURI := "test://history/uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	visibilityArchivalURI := "test://visibility/uri"
-	badBinaries := &namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
+	badBinaries := &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
 	isGlobalNamespace := false
 	configVersion := int64(0)
 	failoverVersion := int64(0)
