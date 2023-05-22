@@ -24,12 +24,19 @@
 
 package aggregate
 
+import "go.temporal.io/server/common/metrics"
+
 type (
-	SignalKeyMapperFn[T any, K comparable] func(signalOrigin T) K
+	SignalKey interface {
+		comparable
+		GetMetricTags() []metrics.Tag
+	}
+
+	SignalKeyMapperFn[T any, K SignalKey] func(origin T) K
 
 	SignalAggregator[T any] interface {
-		GetRecordFn(key T) func(err error)
-		AverageLatency(key T) float64
-		ErrorRatio(key T) float64
+		GetRecordFn(origin T) func(err error)
+		AverageLatency(origin T) float64
+		ErrorRatio(origin T) float64
 	}
 )
