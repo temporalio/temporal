@@ -134,7 +134,8 @@ type (
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
 		deleteSignalRequestedIDs  map[string]struct{} // Deleted signaled requestId
 
-		updateInfos map[string]*persistencespb.UpdateInfo
+		updateInfos       map[string]*persistencespb.UpdateInfo // UpdateID -> UpdateInfo
+		updateUpdateInfos map[string]*persistencespb.UpdateInfo // Modified UpdateInfos from last update.
 
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
@@ -223,7 +224,8 @@ func NewMutableState(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
-		updateInfos: make(map[string]*persistencespb.UpdateInfo),
+		updateInfos:       make(map[string]*persistencespb.UpdateInfo),
+		updateUpdateInfos: make(map[string]*persistencespb.UpdateInfo),
 
 		currentVersion:   namespaceEntry.FailoverVersion(),
 		bufferEventsInDB: nil,
@@ -3278,11 +3280,20 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateAcceptedEvent(
 	if attrs == nil {
 		return serviceerror.NewInternal("wrong event type in call to ReplicateworkflowExecutionUpdateAcceptedEvent")
 	}
-	ms.updateInfos[attrs.GetAcceptedRequest().GetMeta().GetUpdateId()] = &persistencespb.UpdateInfo{
+	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
+	ui := persistencespb.UpdateInfo{
 		Value: &persistencespb.UpdateInfo_AcceptancePointer{
 			AcceptancePointer: &historyspb.HistoryEventPointer{EventId: event.GetEventId()},
 		},
 	}
+
+	_, existed := ms.updateInfos[updateID]
+	ms.updateInfos[updateID] = &ui
+	ms.updateUpdateInfos[updateID] = &ui
+	if !existed {
+		ms.executionInfo.UpdateCount++
+	}
+
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -3322,11 +3333,20 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
 	if attrs == nil {
 		return serviceerror.NewInternal("wrong event type in call to ReplicateworkflowExecutionUpdateCompletedEvent")
 	}
-	ms.updateInfos[attrs.GetMeta().GetUpdateId()] = &persistencespb.UpdateInfo{
+	updateID := attrs.GetMeta().GetUpdateId()
+	ui := persistencespb.UpdateInfo{
 		Value: &persistencespb.UpdateInfo_CompletedPointer{
 			CompletedPointer: &historyspb.HistoryEventPointer{EventId: event.GetEventId()},
 		},
 	}
+
+	_, existed := ms.updateInfos[updateID]
+	ms.updateInfos[updateID] = &ui
+	ms.updateUpdateInfos[updateID] = &ui
+	if !existed {
+		ms.executionInfo.UpdateCount++
+	}
+
 	ms.writeEventToCache(event)
 	return nil
 }
@@ -4121,6 +4141,9 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, nil, err
 	}
 
+	// It is important to convert speculative WT to normal before prepareEventsAndReplicationTasks,
+	// because prepareEventsAndReplicationTasks will move internal buffered events to the history,
+	// and WT related events (WTScheduled, in particular) need to go first.
 	if err := ms.workflowTaskManager.convertSpeculativeWorkflowTaskToNormal(); err != nil {
 		return nil, nil, err
 	}
@@ -4175,6 +4198,7 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		DeleteSignalInfos:         ms.deleteSignalInfos,
 		UpsertSignalRequestedIDs:  ms.updateSignalRequestedIDs,
 		DeleteSignalRequestedIDs:  ms.deleteSignalRequestedIDs,
+		UpsertUpdateInfos:         ms.updateUpdateInfos,
 		NewBufferedEvents:         bufferEvents,
 		ClearBufferedEvents:       clearBuffer,
 
@@ -4286,7 +4310,7 @@ func (ms *MutableStateImpl) UpdateDuplicatedResource(
 	ms.appliedEvents[id] = struct{}{}
 }
 
-func (ms *MutableStateImpl) GenerateMigrationTasks() (tasks.Task, error) {
+func (ms *MutableStateImpl) GenerateMigrationTasks() (tasks.Task, int64, error) {
 	return ms.taskGenerator.GenerateMigrationTasks()
 }
 

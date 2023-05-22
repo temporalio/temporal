@@ -61,6 +61,7 @@ type (
 	mockStream struct {
 		requests []*adminservice.StreamWorkflowReplicationMessagesRequest
 		respChan chan StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]
+		closed   bool
 	}
 	mockScheduler struct {
 		tasks []TrackableExecutableTask
@@ -212,7 +213,13 @@ func (s *mockStream) Recv() (<-chan StreamResp[*adminservice.StreamWorkflowRepli
 	return s.respChan, nil
 }
 
-func (s *mockStream) Close() {}
+func (s *mockStream) Close() {
+	s.closed = true
+}
+
+func (s *mockStream) IsValid() bool {
+	return !s.closed
+}
 
 func (s *mockScheduler) Submit(task TrackableExecutableTask) {
 	s.tasks = append(s.tasks, task)
