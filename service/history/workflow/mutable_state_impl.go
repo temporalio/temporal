@@ -144,7 +144,8 @@ type (
 		// in memory only attributes
 		// indicate the current version
 		currentVersion int64
-		// running approximate total size of mutable state fields when written to DB in bytes
+		// running approximate total size of mutable state fields (except buffered events) when written to DB in bytes
+		// buffered events are added to this value when calling GetApproximatePersistedSize
 		approximateSize int
 		// buffer events from DB
 		bufferEventsInDB []*historypb.HistoryEvent
@@ -344,7 +345,9 @@ func newMutableStateFromDB(
 	}
 
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
+	mutableState.approximateSize += dbRecord.ExecutionState.Size() - mutableState.executionState.Size()
 	mutableState.executionState = dbRecord.ExecutionState
+	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
 	mutableState.hBuilder = NewMutableHistoryBuilder(
@@ -1177,8 +1180,8 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ai.LastHeartbeatDetails = request.Details
 	now := ms.timeSource.Now()
 	ai.LastHeartbeatUpdateTime = &now
+	ms.approximateSize += ai.Size() - ms.updateActivityInfos[ai.ScheduledEventId].Size()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
 
@@ -1214,8 +1217,8 @@ func (ms *MutableStateImpl) ReplicateActivityInfo(
 		ai.TimerTaskStatus = TimerTaskStatusNone
 	}
 
+	ms.approximateSize += ai.Size() - ms.updateActivityInfos[ai.ScheduledEventId].Size()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -1233,8 +1236,8 @@ func (ms *MutableStateImpl) UpdateActivity(
 	}
 
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size() - ms.updateActivityInfos[ai.ScheduledEventId].Size()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -1332,8 +1335,8 @@ func (ms *MutableStateImpl) UpdateUserTimer(
 	}
 
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
+	ms.approximateSize += ti.Size() - ms.updateTimerInfos[ti.TimerId].Size()
 	ms.updateTimerInfos[ti.TimerId] = ti
-	ms.approximateSize += ti.Size()
 	return nil
 }
 
@@ -1523,9 +1526,13 @@ func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 }
 
 // GetApproximatePersistedSize returns approximate size of in-memory objects that will be written to
-// persistence + size of buffered events in history builder
+// persistence + size of buffered events in history builder if they will be force flushed
 func (ms *MutableStateImpl) GetApproximatePersistedSize() int {
-	return ms.approximateSize + ms.hBuilder.SizeInBytesOfBufferedEvents()
+	// include buffered events in the size if they will be flushed
+	if !ms.BufferSizeAcceptable() || !ms.HasStartedWorkflowTask() {
+		return ms.approximateSize + ms.hBuilder.SizeInBytesOfBufferedEvents()
+	}
+	return ms.approximateSize
 }
 
 func (ms *MutableStateImpl) AddSignalRequested(
@@ -1744,6 +1751,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	startEvent *historypb.HistoryEvent,
 ) error {
 
+	ms.approximateSize -= ms.executionInfo.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.executionState.CreateRequestId = requestID
 	ms.executionState.RunId = execution.GetRunId()
@@ -1840,6 +1848,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
 
+	ms.approximateSize += ms.executionInfo.Size()
 	ms.writeEventToCache(startEvent)
 	return nil
 }
@@ -2178,8 +2187,8 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
+	ms.approximateSize += ai.Size() - ms.updateActivityInfos[ai.ScheduledEventId].Size()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size()
 	ms.executionInfo.ActivityCount++
 
 	ms.writeEventToCache(event)
@@ -2269,8 +2278,8 @@ func (ms *MutableStateImpl) ReplicateActivityTaskStartedEvent(
 	ai.StartedEventId = event.GetEventId()
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
+	ms.approximateSize += ai.Size() - ms.updateActivityInfos[ai.ScheduledEventId].Size()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -2494,8 +2503,8 @@ func (ms *MutableStateImpl) ReplicateActivityTaskCancelRequestedEvent(
 	ai.CancelRequested = true
 
 	ai.CancelRequestId = event.GetEventId()
+	ms.approximateSize += ai.Size() - ms.updateActivityInfos[ai.ScheduledEventId].Size()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -2814,8 +2823,8 @@ func (ms *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionIniti
 	}
 
 	ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
+	ms.approximateSize += rci.Size() - ms.updateRequestCancelInfos[rci.InitiatedEventId].Size()
 	ms.updateRequestCancelInfos[rci.InitiatedEventId] = rci
-	ms.approximateSize += rci.Size()
 	ms.executionInfo.RequestCancelExternalCount++
 
 	ms.writeEventToCache(event)
@@ -2955,8 +2964,8 @@ func (ms *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEve
 	}
 
 	ms.pendingSignalInfoIDs[si.InitiatedEventId] = si
+	ms.approximateSize += si.Size() - ms.updateSignalInfos[si.InitiatedEventId].Size()
 	ms.updateSignalInfos[si.InitiatedEventId] = si
-	ms.approximateSize += si.Size()
 	ms.executionInfo.SignalExternalCount++
 
 	ms.writeEventToCache(event)
@@ -2986,7 +2995,9 @@ func (ms *MutableStateImpl) ReplicateUpsertWorkflowSearchAttributesEvent(
 	event *historypb.HistoryEvent,
 ) {
 	upsertSearchAttr := event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
+	ms.approximateSize -= ms.executionInfo.Size()
 	ms.executionInfo.SearchAttributes = payload.MergeMapOfPayload(ms.executionInfo.SearchAttributes, upsertSearchAttr)
+	ms.approximateSize += ms.executionInfo.Size()
 }
 
 func (ms *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
@@ -3013,7 +3024,9 @@ func (ms *MutableStateImpl) ReplicateWorkflowPropertiesModifiedEvent(
 	attr := event.GetWorkflowPropertiesModifiedEventAttributes()
 	if attr.UpsertedMemo != nil {
 		upsertMemo := attr.GetUpsertedMemo().GetFields()
+		ms.approximateSize -= ms.executionInfo.Size()
 		ms.executionInfo.Memo = payload.MergeMapOfPayload(ms.executionInfo.Memo, upsertMemo)
+		ms.approximateSize += ms.executionInfo.Size()
 	}
 }
 
@@ -3161,8 +3174,8 @@ func (ms *MutableStateImpl) ReplicateTimerStartedEvent(
 
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
 	ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
+	ms.approximateSize += ti.Size() - ms.updateTimerInfos[ti.TimerId].Size()
 	ms.updateTimerInfos[ti.TimerId] = ti
-	ms.approximateSize += ti.Size()
 	ms.executionInfo.UserTimerCount++
 
 	return ti, nil
@@ -3609,8 +3622,8 @@ func (ms *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 	}
 
 	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
+	ms.approximateSize += ci.Size() - ms.updateChildExecutionInfos[ci.InitiatedEventId].Size()
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
-	ms.approximateSize += ci.Size()
 	ms.executionInfo.ChildExecutionCount++
 
 	ms.writeEventToCache(event)
@@ -3674,8 +3687,8 @@ func (ms *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 	ci.StartedEventId = event.GetEventId()
 	ci.StartedRunId = attributes.GetWorkflowExecution().GetRunId()
 	ci.Clock = clock
+	ms.approximateSize += ci.Size() - ms.updateChildExecutionInfos[ci.InitiatedEventId].Size()
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
-	ms.approximateSize += ci.Size()
 
 	return nil
 }
@@ -4029,8 +4042,8 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
 
+	ms.approximateSize += ai.Size() - ms.updateActivityInfos[ai.ScheduledEventId].Size()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
