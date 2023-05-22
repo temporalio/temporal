@@ -71,13 +71,21 @@ func (m *MetadataPersistenceSuiteV2) SetupTest() {
 	m.Assertions = require.New(m.T())
 	m.ctx, m.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
-	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces_by_id").WithContext(context.Background())
-	err := query.Exec()
-	m.NoError(err)
-
-	query = m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces").WithContext(context.Background())
-	err = query.Exec()
-	m.NoError(err)
+	// cleanup the namespace created
+	var token []byte
+	pageSize := 10
+ListLoop:
+	for {
+		resp, err := m.ListNamespaces(pageSize, token)
+		m.NoError(err)
+		token = resp.NextPageToken
+		for _, n := range resp.Namespaces {
+			m.NoError(m.DeleteNamespace(n.Namespace.Info.Id, ""))
+		}
+		if len(token) == 0 {
+			break ListLoop
+		}
+	}
 }
 
 // TearDownTest implementation
@@ -90,7 +98,9 @@ func (m *MetadataPersistenceSuiteV2) TearDownSuite() {
 	m.TearDownWorkflowStore()
 }
 
+// Partial namespace creation is only relevant for Cassandra, the following tests will only run when the underlying cluster is cassandra
 func (m *MetadataPersistenceSuiteV2) createPartialNamespace(id string, name string) {
+	// only add the namespace to namespaces_by_id table and not namespaces table
 	const constNamespacePartition = 0
 	const templateCreateNamespaceQuery = `INSERT INTO namespaces_by_id (` +
 		`id, name) ` +
@@ -101,7 +111,23 @@ func (m *MetadataPersistenceSuiteV2) createPartialNamespace(id string, name stri
 
 }
 
+func (m *MetadataPersistenceSuiteV2) truncatePartialNamespace() {
+	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces_by_id").WithContext(context.Background())
+	err := query.Exec()
+	m.NoError(err)
+
+	query = m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces").WithContext(context.Background())
+	err = query.Exec()
+	m.NoError(err)
+}
+
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameID() {
+	// This is only relevant for cassandra
+	switch m.DefaultTestCluster.(type) {
+	case *cassandra.TestCluster:
+	default:
+		return
+	}
 	id := uuid.New()
 	name := "create-partial-namespace-test-name"
 	m.createPartialNamespace(id, name)
@@ -170,9 +196,17 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
 	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
+	m.truncatePartialNamespace()
 }
 
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDifferentID() {
+	// This is only relevant for cassandra
+	switch m.DefaultTestCluster.(type) {
+	case *cassandra.TestCluster:
+	default:
+		return
+	}
+
 	id := uuid.New()
 	partialID := uuid.New()
 	name := "create-partial-namespace-test-name"
@@ -241,9 +275,16 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
 	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
 	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
+	m.truncatePartialNamespace()
 }
 
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentNameSameID() {
+	// This is only relevant for cassandra
+	switch m.DefaultTestCluster.(type) {
+	case *cassandra.TestCluster:
+	default:
+		return
+	}
 	id := uuid.New()
 	name := "create-namespace-test-name-for-partial-test"
 	partialName := "create-partial-namespace-test-name"
@@ -287,6 +328,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentName
 	m.Error(err0)
 	m.IsType(&serviceerror.NamespaceAlreadyExists{}, err0)
 	m.Nil(resp0)
+	m.truncatePartialNamespace()
 }
 
 // TestCreateNamespace test
