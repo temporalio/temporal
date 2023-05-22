@@ -71,21 +71,13 @@ func (m *MetadataPersistenceSuiteV2) SetupTest() {
 	m.Assertions = require.New(m.T())
 	m.ctx, m.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
-	// cleanup the namespace created
-	var token []byte
-	pageSize := 10
-ListLoop:
-	for {
-		resp, err := m.ListNamespaces(pageSize, token)
-		m.NoError(err)
-		token = resp.NextPageToken
-		for _, n := range resp.Namespaces {
-			m.NoError(m.DeleteNamespace(n.Namespace.Info.Id, ""))
-		}
-		if len(token) == 0 {
-			break ListLoop
-		}
-	}
+	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces_by_id").WithContext(context.Background())
+	err := query.Exec()
+	m.NoError(err)
+
+	query = m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces").WithContext(context.Background())
+	err = query.Exec()
+	m.NoError(err)
 }
 
 // TearDownTest implementation
@@ -253,7 +245,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentNameSameID() {
 	id := uuid.New()
-	name := "create-namespace-test-name"
+	name := "create-namespace-test-name-for-partial-test"
 	partialName := "create-partial-namespace-test-name"
 	m.createPartialNamespace(id, partialName)
 	state := enumspb.NAMESPACE_STATE_REGISTERED
@@ -270,7 +262,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentName
 	configVersion := int64(0)
 	failoverVersion := int64(0)
 
-	_, err0 := m.CreateNamespace(
+	resp0, err0 := m.CreateNamespace(
 		&persistencespb.NamespaceInfo{
 			Id:          id,
 			Name:        name,
@@ -293,12 +285,14 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentName
 		failoverVersion,
 	)
 	m.Error(err0)
+	m.IsType(&serviceerror.NamespaceAlreadyExists{}, err0)
+	m.Nil(resp0)
 }
 
 // TestCreateNamespace test
 func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	id := uuid.New()
-	name := "create-namespace-test-name"
+	name := "create-namespace-test-name-for-partial-test"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "create-namespace-test-description"
 	owner := "create-namespace-test-owner"
