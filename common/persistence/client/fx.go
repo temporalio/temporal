@@ -43,22 +43,38 @@ type (
 	PersistenceNamespaceMaxQps         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
-	ClusterName                        string
+
+	EnableDynamicRateLimiting              dynamicconfig.BoolPropertyFn
+	DynamicRateLimitingRefreshInterval     dynamicconfig.DurationPropertyFn
+	DynamicRateLimitingLatencyThreshold    dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	DynamicRateLimitingErrorThreshold      dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	DynamicRateLimitingReductionMultiplier dynamicconfig.FloatPropertyFn
+	DynamicRateLimitingIncreaseRatio       dynamicconfig.FloatPropertyFn
+	DynamicRateLimitingRateToBurstRatio    dynamicconfig.FloatPropertyFn
+
+	ClusterName string
 
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory                   DataStoreFactory
-		Cfg                                *config.Persistence
-		PersistenceMaxQPS                  PersistenceMaxQps
-		PersistenceNamespaceMaxQPS         PersistenceNamespaceMaxQps
-		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
-		EnablePriorityRateLimiting         EnablePriorityRateLimiting
-		ClusterName                        ClusterName
-		ServiceName                        primitives.ServiceName
-		MetricsHandler                     metrics.Handler
-		Logger                             log.Logger
-		HealthSignals                      aggregate.SignalAggregator[quotas.Request]
+		DataStoreFactory                       DataStoreFactory
+		Cfg                                    *config.Persistence
+		PersistenceMaxQPS                      PersistenceMaxQps
+		PersistenceNamespaceMaxQPS             PersistenceNamespaceMaxQps
+		PersistencePerShardNamespaceMaxQPS     PersistencePerShardNamespaceMaxQPS
+		EnablePriorityRateLimiting             EnablePriorityRateLimiting
+		ClusterName                            ClusterName
+		ServiceName                            primitives.ServiceName
+		MetricsHandler                         metrics.Handler
+		Logger                                 log.Logger
+		HealthSignals                          aggregate.SignalAggregator[quotas.Request]
+		EnableDynamicRateLimiting              EnableDynamicRateLimiting
+		DynamicRateLimitingRefreshInterval     DynamicRateLimitingRefreshInterval
+		DynamicRateLimitingLatencyThreshold    DynamicRateLimitingLatencyThreshold
+		DynamicRateLimitingErrorThreshold      DynamicRateLimitingErrorThreshold
+		DynamicRateLimitingReductionMultiplier DynamicRateLimitingReductionMultiplier
+		DynamicRateLimitingIncreaseRatio       DynamicRateLimitingIncreaseRatio
+		DynamicRateLimitingRateToBurstRatio    DynamicRateLimitingRateToBurstRatio
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -80,12 +96,28 @@ func FactoryProvider(
 	var requestRatelimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
 		if params.EnablePriorityRateLimiting != nil && params.EnablePriorityRateLimiting() {
-			requestRatelimiter = NewPriorityRateLimiter(
-				params.PersistenceNamespaceMaxQPS,
-				params.PersistenceMaxQPS,
-				params.PersistencePerShardNamespaceMaxQPS,
-				RequestPriorityFn,
-			)
+			if params.EnableDynamicRateLimiting != nil && params.EnableDynamicRateLimiting() {
+				requestRatelimiter = NewDynamicPriorityRateLimiter(
+					params.PersistenceNamespaceMaxQPS,
+					params.PersistenceMaxQPS,
+					params.PersistencePerShardNamespaceMaxQPS,
+					RequestPriorityFn,
+					params.HealthSignals,
+					params.DynamicRateLimitingRefreshInterval,
+					params.DynamicRateLimitingLatencyThreshold,
+					params.DynamicRateLimitingErrorThreshold,
+					params.DynamicRateLimitingReductionMultiplier,
+					params.DynamicRateLimitingIncreaseRatio,
+					params.DynamicRateLimitingRateToBurstRatio,
+				)
+			} else {
+				requestRatelimiter = NewPriorityRateLimiter(
+					params.PersistenceNamespaceMaxQPS,
+					params.PersistenceMaxQPS,
+					params.PersistencePerShardNamespaceMaxQPS,
+					RequestPriorityFn,
+				)
+			}
 		} else {
 			requestRatelimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
 		}

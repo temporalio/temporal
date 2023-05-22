@@ -25,6 +25,7 @@
 package client
 
 import (
+	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/headers"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
@@ -85,6 +86,31 @@ func NewPriorityRateLimiter(
 	hostMaxQPS PersistenceMaxQps,
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	requestPriorityFn quotas.RequestPriorityFn,
+) quotas.RequestRateLimiter {
+	hostRequestRateLimiter := newPriorityRateLimiter(
+		func() float64 { return float64(hostMaxQPS()) },
+		requestPriorityFn,
+	)
+
+	return quotas.NewMultiRequestRateLimiter(
+		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		hostRequestRateLimiter,
+	)
+}
+
+func NewDynamicPriorityRateLimiter(
+	namespaceMaxQPS PersistenceNamespaceMaxQps,
+	hostMaxQPS PersistenceMaxQps,
+	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
+	requestPriorityFn quotas.RequestPriorityFn,
+	healthSignals aggregate.SignalAggregator[quotas.Request],
+	refreshInterval DynamicRateLimitingRefreshInterval,
+	latencyThreshold DynamicRateLimitingLatencyThreshold,
+	errorThreshold DynamicRateLimitingErrorThreshold,
+	reductionMultiplier DynamicRateLimitingReductionMultiplier,
+	increaseRatio DynamicRateLimitingIncreaseRatio,
+	rateToBurstRatio DynamicRateLimitingRateToBurstRatio,
 ) quotas.RequestRateLimiter {
 	hostRequestRateLimiter := newPriorityRateLimiter(
 		func() float64 { return float64(hostMaxQPS()) },

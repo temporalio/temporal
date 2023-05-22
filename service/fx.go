@@ -47,6 +47,14 @@ type (
 		PersistenceNamespaceMaxQps         persistenceClient.PersistenceNamespaceMaxQps
 		PersistencePerShardNamespaceMaxQPS persistenceClient.PersistencePerShardNamespaceMaxQPS
 		EnablePriorityRateLimiting         persistenceClient.EnablePriorityRateLimiting
+
+		EnableDynamicRateLimiting              persistenceClient.EnableDynamicRateLimiting
+		DynamicRateLimitingRefreshInterval     persistenceClient.DynamicRateLimitingRefreshInterval
+		DynamicRateLimitingLatencyThreshold    persistenceClient.DynamicRateLimitingLatencyThreshold
+		DynamicRateLimitingErrorThreshold      persistenceClient.DynamicRateLimitingErrorThreshold
+		DynamicRateLimitingReductionMultiplier persistenceClient.DynamicRateLimitingReductionMultiplier
+		DynamicRateLimitingIncreaseRatio       persistenceClient.DynamicRateLimitingIncreaseRatio
+		DynamicRateLimitingRateToBurstRatio    persistenceClient.DynamicRateLimitingRateToBurstRatio
 	}
 )
 
@@ -62,6 +70,36 @@ func NewPersistenceRateLimitingParams(
 		PersistenceNamespaceMaxQps:         persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
 		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
+		EnableDynamicRateLimiting:          dynamicconfig.GetBoolPropertyFn(false),
+	}
+}
+
+func NewDynamicPersistenceRateLimitingParams(
+	maxQps dynamicconfig.IntPropertyFn,
+	globalMaxQps dynamicconfig.IntPropertyFn,
+	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
+	enableDynamicRateLimiting dynamicconfig.BoolPropertyFn,
+	dynamicRefreshInterval dynamicconfig.DurationPropertyFn,
+	dynamicLatencyThreshold dynamicconfig.FloatPropertyFnWithNamespaceFilter,
+	dynamicErrorThreshold dynamicconfig.FloatPropertyFnWithNamespaceFilter,
+	dynamicReductionMultiplier dynamicconfig.FloatPropertyFn,
+	dynamicIncreaseRatio dynamicconfig.FloatPropertyFn,
+	dynamicRateToBurstRatio dynamicconfig.FloatPropertyFn,
+) PersistenceRateLimitingParams {
+	return PersistenceRateLimitingParams{
+		PersistenceMaxQps:                      PersistenceMaxQpsFn(maxQps, globalMaxQps),
+		PersistenceNamespaceMaxQps:             persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
+		PersistencePerShardNamespaceMaxQPS:     persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
+		EnablePriorityRateLimiting:             persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
+		EnableDynamicRateLimiting:              persistenceClient.EnableDynamicRateLimiting(enableDynamicRateLimiting),
+		DynamicRateLimitingRefreshInterval:     persistenceClient.DynamicRateLimitingRefreshInterval(dynamicRefreshInterval),
+		DynamicRateLimitingLatencyThreshold:    persistenceClient.DynamicRateLimitingLatencyThreshold(dynamicLatencyThreshold),
+		DynamicRateLimitingErrorThreshold:      persistenceClient.DynamicRateLimitingErrorThreshold(dynamicErrorThreshold),
+		DynamicRateLimitingReductionMultiplier: persistenceClient.DynamicRateLimitingReductionMultiplier(dynamicReductionMultiplier),
+		DynamicRateLimitingIncreaseRatio:       persistenceClient.DynamicRateLimitingIncreaseRatio(dynamicIncreaseRatio),
+		DynamicRateLimitingRateToBurstRatio:    persistenceClient.DynamicRateLimitingRateToBurstRatio(dynamicRateToBurstRatio),
 	}
 }
 
