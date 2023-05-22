@@ -89,18 +89,19 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller              *gomock.Controller
-		mockShard               *shard.ContextTest
-		mockTxProcessor         *queues.MockQueue
-		mockTimerProcessor      *queues.MockQueue
-		mockVisibilityProcessor *queues.MockQueue
-		mockArchivalProcessor   *queues.MockQueue
-		mockNamespaceCache      *namespace.MockRegistry
-		mockMatchingClient      *matchingservicemock.MockMatchingServiceClient
-		mockHistoryClient       *historyservicemock.MockHistoryServiceClient
-		mockClusterMetadata     *cluster.MockMetadata
-		mockEventsReapplier     *ndc.MockEventsReapplier
-		mockWorkflowResetter    *ndc.MockWorkflowResetter
+		controller               *gomock.Controller
+		mockShard                *shard.ContextTest
+		mockTxProcessor          *queues.MockQueue
+		mockTimerProcessor       *queues.MockQueue
+		mockVisibilityProcessor  *queues.MockQueue
+		mockArchivalProcessor    *queues.MockQueue
+		mockMemoryScheduledQueue *queues.MockQueue
+		mockNamespaceCache       *namespace.MockRegistry
+		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
+		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
+		mockClusterMetadata      *cluster.MockMetadata
+		mockEventsReapplier      *ndc.MockEventsReapplier
+		mockWorkflowResetter     *ndc.MockWorkflowResetter
 
 		workflowCache     wcache.Cache
 		mockHistoryEngine *historyEngineImpl
@@ -134,14 +135,18 @@ func (s *engineSuite) SetupTest() {
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
 	s.mockArchivalProcessor = queues.NewMockQueue(s.controller)
+	s.mockMemoryScheduledQueue = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
 	s.mockArchivalProcessor.EXPECT().Category().Return(tasks.CategoryArchival).AnyTimes()
+	s.mockMemoryScheduledQueue.EXPECT().Category().Return(tasks.CategoryMemoryTimer).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockMemoryScheduledQueue.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -200,10 +205,11 @@ func (s *engineSuite) SetupTest() {
 		eventNotifier:      eventNotifier,
 		config:             s.config,
 		queueProcessors: map[tasks.Category]queues.Queue{
-			s.mockTxProcessor.Category():         s.mockTxProcessor,
-			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
-			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
-			s.mockArchivalProcessor.Category():   s.mockArchivalProcessor,
+			s.mockTxProcessor.Category():          s.mockTxProcessor,
+			s.mockTimerProcessor.Category():       s.mockTimerProcessor,
+			s.mockVisibilityProcessor.Category():  s.mockVisibilityProcessor,
+			s.mockArchivalProcessor.Category():    s.mockArchivalProcessor,
+			s.mockMemoryScheduledQueue.Category(): s.mockMemoryScheduledQueue,
 		},
 		eventsReapplier:            s.mockEventsReapplier,
 		workflowResetter:           s.mockWorkflowResetter,

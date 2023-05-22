@@ -42,13 +42,20 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+)
+
+const (
+	// Fail update fast if workflow task keeps failing (attempt >= 3).
+	failUpdateWorkflowTaskAttemptCount = 3
 )
 
 func Invoke(
@@ -92,6 +99,7 @@ func Invoke(
 	var (
 		upd                    *update.Update
 		taskQueue              taskqueuepb.TaskQueue
+		normalTaskQueueName    string
 		scheduledEventID       int64
 		scheduleToStartTimeout time.Duration
 	)
@@ -117,8 +125,25 @@ func Invoke(
 			return consts.ErrWorkflowCompleted
 		}
 
+		// wfKey built from request may have blank RunID so assign a fully
+		// populated version
+		wfKey = ms.GetWorkflowKey()
+
 		if req.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != req.GetRequest().GetFirstExecutionRunId() {
 			return consts.ErrWorkflowExecutionNotFound
+		}
+
+		if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
+			// If workflow task is constantly failing, the update to that workflow will also fail.
+			// Additionally, workflow update can't "fix" workflow state because updates (delivered with messages)
+			// are applied after events.
+			// Failing API call fast here to prevent wasting resources for an update that will fail.
+			shardCtx.GetLogger().Info("Fail update fast due to WorkflowTask in failed state.",
+				tag.WorkflowNamespace(req.Request.Namespace),
+				tag.WorkflowNamespaceID(wfKey.NamespaceID),
+				tag.WorkflowID(wfKey.WorkflowID),
+				tag.WorkflowRunID(wfKey.RunID))
+			return serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
 		}
 
 		updateID := req.GetRequest().GetRequest().GetMeta().GetUpdateId()
@@ -156,6 +181,7 @@ func Invoke(
 				Name: newWorkflowTask.TaskQueue.Name,
 				Kind: newWorkflowTask.TaskQueue.Kind,
 			}
+			normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
 		}
 		return nil
 	}
@@ -164,9 +190,21 @@ func Invoke(
 		return nil, err
 	}
 
-	// WT was created.
+	// WT was created and needs to be added directly to matching w/o transfer task.
+	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
+	//   Helper function needs to be extracted to avoid code duplication.
 	if scheduledEventID != common.EmptyEventID {
 		err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), shardCtx, matchingClient)
+
+		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
+			// If sticky worker is unavailable, switch to original normal task queue.
+			taskQueue = taskqueuepb.TaskQueue{
+				Name: normalTaskQueueName,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			}
+			err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), shardCtx, matchingClient)
+		}
+
 		if err != nil {
 			return nil, err
 		}
