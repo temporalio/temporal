@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -95,6 +96,199 @@ func (m *MetadataPersistenceSuiteV2) TearDownTest() {
 // TearDownSuite implementation
 func (m *MetadataPersistenceSuiteV2) TearDownSuite() {
 	m.TearDownWorkflowStore()
+}
+
+func (m *MetadataPersistenceSuiteV2) createPartialNamespace() (string, string) {
+	id := uuid.New()
+	name := "create-partial-namespace-test-name"
+	const constNamespacePartition = 0
+	const templateCreateNamespaceQuery = `INSERT INTO namespaces_by_id (` +
+		`id, name) ` +
+		`VALUES(?, ?) IF NOT EXISTS`
+	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query(templateCreateNamespaceQuery, id, name).WithContext(context.Background())
+	err := query.Exec()
+	m.NoError(err)
+
+	return id, name
+}
+
+func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameID() {
+	id, name := m.createPartialNamespace()
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "create-namespace-test-description"
+	owner := "create-namespace-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+	badBinaries := &namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
+	isGlobalNamespace := false
+	configVersion := int64(0)
+	failoverVersion := int64(0)
+
+	resp0, err0 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+			BadBinaries:             badBinaries,
+		},
+		&persistencespb.NamespaceReplicationConfig{},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err0)
+	m.NotNil(resp0)
+	m.EqualValues(id, resp0.ID)
+
+	// for namespace which do not have replication config set, will default to
+	// use current cluster as active, with current cluster as all clusters
+	resp1, err1 := m.GetNamespace(id, "")
+	m.NoError(err1)
+	m.NotNil(resp1)
+	m.EqualValues(id, resp1.Namespace.Info.Id)
+	m.Equal(name, resp1.Namespace.Info.Name)
+	m.Equal(state, resp1.Namespace.Info.State)
+	m.Equal(description, resp1.Namespace.Info.Description)
+	m.Equal(owner, resp1.Namespace.Info.Owner)
+	m.Equal(data, resp1.Namespace.Info.Data)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp1.Namespace.Config.Retention)
+	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
+	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
+	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
+	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
+	m.Equal(badBinaries, resp1.Namespace.Config.BadBinaries)
+	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
+	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
+	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
+	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
+	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
+	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
+	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
+}
+
+func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDifferentID() {
+	id := uuid.New()
+	_, name := m.createPartialNamespace()
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "create-namespace-test-description"
+	owner := "create-namespace-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+	badBinaries := &namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
+	isGlobalNamespace := false
+	configVersion := int64(0)
+	failoverVersion := int64(0)
+
+	resp0, err0 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+			BadBinaries:             badBinaries,
+		},
+		&persistencespb.NamespaceReplicationConfig{},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err0)
+	m.NotNil(resp0)
+	m.EqualValues(id, resp0.ID)
+
+	// for namespace which do not have replication config set, will default to
+	// use current cluster as active, with current cluster as all clusters
+	resp1, err1 := m.GetNamespace(id, "")
+	m.NoError(err1)
+	m.NotNil(resp1)
+	m.EqualValues(id, resp1.Namespace.Info.Id)
+	m.Equal(name, resp1.Namespace.Info.Name)
+	m.Equal(state, resp1.Namespace.Info.State)
+	m.Equal(description, resp1.Namespace.Info.Description)
+	m.Equal(owner, resp1.Namespace.Info.Owner)
+	m.Equal(data, resp1.Namespace.Info.Data)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp1.Namespace.Config.Retention)
+	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
+	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
+	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
+	m.Equal(visibilityArchivalURI, resp1.Namespace.Config.VisibilityArchivalUri)
+	m.Equal(badBinaries, resp1.Namespace.Config.BadBinaries)
+	m.Equal(cluster.TestCurrentClusterName, resp1.Namespace.ReplicationConfig.ActiveClusterName)
+	m.Equal(1, len(resp1.Namespace.ReplicationConfig.Clusters))
+	m.Equal(isGlobalNamespace, resp1.IsGlobalNamespace)
+	m.Equal(configVersion, resp1.Namespace.ConfigVersion)
+	m.Equal(failoverVersion, resp1.Namespace.FailoverVersion)
+	m.True(resp1.Namespace.ReplicationConfig.Clusters[0] == cluster.TestCurrentClusterName)
+	m.Equal(p.InitialFailoverNotificationVersion, resp1.Namespace.FailoverNotificationVersion)
+}
+
+func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentNameSameID() {
+	name := "create-namespace-test-name"
+	id, _ := m.createPartialNamespace()
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "create-namespace-test-description"
+	owner := "create-namespace-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+	badBinaries := &namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
+	isGlobalNamespace := false
+	configVersion := int64(0)
+	failoverVersion := int64(0)
+
+	_, err0 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+			BadBinaries:             badBinaries,
+		},
+		&persistencespb.NamespaceReplicationConfig{},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.Error(err0)
 }
 
 // TestCreateNamespace test

@@ -137,7 +137,7 @@ func (m *MetadataStore) CreateNamespace(
 		// if the id with the same name exists in `namespaces_by_id`, fall through and either add a row in `namespaces` table
 		// or fail if name exists in that table already. This is to make sure we do not end up with a row in `namespaces_by_id`
 		// table and no entry in `namespaces` table
-		matched, err := fieldMatches[string](existingRow, "name", request.Name)
+		matched, err := fieldMatches(existingRow, "name", request.Name)
 		if err != nil {
 			return nil, err
 		}
