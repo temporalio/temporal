@@ -120,7 +120,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		return err
 	}
 
-	metadataResp, err := getClusterMetadata(ctx, params)
+	metadataResp, err := getClusterMetadata(ctx, &params)
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		workflowExecutionsCh.Close()
 	})
 
-	if err := enqueueReplicationTasks(ctx, workflowExecutionsCh, metadataResp.NamespaceID, params); err != nil {
+	if err := enqueueReplicationTasks(ctx, workflowExecutionsCh, metadataResp.NamespaceID, &params); err != nil {
 		return err
 	}
 
@@ -192,7 +192,7 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 	return nil
 }
 
-func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (metadataResponse, error) {
+func getClusterMetadata(ctx workflow.Context, params *ForceReplicationParams) (metadataResponse, error) {
 	var a *activities
 
 	// Get cluster metadata, we need namespace ID for history API call.
@@ -257,7 +257,7 @@ Loop:
 	return nil
 }
 
-func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow.Channel, namespaceID string, params ForceReplicationParams) error {
+func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow.Channel, namespaceID string, params *ForceReplicationParams) error {
 	selector := workflow.NewSelector(ctx)
 	pendingActivities := 0
 

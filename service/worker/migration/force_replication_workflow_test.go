@@ -93,7 +93,7 @@ func TestForceReplicationWorkflow_Query_Deprecated(t *testing.T) {
 	require.NoError(t, err)
 
 	var status ForceReplicationStatus
-	envValue.Get(&status)
+	_ = envValue.Get(&status)
 	assert.Equal(t, 0, status.ContinuedAsNewCount)
 	assert.Equal(t, startTime, status.LastStartTime)
 	assert.Equal(t, closeTime, status.LastCloseTime)
@@ -112,21 +112,15 @@ func TestForceReplicationWorkflow_Queries_Compatibility(t *testing.T) {
 	startTime, _ := time.Parse(layout, "2020-01-01 00:00Z")
 	closeTime, _ := time.Parse(layout, "2020-02-01 00:00Z")
 
-	params := ForceReplicationParams{
-		Namespace:               "test-ns",
-		Query:                   "deprecated query",
-		Queries:                 []string{"random query"},
-		ConcurrentActivityCount: 2,
-		OverallRps:              10,
-		ListWorkflowsPageSize:   1,
-		PageCountPerExecution:   4,
-	}
+	namespace := "test-ns"
+	query := "deprecated query"
+	queries := []string{"random query"}
 
 	env.OnActivity(a.ListWorkflows, mock.Anything, &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace:     params.Namespace,
-		PageSize:      int32(params.ListWorkflowsPageSize),
+		Namespace:     namespace,
+		PageSize:      int32(1),
 		NextPageToken: nil,
-		Query:         params.Query,
+		Query:         query,
 	}).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		assert.Equal(t, "test-ns", request.Namespace)
 		return &listWorkflowsResponse{
@@ -137,10 +131,10 @@ func TestForceReplicationWorkflow_Queries_Compatibility(t *testing.T) {
 		}, nil
 	}).Times(1)
 	env.OnActivity(a.ListWorkflows, mock.Anything, &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace:     params.Namespace,
-		PageSize:      int32(params.ListWorkflowsPageSize),
+		Namespace:     namespace,
+		PageSize:      1,
 		NextPageToken: nil,
-		Query:         params.Queries[0],
+		Query:         queries[0],
 	}).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		assert.Equal(t, "test-ns", request.Namespace)
 		return &listWorkflowsResponse{
@@ -152,7 +146,15 @@ func TestForceReplicationWorkflow_Queries_Compatibility(t *testing.T) {
 	}).Times(1)
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(2)
 
-	env.ExecuteWorkflow(ForceReplicationWorkflow, params)
+	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
+		Namespace:               namespace,
+		Query:                   query,
+		Queries:                 queries,
+		ConcurrentActivityCount: 2,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   1,
+		PageCountPerExecution:   4,
+	})
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
@@ -162,7 +164,7 @@ func TestForceReplicationWorkflow_Queries_Compatibility(t *testing.T) {
 	require.NoError(t, err)
 
 	var status ForceReplicationStatus
-	envValue.Get(&status)
+	_ = envValue.Get(&status)
 	assert.Equal(t, 0, status.ContinuedAsNewCount)
 	assert.Equal(t, startTime, status.LastStartTime)
 	assert.Equal(t, closeTime, status.LastCloseTime)
@@ -181,21 +183,15 @@ func TestForceReplicationWorkflow_Queries(t *testing.T) {
 	startTime, _ := time.Parse(layout, "2020-01-01 00:00Z")
 	closeTime, _ := time.Parse(layout, "2020-02-01 00:00Z")
 
-	params := ForceReplicationParams{
-		Namespace:               "test-ns",
-		Query:                   "",
-		Queries:                 []string{"random query 1", "random query 2"},
-		ConcurrentActivityCount: 2,
-		OverallRps:              10,
-		ListWorkflowsPageSize:   1,
-		PageCountPerExecution:   4,
-	}
+	namespace := "test-ns"
+	query := ""
+	queries := []string{"random query 1", "random query 2"}
 
 	env.OnActivity(a.ListWorkflows, mock.Anything, &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace:     params.Namespace,
-		PageSize:      int32(params.ListWorkflowsPageSize),
+		Namespace:     namespace,
+		PageSize:      1,
 		NextPageToken: nil,
-		Query:         params.Queries[0],
+		Query:         queries[0],
 	}).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		assert.Equal(t, "test-ns", request.Namespace)
 		return &listWorkflowsResponse{
@@ -206,10 +202,10 @@ func TestForceReplicationWorkflow_Queries(t *testing.T) {
 		}, nil
 	}).Times(1)
 	env.OnActivity(a.ListWorkflows, mock.Anything, &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace:     params.Namespace,
-		PageSize:      int32(params.ListWorkflowsPageSize),
+		Namespace:     namespace,
+		PageSize:      1,
 		NextPageToken: nil,
-		Query:         params.Queries[1],
+		Query:         queries[1],
 	}).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		assert.Equal(t, "test-ns", request.Namespace)
 		return &listWorkflowsResponse{
@@ -221,7 +217,15 @@ func TestForceReplicationWorkflow_Queries(t *testing.T) {
 	}).Times(1)
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(2)
 
-	env.ExecuteWorkflow(ForceReplicationWorkflow, params)
+	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
+		Namespace:               namespace,
+		Query:                   query,
+		Queries:                 queries,
+		ConcurrentActivityCount: 2,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   1,
+		PageCountPerExecution:   4,
+	})
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
@@ -231,7 +235,7 @@ func TestForceReplicationWorkflow_Queries(t *testing.T) {
 	require.NoError(t, err)
 
 	var status ForceReplicationStatus
-	envValue.Get(&status)
+	_ = envValue.Get(&status)
 	assert.Equal(t, 0, status.ContinuedAsNewCount)
 	assert.Equal(t, startTime, status.LastStartTime)
 	assert.Equal(t, closeTime, status.LastCloseTime)
@@ -293,7 +297,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 	require.NoError(t, err)
 
 	var status ForceReplicationStatus
-	envValue.Get(&status)
+	_ = envValue.Get(&status)
 	assert.Equal(t, 1, status.ContinuedAsNewCount)
 	assert.Equal(t, startTime, status.LastStartTime)
 	assert.Equal(t, closeTime, status.LastCloseTime)
