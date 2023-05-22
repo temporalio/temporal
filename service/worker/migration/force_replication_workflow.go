@@ -26,6 +26,7 @@ package migration
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -37,17 +38,28 @@ import (
 type (
 	ForceReplicationParams struct {
 		Namespace               string
-		Query                   string // query to list workflows for replication
+		Query                   string   // DEPRECATED: use Queries
+		Queries                 []string // query to list workflows for replication
 		ConcurrentActivityCount int
 		OverallRps              float64 // RPS for enqueuing of replication tasks
 		ListWorkflowsPageSize   int     // PageSize of ListWorkflow, will paginate through results.
 		PageCountPerExecution   int     // number of pages to be processed before continue as new, max is 1000.
-		NextPageToken           []byte  // used by continue as new
 
 		// Used by query handler to indicate overall progress of replication
+		sync.Mutex
 		LastCloseTime       time.Time
 		LastStartTime       time.Time
 		ContinuedAsNewCount int
+
+		// Used for pagination
+		Token *ListWorkflowToken
+	}
+
+	ListWorkflowToken struct {
+		Queries []string // all queries, FIFO order
+
+		Index         int    // current query
+		NextPageToken []byte // current query page token
 	}
 
 	ForceReplicationStatus struct {
@@ -95,6 +107,8 @@ const (
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
 	workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
+		params.Lock()
+		defer params.Unlock()
 		return ForceReplicationStatus{
 			LastCloseTime:       params.LastCloseTime,
 			LastStartTime:       params.LastStartTime,
@@ -113,6 +127,18 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 
 	workflowExecutionsCh := workflow.NewBufferedChannel(ctx, params.PageCountPerExecution)
 
+	if params.Token == nil {
+		queries := make([]string, 0, len(params.Queries)+1)
+		if len(params.Query) != 0 {
+			queries = append(queries, params.Query)
+		}
+		queries = append(queries, params.Queries...)
+		params.Token = &ListWorkflowToken{
+			Queries:       queries,
+			Index:         0,
+			NextPageToken: nil,
+		}
+	}
 	var listWorkflowsErr error
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		listWorkflowsErr = listWorkflowsForReplication(ctx, workflowExecutionsCh, &params)
@@ -130,11 +156,13 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		return listWorkflowsErr
 	}
 
-	if params.NextPageToken == nil {
+	if params.Token == nil {
 		return nil
 	}
 
+	params.Lock()
 	params.ContinuedAsNewCount++
+	params.Unlock()
 
 	// There are still more workflows to replicate. Continue-as-new to process on a new run.
 	// This prevents history size from exceeding the server-defined limit
@@ -181,7 +209,11 @@ func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (me
 	return metadataResp, err
 }
 
-func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh workflow.Channel, params *ForceReplicationParams) error {
+func listWorkflowsForReplication(
+	ctx workflow.Context,
+	workflowExecutionsCh workflow.Channel,
+	params *ForceReplicationParams,
+) error {
 	var a *activities
 
 	ao := workflow.ActivityOptions{
@@ -192,12 +224,13 @@ func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh work
 
 	actx := workflow.WithActivityOptions(ctx, ao)
 
+Loop:
 	for i := 0; i < params.PageCountPerExecution; i++ {
 		listFuture := workflow.ExecuteActivity(actx, a.ListWorkflows, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace:     params.Namespace,
 			PageSize:      int32(params.ListWorkflowsPageSize),
-			NextPageToken: params.NextPageToken,
-			Query:         params.Query,
+			NextPageToken: params.Token.NextPageToken,
+			Query:         params.Token.Queries[params.Token.Index],
 		})
 
 		var listResp listWorkflowsResponse
@@ -207,15 +240,20 @@ func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh work
 
 		workflowExecutionsCh.Send(ctx, listResp.Executions)
 
-		params.NextPageToken = listResp.NextPageToken
+		params.Lock()
 		params.LastCloseTime = listResp.LastCloseTime
 		params.LastStartTime = listResp.LastStartTime
+		params.Unlock()
 
-		if params.NextPageToken == nil {
-			break
+		params.Token.NextPageToken = listResp.NextPageToken
+		if params.Token.NextPageToken == nil {
+			params.Token.Index++
+			if params.Token.Index >= len(params.Token.Queries) {
+				params.Token = nil
+				break Loop
+			}
 		}
 	}
-
 	return nil
 }
 

@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 )
 
-func TestForceReplicationWorkflow(t *testing.T) {
+func TestForceReplicationWorkflow_Query_Deprecated(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
@@ -78,12 +78,150 @@ func TestForceReplicationWorkflow(t *testing.T) {
 
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
-		Query:                   "",
+		Query:                   "random query",
 		ConcurrentActivityCount: 2,
 		OverallRps:              10,
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	env.AssertExpectations(t)
+
+	envValue, err := env.QueryWorkflow(forceReplicationStatusQueryType)
+	require.NoError(t, err)
+
+	var status ForceReplicationStatus
+	envValue.Get(&status)
+	assert.Equal(t, 0, status.ContinuedAsNewCount)
+	assert.Equal(t, startTime, status.LastStartTime)
+	assert.Equal(t, closeTime, status.LastCloseTime)
+}
+
+func TestForceReplicationWorkflow_Queries_Compatibility(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	namespaceID := uuid.New()
+
+	var a *activities
+	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+
+	layout := "2006-01-01 00:00Z"
+	startTime, _ := time.Parse(layout, "2020-01-01 00:00Z")
+	closeTime, _ := time.Parse(layout, "2020-02-01 00:00Z")
+
+	params := ForceReplicationParams{
+		Namespace:               "test-ns",
+		Query:                   "deprecated query",
+		Queries:                 []string{"random query"},
+		ConcurrentActivityCount: 2,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   1,
+		PageCountPerExecution:   4,
+	}
+
+	env.OnActivity(a.ListWorkflows, mock.Anything, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace:     params.Namespace,
+		PageSize:      int32(params.ListWorkflowsPageSize),
+		NextPageToken: nil,
+		Query:         params.Query,
+	}).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		assert.Equal(t, "test-ns", request.Namespace)
+		return &listWorkflowsResponse{
+			Executions:    []commonpb.WorkflowExecution{},
+			NextPageToken: nil, // last page
+			LastStartTime: startTime,
+			LastCloseTime: closeTime,
+		}, nil
+	}).Times(1)
+	env.OnActivity(a.ListWorkflows, mock.Anything, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace:     params.Namespace,
+		PageSize:      int32(params.ListWorkflowsPageSize),
+		NextPageToken: nil,
+		Query:         params.Queries[0],
+	}).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		assert.Equal(t, "test-ns", request.Namespace)
+		return &listWorkflowsResponse{
+			Executions:    []commonpb.WorkflowExecution{},
+			NextPageToken: nil, // last page
+			LastStartTime: startTime,
+			LastCloseTime: closeTime,
+		}, nil
+	}).Times(1)
+	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(2)
+
+	env.ExecuteWorkflow(ForceReplicationWorkflow, params)
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	env.AssertExpectations(t)
+
+	envValue, err := env.QueryWorkflow(forceReplicationStatusQueryType)
+	require.NoError(t, err)
+
+	var status ForceReplicationStatus
+	envValue.Get(&status)
+	assert.Equal(t, 0, status.ContinuedAsNewCount)
+	assert.Equal(t, startTime, status.LastStartTime)
+	assert.Equal(t, closeTime, status.LastCloseTime)
+}
+
+func TestForceReplicationWorkflow_Queries(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	namespaceID := uuid.New()
+
+	var a *activities
+	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+
+	layout := "2006-01-01 00:00Z"
+	startTime, _ := time.Parse(layout, "2020-01-01 00:00Z")
+	closeTime, _ := time.Parse(layout, "2020-02-01 00:00Z")
+
+	params := ForceReplicationParams{
+		Namespace:               "test-ns",
+		Query:                   "",
+		Queries:                 []string{"random query 1", "random query 2"},
+		ConcurrentActivityCount: 2,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   1,
+		PageCountPerExecution:   4,
+	}
+
+	env.OnActivity(a.ListWorkflows, mock.Anything, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace:     params.Namespace,
+		PageSize:      int32(params.ListWorkflowsPageSize),
+		NextPageToken: nil,
+		Query:         params.Queries[0],
+	}).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		assert.Equal(t, "test-ns", request.Namespace)
+		return &listWorkflowsResponse{
+			Executions:    []commonpb.WorkflowExecution{},
+			NextPageToken: nil, // last page
+			LastStartTime: startTime,
+			LastCloseTime: closeTime,
+		}, nil
+	}).Times(1)
+	env.OnActivity(a.ListWorkflows, mock.Anything, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace:     params.Namespace,
+		PageSize:      int32(params.ListWorkflowsPageSize),
+		NextPageToken: nil,
+		Query:         params.Queries[1],
+	}).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		assert.Equal(t, "test-ns", request.Namespace)
+		return &listWorkflowsResponse{
+			Executions:    []commonpb.WorkflowExecution{},
+			NextPageToken: nil, // last page
+			LastStartTime: startTime,
+			LastCloseTime: closeTime,
+		}, nil
+	}).Times(1)
+	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(2)
+
+	env.ExecuteWorkflow(ForceReplicationWorkflow, params)
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
@@ -138,6 +276,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
+		Queries:                 []string{"random query"},
 		ConcurrentActivityCount: 2,
 		OverallRps:              10,
 		ListWorkflowsPageSize:   1,
@@ -175,6 +314,7 @@ func TestForceReplicationWorkflow_ListWorkflowsError(t *testing.T) {
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
+		Queries:                 []string{"random query"},
 		ConcurrentActivityCount: 2,
 		OverallRps:              10,
 		ListWorkflowsPageSize:   1,
@@ -220,6 +360,7 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskError(t *testing.T) {
 	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
 		Namespace:               "test-ns",
 		Query:                   "",
+		Queries:                 []string{"random query"},
 		ConcurrentActivityCount: 2,
 		OverallRps:              10,
 		ListWorkflowsPageSize:   1,
