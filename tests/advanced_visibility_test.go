@@ -2034,9 +2034,8 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_WithoutTasks_ByBuil
 
 	s.Eventually(func() bool {
 		reachabilityResponse, err = s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-			Namespace:    s.namespace,
-			BuildIds:     []string{v01},
-			Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+			Namespace: s.namespace,
+			BuildIds:  []string{v01},
 		})
 		s.Require().NoError(err)
 		if len(reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability) < 2 {
@@ -2079,10 +2078,9 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 
 	checkReachability := func() {
 		reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-			Namespace:    s.namespace,
-			BuildIds:     []string{v01},
-			TaskQueues:   []string{tq},
-			Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+			Namespace:  s.namespace,
+			BuildIds:   []string{v01},
+			TaskQueues: []string{tq},
 		})
 		s.Require().NoError(err)
 		s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
@@ -2110,8 +2108,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds() {
 	ctx := NewContext()
 
 	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace:    s.namespace,
-		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+		Namespace: s.namespace,
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.Require().ErrorAs(err, &invalidArgument)
@@ -2121,9 +2118,8 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
 	ctx := NewContext()
 
 	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace:    s.namespace,
-		BuildIds:     []string{"", "v1"},
-		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+		Namespace: s.namespace,
+		BuildIds:  []string{"", "v1"},
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.Require().ErrorAs(err, &invalidArgument)
@@ -2133,9 +2129,8 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNames
 	ctx := NewContext()
 
 	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace:    s.namespace,
-		BuildIds:     []string{""},
-		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+		Namespace: s.namespace,
+		BuildIds:  []string{""},
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.Require().ErrorAs(err, &invalidArgument)

@@ -31,6 +31,7 @@ import (
 	"sync"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -199,7 +200,24 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 	if request.buildId == "" {
 		// Query for the unversioned worker
 		isDefaultInQueue = len(request.versionSets) == 0
-		buildIdsFilter = "BuildIds IS NULL"
+		if isDefaultInQueue {
+			buildIdsFilter = "BuildIds IS NULL"
+		} else {
+			allKnownBuildIdsEscaped := []string{}
+			for _, set := range request.versionSets {
+				for _, buildId := range set.BuildIds {
+					allKnownBuildIdsEscaped = append(allKnownBuildIdsEscaped, fmt.Sprintf("%q", buildId))
+				}
+			}
+			// This is a versioned task queue, the unversioned worker should only process workflows that have tasks that
+			// were completed by workers that are not defined in the versioning data.
+			// This condition assumes that all of these workflows were processed by SDKs that have already been using
+			// the BuildId field in WorkflowTaskCompleted events without opting in to versioning, which should
+			// eventually cover all SDKs.
+			// TODO: This doesn't cover a build id that was previously not used for versioning and later got defined in
+			// the versioning data. Maybe it'd be better to mark every workflow that opts in to versioning.
+			buildIdsFilter = fmt.Sprintf("BuildIds IS NOT NULL AND BuilIds NOT IN (%s)", strings.Join(allKnownBuildIdsEscaped, ","))
+		}
 	} else {
 		// Query for a versioned worker
 		setIdx := -1
@@ -233,12 +251,11 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		for i, buildId := range set.GetBuildIds() {
 			escapedBuildIds[i] = fmt.Sprintf("%q", buildId)
 		}
+		// Workflows that have just started and hane not yet been processed by workers are marked as:
+		// Latest - BuildIds IS NULL.
+		// Compatible - BuildIds = ["source" build id] where source is either a taken from a parent or a previous run in
+		// a chain.
 		buildIdsFilter = fmt.Sprintf("BuildIds IN (%s)", strings.Join(escapedBuildIds, ","))
-		// TODO(bergundy): To properly answer if there are open workflows that may be routed to a build id, we'll need to see if
-		// any of them have not *yet* been assigned a build id, e.g. they've been started but have not had any completed
-		// workflow tasks.
-		// Since this is an API used to check which build ids can be retired, we'll take the stricter approach and
-		// assume that `BuildIds = NULL` does not mean old unversioned workflows.
 		if isDefaultInQueue && request.reachabilityType != enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS {
 			buildIdsFilter = fmt.Sprintf("(%s OR BuildIds IS NULL)", buildIdsFilter)
 		}
@@ -272,10 +289,15 @@ func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
 		statusFilter = " AND ExecutionStatus = \"Running\""
 	case enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS:
 		statusFilter = " AND ExecutionStatus != \"Running\""
+	case enumspb.TASK_REACHABILITY_UNSPECIFIED:
+		reachabilityType = enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS
+		statusFilter = ""
 	case enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS:
 		statusFilter = ""
-	default:
+	case enumspb.TASK_REACHABILITY_NEW_WORKFLOWS:
 		return nil, nil
+	default:
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unsupported reachability type: %v", reachabilityType))
 	}
 
 	req := manager.CountWorkflowExecutionsRequest{

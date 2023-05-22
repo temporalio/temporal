@@ -3642,9 +3642,13 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 		return nil, err
 	}
 
-	// All validation happens before this call, treat all errors as internal errors
 	response, err := wh.getWorkerTaskReachabilityValidated(ctx, ns, request)
 	if err != nil {
+		var invalidArgument *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgument) {
+			return nil, err
+		}
+		// Intentionally treat all errors as internal errors
 		wh.logger.Error("Failed getting worker task reachability", tag.Error(err))
 		return nil, serviceerror.NewInternal("Internal error")
 	}
