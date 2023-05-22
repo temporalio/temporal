@@ -487,9 +487,12 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 	if err != nil {
 		return err
 	}
-	msForceTerminate, err := c.enforceMutableStateSizeCheck(ctx)
-	if err != nil {
-		return err
+	msForceTerminate := false
+	if !historyForceTerminate {
+		msForceTerminate, err = c.enforceMutableStateSizeCheck(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = c.UpdateWorkflowExecutionWithNew(
@@ -907,7 +910,7 @@ func (c *ContextImpl) maxHistorySizeExceeded() bool {
 
 	if (historySize > historySizeLimitError || historyCount > historyCountLimitError) &&
 		c.MutableState.IsWorkflowExecutionRunning() {
-		c.throttledLogger.Warn("history size exceeds error limit.",
+		c.logger.Warn("history size exceeds error limit.",
 			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
 			tag.WorkflowID(c.workflowKey.WorkflowID),
 			tag.WorkflowRunID(c.workflowKey.RunID),
@@ -951,7 +954,7 @@ func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 	mutableStateSize := c.MutableState.GetApproximatePersistedSize()
 
 	if mutableStateSize > mutableStateSizeLimitError {
-		c.throttledLogger.Warn("mutable state size exceeds error limit.",
+		c.logger.Warn("mutable state size exceeds error limit.",
 			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
 			tag.WorkflowID(c.workflowKey.WorkflowID),
 			tag.WorkflowRunID(c.workflowKey.RunID),

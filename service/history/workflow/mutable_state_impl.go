@@ -1178,13 +1178,13 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ai *persistencespb.ActivityInfo,
 	request *workflowservice.RecordActivityTaskHeartbeatRequest,
 ) {
+	if prev, existed := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; existed {
+		ms.approximateSize -= prev.Size()
+	}
 	ai.Version = ms.GetCurrentVersion()
 	ai.LastHeartbeatDetails = request.Details
 	now := ms.timeSource.Now()
 	ai.LastHeartbeatUpdateTime = &now
-	if prev, existed := ms.updateActivityInfos[ai.ScheduledEventId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
@@ -2192,9 +2192,6 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		}
 	}
 
-	if prev, existed := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
@@ -2836,10 +2833,6 @@ func (ms *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionIniti
 		CancelRequestId:       cancelRequestID,
 	}
 
-	if prev, existed := ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
-
 	ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
 	ms.updateRequestCancelInfos[rci.InitiatedEventId] = rci
 	ms.approximateSize += rci.Size()
@@ -2979,10 +2972,6 @@ func (ms *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEve
 		InitiatedEventBatchId: firstEventID,
 		InitiatedEventId:      initiatedEventID,
 		RequestId:             signalRequestID,
-	}
-
-	if prev, existed := ms.pendingSignalInfoIDs[si.InitiatedEventId]; existed {
-		ms.approximateSize -= prev.Size()
 	}
 
 	ms.pendingSignalInfoIDs[si.InitiatedEventId] = si
@@ -3192,10 +3181,6 @@ func (ms *MutableStateImpl) ReplicateTimerStartedEvent(
 		ExpiryTime:     &expiryTime,
 		StartedEventId: event.GetEventId(),
 		TaskStatus:     TimerTaskStatusNone,
-	}
-
-	if prev, existed := ms.pendingTimerInfoIDs[ti.TimerId]; existed {
-		ms.approximateSize -= prev.Size()
 	}
 
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
@@ -3662,10 +3647,6 @@ func (ms *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 		NamespaceId:           attributes.GetNamespaceId(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),
 		ParentClosePolicy:     attributes.GetParentClosePolicy(),
-	}
-
-	if prev, existed := ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId]; existed {
-		ms.approximateSize -= prev.Size()
 	}
 
 	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
@@ -4591,13 +4572,11 @@ func (ms *MutableStateImpl) updatePendingEventIDs(
 		if activityInfo, ok := ms.GetActivityInfo(scheduledEventID); ok {
 			activityInfo.StartedEventId = startedEventID
 			ms.updateActivityInfos[activityInfo.ScheduledEventId] = activityInfo
-			ms.approximateSize += activityInfo.Size()
 			continue
 		}
 		if childInfo, ok := ms.GetChildExecutionInfo(scheduledEventID); ok {
 			childInfo.StartedEventId = startedEventID
 			ms.updateChildExecutionInfos[childInfo.InitiatedEventId] = childInfo
-			ms.approximateSize += childInfo.Size()
 			continue
 		}
 	}
