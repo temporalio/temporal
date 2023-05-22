@@ -1088,7 +1088,8 @@ func (ms *MutableStateImpl) DeletePendingChildExecution(
 	initiatedEventID int64,
 ) error {
 
-	if _, ok := ms.pendingChildExecutionInfoIDs[initiatedEventID]; ok {
+	if prev, ok := ms.pendingChildExecutionInfoIDs[initiatedEventID]; ok {
+		ms.approximateSize -= prev.Size()
 		delete(ms.pendingChildExecutionInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1099,7 +1100,6 @@ func (ms *MutableStateImpl) DeletePendingChildExecution(
 		ms.logDataInconsistency()
 	}
 
-	ms.approximateSize -= ms.updateChildExecutionInfos[initiatedEventID].Size()
 	delete(ms.updateChildExecutionInfos, initiatedEventID)
 	ms.deleteChildExecutionInfos[initiatedEventID] = struct{}{}
 	return nil
@@ -1110,7 +1110,8 @@ func (ms *MutableStateImpl) DeletePendingRequestCancel(
 	initiatedEventID int64,
 ) error {
 
-	if _, ok := ms.pendingRequestCancelInfoIDs[initiatedEventID]; ok {
+	if prev, ok := ms.pendingRequestCancelInfoIDs[initiatedEventID]; ok {
+		ms.approximateSize -= prev.Size()
 		delete(ms.pendingRequestCancelInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1121,7 +1122,6 @@ func (ms *MutableStateImpl) DeletePendingRequestCancel(
 		ms.logDataInconsistency()
 	}
 
-	ms.approximateSize -= ms.updateRequestCancelInfos[initiatedEventID].Size()
 	delete(ms.updateRequestCancelInfos, initiatedEventID)
 	ms.deleteRequestCancelInfos[initiatedEventID] = struct{}{}
 	return nil
@@ -1132,7 +1132,8 @@ func (ms *MutableStateImpl) DeletePendingSignal(
 	initiatedEventID int64,
 ) error {
 
-	if _, ok := ms.pendingSignalInfoIDs[initiatedEventID]; ok {
+	if prev, ok := ms.pendingSignalInfoIDs[initiatedEventID]; ok {
+		ms.approximateSize -= prev.Size()
 		delete(ms.pendingSignalInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1143,7 +1144,6 @@ func (ms *MutableStateImpl) DeletePendingSignal(
 		ms.logDataInconsistency()
 	}
 
-	ms.approximateSize -= ms.updateSignalInfos[initiatedEventID].Size()
 	delete(ms.updateSignalInfos, initiatedEventID)
 	ms.deleteSignalInfos[initiatedEventID] = struct{}{}
 	return nil
@@ -1204,6 +1204,8 @@ func (ms *MutableStateImpl) ReplicateActivityInfo(
 		return ErrMissingActivityInfo
 	}
 
+	ms.approximateSize -= ai.Size()
+
 	ai.Version = request.GetVersion()
 	ai.ScheduledTime = request.GetScheduledTime()
 	ai.StartedEventId = request.GetStartedEventId()
@@ -1222,9 +1224,6 @@ func (ms *MutableStateImpl) ReplicateActivityInfo(
 		ai.TimerTaskStatus = TimerTaskStatusNone
 	}
 
-	if prev, existed := ms.updateActivityInfos[ai.ScheduledEventId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 	return nil
@@ -1235,7 +1234,8 @@ func (ms *MutableStateImpl) UpdateActivity(
 	ai *persistencespb.ActivityInfo,
 ) error {
 
-	if _, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; !ok {
+	prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]
+	if !ok {
 		ms.logError(
 			fmt.Sprintf("unable to find activity ID: %v in mutable state", ai.ActivityId),
 			tag.ErrorTypeInvalidMutableStateAction,
@@ -1244,11 +1244,8 @@ func (ms *MutableStateImpl) UpdateActivity(
 	}
 
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
-	if prev, existed := ms.updateActivityInfos[ai.ScheduledEventId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size()
+	ms.approximateSize += ai.Size() - prev.Size()
 	return nil
 }
 
@@ -1275,6 +1272,7 @@ func (ms *MutableStateImpl) DeleteActivity(
 	if activityInfo, ok := ms.pendingActivityInfoIDs[scheduledEventID]; ok {
 		delete(ms.pendingActivityInfoIDs, scheduledEventID)
 		delete(ms.pendingActivityTimerHeartbeats, scheduledEventID)
+		ms.approximateSize -= activityInfo.Size()
 
 		if _, ok = ms.pendingActivityIDToEventID[activityInfo.ActivityId]; ok {
 			delete(ms.pendingActivityIDToEventID, activityInfo.ActivityId)
@@ -1295,7 +1293,6 @@ func (ms *MutableStateImpl) DeleteActivity(
 		ms.logDataInconsistency()
 	}
 
-	ms.approximateSize -= ms.updateActivityInfos[scheduledEventID].Size()
 	delete(ms.updateActivityInfos, scheduledEventID)
 	delete(ms.syncActivityTasks, scheduledEventID)
 	ms.deleteActivityInfos[scheduledEventID] = struct{}{}
@@ -1346,11 +1343,7 @@ func (ms *MutableStateImpl) UpdateUserTimer(
 	}
 
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
-	if prev, existed := ms.updateTimerInfos[ti.TimerId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
 	ms.updateTimerInfos[ti.TimerId] = ti
-	ms.approximateSize += ti.Size()
 	return nil
 }
 
@@ -1361,6 +1354,7 @@ func (ms *MutableStateImpl) DeleteUserTimer(
 
 	if timerInfo, ok := ms.pendingTimerInfoIDs[timerID]; ok {
 		delete(ms.pendingTimerInfoIDs, timerID)
+		ms.approximateSize -= timerInfo.Size()
 
 		if _, ok = ms.pendingTimerEventIDToID[timerInfo.GetStartedEventId()]; ok {
 			delete(ms.pendingTimerEventIDToID, timerInfo.GetStartedEventId())
@@ -1381,7 +1375,6 @@ func (ms *MutableStateImpl) DeleteUserTimer(
 		ms.logDataInconsistency()
 	}
 
-	ms.approximateSize -= ms.updateTimerInfos[timerID].Size()
 	delete(ms.updateTimerInfos, timerID)
 	ms.deleteTimerInfos[timerID] = struct{}{}
 	return nil
@@ -2199,11 +2192,11 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		}
 	}
 
-	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
-	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
-	if prev, existed := ms.updateActivityInfos[ai.ScheduledEventId]; existed {
+	if prev, existed := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; existed {
 		ms.approximateSize -= prev.Size()
 	}
+	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
+	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 	ms.executionInfo.ActivityCount++
@@ -2291,13 +2284,12 @@ func (ms *MutableStateImpl) ReplicateActivityTaskStartedEvent(
 		return ErrMissingActivityInfo
 	}
 
+	ms.approximateSize -= ai.Size()
+
 	ai.Version = event.GetVersion()
 	ai.StartedEventId = event.GetEventId()
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
-	if prev, existed := ms.updateActivityInfos[ai.ScheduledEventId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 	return nil
@@ -2515,6 +2507,8 @@ func (ms *MutableStateImpl) ReplicateActivityTaskCancelRequestedEvent(
 		return nil
 	}
 
+	ms.approximateSize -= ai.Size()
+
 	ai.Version = event.GetVersion()
 
 	// - We have the activity dispatched to worker.
@@ -2523,9 +2517,6 @@ func (ms *MutableStateImpl) ReplicateActivityTaskCancelRequestedEvent(
 	ai.CancelRequested = true
 
 	ai.CancelRequestId = event.GetEventId()
-	if prev, existed := ms.updateActivityInfos[ai.ScheduledEventId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 	return nil
@@ -2845,10 +2836,11 @@ func (ms *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionIniti
 		CancelRequestId:       cancelRequestID,
 	}
 
-	ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
-	if prev, existed := ms.updateRequestCancelInfos[rci.InitiatedEventId]; existed {
+	if prev, existed := ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId]; existed {
 		ms.approximateSize -= prev.Size()
 	}
+
+	ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
 	ms.updateRequestCancelInfos[rci.InitiatedEventId] = rci
 	ms.approximateSize += rci.Size()
 	ms.executionInfo.RequestCancelExternalCount++
@@ -2989,10 +2981,11 @@ func (ms *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEve
 		RequestId:             signalRequestID,
 	}
 
-	ms.pendingSignalInfoIDs[si.InitiatedEventId] = si
-	if prev, existed := ms.updateSignalInfos[si.InitiatedEventId]; existed {
+	if prev, existed := ms.pendingSignalInfoIDs[si.InitiatedEventId]; existed {
 		ms.approximateSize -= prev.Size()
 	}
+
+	ms.pendingSignalInfoIDs[si.InitiatedEventId] = si
 	ms.updateSignalInfos[si.InitiatedEventId] = si
 	ms.approximateSize += si.Size()
 	ms.executionInfo.SignalExternalCount++
@@ -3201,11 +3194,12 @@ func (ms *MutableStateImpl) ReplicateTimerStartedEvent(
 		TaskStatus:     TimerTaskStatusNone,
 	}
 
-	ms.pendingTimerInfoIDs[ti.TimerId] = ti
-	ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
-	if prev, existed := ms.updateTimerInfos[ti.TimerId]; existed {
+	if prev, existed := ms.pendingTimerInfoIDs[ti.TimerId]; existed {
 		ms.approximateSize -= prev.Size()
 	}
+
+	ms.pendingTimerInfoIDs[ti.TimerId] = ti
+	ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
 	ms.updateTimerInfos[ti.TimerId] = ti
 	ms.approximateSize += ti.Size()
 	ms.executionInfo.UserTimerCount++
@@ -3670,10 +3664,11 @@ func (ms *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 		ParentClosePolicy:     attributes.GetParentClosePolicy(),
 	}
 
-	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
-	if prev, existed := ms.updateChildExecutionInfos[ci.InitiatedEventId]; existed {
+	if prev, existed := ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId]; existed {
 		ms.approximateSize -= prev.Size()
 	}
+
+	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
 	ms.approximateSize += ci.Size()
 	ms.executionInfo.ChildExecutionCount++
@@ -3736,12 +3731,11 @@ func (ms *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 		return ErrMissingChildWorkflowInfo
 	}
 
+	ms.approximateSize -= ci.Size()
+
 	ci.StartedEventId = event.GetEventId()
 	ci.StartedRunId = attributes.GetWorkflowExecution().GetRunId()
 	ci.Clock = clock
-	if prev, existed := ms.updateChildExecutionInfos[ci.InitiatedEventId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
 	ms.approximateSize += ci.Size()
 
@@ -4097,11 +4091,7 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
 
-	if prev, existed := ms.updateActivityInfos[ai.ScheduledEventId]; existed {
-		ms.approximateSize -= prev.Size()
-	}
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
