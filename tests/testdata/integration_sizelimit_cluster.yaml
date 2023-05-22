@@ -7,8 +7,8 @@ historyconfig:
   historycountlimitwarn: 10
   blobsizelimiterror: 1000
   blobsizelimitwarn: 1
-  mutablestatesizelimiterror: 2000
-  mutablestatesizelimitwarn: 900
+  mutablestatesizelimiterror: 1100
+  mutablestatesizelimitwarn: 200
 workerconfig:
   enablearchiver: false
   enablereplicator: false
