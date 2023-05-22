@@ -241,7 +241,6 @@ type Config struct {
 	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
 
 	ReplicationStreamSyncStatusDuration      dynamicconfig.DurationPropertyFn
-	ReplicationStreamMinReconnectDuration    dynamicconfig.DurationPropertyFn
 	ReplicationProcessorSchedulerQueueSize   dynamicconfig.IntPropertyFn
 	ReplicationProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
 
@@ -421,7 +420,6 @@ func NewConfig(
 		ReplicationEnableDLQMetrics:                           dc.GetBoolProperty(dynamicconfig.ReplicationEnableDLQMetrics, true),
 
 		ReplicationStreamSyncStatusDuration:      dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
-		ReplicationStreamMinReconnectDuration:    dc.GetDurationProperty(dynamicconfig.ReplicationStreamMinReconnectDuration, 4*time.Second),
 		ReplicationProcessorSchedulerQueueSize:   dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
 		ReplicationProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
 

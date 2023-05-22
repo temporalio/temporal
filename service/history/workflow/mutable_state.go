@@ -294,7 +294,7 @@ type (
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
-		GenerateMigrationTasks() (tasks.Task, error)
+		GenerateMigrationTasks() (tasks.Task, int64, error)
 
 		// ContinueAsNewMinBackoff calculate minimal backoff for next ContinueAsNew run.
 		// Input backoffDuration is current backoff for next run.

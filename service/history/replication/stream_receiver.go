@@ -26,7 +26,6 @@ package replication
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -61,10 +60,7 @@ type (
 		taskTracker    ExecutableTaskTracker
 		shutdownChan   channel.ShutdownOnce
 		logger         log.Logger
-
-		sync.Mutex
-		streamCreationTime time.Time
-		stream             Stream
+		stream         Stream
 	}
 )
 
@@ -94,8 +90,6 @@ func NewStreamReceiver(
 		taskTracker:    taskTracker,
 		shutdownChan:   channel.NewShutdownOnce(),
 		logger:         logger,
-
-		streamCreationTime: time.Now().UTC(),
 		stream: newStream(
 			processToolBox,
 			clientShardKey,
@@ -150,9 +144,9 @@ func (r *StreamReceiver) sendEventLoop() {
 		select {
 		case <-timer.C:
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
-			streamCreationTime, stream := r.getStream()
-			if err := r.ackMessage(stream); err != nil {
-				r.recreateStream(streamCreationTime)
+			if err := r.ackMessage(r.stream); err != nil {
+				r.logger.Error("StreamReceiver exit send loop", tag.Error(err))
+				return
 			}
 		case <-r.shutdownChan.Channel():
 			return
@@ -163,38 +157,8 @@ func (r *StreamReceiver) sendEventLoop() {
 func (r *StreamReceiver) recvEventLoop() {
 	defer r.Stop()
 
-	for !r.shutdownChan.IsShutdown() {
-		streamCreationTime, stream := r.getStream()
-		_ = r.processMessages(stream)
-		r.recreateStream(streamCreationTime)
-	}
-}
-
-func (r *StreamReceiver) getStream() (time.Time, Stream) {
-	r.Lock()
-	defer r.Unlock()
-	return r.streamCreationTime, r.stream
-}
-
-func (r *StreamReceiver) recreateStream(
-	streamCreationTime time.Time,
-) {
-	delay := streamCreationTime.Add(r.Config.ReplicationStreamMinReconnectDuration()).Sub(time.Now().UTC())
-	if delay > 0 {
-		select {
-		case <-time.After(delay):
-		case <-r.shutdownChan.Channel():
-		}
-	}
-
-	r.Lock()
-	defer r.Unlock()
-	r.streamCreationTime = time.Now().UTC()
-	r.stream = newStream(
-		r.ProcessToolBox,
-		r.clientShardKey,
-		r.serverShardKey,
-	)
+	err := r.processMessages(r.stream)
+	r.logger.Error("StreamReceiver exit recv loop", tag.Error(err))
 }
 
 func (r *StreamReceiver) ackMessage(
