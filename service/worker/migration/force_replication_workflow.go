@@ -25,7 +25,9 @@
 package migration
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -139,6 +141,10 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 			NextPageToken: nil,
 		}
 	}
+	if params.Token.Index >= len(params.Token.Queries) {
+		return errors.New("InvalidArgument: no query / queries provided")
+	}
+
 	var listWorkflowsErr error
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		listWorkflowsErr = listWorkflowsForReplication(ctx, workflowExecutionsCh, &params)
@@ -238,6 +244,13 @@ Loop:
 			return err
 		}
 
+		fmt.Println("#######")
+		prettyPrint := func(input interface{}) string {
+			binary, _ := json.MarshalIndent(input, "", "  ")
+			return string(binary)
+		}
+		fmt.Printf("%v\n", prettyPrint(listResp.Executions))
+		fmt.Println("#######")
 		workflowExecutionsCh.Send(ctx, listResp.Executions)
 
 		params.Lock()

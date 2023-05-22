@@ -40,6 +40,7 @@ import (
 )
 
 func TestForceReplicationWorkflow_Query_Deprecated(t *testing.T) {
+	t.Parallel()
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
@@ -100,6 +101,7 @@ func TestForceReplicationWorkflow_Query_Deprecated(t *testing.T) {
 }
 
 func TestForceReplicationWorkflow_Queries_Compatibility(t *testing.T) {
+	t.Parallel()
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
@@ -171,6 +173,7 @@ func TestForceReplicationWorkflow_Queries_Compatibility(t *testing.T) {
 }
 
 func TestForceReplicationWorkflow_Queries(t *testing.T) {
+	t.Parallel()
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
