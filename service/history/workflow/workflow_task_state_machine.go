@@ -990,9 +990,14 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	// it gets deleted from memory only but not from the database.
 	// If execution info in mutable state has speculative workflow task, then
 	// convert it to normal workflow task before persisting.
-	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
+
+	if !m.ms.IsWorkflowExecutionRunning() {
+		// Workflow execution can be terminated. New events can't be added after workflow is finished.
+		return nil
+	}
+
+	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 
 	wt := m.getWorkflowTaskInfo()
 

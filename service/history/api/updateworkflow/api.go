@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/internal/effect"
@@ -50,6 +51,11 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+)
+
+const (
+	// Fail update fast if workflow task keeps failing (attempt >= 3).
+	failUpdateWorkflowTaskAttemptCount = 3
 )
 
 func Invoke(
@@ -125,6 +131,19 @@ func Invoke(
 
 		if req.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != req.GetRequest().GetFirstExecutionRunId() {
 			return consts.ErrWorkflowExecutionNotFound
+		}
+
+		if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
+			// If workflow task is constantly failing, the update to that workflow will also fail.
+			// Additionally, workflow update can't "fix" workflow state because updates (delivered with messages)
+			// are applied after events.
+			// Failing API call fast here to prevent wasting resources for an update that will fail.
+			shardCtx.GetLogger().Info("Fail update fast due to WorkflowTask in failed state.",
+				tag.WorkflowNamespace(req.Request.Namespace),
+				tag.WorkflowNamespaceID(wfKey.NamespaceID),
+				tag.WorkflowID(wfKey.WorkflowID),
+				tag.WorkflowRunID(wfKey.RunID))
+			return serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
 		}
 
 		updateID := req.GetRequest().GetRequest().GetMeta().GetUpdateId()
