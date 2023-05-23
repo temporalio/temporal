@@ -28,14 +28,23 @@ import (
 	"math/rand"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/quotas"
 )
 
 // BenchmarkRingMovingWindowAvg
 // BenchmarkRingMovingWindowAvg-10    		12283236	        94.76 ns/op
 
+// BenchmarkHealthRequestRateLimiter
+// BenchmarkHealthRequestRateLimiter-10    	15905046	        71.08 ns/op
+
 const (
 	testWindowSize = 3 * time.Second
 	testBufferSize = 200
+
+	testRPS = 4000
 )
 
 func BenchmarkRingMovingWindowAvg(b *testing.B) {
@@ -43,5 +52,36 @@ func BenchmarkRingMovingWindowAvg(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		avg.Record(rand.Int63())
 		avg.Average()
+	}
+}
+
+func BenchmarkHealthRequestRateLimiter(b *testing.B) {
+	testRequest := quotas.NewRequest(
+		"bench-test-api",
+		1,
+		"bench-test-ns",
+		"bench-test-caller-type",
+		2,
+		"bench-test",
+	)
+
+	healthSignals := NewPerShardPerNsHealthSignalAggregator(
+		dynamicconfig.GetDurationPropertyFn(testWindowSize),
+		dynamicconfig.GetIntPropertyFn(testBufferSize),
+		metrics.NoopMetricsHandler,
+	)
+
+	rateLimiter := NewHealthRequestRateLimiterImpl(
+		healthSignals,
+		testWindowSize,
+		func() float64 { return float64(testRPS) },
+		float64(100),
+		float64(1),
+		0.3,
+		0.1,
+	)
+
+	for i := 0; i < b.N; i++ {
+		rateLimiter.Allow(time.Now(), testRequest)
 	}
 }

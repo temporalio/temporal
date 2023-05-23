@@ -76,6 +76,7 @@ func NewHealthRequestRateLimiterImpl(
 	rateIncreaseStepSize float64,
 ) *HealthRequestRateLimiterImpl {
 	return &HealthRequestRateLimiterImpl{
+		rateLimiter:          quotas.NewRateLimiter(rateFn(), int(DefaultRateBurstRatio*rateFn())),
 		healthSignals:        healthSignals,
 		refreshTimer:         time.NewTicker(refreshInterval),
 		rateFn:               rateFn,
