@@ -22,25 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas
+package aggregate
 
 import (
 	"context"
 	"math"
 	"time"
 
-	"go.temporal.io/server/common/aggregate"
+	"go.temporal.io/server/common/quotas"
 )
 
 const (
+	DefaultRateBurstRatio    = 1.0
 	DefaultMinRateMultiplier = 0.1
 	DefaultMaxRateMultiplier = 1.0
 )
 
 type (
 	HealthRequestRateLimiterImpl struct {
-		rateLimiter   *RateLimiterImpl
-		healthSignals aggregate.SignalAggregator[Request]
+		rateLimiter   *quotas.RateLimiterImpl
+		healthSignals SignalAggregator[quotas.Request]
 
 		refreshTimer *time.Ticker
 
@@ -48,7 +49,7 @@ type (
 		latencyThreshold float64
 		errorThreshold   float64
 
-		rateFn           RateFn
+		rateFn           quotas.RateFn
 		rateToBurstRatio float64
 
 		minRateMultiplier float64
@@ -63,12 +64,12 @@ type (
 	}
 )
 
-var _ RequestRateLimiter = (*HealthRequestRateLimiterImpl)(nil)
+var _ quotas.RequestRateLimiter = (*HealthRequestRateLimiterImpl)(nil)
 
 func NewHealthRequestRateLimiterImpl(
-	healthSignals aggregate.SignalAggregator[Request],
+	healthSignals SignalAggregator[quotas.Request],
 	refreshInterval time.Duration,
-	rateFn RateFn,
+	rateFn quotas.RateFn,
 	latencyThreshold float64,
 	errorThreshold float64,
 	rateBackoffStepSize float64,
@@ -78,7 +79,7 @@ func NewHealthRequestRateLimiterImpl(
 		healthSignals:        healthSignals,
 		refreshTimer:         time.NewTicker(refreshInterval),
 		rateFn:               rateFn,
-		rateToBurstRatio:     defaultOutgoingRateBurstRatio,
+		rateToBurstRatio:     DefaultRateBurstRatio,
 		latencyThreshold:     latencyThreshold,
 		errorThreshold:       errorThreshold,
 		minRateMultiplier:    DefaultMinRateMultiplier,
@@ -89,22 +90,22 @@ func NewHealthRequestRateLimiterImpl(
 	}
 }
 
-func (rl *HealthRequestRateLimiterImpl) Allow(now time.Time, request Request) bool {
+func (rl *HealthRequestRateLimiterImpl) Allow(now time.Time, request quotas.Request) bool {
 	rl.maybeRefresh(request)
 	return rl.rateLimiter.AllowN(now, request.Token)
 }
 
-func (rl *HealthRequestRateLimiterImpl) Reserve(now time.Time, request Request) Reservation {
+func (rl *HealthRequestRateLimiterImpl) Reserve(now time.Time, request quotas.Request) quotas.Reservation {
 	rl.maybeRefresh(request)
 	return rl.rateLimiter.ReserveN(now, request.Token)
 }
 
-func (rl *HealthRequestRateLimiterImpl) Wait(ctx context.Context, request Request) error {
+func (rl *HealthRequestRateLimiterImpl) Wait(ctx context.Context, request quotas.Request) error {
 	rl.maybeRefresh(request)
 	return rl.rateLimiter.WaitN(ctx, request.Token)
 }
 
-func (rl *HealthRequestRateLimiterImpl) maybeRefresh(request Request) {
+func (rl *HealthRequestRateLimiterImpl) maybeRefresh(request quotas.Request) {
 	select {
 	case <-rl.refreshTimer.C:
 		rl.refresh(request)
@@ -114,7 +115,7 @@ func (rl *HealthRequestRateLimiterImpl) maybeRefresh(request Request) {
 	}
 }
 
-func (rl *HealthRequestRateLimiterImpl) refresh(request Request) {
+func (rl *HealthRequestRateLimiterImpl) refresh(request quotas.Request) {
 	if rl.healthSignals.AverageLatency(request) > rl.latencyThreshold ||
 		rl.healthSignals.ErrorRatio(request) > rl.errorThreshold {
 		// limits exceeded, do backoff

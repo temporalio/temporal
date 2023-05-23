@@ -243,7 +243,7 @@ func newDynamicPriorityRateLimiter(
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewHealthRequestRateLimiterImpl(
+		rateLimiters[priority] = aggregate.NewHealthRequestRateLimiterImpl(
 			healthSignals,
 			refreshInterval,
 			rateFn,
