@@ -337,7 +337,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	// We don't need the userDataChanged channel here because:
-	// - if we sync match or sticky worker unavailable, we're done
+	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
 	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, taskQueueKind)
 	if err != nil {
@@ -380,21 +380,21 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 	ctx context.Context,
 	task *internalTask,
 	origTaskQueue *taskQueueID,
+	kind enumspb.TaskQueueKind,
 ) error {
 	// This task came from taskReader so task.event is always set here.
 	directive := task.event.GetData().GetVersionDirective()
 	// If this came from a versioned queue, ignore the version and re-resolve, in case we're
 	// going to the default and the default changed.
 	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
-	// Kind must be normal here, sticky aren't spooled.
-	kind := enumspb.TASK_QUEUE_KIND_NORMAL
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
 		taskQueue, userDataChanged, err := e.redirectToVersionedQueueForAdd(ctx, unversionedOrigTaskQueue, directive, kind)
 		if err != nil {
 			return err
 		}
-		tqm, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
+		sticky := kind == enumspb.TASK_QUEUE_KIND_STICKY
+		tqm, err := e.getTaskQueueManager(ctx, taskQueue, kind, !sticky)
 		if err != nil {
 			return err
 		}
@@ -865,8 +865,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	req *matchingservice.GetTaskQueueUserDataRequest,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
-	taskQueueName := req.GetTaskQueue()
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	taskQueue, err := newTaskQueueID(namespaceID, req.GetTaskQueue(), req.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
@@ -955,6 +954,27 @@ func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
 		return nil, err
 	}
 	return &matchingservice.GetBuildIdTaskQueueMappingResponse{TaskQueues: taskQueues}, nil
+}
+
+func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+	ctx context.Context,
+	req *matchingservice.ForceUnloadTaskQueueRequest,
+) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueue, err := newTaskQueueID(namespaceID, req.TaskQueue, req.TaskQueueType)
+	if err != nil {
+		return nil, err
+	}
+	// kind is only used if we want to create a new tqm
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_UNSPECIFIED, false)
+	if err != nil {
+		return nil, err
+	}
+	if tqm == nil {
+		return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: false}, nil
+	}
+	e.unloadTaskQueue(tqm)
+	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: true}, nil
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {

@@ -330,6 +330,16 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.unloadFromEngine()
 }
 
+// isVersioned returns true if this is a tqm for a "versioned [low-level] task queue". Note
+// that this is a different concept from the overall [high-level] task queue having versioning
+// data associated with it, which is the usual meaning of "versioned task queue". In this case,
+// it means whether this is a tqm processing a specific version set id. Unlike non-root
+// partitions which are known (at some level) by other services, [low-level] task queues with a
+// version set should not be interacted with outside of the matching service.
+func (c *taskQueueManagerImpl) isVersioned() bool {
+	return c.taskQueueID.VersionSet() != ""
+}
+
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
 	if err != nil {
@@ -437,10 +447,10 @@ func (c *taskQueueManagerImpl) GetTask(
 	c.matcher.UpdateRatelimit(pollMetadata.ratePerSecond)
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		return c.matcher.PollForQuery(childCtx)
+		return c.matcher.PollForQuery(childCtx, pollMetadata)
 	}
 
-	task, err := c.matcher.Poll(childCtx)
+	task, err := c.matcher.Poll(childCtx, pollMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -475,6 +485,9 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 // GetUserData returns the user data for the task queue if any.
 // Note: can return nil value with no error.
 func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+	if c.isVersioned() {
+		return nil, nil, errNoUserDataOnVersionedTQM
+	}
 	return c.db.GetUserData(ctx)
 }
 
@@ -638,18 +651,20 @@ func executeWithRetry(
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
+	if params.forwardedFrom == "" && c.config.TestDisableSyncMatch() {
+		return false, nil
+	}
 	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
+	defer cancel()
 
-	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
+	// Use fake TaskId for sync match as it hasn't been allocated yet
 	fakeTaskIdWrapper := &persistencespb.AllocatedTaskInfo{
 		Data:   params.taskInfo,
 		TaskId: syncMatchTaskId,
 	}
 
 	task := newInternalTask(fakeTaskIdWrapper, nil, params.source, params.forwardedFrom, true)
-	matched, err := c.matcher.Offer(childCtx, task)
-	cancel()
-	return matched, err
+	return c.matcher.Offer(childCtx, task)
 }
 
 // newChildContext creates a child context with desired timeout.
@@ -715,8 +730,8 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
-	// root workflow partition reads data from db
-	if c.taskQueueID.OwnsUserData() {
+	// root workflow partition reads data from db; versioned tqm has no user data
+	if c.taskQueueID.OwnsUserData() || c.isVersioned() {
 		return nil
 	}
 
@@ -728,7 +743,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	firstCall := true
 
 	op := func(ctx context.Context) error {
-		knownUserData, _, err := c.db.GetUserData(ctx)
+		knownUserData, _, err := c.GetUserData(ctx)
 		if err != nil {
 			return err
 		}
@@ -739,6 +754,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		res, err := c.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              c.taskQueueID.namespaceID.String(),
 			TaskQueue:                fetchSource,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
 			WaitNewData:              !firstCall,
 		})

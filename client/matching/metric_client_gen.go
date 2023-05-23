@@ -77,6 +77,20 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) ForceUnloadTaskQueue(
+	ctx context.Context,
+	request *matchingservice.ForceUnloadTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ForceUnloadTaskQueueResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientForceUnloadTaskQueueScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ForceUnloadTaskQueue(ctx, request, opts...)
+}
+
 func (c *metricClient) GetBuildIdTaskQueueMapping(
 	ctx context.Context,
 	request *matchingservice.GetBuildIdTaskQueueMappingRequest,

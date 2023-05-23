@@ -884,6 +884,12 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 		}
 
+		// For newer build error, return silently.
+		var newerBuild *serviceerror.NewerBuildExists
+		if errors.As(err, &newerBuild) {
+			return nil, err
+		}
+
 		// For all other errors log an error and return it back to client.
 		ctxTimeout := "not-set"
 		ctxDeadline, ok := ctx.Deadline()
@@ -1112,6 +1118,12 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollActivityTaskQueueResponse{}, nil
+		}
+
+		// For newer build error, return silently.
+		var newerBuild *serviceerror.NewerBuildExists
+		if errors.As(err, &newerBuild) {
+			return nil, err
 		}
 
 		// For all other errors log an error and return it back to client.

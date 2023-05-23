@@ -110,6 +110,21 @@ func (c *retryableClient) DescribeTaskQueue(
 	return resp, err
 }
 
+func (c *retryableClient) ForceUnloadTaskQueue(
+	ctx context.Context,
+	request *matchingservice.ForceUnloadTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+	var resp *matchingservice.ForceUnloadTaskQueueResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ForceUnloadTaskQueue(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetBuildIdTaskQueueMapping(
 	ctx context.Context,
 	request *matchingservice.GetBuildIdTaskQueueMappingRequest,

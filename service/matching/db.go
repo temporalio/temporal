@@ -67,7 +67,11 @@ type (
 )
 
 var (
-	errUserDataNoMutateNonRoot = errors.New("can only mutate user data on root workflow task queue")
+	errUserDataNoMutateNonRoot = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
+
+	// This is an internal error when requesting user data on a TQM created for a specific
+	// version set. This indicates a bug in the server since nothing should be using this data.
+	errNoUserDataOnVersionedTQM = serviceerror.NewInternal("should not get user data on versioned tqm")
 )
 
 // newTaskQueueDB returns an instance of an object that represents

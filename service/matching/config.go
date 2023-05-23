@@ -41,6 +41,7 @@ type (
 		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		TestDisableSyncMatch                  dynamicconfig.BoolPropertyFn
 		RPS                                   dynamicconfig.IntPropertyFn
 		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
 
@@ -86,6 +87,7 @@ type (
 	taskQueueConfig struct {
 		forwarderConfig
 		SyncMatchWaitDuration func() time.Duration
+		TestDisableSyncMatch  func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		RangeSize                  int64
@@ -132,6 +134,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 0),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
 		SyncMatchWaitDuration:                 dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
+		TestDisableSyncMatch:                  dc.GetBoolProperty(dynamicconfig.TestMatchingDisableSyncMatch, false),
 		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                             100000,
 		GetTasksBatchSize:                     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
@@ -181,6 +184,7 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		SyncMatchWaitDuration: func() time.Duration {
 			return config.SyncMatchWaitDuration(namespace.String(), taskQueueName, taskType)
 		},
+		TestDisableSyncMatch: config.TestDisableSyncMatch,
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(namespace.String(), taskQueueName, taskType)
 		},
