@@ -1794,6 +1794,10 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	if event.SearchAttributes != nil {
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
+	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+		limit := ms.config.MaxTrackedBuildIds(string(ms.namespaceEntry.Name()))
+		ms.addBuildIdWithNoVisibilityTask(common.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId), limit)
+	}
 
 	ms.executionInfo.WorkerVersionStamp = event.SourceVersionStamp
 
@@ -1978,53 +1982,103 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 
 // Similar to (the to-be-deprecated) addBinaryCheckSumIfNotExists but works on build IDs.
 func (ms *MutableStateImpl) trackBuildIdFromCompletion(
-	buildID string,
+	version *commonpb.WorkerVersionStamp,
 	eventID int64,
 	limits WorkflowTaskCompletionLimits,
 ) error {
-	ms.addResetPointFromCompletion(buildID, eventID, limits.MaxResetPoints)
-	if limits.MaxTrackedBuildIds < 1 {
-		// Can't track this build ID
+	buildIds, err := ms.loadBuildIds()
+	if err != nil {
+		return err
+	}
+	anyAdded := false
+	added := false
+	if !version.GetUseVersioning() {
+		// Make sure unversioned workflow tasks are easily locatable with just the prefix
+		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, common.UnversionedSearchAttribute, limits.MaxTrackedBuildIds)
+		anyAdded = anyAdded || added
+	}
+	if version.GetBuildId() != "" {
+		ms.addResetPointFromCompletion(version.GetBuildId(), eventID, limits.MaxResetPoints)
+		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, common.VersionStampToBuildIdSearchAttribute(version), limits.MaxTrackedBuildIds)
+		anyAdded = anyAdded || added
+	}
+	if !anyAdded {
 		return nil
 	}
+	if err := ms.saveBuildIds(buildIds); err != nil {
+		return err
+	}
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
+	searchAttributes := ms.executionInfo.SearchAttributes
+	if searchAttributes == nil {
+		return []string{}, nil
+	}
+	saPayload, found := searchAttributes[searchattribute.BuildIds]
+	if !found {
+		return []string{}, nil
+	} else {
+		decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+		if err != nil {
+			return nil, err
+		}
+		searchAttributeValues, ok := decoded.([]string)
+		if !ok {
+			return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
+		}
+		return searchAttributeValues, nil
+	}
+}
+
+func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(searchAttributeValues []string, searchAttributeValue string, maxTrackedBuildIds int) ([]string, bool) {
+	if maxTrackedBuildIds < 1 {
+		// Can't track this build ID
+		return searchAttributeValues, false
+	}
+	for _, exisitingValue := range searchAttributeValues {
+		if exisitingValue == searchAttributeValue {
+			return searchAttributeValues, false
+		}
+	}
+	if len(searchAttributeValues) >= maxTrackedBuildIds {
+		hasUnversioned := searchAttributeValues[0] == common.UnversionedSearchAttribute
+		searchAttributeValues = searchAttributeValues[len(searchAttributeValues)-maxTrackedBuildIds+1:]
+		// Make sure not to lose the unversioned value, it's required for the reachability API
+		if hasUnversioned {
+			searchAttributeValues[0] = common.UnversionedSearchAttribute
+		}
+	}
+	return append(searchAttributeValues, searchAttributeValue), true
+}
+
+func (ms *MutableStateImpl) saveBuildIds(buildIds []string) error {
 	searchAttributes := ms.executionInfo.SearchAttributes
 	if searchAttributes == nil {
 		searchAttributes = make(map[string]*commonpb.Payload, 1)
 		ms.executionInfo.SearchAttributes = searchAttributes
 	}
 
-	var buildIDs []string
-	saPayload, found := searchAttributes[searchattribute.BuildIds]
-	if !found {
-		buildIDs = make([]string, 0, 1)
-	} else {
-		decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-		if err != nil {
-			return err
-		}
-		var ok bool
-		buildIDs, ok = decoded.([]string)
-		if !ok {
-			return serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
-		}
-		for _, exisitingID := range buildIDs {
-			if exisitingID == buildID {
-				return nil
-			}
-		}
-		if len(buildIDs) >= limits.MaxTrackedBuildIds {
-			buildIDs = buildIDs[len(buildIDs)-limits.MaxTrackedBuildIds+1:]
-		}
-	}
-
-	buildIDs = append(buildIDs, buildID)
-
-	saPayload, err := searchattribute.EncodeValue(buildIDs, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	saPayload, err := searchattribute.EncodeValue(buildIds, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
 	}
 	searchAttributes[searchattribute.BuildIds] = saPayload
-	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+	return nil
+}
+
+func (ms *MutableStateImpl) addBuildIdWithNoVisibilityTask(searchAttributeValue string, maxTrackedBuildIds int) error {
+	buildIds, err := ms.loadBuildIds()
+	if err != nil {
+		return err
+	}
+	var added bool
+	buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, searchAttributeValue, maxTrackedBuildIds)
+	if !added {
+		return nil
+	}
+	return ms.saveBuildIds(buildIds)
 }
 
 // TODO: we will release the restriction when reset API allow those pending

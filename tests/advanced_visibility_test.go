@@ -1823,7 +1823,7 @@ func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
-func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion() {
+func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWorker() {
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
 	workflowType := "integration-build-id"
@@ -1846,7 +1846,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion() {
 	s.NoError(err)
 
 	buildIDs := s.getBuildIds(ctx, task.WorkflowExecution)
-	s.Equal([]string{"1.0"}, buildIDs)
+	s.Equal([]string{"unversioned", "unversioned:1.0"}, buildIDs)
 
 	_, err = s.engine.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: s.namespace, WorkflowExecution: task.WorkflowExecution, SignalName: "continue"})
 	s.NoError(err)
@@ -1872,7 +1872,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion() {
 	s.NoError(err)
 
 	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
-	s.Equal([]string{"1.0", "1.1"}, buildIDs)
+	s.Equal([]string{"unversioned", "unversioned:1.0", "unversioned:1.1"}, buildIDs)
 
 	task, err = s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
@@ -1896,13 +1896,13 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion() {
 	s.NoError(err)
 
 	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
-	s.Equal([]string{"1.2"}, buildIDs)
+	s.Equal([]string{"unversioned", "unversioned:1.2"}, buildIDs)
 
 	for minor := 1; minor <= 2; minor++ {
 		s.Eventually(func() bool {
 			response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: s.namespace,
-				Query:     fmt.Sprintf("BuildIds = '1.%d'", minor),
+				Query:     fmt.Sprintf("BuildIds = 'unversioned:1.%d'", minor),
 				PageSize:  defaultPageSize,
 			})
 			if err != nil {

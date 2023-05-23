@@ -35,6 +35,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/util"
@@ -200,24 +201,8 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 	if request.buildId == "" {
 		// Query for the unversioned worker
 		isDefaultInQueue = len(request.versionSets) == 0
-		if isDefaultInQueue {
-			buildIdsFilter = "BuildIds IS NULL"
-		} else {
-			allKnownBuildIdsEscaped := []string{}
-			for _, set := range request.versionSets {
-				for _, buildId := range set.BuildIds {
-					allKnownBuildIdsEscaped = append(allKnownBuildIdsEscaped, fmt.Sprintf("%q", buildId))
-				}
-			}
-			// This is a versioned task queue, the unversioned worker should only process workflows that have tasks that
-			// were completed by workers that are not defined in the versioning data.
-			// This condition assumes that all of these workflows were processed by SDKs that have already been using
-			// the BuildId field in WorkflowTaskCompleted events without opting in to versioning, which should
-			// eventually cover all SDKs.
-			// TODO: This doesn't cover a build id that was previously not used for versioning and later got defined in
-			// the versioning data. Maybe it'd be better to mark every workflow that opts in to versioning.
-			buildIdsFilter = fmt.Sprintf("BuildIds IS NOT NULL AND BuilIds NOT IN (%s)", strings.Join(allKnownBuildIdsEscaped, ","))
-		}
+		// Query workflows that have completed tasks marked with a sentinel "unversioned" search attribute.
+		buildIdsFilter = fmt.Sprintf("BuildIds = %q", common.UnversionedSearchAttribute)
 	} else {
 		// Query for a versioned worker
 		setIdx := -1
@@ -249,16 +234,9 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		isDefaultInQueue = setIdx == len(request.versionSets)-1
 		escapedBuildIds := make([]string, len(set.GetBuildIds()))
 		for i, buildId := range set.GetBuildIds() {
-			escapedBuildIds[i] = fmt.Sprintf("%q", buildId)
+			escapedBuildIds[i] = fmt.Sprintf("%q", common.VersionedBuildIdSearchAttribute(buildId))
 		}
-		// Workflows that have just started and hane not yet been processed by workers are marked as:
-		// Latest - BuildIds IS NULL.
-		// Compatible - BuildIds = ["source" build id] where source is either a taken from a parent or a previous run in
-		// a chain.
 		buildIdsFilter = fmt.Sprintf("BuildIds IN (%s)", strings.Join(escapedBuildIds, ","))
-		if isDefaultInQueue && request.reachabilityType != enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS {
-			buildIdsFilter = fmt.Sprintf("(%s OR BuildIds IS NULL)", buildIdsFilter)
-		}
 	}
 
 	if isDefaultInQueue {
@@ -266,6 +244,10 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 			taskQueueReachability.Reachability,
 			enumspb.TASK_REACHABILITY_NEW_WORKFLOWS,
 		)
+		// Take into account started workflows that have not yet been processed by any worker.
+		if request.reachabilityType != enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS {
+			buildIdsFilter = fmt.Sprintf("(BuildIds IS NULL OR %s)", buildIdsFilter)
+		}
 	}
 
 	reachability, err := wh.queryVisibilityForExisitingWorkflowsReachability(ctx, request.namespace, request.taskQueue, buildIdsFilter, request.reachabilityType)
