@@ -25,6 +25,8 @@
 package client
 
 import (
+	"time"
+
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/headers"
 	p "go.temporal.io/server/common/persistence"
@@ -108,9 +110,8 @@ func NewDynamicPriorityRateLimiter(
 	refreshInterval DynamicRateLimitingRefreshInterval,
 	latencyThreshold DynamicRateLimitingLatencyThreshold,
 	errorThreshold DynamicRateLimitingErrorThreshold,
-	reductionMultiplier DynamicRateLimitingReductionMultiplier,
-	increaseRatio DynamicRateLimitingIncreaseRatio,
-	rateToBurstRatio DynamicRateLimitingRateToBurstRatio,
+	backoffStepSize DynamicRateLimitingRateBackoffStepSize,
+	increaseStepSize DynamicRateLimitingRateIncreaseStepSize,
 ) quotas.RequestRateLimiter {
 	hostRequestRateLimiter := newPriorityRateLimiter(
 		func() float64 { return float64(hostMaxQPS()) },
@@ -118,7 +119,7 @@ func NewDynamicPriorityRateLimiter(
 	)
 
 	return quotas.NewMultiRequestRateLimiter(
-		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		newPerShardPerNamespaceDynamicPriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn, healthSignals, refreshInterval, latencyThreshold, errorThreshold, backoffStepSize, increaseStepSize),
 		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
 		hostRequestRateLimiter,
 	)
@@ -144,6 +145,41 @@ func newPerShardPerNamespacePriorityRateLimiter(
 	},
 		perShardPerNamespaceKeyFn,
 	)
+}
+
+func newPerShardPerNamespaceDynamicPriorityRateLimiter(
+	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
+	hostMaxQPS PersistenceMaxQps,
+	requestPriorityFn quotas.RequestPriorityFn,
+	healthSignals aggregate.SignalAggregator[quotas.Request],
+	refreshInterval DynamicRateLimitingRefreshInterval,
+	latencyThreshold DynamicRateLimitingLatencyThreshold,
+	errorThreshold DynamicRateLimitingErrorThreshold,
+	rateBackoffStepSize DynamicRateLimitingRateBackoffStepSize,
+	rateIncreaseStepSize DynamicRateLimitingRateIncreaseStepSize,
+) quotas.RequestRateLimiter {
+	return quotas.NewMapRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
+		if !hasCaller(req) {
+			return quotas.NoopRequestRateLimiter
+		}
+		rateFn := func() float64 {
+			if perShardNamespaceMaxQPS == nil || perShardNamespaceMaxQPS(req.Caller) <= 0 {
+				return float64(hostMaxQPS())
+			}
+			return float64(perShardNamespaceMaxQPS(req.Caller))
+		}
+		return newDynamicPriorityRateLimiter(
+			rateFn,
+			requestPriorityFn,
+			healthSignals,
+			refreshInterval(),
+			latencyThreshold(req.Caller),
+			errorThreshold(req.Caller),
+			rateBackoffStepSize(),
+			rateIncreaseStepSize(),
+		)
+	},
+		perShardPerNamespaceKeyFn)
 }
 
 func perShardPerNamespaceKeyFn(req quotas.Request) perShardPerNamespaceKey {
@@ -187,6 +223,35 @@ func newPriorityRateLimiter(
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
+	}
+
+	return quotas.NewPriorityRateLimiter(
+		requestPriorityFn,
+		rateLimiters,
+	)
+}
+
+func newDynamicPriorityRateLimiter(
+	rateFn quotas.RateFn,
+	requestPriorityFn quotas.RequestPriorityFn,
+	healthSignals aggregate.SignalAggregator[quotas.Request],
+	refreshInterval time.Duration,
+	latencyThreshold float64,
+	errorThreshold float64,
+	rateBackoffStepSize float64,
+	rateIncreaseStepSize float64,
+) quotas.RequestRateLimiter {
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
+	for priority := range RequestPrioritiesOrdered {
+		rateLimiters[priority] = quotas.NewHealthRequestRateLimiterImpl(
+			healthSignals,
+			refreshInterval,
+			rateFn,
+			latencyThreshold,
+			errorThreshold,
+			rateBackoffStepSize,
+			rateIncreaseStepSize,
+		)
 	}
 
 	return quotas.NewPriorityRateLimiter(

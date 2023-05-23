@@ -52,9 +52,8 @@ type (
 		DynamicRateLimitingRefreshInterval     persistenceClient.DynamicRateLimitingRefreshInterval
 		DynamicRateLimitingLatencyThreshold    persistenceClient.DynamicRateLimitingLatencyThreshold
 		DynamicRateLimitingErrorThreshold      persistenceClient.DynamicRateLimitingErrorThreshold
-		DynamicRateLimitingReductionMultiplier persistenceClient.DynamicRateLimitingReductionMultiplier
-		DynamicRateLimitingIncreaseRatio       persistenceClient.DynamicRateLimitingIncreaseRatio
-		DynamicRateLimitingRateToBurstRatio    persistenceClient.DynamicRateLimitingRateToBurstRatio
+		DynamicRateLimitingRateBackoffStepSize persistenceClient.DynamicRateLimitingRateBackoffStepSize
+		DynamicRateLimitingIncreaseStepSize    persistenceClient.DynamicRateLimitingRateIncreaseStepSize
 	}
 )
 
@@ -64,29 +63,12 @@ func NewPersistenceRateLimitingParams(
 	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
-) PersistenceRateLimitingParams {
-	return PersistenceRateLimitingParams{
-		PersistenceMaxQps:                  PersistenceMaxQpsFn(maxQps, globalMaxQps),
-		PersistenceNamespaceMaxQps:         persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
-		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
-		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
-		EnableDynamicRateLimiting:          dynamicconfig.GetBoolPropertyFn(false),
-	}
-}
-
-func NewDynamicPersistenceRateLimitingParams(
-	maxQps dynamicconfig.IntPropertyFn,
-	globalMaxQps dynamicconfig.IntPropertyFn,
-	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 	enableDynamicRateLimiting dynamicconfig.BoolPropertyFn,
 	dynamicRefreshInterval dynamicconfig.DurationPropertyFn,
 	dynamicLatencyThreshold dynamicconfig.FloatPropertyFnWithNamespaceFilter,
 	dynamicErrorThreshold dynamicconfig.FloatPropertyFnWithNamespaceFilter,
-	dynamicReductionMultiplier dynamicconfig.FloatPropertyFn,
-	dynamicIncreaseRatio dynamicconfig.FloatPropertyFn,
-	dynamicRateToBurstRatio dynamicconfig.FloatPropertyFn,
+	dynamicBackoffStepSize dynamicconfig.FloatPropertyFn,
+	dynamicIncreaseStepSize dynamicconfig.FloatPropertyFn,
 ) PersistenceRateLimitingParams {
 	return PersistenceRateLimitingParams{
 		PersistenceMaxQps:                      PersistenceMaxQpsFn(maxQps, globalMaxQps),
@@ -97,9 +79,8 @@ func NewDynamicPersistenceRateLimitingParams(
 		DynamicRateLimitingRefreshInterval:     persistenceClient.DynamicRateLimitingRefreshInterval(dynamicRefreshInterval),
 		DynamicRateLimitingLatencyThreshold:    persistenceClient.DynamicRateLimitingLatencyThreshold(dynamicLatencyThreshold),
 		DynamicRateLimitingErrorThreshold:      persistenceClient.DynamicRateLimitingErrorThreshold(dynamicErrorThreshold),
-		DynamicRateLimitingReductionMultiplier: persistenceClient.DynamicRateLimitingReductionMultiplier(dynamicReductionMultiplier),
-		DynamicRateLimitingIncreaseRatio:       persistenceClient.DynamicRateLimitingIncreaseRatio(dynamicIncreaseRatio),
-		DynamicRateLimitingRateToBurstRatio:    persistenceClient.DynamicRateLimitingRateToBurstRatio(dynamicRateToBurstRatio),
+		DynamicRateLimitingRateBackoffStepSize: persistenceClient.DynamicRateLimitingRateBackoffStepSize(dynamicBackoffStepSize),
+		DynamicRateLimitingIncreaseStepSize:    persistenceClient.DynamicRateLimitingRateIncreaseStepSize(dynamicIncreaseStepSize),
 	}
 }
 

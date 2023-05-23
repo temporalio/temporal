@@ -379,6 +379,18 @@ const (
 	HistoryPersistencePerShardNamespaceMaxQPS = "history.persistencePerShardNamespaceMaxQPS"
 	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
 	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
+	// HistoryEnablePersistenceDynamicRateLimiting indicates if dynamic rate limiting is enabled in history persistence client
+	HistoryEnablePersistenceDynamicRateLimiting = "history.enablePersistenceDynamicRateLimiting"
+	// HistoryPersistenceDynamicRateLimitingRefreshInterval is how often the dynamic rate limit should be updated
+	HistoryPersistenceDynamicRateLimitingRefreshInterval = "history.persistenceDynamicRateLimitingRefreshInterval"
+	// HistoryPersistenceDynamicRateLimitingLatencyThreshold is the average latency in ms which should trigger backoff
+	HistoryPersistenceDynamicRateLimitingLatencyThreshold = "history.persistenceDynamicRateLimitingLatencyThreshold"
+	// HistoryPersistenceDynamicRateLimitingErrorThreshold is the error ratio which should trigger backoff
+	HistoryPersistenceDynamicRateLimitingErrorThreshold = "history.persistenceDynamicRateLimitingErrorThreshold"
+	// HistoryPersistenceDynamicRateLimitingBackoffStepSize is the amount the rate limiter multiplier should be reduced when backoff is triggered
+	HistoryPersistenceDynamicRateLimitingBackoffStepSize = "history.persistenceDynamicRateLimitingBackoffStepSize"
+	// HistoryPersistenceDynamicRateLimitingIncreaseStepSize is the amount the rate limiter multiplier should be increased when the system is healthy
+	HistoryPersistenceDynamicRateLimitingIncreaseStepSize = "history.persistenceDynamicRateLimitingIncreaseStepSize"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval = "history.longPollExpirationInterval"
 	// HistoryCacheInitialSize is initial size of history cache

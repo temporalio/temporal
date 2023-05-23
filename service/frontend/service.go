@@ -61,6 +61,13 @@ type Config struct {
 	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 
+	EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
+	DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
+	DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
+	DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
+
 	VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -185,6 +192,8 @@ func NewConfig(
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
+
+		EnableDynamicRateLimiting: dynamicconfig.DisabledDynamicRateLimiting,
 
 		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, enableReadFromES),
 		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, enableReadFromES),

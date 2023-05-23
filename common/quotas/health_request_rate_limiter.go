@@ -32,6 +32,11 @@ import (
 	"go.temporal.io/server/common/aggregate"
 )
 
+const (
+	DefaultMinRateMultiplier = 0.1
+	DefaultMaxRateMultiplier = 1.0
+)
+
 type (
 	HealthRequestRateLimiterImpl struct {
 		rateLimiter   *RateLimiterImpl
@@ -43,17 +48,18 @@ type (
 		latencyThreshold float64
 		errorThreshold   float64
 
-		maxRate          float64
-		curRate          float64
+		rateFn           RateFn
 		rateToBurstRatio float64
 
-		// if either threshold is exceeded, the current rate and burst will be lowered by
-		// multiplying the current value with this
-		reductionMultiplier float64
-		// when the system is healthy, and the curRate < maxRate, the curRate will be
-		// additively increased by this amount each refresh. Determined as a ratio of the
-		// maxRate on creation
-		increaseStepSize float64
+		minRateMultiplier float64
+		maxRateMultiplier float64
+		curRateMultiplier float64
+
+		// if either threshold is exceeded, the current rate multiplier will be reduced by this amount
+		rateBackoffStepSize float64
+		// when the system is healthy and current rate < max rate, the current rate multiplier will be
+		// increased by this amount
+		rateIncreaseStepSize float64
 	}
 )
 
@@ -62,23 +68,24 @@ var _ RequestRateLimiter = (*HealthRequestRateLimiterImpl)(nil)
 func NewHealthRequestRateLimiterImpl(
 	healthSignals aggregate.SignalAggregator[Request],
 	refreshInterval time.Duration,
+	rateFn RateFn,
 	latencyThreshold float64,
 	errorThreshold float64,
-	maxRate float64,
-	rateToBurstRatio float64,
-	reductionMultiplier float64,
-	rateIncreaseRatio float64,
+	rateBackoffStepSize float64,
+	rateIncreaseStepSize float64,
 ) *HealthRequestRateLimiterImpl {
 	return &HealthRequestRateLimiterImpl{
-		healthSignals:       healthSignals,
-		refreshTimer:        time.NewTicker(refreshInterval),
-		latencyThreshold:    latencyThreshold,
-		errorThreshold:      errorThreshold,
-		reductionMultiplier: reductionMultiplier,
-		maxRate:             maxRate,
-		curRate:             maxRate,
-		increaseStepSize:    maxRate * rateIncreaseRatio,
-		rateToBurstRatio:    rateToBurstRatio,
+		healthSignals:        healthSignals,
+		refreshTimer:         time.NewTicker(refreshInterval),
+		rateFn:               rateFn,
+		rateToBurstRatio:     defaultOutgoingRateBurstRatio,
+		latencyThreshold:     latencyThreshold,
+		errorThreshold:       errorThreshold,
+		minRateMultiplier:    DefaultMinRateMultiplier,
+		maxRateMultiplier:    DefaultMaxRateMultiplier,
+		curRateMultiplier:    DefaultMaxRateMultiplier,
+		rateBackoffStepSize:  rateBackoffStepSize,
+		rateIncreaseStepSize: rateIncreaseStepSize,
 	}
 }
 
@@ -111,11 +118,13 @@ func (rl *HealthRequestRateLimiterImpl) refresh(request Request) {
 	if rl.healthSignals.AverageLatency(request) > rl.latencyThreshold ||
 		rl.healthSignals.ErrorRatio(request) > rl.errorThreshold {
 		// limits exceeded, do backoff
-		rl.curRate = rl.curRate * rl.reductionMultiplier
-		rl.rateLimiter.SetRateBurst(rl.curRate, int(rl.curRate*rl.rateToBurstRatio))
-	} else if rl.curRate < rl.maxRate {
+		rl.curRateMultiplier = math.Max(rl.minRateMultiplier, rl.curRateMultiplier-rl.rateBackoffStepSize)
+		rl.rateLimiter.SetRate(rl.curRateMultiplier * rl.rateFn())
+		rl.rateLimiter.SetBurst(int(rl.rateToBurstRatio * rl.rateFn()))
+	} else if rl.curRateMultiplier < rl.maxRateMultiplier {
 		// already doing backoff and under thresholds, increase limit
-		rl.curRate = math.Min(rl.maxRate, rl.curRate+rl.increaseStepSize)
-		rl.rateLimiter.SetRateBurst(rl.curRate, int(rl.curRate*rl.rateToBurstRatio))
+		rl.curRateMultiplier = math.Min(rl.maxRateMultiplier, rl.curRateMultiplier+rl.rateIncreaseStepSize)
+		rl.rateLimiter.SetRate(rl.curRateMultiplier * rl.rateFn())
+		rl.rateLimiter.SetBurst(int(rl.rateToBurstRatio * rl.rateFn()))
 	}
 }

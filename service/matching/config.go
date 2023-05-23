@@ -45,6 +45,13 @@ type (
 		RPS                                   dynamicconfig.IntPropertyFn
 		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
 
+		EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
+		DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
+		DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
+		DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
+
 		// taskQueueManager configuration
 
 		RangeSize                    int64
@@ -127,6 +134,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
+		EnableDynamicRateLimiting:             dynamicconfig.DisabledDynamicRateLimiting,
 		SyncMatchWaitDuration:                 dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
 		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                             100000,

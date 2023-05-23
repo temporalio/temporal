@@ -46,3 +46,4 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 }
 
 var DefaultPerShardNamespaceRPSMax = func(namespace string) int { return 0 }
+var DisabledDynamicRateLimiting = func() bool { return false }

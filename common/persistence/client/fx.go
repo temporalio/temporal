@@ -44,37 +44,35 @@ type (
 	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
 
-	EnableDynamicRateLimiting              dynamicconfig.BoolPropertyFn
-	DynamicRateLimitingRefreshInterval     dynamicconfig.DurationPropertyFn
-	DynamicRateLimitingLatencyThreshold    dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	DynamicRateLimitingErrorThreshold      dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	DynamicRateLimitingReductionMultiplier dynamicconfig.FloatPropertyFn
-	DynamicRateLimitingIncreaseRatio       dynamicconfig.FloatPropertyFn
-	DynamicRateLimitingRateToBurstRatio    dynamicconfig.FloatPropertyFn
+	EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
+	DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
+	DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
+	DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
 
 	ClusterName string
 
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory                       DataStoreFactory
-		Cfg                                    *config.Persistence
-		PersistenceMaxQPS                      PersistenceMaxQps
-		PersistenceNamespaceMaxQPS             PersistenceNamespaceMaxQps
-		PersistencePerShardNamespaceMaxQPS     PersistencePerShardNamespaceMaxQPS
-		EnablePriorityRateLimiting             EnablePriorityRateLimiting
-		ClusterName                            ClusterName
-		ServiceName                            primitives.ServiceName
-		MetricsHandler                         metrics.Handler
-		Logger                                 log.Logger
-		HealthSignals                          aggregate.SignalAggregator[quotas.Request]
-		EnableDynamicRateLimiting              EnableDynamicRateLimiting
-		DynamicRateLimitingRefreshInterval     DynamicRateLimitingRefreshInterval
-		DynamicRateLimitingLatencyThreshold    DynamicRateLimitingLatencyThreshold
-		DynamicRateLimitingErrorThreshold      DynamicRateLimitingErrorThreshold
-		DynamicRateLimitingReductionMultiplier DynamicRateLimitingReductionMultiplier
-		DynamicRateLimitingIncreaseRatio       DynamicRateLimitingIncreaseRatio
-		DynamicRateLimitingRateToBurstRatio    DynamicRateLimitingRateToBurstRatio
+		DataStoreFactory                        DataStoreFactory
+		Cfg                                     *config.Persistence
+		PersistenceMaxQPS                       PersistenceMaxQps
+		PersistenceNamespaceMaxQPS              PersistenceNamespaceMaxQps
+		PersistencePerShardNamespaceMaxQPS      PersistencePerShardNamespaceMaxQPS
+		EnablePriorityRateLimiting              EnablePriorityRateLimiting
+		ClusterName                             ClusterName
+		ServiceName                             primitives.ServiceName
+		MetricsHandler                          metrics.Handler
+		Logger                                  log.Logger
+		HealthSignals                           aggregate.SignalAggregator[quotas.Request]
+		EnableDynamicRateLimiting               EnableDynamicRateLimiting
+		DynamicRateLimitingRefreshInterval      DynamicRateLimitingRefreshInterval
+		DynamicRateLimitingLatencyThreshold     DynamicRateLimitingLatencyThreshold
+		DynamicRateLimitingErrorThreshold       DynamicRateLimitingErrorThreshold
+		DynamicRateLimitingRateBackoffStepSize  DynamicRateLimitingRateBackoffStepSize
+		DynamicRateLimitingRateIncreaseStepSize DynamicRateLimitingRateIncreaseStepSize
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -106,9 +104,8 @@ func FactoryProvider(
 					params.DynamicRateLimitingRefreshInterval,
 					params.DynamicRateLimitingLatencyThreshold,
 					params.DynamicRateLimitingErrorThreshold,
-					params.DynamicRateLimitingReductionMultiplier,
-					params.DynamicRateLimitingIncreaseRatio,
-					params.DynamicRateLimitingRateToBurstRatio,
+					params.DynamicRateLimitingRateBackoffStepSize,
+					params.DynamicRateLimitingRateIncreaseStepSize,
 				)
 			} else {
 				requestRatelimiter = NewPriorityRateLimiter(

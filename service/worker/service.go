@@ -122,6 +122,13 @@ type (
 		EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+		EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
+		DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
+		DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
+		DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
 	}
 )
 
@@ -354,6 +361,8 @@ func NewConfig(
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, enableReadFromES),
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
+
+		EnableDynamicRateLimiting: dynamicconfig.DisabledDynamicRateLimiting,
 	}
 	return config
 }

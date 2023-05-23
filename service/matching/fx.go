@@ -104,6 +104,12 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.EnableDynamicRateLimiting,
+		serviceConfig.DynamicRateLimitingRefreshInterval,
+		serviceConfig.DynamicRateLimitingLatencyThreshold,
+		serviceConfig.DynamicRateLimitingErrorThreshold,
+		serviceConfig.DynamicRateLimitingRateBackoffStepSize,
+		serviceConfig.DynamicRateLimitingRateIncreaseStepSize,
 	)
 }
 
