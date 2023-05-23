@@ -2658,7 +2658,15 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
 		OverallRps: 10,
-		Queries:    []string{"ExecutionStatus != 'Running'", "ExecutionStatus = 'Running'"},
+		Queries: []string{
+			"ExecutionStatus = 'Completed'",
+			"ExecutionStatus = 'Failed'",
+			"ExecutionStatus = 'Canceled'",
+			"ExecutionStatus = 'Terminated'",
+			"ExecutionStatus = 'ContinuedAsNew'",
+			"ExecutionStatus = 'TimedOut'",
+			"ExecutionStatus = 'Running'",
+		},
 	})
 
 	s.NoError(err)
@@ -2801,7 +2809,15 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
 		OverallRps: 10,
-		Queries:    []string{"ExecutionStatus != 'Running'", "ExecutionStatus = 'Running'"},
+		Queries: []string{
+			"ExecutionStatus = 'Completed'",
+			"ExecutionStatus = 'Failed'",
+			"ExecutionStatus = 'Canceled'",
+			"ExecutionStatus = 'Terminated'",
+			"ExecutionStatus = 'ContinuedAsNew'",
+			"ExecutionStatus = 'TimedOut'",
+			"ExecutionStatus = 'Running'",
+		},
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
@@ -2941,7 +2957,15 @@ func (s *integrationClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
 		OverallRps: 10,
-		Queries:    []string{"ExecutionStatus != 'Running'", "ExecutionStatus = 'Running'"},
+		Queries: []string{
+			"ExecutionStatus = 'Completed'",
+			"ExecutionStatus = 'Failed'",
+			"ExecutionStatus = 'Canceled'",
+			"ExecutionStatus = 'Terminated'",
+			"ExecutionStatus = 'ContinuedAsNew'",
+			"ExecutionStatus = 'TimedOut'",
+			"ExecutionStatus = 'Running'",
+		},
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)

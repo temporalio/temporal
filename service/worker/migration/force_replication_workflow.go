@@ -25,13 +25,12 @@
 package migration
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -142,7 +141,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		}
 	}
 	if params.Token.Index >= len(params.Token.Queries) {
-		return errors.New("InvalidArgument: no query / queries provided")
+		return serviceerror.NewInvalidArgument("InvalidArgument: no query / queries provided")
 	}
 
 	var listWorkflowsErr error
@@ -244,13 +243,6 @@ Loop:
 			return err
 		}
 
-		fmt.Println("#######")
-		prettyPrint := func(input interface{}) string {
-			binary, _ := json.MarshalIndent(input, "", "  ")
-			return string(binary)
-		}
-		fmt.Printf("%v\n", prettyPrint(listResp.Executions))
-		fmt.Println("#######")
 		workflowExecutionsCh.Send(ctx, listResp.Executions)
 
 		params.Lock()
