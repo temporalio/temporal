@@ -1796,7 +1796,9 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	}
 	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
 		limit := ms.config.MaxTrackedBuildIds(string(ms.namespaceEntry.Name()))
-		ms.addBuildIdWithNoVisibilityTask(common.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId), limit)
+		if err := ms.addBuildIdWithNoVisibilityTask(common.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId), limit); err != nil {
+			return err
+		}
 	}
 
 	ms.executionInfo.WorkerVersionStamp = event.SourceVersionStamp

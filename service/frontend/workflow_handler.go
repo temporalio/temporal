@@ -927,7 +927,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
-
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
