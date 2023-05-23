@@ -38,12 +38,14 @@ import (
 
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -85,8 +87,10 @@ type (
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
 
 const (
-	cacheNotReleased int32 = 0
-	cacheReleased    int32 = 1
+	cacheNotReleased            int32 = 0
+	cacheReleased               int32 = 1
+	workflowLockTimeoutTailTime       = 500 * time.Millisecond
+	nonApiContextLockTimeout          = 500 * time.Millisecond
 )
 
 func NewCache(shard shard.Context) Cache {
@@ -198,14 +202,44 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext, lockPriority)
 
-	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
-		// ctx is done before lock can be acquired
-		c.Release(key)
+	if err := c.lockWorkflowExecution(ctx, workflowCtx, key, lockPriority); err != nil {
 		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 		handler.Counter(metrics.AcquireLockFailedCounter.GetMetricName()).Record(1)
 		return nil, nil, err
 	}
+
 	return workflowCtx, releaseFunc, nil
+}
+
+func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
+	workflowCtx workflow.Context,
+	key definition.WorkflowKey,
+	lockPriority workflow.LockPriority) error {
+
+	// skip if there is no deadline
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		if headers.GetCallerInfo(ctx).CallerType != headers.CallerTypeAPI {
+			newDeadline := time.Now().Add(nonApiContextLockTimeout)
+			if newDeadline.Before(deadline) {
+				ctx, cancel = context.WithDeadline(ctx, newDeadline)
+				defer cancel()
+			}
+		} else {
+			newDeadline := deadline.Add(-workflowLockTimeoutTailTime)
+			if newDeadline.After(time.Now()) {
+				ctx, cancel = context.WithDeadline(ctx, newDeadline)
+				defer cancel()
+			}
+		}
+	}
+
+	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
+		// ctx is done before lock can be acquired
+		c.Release(key)
+		return consts.ErrResourceExhaustedBusyWorkflow
+	}
+	return nil
 }
 
 func (c *CacheImpl) makeReleaseFunc(

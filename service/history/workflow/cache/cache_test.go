@@ -38,9 +38,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
@@ -397,4 +398,74 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 	s.True(ok)
 	s.Greater(latency2, latency1)
 
+}
+
+func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
+
+	testSets := []struct {
+		name             string
+		shouldLockBefore bool
+		callerType       string
+		withTimeout      bool
+		wantErr          bool
+	}{
+
+		{
+			name:       "API context without timeout without locking beforehand should not return an error",
+			callerType: headers.CallerTypeAPI,
+		},
+		{
+			name:             "API context without timeout with locking beforehand should not return an error",
+			shouldLockBefore: true,
+			callerType:       headers.CallerTypeAPI,
+			wantErr:          true,
+		},
+
+		{
+			name:       "API context with timeout without locking beforehand should not return an error",
+			callerType: headers.CallerTypeAPI,
+		},
+		{
+			name:             "API context with timeout and locking beforehand should return an error",
+			shouldLockBefore: true,
+			callerType:       headers.CallerTypeAPI,
+			wantErr:          true,
+		},
+		{
+			name:       "Non API context with timeout without locking beforehand should return an error",
+			callerType: headers.CallerTypeBackground,
+		},
+		{
+			name:             "Non API context with timeout and locking beforehand should return an error",
+			shouldLockBefore: true,
+			callerType:       headers.CallerTypeBackground,
+			wantErr:          true,
+		},
+	}
+	for _, tt := range testSets {
+		s.Run(tt.name, func() {
+			c := NewCache(s.mockShard).(*CacheImpl)
+			namespaceID := namespace.ID("test_namespace_id")
+			execution := commonpb.WorkflowExecution{
+				WorkflowId: "some random workflow id",
+				RunId:      uuid.New(),
+			}
+			key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
+			workflowCtx := workflow.NewContext(c.shard, key, c.logger)
+			ctx := headers.SetCallerType(context.Background(), tt.callerType)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+
+			if tt.shouldLockBefore {
+				// lock the workflow to allow it to time out
+				err := workflowCtx.Lock(ctx, workflow.LockPriorityHigh)
+				s.Nil(err)
+			}
+
+			if err := c.lockWorkflowExecution(ctx, workflowCtx, key, workflow.LockPriorityHigh); (err != nil) != tt.wantErr {
+				s.T().Errorf("CacheImpl.lockWorkflowExecution() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+		})
+	}
 }
