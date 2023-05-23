@@ -1533,10 +1533,10 @@ func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 }
 
 // GetApproximatePersistedSize returns approximate size of in-memory objects that will be written to
-// persistence + size of buffered events in history builder if they will be force flushed
+// persistence + size of buffered events in history builder if they will not be flushed
 func (ms *MutableStateImpl) GetApproximatePersistedSize() int {
-	// include buffered events in the size if they will be flushed
-	if !ms.BufferSizeAcceptable() || !ms.HasStartedWorkflowTask() {
+	// include buffered events in the size if they will not be flushed
+	if ms.BufferSizeAcceptable() && ms.HasStartedWorkflowTask() {
 		return ms.approximateSize + ms.hBuilder.SizeInBytesOfBufferedEvents()
 	}
 	return ms.approximateSize
