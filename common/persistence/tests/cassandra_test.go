@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
@@ -171,5 +170,10 @@ func TestCassandraClusterMetadataPersistence(t *testing.T) {
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestDynamicRateLimitedCassandra(t *testing.T) {
+	s := new(persistencetests.DynamicRateLimitSuite)
 	suite.Run(t, s)
 }

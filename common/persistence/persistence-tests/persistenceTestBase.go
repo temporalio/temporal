@@ -101,6 +101,7 @@ type (
 		ClusterMetadata           cluster.Metadata
 		SearchAttributesManager   searchattribute.Manager
 		PersistenceHealthSignals  aggregate.SignalAggregator[quotas.Request]
+		PersistenceRateLimiter    quotas.RequestRateLimiter
 		ReadLevel                 int64
 		ReplicationReadLevel      int64
 		DefaultTestCluster        PersistenceTestCluster
@@ -191,6 +192,9 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	if clusterMetadataConfig == nil {
 		clusterMetadataConfig = cluster.NewTestClusterMetadataConfig(false, false)
 	}
+	if s.PersistenceHealthSignals == nil {
+		s.PersistenceHealthSignals = aggregate.NoopPersistenceHealthSignalAggregator
+	}
 
 	clusterName := clusterMetadataConfig.CurrentClusterName
 
@@ -205,7 +209,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopMetricsHandler, s.Logger, aggregate.NoopPersistenceHealthSignalAggregator)
+	factory := client.NewFactory(dataStoreFactory, &cfg, s.PersistenceRateLimiter, serialization.NewSerializer(), clusterName, metrics.NoopMetricsHandler, s.Logger, s.PersistenceHealthSignals)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
