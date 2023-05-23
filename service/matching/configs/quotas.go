@@ -43,6 +43,7 @@ var (
 		"UpdateWorkerBuildIdCompatibility":       0,
 		"GetTaskQueueUserData":                   0,
 		"ApplyTaskQueueUserDataReplicationEvent": 0,
+		"ForceUnloadTaskQueue":                   0,
 	}
 
 	APIPrioritiesOrdered = []int{0}

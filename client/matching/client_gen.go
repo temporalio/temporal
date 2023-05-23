@@ -80,13 +80,28 @@ func (c *clientImpl) DescribeTaskQueue(
 	return client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) ForceUnloadTaskQueue(
+	ctx context.Context,
+	request *matchingservice.ForceUnloadTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ForceUnloadTaskQueue(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.GetTaskQueueUserDataRequest,
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
