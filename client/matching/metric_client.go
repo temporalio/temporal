@@ -212,6 +212,7 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.NotFound,
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
+			*serviceerror.NewerBuildExists,
 			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:
