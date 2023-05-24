@@ -46,8 +46,8 @@ type (
 
 	EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
 	DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
-	DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFn
+	DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFn
 	DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
 	DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
 

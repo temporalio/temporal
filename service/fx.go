@@ -65,8 +65,8 @@ func NewPersistenceRateLimitingParams(
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 	enableDynamicRateLimiting dynamicconfig.BoolPropertyFn,
 	dynamicRefreshInterval dynamicconfig.DurationPropertyFn,
-	dynamicLatencyThreshold dynamicconfig.FloatPropertyFnWithNamespaceFilter,
-	dynamicErrorThreshold dynamicconfig.FloatPropertyFnWithNamespaceFilter,
+	dynamicLatencyThreshold dynamicconfig.FloatPropertyFn,
+	dynamicErrorThreshold dynamicconfig.FloatPropertyFn,
 	dynamicBackoffStepSize dynamicconfig.FloatPropertyFn,
 	dynamicIncreaseStepSize dynamicconfig.FloatPropertyFn,
 ) PersistenceRateLimitingParams {

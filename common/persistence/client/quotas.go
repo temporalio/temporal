@@ -113,13 +113,19 @@ func NewDynamicPriorityRateLimiter(
 	backoffStepSize DynamicRateLimitingRateBackoffStepSize,
 	increaseStepSize DynamicRateLimitingRateIncreaseStepSize,
 ) quotas.RequestRateLimiter {
-	hostRequestRateLimiter := newPriorityRateLimiter(
+	hostRequestRateLimiter := newDynamicPriorityRateLimiter(
 		func() float64 { return float64(hostMaxQPS()) },
 		requestPriorityFn,
+		healthSignals,
+		refreshInterval(),
+		latencyThreshold(),
+		errorThreshold(),
+		backoffStepSize(),
+		increaseStepSize(),
 	)
 
 	return quotas.NewMultiRequestRateLimiter(
-		newPerShardPerNamespaceDynamicPriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn, healthSignals, refreshInterval, latencyThreshold, errorThreshold, backoffStepSize, increaseStepSize),
+		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn),
 		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
 		hostRequestRateLimiter,
 	)
@@ -145,41 +151,6 @@ func newPerShardPerNamespacePriorityRateLimiter(
 	},
 		perShardPerNamespaceKeyFn,
 	)
-}
-
-func newPerShardPerNamespaceDynamicPriorityRateLimiter(
-	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
-	hostMaxQPS PersistenceMaxQps,
-	requestPriorityFn quotas.RequestPriorityFn,
-	healthSignals aggregate.SignalAggregator[quotas.Request],
-	refreshInterval DynamicRateLimitingRefreshInterval,
-	latencyThreshold DynamicRateLimitingLatencyThreshold,
-	errorThreshold DynamicRateLimitingErrorThreshold,
-	rateBackoffStepSize DynamicRateLimitingRateBackoffStepSize,
-	rateIncreaseStepSize DynamicRateLimitingRateIncreaseStepSize,
-) quotas.RequestRateLimiter {
-	return quotas.NewMapRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
-		if !hasCaller(req) {
-			return quotas.NoopRequestRateLimiter
-		}
-		rateFn := func() float64 {
-			if perShardNamespaceMaxQPS == nil || perShardNamespaceMaxQPS(req.Caller) <= 0 {
-				return float64(hostMaxQPS())
-			}
-			return float64(perShardNamespaceMaxQPS(req.Caller))
-		}
-		return newDynamicPriorityRateLimiter(
-			rateFn,
-			requestPriorityFn,
-			healthSignals,
-			refreshInterval(),
-			latencyThreshold(req.Caller),
-			errorThreshold(req.Caller),
-			rateBackoffStepSize(),
-			rateIncreaseStepSize(),
-		)
-	},
-		perShardPerNamespaceKeyFn)
 }
 
 func perShardPerNamespaceKeyFn(req quotas.Request) perShardPerNamespaceKey {
