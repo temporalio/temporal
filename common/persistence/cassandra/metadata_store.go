@@ -137,7 +137,7 @@ func (m *MetadataStore) CreateNamespace(
 		// if the id with the same name exists in `namespaces_by_id`, fall through and either add a row in `namespaces` table
 		// or fail if name exists in that table already. This is to make sure we do not end up with a row in `namespaces_by_id`
 		// table and no entry in `namespaces` table
-		matched, err := fieldMatches(existingRow, "name", request.Name)
+		matched, err := hasNameConflict(existingRow, "name", request.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -187,21 +187,19 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 	if !applied {
 
 		// if both conditions fail, find the one related to the first query
-		matched, err := fieldMatches(previous, "name", request.Name)
+		matched, err := hasNameConflict(previous, "name", request.Name)
 		if err != nil {
 			return nil, err
 		}
 		if !matched {
 			m := make(map[string]interface{})
 			if iter.MapScan(m) {
-				if applied, ok := m["[applied]"].(bool); ok && !applied {
-					previous = m
-				}
+				previous = m
 			}
 		}
 
 		// if conditional failure is due to a duplicate name in namespaces table
-		matched, err = fieldMatches(previous, "name", request.Name)
+		matched, err = hasNameConflict(previous, "name", request.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -532,7 +530,7 @@ func (m *MetadataStore) Close() {
 	}
 }
 
-func fieldMatches[T comparable](row map[string]interface{}, column string, value T) (bool, error) {
+func hasNameConflict[T comparable](row map[string]interface{}, column string, value T) (bool, error) {
 	existingValue, ok := row[column]
 	if !ok {
 		msg := fmt.Sprintf("Unexpected error: column not found %q", column)
