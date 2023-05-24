@@ -78,7 +78,7 @@ const (
 	mutableStateInvalidHistoryActionMsg         = "invalid history builder state for action"
 	mutableStateInvalidHistoryActionMsgTemplate = mutableStateInvalidHistoryActionMsg + ": %v, %v"
 
-	intSizeBytes = 8
+	int64SizeBytes = 8
 )
 
 var (
@@ -301,7 +301,7 @@ func newMutableStateFromDB(
 
 	if dbRecord.ActivityInfos != nil {
 		mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
-		mutableState.approximateSize += intSizeBytes * len(mutableState.pendingActivityInfoIDs)
+		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingActivityInfoIDs)
 	}
 	for _, activityInfo := range dbRecord.ActivityInfos {
 		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduledEventId
@@ -316,15 +316,15 @@ func newMutableStateFromDB(
 	if dbRecord.TimerInfos != nil {
 		mutableState.pendingTimerInfoIDs = dbRecord.TimerInfos
 	}
-	for key, timerInfo := range dbRecord.TimerInfos {
+	for timerID, timerInfo := range dbRecord.TimerInfos {
 		mutableState.pendingTimerEventIDToID[timerInfo.GetStartedEventId()] = timerInfo.GetTimerId()
 		mutableState.approximateSize += timerInfo.Size()
-		mutableState.approximateSize += len(key)
+		mutableState.approximateSize += len(timerID)
 	}
 
 	if dbRecord.ChildExecutionInfos != nil {
 		mutableState.pendingChildExecutionInfoIDs = dbRecord.ChildExecutionInfos
-		mutableState.approximateSize += intSizeBytes * len(mutableState.pendingChildExecutionInfoIDs)
+		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingChildExecutionInfoIDs)
 	}
 	for _, childInfo := range dbRecord.ChildExecutionInfos {
 		mutableState.approximateSize += childInfo.Size()
@@ -332,7 +332,7 @@ func newMutableStateFromDB(
 
 	if dbRecord.RequestCancelInfos != nil {
 		mutableState.pendingRequestCancelInfoIDs = dbRecord.RequestCancelInfos
-		mutableState.approximateSize += intSizeBytes * len(mutableState.pendingRequestCancelInfoIDs)
+		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingRequestCancelInfoIDs)
 	}
 	for _, cancelInfo := range dbRecord.RequestCancelInfos {
 		mutableState.approximateSize += cancelInfo.Size()
@@ -340,7 +340,7 @@ func newMutableStateFromDB(
 
 	if dbRecord.SignalInfos != nil {
 		mutableState.pendingSignalInfoIDs = dbRecord.SignalInfos
-		mutableState.approximateSize += intSizeBytes * len(mutableState.pendingSignalInfoIDs)
+		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingSignalInfoIDs)
 	}
 	for _, signalInfo := range dbRecord.SignalInfos {
 		mutableState.approximateSize += signalInfo.Size()
@@ -349,14 +349,14 @@ func newMutableStateFromDB(
 	if dbRecord.UpdateInfos != nil {
 		mutableState.updateInfos = dbRecord.UpdateInfos
 	}
-	for key, updateInfo := range dbRecord.UpdateInfos {
+	for updateID, updateInfo := range dbRecord.UpdateInfos {
 		mutableState.approximateSize += updateInfo.Size()
-		mutableState.approximateSize += len(key)
+		mutableState.approximateSize += len(updateID)
 	}
 
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
-	for key := range mutableState.pendingSignalRequestedIDs {
-		mutableState.approximateSize += len(key)
+	for requestID := range mutableState.pendingSignalRequestedIDs {
+		mutableState.approximateSize += len(requestID)
 	}
 
 	mutableState.approximateSize += dbRecord.ExecutionState.Size() - mutableState.executionState.Size()
@@ -1101,7 +1101,7 @@ func (ms *MutableStateImpl) DeletePendingChildExecution(
 ) error {
 
 	if prev, ok := ms.pendingChildExecutionInfoIDs[initiatedEventID]; ok {
-		ms.approximateSize -= prev.Size() + intSizeBytes
+		ms.approximateSize -= prev.Size() + int64SizeBytes
 		delete(ms.pendingChildExecutionInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1123,7 +1123,7 @@ func (ms *MutableStateImpl) DeletePendingRequestCancel(
 ) error {
 
 	if prev, ok := ms.pendingRequestCancelInfoIDs[initiatedEventID]; ok {
-		ms.approximateSize -= prev.Size() + intSizeBytes
+		ms.approximateSize -= prev.Size() + int64SizeBytes
 		delete(ms.pendingRequestCancelInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1145,7 +1145,7 @@ func (ms *MutableStateImpl) DeletePendingSignal(
 ) error {
 
 	if prev, ok := ms.pendingSignalInfoIDs[initiatedEventID]; ok {
-		ms.approximateSize -= prev.Size() + intSizeBytes
+		ms.approximateSize -= prev.Size() + int64SizeBytes
 		delete(ms.pendingSignalInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1284,7 +1284,7 @@ func (ms *MutableStateImpl) DeleteActivity(
 	if activityInfo, ok := ms.pendingActivityInfoIDs[scheduledEventID]; ok {
 		delete(ms.pendingActivityInfoIDs, scheduledEventID)
 		delete(ms.pendingActivityTimerHeartbeats, scheduledEventID)
-		ms.approximateSize -= activityInfo.Size() + intSizeBytes
+		ms.approximateSize -= activityInfo.Size() + int64SizeBytes
 
 		if _, ok = ms.pendingActivityIDToEventID[activityInfo.ActivityId]; ok {
 			delete(ms.pendingActivityIDToEventID, activityInfo.ActivityId)
@@ -2209,7 +2209,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size() + intSizeBytes
+	ms.approximateSize += ai.Size() + int64SizeBytes
 	ms.executionInfo.ActivityCount++
 
 	ms.writeEventToCache(event)
@@ -2849,7 +2849,7 @@ func (ms *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionIniti
 
 	ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
 	ms.updateRequestCancelInfos[rci.InitiatedEventId] = rci
-	ms.approximateSize += rci.Size() + intSizeBytes
+	ms.approximateSize += rci.Size() + int64SizeBytes
 	ms.executionInfo.RequestCancelExternalCount++
 
 	ms.writeEventToCache(event)
@@ -2990,7 +2990,7 @@ func (ms *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEve
 
 	ms.pendingSignalInfoIDs[si.InitiatedEventId] = si
 	ms.updateSignalInfos[si.InitiatedEventId] = si
-	ms.approximateSize += si.Size() + intSizeBytes
+	ms.approximateSize += si.Size() + int64SizeBytes
 	ms.executionInfo.SignalExternalCount++
 
 	ms.writeEventToCache(event)
@@ -3665,7 +3665,7 @@ func (ms *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 
 	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
-	ms.approximateSize += ci.Size() + intSizeBytes
+	ms.approximateSize += ci.Size() + int64SizeBytes
 	ms.executionInfo.ChildExecutionCount++
 
 	ms.writeEventToCache(event)
