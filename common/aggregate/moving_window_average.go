@@ -42,7 +42,7 @@ type (
 	}
 
 	MovingWindowAvgImpl struct {
-		sync.RWMutex
+		sync.Mutex
 		windowSize    time.Duration
 		maxBufferSize int
 		head          *ring.Ring
@@ -81,18 +81,17 @@ func (a *MovingWindowAvgImpl) Record(val int64) {
 }
 
 func (a *MovingWindowAvgImpl) Average() float64 {
-	a.expireOldValues()
+	a.Lock()
+	defer a.Unlock()
 
-	a.RLock()
-	defer a.RUnlock()
-
+	a.expireOldValuesLocked()
 	if a.count == 0 {
 		return 0
 	}
 	return float64(a.sum) / float64(a.count)
 }
 
-func (a *MovingWindowAvgImpl) expireOldValues() {
+func (a *MovingWindowAvgImpl) expireOldValuesLocked() {
 	a.Lock()
 	defer a.Unlock()
 
