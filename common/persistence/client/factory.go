@@ -115,7 +115,7 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	if f.metricsHandler != nil || f.healthSignals != nil {
 		if f.metricsHandler == nil {
 			f.metricsHandler = metrics.NoopMetricsHandler
-		} else {
+		} else if f.healthSignals == nil {
 			f.healthSignals = p.NoopHealthSignalAggregator
 		}
 		result = p.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -137,7 +137,7 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	if f.metricsHandler != nil || f.healthSignals != nil {
 		if f.metricsHandler == nil {
 			f.metricsHandler = metrics.NoopMetricsHandler
-		} else {
+		} else if f.healthSignals == nil {
 			f.healthSignals = p.NoopHealthSignalAggregator
 		}
 		result = p.NewShardPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -160,7 +160,7 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 	if f.metricsHandler != nil || f.healthSignals != nil {
 		if f.metricsHandler == nil {
 			f.metricsHandler = metrics.NoopMetricsHandler
-		} else {
+		} else if f.healthSignals == nil {
 			f.healthSignals = p.NoopHealthSignalAggregator
 		}
 		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -183,7 +183,7 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 	if f.metricsHandler != nil || f.healthSignals != nil {
 		if f.metricsHandler == nil {
 			f.metricsHandler = metrics.NoopMetricsHandler
-		} else {
+		} else if f.healthSignals == nil {
 			f.healthSignals = p.NoopHealthSignalAggregator
 		}
 		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -206,7 +206,7 @@ func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 	if f.metricsHandler != nil || f.healthSignals != nil {
 		if f.metricsHandler == nil {
 			f.metricsHandler = metrics.NoopMetricsHandler
-		} else {
+		} else if f.healthSignals == nil {
 			f.healthSignals = p.NoopHealthSignalAggregator
 		}
 		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
@@ -227,7 +227,7 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 	if f.metricsHandler != nil || f.healthSignals != nil {
 		if f.metricsHandler == nil {
 			f.metricsHandler = metrics.NoopMetricsHandler
-		} else {
+		} else if f.healthSignals == nil {
 			f.healthSignals = p.NoopHealthSignalAggregator
 		}
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
