@@ -174,6 +174,7 @@ func TestCassandraClusterMetadataPersistence(t *testing.T) {
 }
 
 func TestDynamicRateLimitedCassandra(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.DynamicRateLimitSuite)
 	suite.Run(t, s)
 }

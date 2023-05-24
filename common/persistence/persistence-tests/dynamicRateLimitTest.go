@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -55,7 +54,7 @@ type (
 )
 
 func (s *DynamicRateLimitSuite) SetupSuite() {
-	healthSignals := aggregate.NewPerShardPerNsHealthSignalAggregator(
+	healthSignals := persistence.NewHealthSignalAggregatorImpl(
 		dynamicconfig.GetDurationPropertyFn(3*time.Second),
 		dynamicconfig.GetIntPropertyFn(100),
 		metrics.NoopMetricsHandler,

@@ -27,7 +27,6 @@ package client
 import (
 	"time"
 
-	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/headers"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
@@ -106,14 +105,14 @@ func NewDynamicPriorityRateLimiter(
 	hostMaxQPS PersistenceMaxQps,
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	requestPriorityFn quotas.RequestPriorityFn,
-	healthSignals aggregate.SignalAggregator[quotas.Request],
+	healthSignals p.HealthSignalAggregator,
 	refreshInterval DynamicRateLimitingRefreshInterval,
 	latencyThreshold DynamicRateLimitingLatencyThreshold,
 	errorThreshold DynamicRateLimitingErrorThreshold,
 	backoffStepSize DynamicRateLimitingRateBackoffStepSize,
 	increaseStepSize DynamicRateLimitingRateIncreaseStepSize,
 ) quotas.RequestRateLimiter {
-	hostRequestRateLimiter := newDynamicPriorityRateLimiter(
+	hostRequestRateLimiter := newDynamicPriorityHostRateLimiter(
 		func() float64 { return float64(hostMaxQPS()) },
 		requestPriorityFn,
 		healthSignals,
@@ -202,10 +201,10 @@ func newPriorityRateLimiter(
 	)
 }
 
-func newDynamicPriorityRateLimiter(
+func newDynamicPriorityHostRateLimiter(
 	rateFn quotas.RateFn,
 	requestPriorityFn quotas.RequestPriorityFn,
-	healthSignals aggregate.SignalAggregator[quotas.Request],
+	healthSignals p.HealthSignalAggregator,
 	refreshInterval time.Duration,
 	latencyThreshold float64,
 	errorThreshold float64,

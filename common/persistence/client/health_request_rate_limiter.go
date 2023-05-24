@@ -29,7 +29,7 @@ import (
 	"math"
 	"time"
 
-	"go.temporal.io/server/common/aggregate"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -42,7 +42,7 @@ const (
 type (
 	HealthRequestRateLimiterImpl struct {
 		rateLimiter   *quotas.RateLimiterImpl
-		healthSignals aggregate.SignalAggregator[quotas.Request]
+		healthSignals persistence.HealthSignalAggregator
 
 		refreshTimer *time.Ticker
 
@@ -68,7 +68,7 @@ type (
 var _ quotas.RequestRateLimiter = (*HealthRequestRateLimiterImpl)(nil)
 
 func NewHealthRequestRateLimiterImpl(
-	healthSignals aggregate.SignalAggregator[quotas.Request],
+	healthSignals persistence.HealthSignalAggregator,
 	refreshInterval time.Duration,
 	rateFn quotas.RateFn,
 	latencyThreshold float64,
@@ -93,33 +93,32 @@ func NewHealthRequestRateLimiterImpl(
 }
 
 func (rl *HealthRequestRateLimiterImpl) Allow(now time.Time, request quotas.Request) bool {
-	rl.maybeRefresh(request)
+	rl.maybeRefresh()
 	return rl.rateLimiter.AllowN(now, request.Token)
 }
 
 func (rl *HealthRequestRateLimiterImpl) Reserve(now time.Time, request quotas.Request) quotas.Reservation {
-	rl.maybeRefresh(request)
+	rl.maybeRefresh()
 	return rl.rateLimiter.ReserveN(now, request.Token)
 }
 
 func (rl *HealthRequestRateLimiterImpl) Wait(ctx context.Context, request quotas.Request) error {
-	rl.maybeRefresh(request)
+	rl.maybeRefresh()
 	return rl.rateLimiter.WaitN(ctx, request.Token)
 }
 
-func (rl *HealthRequestRateLimiterImpl) maybeRefresh(request quotas.Request) {
+func (rl *HealthRequestRateLimiterImpl) maybeRefresh() {
 	select {
 	case <-rl.refreshTimer.C:
-		rl.refresh(request)
+		rl.refresh()
 
 	default:
 		// no-op
 	}
 }
 
-func (rl *HealthRequestRateLimiterImpl) refresh(request quotas.Request) {
-	if rl.healthSignals.AverageLatency(request) > rl.latencyThreshold ||
-		rl.healthSignals.ErrorRatio(request) > rl.errorThreshold {
+func (rl *HealthRequestRateLimiterImpl) refresh() {
+	if rl.healthSignals.AverageLatency() > rl.latencyThreshold || rl.healthSignals.ErrorRatio() > rl.errorThreshold {
 		// limits exceeded, do backoff
 		rl.curRateMultiplier = math.Max(rl.minRateMultiplier, rl.curRateMultiplier-rl.rateBackoffStepSize)
 		rl.rateLimiter.SetRate(rl.curRateMultiplier * rl.rateFn())
