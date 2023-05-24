@@ -188,3 +188,7 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 		}
 	}
 }
+
+func (s *TestCluster) GetSession() commongocql.Session {
+	return s.session
+}
