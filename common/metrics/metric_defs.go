@@ -1663,6 +1663,4 @@ var (
 	VisibilityPersistenceFailures                       = NewCounterDef("visibility_persistence_errors")
 	VisibilityPersistenceResourceExhausted              = NewCounterDef("visibility_persistence_resource_exhausted")
 	VisibilityPersistenceLatency                        = NewTimerDef("visibility_persistence_latency")
-	PersistenceErrPerShardPerNamespace                  = NewDimensionlessHistogramDef("persistence_error_ratio_per_shard_per_ns")
-	PersistenceAvgLatencyPerShardPerNamespace           = NewDimensionlessHistogramDef("persistence_average_latency_per_shard_per_namespace")
 )

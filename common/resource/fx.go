@@ -219,12 +219,10 @@ func NamespaceRegistryProvider(
 
 func PersistenceHealthSignalAggregatorProvider(
 	dynamicCollection *dynamicconfig.Collection,
-	metricsHandler metrics.Handler,
 ) aggregate.SignalAggregator[quotas.Request] {
 	return aggregate.NewPerShardPerNsHealthSignalAggregator(
 		dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 3*time.Second),
 		dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 500),
-		metricsHandler,
 	)
 }
 
