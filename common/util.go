@@ -330,9 +330,12 @@ func IsServiceClientTransientError(err error) bool {
 		return true
 	}
 
-	switch err.(type) {
-	case *serviceerror.ResourceExhausted,
-		*serviceerrors.ShardOwnershipLost:
+	switch err := err.(type) {
+	case *serviceerror.ResourceExhausted:
+		if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			return true
+		}
+	case *serviceerrors.ShardOwnershipLost:
 		return true
 	}
 	return false
