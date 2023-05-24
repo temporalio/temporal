@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/quotas"
 
 	"go.temporal.io/server/common/headers"
@@ -49,37 +48,37 @@ type (
 
 	shardPersistenceClient struct {
 		metricEmitter
-		healthSignals aggregate.SignalAggregator[quotas.Request]
+		healthSignals HealthSignalAggregator
 		persistence   ShardManager
 	}
 
 	executionPersistenceClient struct {
 		metricEmitter
-		healthSignals aggregate.SignalAggregator[quotas.Request]
+		healthSignals HealthSignalAggregator
 		persistence   ExecutionManager
 	}
 
 	taskPersistenceClient struct {
 		metricEmitter
-		healthSignals aggregate.SignalAggregator[quotas.Request]
+		healthSignals HealthSignalAggregator
 		persistence   TaskManager
 	}
 
 	metadataPersistenceClient struct {
 		metricEmitter
-		healthSignals aggregate.SignalAggregator[quotas.Request]
+		healthSignals HealthSignalAggregator
 		persistence   MetadataManager
 	}
 
 	clusterMetadataPersistenceClient struct {
 		metricEmitter
-		healthSignals aggregate.SignalAggregator[quotas.Request]
+		healthSignals HealthSignalAggregator
 		persistence   ClusterMetadataManager
 	}
 
 	queuePersistenceClient struct {
 		metricEmitter
-		healthSignals aggregate.SignalAggregator[quotas.Request]
+		healthSignals HealthSignalAggregator
 		persistence   Queue
 	}
 )
@@ -92,7 +91,7 @@ var _ ClusterMetadataManager = (*clusterMetadataPersistenceClient)(nil)
 var _ Queue = (*queuePersistenceClient)(nil)
 
 // NewShardPersistenceMetricsClient creates a client to manage shards
-func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler metrics.Handler, healthSignals aggregate.SignalAggregator[quotas.Request], logger log.Logger) ShardManager {
+func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) ShardManager {
 	return &shardPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -104,7 +103,7 @@ func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler m
 }
 
 // NewExecutionPersistenceMetricsClient creates a client to manage executions
-func NewExecutionPersistenceMetricsClient(persistence ExecutionManager, metricsHandler metrics.Handler, healthSignals aggregate.SignalAggregator[quotas.Request], logger log.Logger) ExecutionManager {
+func NewExecutionPersistenceMetricsClient(persistence ExecutionManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) ExecutionManager {
 	return &executionPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -116,7 +115,7 @@ func NewExecutionPersistenceMetricsClient(persistence ExecutionManager, metricsH
 }
 
 // NewTaskPersistenceMetricsClient creates a client to manage tasks
-func NewTaskPersistenceMetricsClient(persistence TaskManager, metricsHandler metrics.Handler, healthSignals aggregate.SignalAggregator[quotas.Request], logger log.Logger) TaskManager {
+func NewTaskPersistenceMetricsClient(persistence TaskManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) TaskManager {
 	return &taskPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -128,7 +127,7 @@ func NewTaskPersistenceMetricsClient(persistence TaskManager, metricsHandler met
 }
 
 // NewMetadataPersistenceMetricsClient creates a MetadataManager client to manage metadata
-func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricsHandler metrics.Handler, healthSignals aggregate.SignalAggregator[quotas.Request], logger log.Logger) MetadataManager {
+func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) MetadataManager {
 	return &metadataPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -140,7 +139,7 @@ func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricsHan
 }
 
 // NewClusterMetadataPersistenceMetricsClient creates a ClusterMetadataManager client to manage cluster metadata
-func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManager, metricsHandler metrics.Handler, healthSignals aggregate.SignalAggregator[quotas.Request], logger log.Logger) ClusterMetadataManager {
+func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -152,7 +151,7 @@ func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManag
 }
 
 // NewQueuePersistenceMetricsClient creates a client to manage queue
-func NewQueuePersistenceMetricsClient(persistence Queue, metricsHandler metrics.Handler, healthSignals aggregate.SignalAggregator[quotas.Request], logger log.Logger) Queue {
+func NewQueuePersistenceMetricsClient(persistence Queue, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) Queue {
 	return &queuePersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
@@ -860,7 +859,7 @@ func recordMetricsAndSignalsFn(
 	shardID int32,
 	scope string,
 	emitter metricEmitter,
-	healthSignals aggregate.SignalAggregator[quotas.Request],
+	healthSignals HealthSignalAggregator,
 	err error,
 ) func(error) {
 	startTime := time.Now().UTC()

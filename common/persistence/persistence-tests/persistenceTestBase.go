@@ -33,9 +33,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/aggregate"
-	"go.temporal.io/server/common/quotas"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -55,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/environment"
@@ -100,8 +98,8 @@ type (
 		TaskIDGenerator           TransferTaskIDGenerator
 		ClusterMetadata           cluster.Metadata
 		SearchAttributesManager   searchattribute.Manager
-		PersistenceHealthSignals  aggregate.SignalAggregator[quotas.Request]
 		PersistenceRateLimiter    quotas.RequestRateLimiter
+		PersistenceHealthSignals  persistence.HealthSignalAggregator
 		ReadLevel                 int64
 		ReplicationReadLevel      int64
 		DefaultTestCluster        PersistenceTestCluster
@@ -193,7 +191,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		clusterMetadataConfig = cluster.NewTestClusterMetadataConfig(false, false)
 	}
 	if s.PersistenceHealthSignals == nil {
-		s.PersistenceHealthSignals = aggregate.NoopPersistenceHealthSignalAggregator
+		s.PersistenceHealthSignals = persistence.NoopHealthSignalAggregator
 	}
 
 	clusterName := clusterMetadataConfig.CurrentClusterName

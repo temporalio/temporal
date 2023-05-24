@@ -22,26 +22,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package aggregate
+package persistence
 
-import "go.temporal.io/server/common/quotas"
-
-var NoopPersistenceHealthSignalAggregator SignalAggregator[quotas.Request] = newNoopSignalAggregator[quotas.Request]()
-
-type (
-	noopSignalAggregator[T any] struct{}
+import (
+	"go.temporal.io/server/common/quotas"
 )
 
-func newNoopSignalAggregator[T any]() *noopSignalAggregator[T] { return &noopSignalAggregator[T]{} }
+var NoopHealthSignalAggregator HealthSignalAggregator = newNoopSignalAggregator()
 
-func (a *noopSignalAggregator[T]) GetRecordFn(T) func(error) {
+type (
+	noopSignalAggregator struct{}
+)
+
+func newNoopSignalAggregator() *noopSignalAggregator { return &noopSignalAggregator{} }
+
+func (a *noopSignalAggregator) GetRecordFn(_ quotas.Request) func(error) {
 	return func(error) {}
 }
 
-func (a *noopSignalAggregator[T]) AverageLatency(T) float64 {
+func (a *noopSignalAggregator) AverageLatency() float64 {
 	return 0
 }
 
-func (*noopSignalAggregator[T]) ErrorRatio(T) float64 {
+func (*noopSignalAggregator) ErrorRatio() float64 {
 	return 0
 }
