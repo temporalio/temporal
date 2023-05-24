@@ -39,7 +39,7 @@ const (
 )
 
 func BenchmarkRingMovingWindowAvg(b *testing.B) {
-	avg := NewMovingWindowAvgImpl(testWindowSize, testBufferSize)
+	avg := newMovingWindowAvgImpl(testWindowSize, testBufferSize)
 	for i := 0; i < b.N; i++ {
 		avg.Record(rand.Int63())
 		avg.Average()

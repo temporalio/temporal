@@ -36,7 +36,6 @@ import (
 
 type (
 	PersistenceHealthSignalAggregator[K SignalKey] struct {
-		SignalAggregator[quotas.Request]
 		keyMapper SignalKeyMapperFn[quotas.Request, K]
 
 		totalRequests     map[K]*atomic.Int64
@@ -147,7 +146,7 @@ func (s *PersistenceHealthSignalAggregator[K]) getOrInitAverage(
 		return avg
 	}
 
-	newAvg := NewMovingWindowAvgImpl(s.windowSize, s.maxBufferSize)
+	newAvg := newMovingWindowAvgImpl(s.windowSize, s.maxBufferSize)
 
 	lock.Lock()
 	defer lock.Unlock()
