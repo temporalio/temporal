@@ -977,6 +977,7 @@ func (s *versioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBu
 }
 
 func (s *versioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}) {
+	s.T().Helper()
 	select {
 	case <-ch:
 	case <-ctx.Done():
