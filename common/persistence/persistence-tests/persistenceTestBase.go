@@ -33,9 +33,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/aggregate"
-	"go.temporal.io/server/common/quotas"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -100,7 +97,7 @@ type (
 		TaskIDGenerator           TransferTaskIDGenerator
 		ClusterMetadata           cluster.Metadata
 		SearchAttributesManager   searchattribute.Manager
-		PersistenceHealthSignals  aggregate.SignalAggregator[quotas.Request]
+		PersistenceHealthSignals  persistence.HealthSignalAggregator
 		ReadLevel                 int64
 		ReplicationReadLevel      int64
 		DefaultTestCluster        PersistenceTestCluster
@@ -205,7 +202,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopMetricsHandler, s.Logger, aggregate.NoopPersistenceHealthSignalAggregator)
+	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopMetricsHandler, s.Logger, persistence.NoopHealthSignalAggregator)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)

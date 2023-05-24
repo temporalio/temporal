@@ -31,7 +31,6 @@ import (
 	"os"
 	"time"
 
-	"go.temporal.io/server/common/aggregate"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -220,8 +219,8 @@ func NamespaceRegistryProvider(
 func PersistenceHealthSignalAggregatorProvider(
 	dynamicCollection *dynamicconfig.Collection,
 	metricsHandler metrics.Handler,
-) aggregate.SignalAggregator[quotas.Request] {
-	return persistenceClient.NewPerShardPerNsHealthSignalAggregator(
+) persistence.HealthSignalAggregator {
+	return persistence.NewHealthSignalAggregatorImpl(
 		dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 3*time.Second),
 		dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 500),
 		metricsHandler,
