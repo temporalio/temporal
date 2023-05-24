@@ -282,7 +282,7 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 	// For poll, only the latest version in the compatible set can get tasks.
 	// Find the version set that this worker is in.
 	// Note data may be nil here, findVersion will return -1 then.
-	setIdx, _ := findVersion(data, caps.BuildId)
+	setIdx, indexInSet := findVersion(data, caps.BuildId)
 	if setIdx < 0 {
 		// A poller is using a build ID but we don't know about that build ID. This can happen
 		// in a replication scenario if pollers are running on the passive side before the data
@@ -297,9 +297,9 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 		return guessedSetId, nil
 	}
 	set := data.VersionSets[setIdx]
-	latestInSet := set.BuildIds[len(set.BuildIds)-1].Id
-	if caps.BuildId != latestInSet {
-		return "", serviceerror.NewNewerBuildExists(latestInSet)
+	lastIndex := len(set.BuildIds) - 1
+	if indexInSet != lastIndex {
+		return "", serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
 	}
 	return getSetID(set), nil
 }
@@ -309,7 +309,7 @@ func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *common
 	// For poll, only the latest version in the compatible set can get tasks.
 	// Find the version set that this worker is in.
 	// Note data may be nil here, findVersion will return -1 then.
-	setIdx, _ := findVersion(data, caps.BuildId)
+	setIdx, indexInSet := findVersion(data, caps.BuildId)
 	if setIdx < 0 {
 		// A poller is using a build ID but we don't know about that build ID. See comments in
 		// lookupVersionSetForPoll. If we consider it the default for its set, then we should
@@ -317,9 +317,9 @@ func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *common
 		return nil
 	}
 	set := data.VersionSets[setIdx]
-	latestInSet := set.BuildIds[len(set.BuildIds)-1].Id
-	if caps.BuildId != latestInSet {
-		return serviceerror.NewNewerBuildExists(latestInSet)
+	lastIndex := len(set.BuildIds) - 1
+	if indexInSet != lastIndex {
+		return serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
 	}
 	return nil
 }
@@ -368,17 +368,15 @@ func checkVersionForStickyAdd(data *persistencespb.VersioningData, buildId strin
 	}
 	// For add, any version in the compatible set maps to the set.
 	// Note data may be nil here, findVersion will return -1 then.
-	setIdx, _ := findVersion(data, buildId)
+	setIdx, indexInSet := findVersion(data, buildId)
 	if setIdx < 0 {
 		// A poller is using a build ID but we don't know about that build ID. See comments in
 		// lookupVersionSetForAdd. If we consider it the default for its set, then we should
 		// leave it on the sticky queue here.
 		return nil
 	}
-	set := data.VersionSets[setIdx]
-	latestInSet := set.BuildIds[len(set.BuildIds)-1].Id
 	// If this is not the set's default anymore, we need to kick it back to the regular queue.
-	if buildId != latestInSet {
+	if indexInSet != len(data.VersionSets[setIdx].BuildIds)-1 {
 		return serviceerrors.NewStickyWorkerUnavailable()
 	}
 	return nil
