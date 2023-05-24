@@ -230,6 +230,21 @@ func (c *retryableClient) QueryWorkflow(
 	return resp, err
 }
 
+func (c *retryableClient) ReplicateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.ReplicateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
+	var resp *matchingservice.ReplicateTaskQueueUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ReplicateTaskQueueUserData(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
@@ -239,6 +254,21 @@ func (c *retryableClient) RespondQueryTaskCompleted(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
+	var resp *matchingservice.UpdateTaskQueueUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateTaskQueueUserData(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -59,6 +60,7 @@ type (
 		userDataChanged chan struct{}
 		store           persistence.TaskManager
 		logger          log.Logger
+		matchingClient  matchingservice.MatchingServiceClient
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -84,7 +86,14 @@ var (
 //   - To provide the guarantee that there is only writer who updates taskQueue in persistence at any given point in time
 //     This guarantee makes some of the other code simpler and there is no impact to perf because updates to taskqueue are
 //     spread out and happen in background routines
-func newTaskQueueDB(store persistence.TaskManager, namespaceID namespace.ID, taskQueue *taskQueueID, kind enumspb.TaskQueueKind, logger log.Logger) *taskQueueDB {
+func newTaskQueueDB(
+	store persistence.TaskManager,
+	matchingClient matchingservice.MatchingServiceClient,
+	namespaceID namespace.ID,
+	taskQueue *taskQueueID,
+	kind enumspb.TaskQueueKind,
+	logger log.Logger,
+) *taskQueueDB {
 	return &taskQueueDB{
 		namespaceID:     namespaceID,
 		taskQueue:       taskQueue,
@@ -92,6 +101,7 @@ func newTaskQueueDB(store persistence.TaskManager, namespaceID namespace.ID, tas
 		store:           store,
 		logger:          logger,
 		userDataChanged: make(chan struct{}),
+		matchingClient:  matchingClient,
 	}
 }
 
@@ -336,6 +346,8 @@ func (db *taskQueueDB) getUserDataLocked(
 // Note that the user data's clock may be nil and should be initialized externally where there's access to the cluster
 // metadata and the cluster ID can be obtained.
 //
+// The DB write is performed remotely on an owning node for all user data updates in the namespace.
+//
 // On success returns a pointer to the updated data, which must *not* be mutated.
 func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error), taskQueueLimitPerBuildId int) (*persistencespb.VersionedTaskQueueUserData, error) {
 	if !db.taskQueue.OwnsUserData() {
@@ -375,8 +387,8 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 		}
 	}
 
-	err = db.store.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID:     db.namespaceID.String(),
+	_, err = db.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
+		NamespaceId:     db.namespaceID.String(),
 		TaskQueue:       db.cachedQueueInfo().Name,
 		UserData:        &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion(), Data: updatedUserData},
 		BuildIdsAdded:   added,
