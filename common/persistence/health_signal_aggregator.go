@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -148,7 +149,8 @@ func isUnhealthyError(err error) bool {
 	switch err.(type) {
 	case *ShardOwnershipLostError,
 		*AppendHistoryTimeoutError,
-		*TimeoutError:
+		*TimeoutError,
+		*serviceerror.Unavailable:
 		return true
 
 	default:

@@ -1275,7 +1275,7 @@ func (p *metricEmitter) recordRequestMetrics(operation string, caller string, st
 }
 
 func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation string, err error) {
-	if err != nil {
+	if err != nil && handler != metrics.NoopMetricsHandler {
 		handler.Counter(metrics.PersistenceErrorWithType.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 		switch err := err.(type) {
 		case *ShardAlreadyExistError,

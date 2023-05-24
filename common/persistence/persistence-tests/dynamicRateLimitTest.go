@@ -27,12 +27,15 @@ package persistencetests
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -50,22 +53,24 @@ type (
 
 		ctx    context.Context
 		cancel context.CancelFunc
+
+		rateLimiter *client.HealthRequestRateLimiterImpl
 	}
 )
 
 func (s *DynamicRateLimitSuite) SetupSuite() {
 	healthSignals := persistence.NewHealthSignalAggregatorImpl(
-		dynamicconfig.GetDurationPropertyFn(3*time.Second),
-		dynamicconfig.GetIntPropertyFn(100),
+		dynamicconfig.GetDurationPropertyFn(30*time.Second),
+		dynamicconfig.GetIntPropertyFn(1000),
 		metrics.NoopMetricsHandler,
 	)
 
 	rateLimiter := client.NewHealthRequestRateLimiterImpl(
 		healthSignals,
-		3*time.Second,
+		50*time.Millisecond,
 		func() float64 { return float64(200) },
 		100,
-		0.5,
+		0.3,
 		0.3,
 		0.1,
 	)
@@ -73,6 +78,7 @@ func (s *DynamicRateLimitSuite) SetupSuite() {
 	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{FaultInjection: &config.FaultInjection{Rate: 0.0}})
 	s.TestBase.PersistenceHealthSignals = healthSignals
 	s.TestBase.PersistenceRateLimiter = rateLimiter
+	s.rateLimiter = rateLimiter
 
 	s.TestBase.Setup(nil)
 }
@@ -93,10 +99,14 @@ func (s *DynamicRateLimitSuite) TearDownTest() {
 
 func (s *DynamicRateLimitSuite) TestNamespaceReplicationQueue() {
 	s.TestBase.FaultInjection.UpdateRate(0.5)
+	shouldError := true
+
+	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
+		WithBackoffCoefficient(1.5).
+		WithMaximumAttempts(5)
 
 	numMessages := 100
 	concurrentSenders := 10
-	maxAttempts := 5
 
 	messageChan := make(chan *replicationspb.ReplicationTask)
 
@@ -122,15 +132,27 @@ func (s *DynamicRateLimitSuite) TestNamespaceReplicationQueue() {
 		go func(senderNum int) {
 			defer wg.Done()
 			for message := range messageChan {
-				var err error
-				for n := 0; n < maxAttempts; n++ {
-					err = s.Publish(s.ctx, message)
-					if err == nil {
-						break
-					}
-					time.Sleep(5 * time.Second)
-				}
+				err := backoff.ThrottleRetry(
+					func() error {
+						return s.NamespaceReplicationQueue.Publish(s.ctx, message)
+					},
+					retryPolicy,
+					func(e error) bool {
+						if isMessageIDConflictError(e) {
+							return true
+						}
+						if shouldError {
+							if common.IsPersistenceTransientError(e) {
+								curMultiplier := reflect.ValueOf(*(s.rateLimiter)).FieldByName("curRateMultiplier").Float()
+								s.Less(curMultiplier, 1.0)
 
+								s.TestBase.FaultInjection.UpdateRate(0.0)
+								shouldError = false
+							}
+							return true
+						}
+						return false
+					})
 				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
 				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
@@ -138,6 +160,8 @@ func (s *DynamicRateLimitSuite) TestNamespaceReplicationQueue() {
 	}
 
 	wg.Wait()
+	curMultiplier := reflect.ValueOf(*(s.rateLimiter)).FieldByName("curRateMultiplier").Float()
+	s.Equal(1.0, curMultiplier)
 
 	result, lastRetrievedMessageID, err := s.GetReplicationMessages(s.ctx, persistence.EmptyQueueMessageID, numMessages)
 	s.Nil(err, "GetReplicationMessages failed.")
