@@ -77,6 +77,8 @@ const (
 
 	mutableStateInvalidHistoryActionMsg         = "invalid history builder state for action"
 	mutableStateInvalidHistoryActionMsgTemplate = mutableStateInvalidHistoryActionMsg + ": %v, %v"
+
+	int64SizeBytes = 8
 )
 
 var (
@@ -145,6 +147,9 @@ type (
 		// in memory only attributes
 		// indicate the current version
 		currentVersion int64
+		// running approximate total size of mutable state fields (except buffered events) when written to DB in bytes
+		// buffered events are added to this value when calling GetApproximatePersistedSize
+		approximateSize int
 		// buffer events from DB
 		bufferEventsInDB []*historypb.HistoryEvent
 		// indicates the workflow state in DB, can be used to calculate
@@ -227,6 +232,7 @@ func NewMutableState(
 		updateInfos:       make(map[string]*persistencespb.UpdateInfo),
 		updateUpdateInfos: make(map[string]*persistencespb.UpdateInfo),
 
+		approximateSize:  0,
 		currentVersion:   namespaceEntry.FailoverVersion(),
 		bufferEventsInDB: nil,
 		stateInDB:        enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
@@ -261,8 +267,10 @@ func NewMutableState(
 		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		ExecutionStats:   &persistencespb.ExecutionStats{HistorySize: 0},
 	}
+	s.approximateSize += s.executionInfo.Size()
 	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+	s.approximateSize += s.executionState.Size()
 
 	s.hBuilder = NewMutableHistoryBuilder(
 		s.timeSource,
@@ -293,9 +301,11 @@ func newMutableStateFromDB(
 
 	if dbRecord.ActivityInfos != nil {
 		mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
+		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingActivityInfoIDs)
 	}
 	for _, activityInfo := range dbRecord.ActivityInfos {
 		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduledEventId
+		mutableState.approximateSize += activityInfo.Size()
 		if (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0 {
 			// Sets last pending timer heartbeat to year 2000.
 			// This ensures at least one heartbeat task will be processed for the pending activity.
@@ -306,28 +316,52 @@ func newMutableStateFromDB(
 	if dbRecord.TimerInfos != nil {
 		mutableState.pendingTimerInfoIDs = dbRecord.TimerInfos
 	}
-	for _, timerInfo := range dbRecord.TimerInfos {
+	for timerID, timerInfo := range dbRecord.TimerInfos {
 		mutableState.pendingTimerEventIDToID[timerInfo.GetStartedEventId()] = timerInfo.GetTimerId()
+		mutableState.approximateSize += timerInfo.Size()
+		mutableState.approximateSize += len(timerID)
 	}
 
 	if dbRecord.ChildExecutionInfos != nil {
 		mutableState.pendingChildExecutionInfoIDs = dbRecord.ChildExecutionInfos
+		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingChildExecutionInfoIDs)
+	}
+	for _, childInfo := range dbRecord.ChildExecutionInfos {
+		mutableState.approximateSize += childInfo.Size()
 	}
 
 	if dbRecord.RequestCancelInfos != nil {
 		mutableState.pendingRequestCancelInfoIDs = dbRecord.RequestCancelInfos
+		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingRequestCancelInfoIDs)
+	}
+	for _, cancelInfo := range dbRecord.RequestCancelInfos {
+		mutableState.approximateSize += cancelInfo.Size()
 	}
 
 	if dbRecord.SignalInfos != nil {
 		mutableState.pendingSignalInfoIDs = dbRecord.SignalInfos
+		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingSignalInfoIDs)
+	}
+	for _, signalInfo := range dbRecord.SignalInfos {
+		mutableState.approximateSize += signalInfo.Size()
 	}
 
 	if dbRecord.UpdateInfos != nil {
 		mutableState.updateInfos = dbRecord.UpdateInfos
 	}
+	for updateID, updateInfo := range dbRecord.UpdateInfos {
+		mutableState.approximateSize += updateInfo.Size()
+		mutableState.approximateSize += len(updateID)
+	}
 
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
+	for requestID := range mutableState.pendingSignalRequestedIDs {
+		mutableState.approximateSize += len(requestID)
+	}
+
+	mutableState.approximateSize += dbRecord.ExecutionState.Size() - mutableState.executionState.Size()
 	mutableState.executionState = dbRecord.ExecutionState
+	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
 	mutableState.hBuilder = NewMutableHistoryBuilder(
@@ -1066,7 +1100,8 @@ func (ms *MutableStateImpl) DeletePendingChildExecution(
 	initiatedEventID int64,
 ) error {
 
-	if _, ok := ms.pendingChildExecutionInfoIDs[initiatedEventID]; ok {
+	if prev, ok := ms.pendingChildExecutionInfoIDs[initiatedEventID]; ok {
+		ms.approximateSize -= prev.Size() + int64SizeBytes
 		delete(ms.pendingChildExecutionInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1087,7 +1122,8 @@ func (ms *MutableStateImpl) DeletePendingRequestCancel(
 	initiatedEventID int64,
 ) error {
 
-	if _, ok := ms.pendingRequestCancelInfoIDs[initiatedEventID]; ok {
+	if prev, ok := ms.pendingRequestCancelInfoIDs[initiatedEventID]; ok {
+		ms.approximateSize -= prev.Size() + int64SizeBytes
 		delete(ms.pendingRequestCancelInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1108,7 +1144,8 @@ func (ms *MutableStateImpl) DeletePendingSignal(
 	initiatedEventID int64,
 ) error {
 
-	if _, ok := ms.pendingSignalInfoIDs[initiatedEventID]; ok {
+	if prev, ok := ms.pendingSignalInfoIDs[initiatedEventID]; ok {
+		ms.approximateSize -= prev.Size() + int64SizeBytes
 		delete(ms.pendingSignalInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1153,11 +1190,15 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ai *persistencespb.ActivityInfo,
 	request *workflowservice.RecordActivityTaskHeartbeatRequest,
 ) {
+	if prev, existed := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; existed {
+		ms.approximateSize -= prev.Size()
+	}
 	ai.Version = ms.GetCurrentVersion()
 	ai.LastHeartbeatDetails = request.Details
 	now := ms.timeSource.Now()
 	ai.LastHeartbeatUpdateTime = &now
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
 
@@ -1174,6 +1215,8 @@ func (ms *MutableStateImpl) ReplicateActivityInfo(
 		)
 		return ErrMissingActivityInfo
 	}
+
+	ms.approximateSize -= ai.Size()
 
 	ai.Version = request.GetVersion()
 	ai.ScheduledTime = request.GetScheduledTime()
@@ -1194,6 +1237,7 @@ func (ms *MutableStateImpl) ReplicateActivityInfo(
 	}
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -1202,7 +1246,8 @@ func (ms *MutableStateImpl) UpdateActivity(
 	ai *persistencespb.ActivityInfo,
 ) error {
 
-	if _, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; !ok {
+	prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]
+	if !ok {
 		ms.logError(
 			fmt.Sprintf("unable to find activity ID: %v in mutable state", ai.ActivityId),
 			tag.ErrorTypeInvalidMutableStateAction,
@@ -1212,6 +1257,7 @@ func (ms *MutableStateImpl) UpdateActivity(
 
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size() - prev.Size()
 	return nil
 }
 
@@ -1238,6 +1284,7 @@ func (ms *MutableStateImpl) DeleteActivity(
 	if activityInfo, ok := ms.pendingActivityInfoIDs[scheduledEventID]; ok {
 		delete(ms.pendingActivityInfoIDs, scheduledEventID)
 		delete(ms.pendingActivityTimerHeartbeats, scheduledEventID)
+		ms.approximateSize -= activityInfo.Size() + int64SizeBytes
 
 		if _, ok = ms.pendingActivityIDToEventID[activityInfo.ActivityId]; ok {
 			delete(ms.pendingActivityIDToEventID, activityInfo.ActivityId)
@@ -1319,6 +1366,7 @@ func (ms *MutableStateImpl) DeleteUserTimer(
 
 	if timerInfo, ok := ms.pendingTimerInfoIDs[timerID]; ok {
 		delete(ms.pendingTimerInfoIDs, timerID)
+		ms.approximateSize -= timerInfo.Size() + len(timerID)
 
 		if _, ok = ms.pendingTimerEventIDToID[timerInfo.GetStartedEventId()]; ok {
 			delete(ms.pendingTimerEventIDToID, timerInfo.GetStartedEventId())
@@ -1496,6 +1544,16 @@ func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
 	return false
 }
 
+// GetApproximatePersistedSize returns approximate size of in-memory objects that will be written to
+// persistence + size of buffered events in history builder if they will not be flushed
+func (ms *MutableStateImpl) GetApproximatePersistedSize() int {
+	// include buffered events in the size if they will not be flushed
+	if ms.BufferSizeAcceptable() && ms.HasStartedWorkflowTask() {
+		return ms.approximateSize + ms.hBuilder.SizeInBytesOfBufferedEvents()
+	}
+	return ms.approximateSize
+}
+
 func (ms *MutableStateImpl) AddSignalRequested(
 	requestID string,
 ) {
@@ -1508,6 +1566,7 @@ func (ms *MutableStateImpl) AddSignalRequested(
 	}
 	ms.pendingSignalRequestedIDs[requestID] = struct{}{} // add requestID to set
 	ms.updateSignalRequestedIDs[requestID] = struct{}{}
+	ms.approximateSize += len(requestID)
 }
 
 func (ms *MutableStateImpl) DeleteSignalRequested(
@@ -1517,6 +1576,7 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	delete(ms.pendingSignalRequestedIDs, requestID)
 	delete(ms.updateSignalRequestedIDs, requestID)
 	ms.deleteSignalRequestedIDs[requestID] = struct{}{}
+	ms.approximateSize -= len(requestID)
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -1712,6 +1772,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	startEvent *historypb.HistoryEvent,
 ) error {
 
+	ms.approximateSize -= ms.executionInfo.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.executionState.CreateRequestId = requestID
 	ms.executionState.RunId = execution.GetRunId()
@@ -1808,6 +1869,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
 
+	ms.approximateSize += ms.executionInfo.Size()
 	ms.writeEventToCache(startEvent)
 	return nil
 }
@@ -2147,6 +2209,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size() + int64SizeBytes
 	ms.executionInfo.ActivityCount++
 
 	ms.writeEventToCache(event)
@@ -2232,11 +2295,14 @@ func (ms *MutableStateImpl) ReplicateActivityTaskStartedEvent(
 		return ErrMissingActivityInfo
 	}
 
+	ms.approximateSize -= ai.Size()
+
 	ai.Version = event.GetVersion()
 	ai.StartedEventId = event.GetEventId()
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -2452,6 +2518,8 @@ func (ms *MutableStateImpl) ReplicateActivityTaskCancelRequestedEvent(
 		return nil
 	}
 
+	ms.approximateSize -= ai.Size()
+
 	ai.Version = event.GetVersion()
 
 	// - We have the activity dispatched to worker.
@@ -2461,6 +2529,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskCancelRequestedEvent(
 
 	ai.CancelRequestId = event.GetEventId()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.approximateSize += ai.Size()
 	return nil
 }
 
@@ -2780,6 +2849,7 @@ func (ms *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionIniti
 
 	ms.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
 	ms.updateRequestCancelInfos[rci.InitiatedEventId] = rci
+	ms.approximateSize += rci.Size() + int64SizeBytes
 	ms.executionInfo.RequestCancelExternalCount++
 
 	ms.writeEventToCache(event)
@@ -2920,6 +2990,7 @@ func (ms *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEve
 
 	ms.pendingSignalInfoIDs[si.InitiatedEventId] = si
 	ms.updateSignalInfos[si.InitiatedEventId] = si
+	ms.approximateSize += si.Size() + int64SizeBytes
 	ms.executionInfo.SignalExternalCount++
 
 	ms.writeEventToCache(event)
@@ -2949,7 +3020,9 @@ func (ms *MutableStateImpl) ReplicateUpsertWorkflowSearchAttributesEvent(
 	event *historypb.HistoryEvent,
 ) {
 	upsertSearchAttr := event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
+	ms.approximateSize -= ms.executionInfo.Size()
 	ms.executionInfo.SearchAttributes = payload.MergeMapOfPayload(ms.executionInfo.SearchAttributes, upsertSearchAttr)
+	ms.approximateSize += ms.executionInfo.Size()
 }
 
 func (ms *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
@@ -2976,7 +3049,9 @@ func (ms *MutableStateImpl) ReplicateWorkflowPropertiesModifiedEvent(
 	attr := event.GetWorkflowPropertiesModifiedEventAttributes()
 	if attr.UpsertedMemo != nil {
 		upsertMemo := attr.GetUpsertedMemo().GetFields()
+		ms.approximateSize -= ms.executionInfo.Size()
 		ms.executionInfo.Memo = payload.MergeMapOfPayload(ms.executionInfo.Memo, upsertMemo)
+		ms.approximateSize += ms.executionInfo.Size()
 	}
 }
 
@@ -3125,6 +3200,7 @@ func (ms *MutableStateImpl) ReplicateTimerStartedEvent(
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
 	ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
 	ms.updateTimerInfos[ti.TimerId] = ti
+	ms.approximateSize += ti.Size() + len(ti.TimerId)
 	ms.executionInfo.UserTimerCount++
 
 	return ti, nil
@@ -3280,6 +3356,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateAcceptedEvent(
 	if attrs == nil {
 		return serviceerror.NewInternal("wrong event type in call to ReplicateworkflowExecutionUpdateAcceptedEvent")
 	}
+
 	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
 	ui := persistencespb.UpdateInfo{
 		Value: &persistencespb.UpdateInfo_AcceptancePointer{
@@ -3292,6 +3369,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateAcceptedEvent(
 	ms.updateUpdateInfos[updateID] = &ui
 	if !existed {
 		ms.executionInfo.UpdateCount++
+		ms.approximateSize += ui.Size() + len(updateID)
 	}
 
 	ms.writeEventToCache(event)
@@ -3345,6 +3423,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
 	ms.updateUpdateInfos[updateID] = &ui
 	if !existed {
 		ms.executionInfo.UpdateCount++
+		ms.approximateSize += ui.Size() + len(updateID)
 	}
 
 	ms.writeEventToCache(event)
@@ -3586,6 +3665,7 @@ func (ms *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 
 	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
+	ms.approximateSize += ci.Size() + int64SizeBytes
 	ms.executionInfo.ChildExecutionCount++
 
 	ms.writeEventToCache(event)
@@ -3646,10 +3726,13 @@ func (ms *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 		return ErrMissingChildWorkflowInfo
 	}
 
+	ms.approximateSize -= ci.Size()
+
 	ci.StartedEventId = event.GetEventId()
 	ci.StartedRunId = attributes.GetWorkflowExecution().GetRunId()
 	ci.Clock = clock
 	ms.updateChildExecutionInfos[ci.InitiatedEventId] = ci
+	ms.approximateSize += ci.Size()
 
 	return nil
 }
@@ -3969,6 +4052,10 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
 	}
 
+	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
+		ms.approximateSize -= prev.Size()
+	}
+
 	now := ms.timeSource.Now()
 
 	backoffInterval, retryState := getBackoffInterval(
@@ -4005,6 +4092,7 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+	ms.approximateSize += ai.Size()
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 

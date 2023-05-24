@@ -160,6 +160,10 @@ const (
 	MutableStateActivityFailureSizeLimitError = "limit.mutableStateActivityFailureSize.error"
 	// MutableStateActivityFailureSizeLimitWarn is the per activity failure size warning limit for workflow mutable state
 	MutableStateActivityFailureSizeLimitWarn = "limit.mutableStateActivityFailureSize.warn"
+	// MutableStateSizeLimitError is the per workflow execution mutable state size limit in bytes
+	MutableStateSizeLimitError = "limit.mutableStateSize.error"
+	// MutableStateSizeLimitWarn is the per workflow execution mutable state size limit in bytes for warning
+	MutableStateSizeLimitWarn = "limit.mutableStateSize.warn"
 	// HistoryCountSuggestContinueAsNew is the workflow execution history event count limit to
 	// suggest continue-as-new (in workflow task started event)
 	HistoryCountSuggestContinueAsNew = "limit.historyCount.suggestContinueAsNew"

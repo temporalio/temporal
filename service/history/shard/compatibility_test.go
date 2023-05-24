@@ -36,6 +36,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -302,9 +303,9 @@ func (s *compatibilitySuite) TestStoreShardInfoCompatibilityCheckWithoutReplicat
 	s.EqualShardInfo(expectedMemShardInfo, actualMemShardInfo)
 }
 
-func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_OnlyQueueAckLevel() {
+func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_OnlyQueueAckLevel_8_4() {
 	allClusterInfo := cluster.TestAllClusterInfo
-	shardID := rand.Int31()
+	shardID := rand.Int31n(allClusterInfo[cluster.TestCurrentClusterName].ShardCount) + 1
 	replicationAckTaskID := rand.Int63()
 	persistenceShardInfo := &persistencespb.ShardInfo{
 		ShardId: shardID,
@@ -326,7 +327,11 @@ func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_
 			tasks.CategoryIDReplication: {
 				ExclusiveReaderHighWatermark: nil,
 				ReaderStates: map[int64]*persistencespb.QueueReaderState{
-					ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, shardID): {
+					ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, common.MapShardID(
+						allClusterInfo[cluster.TestCurrentClusterName].ShardCount,
+						allClusterInfo[cluster.TestAlternativeClusterName].ShardCount,
+						shardID,
+					)[0]): {
 						Scopes: []*persistencespb.QueueSliceScope{{
 							Range: &persistencespb.QueueSliceRange{
 								InclusiveMin: &persistencespb.TaskKey{
@@ -348,14 +353,91 @@ func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_
 			},
 		},
 	}
-	actualMemShardInfo := loadShardInfoCompatibilityCheckWithReplication(allClusterInfo, copyShardInfo(persistenceShardInfo))
+	actualMemShardInfo := loadShardInfoCompatibilityCheckWithReplication(cluster.TestCurrentClusterName, allClusterInfo, copyShardInfo(persistenceShardInfo))
+	actualMemShardInfo.QueueAckLevels = map[int32]*persistencespb.QueueAckLevel{}
+	s.EqualShardInfo(expectedMemShardInfo, actualMemShardInfo)
+}
+
+func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_OnlyQueueAckLevel_4_8() {
+	allClusterInfo := cluster.TestAllClusterInfo
+	shardID := rand.Int31n(allClusterInfo[cluster.TestAlternativeClusterName].ShardCount) + 1
+	replicationAckTaskID := rand.Int63()
+	persistenceShardInfo := &persistencespb.ShardInfo{
+		ShardId: shardID,
+		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+			tasks.CategoryIDReplication: {
+				AckLevel: 0,
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName: replicationAckTaskID,
+				},
+			},
+		},
+		QueueStates: make(map[int32]*persistencespb.QueueState),
+	}
+
+	expectedMemShardInfo := &persistencespb.ShardInfo{
+		ShardId:        shardID,
+		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{},
+		QueueStates: map[int32]*persistencespb.QueueState{
+			tasks.CategoryIDReplication: {
+				ExclusiveReaderHighWatermark: nil,
+				ReaderStates: map[int64]*persistencespb.QueueReaderState{
+					ReplicationReaderIDFromClusterShardID(cluster.TestCurrentClusterInitialFailoverVersion, common.MapShardID(
+						allClusterInfo[cluster.TestAlternativeClusterName].ShardCount,
+						allClusterInfo[cluster.TestCurrentClusterName].ShardCount,
+						shardID,
+					)[0]): {
+						Scopes: []*persistencespb.QueueSliceScope{{
+							Range: &persistencespb.QueueSliceRange{
+								InclusiveMin: &persistencespb.TaskKey{
+									FireTime: timestamp.TimePtr(time.Unix(0, 0)),
+									TaskId:   replicationAckTaskID + 1,
+								},
+								ExclusiveMax: &persistencespb.TaskKey{
+									FireTime: timestamp.TimePtr(time.Unix(0, 0)),
+									TaskId:   math.MaxInt64,
+								},
+							},
+							Predicate: &persistencespb.Predicate{
+								PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+								Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+							},
+						}},
+					},
+					ReplicationReaderIDFromClusterShardID(cluster.TestCurrentClusterInitialFailoverVersion, common.MapShardID(
+						allClusterInfo[cluster.TestAlternativeClusterName].ShardCount,
+						allClusterInfo[cluster.TestCurrentClusterName].ShardCount,
+						shardID,
+					)[1]): {
+						Scopes: []*persistencespb.QueueSliceScope{{
+							Range: &persistencespb.QueueSliceRange{
+								InclusiveMin: &persistencespb.TaskKey{
+									FireTime: timestamp.TimePtr(time.Unix(0, 0)),
+									TaskId:   replicationAckTaskID + 1,
+								},
+								ExclusiveMax: &persistencespb.TaskKey{
+									FireTime: timestamp.TimePtr(time.Unix(0, 0)),
+									TaskId:   math.MaxInt64,
+								},
+							},
+							Predicate: &persistencespb.Predicate{
+								PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+								Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+							},
+						}},
+					},
+				},
+			},
+		},
+	}
+	actualMemShardInfo := loadShardInfoCompatibilityCheckWithReplication(cluster.TestAlternativeClusterName, allClusterInfo, copyShardInfo(persistenceShardInfo))
 	actualMemShardInfo.QueueAckLevels = map[int32]*persistencespb.QueueAckLevel{}
 	s.EqualShardInfo(expectedMemShardInfo, actualMemShardInfo)
 }
 
 func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_OnlyQueueState() {
 	allClusterInfo := cluster.TestAllClusterInfo
-	shardID := rand.Int31()
+	shardID := rand.Int31n(allClusterInfo[cluster.TestCurrentClusterName].ShardCount) + 1
 	replicationAckTaskID := rand.Int63()
 	persistenceShardInfo := &persistencespb.ShardInfo{
 		ShardId:        shardID,
@@ -364,7 +446,11 @@ func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_
 			tasks.CategoryIDReplication: {
 				ExclusiveReaderHighWatermark: nil,
 				ReaderStates: map[int64]*persistencespb.QueueReaderState{
-					ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, shardID): {
+					ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, common.MapShardID(
+						allClusterInfo[cluster.TestCurrentClusterName].ShardCount,
+						allClusterInfo[cluster.TestAlternativeClusterName].ShardCount,
+						shardID,
+					)[0]): {
 						Scopes: []*persistencespb.QueueSliceScope{{
 							Range: &persistencespb.QueueSliceRange{
 								InclusiveMin: &persistencespb.TaskKey{
@@ -388,14 +474,14 @@ func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_
 	}
 
 	expectedMemShardInfo := copyShardInfo(persistenceShardInfo)
-	actualMemShardInfo := loadShardInfoCompatibilityCheckWithReplication(allClusterInfo, copyShardInfo(persistenceShardInfo))
+	actualMemShardInfo := loadShardInfoCompatibilityCheckWithReplication(cluster.TestCurrentClusterName, allClusterInfo, copyShardInfo(persistenceShardInfo))
 	actualMemShardInfo.QueueAckLevels = map[int32]*persistencespb.QueueAckLevel{}
 	s.EqualShardInfo(expectedMemShardInfo, actualMemShardInfo)
 }
 
 func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_Both() {
 	allClusterInfo := cluster.TestAllClusterInfo
-	shardID := rand.Int31()
+	shardID := rand.Int31n(allClusterInfo[cluster.TestCurrentClusterName].ShardCount) + 1
 	ackLevelReplicationAckTaskID := rand.Int63()
 	queueStateReplicationAckTaskID := rand.Int63()
 	persistenceShardInfo := &persistencespb.ShardInfo{
@@ -412,7 +498,11 @@ func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_
 			tasks.CategoryIDReplication: {
 				ExclusiveReaderHighWatermark: nil,
 				ReaderStates: map[int64]*persistencespb.QueueReaderState{
-					ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, shardID): {
+					ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, common.MapShardID(
+						allClusterInfo[cluster.TestCurrentClusterName].ShardCount,
+						allClusterInfo[cluster.TestAlternativeClusterName].ShardCount,
+						shardID,
+					)[0]): {
 						Scopes: []*persistencespb.QueueSliceScope{{
 							Range: &persistencespb.QueueSliceRange{
 								InclusiveMin: &persistencespb.TaskKey{
@@ -442,7 +532,11 @@ func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_
 			tasks.CategoryIDReplication: {
 				ExclusiveReaderHighWatermark: nil,
 				ReaderStates: map[int64]*persistencespb.QueueReaderState{
-					ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, shardID): {
+					ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, common.MapShardID(
+						allClusterInfo[cluster.TestCurrentClusterName].ShardCount,
+						allClusterInfo[cluster.TestAlternativeClusterName].ShardCount,
+						shardID,
+					)[0]): {
 						Scopes: []*persistencespb.QueueSliceScope{{
 							Range: &persistencespb.QueueSliceRange{
 								InclusiveMin: &persistencespb.TaskKey{
@@ -464,7 +558,7 @@ func (s *compatibilitySuite) TestLoadShardInfoCompatibilityCheckWithReplication_
 			},
 		},
 	}
-	actualMemShardInfo := loadShardInfoCompatibilityCheckWithReplication(allClusterInfo, copyShardInfo(persistenceShardInfo))
+	actualMemShardInfo := loadShardInfoCompatibilityCheckWithReplication(cluster.TestCurrentClusterName, allClusterInfo, copyShardInfo(persistenceShardInfo))
 	actualMemShardInfo.QueueAckLevels = map[int32]*persistencespb.QueueAckLevel{}
 	s.EqualShardInfo(expectedMemShardInfo, actualMemShardInfo)
 }
