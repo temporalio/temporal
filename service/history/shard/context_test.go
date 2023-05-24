@@ -103,6 +103,75 @@ func (s *contextSuite) SetupTest() {
 	shardContext.engineFuture.Set(s.mockHistoryEngine, nil)
 }
 
+func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
+	now := s.timeSource.Now()
+	s.timeSource.Update(now)
+	maxReadLevel, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark()
+	s.NoError(err)
+
+	now = now.Add(time.Minute)
+	s.timeSource.Update(now)
+
+	workflowKey := definition.NewWorkflowKey(
+		tests.NamespaceID.String(),
+		tests.WorkflowID,
+		tests.RunID,
+	)
+	fakeTask := tasks.NewFakeTask(
+		workflowKey,
+		tasks.CategoryTimer,
+		time.Time{},
+	)
+	tasks := map[tasks.Category][]tasks.Task{
+		tasks.CategoryTimer: {fakeTask},
+	}
+
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(tasks).AnyTimes()
+
+	testCases := []struct {
+		taskTimestamp     time.Time
+		expectedTimestamp time.Time
+	}{
+		{
+			// task timestamp is lower than both scheduled queue max read level and now
+			// should be overwritten to be later than both
+			taskTimestamp:     maxReadLevel.FireTime.Add(-time.Minute),
+			expectedTimestamp: now.Add(persistence.ScheduledTaskMinPrecision),
+		},
+		{
+			// task timestamp is lower than now but higher than scheduled queue max read level
+			// should still be overwritten to be later than both
+			taskTimestamp:     now.Add(-time.Minute),
+			expectedTimestamp: now.Add(persistence.ScheduledTaskMinPrecision),
+		},
+		{
+			// task timestamp is later than both now and scheduled queue max read level
+			// should not be overwritten
+			taskTimestamp:     now.Add(time.Minute),
+			expectedTimestamp: now.Add(time.Minute),
+		},
+	}
+
+	for _, tc := range testCases {
+		fakeTask.SetVisibilityTime(tc.taskTimestamp)
+		err = s.mockShard.AddTasks(
+			context.Background(),
+			&persistence.AddHistoryTasksRequest{
+				ShardID:     s.mockShard.GetShardID(),
+				NamespaceID: workflowKey.NamespaceID,
+				WorkflowID:  workflowKey.WorkflowID,
+				RunID:       workflowKey.RunID,
+				Tasks:       tasks,
+			},
+		)
+		s.NoError(err)
+		s.True(fakeTask.GetVisibilityTime().After(now))
+		s.True(fakeTask.GetVisibilityTime().After(maxReadLevel.FireTime))
+		s.True(fakeTask.GetVisibilityTime().Equal(tc.expectedTimestamp))
+	}
+}
+
 func (s *contextSuite) TestAddTasks_Success() {
 	tasks := map[tasks.Category][]tasks.Task{
 		tasks.CategoryTransfer:    {&tasks.ActivityTask{}},           // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
