@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
 )
 
 type (
@@ -100,4 +101,12 @@ func marshalAny(s *integrationSuite, pb proto.Message) *types.Any {
 	a, err := types.MarshalAny(pb)
 	s.NoError(err)
 	return a
+}
+
+func decodeString(s *integrationSuite, pls *commonpb.Payloads) string {
+	s.T().Helper()
+	var str string
+	err := payloads.Decode(pls, &str)
+	s.NoError(err)
+	return str
 }
