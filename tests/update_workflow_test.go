@@ -2445,7 +2445,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
 
 	msResp, err := s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace,
-		Execution: we,
+		Execution: tv.WorkflowExecution(),
 	})
 	s.NoError(err)
 	// completion_event_batch_id should point to WTFailed event.
@@ -2553,7 +2553,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 
 	msResp, err := s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace,
-		Execution: we,
+		Execution: tv.WorkflowExecution(),
 	})
 	s.NoError(err)
 	// completion_event_batch_id should point to WFTerminated event.
