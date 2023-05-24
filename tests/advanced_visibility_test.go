@@ -49,6 +49,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
@@ -2114,44 +2115,160 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *advancedVisibilitySuite) getBuildIds(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
-	description, err := s.engine.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		Execution: execution,
-	})
-	s.NoError(err)
-	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.BuildIds]
-	if !found {
-		return []string{}
+func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
+	// Use only one partition to avoid having to wait for user data propagation later
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	ctx := NewContext()
+	id := s.randomizeStr(s.T().Name())
+	workflowType := "integration-build-id"
+	taskQueue := s.randomizeStr(s.T().Name())
+	v1 := s.T().Name() + "-v1"
+
+	startedCh := make(chan struct{})
+	wf := func(ctx workflow.Context) error {
+		// Continue-as-new once
+		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+			return workflow.NewContinueAsNewError(ctx, workflowType)
+		}
+		workflow.Sleep(ctx, time.Millisecond)
+		startedCh <- struct{}{}
+		return nil
 	}
-	var buildIDs []string
-	err = payload.Decode(attr, &buildIDs)
-	s.NoError(err)
-	return buildIDs
+
+	// Declare v1
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v1,
+		},
+	})
+	s.Require().NoError(err)
+
+	// Start a worker
+	w := worker.New(s.sdkClient, taskQueue, worker.Options{
+		BuildID:                      v1,
+		UseBuildIDForVersioning:      true,
+		StickyScheduleToStartTimeout: time.Second,
+	})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+	s.Require().NoError(w.Start())
+	defer w.Stop()
+
+	// Start the workflow and wait for CAN
+	startOptions := sdkclient.StartWorkflowOptions{
+		ID:        id,
+		TaskQueue: taskQueue,
+	}
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, workflowType)
+	s.Require().NoError(err)
+
+	err = run.GetWithOptions(ctx, nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
+	var canError *workflow.ContinueAsNewError
+	s.Require().ErrorAs(err, &canError)
+
+	// Confirm first WFT is complete before resetting
+	<-startedCh
+
+	resetResult, err := s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.namespace,
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: id},
+		WorkflowTaskFinishEventId: 3,
+	})
+	s.Require().NoError(err)
+	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id, RunId: resetResult.RunId})
+	s.Equal([]string{common.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
+
+	s.Eventually(func() bool {
+		response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     fmt.Sprintf("BuildIds = %q AND RunId = %q", common.VersionedBuildIdSearchAttribute(v1), resetResult.RunId),
+			PageSize:  defaultPageSize,
+		})
+		if err != nil {
+			return false
+		}
+		if len(response.Executions) != 1 {
+			return false
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *advancedVisibilitySuite) updateMaxResultWindow() {
-	esConfig := s.testClusterConfig.ESConfig
+func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
+	// Use only one partition to avoid having to wait for user data propagation later
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
 
-	esClient, err := esclient.NewIntegrationTestsClient(esConfig, s.Logger)
-	s.Require().NoError(err)
+	ctx := NewContext()
+	id := s.randomizeStr(s.T().Name())
+	workflowType := "integration-build-id"
+	taskQueue := s.randomizeStr(s.T().Name())
+	v1 := s.T().Name() + "-v1"
 
-	acknowledged, err := esClient.IndexPutSettings(
-		context.Background(),
-		esConfig.GetVisibilityIndex(),
-		fmt.Sprintf(`{"max_result_window" : %d}`, defaultPageSize))
-	s.Require().NoError(err)
-	s.Require().True(acknowledged)
-
-	for i := 0; i < numOfRetry; i++ {
-		settings, err := esClient.IndexGetSettings(context.Background(), esConfig.GetVisibilityIndex())
-		s.Require().NoError(err)
-		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(defaultPageSize) {
-			return
-		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+	wf := func(ctx workflow.Context) error {
+		return fmt.Errorf("fail")
 	}
-	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
+
+	// Declare v1
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v1,
+		},
+	})
+	s.Require().NoError(err)
+
+	// Start a worker
+	w := worker.New(s.sdkClient, taskQueue, worker.Options{
+		BuildID:                      v1,
+		UseBuildIDForVersioning:      true,
+		StickyScheduleToStartTimeout: time.Second,
+	})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+	s.Require().NoError(w.Start())
+	defer w.Stop()
+
+	// Start the workflow and wait for CAN
+	startOptions := sdkclient.StartWorkflowOptions{
+		ID:        id,
+		TaskQueue: taskQueue,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Millisecond,
+			MaximumAttempts: 2,
+		},
+	}
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, workflowType)
+	s.Require().NoError(err)
+	s.Require().Error(run.Get(ctx, nil))
+
+	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id})
+	s.Equal([]string{common.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
+
+	s.Eventually(func() bool {
+		response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     fmt.Sprintf("BuildIds = %q", common.VersionedBuildIdSearchAttribute(v1)),
+			PageSize:  defaultPageSize,
+		})
+		if err != nil {
+			return false
+		}
+		// Both runs should be associated with this build id
+		if len(response.Executions) != 2 {
+			return false
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
@@ -2428,4 +2545,44 @@ func (s *advancedVisibilitySuite) checkReachability(ctx context.Context, taskQue
 			}}, reachabilityResponse.BuildIdReachability)
 		return true
 	}, 15*time.Second, 100*time.Millisecond)
+}
+
+func (s *advancedVisibilitySuite) getBuildIds(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
+	description, err := s.engine.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: execution,
+	})
+	s.NoError(err)
+	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.BuildIds]
+	if !found {
+		return []string{}
+	}
+	var buildIDs []string
+	err = payload.Decode(attr, &buildIDs)
+	s.NoError(err)
+	return buildIDs
+}
+
+func (s *advancedVisibilitySuite) updateMaxResultWindow() {
+	esConfig := s.testClusterConfig.ESConfig
+
+	esClient, err := esclient.NewIntegrationTestsClient(esConfig, s.Logger)
+	s.Require().NoError(err)
+
+	acknowledged, err := esClient.IndexPutSettings(
+		context.Background(),
+		esConfig.GetVisibilityIndex(),
+		fmt.Sprintf(`{"max_result_window" : %d}`, defaultPageSize))
+	s.Require().NoError(err)
+	s.Require().True(acknowledged)
+
+	for i := 0; i < numOfRetry; i++ {
+		settings, err := esClient.IndexGetSettings(context.Background(), esConfig.GetVisibilityIndex())
+		s.Require().NoError(err)
+		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(defaultPageSize) {
+			return
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
 }
