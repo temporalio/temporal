@@ -22,13 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package aggregate
+package client
 
 import (
 	"context"
 	"math"
 	"time"
 
+	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -41,7 +42,7 @@ const (
 type (
 	HealthRequestRateLimiterImpl struct {
 		rateLimiter   *quotas.RateLimiterImpl
-		healthSignals SignalAggregator[quotas.Request]
+		healthSignals aggregate.SignalAggregator[quotas.Request]
 
 		refreshTimer *time.Ticker
 
@@ -67,7 +68,7 @@ type (
 var _ quotas.RequestRateLimiter = (*HealthRequestRateLimiterImpl)(nil)
 
 func NewHealthRequestRateLimiterImpl(
-	healthSignals SignalAggregator[quotas.Request],
+	healthSignals aggregate.SignalAggregator[quotas.Request],
 	refreshInterval time.Duration,
 	rateFn quotas.RateFn,
 	latencyThreshold float64,

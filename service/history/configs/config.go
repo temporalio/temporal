@@ -51,8 +51,8 @@ type Config struct {
 
 	EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
 	DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
-	DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFn
+	DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFn
 	DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
 	DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
 
@@ -342,8 +342,8 @@ func NewConfig(
 
 		EnableDynamicRateLimiting:               dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistenceDynamicRateLimiting, false),
 		DynamicRateLimitingRefreshInterval:      dc.GetDurationProperty(dynamicconfig.HistoryPersistenceDynamicRateLimitingRefreshInterval, 3*time.Second),
-		DynamicRateLimitingLatencyThreshold:     dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceDynamicRateLimitingLatencyThreshold, 500),
-		DynamicRateLimitingErrorThreshold:       dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceDynamicRateLimitingErrorThreshold, 0.5),
+		DynamicRateLimitingLatencyThreshold:     dc.GetFloat64Property(dynamicconfig.HistoryPersistenceDynamicRateLimitingLatencyThreshold, 500),
+		DynamicRateLimitingErrorThreshold:       dc.GetFloat64Property(dynamicconfig.HistoryPersistenceDynamicRateLimitingErrorThreshold, 0.5),
 		DynamicRateLimitingRateBackoffStepSize:  dc.GetFloat64Property(dynamicconfig.HistoryPersistenceDynamicRateLimitingBackoffStepSize, 0.3),
 		DynamicRateLimitingRateIncreaseStepSize: dc.GetFloat64Property(dynamicconfig.HistoryPersistenceDynamicRateLimitingIncreaseStepSize, 0.1),
 

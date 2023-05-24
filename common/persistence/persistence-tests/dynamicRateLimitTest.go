@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/client"
 )
 
 type (
@@ -60,7 +61,7 @@ func (s *DynamicRateLimitSuite) SetupSuite() {
 		metrics.NoopMetricsHandler,
 	)
 
-	rateLimiter := aggregate.NewHealthRequestRateLimiterImpl(
+	rateLimiter := client.NewHealthRequestRateLimiterImpl(
 		healthSignals,
 		3*time.Second,
 		func() float64 { return float64(200) },
