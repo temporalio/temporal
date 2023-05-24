@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
@@ -67,10 +66,10 @@ func (s *DynamicRateLimitSuite) SetupSuite() {
 
 	rateLimiter := client.NewHealthRequestRateLimiterImpl(
 		healthSignals,
-		50*time.Millisecond,
+		5*time.Millisecond,
 		func() float64 { return float64(200) },
 		100,
-		0.3,
+		0.2,
 		0.3,
 		0.1,
 	)
@@ -99,27 +98,19 @@ func (s *DynamicRateLimitSuite) TearDownTest() {
 
 func (s *DynamicRateLimitSuite) TestNamespaceReplicationQueue() {
 	s.TestBase.FaultInjection.UpdateRate(0.5)
-	shouldError := true
+	didReduce := false
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
 		WithBackoffCoefficient(1.5).
 		WithMaximumAttempts(5)
 
 	isRetryableFn := func(e error) bool {
-		if isMessageIDConflictError(e) {
-			return true
+		curMultiplier := reflect.ValueOf(*(s.rateLimiter)).FieldByName("curRateMultiplier").Float()
+		if !didReduce && curMultiplier < 1.0 {
+			s.TestBase.FaultInjection.UpdateRate(0.0)
+			didReduce = true
 		}
-		if shouldError {
-			if common.IsPersistenceTransientError(e) {
-				curMultiplier := reflect.ValueOf(*(s.rateLimiter)).FieldByName("curRateMultiplier").Float()
-				s.Less(curMultiplier, 1.0)
-
-				s.TestBase.FaultInjection.UpdateRate(0.0)
-				shouldError = false
-			}
-			return true
-		}
-		return false
+		return true
 	}
 
 	numMessages := 100
@@ -162,6 +153,7 @@ func (s *DynamicRateLimitSuite) TestNamespaceReplicationQueue() {
 	}
 
 	wg.Wait()
+	s.True(didReduce)
 	curMultiplier := reflect.ValueOf(*(s.rateLimiter)).FieldByName("curRateMultiplier").Float()
 	s.Equal(1.0, curMultiplier)
 
