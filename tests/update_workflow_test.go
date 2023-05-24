@@ -758,13 +758,34 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 				T:                   s.T(),
 			}
 
-			go func() {
-				if tc.RespondWorkflowTaskError != "" {
-					_, _ = s.sendUpdate(tv, "1")
+			updateResultCh := make(chan struct{})
+			updateWorkflowFn := func(errExpected bool) {
+				halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
+				defer cancel()
+
+				updateResponse, err1 := s.engine.UpdateWorkflowExecution(halfSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+					Namespace:         s.namespace,
+					WorkflowExecution: tv.WorkflowExecution(),
+					Request: &updatepb.Request{
+						Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+						Input: &updatepb.Input{
+							Name: tv.HandlerName(),
+							Args: payloads.EncodeString(tv.Any()),
+						},
+					},
+				})
+				// When worker returns validation error, API caller got timeout error.
+				if errExpected {
+					assert.Error(s.T(), err1)
+					assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+					assert.Nil(s.T(), updateResponse)
 				} else {
-					s.sendUpdateNoError(tv, "1")
+					assert.NoError(s.T(), err1)
 				}
-			}()
+
+				updateResultCh <- struct{}{}
+			}
+			go updateWorkflowFn(tc.RespondWorkflowTaskError != "")
 
 			// Process update in workflow.
 			_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -775,6 +796,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			} else {
 				require.NoError(t, err)
 			}
+			<-updateResultCh
 		})
 	}
 }

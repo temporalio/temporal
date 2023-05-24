@@ -92,6 +92,9 @@ func (tv TestVars) cloneSet(typ, val string, key []string) TestVars {
 	return newTv
 }
 
+// ----------- Methods for every "type" ------------
+// TODO: add more as you need them.
+
 func (tv TestVars) WorkflowID(key ...string) string {
 	return tv.getOrCreate("workflow_id", key)
 }
