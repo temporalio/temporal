@@ -219,11 +219,14 @@ func NamespaceRegistryProvider(
 func PersistenceHealthSignalAggregatorProvider(
 	dynamicCollection *dynamicconfig.Collection,
 	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) persistence.HealthSignalAggregator {
 	return persistence.NewHealthSignalAggregatorImpl(
 		dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 3*time.Second),
 		dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 500),
 		metricsHandler,
+		dynamicCollection.GetIntProperty(dynamicconfig.ShardRPSWarnLimit, 50),
+		logger,
 	)
 }
 

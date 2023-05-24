@@ -31,8 +31,14 @@ import (
 
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
+)
+
+const (
+	emitMetricsInterval = 30 * time.Second
 )
 
 type (
@@ -43,20 +49,17 @@ type (
 	}
 
 	HealthSignalAggregatorImpl struct {
-		requestsPerShardAndNs map[perShardPerNamespaceKey]*atomic.Int64
-		requestsLock          sync.RWMutex
+		requestsPerShard map[int32]*atomic.Int64
+		requestsLock     sync.RWMutex
 
 		latencyAverage aggregate.MovingWindowAverage
 		errorRatio     aggregate.MovingWindowAverage
 
-		metricsHandler      metrics.Handler
-		emitMetricsInterval time.Duration
-		emitMetricsTimer    *time.Ticker
-	}
+		metricsHandler       metrics.Handler
+		emitMetricsTimer     *time.Ticker
+		perShardRPSWarnLimit dynamicconfig.IntPropertyFn
 
-	perShardPerNamespaceKey struct {
-		namespace string
-		shard     int32
+		logger log.Logger
 	}
 )
 
@@ -64,26 +67,33 @@ func NewHealthSignalAggregatorImpl(
 	windowSize dynamicconfig.DurationPropertyFn,
 	maxBufferSize dynamicconfig.IntPropertyFn,
 	metricsHandler metrics.Handler,
+	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
+	logger log.Logger,
 ) *HealthSignalAggregatorImpl {
 	return &HealthSignalAggregatorImpl{
-		requestsPerShardAndNs: make(map[perShardPerNamespaceKey]*atomic.Int64),
-		latencyAverage:        aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
-		errorRatio:            aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
-		metricsHandler:        metricsHandler,
-		emitMetricsInterval:   windowSize(),
-		emitMetricsTimer:      time.NewTicker(windowSize()),
+		requestsPerShard:     make(map[int32]*atomic.Int64),
+		latencyAverage:       aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
+		errorRatio:           aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
+		metricsHandler:       metricsHandler,
+		emitMetricsTimer:     time.NewTicker(emitMetricsInterval),
+		perShardRPSWarnLimit: perShardRPSWarnLimit,
+		logger:               logger,
 	}
 }
 
 func (s *HealthSignalAggregatorImpl) GetRecordFn(req quotas.Request) func(err error) {
 	start := time.Now()
 	return func(err error) {
-		s.getOrInitRequestCount(req).Add(1)
 		s.latencyAverage.Record(time.Since(start).Milliseconds())
+
 		if isUnhealthyError(err) {
 			s.errorRatio.Record(1)
 		} else {
 			s.errorRatio.Record(0)
+		}
+
+		if req.CallerSegment != CallerSegmentMissing {
+			s.getOrInitShardRequestCount(req.CallerSegment).Add(1)
 		}
 	}
 }
@@ -96,11 +106,9 @@ func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
 	return s.errorRatio.Average()
 }
 
-func (s *HealthSignalAggregatorImpl) getOrInitRequestCount(req quotas.Request) *atomic.Int64 {
-	key := getPerShardPerNsKey(req)
-
+func (s *HealthSignalAggregatorImpl) getOrInitShardRequestCount(shardID int32) *atomic.Int64 {
 	s.requestsLock.RLock()
-	count, ok := s.requestsPerShardAndNs[key]
+	count, ok := s.requestsPerShard[shardID]
 	s.requestsLock.RUnlock()
 	if ok {
 		return count
@@ -111,12 +119,12 @@ func (s *HealthSignalAggregatorImpl) getOrInitRequestCount(req quotas.Request) *
 	s.requestsLock.Lock()
 	defer s.requestsLock.Unlock()
 
-	count, ok = s.requestsPerShardAndNs[key]
+	count, ok = s.requestsPerShard[shardID]
 	if ok {
 		return count
 	}
 
-	s.requestsPerShardAndNs[key] = newCount
+	s.requestsPerShard[shardID] = newCount
 	return newCount
 }
 
@@ -125,19 +133,15 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 		select {
 		case <-s.emitMetricsTimer.C:
 			s.requestsLock.RLock()
-			for key, count := range s.requestsPerShardAndNs {
-				shardRPS := int64(float64(count.Swap(0)) / s.emitMetricsInterval.Seconds())
-				s.metricsHandler.Histogram(metrics.PersistenceShardRPS.GetMetricName(), metrics.PersistenceShardRPS.GetMetricUnit()).Record(shardRPS, metrics.NamespaceTag(key.namespace))
+			for shardID, count := range s.requestsPerShard {
+				shardRPS := int64(float64(count.Swap(0)) / emitMetricsInterval.Seconds())
+				s.metricsHandler.Histogram(metrics.PersistenceShardRPS.GetMetricName(), metrics.PersistenceShardRPS.GetMetricUnit()).Record(shardRPS)
+				if shardRPS > int64(s.perShardRPSWarnLimit()) {
+					s.logger.Warn("Per shard RPS warn limit exceeded", tag.ShardID(shardID))
+				}
 			}
 			s.requestsLock.RUnlock()
 		}
-	}
-}
-
-func getPerShardPerNsKey(req quotas.Request) perShardPerNamespaceKey {
-	return perShardPerNamespaceKey{
-		namespace: req.Caller,
-		shard:     req.CallerSegment,
 	}
 }
 

@@ -110,6 +110,8 @@ const (
 	PersistenceHealthSignalWindowSize = "system.persistenceHealthSignalWindowSize"
 	// PersistenceHealthSignalBufferSize is the maximum number of persistence signals to buffer in memory per signal key
 	PersistenceHealthSignalBufferSize = "system.persistenceHealthSignalBufferSize"
+	// ShardRPSWarnLimit is the per-shard RPS limit for warning
+	ShardRPSWarnLimit = "system.shardRPSWarnLimit"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"
