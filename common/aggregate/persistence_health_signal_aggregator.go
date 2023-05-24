@@ -164,17 +164,12 @@ func (s *PersistenceHealthSignalAggregator[_]) emitMetricsLoop() {
 	for {
 		select {
 		case <-s.emitMetricsTimer.C:
-			s.latencyLock.RLock()
 			for key, avg := range s.latencyAverages {
 				s.metricsHandler.Gauge(metrics.PersistenceAvgLatencyPerShardPerNamespace.GetMetricName()).Record(avg.Average(), key.GetMetricTags()...)
 			}
-			s.latencyLock.RUnlock()
-
-			s.errorLock.RLock()
 			for key, ratio := range s.errorRatios {
 				s.metricsHandler.Gauge(metrics.PersistenceErrPerShardPerNamespace.GetMetricName()).Record(ratio.Average(), key.GetMetricTags()...)
 			}
-			s.errorLock.RUnlock()
 		}
 	}
 }
