@@ -30,6 +30,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -44,7 +45,7 @@ func loadShardInfoCompatibilityCheck(
 
 	allClusterInfo := clusterMetadata.GetAllClusterInfo()
 	shardInfo = loadShardInfoCompatibilityCheckWithoutReplication(shardInfo)
-	shardInfo = loadShardInfoCompatibilityCheckWithReplication(allClusterInfo, shardInfo)
+	shardInfo = loadShardInfoCompatibilityCheckWithReplication(clusterMetadata.GetCurrentClusterName(), allClusterInfo, shardInfo)
 
 	// clear QueueAckLevels to force new logic to only use QueueStates
 	shardInfo.QueueAckLevels = nil
@@ -83,6 +84,7 @@ func loadShardInfoCompatibilityCheckWithoutReplication(
 }
 
 func loadShardInfoCompatibilityCheckWithReplication(
+	currentClusterName string,
 	allClusterInfo map[string]cluster.ClusterInformation,
 	shardInfo *persistencespb.ShardInfo,
 ) *persistencespb.ShardInfo {
@@ -97,11 +99,6 @@ func loadShardInfoCompatibilityCheckWithReplication(
 
 	for clusterName, ackLevel := range queueAckLevel.ClusterAckLevel {
 		minCursor := convertPersistenceAckLevelToTaskKey(tasks.CategoryReplication.Type(), ackLevel).Next()
-		readerID := ReplicationReaderIDFromClusterShardID(
-			allClusterInfo[clusterName].InitialFailoverVersion,
-			shardInfo.ShardId,
-		)
-
 		queueStates, ok := shardInfo.QueueStates[tasks.CategoryIDReplication]
 		if !ok {
 			queueStates = &persistencespb.QueueState{
@@ -110,24 +107,35 @@ func loadShardInfoCompatibilityCheckWithReplication(
 			}
 			shardInfo.QueueStates[tasks.CategoryIDReplication] = queueStates
 		}
-		readerState, ok := queueStates.ReaderStates[readerID]
-		if !ok || minCursor.CompareTo(ConvertFromPersistenceTaskKey(readerState.Scopes[0].Range.InclusiveMin)) > 0 {
-			queueStates.ReaderStates[readerID] = &persistencespb.QueueReaderState{
-				Scopes: []*persistencespb.QueueSliceScope{{
-					Range: &persistencespb.QueueSliceRange{
-						InclusiveMin: ConvertToPersistenceTaskKey(minCursor),
-						ExclusiveMax: ConvertToPersistenceTaskKey(
-							convertPersistenceAckLevelToTaskKey(
-								tasks.CategoryReplication.Type(),
-								math.MaxInt64,
+
+		for _, shardID := range common.MapShardID(
+			allClusterInfo[currentClusterName].ShardCount,
+			allClusterInfo[clusterName].ShardCount,
+			shardInfo.ShardId,
+		) {
+			readerID := ReplicationReaderIDFromClusterShardID(
+				allClusterInfo[clusterName].InitialFailoverVersion,
+				shardID,
+			)
+			readerState, ok := queueStates.ReaderStates[readerID]
+			if !ok || minCursor.CompareTo(ConvertFromPersistenceTaskKey(readerState.Scopes[0].Range.InclusiveMin)) > 0 {
+				queueStates.ReaderStates[readerID] = &persistencespb.QueueReaderState{
+					Scopes: []*persistencespb.QueueSliceScope{{
+						Range: &persistencespb.QueueSliceRange{
+							InclusiveMin: ConvertToPersistenceTaskKey(minCursor),
+							ExclusiveMax: ConvertToPersistenceTaskKey(
+								convertPersistenceAckLevelToTaskKey(
+									tasks.CategoryReplication.Type(),
+									math.MaxInt64,
+								),
 							),
-						),
-					},
-					Predicate: &persistencespb.Predicate{
-						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
-						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
-					},
-				}},
+						},
+						Predicate: &persistencespb.Predicate{
+							PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+							Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+						},
+					}},
+				}
 			}
 		}
 	}
