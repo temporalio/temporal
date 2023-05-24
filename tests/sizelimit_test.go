@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type sizeLimitIntegrationSuite struct {
@@ -370,27 +371,28 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	activityCount := int32(4)
-	activityCounter := int32(0)
+	activitiesScheduled := false
+	activityLargePayload := payloads.EncodeBytes(make([]byte, 900))
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		if activityCounter < activityCount {
-			activityCounter++
-			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
-
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             convert.Int32ToString(activityCounter),
-					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
-					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
-				}},
-			}}, nil
+		if !activitiesScheduled {
+			cmds := make([]*commandpb.Command, activityCount)
+			for i := range cmds {
+				cmds[i] = &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             convert.Int32ToString(int32(i)),
+						ActivityType:           &commonpb.ActivityType{Name: activityName},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+						Input:                  activityLargePayload,
+						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+						ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
+						StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
+						HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					}},
+				}
+			}
+			return cmds, nil
 		}
 
 		return []*commandpb.Command{{
@@ -418,57 +420,37 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		T:                   s.T(),
 	}
 
-	for i := int32(0); i < activityCount-1; i++ {
-		dwResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
-		})
-		s.NoError(err)
+	dwResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+	})
+	s.NoError(err)
 
-		// Poll workflow task only if it is running
-		if dwResp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			_, err := poller.PollAndProcessWorkflowTask(false, false)
-			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-			s.NoError(err)
+	// Poll workflow task only if it is running
+	if dwResp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 
-			err = poller.PollAndProcessActivityTask(false)
-			s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
-			s.NoError(err)
-		}
+		// Workflow should be force terminated at this point
+		s.EqualError(err, common.FailureReasonMutableStateSizeExceedsLimit)
 	}
 
-	// Allocate 1MB payload
-	buf := make([]byte, 900)
-	largePayload := payloads.EncodeBytes(buf)
+	// Send another signal without RunID
+	_, signalErr := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+		SignalName: "another signal",
+		Input:      payloads.EncodeString("another signal input"),
+		Identity:   identity,
+	})
 
-	var signalErr error
-	// Send signals until workflow is force terminated
-SignalLoop:
-	for i := 0; i < 10; i++ {
-		// Send another signal without RunID
-		signalName := "another signal"
-		_, signalErr = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace: s.namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-			},
-			SignalName: signalName,
-			Input:      largePayload,
-			Identity:   identity,
-		})
-
-		if signalErr != nil {
-			break SignalLoop
-		}
-	}
-	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
-	// error. InvalidArgument is returned by the client.
-	//s.Logger.Info(signalErr.Error())
-	s.EqualError(signalErr, common.FailureReasonMutableStateSizeExceedsLimit)
-	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
+	s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
+	s.IsType(&serviceerror.NotFound{}, signalErr)
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,
