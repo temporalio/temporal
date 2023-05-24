@@ -1101,7 +1101,7 @@ func (ms *MutableStateImpl) DeletePendingChildExecution(
 ) error {
 
 	if prev, ok := ms.pendingChildExecutionInfoIDs[initiatedEventID]; ok {
-		ms.approximateSize -= prev.Size() - intSizeBytes
+		ms.approximateSize -= prev.Size() + intSizeBytes
 		delete(ms.pendingChildExecutionInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1123,7 +1123,7 @@ func (ms *MutableStateImpl) DeletePendingRequestCancel(
 ) error {
 
 	if prev, ok := ms.pendingRequestCancelInfoIDs[initiatedEventID]; ok {
-		ms.approximateSize -= prev.Size() - intSizeBytes
+		ms.approximateSize -= prev.Size() + intSizeBytes
 		delete(ms.pendingRequestCancelInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1145,7 +1145,7 @@ func (ms *MutableStateImpl) DeletePendingSignal(
 ) error {
 
 	if prev, ok := ms.pendingSignalInfoIDs[initiatedEventID]; ok {
-		ms.approximateSize -= prev.Size() - intSizeBytes
+		ms.approximateSize -= prev.Size() + intSizeBytes
 		delete(ms.pendingSignalInfoIDs, initiatedEventID)
 	} else {
 		ms.logError(
@@ -1284,7 +1284,7 @@ func (ms *MutableStateImpl) DeleteActivity(
 	if activityInfo, ok := ms.pendingActivityInfoIDs[scheduledEventID]; ok {
 		delete(ms.pendingActivityInfoIDs, scheduledEventID)
 		delete(ms.pendingActivityTimerHeartbeats, scheduledEventID)
-		ms.approximateSize -= activityInfo.Size() - intSizeBytes
+		ms.approximateSize -= activityInfo.Size() + intSizeBytes
 
 		if _, ok = ms.pendingActivityIDToEventID[activityInfo.ActivityId]; ok {
 			delete(ms.pendingActivityIDToEventID, activityInfo.ActivityId)
@@ -1366,7 +1366,7 @@ func (ms *MutableStateImpl) DeleteUserTimer(
 
 	if timerInfo, ok := ms.pendingTimerInfoIDs[timerID]; ok {
 		delete(ms.pendingTimerInfoIDs, timerID)
-		ms.approximateSize -= timerInfo.Size() - len(timerID)
+		ms.approximateSize -= timerInfo.Size() + len(timerID)
 
 		if _, ok = ms.pendingTimerEventIDToID[timerInfo.GetStartedEventId()]; ok {
 			delete(ms.pendingTimerEventIDToID, timerInfo.GetStartedEventId())
