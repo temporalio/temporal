@@ -1647,6 +1647,7 @@ var (
 	PersistenceFailures                                 = NewCounterDef("persistence_errors")
 	PersistenceErrorWithType                            = NewCounterDef("persistence_error_with_type")
 	PersistenceLatency                                  = NewTimerDef("persistence_latency")
+	PersistenceShardRPS                                 = NewDimensionlessHistogramDef("persistence_shard_rps")
 	PersistenceErrShardExistsCounter                    = NewCounterDef("persistence_errors_shard_exists")
 	PersistenceErrShardOwnershipLostCounter             = NewCounterDef("persistence_errors_shard_ownership_lost")
 	PersistenceErrConditionFailedCounter                = NewCounterDef("persistence_errors_condition_failed")
