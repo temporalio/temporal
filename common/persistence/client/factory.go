@@ -114,11 +114,13 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	if f.ratelimiter != nil {
 		result = p.NewTaskPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsHandler != nil {
-		result = p.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.logger)
-	}
-	if f.healthSignals != nil {
-		result = p.NewTaskPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
+	if f.metricsHandler != nil || f.healthSignals != nil {
+		if f.metricsHandler == nil {
+			f.metricsHandler = metrics.NoopMetricsHandler
+		} else {
+			f.healthSignals = aggregate.NoopPersistenceHealthSignalAggregator
+		}
+		result = p.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
 	return result, nil
 }
@@ -134,11 +136,13 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	if f.ratelimiter != nil {
 		result = p.NewShardPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsHandler != nil {
-		result = p.NewShardPersistenceMetricsClient(result, f.metricsHandler, f.logger)
-	}
-	if f.healthSignals != nil {
-		result = p.NewShardPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
+	if f.metricsHandler != nil || f.healthSignals != nil {
+		if f.metricsHandler == nil {
+			f.metricsHandler = metrics.NoopMetricsHandler
+		} else {
+			f.healthSignals = aggregate.NoopPersistenceHealthSignalAggregator
+		}
+		result = p.NewShardPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
 	result = p.NewShardPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
@@ -155,11 +159,13 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 	if f.ratelimiter != nil {
 		result = p.NewMetadataPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsHandler != nil {
-		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsHandler, f.logger)
-	}
-	if f.healthSignals != nil {
-		result = p.NewMetadataPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
+	if f.metricsHandler != nil || f.healthSignals != nil {
+		if f.metricsHandler == nil {
+			f.metricsHandler = metrics.NoopMetricsHandler
+		} else {
+			f.healthSignals = aggregate.NoopPersistenceHealthSignalAggregator
+		}
+		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
 	result = p.NewMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
@@ -176,11 +182,13 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 	if f.ratelimiter != nil {
 		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsHandler != nil {
-		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsHandler, f.logger)
-	}
-	if f.healthSignals != nil {
-		result = p.NewClusterMetadataPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
+	if f.metricsHandler != nil || f.healthSignals != nil {
+		if f.metricsHandler == nil {
+			f.metricsHandler = metrics.NoopMetricsHandler
+		} else {
+			f.healthSignals = aggregate.NoopPersistenceHealthSignalAggregator
+		}
+		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
 	result = p.NewClusterMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
@@ -197,11 +205,13 @@ func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 	if f.ratelimiter != nil {
 		result = p.NewExecutionPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsHandler != nil {
-		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.logger)
-	}
-	if f.healthSignals != nil {
-		result = p.NewExecutionPersistenceHealthSignalClient(result, f.healthSignals, f.logger)
+	if f.metricsHandler != nil || f.healthSignals != nil {
+		if f.metricsHandler == nil {
+			f.metricsHandler = metrics.NoopMetricsHandler
+		} else {
+			f.healthSignals = aggregate.NoopPersistenceHealthSignalAggregator
+		}
+		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
 	result = p.NewExecutionPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
@@ -216,11 +226,13 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 	if f.ratelimiter != nil {
 		result = p.NewQueuePersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsHandler != nil {
-		result = p.NewQueuePersistenceMetricsClient(result, f.metricsHandler, f.logger)
-	}
-	if f.healthSignals != nil {
-		result = p.NewQueuePersistenceHealthSignalClient(result, f.healthSignals, f.logger)
+	if f.metricsHandler != nil || f.healthSignals != nil {
+		if f.metricsHandler == nil {
+			f.metricsHandler = metrics.NoopMetricsHandler
+		} else {
+			f.healthSignals = aggregate.NoopPersistenceHealthSignalAggregator
+		}
+		result = p.NewQueuePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
 	result = p.NewQueuePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return p.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsHandler, f.logger)

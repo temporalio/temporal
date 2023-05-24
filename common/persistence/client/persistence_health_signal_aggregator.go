@@ -22,27 +22,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package aggregate
+package client
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 )
 
 type (
-	PersistenceHealthSignalAggregator[K SignalKey] struct {
-		SignalAggregator[quotas.Request]
+	PersistenceHealthSignalAggregator[K aggregate.SignalKey] struct {
+		keyMapper aggregate.SignalKeyMapperFn[quotas.Request, K]
 
-		keyMapper SignalKeyMapperFn[quotas.Request, K]
+		totalRequests     map[K]*atomic.Int64
+		totalRequestsLock sync.RWMutex
 
-		latencyAverages map[K]MovingWindowAverage
+		latencyAverages map[K]aggregate.MovingWindowAverage
 		latencyLock     sync.RWMutex
 
-		errorRatios map[K]MovingWindowAverage
+		errorRatios map[K]aggregate.MovingWindowAverage
 		errorLock   sync.RWMutex
 
 		windowSize    time.Duration
@@ -58,23 +61,22 @@ type (
 	}
 )
 
-func NewPersistenceHealthSignalAggregator[K SignalKey](
-	keyMapper SignalKeyMapperFn[quotas.Request, K],
+func NewPersistenceHealthSignalAggregator[K aggregate.SignalKey](
+	keyMapper aggregate.SignalKeyMapperFn[quotas.Request, K],
 	windowSize time.Duration,
 	maxBufferSize int,
 	metricsHandler metrics.Handler,
 ) *PersistenceHealthSignalAggregator[K] {
-	ret := &PersistenceHealthSignalAggregator[K]{
+	return &PersistenceHealthSignalAggregator[K]{
 		keyMapper:        keyMapper,
-		latencyAverages:  make(map[K]MovingWindowAverage),
-		errorRatios:      make(map[K]MovingWindowAverage),
+		totalRequests:    make(map[K]*atomic.Int64),
+		latencyAverages:  make(map[K]aggregate.MovingWindowAverage),
+		errorRatios:      make(map[K]aggregate.MovingWindowAverage),
 		windowSize:       windowSize,
 		maxBufferSize:    maxBufferSize,
 		metricsHandler:   metricsHandler,
 		emitMetricsTimer: time.NewTicker(windowSize),
 	}
-	go ret.emitMetricsLoop()
-	return ret
 }
 
 func NewPerShardPerNsHealthSignalAggregator(
@@ -97,15 +99,14 @@ func perShardPerNsKeyMapperFn(req quotas.Request) perShardPerNsHealthSignalKey {
 	}
 }
 
-func (k perShardPerNsHealthSignalKey) GetMetricTags() []metrics.Tag {
-	nsTag := metrics.NamespaceTag(k.namespace)
-	shardTag := metrics.ShardTag(k.shardID)
-	return []metrics.Tag{nsTag, shardTag}
+func (k perShardPerNsHealthSignalKey) GetNamespace() string {
+	return k.namespace
 }
 
 func (s *PersistenceHealthSignalAggregator[_]) GetRecordFn(req quotas.Request) func(err error) {
 	start := time.Now()
 	return func(err error) {
+		s.getOrInitRequestCount(req).Add(1)
 		s.getOrInitLatencyAverage(req).Record(time.Since(start).Milliseconds())
 		errorRatio := s.getOrInitErrorRatio(req)
 		if err != nil {
@@ -124,57 +125,78 @@ func (s *PersistenceHealthSignalAggregator[_]) ErrorRatio(req quotas.Request) fl
 	return s.getOrInitErrorRatio(req).Average()
 }
 
-func (s *PersistenceHealthSignalAggregator[_]) getOrInitLatencyAverage(req quotas.Request) MovingWindowAverage {
-	return s.getOrInitAverage(req, &s.latencyAverages, &s.latencyLock)
+func (s *PersistenceHealthSignalAggregator[_]) getOrInitLatencyAverage(req quotas.Request) aggregate.MovingWindowAverage {
+	return s.getOrInitAverage(req, s.latencyAverages, &s.latencyLock)
 }
 
-func (s *PersistenceHealthSignalAggregator[_]) getOrInitErrorRatio(req quotas.Request) MovingWindowAverage {
-	return s.getOrInitAverage(req, &s.errorRatios, &s.errorLock)
+func (s *PersistenceHealthSignalAggregator[_]) getOrInitErrorRatio(req quotas.Request) aggregate.MovingWindowAverage {
+	return s.getOrInitAverage(req, s.errorRatios, &s.errorLock)
 }
 
 func (s *PersistenceHealthSignalAggregator[K]) getOrInitAverage(
 	req quotas.Request,
-	averages *map[K]MovingWindowAverage,
+	averages map[K]aggregate.MovingWindowAverage,
 	lock *sync.RWMutex,
-) MovingWindowAverage {
+) aggregate.MovingWindowAverage {
 	key := s.keyMapper(req)
 
 	lock.RLock()
-	avg, ok := (*averages)[key]
+	avg, ok := averages[key]
 	lock.RUnlock()
 	if ok {
 		return avg
 	}
 
-	newAvg := NewMovingWindowAvgImpl(s.windowSize, s.maxBufferSize)
+	newAvg := aggregate.NewMovingWindowAvgImpl(s.windowSize, s.maxBufferSize)
 
 	lock.Lock()
 	defer lock.Unlock()
 
-	avg, ok = (*averages)[key]
+	avg, ok = averages[key]
 	if ok {
 		return avg
 	}
 
-	(*averages)[key] = newAvg
+	averages[key] = newAvg
 	return newAvg
+}
+
+func (s *PersistenceHealthSignalAggregator[_]) getOrInitRequestCount(
+	req quotas.Request,
+) *atomic.Int64 {
+	key := s.keyMapper(req)
+
+	s.totalRequestsLock.RLock()
+	count, ok := s.totalRequests[key]
+	s.totalRequestsLock.RUnlock()
+	if ok {
+		return count
+	}
+
+	newCount := &atomic.Int64{}
+
+	s.totalRequestsLock.Lock()
+	defer s.totalRequestsLock.Unlock()
+
+	count, ok = s.totalRequests[key]
+	if ok {
+		return count
+	}
+
+	s.totalRequests[key] = newCount
+	return newCount
 }
 
 func (s *PersistenceHealthSignalAggregator[_]) emitMetricsLoop() {
 	for {
 		select {
 		case <-s.emitMetricsTimer.C:
-			s.latencyLock.RLock()
-			for key, avg := range s.latencyAverages {
-				s.metricsHandler.Gauge(metrics.PersistenceAvgLatencyPerShardPerNamespace.GetMetricName()).Record(avg.Average(), key.GetMetricTags()...)
+			s.totalRequestsLock.RLock()
+			for key, count := range s.totalRequests {
+				shardRPS := int64(float64(count.Swap(0)) / s.windowSize.Seconds())
+				s.metricsHandler.Histogram(metrics.PersistenceShardRPS.GetMetricName(), metrics.PersistenceShardRPS.GetMetricUnit()).Record(shardRPS, metrics.NamespaceTag(key.GetNamespace()))
 			}
-			s.latencyLock.RUnlock()
-
-			s.errorLock.RLock()
-			for key, ratio := range s.errorRatios {
-				s.metricsHandler.Gauge(metrics.PersistenceErrPerShardPerNamespace.GetMetricName()).Record(ratio.Average(), key.GetMetricTags()...)
-			}
-			s.errorLock.RUnlock()
+			s.totalRequestsLock.RUnlock()
 		}
 	}
 }

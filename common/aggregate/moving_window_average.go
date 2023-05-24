@@ -69,7 +69,6 @@ func (a *MovingWindowAvgImpl) Record(val int64) {
 	a.Lock()
 	defer a.Unlock()
 
-	a.expireOldValuesLocked()
 	if a.count == a.maxBufferSize {
 		a.expireOneLocked()
 	}
@@ -82,20 +81,28 @@ func (a *MovingWindowAvgImpl) Record(val int64) {
 }
 
 func (a *MovingWindowAvgImpl) Average() float64 {
+	a.expireOldValues()
+
 	a.RLock()
 	defer a.RUnlock()
+
 	if a.count == 0 {
 		return 0
 	}
 	return float64(a.sum / int64(a.count))
 }
 
-func (a *MovingWindowAvgImpl) expireOldValuesLocked() {
+func (a *MovingWindowAvgImpl) expireOldValues() {
+	a.Lock()
+	defer a.Unlock()
+
 	for ; a.head != a.tail; a.head = a.head.Next() {
-		if data, ok := a.head.Value.(timestampedData); ok && time.Since(data.timestamp) > a.windowSize {
-			a.sum -= data.value
-			a.count--
+		data, ok := a.head.Value.(timestampedData)
+		if !ok || time.Since(data.timestamp) < a.windowSize {
+			break
 		}
+		a.sum -= data.value
+		a.count--
 	}
 }
 

@@ -24,12 +24,10 @@
 
 package aggregate
 
-import "go.temporal.io/server/common/metrics"
-
 type (
 	SignalKey interface {
 		comparable
-		GetMetricTags() []metrics.Tag
+		GetNamespace() string
 	}
 
 	SignalKeyMapperFn[T any, K SignalKey] func(origin T) K

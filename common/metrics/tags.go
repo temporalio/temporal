@@ -44,7 +44,6 @@ const (
 	instance       = "instance"
 	namespace      = "namespace"
 	namespaceState = "namespace_state"
-	shard          = "shard"
 	targetCluster  = "target_cluster"
 	fromCluster    = "from_cluster"
 	toCluster      = "to_cluster"
@@ -130,10 +129,6 @@ func TaskQueueUnknownTag() Tag {
 // InstanceTag returns a new instance tag
 func InstanceTag(value string) Tag {
 	return &tagImpl{key: instance, value: value}
-}
-
-func ShardTag(value int32) Tag {
-	return &tagImpl{key: shard, value: string(value)}
 }
 
 // TargetClusterTag returns a new target cluster tag.
