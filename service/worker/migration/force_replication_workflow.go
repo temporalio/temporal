@@ -26,7 +26,6 @@ package migration
 
 import (
 	"errors"
-	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -47,7 +46,6 @@ type (
 		PageCountPerExecution   int     // number of pages to be processed before continue as new, max is 1000.
 
 		// Used by query handler to indicate overall progress of replication
-		sync.Mutex
 		LastCloseTime       time.Time
 		LastStartTime       time.Time
 		ContinuedAsNewCount int
@@ -108,8 +106,6 @@ const (
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
 	workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
-		params.Lock()
-		defer params.Unlock()
 		return ForceReplicationStatus{
 			LastCloseTime:       params.LastCloseTime,
 			LastStartTime:       params.LastStartTime,
@@ -165,9 +161,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		return nil
 	}
 
-	params.Lock()
 	params.ContinuedAsNewCount++
-	params.Unlock()
 
 	// There are still more workflows to replicate. Continue-as-new to process on a new run.
 	// This prevents history size from exceeding the server-defined limit
@@ -245,10 +239,8 @@ Loop:
 
 		workflowExecutionsCh.Send(ctx, listResp.Executions)
 
-		params.Lock()
 		params.LastCloseTime = listResp.LastCloseTime
 		params.LastStartTime = listResp.LastStartTime
-		params.Unlock()
 
 		params.Token.NextPageToken = listResp.NextPageToken
 		if params.Token.NextPageToken == nil {
