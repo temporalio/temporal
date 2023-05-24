@@ -460,11 +460,12 @@ func (s *versioningIntegSuite) dispatchActivity() {
 		fut1 := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ScheduleToCloseTimeout: time.Minute,
 			DisableEagerExecution:  true,
+			VersioningIntent:       worker.CompatibleVersion,
 		}), "act")
 		fut2 := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ScheduleToCloseTimeout: time.Minute,
 			DisableEagerExecution:  true,
-			UseLatestBuildID:       true, // this one should go to latest
+			VersioningIntent:       worker.UseDefaultVersion, // this one should go to latest
 		}), "act")
 		var val1, val2 string
 		s.NoError(fut1.Get(ctx, &val1))
@@ -540,7 +541,7 @@ func (s *versioningIntegSuite) dispatchChildWorkflow() {
 		// run two child workflows
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{}), "child")
 		fut2 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			UseLatestBuildID: true, // this one should go to latest
+			VersioningIntent: worker.UseDefaultVersion, // this one should go to latest
 		}), "child")
 		var val1, val2 string
 		s.NoError(fut1.Get(ctx, &val1))
@@ -610,7 +611,7 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		// TODO: shouldn't be WithChildOptions
 		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			UseLatestBuildID: true,
+			VersioningIntent: worker.UseDefaultVersion, // this one should go to latest
 		})
 		_ = newCtx
 		switch attempt {
@@ -628,7 +629,7 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 		started11.Done()
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			UseLatestBuildID: true,
+			VersioningIntent: worker.UseDefaultVersion,
 		})
 		_ = newCtx
 		switch attempt {
@@ -646,7 +647,7 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 		started2.Done()
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			UseLatestBuildID: true,
+			VersioningIntent: worker.UseDefaultVersion,
 		})
 		_ = newCtx
 		switch attempt {
