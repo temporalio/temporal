@@ -4762,7 +4762,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	}
 
 	// we have a workflow task with buffered events on the fly with a lower version, fail it
-	if err := failWorkflowTask(
+	if _, err := failWorkflowTask(
 		ms,
 		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
@@ -4827,7 +4827,7 @@ func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 	// Handling buffered events size issue
 	if workflowTask := ms.GetStartedWorkflowTask(); workflowTask != nil {
 		// we have a workflow task on the fly with a lower version, fail it
-		if err := failWorkflowTask(
+		if _, err := failWorkflowTask(
 			ms,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
