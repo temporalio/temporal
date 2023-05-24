@@ -41,7 +41,7 @@ type (
 		timestamp time.Time
 	}
 
-	movingWindowAvgImpl struct {
+	MovingWindowAvgImpl struct {
 		sync.RWMutex
 		windowSize    time.Duration
 		maxBufferSize int
@@ -52,12 +52,12 @@ type (
 	}
 )
 
-func newMovingWindowAvgImpl(
+func NewMovingWindowAvgImpl(
 	windowSize time.Duration,
 	maxBufferSize int,
-) *movingWindowAvgImpl {
+) *MovingWindowAvgImpl {
 	buffer := ring.New(maxBufferSize)
-	return &movingWindowAvgImpl{
+	return &MovingWindowAvgImpl{
 		windowSize:    windowSize,
 		maxBufferSize: maxBufferSize,
 		head:          buffer,
@@ -65,7 +65,7 @@ func newMovingWindowAvgImpl(
 	}
 }
 
-func (a *movingWindowAvgImpl) Record(val int64) {
+func (a *MovingWindowAvgImpl) Record(val int64) {
 	a.Lock()
 	defer a.Unlock()
 
@@ -80,7 +80,7 @@ func (a *movingWindowAvgImpl) Record(val int64) {
 	a.count++
 }
 
-func (a *movingWindowAvgImpl) Average() float64 {
+func (a *MovingWindowAvgImpl) Average() float64 {
 	a.expireOldValues()
 
 	a.RLock()
@@ -92,7 +92,7 @@ func (a *movingWindowAvgImpl) Average() float64 {
 	return float64(a.sum / int64(a.count))
 }
 
-func (a *movingWindowAvgImpl) expireOldValues() {
+func (a *MovingWindowAvgImpl) expireOldValues() {
 	a.Lock()
 	defer a.Unlock()
 
@@ -106,7 +106,7 @@ func (a *movingWindowAvgImpl) expireOldValues() {
 	}
 }
 
-func (a *movingWindowAvgImpl) expireOneLocked() {
+func (a *MovingWindowAvgImpl) expireOneLocked() {
 	if data, ok := a.head.Value.(timestampedData); ok {
 		a.sum -= data.value
 		a.count--

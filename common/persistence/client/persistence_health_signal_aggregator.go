@@ -22,29 +22,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package aggregate
+package client
 
 import (
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 )
 
 type (
-	PersistenceHealthSignalAggregator[K SignalKey] struct {
-		keyMapper SignalKeyMapperFn[quotas.Request, K]
+	PersistenceHealthSignalAggregator[K aggregate.SignalKey] struct {
+		keyMapper aggregate.SignalKeyMapperFn[quotas.Request, K]
 
 		totalRequests     map[K]*atomic.Int64
 		totalRequestsLock sync.RWMutex
 
-		latencyAverages map[K]MovingWindowAverage
+		latencyAverages map[K]aggregate.MovingWindowAverage
 		latencyLock     sync.RWMutex
 
-		errorRatios map[K]MovingWindowAverage
+		errorRatios map[K]aggregate.MovingWindowAverage
 		errorLock   sync.RWMutex
 
 		windowSize    time.Duration
@@ -60,8 +61,8 @@ type (
 	}
 )
 
-func NewPersistenceHealthSignalAggregator[K SignalKey](
-	keyMapper SignalKeyMapperFn[quotas.Request, K],
+func NewPersistenceHealthSignalAggregator[K aggregate.SignalKey](
+	keyMapper aggregate.SignalKeyMapperFn[quotas.Request, K],
 	windowSize time.Duration,
 	maxBufferSize int,
 	metricsHandler metrics.Handler,
@@ -69,8 +70,8 @@ func NewPersistenceHealthSignalAggregator[K SignalKey](
 	return &PersistenceHealthSignalAggregator[K]{
 		keyMapper:        keyMapper,
 		totalRequests:    make(map[K]*atomic.Int64),
-		latencyAverages:  make(map[K]MovingWindowAverage),
-		errorRatios:      make(map[K]MovingWindowAverage),
+		latencyAverages:  make(map[K]aggregate.MovingWindowAverage),
+		errorRatios:      make(map[K]aggregate.MovingWindowAverage),
 		windowSize:       windowSize,
 		maxBufferSize:    maxBufferSize,
 		metricsHandler:   metricsHandler,
@@ -124,19 +125,19 @@ func (s *PersistenceHealthSignalAggregator[_]) ErrorRatio(req quotas.Request) fl
 	return s.getOrInitErrorRatio(req).Average()
 }
 
-func (s *PersistenceHealthSignalAggregator[_]) getOrInitLatencyAverage(req quotas.Request) MovingWindowAverage {
+func (s *PersistenceHealthSignalAggregator[_]) getOrInitLatencyAverage(req quotas.Request) aggregate.MovingWindowAverage {
 	return s.getOrInitAverage(req, &s.latencyAverages, &s.latencyLock)
 }
 
-func (s *PersistenceHealthSignalAggregator[_]) getOrInitErrorRatio(req quotas.Request) MovingWindowAverage {
+func (s *PersistenceHealthSignalAggregator[_]) getOrInitErrorRatio(req quotas.Request) aggregate.MovingWindowAverage {
 	return s.getOrInitAverage(req, &s.errorRatios, &s.errorLock)
 }
 
 func (s *PersistenceHealthSignalAggregator[K]) getOrInitAverage(
 	req quotas.Request,
-	averages *map[K]MovingWindowAverage,
+	averages *map[K]aggregate.MovingWindowAverage,
 	lock *sync.RWMutex,
-) MovingWindowAverage {
+) aggregate.MovingWindowAverage {
 	key := s.keyMapper(req)
 
 	lock.RLock()
@@ -146,7 +147,7 @@ func (s *PersistenceHealthSignalAggregator[K]) getOrInitAverage(
 		return avg
 	}
 
-	newAvg := newMovingWindowAvgImpl(s.windowSize, s.maxBufferSize)
+	newAvg := aggregate.NewMovingWindowAvgImpl(s.windowSize, s.maxBufferSize)
 
 	lock.Lock()
 	defer lock.Unlock()
