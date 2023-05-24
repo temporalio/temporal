@@ -97,12 +97,12 @@ func (a *MovingWindowAvgImpl) expireOldValues() {
 	defer a.Unlock()
 
 	for ; a.head != a.tail; a.head = a.head.Next() {
-		if data, ok := a.head.Value.(timestampedData); ok && time.Since(data.timestamp) > a.windowSize {
-			a.sum -= data.value
-			a.count--
-		} else {
+		data, ok := a.head.Value.(timestampedData)
+		if !ok || time.Since(data.timestamp) < a.windowSize {
 			break
 		}
+		a.sum -= data.value
+		a.count--
 	}
 }
 
