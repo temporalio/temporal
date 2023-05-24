@@ -105,6 +105,23 @@ func (s *DynamicRateLimitSuite) TestNamespaceReplicationQueue() {
 		WithBackoffCoefficient(1.5).
 		WithMaximumAttempts(5)
 
+	isRetryableFn := func(e error) bool {
+		if isMessageIDConflictError(e) {
+			return true
+		}
+		if shouldError {
+			if common.IsPersistenceTransientError(e) {
+				curMultiplier := reflect.ValueOf(*(s.rateLimiter)).FieldByName("curRateMultiplier").Float()
+				s.Less(curMultiplier, 1.0)
+
+				s.TestBase.FaultInjection.UpdateRate(0.0)
+				shouldError = false
+			}
+			return true
+		}
+		return false
+	}
+
 	numMessages := 100
 	concurrentSenders := 10
 
@@ -137,22 +154,7 @@ func (s *DynamicRateLimitSuite) TestNamespaceReplicationQueue() {
 						return s.NamespaceReplicationQueue.Publish(s.ctx, message)
 					},
 					retryPolicy,
-					func(e error) bool {
-						if isMessageIDConflictError(e) {
-							return true
-						}
-						if shouldError {
-							if common.IsPersistenceTransientError(e) {
-								curMultiplier := reflect.ValueOf(*(s.rateLimiter)).FieldByName("curRateMultiplier").Float()
-								s.Less(curMultiplier, 1.0)
-
-								s.TestBase.FaultInjection.UpdateRate(0.0)
-								shouldError = false
-							}
-							return true
-						}
-						return false
-					})
+					isRetryableFn)
 				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
 				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
