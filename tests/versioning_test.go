@@ -170,13 +170,13 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-// This test verifies that user data persists across unload/reload.
-func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
+func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
 
 	s.addNewDefaultBuildId(ctx, tq, "foo")
 
+	// Unload task queue to make sure the data is there when we load it again.
 	_, err := s.testCluster.host.matchingClient.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
 		NamespaceId:   s.getNamespaceID(s.namespace),
 		TaskQueue:     tq,
