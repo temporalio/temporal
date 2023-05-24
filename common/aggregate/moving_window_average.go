@@ -92,9 +92,6 @@ func (a *MovingWindowAvgImpl) Average() float64 {
 }
 
 func (a *MovingWindowAvgImpl) expireOldValuesLocked() {
-	a.Lock()
-	defer a.Unlock()
-
 	for ; a.head != a.tail; a.head = a.head.Next() {
 		data, ok := a.head.Value.(timestampedData)
 		if !ok || time.Since(data.timestamp) < a.windowSize {
