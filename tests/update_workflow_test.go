@@ -48,7 +48,7 @@ import (
 	"go.temporal.io/server/tests/testvars"
 )
 
-func (s *integrationSuite) startWorkflow(tv testvars.TestVars) testvars.TestVars {
+func (s *integrationSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
 	s.T().Helper()
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    tv.Any(),
@@ -64,7 +64,7 @@ func (s *integrationSuite) startWorkflow(tv testvars.TestVars) testvars.TestVars
 	return tv.WithRunID(startResp.GetRunId())
 }
 
-func (s *integrationSuite) acceptUpdateCommands(tv testvars.TestVars, updateID string) []*commandpb.Command {
+func (s *integrationSuite) acceptUpdateCommands(tv *testvars.TestVars, updateID string) []*commandpb.Command {
 	s.T().Helper()
 	return []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
@@ -74,7 +74,7 @@ func (s *integrationSuite) acceptUpdateCommands(tv testvars.TestVars, updateID s
 	}}
 }
 
-func (s *integrationSuite) completeUpdateCommands(tv testvars.TestVars, updateID string) []*commandpb.Command {
+func (s *integrationSuite) completeUpdateCommands(tv *testvars.TestVars, updateID string) []*commandpb.Command {
 	s.T().Helper()
 	return []*commandpb.Command{
 		{
@@ -86,12 +86,12 @@ func (s *integrationSuite) completeUpdateCommands(tv testvars.TestVars, updateID
 	}
 }
 
-func (s *integrationSuite) acceptCompleteUpdateCommands(tv testvars.TestVars, updateID string) []*commandpb.Command {
+func (s *integrationSuite) acceptCompleteUpdateCommands(tv *testvars.TestVars, updateID string) []*commandpb.Command {
 	s.T().Helper()
 	return append(s.acceptUpdateCommands(tv, updateID), s.completeUpdateCommands(tv, updateID)...)
 }
 
-func (s *integrationSuite) acceptUpdateMessages(tv testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
+func (s *integrationSuite) acceptUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
 	s.T().Helper()
 	updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
 
@@ -109,7 +109,7 @@ func (s *integrationSuite) acceptUpdateMessages(tv testvars.TestVars, updRequest
 	}
 }
 
-func (s *integrationSuite) completeUpdateMessages(tv testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
+func (s *integrationSuite) completeUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
 	s.T().Helper()
 	updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
 
@@ -130,12 +130,12 @@ func (s *integrationSuite) completeUpdateMessages(tv testvars.TestVars, updReque
 	}
 }
 
-func (s *integrationSuite) acceptCompleteUpdateMessages(tv testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
+func (s *integrationSuite) acceptCompleteUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
 	s.T().Helper()
 	return append(s.acceptUpdateMessages(tv, updRequestMsg, updateID), s.completeUpdateMessages(tv, updRequestMsg, updateID)...)
 }
 
-func (s *integrationSuite) rejectUpdateMessages(tv testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
+func (s *integrationSuite) rejectUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
 	s.T().Helper()
 	updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
 
@@ -157,7 +157,7 @@ func (s *integrationSuite) rejectUpdateMessages(tv testvars.TestVars, updRequest
 	}
 }
 
-func (s *integrationSuite) sendUpdateNoError(tv testvars.TestVars, updateID string) *workflowservice.UpdateWorkflowExecutionResponse {
+func (s *integrationSuite) sendUpdateNoError(tv *testvars.TestVars, updateID string) *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
 	resp, err := s.sendUpdate(tv, updateID)
 	// It is important to do assert here to fail fast without trying to process update in wtHandler.
@@ -165,7 +165,7 @@ func (s *integrationSuite) sendUpdateNoError(tv testvars.TestVars, updateID stri
 	return resp
 }
 
-func (s *integrationSuite) sendUpdate(tv testvars.TestVars, updateID string) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
+func (s *integrationSuite) sendUpdate(tv *testvars.TestVars, updateID string) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
 	s.T().Helper()
 	return s.engine.UpdateWorkflowExecution(NewContext(), &workflowservice.UpdateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
@@ -1579,7 +1579,6 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
 
 	updateResult2 := <-updateResultCh2
 	s.Equal(tv.String("update rejected", "2"), updateResult2.GetOutcome().GetFailure().GetMessage())
-	s.printWorkflowHistoryCompact(s.namespace, tv.WorkflowExecution())
 
 	// Complete update1 in WT3.
 	updateCompleteResp1, err := poller.HandlePartialWorkflowTask(updateRejectResp2.GetWorkflowTask(), true)
