@@ -126,22 +126,22 @@ func (s *PersistenceHealthSignalAggregator[_]) ErrorRatio(req quotas.Request) fl
 }
 
 func (s *PersistenceHealthSignalAggregator[_]) getOrInitLatencyAverage(req quotas.Request) aggregate.MovingWindowAverage {
-	return s.getOrInitAverage(req, &s.latencyAverages, &s.latencyLock)
+	return s.getOrInitAverage(req, s.latencyAverages, &s.latencyLock)
 }
 
 func (s *PersistenceHealthSignalAggregator[_]) getOrInitErrorRatio(req quotas.Request) aggregate.MovingWindowAverage {
-	return s.getOrInitAverage(req, &s.errorRatios, &s.errorLock)
+	return s.getOrInitAverage(req, s.errorRatios, &s.errorLock)
 }
 
 func (s *PersistenceHealthSignalAggregator[K]) getOrInitAverage(
 	req quotas.Request,
-	averages *map[K]aggregate.MovingWindowAverage,
+	averages map[K]aggregate.MovingWindowAverage,
 	lock *sync.RWMutex,
 ) aggregate.MovingWindowAverage {
 	key := s.keyMapper(req)
 
 	lock.RLock()
-	avg, ok := (*averages)[key]
+	avg, ok := averages[key]
 	lock.RUnlock()
 	if ok {
 		return avg
@@ -152,12 +152,12 @@ func (s *PersistenceHealthSignalAggregator[K]) getOrInitAverage(
 	lock.Lock()
 	defer lock.Unlock()
 
-	avg, ok = (*averages)[key]
+	avg, ok = averages[key]
 	if ok {
 		return avg
 	}
 
-	(*averages)[key] = newAvg
+	averages[key] = newAvg
 	return newAvg
 }
 
