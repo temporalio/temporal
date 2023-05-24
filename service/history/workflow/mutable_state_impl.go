@@ -4052,6 +4052,10 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
 	}
 
+	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
+		ms.approximateSize -= prev.Size()
+	}
+
 	now := ms.timeSource.Now()
 
 	backoffInterval, retryState := getBackoffInterval(
@@ -4088,6 +4092,7 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+	ms.approximateSize += ai.Size()
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
