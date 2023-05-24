@@ -48,7 +48,7 @@ type (
 		head          *ring.Ring
 		tail          *ring.Ring
 		sum           int64
-		count         int
+		count         int64
 	}
 )
 
@@ -69,7 +69,7 @@ func (a *MovingWindowAvgImpl) Record(val int64) {
 	a.Lock()
 	defer a.Unlock()
 
-	if a.count == a.maxBufferSize {
+	if a.count == int64(a.maxBufferSize) {
 		a.expireOneLocked()
 	}
 
@@ -89,7 +89,7 @@ func (a *MovingWindowAvgImpl) Average() float64 {
 	if a.count == 0 {
 		return 0
 	}
-	return float64(a.sum / int64(a.count))
+	return float64(a.sum) / float64(a.count)
 }
 
 func (a *MovingWindowAvgImpl) expireOldValues() {
