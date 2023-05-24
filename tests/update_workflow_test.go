@@ -289,9 +289,6 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
 
-			// This is to make sure that update API call gets to the server and blocked on result.
-			time.Sleep(500 * time.Millisecond)
-
 			// Process update in workflow.
 			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 			s.NoError(err)
@@ -417,9 +414,6 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_AcceptComp
 			go func() {
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
-
-			// This is to make sure that update API call gets to the server and blocked on result.
-			time.Sleep(500 * time.Millisecond)
 
 			// Process update in workflow.
 			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
@@ -891,7 +885,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 			go func() {
-				time.Sleep(500 * time.Millisecond) // This is to make sure that next sticky poller reach to server first
+				time.Sleep(500 * time.Millisecond) // This is to make sure that next sticky poller reach to server first.
 				updateResultCh <- s.sendUpdateNoError(tv, "1")
 			}()
 
@@ -1033,8 +1027,6 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
 
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
-
 	// Process update in workflow task from non-sticky task queue.
 	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
 	s.NoError(err)
@@ -1136,8 +1128,6 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_Reject() {
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
-
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
 
 	// Process update in workflow.
 	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
@@ -1255,8 +1245,6 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject(
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
-
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
 
 	// Process update in workflow.
 	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
@@ -1389,7 +1377,6 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1s
 	go func() {
 		updateResultCh1 <- s.sendUpdateNoError(tv, "1")
 	}()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
 
 	// Accept update1 in normal WT1.
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -1400,7 +1387,6 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1s
 	go func() {
 		updateResultCh2 <- s.sendUpdateNoError(tv, "2")
 	}()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update2 gets to the server.
 
 	// Poll for WT2 which 2nd update. Accept update2.
 	_, updateAcceptResp2, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
@@ -1552,7 +1538,6 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
 	go func() {
 		updateResultCh1 <- s.sendUpdateNoError(tv, "1")
 	}()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
 
 	// Accept update1 in WT1.
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
@@ -1563,7 +1548,6 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
 	go func() {
 		updateResultCh2 <- s.sendUpdateNoError(tv, "2")
 	}()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update2 gets to the server.
 
 	// Poll for WT2 which 2nd update. Reject update2.
 	_, updateRejectResp2, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
@@ -1881,7 +1865,6 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowT
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
 
 	// Process update in workflow.
 	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
@@ -2005,7 +1988,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflo
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server and speculative WT was created.
+	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server before the next Signal call.
 
 	// Send signal which will NOT be buffered because speculative WT is not started yet (only scheduled).
 	// This will persist MS and speculative WT must be converted to normal.
@@ -2159,7 +2142,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
 
 	// Try to process update in workflow, but it takes more than WT timeout. So, WT times out.
 	_, _, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
@@ -2283,10 +2265,9 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduleToCloseTimeoutSpeculativeW
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
 	}()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server and speculative WT is created.
 
 	// Wait for sticky timeout to fire.
-	time.Sleep(poller.StickyScheduleToStartTimeout)
+	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
 
 	// Try to process update in workflow, poll from normal task queue.
 	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
@@ -2415,7 +2396,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
 		updateResultCh <- struct{}{}
 	}
 	go updateWorkflowFn()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
 
 	// Process update in workflow.
 	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
@@ -2494,10 +2474,6 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
-	type UpdateResult struct {
-		Response *workflowservice.UpdateWorkflowExecutionResponse
-		Err      error
-	}
 	updateResultCh := make(chan struct{})
 	updateWorkflowFn := func() {
 		oneSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
@@ -2520,7 +2496,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 		updateResultCh <- struct{}{}
 	}
 	go updateWorkflowFn()
-	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server.
+	time.Sleep(500 * time.Millisecond) // This is to make sure that update gets to the server before the next Terminate call.
 
 	// Terminate workflow after speculative WT is scheduled but not started.
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -2530,8 +2506,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 	})
 	s.NoError(err)
 
-	// Wait for update context to timeout.
-	time.Sleep(1 * time.Second)
+	<-updateResultCh
 
 	s.Equal(1, wtHandlerCalls)
 	s.Equal(1, msgHandlerCalls)
