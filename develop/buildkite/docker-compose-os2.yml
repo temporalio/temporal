@@ -1,0 +1,50 @@
+version: "3.5"
+
+services:
+  cassandra:
+    image: cassandra:3.11
+    networks:
+      services-network:
+        aliases:
+          - cassandra
+
+  opensearch:
+    image: opensearchproject/opensearch:2.6.0
+    networks:
+      services-network:
+        aliases:
+          - opensearch
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+
+  integration-test-cassandra:
+    build:
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+      - "ES_SEEDS=opensearch"
+      - "ES_VERSION=v8"
+      - "PERSISTENCE_TYPE=nosql"
+      - "PERSISTENCE_DRIVER=cassandra"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    depends_on:
+      - cassandra
+      - opensearch
+    volumes:
+      - ../..:/temporal
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+    networks:
+      services-network:
+        aliases:
+          - integration-test
+
+networks:
+  services-network:
+    name: services-network
+    driver: bridge
