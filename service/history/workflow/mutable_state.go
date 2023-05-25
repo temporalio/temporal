@@ -153,7 +153,6 @@ type (
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
 		GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
-		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
 		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
@@ -209,6 +208,7 @@ type (
 		HasPendingWorkflowTask() bool
 		HadOrHasWorkflowTask() bool
 		IsCancelRequested() bool
+		IsWorkflowCloseAttempted() bool
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
 		GetApproximatePersistedSize() int

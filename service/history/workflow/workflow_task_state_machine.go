@@ -216,7 +216,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskCompletedEvent(
 }
 
 func (m *workflowTaskStateMachine) ReplicateWorkflowTaskFailedEvent() error {
-	m.FailWorkflowTask(true)
+	m.failWorkflowTask(true)
 	return nil
 }
 
@@ -228,7 +228,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskTimedOutEvent(
 	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		incrementAttempt = false
 	}
-	m.FailWorkflowTask(incrementAttempt)
+	m.failWorkflowTask(incrementAttempt)
 	return nil
 }
 
@@ -621,10 +621,14 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		return nil, err
 	}
 
-	// always clear workflow task attempt for reset
-	if cause == enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW ||
-		cause == enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND {
+	switch cause {
+	case enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND:
+		// always clear workflow task attempt for reset and failover close command
 		m.ms.executionInfo.WorkflowTaskAttempt = 1
+	case enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND:
+		// workflow attempted to close but failed due to unhandled buffer events
+		m.ms.workflowCloseAttempted = true
 	}
 
 	// Attempt counter was incremented directly in mutable state. Current WT attempt counter needs to be updated.
@@ -676,7 +680,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	return event, nil
 }
 
-func (m *workflowTaskStateMachine) FailWorkflowTask(
+func (m *workflowTaskStateMachine) failWorkflowTask(
 	incrementAttempt bool,
 ) {
 	// Increment attempts only if workflow task is failing on non-sticky task queue.
@@ -707,8 +711,8 @@ func (m *workflowTaskStateMachine) FailWorkflowTask(
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 }
 
-// DeleteWorkflowTask deletes a workflow task.
-func (m *workflowTaskStateMachine) DeleteWorkflowTask() {
+// deleteWorkflowTask deletes a workflow task.
+func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 	resetWorkflowTaskInfo := &WorkflowTaskInfo{
 		Version:             common.EmptyVersion,
 		ScheduledEventID:    common.EmptyEventID,
@@ -733,6 +737,23 @@ func (m *workflowTaskStateMachine) DeleteWorkflowTask() {
 func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	workflowTask *WorkflowTaskInfo,
 ) {
+	if m.HasStartedWorkflowTask() && workflowTask.StartedEventID == common.EmptyEventID {
+		// reset the flag whenever started workflow task closes, there could be three cases:
+		// 1. workflow task completed:
+		//    a. workflow task contains close workflow command, the fact that workflow task
+		//       completes successfully means workflow will also close and the value of the
+		//       flag doesn't matter.
+		//    b. workflow task doesn't contain close workflow command, then by definition,
+		//       workflow is not trying to close, so unset the flag.
+		// 2. workflow task timedout: we don't know if workflow is trying to close or not,
+		//    reset the flag to be safe. It's possible that workflow task is trying to signal
+		//    itself within a local activity when this flag is set, which may result in timeout.
+		//    reset the flag will allow the workflow to proceed.
+		// 3. workflow failed: always reset the flag here. If failure is due to unhandled command,
+		//    AddWorkflowTaskFailedEvent will set the flag.
+		m.ms.workflowCloseAttempted = false
+	}
+
 	m.ms.executionInfo.WorkflowTaskVersion = workflowTask.Version
 	m.ms.executionInfo.WorkflowTaskScheduledEventId = workflowTask.ScheduledEventID
 	m.ms.executionInfo.WorkflowTaskStartedEventId = workflowTask.StartedEventID
@@ -908,7 +929,7 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *WorkflowTaskInfo {
 
 func (m *workflowTaskStateMachine) beforeAddWorkflowTaskCompletedEvent() {
 	// Make sure to delete workflow task before adding events. Otherwise they are buffered rather than getting appended.
-	m.DeleteWorkflowTask()
+	m.deleteWorkflowTask()
 }
 
 func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(

@@ -166,6 +166,11 @@ type (
 		// record if a event has been applied to mutable state
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
+		// a flag indicating if workflow has attempted to close (complete/cancel/continue as new)
+		// but failed due to undelievered buffered events
+		// the flag will be unset whenever workflow task successfully completed, timedout or failed
+		// due to cause other than UnhandledCommand
+		workflowCloseAttempted bool
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
@@ -1501,11 +1506,6 @@ func (ms *MutableStateImpl) HasAnyBufferedEvent(filter BufferedEventFilter) bool
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
 }
 
-// DeleteWorkflowTask deletes a workflow task.
-func (ms *MutableStateImpl) DeleteWorkflowTask() {
-	ms.workflowTaskManager.DeleteWorkflowTask()
-}
-
 // GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
 // first event ID is the ID of a batch of events in a single history events record
 func (ms *MutableStateImpl) GetLastFirstEventIDTxnID() (int64, int64) {
@@ -1541,6 +1541,10 @@ func (ms *MutableStateImpl) IsWorkflowExecutionRunning() bool {
 
 func (ms *MutableStateImpl) IsCancelRequested() bool {
 	return ms.executionInfo.CancelRequested
+}
+
+func (ms *MutableStateImpl) IsWorkflowCloseAttempted() bool {
+	return ms.workflowCloseAttempted
 }
 
 func (ms *MutableStateImpl) IsSignalRequested(

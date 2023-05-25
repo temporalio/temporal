@@ -959,18 +959,6 @@ func (mr *MockMutableStateMockRecorder) DeleteSignalRequested(requestID interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSignalRequested", reflect.TypeOf((*MockMutableState)(nil).DeleteSignalRequested), requestID)
 }
 
-// DeleteWorkflowTask mocks base method.
-func (m *MockMutableState) DeleteWorkflowTask() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DeleteWorkflowTask")
-}
-
-// DeleteWorkflowTask indicates an expected call of DeleteWorkflowTask.
-func (mr *MockMutableStateMockRecorder) DeleteWorkflowTask() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).DeleteWorkflowTask))
-}
-
 // FlushBufferedEvents mocks base method.
 func (m *MockMutableState) FlushBufferedEvents() {
 	m.ctrl.T.Helper()
@@ -1849,6 +1837,20 @@ func (m *MockMutableState) IsTransientWorkflowTask() bool {
 func (mr *MockMutableStateMockRecorder) IsTransientWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).IsTransientWorkflowTask))
+}
+
+// IsWorkflowCloseAttempted mocks base method.
+func (m *MockMutableState) IsWorkflowCloseAttempted() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsWorkflowCloseAttempted")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsWorkflowCloseAttempted indicates an expected call of IsWorkflowCloseAttempted.
+func (mr *MockMutableStateMockRecorder) IsWorkflowCloseAttempted() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowCloseAttempted", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowCloseAttempted))
 }
 
 // IsWorkflowExecutionRunning mocks base method.
