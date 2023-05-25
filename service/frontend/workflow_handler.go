@@ -931,7 +931,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
-
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3558,10 +3557,6 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 	return histResp.GetResponse(), nil
 }
 
-func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("later")
-}
-
 func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (_ *workflowservice.UpdateWorkerBuildIdCompatibilityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
@@ -3628,6 +3623,60 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 	}
 
 	return matchingResponse.Response, err
+}
+
+func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
+	if len(request.GetBuildIds()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("Must query at least one build id (or empty string for unversioned worker)")
+	}
+	if len(request.GetBuildIds()) > wh.config.ReachabilityQueryBuildIdLimit() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Too many build ids queried at once, limit: %d", wh.config.ReachabilityQueryBuildIdLimit()))
+	}
+	gotUnversionedRequest := false
+	for _, buildId := range request.GetBuildIds() {
+		if buildId == "" {
+			gotUnversionedRequest = true
+		}
+		if len(buildId) > wh.config.WorkerBuildIdSizeLimit() {
+			return nil, errBuildIdTooLong
+		}
+	}
+	if gotUnversionedRequest && len(request.GetTaskQueues()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue")
+	}
+	for _, taskQueue := range request.GetTaskQueues() {
+		taskQueue := &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+		if err := wh.validateTaskQueue(taskQueue); err != nil {
+			return nil, err
+		}
+	}
+
+	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.getWorkerTaskReachabilityValidated(ctx, ns, request)
+	if err != nil {
+		var invalidArgument *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgument) {
+			return nil, err
+		}
+		// Intentionally treat all errors as internal errors
+		wh.logger.Error("Failed getting worker task reachability", tag.Error(err))
+		return nil, serviceerror.NewInternal("Internal error")
+	}
+	return response, nil
 }
 
 func (wh *WorkflowHandler) StartBatchOperation(

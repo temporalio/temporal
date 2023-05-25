@@ -738,6 +738,21 @@ func (mr *MockTaskManagerMockRecorder) CompleteTasksLessThan(ctx, request interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTasksLessThan", reflect.TypeOf((*MockTaskManager)(nil).CompleteTasksLessThan), ctx, request)
 }
 
+// CountTaskQueuesByBuildId mocks base method.
+func (m *MockTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountTaskQueuesByBuildId", ctx, request)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountTaskQueuesByBuildId indicates an expected call of CountTaskQueuesByBuildId.
+func (mr *MockTaskManagerMockRecorder) CountTaskQueuesByBuildId(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountTaskQueuesByBuildId", reflect.TypeOf((*MockTaskManager)(nil).CountTaskQueuesByBuildId), ctx, request)
+}
+
 // CreateTaskQueue mocks base method.
 func (m *MockTaskManager) CreateTaskQueue(ctx context.Context, request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -824,6 +839,21 @@ func (m *MockTaskManager) GetTaskQueueUserData(ctx context.Context, request *Get
 func (mr *MockTaskManagerMockRecorder) GetTaskQueueUserData(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueueUserData), ctx, request)
+}
+
+// GetTaskQueuesByBuildId mocks base method.
+func (m *MockTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueuesByBuildId", ctx, request)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueuesByBuildId indicates an expected call of GetTaskQueuesByBuildId.
+func (mr *MockTaskManagerMockRecorder) GetTaskQueuesByBuildId(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueuesByBuildId", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueuesByBuildId), ctx, request)
 }
 
 // GetTasks mocks base method.

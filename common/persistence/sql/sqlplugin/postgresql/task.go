@@ -106,6 +106,10 @@ task_queue_id = :task_queue_id
 		`VALUES ($1, $2, $3, $4, 1)`
 
 	listTaskQueueUserDataQry = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = $1 AND task_queue_name > $2 LIMIT $3`
+
+	addBuildIdToTaskQueueMappingQry = `INSERT INTO build_id_to_task_queue (namespace_id, build_id, task_queue_name) VALUES `
+	listTaskQueuesByBuildIdQry      = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
+	countTaskQueuesByBuildIdQry     = `SELECT COUNT(*) FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -336,8 +340,47 @@ func (pdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.U
 	return nil
 }
 
+func (pdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddBuildIdToTaskQueueMapping) error {
+	query := addBuildIdToTaskQueueMappingQry
+	var params []any
+	for idx, buildId := range request.BuildIds {
+		query += fmt.Sprintf("($%d, $%d, $%d)", idx*3+1, idx*3+2, idx*3+3)
+		if idx < len(request.BuildIds)-1 {
+			query += ", "
+		}
+		params = append(params, request.NamespaceID, buildId, request.TaskQueueName)
+	}
+
+	_, err := pdb.conn.ExecContext(ctx, query, params...)
+	return err
+}
+
+func (pdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveBuildIdToTaskQueueMapping) error {
+	// TODO(bergundy): implement when we support deletion
+	panic("not implemented")
+}
+
 func (pdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplugin.ListTaskQueueUserDataEntriesRequest) ([]sqlplugin.TaskQueueUserDataEntry, error) {
 	var rows []sqlplugin.TaskQueueUserDataEntry
 	err := pdb.conn.SelectContext(ctx, &rows, listTaskQueueUserDataQry, request.NamespaceID, request.LastTaskQueueName, request.Limit)
 	return rows, err
+}
+
+func (pdb *db) GetTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	var rows []struct {
+		TaskQueueName string
+	}
+
+	err := pdb.conn.SelectContext(ctx, &rows, listTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
+	taskQueues := make([]string, len(rows))
+	for i, row := range rows {
+		taskQueues[i] = row.TaskQueueName
+	}
+	return taskQueues, err
+}
+
+func (pdb *db) CountTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.GetTaskQueuesByBuildIdRequest) (int, error) {
+	var count int
+	err := pdb.conn.GetContext(ctx, &count, countTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
+	return count, err
 }

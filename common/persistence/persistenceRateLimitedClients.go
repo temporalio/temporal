@@ -560,6 +560,20 @@ func (p taskRateLimitedPersistenceClient) ListTaskQueueUserDataEntries(
 	return p.persistence.ListTaskQueueUserDataEntries(ctx, request)
 }
 
+func (p taskRateLimitedPersistenceClient) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	if ok := allow(ctx, "GetTaskQueuesByBuildId", p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.GetTaskQueuesByBuildId(ctx, request)
+}
+
+func (p taskRateLimitedPersistenceClient) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
+	if ok := allow(ctx, "CountTaskQueuesByBuildId", p.rateLimiter); !ok {
+		return 0, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.CountTaskQueuesByBuildId(ctx, request)
+}
+
 func (p *taskRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
