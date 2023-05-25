@@ -68,6 +68,12 @@ func (s *versioningIntegSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode:    partitionTreeDegree,
+
+		// The dispatch tests below rely on being able to see the effects of changing
+		// versioning data relatively quickly. In general we only promise to act on new
+		// versioning data "soon", i.e. after a long poll interval. We can reduce the long poll
+		// interval so that we don't have to wait so long.
+		dynamicconfig.MatchingLongPollExpirationInterval: 5 * time.Second,
 	}
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
@@ -258,7 +264,7 @@ func (s *versioningIntegSuite) dispatchNewWorkflow() {
 		return "done!", nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
@@ -302,7 +308,7 @@ func (s *versioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	// wait for it to start polling
 	time.Sleep(200 * time.Millisecond)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
@@ -322,7 +328,7 @@ func (s *versioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
 func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	tq := s.randomizeStr(s.T().Name())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	started := make(chan struct{}, 1)
@@ -472,7 +478,7 @@ func (s *versioningIntegSuite) dispatchActivity() {
 		panic("workflow should not run on v2")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
@@ -548,7 +554,7 @@ func (s *versioningIntegSuite) dispatchChildWorkflow() {
 		panic("workflow should not run on v2")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
@@ -595,12 +601,10 @@ func (s *versioningIntegSuite) TestDispatchContinueAsNew() {
 }
 
 func (s *versioningIntegSuite) dispatchContinueAsNew() {
-	// TODO: this test will need updating after fixing stickiness, see comments below
 	tq := s.randomizeStr(s.T().Name())
 
-	started1 := make(chan struct{})
-	started11 := make(chan struct{})
-	started2 := make(chan struct{})
+	started1 := make(chan struct{}, 1)
+	started11 := make(chan struct{}, 2)
 
 	wf1 := func(ctx workflow.Context, attempt int) (string, error) {
 		started1 <- struct{}{}
@@ -612,8 +616,7 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 		_ = newCtx
 		switch attempt {
 		case 0:
-			// TODO: after fixing stickiness, comment this out:
-			return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
+			// return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
 		case 1:
 			// return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 2:
@@ -627,11 +630,9 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 			VersioningIntent: worker.UseDefaultVersion,
 		})
-		_ = newCtx
 		switch attempt {
 		case 0:
-			// TODO: after fixing stickiness, uncomment this:
-			// return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
+			return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
 		case 1:
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 2:
@@ -640,24 +641,14 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 		panic("oops")
 	}
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
-		started2 <- struct{}{}
-		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
-		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			VersioningIntent: worker.UseDefaultVersion,
-		})
-		_ = newCtx
 		switch attempt {
-		case 0:
-			// return "",workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
-		case 1:
-			// return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 2:
 			return "done!", nil
 		}
 		panic("oops")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
@@ -680,6 +671,9 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	s.addCompatibleBuildId(ctx, tq, "v11", "v1", false)
 	s.addNewDefaultBuildId(ctx, tq, "v2")
 	s.waitForPropagation(ctx, tq, "v2")
+	// waitForPropagation can't check for propagation to sticky queues, add another 100ms to
+	// make sure it got to those.
+	time.Sleep(100 * time.Millisecond)
 
 	// start workers for v11 and v2
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
@@ -698,17 +692,15 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	// unblock the workflow. it should continue on v1 then continue-as-new onto v11
-	// TODO: after fixing stickiness, it should continue on v11 and then continue-as-new onto v11.
-	// will also need to mess with channels then.
+	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
-
-	// wait for it to start on v11 then unblock. it should continue on v11 then continue-as-new onto v2.
 	s.waitForChan(ctx, started11)
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
-	// wait for it to start on v2 and unblock. it should return.
-	s.waitForChan(ctx, started2)
+	// then continue-as-new onto v11
+	s.waitForChan(ctx, started11)
+
+	// unblock the second run. it should continue on v11 then continue-as-new onto v2, then
+	// complete.
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	var out string
@@ -721,10 +713,9 @@ func (s *versioningIntegSuite) TestDispatchRetry() {
 }
 
 func (s *versioningIntegSuite) dispatchRetry() {
-	// TODO: this test will need updating after fixing stickiness, see comments below
 	tq := s.randomizeStr(s.T().Name())
 
-	started1 := make(chan struct{}, 3)
+	started1 := make(chan struct{}, 1)
 	started11 := make(chan struct{}, 3)
 
 	wf1 := func(ctx workflow.Context) (string, error) {
@@ -732,8 +723,7 @@ func (s *versioningIntegSuite) dispatchRetry() {
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		switch workflow.GetInfo(ctx).Attempt {
 		case 1:
-			// TODO: stickiness
-			return "", errors.New("try again")
+			// return "", errors.New("try again")
 		case 2:
 			// return "", errors.New("try again")
 		case 3:
@@ -746,8 +736,7 @@ func (s *versioningIntegSuite) dispatchRetry() {
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		switch workflow.GetInfo(ctx).Attempt {
 		case 1:
-			// TODO: stickiness
-			// return "", errors.New("try again")
+			return "", errors.New("try again")
 		case 2:
 			return "", errors.New("try again")
 		case 3:
@@ -759,7 +748,7 @@ func (s *versioningIntegSuite) dispatchRetry() {
 		panic("oops")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
@@ -768,6 +757,7 @@ func (s *versioningIntegSuite) dispatchRetry() {
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                 "v1",
 		UseBuildIDForVersioning: true,
+		// FIXME: MaxConcurrentWorkflowTaskPollers: 10,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w1.Start())
@@ -781,12 +771,15 @@ func (s *versioningIntegSuite) dispatchRetry() {
 	}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	<-started1
+	s.waitForChan(ctx, started1)
 
 	// now register v11 as newer compatible with v1 AND v2 as a new default
 	s.addCompatibleBuildId(ctx, tq, "v11", "v1", false)
 	s.addNewDefaultBuildId(ctx, tq, "v2")
 	s.waitForPropagation(ctx, tq, "v2")
+	// waitForPropagation can't check for propagation to sticky queues, add another 100ms to
+	// make sure it got to those.
+	time.Sleep(100 * time.Millisecond)
 
 	// start workers for v11 and v2
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
@@ -805,22 +798,16 @@ func (s *versioningIntegSuite) dispatchRetry() {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	// unblock the workflow. it should continue on v1 then retry onto v11
-	// TODO: after fixing stickiness, it should continue on v11 and then retry onto v11.
-	// will also need to mess with channels then.
+	// unblock the workflow. it should replay on v11 and then retry (on v11).
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.waitForChan(ctx, started11) // replay
+	s.waitForChan(ctx, started11) // attempt 2
+
+	// now it's blocked in attempt 2. unblock it.
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
-	// TODO: fix this hack by making polls interruptable? the problem is w1 still has a poller
-	// sitting around blocked since before we changed versioning data
-	time.Sleep(500 * time.Millisecond)
-	w1.Stop()
-
-	// wait for it to start on v11 then unblock. it should continue on v11 then retry onto v11 again.
-	<-started11
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
-
-	// wait for it to start on v11 and unblock. it should return.
-	<-started11
+	// wait for attempt 3. unblock that and it should return.
+	s.waitForChan(ctx, started11) // attempt 3
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	var out string
@@ -852,7 +839,7 @@ func (s *versioningIntegSuite) dispatchCron() {
 		return "ok", nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
