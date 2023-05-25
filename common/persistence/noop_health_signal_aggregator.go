@@ -36,6 +36,14 @@ type (
 
 func newNoopSignalAggregator() *noopSignalAggregator { return &noopSignalAggregator{} }
 
+func (a *noopSignalAggregator) Start() {
+	return
+}
+
+func (a *noopSignalAggregator) Stop() {
+	return
+}
+
 func (a *noopSignalAggregator) GetRecordFn(_ quotas.Request) func(error) {
 	return func(error) {}
 }

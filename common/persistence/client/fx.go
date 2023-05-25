@@ -25,7 +25,6 @@
 package client
 
 import (
-	"go.temporal.io/server/common/persistence"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -33,6 +32,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
