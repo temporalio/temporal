@@ -1008,6 +1008,7 @@ func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, req
 	if e.namespaceReplicationQueue == nil {
 		return &matchingservice.ReplicateTaskQueueUserDataResponse{}, nil
 	}
+
 	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
 	locks.replicationLock.Lock()
 	defer locks.replicationLock.Unlock()
