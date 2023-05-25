@@ -216,7 +216,7 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 func (f *factoryImpl) Close() {
 	f.dataStoreFactory.Close()
 	if f.healthSignals != nil {
-		f.healthSignals.Start()
+		f.healthSignals.Stop()
 	}
 }
 

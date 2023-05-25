@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/quotas"
 )
 
 const (
@@ -45,12 +44,14 @@ const (
 type (
 	HealthSignalAggregator interface {
 		common.Daemon
-		GetRecordFn(req quotas.Request) func(err error)
+		Record(callerSegment int32, latency time.Duration, err error)
 		AverageLatency() float64
 		ErrorRatio() float64
 	}
 
 	HealthSignalAggregatorImpl struct {
+		enabled dynamicconfig.BoolPropertyFn
+
 		status     int32
 		shutdownCh chan struct{}
 
@@ -69,18 +70,20 @@ type (
 )
 
 func NewHealthSignalAggregatorImpl(
-	windowSize dynamicconfig.DurationPropertyFn,
-	maxBufferSize dynamicconfig.IntPropertyFn,
+	enabled dynamicconfig.BoolPropertyFn,
+	windowSize time.Duration,
+	maxBufferSize int,
 	metricsHandler metrics.Handler,
 	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
 	logger log.Logger,
 ) *HealthSignalAggregatorImpl {
 	return &HealthSignalAggregatorImpl{
+		enabled:              enabled,
 		status:               common.DaemonStatusInitialized,
 		shutdownCh:           make(chan struct{}),
 		requestsPerShard:     make(map[int32]int64),
-		latencyAverage:       aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
-		errorRatio:           aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
+		latencyAverage:       aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+		errorRatio:           aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
 		metricsHandler:       metricsHandler,
 		emitMetricsTimer:     time.NewTicker(emitMetricsInterval),
 		perShardRPSWarnLimit: perShardRPSWarnLimit,
@@ -89,6 +92,11 @@ func NewHealthSignalAggregatorImpl(
 }
 
 func (s *HealthSignalAggregatorImpl) Start() {
+	if !s.enabled() {
+		NoopHealthSignalAggregator.Start()
+		return
+	}
+
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -96,6 +104,11 @@ func (s *HealthSignalAggregatorImpl) Start() {
 }
 
 func (s *HealthSignalAggregatorImpl) Stop() {
+	if !s.enabled() {
+		NoopHealthSignalAggregator.Stop()
+		return
+	}
+
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -103,28 +116,39 @@ func (s *HealthSignalAggregatorImpl) Stop() {
 	s.emitMetricsTimer.Stop()
 }
 
-func (s *HealthSignalAggregatorImpl) GetRecordFn(req quotas.Request) func(err error) {
-	start := time.Now()
-	return func(err error) {
-		s.latencyAverage.Record(time.Since(start).Milliseconds())
+func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, latency time.Duration, err error) {
+	if !s.enabled() {
+		NoopHealthSignalAggregator.Record(callerSegment, latency, err)
+		return
+	}
 
-		if isUnhealthyError(err) {
-			s.errorRatio.Record(1)
-		} else {
-			s.errorRatio.Record(0)
-		}
+	// TODO: uncomment when adding dynamic rate limiter
+	//s.latencyAverage.Record(latency.Milliseconds())
+	//
+	//if isUnhealthyError(err) {
+	//	s.errorRatio.Record(1)
+	//} else {
+	//	s.errorRatio.Record(0)
+	//}
 
-		if req.CallerSegment != CallerSegmentMissing {
-			s.incrementShardRequestCount(req.CallerSegment)
-		}
+	if callerSegment != CallerSegmentMissing {
+		s.incrementShardRequestCount(callerSegment)
 	}
 }
 
 func (s *HealthSignalAggregatorImpl) AverageLatency() float64 {
+	if !s.enabled() {
+		return NoopHealthSignalAggregator.AverageLatency()
+	}
+
 	return s.latencyAverage.Average()
 }
 
 func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
+	if !s.enabled() {
+		return NoopHealthSignalAggregator.ErrorRatio()
+	}
+
 	return s.errorRatio.Average()
 }
 
@@ -156,17 +180,18 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 	}
 }
 
-func isUnhealthyError(err error) bool {
-	if err == nil {
-		return false
-	}
-	switch err.(type) {
-	case *ShardOwnershipLostError,
-		*AppendHistoryTimeoutError,
-		*TimeoutError:
-		return true
-
-	default:
-		return false
-	}
-}
+// TODO: uncomment when adding dynamic rate limiter
+//func isUnhealthyError(err error) bool {
+//	if err == nil {
+//		return false
+//	}
+//	switch err.(type) {
+//	case *ShardOwnershipLostError,
+//		*AppendHistoryTimeoutError,
+//		*TimeoutError:
+//		return true
+//
+//	default:
+//		return false
+//	}
+//}
