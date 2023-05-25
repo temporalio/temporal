@@ -92,11 +92,6 @@ func NewHealthSignalAggregatorImpl(
 }
 
 func (s *HealthSignalAggregatorImpl) Start() {
-	if !s.enabled() {
-		NoopHealthSignalAggregator.Start()
-		return
-	}
-
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
@@ -104,11 +99,6 @@ func (s *HealthSignalAggregatorImpl) Start() {
 }
 
 func (s *HealthSignalAggregatorImpl) Stop() {
-	if !s.enabled() {
-		NoopHealthSignalAggregator.Stop()
-		return
-	}
-
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -164,6 +154,10 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 		case <-s.shutdownCh:
 			return
 		case <-s.emitMetricsTimer.C:
+			if !s.enabled() {
+				continue
+			}
+
 			s.requestsLock.Lock()
 			requestCounts := s.requestsPerShard
 			s.requestsPerShard = make(map[int32]int64, len(requestCounts))
