@@ -69,8 +69,9 @@ const (
 
 func (s *versioningIntegSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
-		dynamicconfig.MatchingForwarderMaxChildrenPerNode:    partitionTreeDegree,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
+		dynamicconfig.MatchingForwarderMaxChildrenPerNode:        partitionTreeDegree,
 
 		// The dispatch tests below rely on being able to see the effects of changing
 		// versioning data relatively quickly. In general we only promise to act on new

@@ -839,7 +839,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -931,6 +931,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	}
 
 	if err := wh.validateVersioningInfo(
+		request.Namespace,
 		request.WorkerVersionStamp,
 		request.StickyAttributes.GetWorkerTaskQueue(),
 	); err != nil {
@@ -1085,7 +1086,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if err := wh.validateVersioningInfo(request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
 		return nil, err
 	}
 
@@ -3548,7 +3549,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
-	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
 		return nil, errWorkerVersioningNotAllowed
 	}
 
@@ -3584,7 +3585,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 		return nil, errRequestNotSet
 	}
 
-	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
 		return nil, errWorkerVersioningNotAllowed
 	}
 
@@ -4220,7 +4221,10 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
-func (wh *WorkflowHandler) validateVersioningInfo(id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+func (wh *WorkflowHandler) validateVersioningInfo(namespace string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(namespace) {
+		return errWorkerVersioningNotAllowed
+	}
 	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
 		return errUseVersioningWithoutNormalName
 	}

@@ -279,8 +279,10 @@ const (
 	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
-	// FrontendEnableUpdateWorkflowExecution enables worker versioning data read / write APIs.
+	// FrontendEnableWorkerVersioningDataAPIs enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
+	// FrontendEnableWorkerVersioningWorkflowAPIs enables worker versioning in workflow progress APIs.
+	FrontendEnableWorkerVersioningWorkflowAPIs = "frontend.workerVersioningWorkflowAPIs"
 
 	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.

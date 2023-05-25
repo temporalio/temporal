@@ -119,5 +119,5 @@ var (
 	errBatchOpsMaxWorkflowExecutionCount = serviceerror.NewInvalidArgument("Workflow executions count exceeded.")
 
 	errUpdateWorkflowExecutionAPINotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
-	errWorkerVersioningNotAllowed           = serviceerror.NewPermissionDenied("Worker versioning operations are disabled on this namespace.", "")
+	errWorkerVersioningNotAllowed           = serviceerror.NewPermissionDenied("Worker versioning is disabled on this namespace.", "")
 )
