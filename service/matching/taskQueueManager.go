@@ -495,6 +495,9 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 		return err
 	}
 	c.signalIfFatal(err)
+	if !options.Replicate {
+		return nil
+	}
 	_, err = c.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
 		NamespaceId: c.db.namespaceID.String(),
 		TaskQueue:   c.taskQueueID.BaseNameString(),

@@ -3632,7 +3632,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 		return nil, errRequestNotSet
 	}
 
-	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
 		return nil, errWorkerVersioningNotAllowed
 	}
 
