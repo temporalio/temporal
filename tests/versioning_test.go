@@ -366,14 +366,15 @@ func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchUpgradeStickyTimeout() {
+func (s *versioningIntegSuite) TestDispatchUpgradeStopOld() {
 	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(true) })
 }
-func (s *versioningIntegSuite) TestDispatchUpgradeStickyUnavailable() {
+
+func (s *versioningIntegSuite) TestDispatchUpgradeWait() {
 	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(false) })
 }
 
-func (s *versioningIntegSuite) dispatchUpgrade(letStickyWftTimeout bool) {
+func (s *versioningIntegSuite) dispatchUpgrade(stopOld bool) {
 	tq := s.randomizeStr(s.T().Name())
 
 	started := make(chan struct{}, 1)
@@ -384,12 +385,11 @@ func (s *versioningIntegSuite) dispatchUpgrade(letStickyWftTimeout bool) {
 		return "done!", nil
 	}
 
-	wf2 := func(ctx workflow.Context) (string, error) {
+	wf11 := func(ctx workflow.Context) (string, error) {
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
-		return "done from two!", nil
+		return "done from 1.1!", nil
 	}
 
-	// TODO: reduce after fixing sticky
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -409,40 +409,41 @@ func (s *versioningIntegSuite) dispatchUpgrade(letStickyWftTimeout bool) {
 	s.NoError(err)
 	s.waitForChan(ctx, started)
 
-	// Stop w1 to break stickiness
-	// TODO: this shouldn't be necessary, add behavior cases that disable stickiness
-	w1.Stop()
+	// now add v11 as compatible so the next workflow task runs there
+	s.addCompatibleBuildId(ctx, tq, "v11", "v1", false)
+	s.waitForPropagation(ctx, tq, "v11")
+	// add another 100ms to make sure it got to sticky queues also
+	time.Sleep(100 * time.Millisecond)
 
-	// two methods of breaking stickiness:
-	if letStickyWftTimeout {
-		// in this case we just start the new worker and kick the workflow immediately. the new
-		// wft will go to the sticky queue, be spooled, but eventually timeout and we'll get a
-		// new wft.
-	} else {
-		// in this case we sleep for more than stickyPollerUnavailableWindow. matching will
-		// return StickyWorkerUnavailable immediately after that.
-		time.Sleep(11 * time.Second)
-	}
-
-	// now add v2 as compatible so the next workflow task runs there
-	s.addCompatibleBuildId(ctx, tq, "v2", "v1", false)
-	s.waitForPropagation(ctx, tq, "v2")
-
-	w2 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          "v2",
+	w11 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          "v11",
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
-	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
-	s.NoError(w2.Start())
-	defer w2.Stop()
+	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w11.Start())
+	defer w11.Stop()
+
+	// Two cases:
+	if stopOld {
+		// Stop the old worker. Workflow tasks will go to the sticky queue, which will see that
+		// it's not the latest and kick them back to the normal queue, which will be dispatched
+		// to v11.
+		w1.Stop()
+	} else {
+		// Don't stop the old worker. In this case, w1 will still have some pollers blocked on
+		// the normal queue which could pick up tasks that we want to go to v11. (We don't
+		// interrupt long polls.) To ensure those polls don't interfere, wait for them to
+		// expire.
+		time.Sleep(longPollTime)
+	}
 
 	// unblock the workflow
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
-	s.Equal("done from two!", out)
+	s.Equal("done from 1.1!", out)
 }
 
 func (s *versioningIntegSuite) TestDispatchActivity() {
@@ -683,8 +684,7 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	s.addCompatibleBuildId(ctx, tq, "v11", "v1", false)
 	s.addNewDefaultBuildId(ctx, tq, "v2")
 	s.waitForPropagation(ctx, tq, "v2")
-	// waitForPropagation can't check for propagation to sticky queues, add another 100ms to
-	// make sure it got to those.
+	// add another 100ms to make sure it got to sticky queues also
 	time.Sleep(100 * time.Millisecond)
 
 	// start workers for v11 and v2
@@ -794,8 +794,7 @@ func (s *versioningIntegSuite) dispatchRetry() {
 	s.addCompatibleBuildId(ctx, tq, "v11", "v1", false)
 	s.addNewDefaultBuildId(ctx, tq, "v2")
 	s.waitForPropagation(ctx, tq, "v2")
-	// waitForPropagation can't check for propagation to sticky queues, add another 100ms to
-	// make sure it got to those.
+	// add another 100ms to make sure it got to sticky queues also
 	time.Sleep(100 * time.Millisecond)
 
 	// start workers for v11 and v2
