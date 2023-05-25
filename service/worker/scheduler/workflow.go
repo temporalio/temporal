@@ -460,9 +460,6 @@ func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
 			s.incSeqNo()
 		}
 		return true
-	} else if s.tweakables.Version >= FinishScheduleWithNoActionsLeft {
-		// schedule should finish
-		s.shouldFinish = true
 	}
 	// No actions left
 	return false
@@ -876,6 +873,11 @@ func (s *scheduler) processBuffer() bool {
 		} else {
 			s.logger.Error("have buffered workflows but none running")
 		}
+	}
+
+	if s.Schedule.State.RemainingActions == 0 && s.tweakables.Version >= FinishScheduleWithNoActionsLeft {
+		// schedule should finish after running out of actions
+		s.shouldFinish = true
 	}
 
 	return tryAgain && !(s.tweakables.Version >= FinishScheduleWithNoActionsLeft && s.shouldFinish)
