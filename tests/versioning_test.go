@@ -65,10 +65,11 @@ const (
 )
 
 func (s *versioningIntegSuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
-		dynamicconfig.MatchingForwarderMaxChildrenPerNode:    partitionTreeDegree,
-		dynamicconfig.TaskQueuesPerBuildIdLimit:              3,
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
+		dynamicconfig.MatchingForwarderMaxChildrenPerNode:        partitionTreeDegree,
+		dynamicconfig.TaskQueuesPerBuildIdLimit:                  3,
 	}
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }

@@ -165,8 +165,9 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	EnableUpdateWorkflowExecution dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableWorkerVersioning        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableUpdateWorkflowExecution  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -242,8 +243,9 @@ func NewConfig(
 		MaxConcurrentBatchOperation:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
 		MaxExecutionCountBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace, 1000),
 
-		EnableUpdateWorkflowExecution: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
-		EnableWorkerVersioning:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
+		EnableUpdateWorkflowExecution:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
+		EnableWorkerVersioningData:     dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
+		EnableWorkerVersioningWorkflow: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, false),
 	}
 }
 
