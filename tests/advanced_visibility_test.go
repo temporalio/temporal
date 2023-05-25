@@ -88,9 +88,10 @@ type advancedVisibilitySuite struct {
 // This cluster use customized threshold for history config
 func (s *advancedVisibilitySuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
-		dynamicconfig.ReachabilityTaskQueueScanLimit:         2,
-		dynamicconfig.ReachabilityQueryBuildIdLimit:          1,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
+		dynamicconfig.ReachabilityTaskQueueScanLimit:             2,
+		dynamicconfig.ReachabilityQueryBuildIdLimit:              1,
 	}
 
 	switch TestFlags.PersistenceDriver {
