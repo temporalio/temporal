@@ -50,8 +50,6 @@ type (
 	}
 
 	HealthSignalAggregatorImpl struct {
-		enabled dynamicconfig.BoolPropertyFn
-
 		status     int32
 		shutdownCh chan struct{}
 
@@ -70,7 +68,6 @@ type (
 )
 
 func NewHealthSignalAggregatorImpl(
-	enabled dynamicconfig.BoolPropertyFn,
 	windowSize time.Duration,
 	maxBufferSize int,
 	metricsHandler metrics.Handler,
@@ -78,7 +75,6 @@ func NewHealthSignalAggregatorImpl(
 	logger log.Logger,
 ) *HealthSignalAggregatorImpl {
 	return &HealthSignalAggregatorImpl{
-		enabled:              enabled,
 		status:               common.DaemonStatusInitialized,
 		shutdownCh:           make(chan struct{}),
 		requestsPerShard:     make(map[int32]int64),
@@ -107,11 +103,6 @@ func (s *HealthSignalAggregatorImpl) Stop() {
 }
 
 func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, latency time.Duration, err error) {
-	if !s.enabled() {
-		NoopHealthSignalAggregator.Record(callerSegment, latency, err)
-		return
-	}
-
 	// TODO: uncomment when adding dynamic rate limiter
 	//s.latencyAverage.Record(latency.Milliseconds())
 	//
@@ -127,18 +118,10 @@ func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, latency time.Du
 }
 
 func (s *HealthSignalAggregatorImpl) AverageLatency() float64 {
-	if !s.enabled() {
-		return NoopHealthSignalAggregator.AverageLatency()
-	}
-
 	return s.latencyAverage.Average()
 }
 
 func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
-	if !s.enabled() {
-		return NoopHealthSignalAggregator.ErrorRatio()
-	}
-
 	return s.errorRatio.Average()
 }
 
@@ -154,10 +137,6 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 		case <-s.shutdownCh:
 			return
 		case <-s.emitMetricsTimer.C:
-			if !s.enabled() {
-				continue
-			}
-
 			s.requestsLock.Lock()
 			requestCounts := s.requestsPerShard
 			s.requestsPerShard = make(map[int32]int64, len(requestCounts))
