@@ -60,6 +60,8 @@ const (
 	InitialVersion SchedulerWorkflowVersion = iota
 	// skip over entire time range if paused and batch and cache getNextTime queries
 	BatchAndCacheTimeQueries
+	// terminate schedule by default after it runs out of actions
+	FinishScheduleWithNoActionsLeft
 )
 
 const (
@@ -119,6 +121,9 @@ type (
 		// This cache is used to store time results after batching getNextTime queries
 		// in a single SideEffect
 		nextTimeResultCache map[time.Time]getNextTimeResult
+
+		// if true, the schedule workflow will finish execution
+		shouldFinish bool
 	}
 
 	tweakablePolicies struct {
@@ -172,7 +177,7 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		Version:                           BatchAndCacheTimeQueries,
+		Version:                           FinishScheduleWithNoActionsLeft,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -246,6 +251,9 @@ func (s *scheduler) run() error {
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
+		if s.tweakables.Version >= FinishScheduleWithNoActionsLeft && s.shouldFinish {
+			return nil
+		}
 		// sleep returns on any of:
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
@@ -452,6 +460,9 @@ func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
 			s.incSeqNo()
 		}
 		return true
+	} else if s.tweakables.Version >= FinishScheduleWithNoActionsLeft {
+		// schedule should finish
+		s.shouldFinish = true
 	}
 	// No actions left
 	return false
@@ -867,7 +878,7 @@ func (s *scheduler) processBuffer() bool {
 		}
 	}
 
-	return tryAgain
+	return tryAgain && !(s.tweakables.Version >= FinishScheduleWithNoActionsLeft && s.shouldFinish)
 }
 
 func (s *scheduler) recordAction(result *schedpb.ScheduleActionResult) {
