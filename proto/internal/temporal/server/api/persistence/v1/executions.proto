@@ -305,7 +305,7 @@ message ActivityInfo {
     int64 scheduled_event_id = 30;
     temporal.api.common.v1.Payloads last_heartbeat_details = 31;
     google.protobuf.Timestamp last_heartbeat_update_time = 32 [(gogoproto.stdtime) = true];
-    bool use_latest_build_id = 33;
+    bool use_compatible_version = 33;
 }
 
 // timer_map column

@@ -197,7 +197,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
-	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), ai.UseLatestBuildId)
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), ai.UseCompatibleVersion)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -837,10 +837,10 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	// copy version stamp from parent to child if:
-	// - command does not say to use latest version
+	// - command says to use compatible version
 	// - parent is using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if !attributes.UseLatestBuildId {
+	if attributes.UseCompatibleVersion {
 		sourceVersionStamp = common.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
 	}
 
