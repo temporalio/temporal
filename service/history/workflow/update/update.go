@@ -32,10 +32,15 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/internal/effect"
+)
+
+var (
+	CancelErr = serviceerror.NewCanceled("update canceled")
 )
 
 type (
@@ -168,13 +173,13 @@ func (u *Update) WaitAccepted(ctx context.Context) (*updatepb.Outcome, error) {
 		// here because we can.
 		return u.outcome.Get(ctx)
 	}
-	fail, err := u.accepted.Get(ctx)
+	rejectionFailure, err := u.accepted.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if fail != nil {
+	if rejectionFailure != nil {
 		return &updatepb.Outcome{
-			Value: &updatepb.Outcome_Failure{Failure: fail},
+			Value: &updatepb.Outcome_Failure{Failure: rejectionFailure},
 		}, nil
 	}
 	return nil, nil
@@ -185,7 +190,7 @@ func (u *Update) WaitAccepted(ctx context.Context) (*updatepb.Outcome, error) {
 // *updatepb.Rejection, *updatepb.Acceptance, or a *protocolpb.Message whose
 // Body field contains an instance from the same list. Writes to the EventStore
 // occur synchronously but externally observable effects on this Update (e.g.
-// emmitting an Outcome or an Accepted) are registered with the EventStore to be
+// emitting an Outcome or an Accepted) are registered with the EventStore to be
 // applied after the durable updates are committed. If the EventStore rolls
 // back its effects, this state machine does the same.
 func (u *Update) OnMessage(
@@ -217,7 +222,7 @@ func (u *Update) OnMessage(
 	}
 }
 
-// ReadOutgoingMessages loads any oubound messages from this Update state
+// ReadOutgoingMessages loads any outbound messages from this Update state
 // machine into the output slice provided.
 func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message) {
 	if u.state != stateRequested {
@@ -234,7 +239,7 @@ func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message) {
 // is in stateAdmitted then it builds a protocolpb.Message that will be sent on
 // ensuing calls to PollOutgoingMessages until the update is accepted.
 func (u *Update) onRequestMsg(
-	ctx context.Context,
+	_ context.Context,
 	req *updatepb.Request,
 	eventStore EventStore,
 ) error {
@@ -265,7 +270,7 @@ func (u *Update) onRequestMsg(
 // and on commit the accepted future is completed and the Update transitions to
 // stateAccepted.
 func (u *Update) onAcceptanceMsg(
-	ctx context.Context,
+	_ context.Context,
 	acpt *updatepb.Acceptance,
 	eventStore EventStore,
 ) error {
@@ -289,13 +294,13 @@ func (u *Update) onAcceptanceMsg(
 	return nil
 }
 
-// onRejectionMsg expectes the Update state to be stateRequested and returns
+// onRejectionMsg expects the Update state to be stateRequested and returns
 // an error if it finds otherwise. On commit of buffered effects the state
 // machine transitions to stateCompleted and the accepted and outcome futures
 // are both completed with the failurepb.Failure value from the
 // updatepb.Rejection input message.
 func (u *Update) onRejectionMsg(
-	ctx context.Context,
+	_ context.Context,
 	rej *updatepb.Rejection,
 	eventStore EventStore,
 ) error {
@@ -323,11 +328,11 @@ func (u *Update) onRejectionMsg(
 
 // onResponseMsg expects the Update to be in either stateProvisionallyAccepted
 // or stateAccepted and returns an error if it finds otherwise. On commit of
-// buffered effects the state machine will transtion to stateCompleted and the
+// buffered effects the state machine will transition to stateCompleted and the
 // outcome future is completed with the updatepb.Outcome from the
 // updatepb.Response input message.
 func (u *Update) onResponseMsg(
-	ctx context.Context,
+	_ context.Context,
 	res *updatepb.Response,
 	eventStore EventStore,
 ) error {
@@ -349,6 +354,31 @@ func (u *Update) onResponseMsg(
 	})
 	eventStore.OnAfterRollback(func(context.Context) { u.setState(prevState) })
 	return nil
+}
+
+func (u *Update) cancel(
+	_ context.Context,
+	eventStore EventStore,
+) {
+	const waitAccepted = stateAdmitted | stateProvisionallyRequested | stateRequested
+	const waitCompleted = stateAccepted | stateProvisionallyAccepted
+
+	prevState := u.setState(stateProvisionallyCompleted)
+	eventStore.OnAfterCommit(func(context.Context) {
+		if prevState.Matches(stateSet(waitAccepted)) {
+			u.request = nil
+			u.setState(stateCompleted)
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, CancelErr)
+			u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, CancelErr)
+			u.onComplete()
+		} else if prevState.Matches(stateSet(waitCompleted)) {
+			u.setState(stateCompleted)
+			u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, CancelErr)
+			u.onComplete()
+		}
+		// No op if state is stateCompleted or stateProvisionallyCompleted.
+	})
+	eventStore.OnAfterRollback(func(context.Context) { u.setState(prevState) })
 }
 
 func (u *Update) hasBeenSeenByWorkflowExecution() bool {

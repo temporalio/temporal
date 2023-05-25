@@ -2658,27 +2658,13 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 
 			updateResultCh := make(chan struct{})
 			go func(updateErrMsg string) {
-				halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
-				defer cancel()
-
-				resp, err1 := s.engine.UpdateWorkflowExecution(halfSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
-					Namespace:         s.namespace,
-					WorkflowExecution: tv.WorkflowExecution(),
-					Request: &updatepb.Request{
-						Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-						Input: &updatepb.Input{
-							Name: tv.HandlerName(),
-							Args: payloads.EncodeString(tv.String("args", "1")),
-						},
-					},
-				})
-
+				resp, err1 := s.sendUpdate(tv, "1")
 				if updateErrMsg == "" {
 					s.NoError(err1)
 					s.NotNil(resp)
 				} else {
 					s.Error(err1)
-					s.True(common.IsContextDeadlineExceededErr(err1))
+					s.ErrorContains(err1, "update canceled")
 					s.Nil(resp)
 				}
 				updateResultCh <- struct{}{}
