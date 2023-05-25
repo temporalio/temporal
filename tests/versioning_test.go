@@ -62,6 +62,9 @@ type versioningIntegSuite struct {
 
 const (
 	partitionTreeDegree = 3
+	longPollTime        = 5 * time.Second
+	// use > 2 pollers by default to expose more timing situations
+	numPollers = 4
 )
 
 func (s *versioningIntegSuite) SetupSuite() {
@@ -73,7 +76,7 @@ func (s *versioningIntegSuite) SetupSuite() {
 		// versioning data relatively quickly. In general we only promise to act on new
 		// versioning data "soon", i.e. after a long poll interval. We can reduce the long poll
 		// interval so that we don't have to wait so long.
-		dynamicconfig.MatchingLongPollExpirationInterval: 5 * time.Second,
+		dynamicconfig.MatchingLongPollExpirationInterval: longPollTime,
 	}
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
@@ -264,15 +267,16 @@ func (s *versioningIntegSuite) dispatchNewWorkflow() {
 		return "done!", nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
 	s.waitForPropagation(ctx, tq, "v1")
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v1",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v1",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflow(wf)
 	s.NoError(w1.Start())
@@ -298,8 +302,9 @@ func (s *versioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 
 	// run worker before registering build. it will use guessed set id
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v1",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v1",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflow(wf)
 	s.NoError(w1.Start())
@@ -308,7 +313,7 @@ func (s *versioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	// wait for it to start polling
 	time.Sleep(200 * time.Millisecond)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
@@ -328,7 +333,7 @@ func (s *versioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
 func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	tq := s.randomizeStr(s.T().Name())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	started := make(chan struct{}, 1)
@@ -385,15 +390,16 @@ func (s *versioningIntegSuite) dispatchUpgrade(letStickyWftTimeout bool) {
 	}
 
 	// TODO: reduce after fixing sticky
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
 	s.waitForPropagation(ctx, tq, "v1")
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v1",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v1",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w1.Start())
@@ -423,8 +429,9 @@ func (s *versioningIntegSuite) dispatchUpgrade(letStickyWftTimeout bool) {
 	s.waitForPropagation(ctx, tq, "v2")
 
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v2",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v2",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w2.Start())
@@ -478,15 +485,16 @@ func (s *versioningIntegSuite) dispatchActivity() {
 		panic("workflow should not run on v2")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
 	s.waitForPropagation(ctx, tq, "v1")
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v1",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v1",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act"})
@@ -504,8 +512,9 @@ func (s *versioningIntegSuite) dispatchActivity() {
 	s.waitForPropagation(ctx, tq, "v2")
 	// start worker for v2
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v2",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v2",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
@@ -554,15 +563,16 @@ func (s *versioningIntegSuite) dispatchChildWorkflow() {
 		panic("workflow should not run on v2")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
 	s.waitForPropagation(ctx, tq, "v1")
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v1",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v1",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	w1.RegisterWorkflowWithOptions(child1, workflow.RegisterOptions{Name: "child"})
@@ -580,8 +590,9 @@ func (s *versioningIntegSuite) dispatchChildWorkflow() {
 	s.waitForPropagation(ctx, tq, "v2")
 	// start worker for v2
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v2",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v2",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	w2.RegisterWorkflowWithOptions(child2, workflow.RegisterOptions{Name: "child"})
@@ -603,8 +614,8 @@ func (s *versioningIntegSuite) TestDispatchContinueAsNew() {
 func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	tq := s.randomizeStr(s.T().Name())
 
-	started1 := make(chan struct{}, 1)
-	started11 := make(chan struct{}, 2)
+	started1 := make(chan struct{}, 10)
+	started11 := make(chan struct{}, 20)
 
 	wf1 := func(ctx workflow.Context, attempt int) (string, error) {
 		started1 <- struct{}{}
@@ -648,15 +659,16 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 		panic("oops")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
 	s.waitForPropagation(ctx, tq, "v1")
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v1",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v1",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w1.Start())
@@ -677,20 +689,25 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 
 	// start workers for v11 and v2
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v11",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v11",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w11.Start())
 	defer w11.Stop()
 
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v2",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v2",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w2.Start())
 	defer w2.Stop()
+
+	// wait for w1 long polls to all time out
+	time.Sleep(longPollTime)
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
@@ -715,8 +732,8 @@ func (s *versioningIntegSuite) TestDispatchRetry() {
 func (s *versioningIntegSuite) dispatchRetry() {
 	tq := s.randomizeStr(s.T().Name())
 
-	started1 := make(chan struct{}, 1)
-	started11 := make(chan struct{}, 3)
+	started1 := make(chan struct{}, 10)
+	started11 := make(chan struct{}, 30)
 
 	wf1 := func(ctx workflow.Context) (string, error) {
 		started1 <- struct{}{}
@@ -748,16 +765,16 @@ func (s *versioningIntegSuite) dispatchRetry() {
 		panic("oops")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
 	s.waitForPropagation(ctx, tq, "v1")
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v1",
-		UseBuildIDForVersioning: true,
-		// FIXME: MaxConcurrentWorkflowTaskPollers: 10,
+		BuildID:                          "v1",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w1.Start())
@@ -783,20 +800,25 @@ func (s *versioningIntegSuite) dispatchRetry() {
 
 	// start workers for v11 and v2
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v11",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v11",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w11.Start())
 	defer w11.Stop()
 
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v2",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v2",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w2.Start())
 	defer w2.Stop()
+
+	// wait for w1 long polls to all time out
+	time.Sleep(longPollTime)
 
 	// unblock the workflow. it should replay on v11 and then retry (on v11).
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
@@ -839,15 +861,16 @@ func (s *versioningIntegSuite) dispatchCron() {
 		return "ok", nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	s.addNewDefaultBuildId(ctx, tq, "v1")
 	s.waitForPropagation(ctx, tq, "v1")
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v1",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v1",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w1.Start())
@@ -870,16 +893,18 @@ func (s *versioningIntegSuite) dispatchCron() {
 
 	// start workers for v11 and v2
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v11",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v11",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w11.Start())
 	defer w11.Stop()
 
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                 "v2",
-		UseBuildIDForVersioning: true,
+		BuildID:                          "v2",
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	s.NoError(w2.Start())
