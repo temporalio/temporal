@@ -2010,9 +2010,11 @@ type UpdateTaskQueueUserDataRequest struct {
 	TaskQueue   string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	// Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
 	// than the version cached in the root partition.
-	UserData        *v110.VersionedTaskQueueUserData `protobuf:"bytes,3,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
-	BuildIdsAdded   []string                         `protobuf:"bytes,4,rep,name=build_ids_added,json=buildIdsAdded,proto3" json:"build_ids_added,omitempty"`
-	BuildIdsRemoved []string                         `protobuf:"bytes,5,rep,name=build_ids_removed,json=buildIdsRemoved,proto3" json:"build_ids_removed,omitempty"`
+	UserData *v110.VersionedTaskQueueUserData `protobuf:"bytes,3,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
+	// List of added build ids
+	BuildIdsAdded []string `protobuf:"bytes,4,rep,name=build_ids_added,json=buildIdsAdded,proto3" json:"build_ids_added,omitempty"`
+	// List of removed build ids
+	BuildIdsRemoved []string `protobuf:"bytes,5,rep,name=build_ids_removed,json=buildIdsRemoved,proto3" json:"build_ids_removed,omitempty"`
 }
 
 func (m *UpdateTaskQueueUserDataRequest) Reset()      { *m = UpdateTaskQueueUserDataRequest{} }
