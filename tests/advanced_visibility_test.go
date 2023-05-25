@@ -1991,18 +1991,17 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 			}
 			// First continue-as-new to compatible set
 			return workflow.NewContinueAsNewError(ctx, workflowType, 1)
-		} else {
-			if !workflow.IsReplaying(ctx) {
-				startedCh <- info.WorkflowExecution.RunID
-			}
-			workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
-			// TODO: shouldn't be WithChildOptions
-			useLatestCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				VersioningIntent: worker.UseDefaultVersion,
-			})
-			// Finally continue-as-new to latest
-			return workflow.NewContinueAsNewError(useLatestCtx, "doesnt-exist")
 		}
+		if !workflow.IsReplaying(ctx) {
+			startedCh <- info.WorkflowExecution.RunID
+		}
+		workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
+		// TODO: shouldn't be WithChildOptions
+		useLatestCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			VersioningIntent: worker.UseDefaultVersion,
+		})
+		// Finally continue-as-new to latest
+		return workflow.NewContinueAsNewError(useLatestCtx, "doesnt-exist")
 	}
 
 	// Declare v1
@@ -2143,7 +2142,9 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
 			return workflow.NewContinueAsNewError(ctx, workflowType)
 		}
-		workflow.Sleep(ctx, time.Millisecond)
+		if err := workflow.Sleep(ctx, time.Millisecond); err != nil {
+			return err
+		}
 		startedCh <- struct{}{}
 		return nil
 	}

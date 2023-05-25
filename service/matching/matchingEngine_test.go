@@ -114,6 +114,10 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockMatchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.mockMatchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{}, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.UpdateTaskQueueUserDataResponse{}, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "")
