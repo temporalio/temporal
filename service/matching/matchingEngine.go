@@ -1290,7 +1290,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 		return taskQueue, nil
 	}
 
-	if workerVersionCapabilities == nil {
+	if !workerVersionCapabilities.GetUseVersioning() {
 		// Either this task queue is versioned, or there are still some workflows running on
 		// the "unversioned" set.
 		return taskQueue, nil
