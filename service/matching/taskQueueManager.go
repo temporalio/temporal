@@ -498,6 +498,16 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 	if !options.Replicate {
 		return nil
 	}
+
+	// Only replicate if namespace is global and has at least 2 clusters registered.
+	ns, err := c.namespaceRegistry.GetNamespaceByID(c.db.namespaceID)
+	if err != nil {
+		return err
+	}
+	if !ns.IsGlobalNamespace() || len(ns.ClusterNames()) < 2 {
+		return nil
+	}
+
 	_, err = c.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
 		NamespaceId: c.db.namespaceID.String(),
 		TaskQueue:   c.taskQueueID.BaseNameString(),

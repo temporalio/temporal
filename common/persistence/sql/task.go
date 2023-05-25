@@ -518,7 +518,7 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 			return err
 		}
 		if len(request.BuildIdsAdded) > 0 {
-			err = tx.AddBuildIdToTaskQueueMapping(ctx, sqlplugin.AddBuildIdToTaskQueueMapping{
+			err = tx.AddBuildIdToTaskQueueMapping(ctx, sqlplugin.AddBuildIdsToTaskQueueMapping{
 				NamespaceID:   namespaceID,
 				TaskQueueName: request.TaskQueue,
 				BuildIds:      request.BuildIdsAdded,
@@ -528,7 +528,7 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 			}
 		}
 		if len(request.BuildIdsRemoved) > 0 {
-			err = tx.RemoveBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveBuildIdToTaskQueueMapping{
+			err = tx.RemoveBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveBuildIdsToTaskQueueMapping{
 				NamespaceID:   namespaceID,
 				TaskQueueName: request.TaskQueue,
 				BuildIds:      request.BuildIdsRemoved,

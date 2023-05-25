@@ -2104,13 +2104,14 @@ func (ms *MutableStateImpl) trackBuildIdFromCompletion(
 		return err
 	}
 	anyAdded := false
-	added := false
 	if !version.GetUseVersioning() {
+		var added bool
 		// Make sure unversioned workflow tasks are easily locatable with just the prefix
 		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, common.UnversionedSearchAttribute, limits.MaxTrackedBuildIds)
 		anyAdded = anyAdded || added
 	}
 	if version.GetBuildId() != "" {
+		var added bool
 		ms.addResetPointFromCompletion(version.GetBuildId(), eventID, limits.MaxResetPoints)
 		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, common.VersionStampToBuildIdSearchAttribute(version), limits.MaxTrackedBuildIds)
 		anyAdded = anyAdded || added
@@ -2145,6 +2146,8 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	}
 }
 
+// Takes a list of loaded build IDs from a search attribute and added a new build ID to it while respecting provided limits.
+// Returns a potentially modified list and a flag indicating whether it was modified.
 func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(searchAttributeValues []string, searchAttributeValue string, maxTrackedBuildIds int) ([]string, bool) {
 	if maxTrackedBuildIds < 1 {
 		// Can't track this build ID

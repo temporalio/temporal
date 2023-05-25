@@ -2775,6 +2775,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			UpsertMemo:                      true,
 			EagerWorkflowStart:              true,
 			SdkMetadata:                     true,
+			BuildIdBasedVersioning:          true,
 		},
 	}, nil
 }
