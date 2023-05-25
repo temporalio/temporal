@@ -189,11 +189,16 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		tqPath = "&taskqueuepb.TaskQueue{Name: fmt.Sprintf(\"not-applicable-%%s\", rand.Int())}"
 		tqtPath = "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"
 		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
+	case "UpdateTaskQueueUserDataRequest",
+		"ReplicateTaskQueueUserDataRequest":
+		// Always route these requests to the same matching node by namespace.
+		tqPath = "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"
+		tqtPath = "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"
+		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
 	case "GetWorkerBuildIdCompatibilityRequest",
 		"UpdateWorkerBuildIdCompatibilityRequest",
 		"RespondQueryTaskCompletedRequest",
 		"ListTaskQueuePartitionsRequest",
-		"GetTaskQueueUserDataRequest",
 		"ApplyTaskQueueUserDataReplicationEventRequest":
 		tqtPath = "enumspb.TASK_QUEUE_TYPE_WORKFLOW"
 	default:

@@ -77,6 +77,20 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) ForceUnloadTaskQueue(
+	ctx context.Context,
+	request *matchingservice.ForceUnloadTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ForceUnloadTaskQueueResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientForceUnloadTaskQueueScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ForceUnloadTaskQueue(ctx, request, opts...)
+}
+
 func (c *metricClient) GetBuildIdTaskQueueMapping(
 	ctx context.Context,
 	request *matchingservice.GetBuildIdTaskQueueMappingRequest,
@@ -133,6 +147,20 @@ func (c *metricClient) ListTaskQueuePartitions(
 	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *metricClient) ReplicateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.ReplicateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ReplicateTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientReplicateTaskQueueUserDataScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ReplicateTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *metricClient) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
@@ -145,6 +173,20 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	}()
 
 	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientUpdateTaskQueueUserDataScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateWorkerBuildIdCompatibility(

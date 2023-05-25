@@ -550,6 +550,7 @@ func TestTQMFetchesUserDataFromOnInit(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false, // first fetch is not long poll
 		}).
@@ -592,6 +593,7 @@ func TestTQMFetchesUserDataAndFetchesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false, // first is not long poll
 		}).
@@ -605,6 +607,7 @@ func TestTQMFetchesUserDataAndFetchesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // second is long poll
 		}).
@@ -618,6 +621,7 @@ func TestTQMFetchesUserDataAndFetchesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 2,
 			WaitNewData:              true,
 		}).
@@ -656,6 +660,7 @@ func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
 		}).
@@ -666,6 +671,7 @@ func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
 		}).
@@ -705,6 +711,7 @@ func TestTQMFetchesUserDataUpTree(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                tqId.Name.WithPartition(10).FullName(),
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
 		}).
@@ -743,6 +750,7 @@ func TestTQMFetchesUserDataActivityToWorkflow(t *testing.T) {
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              defaultNamespaceId.String(),
 			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
 		}).

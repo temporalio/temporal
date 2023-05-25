@@ -31,9 +31,11 @@ import (
 	"sync"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/util"
@@ -199,7 +201,8 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 	if request.buildId == "" {
 		// Query for the unversioned worker
 		isDefaultInQueue = len(request.versionSets) == 0
-		buildIdsFilter = "BuildIds IS NULL"
+		// Query workflows that have completed tasks marked with a sentinel "unversioned" search attribute.
+		buildIdsFilter = fmt.Sprintf("BuildIds = %q", common.UnversionedSearchAttribute)
 	} else {
 		// Query for a versioned worker
 		setIdx := -1
@@ -231,17 +234,9 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		isDefaultInQueue = setIdx == len(request.versionSets)-1
 		escapedBuildIds := make([]string, len(set.GetBuildIds()))
 		for i, buildId := range set.GetBuildIds() {
-			escapedBuildIds[i] = fmt.Sprintf("%q", buildId)
+			escapedBuildIds[i] = fmt.Sprintf("%q", common.VersionedBuildIdSearchAttribute(buildId))
 		}
 		buildIdsFilter = fmt.Sprintf("BuildIds IN (%s)", strings.Join(escapedBuildIds, ","))
-		// TODO(bergundy): To properly answer if there are open workflows that may be routed to a build id, we'll need to see if
-		// any of them have not *yet* been assigned a build id, e.g. they've been started but have not had any completed
-		// workflow tasks.
-		// Since this is an API used to check which build ids can be retired, we'll take the stricter approach and
-		// assume that `BuildIds = NULL` does not mean old unversioned workflows.
-		if isDefaultInQueue && request.reachabilityType != enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS {
-			buildIdsFilter = fmt.Sprintf("(%s OR BuildIds IS NULL)", buildIdsFilter)
-		}
 	}
 
 	if isDefaultInQueue {
@@ -249,6 +244,10 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 			taskQueueReachability.Reachability,
 			enumspb.TASK_REACHABILITY_NEW_WORKFLOWS,
 		)
+		// Take into account started workflows that have not yet been processed by any worker.
+		if request.reachabilityType != enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS {
+			buildIdsFilter = fmt.Sprintf("(BuildIds IS NULL OR %s)", buildIdsFilter)
+		}
 	}
 
 	reachability, err := wh.queryVisibilityForExisitingWorkflowsReachability(ctx, request.namespace, request.taskQueue, buildIdsFilter, request.reachabilityType)
@@ -272,10 +271,15 @@ func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
 		statusFilter = " AND ExecutionStatus = \"Running\""
 	case enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS:
 		statusFilter = " AND ExecutionStatus != \"Running\""
+	case enumspb.TASK_REACHABILITY_UNSPECIFIED:
+		reachabilityType = enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS
+		statusFilter = ""
 	case enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS:
 		statusFilter = ""
-	default:
+	case enumspb.TASK_REACHABILITY_NEW_WORKFLOWS:
 		return nil, nil
+	default:
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unsupported reachability type: %v", reachabilityType))
 	}
 
 	req := manager.CountWorkflowExecutionsRequest{

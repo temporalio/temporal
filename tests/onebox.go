@@ -346,6 +346,8 @@ func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 }
 
 func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient {
+	// Note that this matching client does not do routing. But it doesn't matter since we have
+	// only one matching node in testing.
 	return c.matchingClient
 }
 

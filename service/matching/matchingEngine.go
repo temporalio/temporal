@@ -41,9 +41,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -96,6 +98,11 @@ type (
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 	}
 
+	namespaceUpdateLocks struct {
+		updateLock      sync.Mutex
+		replicationLock sync.Mutex
+	}
+
 	matchingEngineImpl struct {
 		status               int32
 		taskManager          persistence.TaskManager
@@ -115,6 +122,10 @@ type (
 		timeSource           clock.TimeSource
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
+		// Disables concurrent task queue user data updates and replication requests (due to a cassandra limitation)
+		namespaceUpdateLockMap map[string]*namespaceUpdateLocks
+		// Serializes access to the per namespace lock map
+		namespaceUpdateLockMapLock sync.Mutex
 	}
 )
 
@@ -165,6 +176,7 @@ func NewEngine(
 		clusterMeta:               clusterMeta,
 		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
 		namespaceReplicationQueue: namespaceReplicationQueue,
+		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
 	}
 }
 
@@ -337,7 +349,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	// We don't need the userDataChanged channel here because:
-	// - if we sync match or sticky worker unavailable, we're done
+	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
 	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, taskQueueKind)
 	if err != nil {
@@ -380,21 +392,21 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 	ctx context.Context,
 	task *internalTask,
 	origTaskQueue *taskQueueID,
+	kind enumspb.TaskQueueKind,
 ) error {
 	// This task came from taskReader so task.event is always set here.
 	directive := task.event.GetData().GetVersionDirective()
 	// If this came from a versioned queue, ignore the version and re-resolve, in case we're
 	// going to the default and the default changed.
 	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
-	// Kind must be normal here, sticky aren't spooled.
-	kind := enumspb.TASK_QUEUE_KIND_NORMAL
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
 		taskQueue, userDataChanged, err := e.redirectToVersionedQueueForAdd(ctx, unversionedOrigTaskQueue, directive, kind)
 		if err != nil {
 			return err
 		}
-		tqm, err := e.getTaskQueueManager(ctx, taskQueue, kind, true)
+		sticky := kind == enumspb.TASK_QUEUE_KIND_STICKY
+		tqm, err := e.getTaskQueueManager(ctx, taskQueue, kind, !sticky)
 		if err != nil {
 			return err
 		}
@@ -865,8 +877,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	req *matchingservice.GetTaskQueueUserDataRequest,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
-	taskQueueName := req.GetTaskQueue()
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	taskQueue, err := newTaskQueueID(namespaceID, req.GetTaskQueue(), req.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
@@ -955,6 +966,75 @@ func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
 		return nil, err
 	}
 	return &matchingservice.GetBuildIdTaskQueueMappingResponse{TaskQueues: taskQueues}, nil
+}
+
+func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+	ctx context.Context,
+	req *matchingservice.ForceUnloadTaskQueueRequest,
+) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueue, err := newTaskQueueID(namespaceID, req.TaskQueue, req.TaskQueueType)
+	if err != nil {
+		return nil, err
+	}
+	// kind is only used if we want to create a new tqm
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_UNSPECIFIED, false)
+	if err != nil {
+		return nil, err
+	}
+	if tqm == nil {
+		return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: false}, nil
+	}
+	e.unloadTaskQueue(tqm)
+	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: true}, nil
+}
+
+func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
+	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
+	locks.updateLock.Lock()
+	defer locks.updateLock.Unlock()
+
+	err := e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID:     request.GetNamespaceId(),
+		TaskQueue:       request.GetTaskQueue(),
+		UserData:        request.GetUserData(),
+		BuildIdsAdded:   request.BuildIdsAdded,
+		BuildIdsRemoved: request.BuildIdsRemoved,
+	})
+	return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+}
+
+func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
+	if e.namespaceReplicationQueue == nil {
+		return &matchingservice.ReplicateTaskQueueUserDataResponse{}, nil
+	}
+	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
+	locks.replicationLock.Lock()
+	defer locks.replicationLock.Unlock()
+
+	err := e.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
+		Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+			TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+				NamespaceId:   request.GetNamespaceId(),
+				TaskQueueName: request.GetTaskQueue(),
+				UserData:      request.GetUserData(),
+			},
+		},
+	})
+	return &matchingservice.ReplicateTaskQueueUserDataResponse{}, err
+
+}
+
+func (e *matchingEngineImpl) getNamespaceUpdateLocks(namespaceId string) *namespaceUpdateLocks {
+	e.namespaceUpdateLockMapLock.Lock()
+	defer e.namespaceUpdateLockMapLock.Unlock()
+	locks, found := e.namespaceUpdateLockMap[namespaceId]
+	if !found {
+		locks = &namespaceUpdateLocks{}
+		e.namespaceUpdateLockMap[namespaceId] = locks
+	}
+	return locks
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
@@ -1210,7 +1290,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 		return taskQueue, nil
 	}
 
-	if workerVersionCapabilities == nil {
+	if !workerVersionCapabilities.GetUseVersioning() {
 		// Either this task queue is versioned, or there are still some workflows running on
 		// the "unversioned" set.
 		return taskQueue, nil

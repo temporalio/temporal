@@ -160,6 +160,26 @@ func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueue(ctx, in inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeTaskQueue), varargs...)
 }
 
+// ForceUnloadTaskQueue mocks base method.
+func (m *MockMatchingServiceClient) ForceUnloadTaskQueue(ctx context.Context, in *matchingservice.ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ForceUnloadTaskQueue", varargs...)
+	ret0, _ := ret[0].(*matchingservice.ForceUnloadTaskQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceUnloadTaskQueue indicates an expected call of ForceUnloadTaskQueue.
+func (mr *MockMatchingServiceClientMockRecorder) ForceUnloadTaskQueue(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).ForceUnloadTaskQueue), varargs...)
+}
+
 // GetBuildIdTaskQueueMapping mocks base method.
 func (m *MockMatchingServiceClient) GetBuildIdTaskQueueMapping(ctx context.Context, in *matchingservice.GetBuildIdTaskQueueMappingRequest, opts ...grpc.CallOption) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
 	m.ctrl.T.Helper()
@@ -300,6 +320,26 @@ func (mr *MockMatchingServiceClientMockRecorder) QueryWorkflow(ctx, in interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryWorkflow", reflect.TypeOf((*MockMatchingServiceClient)(nil).QueryWorkflow), varargs...)
 }
 
+// ReplicateTaskQueueUserData mocks base method.
+func (m *MockMatchingServiceClient) ReplicateTaskQueueUserData(ctx context.Context, in *matchingservice.ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ReplicateTaskQueueUserData", varargs...)
+	ret0, _ := ret[0].(*matchingservice.ReplicateTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReplicateTaskQueueUserData indicates an expected call of ReplicateTaskQueueUserData.
+func (mr *MockMatchingServiceClientMockRecorder) ReplicateTaskQueueUserData(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).ReplicateTaskQueueUserData), varargs...)
+}
+
 // RespondQueryTaskCompleted mocks base method.
 func (m *MockMatchingServiceClient) RespondQueryTaskCompleted(ctx context.Context, in *matchingservice.RespondQueryTaskCompletedRequest, opts ...grpc.CallOption) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
@@ -318,6 +358,26 @@ func (mr *MockMatchingServiceClientMockRecorder) RespondQueryTaskCompleted(ctx, 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceClient)(nil).RespondQueryTaskCompleted), varargs...)
+}
+
+// UpdateTaskQueueUserData mocks base method.
+func (m *MockMatchingServiceClient) UpdateTaskQueueUserData(ctx context.Context, in *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateTaskQueueUserData", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateTaskQueueUserData indicates an expected call of UpdateTaskQueueUserData.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateTaskQueueUserData(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateTaskQueueUserData), varargs...)
 }
 
 // UpdateWorkerBuildIdCompatibility mocks base method.
@@ -438,6 +498,21 @@ func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueue(arg0, arg1 in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeTaskQueue), arg0, arg1)
 }
 
+// ForceUnloadTaskQueue mocks base method.
+func (m *MockMatchingServiceServer) ForceUnloadTaskQueue(arg0 context.Context, arg1 *matchingservice.ForceUnloadTaskQueueRequest) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForceUnloadTaskQueue", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.ForceUnloadTaskQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceUnloadTaskQueue indicates an expected call of ForceUnloadTaskQueue.
+func (mr *MockMatchingServiceServerMockRecorder) ForceUnloadTaskQueue(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).ForceUnloadTaskQueue), arg0, arg1)
+}
+
 // GetBuildIdTaskQueueMapping mocks base method.
 func (m *MockMatchingServiceServer) GetBuildIdTaskQueueMapping(arg0 context.Context, arg1 *matchingservice.GetBuildIdTaskQueueMappingRequest) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
 	m.ctrl.T.Helper()
@@ -543,6 +618,21 @@ func (mr *MockMatchingServiceServerMockRecorder) QueryWorkflow(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryWorkflow", reflect.TypeOf((*MockMatchingServiceServer)(nil).QueryWorkflow), arg0, arg1)
 }
 
+// ReplicateTaskQueueUserData mocks base method.
+func (m *MockMatchingServiceServer) ReplicateTaskQueueUserData(arg0 context.Context, arg1 *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicateTaskQueueUserData", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.ReplicateTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReplicateTaskQueueUserData indicates an expected call of ReplicateTaskQueueUserData.
+func (mr *MockMatchingServiceServerMockRecorder) ReplicateTaskQueueUserData(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).ReplicateTaskQueueUserData), arg0, arg1)
+}
+
 // RespondQueryTaskCompleted mocks base method.
 func (m *MockMatchingServiceServer) RespondQueryTaskCompleted(arg0 context.Context, arg1 *matchingservice.RespondQueryTaskCompletedRequest) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
@@ -556,6 +646,21 @@ func (m *MockMatchingServiceServer) RespondQueryTaskCompleted(arg0 context.Conte
 func (mr *MockMatchingServiceServerMockRecorder) RespondQueryTaskCompleted(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceServer)(nil).RespondQueryTaskCompleted), arg0, arg1)
+}
+
+// UpdateTaskQueueUserData mocks base method.
+func (m *MockMatchingServiceServer) UpdateTaskQueueUserData(arg0 context.Context, arg1 *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTaskQueueUserData", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateTaskQueueUserData indicates an expected call of UpdateTaskQueueUserData.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateTaskQueueUserData(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateTaskQueueUserData), arg0, arg1)
 }
 
 // UpdateWorkerBuildIdCompatibility mocks base method.

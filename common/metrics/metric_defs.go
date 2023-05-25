@@ -475,6 +475,12 @@ const (
 	MatchingClientGetTaskQueueUserDataScope = "MatchingClientGetTaskQueueUserData"
 	// MatchingClientApplyTaskQueueUserDataReplicationEventScope tracks RPC calls to matching service
 	MatchingClientApplyTaskQueueUserDataReplicationEventScope = "MatchingClientApplyTaskQueueUserDataReplicationEvent"
+	// MatchingClientForceUnloadTaskQueueScope tracks RPC calls to matching service
+	MatchingClientForceUnloadTaskQueueScope = "MatchingClientForceUnloadTaskQueue"
+	// MatchingClientUpdateTaskQueueUserDataScope tracks RPC calls to matching service
+	MatchingClientUpdateTaskQueueUserDataScope = "MatchingClientUpdateTaskQueueUserData"
+	// MatchingClientReplicateTaskQueueUserDataScope tracks RPC calls to matching service
+	MatchingClientReplicateTaskQueueUserDataScope = "MatchingClientReplicateTaskQueueUserData"
 )
 
 // Worker

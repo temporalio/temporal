@@ -1051,38 +1051,70 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 }
 
 func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
-	dbState := s.buildWorkflowMutableState()
-	var err error
-	s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
-	s.NoError(err)
+	versioned := func(buildId string) *commonpb.WorkerVersionStamp {
+		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: true}
+	}
+	versionedSearchAttribute := func(buildIds ...string) []string {
+		attrs := []string{}
+		for _, buildId := range buildIds {
+			attrs = append(attrs, common.VersionedBuildIdSearchAttribute(buildId))
+		}
+		return attrs
+	}
+	unversioned := func(buildId string) *commonpb.WorkerVersionStamp {
+		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: false}
+	}
+	unversionedSearchAttribute := func(buildIds ...string) []string {
+		// assumed limit is 2
+		attrs := []string{common.UnversionedSearchAttribute, common.UnversionedBuildIdSearchAttribute(buildIds[len(buildIds)-1])}
+		return attrs
+	}
 
-	// Max 0
-	err = s.mutableState.trackBuildIdFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxTrackedBuildIds: 0})
-	s.NoError(err)
-	s.Equal([]string{}, s.getBuildIdsFromMutableState())
-	s.Equal([]string{}, s.getResetPointsBinaryChecksumsFromMutableState())
+	type testCase struct {
+		name            string
+		searchAttribute func(buildIds ...string) []string
+		stamp           func(buildId string) *commonpb.WorkerVersionStamp
+	}
+	matrix := []testCase{
+		{name: "versioned", searchAttribute: versionedSearchAttribute, stamp: versioned},
+		{name: "unversioned", searchAttribute: unversionedSearchAttribute, stamp: unversioned},
+	}
+	for _, c := range matrix {
+		s.T().Run(c.name, func(t *testing.T) {
+			dbState := s.buildWorkflowMutableState()
+			var err error
+			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.NoError(err)
 
-	err = s.mutableState.trackBuildIdFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
-	s.NoError(err)
-	s.Equal([]string{"0.1"}, s.getBuildIdsFromMutableState())
-	s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
+			// Max 0
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxTrackedBuildIds: 0})
+			s.NoError(err)
+			s.Equal([]string{}, s.getBuildIdsFromMutableState())
+			s.Equal([]string{}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-	// Add the same build ID
-	err = s.mutableState.trackBuildIdFromCompletion("0.1", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
-	s.NoError(err)
-	s.Equal([]string{"0.1"}, s.getBuildIdsFromMutableState())
-	s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-	err = s.mutableState.trackBuildIdFromCompletion("0.2", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
-	s.NoError(err)
-	s.Equal([]string{"0.1", "0.2"}, s.getBuildIdsFromMutableState())
-	s.Equal([]string{"0.1", "0.2"}, s.getResetPointsBinaryChecksumsFromMutableState())
+			// Add the same build ID
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-	// Limit applies
-	err = s.mutableState.trackBuildIdFromCompletion("0.3", 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
-	s.NoError(err)
-	s.Equal([]string{"0.2", "0.3"}, s.getBuildIdsFromMutableState())
-	s.Equal([]string{"0.2", "0.3"}, s.getResetPointsBinaryChecksumsFromMutableState())
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.2"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.1", "0.2"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+			// Limit applies
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.3"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.2", "0.3"}, s.getResetPointsBinaryChecksumsFromMutableState())
+		})
+	}
 }
 
 func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {

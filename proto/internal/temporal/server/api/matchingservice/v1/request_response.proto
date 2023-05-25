@@ -215,9 +215,12 @@ message GetWorkerBuildIdCompatibilityResponse {
 
 message GetTaskQueueUserDataRequest {
     string namespace_id = 1;
-    // The task queue to fetch data from. Is always considered as a workflow queue, since root
-    // workflow queues own the metadata.
+    // The task queue to fetch data from. The task queue is always considered as a normal
+    // queue, since sticky queues have no user data.
     string task_queue = 2;
+    // Normally task queue type should always be TASK_QUEUE_TYPE_WORKFLOW here, but querying
+    // activity task queues is useful for testing.
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 5;
     // The value of the last known user data version.
     // If the requester has no data, it should set this to 0.
     // This value must not be set to a negative number (note that our linter suggests avoiding uint64).
@@ -251,3 +254,42 @@ message GetBuildIdTaskQueueMappingRequest {
 message GetBuildIdTaskQueueMappingResponse {
     repeated string task_queues = 1;
 }
+
+message ForceUnloadTaskQueueRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+}
+
+message ForceUnloadTaskQueueResponse {
+    bool was_loaded = 1;
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueUserDataRequest doesn't follow Google API format --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueUserDataRequest RPC doesn't follow Google API format. --)
+message UpdateTaskQueueUserDataRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
+    // than the version cached in the root partition.
+    temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 3;
+    // List of added build ids
+    repeated string build_ids_added = 4;
+    // List of removed build ids
+    repeated string build_ids_removed = 5;
+}
+
+message UpdateTaskQueueUserDataResponse {
+}
+
+message ReplicateTaskQueueUserDataRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
+}
+
+message ReplicateTaskQueueUserDataResponse {
+}
+

@@ -299,14 +299,14 @@ forLoop:
 // Poll blocks until a task is found or context deadline is exceeded
 // On success, the returned task could be a query task or a regular task
 // Returns ErrNoTasks when context deadline is exceeded
-func (tm *TaskMatcher) Poll(ctx context.Context) (*internalTask, error) {
-	return tm.poll(ctx, false)
+func (tm *TaskMatcher) Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
+	return tm.poll(ctx, pollMetadata, false)
 }
 
 // PollForQuery blocks until a *query* task is found or context deadline is exceeded
 // Returns ErrNoTasks when context deadline is exceeded
-func (tm *TaskMatcher) PollForQuery(ctx context.Context) (*internalTask, error) {
-	return tm.poll(ctx, true)
+func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
+	return tm.poll(ctx, pollMetadata, true)
 }
 
 // UpdateRatelimit updates the task dispatch rate
@@ -343,7 +343,7 @@ func (tm *TaskMatcher) Rate() float64 {
 	return tm.rateLimiter.Rate()
 }
 
-func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask, error) {
+func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, queryOnly bool) (*internalTask, error) {
 	taskC, queryTaskC := tm.taskC, tm.queryTaskC
 	if queryOnly {
 		taskC = nil
@@ -399,7 +399,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 		tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.GetMetricName()).Record(1)
 		return task, nil
 	case token := <-tm.fwdrPollReqTokenC():
-		if task, err := tm.fwdr.ForwardPoll(ctx); err == nil {
+		if task, err := tm.fwdr.ForwardPoll(ctx, pollMetadata); err == nil {
 			token.release()
 			return task, nil
 		}

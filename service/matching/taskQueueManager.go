@@ -43,7 +43,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -142,25 +141,24 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status                    int32
-		engine                    *matchingEngineImpl
-		taskQueueID               *taskQueueID
-		taskQueueKind             enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
-		config                    *taskQueueConfig
-		db                        *taskQueueDB
-		taskWriter                *taskWriter
-		taskReader                *taskReader // reads tasks from db and async matches it with poller
-		liveness                  *liveness
-		taskGC                    *taskGC
-		taskAckManager            ackManager   // tracks ackLevel for delivered messages
-		matcher                   *TaskMatcher // for matching a task producer with a poller
-		namespaceRegistry         namespace.Registry
-		namespaceReplicationQueue persistence.NamespaceReplicationQueue
-		logger                    log.Logger
-		matchingClient            matchingservice.MatchingServiceClient
-		metricsHandler            metrics.Handler
-		namespace                 namespace.Name
-		taggedMetricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
+		status               int32
+		engine               *matchingEngineImpl
+		taskQueueID          *taskQueueID
+		taskQueueKind        enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		config               *taskQueueConfig
+		db                   *taskQueueDB
+		taskWriter           *taskWriter
+		taskReader           *taskReader // reads tasks from db and async matches it with poller
+		liveness             *liveness
+		taskGC               *taskGC
+		taskAckManager       ackManager   // tracks ackLevel for delivered messages
+		matcher              *TaskMatcher // for matching a task producer with a poller
+		namespaceRegistry    namespace.Registry
+		logger               log.Logger
+		matchingClient       matchingservice.MatchingServiceClient
+		metricsHandler       metrics.Handler
+		namespace            namespace.Name
+		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -205,7 +203,7 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
+	db := newTaskQueueDB(e.taskManager, e.matchingClient, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -217,26 +215,25 @@ func newTaskQueueManager(
 		taskQueueKind,
 	)
 	tlMgr := &taskQueueManagerImpl{
-		status:                    common.DaemonStatusInitialized,
-		engine:                    e,
-		namespaceRegistry:         e.namespaceRegistry,
-		namespaceReplicationQueue: e.namespaceReplicationQueue,
-		matchingClient:            e.matchingClient,
-		metricsHandler:            e.metricsHandler,
-		taskQueueID:               taskQueue,
-		taskQueueKind:             taskQueueKind,
-		logger:                    logger,
-		db:                        db,
-		taskAckManager:            newAckManager(e.logger),
-		taskGC:                    newTaskGC(db, taskQueueConfig),
-		config:                    taskQueueConfig,
-		pollerHistory:             newPollerHistory(),
-		outstandingPollsMap:       make(map[string]context.CancelFunc),
-		clusterMeta:               clusterMeta,
-		namespace:                 nsName,
-		taggedMetricsHandler:      taggedMetricsHandler,
-		initializedError:          future.NewFuture[struct{}](),
-		userDataInitialFetch:      future.NewFuture[struct{}](),
+		status:               common.DaemonStatusInitialized,
+		engine:               e,
+		namespaceRegistry:    e.namespaceRegistry,
+		matchingClient:       e.matchingClient,
+		metricsHandler:       e.metricsHandler,
+		taskQueueID:          taskQueue,
+		taskQueueKind:        taskQueueKind,
+		logger:               logger,
+		db:                   db,
+		taskAckManager:       newAckManager(e.logger),
+		taskGC:               newTaskGC(db, taskQueueConfig),
+		config:               taskQueueConfig,
+		pollerHistory:        newPollerHistory(),
+		outstandingPollsMap:  make(map[string]context.CancelFunc),
+		clusterMeta:          clusterMeta,
+		namespace:            nsName,
+		taggedMetricsHandler: taggedMetricsHandler,
+		initializedError:     future.NewFuture[struct{}](),
+		userDataInitialFetch: future.NewFuture[struct{}](),
 	}
 
 	tlMgr.liveness = newLiveness(
@@ -328,6 +325,16 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
 	c.unloadFromEngine()
+}
+
+// isVersioned returns true if this is a tqm for a "versioned [low-level] task queue". Note
+// that this is a different concept from the overall [high-level] task queue having versioning
+// data associated with it, which is the usual meaning of "versioned task queue". In this case,
+// it means whether this is a tqm processing a specific version set id. Unlike non-root
+// partitions which are known (at some level) by other services, [low-level] task queues with a
+// version set should not be interacted with outside of the matching service.
+func (c *taskQueueManagerImpl) isVersioned() bool {
+	return c.taskQueueID.VersionSet() != ""
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -437,10 +444,10 @@ func (c *taskQueueManagerImpl) GetTask(
 	c.matcher.UpdateRatelimit(pollMetadata.ratePerSecond)
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		return c.matcher.PollForQuery(childCtx)
+		return c.matcher.PollForQuery(childCtx, pollMetadata)
 	}
 
-	task, err := c.matcher.Poll(childCtx)
+	task, err := c.matcher.Poll(childCtx, pollMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -475,33 +482,29 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 // GetUserData returns the user data for the task queue if any.
 // Note: can return nil value with no error.
 func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+	if c.isVersioned() {
+		return nil, nil, errNoUserDataOnVersionedTQM
+	}
 	return c.db.GetUserData(ctx)
 }
 
 //nolint:revive // control coupling
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
 	newData, err := c.db.UpdateUserData(ctx, updateFn, options.TaskQueueLimitPerBuildId)
-	c.signalIfFatal(err)
 	if err != nil {
 		return err
 	}
-	if options.Replicate && c.namespaceReplicationQueue != nil {
-		err = c.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
-			TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
-			Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
-				TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
-					NamespaceId:   c.taskQueueID.namespaceID.String(),
-					TaskQueueName: c.taskQueueID.BaseNameString(),
-					UserData:      newData.GetData(),
-				},
-			},
-		})
-		if err != nil {
-			c.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
-			return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
-		}
+	c.signalIfFatal(err)
+	_, err = c.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
+		NamespaceId: c.db.namespaceID.String(),
+		TaskQueue:   c.taskQueueID.BaseNameString(),
+		UserData:    newData.GetData(),
+	})
+	if err != nil {
+		c.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
+		return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
 	}
-	return nil
+	return err
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
@@ -638,18 +641,20 @@ func executeWithRetry(
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
+	if params.forwardedFrom == "" && c.config.TestDisableSyncMatch() {
+		return false, nil
+	}
 	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
+	defer cancel()
 
-	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
+	// Use fake TaskId for sync match as it hasn't been allocated yet
 	fakeTaskIdWrapper := &persistencespb.AllocatedTaskInfo{
 		Data:   params.taskInfo,
 		TaskId: syncMatchTaskId,
 	}
 
 	task := newInternalTask(fakeTaskIdWrapper, nil, params.source, params.forwardedFrom, true)
-	matched, err := c.matcher.Offer(childCtx, task)
-	cancel()
-	return matched, err
+	return c.matcher.Offer(childCtx, task)
 }
 
 // newChildContext creates a child context with desired timeout.
@@ -715,8 +720,8 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
-	// root workflow partition reads data from db
-	if c.taskQueueID.OwnsUserData() {
+	// root workflow partition reads data from db; versioned tqm has no user data
+	if c.taskQueueID.OwnsUserData() || c.isVersioned() {
 		return nil
 	}
 
@@ -728,7 +733,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	firstCall := true
 
 	op := func(ctx context.Context) error {
-		knownUserData, _, err := c.db.GetUserData(ctx)
+		knownUserData, _, err := c.GetUserData(ctx)
 		if err != nil {
 			return err
 		}
@@ -739,6 +744,7 @@ func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 		res, err := c.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:              c.taskQueueID.namespaceID.String(),
 			TaskQueue:                fetchSource,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
 			WaitNewData:              !firstCall,
 		})

@@ -360,6 +360,15 @@ const (
 	// MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.
 	MatchingGetUserDataLongPollTimeout = "matching.getUserDataLongPollTimeout"
 
+	// for matching testing only:
+
+	// TestMatchingDisableSyncMatch forces tasks to go through the db once
+	TestMatchingDisableSyncMatch = "test.matching.disableSyncMatch"
+	// TestMatchingLBForceReadPartition forces polls to go to a specific partition
+	TestMatchingLBForceReadPartition = "test.matching.lbForceReadPartition"
+	// TestMatchingLBForceWritePartition forces adds to go to a specific partition
+	TestMatchingLBForceWritePartition = "test.matching.lbForceWritePartition"
+
 	// keys for history
 
 	// EnableReplicationStream turn on replication stream
