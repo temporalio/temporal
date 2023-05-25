@@ -28,7 +28,7 @@ require (
 	github.com/pborman/uuid v1.2.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.3
 	github.com/temporalio/ringpop-go v0.0.0-20220818230611-30bf23b490b2
 	github.com/temporalio/tchannel-go v1.22.1-0.20220818200552-1be8d8cffa5b
 	github.com/temporalio/tctl-kit v0.0.0-20230213052353-2342ea1e7d14

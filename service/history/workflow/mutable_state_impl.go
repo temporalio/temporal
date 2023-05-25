@@ -1663,10 +1663,10 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
 
 	// Copy version stamp to new workflow only if:
-	// - command does not say to use latest build id
+	// - command says to use compatible version
 	// - using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	if !command.UseLatestBuildId {
+	if command.UseCompatibleVersion {
 		sourceVersionStamp = common.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
 	}
 
@@ -2290,7 +2290,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		TaskQueue:               attributes.TaskQueue.GetName(),
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
-		UseLatestBuildId:        attributes.UseLatestBuildId,
+		UseCompatibleVersion:    attributes.UseCompatibleVersion,
 	}
 	if ai.HasRetryPolicy {
 		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()

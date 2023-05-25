@@ -820,10 +820,10 @@ func MakeVersionDirectiveForWorkflowTask(
 
 func MakeVersionDirectiveForActivityTask(
 	stamp *commonpb.WorkerVersionStamp,
-	useLatestBuildId bool,
+	useCompatibleVersion bool,
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
-	if useLatestBuildId {
+	if !useCompatibleVersion {
 		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
 	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
 		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
