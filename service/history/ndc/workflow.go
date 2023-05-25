@@ -262,9 +262,14 @@ func (r *WorkflowImpl) terminateWorkflow(
 	incomingLastWriteVersion int64,
 ) error {
 
+	eventBatchFirstEventID := r.GetMutableState().GetNextEventID()
 	wtFailedEvent, err := r.failWorkflowTask(lastWriteVersion)
 	if err != nil {
 		return err
+	}
+
+	if wtFailedEvent != nil {
+		eventBatchFirstEventID = wtFailedEvent.GetEventId()
 	}
 
 	// do not persist the change right now, Workflow requires transaction
@@ -273,7 +278,7 @@ func (r *WorkflowImpl) terminateWorkflow(
 	}
 
 	_, err = r.mutableState.AddWorkflowExecutionTerminatedEvent(
-		wtFailedEvent.GetEventId(),
+		eventBatchFirstEventID,
 		workflowTerminationReason,
 		payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
 		workflowTerminationIdentity,
