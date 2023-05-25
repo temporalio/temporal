@@ -43,7 +43,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -142,25 +141,24 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status                    int32
-		engine                    *matchingEngineImpl
-		taskQueueID               *taskQueueID
-		taskQueueKind             enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
-		config                    *taskQueueConfig
-		db                        *taskQueueDB
-		taskWriter                *taskWriter
-		taskReader                *taskReader // reads tasks from db and async matches it with poller
-		liveness                  *liveness
-		taskGC                    *taskGC
-		taskAckManager            ackManager   // tracks ackLevel for delivered messages
-		matcher                   *TaskMatcher // for matching a task producer with a poller
-		namespaceRegistry         namespace.Registry
-		namespaceReplicationQueue persistence.NamespaceReplicationQueue
-		logger                    log.Logger
-		matchingClient            matchingservice.MatchingServiceClient
-		metricsHandler            metrics.Handler
-		namespace                 namespace.Name
-		taggedMetricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
+		status               int32
+		engine               *matchingEngineImpl
+		taskQueueID          *taskQueueID
+		taskQueueKind        enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		config               *taskQueueConfig
+		db                   *taskQueueDB
+		taskWriter           *taskWriter
+		taskReader           *taskReader // reads tasks from db and async matches it with poller
+		liveness             *liveness
+		taskGC               *taskGC
+		taskAckManager       ackManager   // tracks ackLevel for delivered messages
+		matcher              *TaskMatcher // for matching a task producer with a poller
+		namespaceRegistry    namespace.Registry
+		logger               log.Logger
+		matchingClient       matchingservice.MatchingServiceClient
+		metricsHandler       metrics.Handler
+		namespace            namespace.Name
+		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -205,7 +203,7 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
+	db := newTaskQueueDB(e.taskManager, e.matchingClient, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -217,26 +215,25 @@ func newTaskQueueManager(
 		taskQueueKind,
 	)
 	tlMgr := &taskQueueManagerImpl{
-		status:                    common.DaemonStatusInitialized,
-		engine:                    e,
-		namespaceRegistry:         e.namespaceRegistry,
-		namespaceReplicationQueue: e.namespaceReplicationQueue,
-		matchingClient:            e.matchingClient,
-		metricsHandler:            e.metricsHandler,
-		taskQueueID:               taskQueue,
-		taskQueueKind:             taskQueueKind,
-		logger:                    logger,
-		db:                        db,
-		taskAckManager:            newAckManager(e.logger),
-		taskGC:                    newTaskGC(db, taskQueueConfig),
-		config:                    taskQueueConfig,
-		pollerHistory:             newPollerHistory(),
-		outstandingPollsMap:       make(map[string]context.CancelFunc),
-		clusterMeta:               clusterMeta,
-		namespace:                 nsName,
-		taggedMetricsHandler:      taggedMetricsHandler,
-		initializedError:          future.NewFuture[struct{}](),
-		userDataInitialFetch:      future.NewFuture[struct{}](),
+		status:               common.DaemonStatusInitialized,
+		engine:               e,
+		namespaceRegistry:    e.namespaceRegistry,
+		matchingClient:       e.matchingClient,
+		metricsHandler:       e.metricsHandler,
+		taskQueueID:          taskQueue,
+		taskQueueKind:        taskQueueKind,
+		logger:               logger,
+		db:                   db,
+		taskAckManager:       newAckManager(e.logger),
+		taskGC:               newTaskGC(db, taskQueueConfig),
+		config:               taskQueueConfig,
+		pollerHistory:        newPollerHistory(),
+		outstandingPollsMap:  make(map[string]context.CancelFunc),
+		clusterMeta:          clusterMeta,
+		namespace:            nsName,
+		taggedMetricsHandler: taggedMetricsHandler,
+		initializedError:     future.NewFuture[struct{}](),
+		userDataInitialFetch: future.NewFuture[struct{}](),
 	}
 
 	tlMgr.liveness = newLiveness(
@@ -494,27 +491,20 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 //nolint:revive // control coupling
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
 	newData, err := c.db.UpdateUserData(ctx, updateFn, options.TaskQueueLimitPerBuildId)
-	c.signalIfFatal(err)
 	if err != nil {
 		return err
 	}
-	if options.Replicate && c.namespaceReplicationQueue != nil {
-		err = c.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
-			TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
-			Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
-				TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
-					NamespaceId:   c.taskQueueID.namespaceID.String(),
-					TaskQueueName: c.taskQueueID.BaseNameString(),
-					UserData:      newData.GetData(),
-				},
-			},
-		})
-		if err != nil {
-			c.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
-			return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
-		}
+	c.signalIfFatal(err)
+	_, err = c.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
+		NamespaceId: c.db.namespaceID.String(),
+		TaskQueue:   c.taskQueueID.BaseNameString(),
+		UserData:    newData.GetData(),
+	})
+	if err != nil {
+		c.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
+		return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
 	}
-	return nil
+	return err
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes

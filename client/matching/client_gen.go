@@ -157,6 +157,21 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	return client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *clientImpl) ReplicateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.ReplicateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
+
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ReplicateTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *clientImpl) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
@@ -170,6 +185,21 @@ func (c *clientImpl) RespondQueryTaskCompleted(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.RespondQueryTaskCompleted(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
+
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: "not-applicable"}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkerBuildIdCompatibility(

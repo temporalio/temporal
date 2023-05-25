@@ -264,3 +264,32 @@ message ForceUnloadTaskQueueRequest {
 message ForceUnloadTaskQueueResponse {
     bool was_loaded = 1;
 }
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueUserDataRequest doesn't follow Google API format --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueUserDataRequest RPC doesn't follow Google API format. --)
+message UpdateTaskQueueUserDataRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
+    // than the version cached in the root partition.
+    temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 3;
+    // List of added build ids
+    repeated string build_ids_added = 4;
+    // List of removed build ids
+    repeated string build_ids_removed = 5;
+}
+
+message UpdateTaskQueueUserDataResponse {
+}
+
+message ReplicateTaskQueueUserDataRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
+}
+
+message ReplicateTaskQueueUserDataResponse {
+}
+

@@ -320,7 +320,8 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	}
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
-	s.Equal(len(searchAttributes.GetIndexedFields()), len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
+	// Add one for BuildIds={unversioned}
+	s.Equal(len(searchAttributes.GetIndexedFields())+1, len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
 	for attrName, expectedPayload := range searchAttributes.GetIndexedFields() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
 		s.True(ok)
@@ -1414,6 +1415,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		map[string]interface{}{
 			"CustomDoubleField":             22.0878,
 			searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+			searchattribute.BuildIds:        []string{common.UnversionedSearchAttribute},
 		},
 		nil,
 	)
@@ -1701,7 +1703,7 @@ func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 			s.Nil(resp.NextPageToken)
 			execution := resp.GetExecutions()[0]
 			retrievedSearchAttr := execution.SearchAttributes
-			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 4 {
+			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 5 {
 				fields := retrievedSearchAttr.GetIndexedFields()
 				searchValBytes := fields[s.testSearchAttributeKey]
 				var searchVal string
@@ -1726,6 +1728,12 @@ func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 				err = payload.Decode(binaryChecksumsBytes, &binaryChecksums)
 				s.NoError(err)
 				s.Equal([]string{"binary-v1", "binary-v2"}, binaryChecksums)
+
+				buildIdsBytes := fields[searchattribute.BuildIds]
+				var buildIds []string
+				err = payload.Decode(buildIdsBytes, &buildIds)
+				s.NoError(err)
+				s.Equal([]string{common.UnversionedSearchAttribute}, buildIds)
 
 				verified = true
 				break
@@ -1972,12 +1980,12 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 			workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
 
 			// Start compatible child
-			c1Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId1, TaskQueue: taskQueue, UseLatestBuildID: false})
+			c1Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId1, TaskQueue: taskQueue, VersioningIntent: worker.CompatibleVersion})
 			if err := workflow.ExecuteChildWorkflow(c1Ctx, "doesnt-exist").GetChildWorkflowExecution().Get(ctx, nil); err != nil {
 				return err
 			}
 			// Start latest child
-			c2Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId2, TaskQueue: taskQueue, UseLatestBuildID: true})
+			c2Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId2, TaskQueue: taskQueue, VersioningIntent: worker.UseDefaultVersion})
 			if err := workflow.ExecuteChildWorkflow(c2Ctx, "doesnt-exist").GetChildWorkflowExecution().Get(ctx, nil); err != nil {
 				return err
 			}
@@ -1990,7 +1998,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 			workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
 			// TODO: shouldn't be WithChildOptions
 			useLatestCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				UseLatestBuildID: true,
+				VersioningIntent: worker.UseDefaultVersion,
 			})
 			// Finally continue-as-new to latest
 			return workflow.NewContinueAsNewError(useLatestCtx, "doesnt-exist")
@@ -2353,7 +2361,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:                 s.namespace,
 		TaskQueue:                 &taskqueuepb.TaskQueue{Name: tq1},
-		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{BuildId: v01},
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{BuildId: v01, UseVersioning: true},
 	})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(task.GetTaskToken())

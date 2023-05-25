@@ -29,7 +29,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -159,13 +158,13 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-// This test verifies that user data persists across unload/reload.
-func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
+func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
 
 	s.addNewDefaultBuildId(ctx, tq, "foo")
 
+	// Unload task queue to make sure the data is there when we load it again.
 	_, err := s.testCluster.host.matchingClient.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
 		NamespaceId:   s.getNamespaceID(s.namespace),
 		TaskQueue:     tq,
@@ -346,11 +345,10 @@ func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var started sync.WaitGroup
-	started.Add(1)
+	started := make(chan struct{}, 1)
 
 	wf := func(ctx workflow.Context) (string, error) {
-		started.Done()
+		started <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		return "done!", nil
 	}
@@ -365,7 +363,7 @@ func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
-	started.Wait()
+	s.waitForChan(ctx, started)
 	s.addNewDefaultBuildId(ctx, tq, "v1")
 	s.waitForPropagation(ctx, tq, "v1")
 
@@ -387,11 +385,10 @@ func (s *versioningIntegSuite) TestDispatchUpgradeStickyUnavailable() {
 func (s *versioningIntegSuite) dispatchUpgrade(letStickyWftTimeout bool) {
 	tq := s.randomizeStr(s.T().Name())
 
-	var started sync.WaitGroup
-	started.Add(1)
+	started := make(chan struct{}, 1)
 
 	wf1 := func(ctx workflow.Context) (string, error) {
-		started.Done()
+		started <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		return "done!", nil
 	}
@@ -418,7 +415,7 @@ func (s *versioningIntegSuite) dispatchUpgrade(letStickyWftTimeout bool) {
 
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
-	started.Wait()
+	s.waitForChan(ctx, started)
 
 	// Stop w1 to break stickiness
 	// TODO: this shouldn't be necessary, add behavior cases that disable stickiness
@@ -462,29 +459,29 @@ func (s *versioningIntegSuite) TestDispatchActivity() {
 func (s *versioningIntegSuite) dispatchActivity() {
 	// This also implicitly tests that a workflow stays on a compatible version set if a new
 	// incompatible set is registered, because wf2 just panics. It further tests that
-	// stickiness on v1 is not broken by registering v2, because `started.Done()` will panic on
-	// replay.
+	// stickiness on v1 is not broken by registering v2, because the channel send will panic on
+	// replay after we close the channel.
 
 	tq := s.randomizeStr(s.T().Name())
 
-	var started sync.WaitGroup
-	started.Add(1)
+	started := make(chan struct{}, 1)
 
 	act1 := func() (string, error) { return "v1", nil }
 	act2 := func() (string, error) { return "v2", nil }
 	wf1 := func(ctx workflow.Context) (string, error) {
-		started.Done()
+		started <- struct{}{}
 		// wait for signal
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		// run two activities
 		fut1 := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ScheduleToCloseTimeout: time.Minute,
 			DisableEagerExecution:  true,
+			VersioningIntent:       worker.CompatibleVersion,
 		}), "act")
 		fut2 := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ScheduleToCloseTimeout: time.Minute,
 			DisableEagerExecution:  true,
-			UseLatestBuildID:       true, // this one should go to latest
+			VersioningIntent:       worker.UseDefaultVersion, // this one should go to latest
 		}), "act")
 		var val1, val2 string
 		s.NoError(fut1.Get(ctx, &val1))
@@ -513,7 +510,8 @@ func (s *versioningIntegSuite) dispatchActivity() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	started.Wait()
+	s.waitForChan(ctx, started)
+	close(started) //force panic if replayed
 
 	// now register v2 as default
 	s.addNewDefaultBuildId(ctx, tq, "v2")
@@ -543,24 +541,23 @@ func (s *versioningIntegSuite) TestDispatchChildWorkflow() {
 func (s *versioningIntegSuite) dispatchChildWorkflow() {
 	// This also implicitly tests that a workflow stays on a compatible version set if a new
 	// incompatible set is registered, because wf2 just panics. It further tests that
-	// stickiness on v1 is not broken by registering v2, because `started.Done()` will panic on
-	// replay.
+	// stickiness on v1 is not broken by registering v2, because the channel send will panic on
+	// replay after we close the channel.
 
 	tq := s.randomizeStr(s.T().Name())
 
-	var started sync.WaitGroup
-	started.Add(1)
+	started := make(chan struct{}, 1)
 
 	child1 := func(workflow.Context) (string, error) { return "v1", nil }
 	child2 := func(workflow.Context) (string, error) { return "v2", nil }
 	wf1 := func(ctx workflow.Context) (string, error) {
-		started.Done()
+		started <- struct{}{}
 		// wait for signal
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		// run two child workflows
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{}), "child")
 		fut2 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			UseLatestBuildID: true, // this one should go to latest
+			VersioningIntent: worker.UseDefaultVersion, // this one should go to latest
 		}), "child")
 		var val1, val2 string
 		s.NoError(fut1.Get(ctx, &val1))
@@ -589,7 +586,8 @@ func (s *versioningIntegSuite) dispatchChildWorkflow() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	started.Wait()
+	s.waitForChan(ctx, started)
+	close(started) //force panic if replayed
 
 	// now register v2 as default
 	s.addNewDefaultBuildId(ctx, tq, "v2")
@@ -620,17 +618,16 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	// TODO: this test will need updating after fixing stickiness, see comments below
 	tq := s.randomizeStr(s.T().Name())
 
-	var started1, started11, started2 sync.WaitGroup
-	started1.Add(1)
-	started11.Add(1)
-	started2.Add(1)
+	started1 := make(chan struct{})
+	started11 := make(chan struct{})
+	started2 := make(chan struct{})
 
 	wf1 := func(ctx workflow.Context, attempt int) (string, error) {
-		started1.Done()
+		started1 <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		// TODO: shouldn't be WithChildOptions
 		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			UseLatestBuildID: true,
+			VersioningIntent: worker.UseDefaultVersion, // this one should go to latest
 		})
 		_ = newCtx
 		switch attempt {
@@ -645,10 +642,10 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 		panic("oops")
 	}
 	wf11 := func(ctx workflow.Context, attempt int) (string, error) {
-		started11.Done()
+		started11 <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			UseLatestBuildID: true,
+			VersioningIntent: worker.UseDefaultVersion,
 		})
 		_ = newCtx
 		switch attempt {
@@ -663,10 +660,10 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 		panic("oops")
 	}
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
-		started2.Done()
+		started2 <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			UseLatestBuildID: true,
+			VersioningIntent: worker.UseDefaultVersion,
 		})
 		_ = newCtx
 		switch attempt {
@@ -697,7 +694,7 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	started1.Wait()
+	s.waitForChan(ctx, started1)
 
 	// now register v11 as newer compatible with v1 AND v2 as a new default
 	s.addCompatibleBuildId(ctx, tq, "v11", "v1", false)
@@ -723,15 +720,15 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 
 	// unblock the workflow. it should continue on v1 then continue-as-new onto v11
 	// TODO: after fixing stickiness, it should continue on v11 and then continue-as-new onto v11.
-	// will also need to mess with waitgroups then.
+	// will also need to mess with channels then.
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// wait for it to start on v11 then unblock. it should continue on v11 then continue-as-new onto v2.
-	started11.Wait()
+	s.waitForChan(ctx, started11)
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// wait for it to start on v2 and unblock. it should return.
-	started2.Wait()
+	s.waitForChan(ctx, started2)
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	var out string
@@ -1002,6 +999,15 @@ func (s *versioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBu
 		}
 		return len(remaining) == 0
 	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *versioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}) {
+	s.T().Helper()
+	select {
+	case <-ch:
+	case <-ctx.Done():
+		s.FailNow("context timeout")
+	}
 }
 
 func containsBuildId(data *persistencespb.VersioningData, buildId string) bool {
