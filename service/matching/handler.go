@@ -325,12 +325,36 @@ func (h *Handler) ApplyTaskQueueUserDataReplicationEvent(
 	return h.engine.ApplyTaskQueueUserDataReplicationEvent(ctx, request)
 }
 
+func (h *Handler) GetBuildIdTaskQueueMapping(
+	ctx context.Context,
+	request *matchingservice.GetBuildIdTaskQueueMappingRequest,
+) (_ *matchingservice.GetBuildIdTaskQueueMappingResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.GetBuildIdTaskQueueMapping(ctx, request)
+}
+
 func (h *Handler) ForceUnloadTaskQueue(
 	ctx context.Context,
 	request *matchingservice.ForceUnloadTaskQueueRequest,
 ) (_ *matchingservice.ForceUnloadTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.ForceUnloadTaskQueue(ctx, request)
+}
+
+func (h *Handler) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueUserDataRequest,
+) (_ *matchingservice.UpdateTaskQueueUserDataResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.UpdateTaskQueueUserData(ctx, request)
+}
+
+func (h *Handler) ReplicateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.ReplicateTaskQueueUserDataRequest,
+) (_ *matchingservice.ReplicateTaskQueueUserDataResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.ReplicateTaskQueueUserData(ctx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

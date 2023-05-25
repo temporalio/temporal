@@ -941,9 +941,8 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.WorkerVersionStamp = attrs.GetWorkerVersion()
-	buildID := attrs.GetWorkerVersion().GetBuildId()
-	if buildID != "" {
-		return m.ms.trackBuildIdFromCompletion(buildID, event.GetEventId(), limits)
+	if err := m.ms.trackBuildIdFromCompletion(attrs.GetWorkerVersion(), event.GetEventId(), limits); err != nil {
+		return err
 	}
 	return m.ms.addBinaryCheckSumIfNotExists(event, limits.MaxResetPoints)
 }

@@ -114,6 +114,10 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockMatchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.mockMatchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{}, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.UpdateTaskQueueUserDataResponse{}, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "")
@@ -2602,6 +2606,18 @@ func (m *testTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *
 func (*testTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.ListTaskQueueUserDataEntriesResponse, error) {
 	// No need to implement this for unit tests
 	panic("unimplemented")
+}
+
+// GetTaskQueuesByBuildId implements persistence.TaskManager
+func (*testTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	// No need to implement this for unit tests
+	panic("unimplemented")
+}
+
+// CountTaskQueuesByBuildId implements persistence.TaskManager
+func (*testTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) (int, error) {
+	// This is only used to validate that the build id to task queue mapping is enforced (at the time of writing), report 0.
+	return 0, nil
 }
 
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
