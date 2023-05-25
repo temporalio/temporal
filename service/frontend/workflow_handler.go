@@ -839,6 +839,10 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
+	if request.GetWorkerVersionCapabilities().GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
 	if len(request.GetWorkerVersionCapabilities().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
 		return nil, errBuildIdTooLong
 	}
@@ -937,6 +941,11 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
+
+	if request.GetWorkerVersionStamp().GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
 	if len(request.GetWorkerVersionStamp().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
 		return nil, errBuildIdTooLong
 	}
@@ -1091,6 +1100,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	if request.GetWorkerVersionCapabilities().GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
 	}
 
 	if len(request.GetWorkerVersionCapabilities().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
@@ -3556,7 +3569,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
-	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
 		return nil, errWorkerVersioningNotAllowed
 	}
 
@@ -3592,7 +3605,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 		return nil, errRequestNotSet
 	}
 
-	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
 		return nil, errWorkerVersioningNotAllowed
 	}
 
