@@ -62,6 +62,8 @@ func (s *DynamicRateLimitSuite) SetupSuite() {
 		dynamicconfig.GetDurationPropertyFn(30*time.Second),
 		dynamicconfig.GetIntPropertyFn(1000),
 		metrics.NoopMetricsHandler,
+		dynamicconfig.GetIntPropertyFn(50),
+		s.Logger,
 	)
 
 	rateLimiter := client.NewHealthRequestRateLimiterImpl(
