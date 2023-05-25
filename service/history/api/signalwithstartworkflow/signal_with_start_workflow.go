@@ -272,6 +272,9 @@ func signalWorkflow(
 
 	if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
 		// duplicate signal
+		// in-memory mutable state is still clean, release the lock with nil error to prevent
+		// clearing and reloading mutable state
+		workflowContext.GetReleaseFn()(nil)
 		return nil
 	}
 	if request.GetRequestId() != "" {

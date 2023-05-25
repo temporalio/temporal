@@ -77,11 +77,6 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			executionInfo := mutableState.GetExecutionInfo()
-
-			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() && !request.GetSkipGenerateWorkflowTask()
-
 			if err := api.ValidateSignal(
 				ctx,
 				shard,
@@ -92,6 +87,11 @@ func Invoke(
 				releaseFn(nil)
 				return nil, err
 			}
+
+			executionInfo := mutableState.GetExecutionInfo()
+
+			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
+			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() && !request.GetSkipGenerateWorkflowTask()
 
 			if childWorkflowOnly {
 				parentWorkflowID := executionInfo.ParentWorkflowId

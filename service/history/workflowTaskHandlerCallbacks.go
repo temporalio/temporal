@@ -732,10 +732,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	if workflowTaskHeartbeatTimeout {
 		// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
+		// release workflow lock with nil error to prevent mutable state from being cleared and reloaded
+		workflowContext.GetReleaseFn()(nil)
 		return nil, serviceerror.NewNotFound("workflow task heartbeat timeout")
 	}
 
 	if wtFailedCause != nil {
+		// release workflow lock with nil error to prevent mutable state from being cleared and reloaded
+		workflowContext.GetReleaseFn()(nil)
 		return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 	}
 

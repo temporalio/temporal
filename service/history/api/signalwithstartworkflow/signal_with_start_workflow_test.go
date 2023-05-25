@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -109,6 +110,27 @@ func (s *signalWithStartWorkflowSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
+	ctx := context.Background()
+	currentWorkflowContext := api.NewWorkflowContext(
+		s.currentContext,
+		wcache.NoopReleaseFn,
+		s.currentMutableState,
+	)
+	request := s.randomRequest()
+
+	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(true)
+	s.currentMutableState.EXPECT().HasStartedWorkflowTask().Return(true)
+
+	err := signalWorkflow(
+		ctx,
+		s.shardContext,
+		currentWorkflowContext,
+		request,
+	)
+	s.Error(consts.ErrWorkflowClosing, err)
+}
+
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	ctx := context.Background()
 	currentWorkflowContext := api.NewWorkflowContext(
@@ -118,6 +140,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	)
 	request := s.randomRequest()
 
+	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(true)
 
 	err := signalWorkflow(
@@ -139,6 +162,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 	request := s.randomRequest()
 	request.SkipGenerateWorkflowTask = false
 
+	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(false)
 	s.currentMutableState.EXPECT().AddSignalRequested(request.GetRequestId())
 	s.currentMutableState.EXPECT().AddWorkflowExecutionSignaled(
@@ -170,6 +194,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 	)
 	request := s.randomRequest()
 
+	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(false)
 	s.currentMutableState.EXPECT().AddSignalRequested(request.GetRequestId())
 	s.currentMutableState.EXPECT().AddWorkflowExecutionSignaled(
