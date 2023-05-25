@@ -104,9 +104,9 @@ type (
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
 		metricsHandler       metrics.Handler
-		taskQueuesLock       sync.RWMutex                     // locks mutation of taskQueues
-		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
-		taskQueueCount       map[taskQueueCounterKey]int      // per-namespace task queue counter
+		taskQueuesLock       sync.RWMutex // locks mutation of taskQueues
+		taskQueues           map[taskQueueID]taskQueueManager
+		taskQueueCount       map[taskQueueCounterKey]int // per-namespace task queue counter
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
 		namespaceRegistry    namespace.Registry
@@ -255,6 +255,8 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 			e.updateTaskQueueGauge(countKey, taskQueueCount)
 		}
 		e.taskQueuesLock.Unlock()
+	} else {
+		tqm.CheckNormalName(stickyInfo.normalName)
 	}
 
 	if err := tqm.WaitUntilInitialized(ctx); err != nil {

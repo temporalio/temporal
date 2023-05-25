@@ -139,6 +139,7 @@ type (
 		String() string
 		QueueID() *taskQueueID
 		TaskQueueKind() enumspb.TaskQueueKind
+		CheckNormalName(normalName string)
 	}
 
 	// Single task queue in memory state
@@ -360,9 +361,9 @@ func (c *taskQueueManagerImpl) shouldNotFetchUserData() bool {
 	return c.taskQueueID.OwnsUserData() || c.isVersioned()
 }
 
-// checkNormalName verifies that the "normal_name" field in TaskQueue is being set
-// consistently.
-func (c *taskQueueManagerImpl) checkNormalName(normalName string) {
+// CheckNormalName verifies that the "normal_name" field in TaskQueue is being set
+// consistently. This could indicate a bug in the server or in an SDK.
+func (c *taskQueueManagerImpl) CheckNormalName(normalName string) {
 	if normalName != c.normalName {
 		c.logger.Warn("task queue normal name set inconsistently",
 			tag.NewStringTag("sticky-queue-name", c.taskQueueID.BaseNameString()),
