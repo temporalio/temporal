@@ -350,8 +350,7 @@ func createTestTaskQueueManagerWithConfig(
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns-name"), nil).AnyTimes()
 	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	me := newMatchingEngine(testOpts.config, tm, nil, logger, mockNamespaceCache, testOpts.matchingClientMock)
-	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
-	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, tlKind, testOpts.config, cmeta, opts...)
+	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, cmeta, opts...)
 	if err != nil {
 		return nil, err
 	}
