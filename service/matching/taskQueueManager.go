@@ -308,7 +308,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	if !c.shouldNotFetchUserData() {
+	if c.shouldFetchUserData() {
 		c.goroGroup.Go(c.fetchUserDataLoop)
 	}
 	c.logger.Info("", tag.LifeCycleStarted)
@@ -356,9 +356,13 @@ func (c *taskQueueManagerImpl) isVersioned() bool {
 	return c.taskQueueID.VersionSet() != ""
 }
 
-func (c *taskQueueManagerImpl) shouldNotFetchUserData() bool {
-	// root workflow partition reads data from db; versioned tqm has no user data
-	return c.taskQueueID.OwnsUserData() || c.isVersioned()
+// shouldFetchUserData consolidates the logic for when to fetch user data from another task
+// queue or (maybe) read it from the db. We set the userDataInitialFetch future from two
+// places, so they need to agree on which one should set it.
+func (c *taskQueueManagerImpl) shouldFetchUserData() bool {
+	// 1. If the db stores it, then we definitely should not be fetching.
+	// 2. Additionally, we should not fetch for "versioned" tqms.
+	return !c.db.DbStoresUserData() && !c.isVersioned()
 }
 
 // CheckNormalName verifies that the "normal_name" field in TaskQueue is being set

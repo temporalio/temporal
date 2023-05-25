@@ -293,6 +293,12 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	return n, err
 }
 
+// Returns true if we are storing user data in the db. We need to be the root partition,
+// workflow type, unversioned, and also a normal queue.
+func (db *taskQueueDB) DbStoresUserData() bool {
+	return db.taskQueue.OwnsUserData() && db.taskQueueKind == enumspb.TASK_QUEUE_KIND_NORMAL
+}
+
 // GetUserData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
 // will cause cache inconsistency.
 func (db *taskQueueDB) GetUserData(
@@ -316,7 +322,7 @@ func (db *taskQueueDB) getUserDataLocked(
 	ctx context.Context,
 ) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	if db.userData == nil {
-		if !db.taskQueue.OwnsUserData() || db.taskQueueKind != enumspb.TASK_QUEUE_KIND_NORMAL {
+		if !db.DbStoresUserData() {
 			return nil, db.userDataChanged, nil
 		}
 
@@ -344,7 +350,7 @@ func (db *taskQueueDB) getUserDataLocked(
 //
 // On success returns a pointer to the updated data, which must *not* be mutated.
 func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) (*persistencespb.VersionedTaskQueueUserData, error) {
-	if !db.taskQueue.OwnsUserData() {
+	if !db.DbStoresUserData() {
 		return nil, errUserDataNoMutateNonRoot
 	}
 	db.Lock()

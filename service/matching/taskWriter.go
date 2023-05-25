@@ -219,7 +219,7 @@ func (w *taskWriter) appendTasks(
 func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
 	err := w.initReadWriteState(ctx)
 	w.tlMgr.initializedError.Set(struct{}{}, err)
-	if w.tlMgr.shouldNotFetchUserData() {
+	if !w.tlMgr.shouldFetchUserData() {
 		w.tlMgr.userDataInitialFetch.Set(struct{}{}, err)
 	}
 	if err != nil {
