@@ -839,8 +839,8 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if len(request.GetWorkerVersionCapabilities().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		return nil, errBuildIdTooLong
+	if err := wh.validateVersioningInfo(request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+		return nil, err
 	}
 
 	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
@@ -852,14 +852,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 	namespaceID := namespaceEntry.ID()
-
-	// Copy WorkerVersionCapabilities.BuildId to BinaryChecksum if BinaryChecksum is missing (small
-	// optimization to save space in the poll request).
-	if request.WorkerVersionCapabilities != nil {
-		if len(request.WorkerVersionCapabilities.BuildId) > 0 && len(request.BinaryChecksum) == 0 {
-			request.BinaryChecksum = request.WorkerVersionCapabilities.BuildId
-		}
-	}
 
 	wh.logger.Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowNamespaceID(namespaceID.String()))
 	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
@@ -937,8 +929,12 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
 	}
-	if len(request.GetWorkerVersionStamp().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		return nil, errBuildIdTooLong
+
+	if err := wh.validateVersioningInfo(
+		request.WorkerVersionStamp,
+		request.StickyAttributes.GetWorkerTaskQueue(),
+	); err != nil {
+		return nil, err
 	}
 
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
@@ -946,10 +942,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, err
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
-
-	if request.WorkerVersionStamp.GetUseVersioning() && len(request.WorkerVersionStamp.GetBuildId()) == 0 {
-		return nil, errUseVersioningWithoutBuildId
-	}
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
@@ -1093,8 +1085,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	if len(request.GetWorkerVersionCapabilities().GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		return nil, errBuildIdTooLong
+	if err := wh.validateVersioningInfo(request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+		return nil, err
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -4220,6 +4212,24 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
+	return nil
+}
+
+type buildIdAndFlag interface {
+	GetBuildId() string
+	GetUseVersioning() bool
+}
+
+func (wh *WorkflowHandler) validateVersioningInfo(id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+		return errUseVersioningWithoutNormalName
+	}
+	if id.GetUseVersioning() && len(id.GetBuildId()) == 0 {
+		return errUseVersioningWithoutBuildId
+	}
+	if len(id.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+		return errBuildIdTooLong
+	}
 	return nil
 }
 

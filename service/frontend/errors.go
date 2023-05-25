@@ -81,6 +81,7 @@ var (
 	errInvalidWorkflowStartDelaySeconds                   = serviceerror.NewInvalidArgument("An invalid WorkflowStartDelaySeconds is set on request.")
 	errRaceConditionAddingSearchAttributes                = serviceerror.NewUnavailable("Generated search attributes mapping unavailble.")
 	errUseVersioningWithoutBuildId                        = serviceerror.NewInvalidArgument("WorkerVersionStamp must be present if UseVersioning is true.")
+	errUseVersioningWithoutNormalName                     = serviceerror.NewInvalidArgument("NormalName must be set on sticky queue if UseVersioning is true.")
 	errBuildIdTooLong                                     = serviceerror.NewInvalidArgument("Build ID exceeds configured limit.workerBuildIdSize, use a shorter build ID.")
 
 	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
