@@ -340,7 +340,7 @@ func (pdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.U
 	return nil
 }
 
-func (pdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddBuildIdToTaskQueueMapping) error {
+func (pdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddBuildIdsToTaskQueueMapping) error {
 	query := addBuildIdToTaskQueueMappingQry
 	var params []any
 	for idx, buildId := range request.BuildIds {
@@ -355,7 +355,7 @@ func (pdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplug
 	return err
 }
 
-func (pdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveBuildIdToTaskQueueMapping) error {
+func (pdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveBuildIdsToTaskQueueMapping) error {
 	// TODO(bergundy): implement when we support deletion
 	panic("not implemented")
 }
