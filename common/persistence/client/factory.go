@@ -89,7 +89,6 @@ func NewFactory(
 	logger log.Logger,
 	healthSignals p.HealthSignalAggregator,
 ) Factory {
-	healthSignals.Start()
 	return &factoryImpl{
 		dataStoreFactory: dataStoreFactory,
 		config:           cfg,
@@ -216,7 +215,9 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 // Close closes this factory
 func (f *factoryImpl) Close() {
 	f.dataStoreFactory.Close()
-	f.healthSignals.Stop()
+	if f.healthSignals != nil {
+		f.healthSignals.Start()
+	}
 }
 
 func IsPersistenceTransientError(err error) bool {
@@ -235,4 +236,5 @@ func (f *factoryImpl) updateNilMetricsAndHealthSignals() {
 	if f.healthSignals == nil {
 		f.healthSignals = p.NoopHealthSignalAggregator
 	}
+	f.healthSignals.Start()
 }
