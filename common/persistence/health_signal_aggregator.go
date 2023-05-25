@@ -30,34 +30,42 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 )
 
+const (
+	emitMetricsInterval = 30 * time.Second
+)
+
 type (
 	HealthSignalAggregator interface {
+		common.Daemon
 		GetRecordFn(req quotas.Request) func(err error)
 		AverageLatency() float64
 		ErrorRatio() float64
 	}
 
 	HealthSignalAggregatorImpl struct {
-		requestsPerShardAndNs map[perShardPerNamespaceKey]*atomic.Int64
-		requestsLock          sync.RWMutex
+		status     int32
+		shutdownCh chan struct{}
+
+		requestsPerShard map[int32]int64
+		requestsLock     sync.Mutex
 
 		latencyAverage aggregate.MovingWindowAverage
 		errorRatio     aggregate.MovingWindowAverage
 
-		metricsHandler      metrics.Handler
-		emitMetricsInterval time.Duration
-		emitMetricsTimer    *time.Ticker
-	}
+		metricsHandler       metrics.Handler
+		emitMetricsTimer     *time.Ticker
+		perShardRPSWarnLimit dynamicconfig.IntPropertyFn
 
-	perShardPerNamespaceKey struct {
-		namespace string
-		shard     int32
+		logger log.Logger
 	}
 )
 
@@ -65,26 +73,50 @@ func NewHealthSignalAggregatorImpl(
 	windowSize dynamicconfig.DurationPropertyFn,
 	maxBufferSize dynamicconfig.IntPropertyFn,
 	metricsHandler metrics.Handler,
+	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
+	logger log.Logger,
 ) *HealthSignalAggregatorImpl {
 	return &HealthSignalAggregatorImpl{
-		requestsPerShardAndNs: make(map[perShardPerNamespaceKey]*atomic.Int64),
-		latencyAverage:        aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
-		errorRatio:            aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
-		metricsHandler:        metricsHandler,
-		emitMetricsInterval:   windowSize(),
-		emitMetricsTimer:      time.NewTicker(windowSize()),
+		status:               common.DaemonStatusInitialized,
+		shutdownCh:           make(chan struct{}),
+		requestsPerShard:     make(map[int32]int64),
+		latencyAverage:       aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
+		errorRatio:           aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
+		metricsHandler:       metricsHandler,
+		emitMetricsTimer:     time.NewTicker(emitMetricsInterval),
+		perShardRPSWarnLimit: perShardRPSWarnLimit,
+		logger:               logger,
 	}
+}
+
+func (s *HealthSignalAggregatorImpl) Start() {
+	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
+	}
+	go s.emitMetricsLoop()
+}
+
+func (s *HealthSignalAggregatorImpl) Stop() {
+	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+		return
+	}
+	close(s.shutdownCh)
+	s.emitMetricsTimer.Stop()
 }
 
 func (s *HealthSignalAggregatorImpl) GetRecordFn(req quotas.Request) func(err error) {
 	start := time.Now()
 	return func(err error) {
-		s.getOrInitRequestCount(req).Add(1)
 		s.latencyAverage.Record(time.Since(start).Milliseconds())
+
 		if isUnhealthyError(err) {
 			s.errorRatio.Record(1)
 		} else {
 			s.errorRatio.Record(0)
+		}
+
+		if req.CallerSegment != CallerSegmentMissing {
+			s.incrementShardRequestCount(req.CallerSegment)
 		}
 	}
 }
@@ -97,48 +129,31 @@ func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
 	return s.errorRatio.Average()
 }
 
-func (s *HealthSignalAggregatorImpl) getOrInitRequestCount(req quotas.Request) *atomic.Int64 {
-	key := getPerShardPerNsKey(req)
-
-	s.requestsLock.RLock()
-	count, ok := s.requestsPerShardAndNs[key]
-	s.requestsLock.RUnlock()
-	if ok {
-		return count
-	}
-
-	newCount := &atomic.Int64{}
-
+func (s *HealthSignalAggregatorImpl) incrementShardRequestCount(shardID int32) {
 	s.requestsLock.Lock()
 	defer s.requestsLock.Unlock()
-
-	count, ok = s.requestsPerShardAndNs[key]
-	if ok {
-		return count
-	}
-
-	s.requestsPerShardAndNs[key] = newCount
-	return newCount
+	s.requestsPerShard[shardID]++
 }
 
 func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 	for {
 		select {
+		case <-s.shutdownCh:
+			return
 		case <-s.emitMetricsTimer.C:
-			s.requestsLock.RLock()
-			for key, count := range s.requestsPerShardAndNs {
-				shardRPS := int64(float64(count.Swap(0)) / s.emitMetricsInterval.Seconds())
-				s.metricsHandler.Histogram(metrics.PersistenceShardRPS.GetMetricName(), metrics.PersistenceShardRPS.GetMetricUnit()).Record(shardRPS, metrics.NamespaceTag(key.namespace))
-			}
-			s.requestsLock.RUnlock()
-		}
-	}
-}
+			s.requestsLock.Lock()
+			requestCounts := s.requestsPerShard
+			s.requestsPerShard = make(map[int32]int64, len(requestCounts))
+			s.requestsLock.Unlock()
 
-func getPerShardPerNsKey(req quotas.Request) perShardPerNamespaceKey {
-	return perShardPerNamespaceKey{
-		namespace: req.Caller,
-		shard:     req.CallerSegment,
+			for shardID, count := range requestCounts {
+				shardRPS := int64(float64(count) / emitMetricsInterval.Seconds())
+				s.metricsHandler.Histogram(metrics.PersistenceShardRPS.GetMetricName(), metrics.PersistenceShardRPS.GetMetricUnit()).Record(shardRPS)
+				if shardRPS > int64(s.perShardRPSWarnLimit()) {
+					s.logger.Warn("Per shard RPS warn limit exceeded", tag.ShardID(shardID))
+				}
+			}
+		}
 	}
 }
 

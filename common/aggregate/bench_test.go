@@ -30,23 +30,25 @@ import (
 	"time"
 )
 
-// BenchmarkRingMovingWindowAvg
-// BenchmarkRingMovingWindowAvg-10    		12283236	        94.76 ns/op
+// BenchmarkArrayMovingWindowAvg
+// BenchmarkArrayMovingWindowAvg-10    	17021074	        66.27 ns/op
 
 // BenchmarkHealthRequestRateLimiter
 // BenchmarkHealthRequestRateLimiter-10    	15905046	        71.08 ns/op
 
 const (
-	testWindowSize = 3 * time.Second
+	testWindowSize = 10 * time.Millisecond
 	testBufferSize = 200
 
 	testRPS = 4000
 )
 
-func BenchmarkRingMovingWindowAvg(b *testing.B) {
+func BenchmarkArrayMovingWindowAvg(b *testing.B) {
 	avg := NewMovingWindowAvgImpl(testWindowSize, testBufferSize)
 	for i := 0; i < b.N; i++ {
 		avg.Record(rand.Int63())
-		avg.Average()
+		if i%10 == 0 {
+			avg.Average()
+		}
 	}
 }

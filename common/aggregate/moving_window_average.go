@@ -25,7 +25,6 @@
 package aggregate
 
 import (
-	"container/ring"
 	"sync"
 	"time"
 )
@@ -42,11 +41,12 @@ type (
 	}
 
 	MovingWindowAvgImpl struct {
-		sync.RWMutex
+		sync.Mutex
 		windowSize    time.Duration
 		maxBufferSize int
-		head          *ring.Ring
-		tail          *ring.Ring
+		buffer        []timestampedData
+		headIdx       int
+		tailIdx       int
 		sum           int64
 		count         int64
 	}
@@ -56,12 +56,10 @@ func NewMovingWindowAvgImpl(
 	windowSize time.Duration,
 	maxBufferSize int,
 ) *MovingWindowAvgImpl {
-	buffer := ring.New(maxBufferSize)
 	return &MovingWindowAvgImpl{
 		windowSize:    windowSize,
 		maxBufferSize: maxBufferSize,
-		head:          buffer,
-		tail:          buffer,
+		buffer:        make([]timestampedData, maxBufferSize),
 	}
 }
 
@@ -69,47 +67,37 @@ func (a *MovingWindowAvgImpl) Record(val int64) {
 	a.Lock()
 	defer a.Unlock()
 
-	if a.count == int64(a.maxBufferSize) {
-		a.expireOneLocked()
-	}
-
-	a.tail.Value = timestampedData{value: val, timestamp: time.Now()}
-	a.tail = a.tail.Next()
+	a.buffer[a.tailIdx] = timestampedData{timestamp: time.Now(), value: val}
+	a.tailIdx = (a.tailIdx + 1) % a.maxBufferSize
 
 	a.sum += val
 	a.count++
+
+	if a.tailIdx == a.headIdx {
+		// buffer full, expire oldest element
+		a.sum -= a.buffer[a.headIdx].value
+		a.count--
+		a.headIdx = (a.headIdx + 1) % a.maxBufferSize
+	}
 }
 
 func (a *MovingWindowAvgImpl) Average() float64 {
-	a.expireOldValues()
+	a.Lock()
+	defer a.Unlock()
 
-	a.RLock()
-	defer a.RUnlock()
-
+	a.expireOldValuesLocked()
 	if a.count == 0 {
 		return 0
 	}
 	return float64(a.sum) / float64(a.count)
 }
 
-func (a *MovingWindowAvgImpl) expireOldValues() {
-	a.Lock()
-	defer a.Unlock()
-
-	for ; a.head != a.tail; a.head = a.head.Next() {
-		data, ok := a.head.Value.(timestampedData)
-		if !ok || time.Since(data.timestamp) < a.windowSize {
+func (a *MovingWindowAvgImpl) expireOldValuesLocked() {
+	for ; a.headIdx != a.tailIdx; a.headIdx = (a.headIdx + 1) % a.maxBufferSize {
+		if time.Since(a.buffer[a.headIdx].timestamp) < a.windowSize {
 			break
 		}
-		a.sum -= data.value
+		a.sum -= a.buffer[a.headIdx].value
 		a.count--
 	}
-}
-
-func (a *MovingWindowAvgImpl) expireOneLocked() {
-	if data, ok := a.head.Value.(timestampedData); ok {
-		a.sum -= data.value
-		a.count--
-	}
-	a.head = a.head.Next()
 }
