@@ -101,6 +101,11 @@ type (
 		forwardedFrom string
 	}
 
+	stickyInfo struct {
+		kind       enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		normalName string                // if kind is sticky, name of normal queue
+	}
+
 	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)
 
 	taskQueueManager interface {
@@ -138,11 +143,10 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status                    int32
-		engine                    *matchingEngineImpl
-		taskQueueID               *taskQueueID
-		taskQueueKind             enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
-		normalName                string                // if this is sticky, name of normal queue
+		status      int32
+		engine      *matchingEngineImpl
+		taskQueueID *taskQueueID
+		stickyInfo
 		config                    *taskQueueConfig
 		db                        *taskQueueDB
 		taskWriter                *taskWriter
@@ -181,6 +185,8 @@ var _ taskQueueManager = (*taskQueueManagerImpl)(nil)
 var (
 	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
 	errMissingNormalQueueName = errors.New("missing normal queue name")
+
+	normalStickyInfo = stickyInfo{kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 )
 
 func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
@@ -189,11 +195,17 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	}
 }
 
+func stickyInfoFromTaskQueue(tq *taskqueuepb.TaskQueue) stickyInfo {
+	return stickyInfo{
+		kind:       tq.GetKind(),
+		normalName: tq.GetNormalName(),
+	}
+}
+
 func newTaskQueueManager(
 	e *matchingEngineImpl,
 	taskQueue *taskQueueID,
-	taskQueueKind enumspb.TaskQueueKind,
-	normalName string,
+	stickyInfo stickyInfo,
 	config *Config,
 	clusterMeta cluster.Metadata,
 	opts ...taskQueueManagerOpt,
@@ -206,7 +218,7 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
+	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, stickyInfo.kind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -215,7 +227,7 @@ func newTaskQueueManager(
 		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType)),
 		nsName.String(),
 		taskQueue.FullName(),
-		taskQueueKind,
+		stickyInfo.kind,
 	)
 	tlMgr := &taskQueueManagerImpl{
 		status:                    common.DaemonStatusInitialized,
@@ -225,8 +237,7 @@ func newTaskQueueManager(
 		matchingClient:            e.matchingClient,
 		metricsHandler:            e.metricsHandler,
 		taskQueueID:               taskQueue,
-		taskQueueKind:             taskQueueKind,
-		normalName:                normalName,
+		stickyInfo:                stickyInfo,
 		logger:                    logger,
 		db:                        db,
 		taskAckManager:            newAckManager(e.logger),
@@ -250,11 +261,11 @@ func newTaskQueueManager(
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
 	var fwdr *Forwarder
-	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
+	if tlMgr.isFowardingAllowed(taskQueue, stickyInfo.kind) {
 		// Forward without version set, the target will resolve the correct version set from
 		// the build id itself. TODO: check if we still need this here after tqm refactoring
 		forwardTaskQueue := newTaskQueueIDWithVersionSet(taskQueue, "")
-		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, taskQueueKind, e.matchingClient)
+		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, stickyInfo.kind, e.matchingClient)
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
@@ -722,7 +733,7 @@ func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
 }
 
 func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
-	return c.taskQueueKind
+	return c.kind
 }
 
 func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
@@ -736,7 +747,7 @@ func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFu
 }
 
 func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
-	if c.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+	if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// Sticky queues get data from their corresponding normal queue
 		if c.normalName == "" {
 			// Older SDKs don't send the normal name. That's okay, they just can't use versioning.
