@@ -186,7 +186,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	switch t.Name() {
 	case "GetBuildIdTaskQueueMappingRequest":
 		// Pick a random node for this request, it's not associated with a specific task queue.
-		tqPath = "&taskqueuepb.TaskQueue{Name: fmt.Sprintf(\"not-applicable-%%s\", rand.Int())}"
+		tqPath = "&taskqueuepb.TaskQueue{Name: fmt.Sprintf(\"not-applicable-%s\", rand.Int())}"
 		tqtPath = "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"
 		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
 	case "UpdateTaskQueueUserDataRequest",

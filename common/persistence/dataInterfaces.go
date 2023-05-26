@@ -585,7 +585,10 @@ type (
 		BuildID     string
 	}
 
-	CountTaskQueuesByBuildIdRequest = GetTaskQueuesByBuildIdRequest
+	CountTaskQueuesByBuildIdRequest struct {
+		NamespaceID string
+		BuildID     string
+	}
 
 	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
 	ListTaskQueueRequest struct {

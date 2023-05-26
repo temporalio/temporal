@@ -518,7 +518,7 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 			return err
 		}
 		if len(request.BuildIdsAdded) > 0 {
-			err = tx.AddBuildIdToTaskQueueMapping(ctx, sqlplugin.AddBuildIdsToTaskQueueMapping{
+			err = tx.AddBuildIdToTaskQueueMapping(ctx, sqlplugin.AddToBuildIdToTaskQueueMapping{
 				NamespaceID:   namespaceID,
 				TaskQueueName: request.TaskQueue,
 				BuildIds:      request.BuildIdsAdded,
@@ -528,7 +528,7 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 			}
 		}
 		if len(request.BuildIdsRemoved) > 0 {
-			err = tx.RemoveBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveBuildIdsToTaskQueueMapping{
+			err = tx.RemoveBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveFromBuildIdToTaskQueueMapping{
 				NamespaceID:   namespaceID,
 				TaskQueueName: request.TaskQueue,
 				BuildIds:      request.BuildIdsRemoved,
@@ -599,7 +599,7 @@ func (m *sqlTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *
 	if err != nil {
 		return 0, serviceerror.NewInternal(err.Error())
 	}
-	return m.Db.CountTaskQueuesByBuildId(ctx, &sqlplugin.GetTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
+	return m.Db.CountTaskQueuesByBuildId(ctx, &sqlplugin.CountTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
 }
 
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType

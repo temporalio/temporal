@@ -134,7 +134,7 @@ const (
 
 	templateGetTaskQueueUserDataQuery = `SELECT data, data_encoding, version
 	    FROM task_queue_user_data
-		WHERE namespace_id = ? AND build_id_if_row_is_an_index = ''
+		WHERE namespace_id = ? AND build_id = ''
 		AND task_queue_name = ?`
 
 	templateUpdateTaskQueueUserDataQuery = `UPDATE task_queue_user_data SET
@@ -142,22 +142,22 @@ const (
 		data_encoding = ?,
 		version = ?
 		WHERE namespace_id = ?
-		AND build_id_if_row_is_an_index = ''
+		AND build_id = ''
 		AND task_queue_name = ?
 		IF version = ?`
 
 	templateInsertTaskQueueUserDataQuery = `INSERT INTO task_queue_user_data
-		(namespace_id, build_id_if_row_is_an_index, task_queue_name, data, data_encoding, version) VALUES
-		(?           , ''                         , ?              , ?   , ?            , 1      ) IF NOT EXISTS`
+		(namespace_id, build_id, task_queue_name, data, data_encoding, version) VALUES
+		(?           , ''      , ?              , ?   , ?            , 1      ) IF NOT EXISTS`
 
 	templateInsertBuildIdTaskQueueMappingQuery = `INSERT INTO task_queue_user_data
-	(namespace_id, build_id_if_row_is_an_index, task_queue_name) VALUES
-	(?           , ?                          , ?)`
+	(namespace_id, build_id, task_queue_name) VALUES
+	(?           , ?       , ?)`
 	templateDeleteBuildIdTaskQueueMappingQuery = `DELETE FROM task_queue_user_data
-	WHERE namespace_id = ? AND build_id_if_row_is_an_index = ? AND task_queue_name = ?`
-	templateListTaskQueueUserDataQuery       = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ? AND build_id_if_row_is_an_index = ''`
-	templateListTaskQueueNamesByBuildIdQuery = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_id_if_row_is_an_index = ?`
-	templateCountTaskQueueByBuildIdQuery     = `SELECT COUNT(*) FROM task_queue_user_data WHERE namespace_id = ? AND build_id_if_row_is_an_index = ?`
+	WHERE namespace_id = ? AND build_id = ? AND task_queue_name = ?`
+	templateListTaskQueueUserDataQuery       = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ''`
+	templateListTaskQueueNamesByBuildIdQuery = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ?`
+	templateCountTaskQueueByBuildIdQuery     = `SELECT COUNT(*) FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ?`
 
 	// Not much of a need to make this configurable, we're just reading some strings
 	listTaskQueueNamesByBuildIdPageSize = 100
