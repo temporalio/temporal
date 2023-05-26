@@ -380,6 +380,12 @@ func IsInternalError(err error) bool {
 	return errors.As(err, &internalErr)
 }
 
+// IsNotFoundError checks if the error is a not found error.
+func IsNotFoundError(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	return errors.As(err, &notFoundErr)
+}
+
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
 func WorkflowIDToHistoryShard(
 	namespaceID string,
