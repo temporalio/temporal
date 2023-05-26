@@ -51,6 +51,9 @@ type (
 		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
 		WaitForYellowStatus(ctx context.Context, index string) (string, error)
 		GetMapping(ctx context.Context, index string) (map[string]string, error)
+
+		OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error)
+		ClosePointInTime(ctx context.Context, id string) (bool, error)
 	}
 
 	CLIClient interface {
@@ -76,5 +79,6 @@ type (
 		Sorter   []elastic.Sorter
 
 		SearchAfter []interface{}
+		PointInTime *elastic.PointInTime
 	}
 )

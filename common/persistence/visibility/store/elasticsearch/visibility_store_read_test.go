@@ -469,6 +469,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: nil,
+		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter:      defaultSorter,
 	}, p)
@@ -485,6 +486,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: nil,
+		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter:      defaultSorter,
 	}, p)
@@ -501,6 +503,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: nil,
+		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.WorkflowID).Asc(),
@@ -519,6 +522,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: nil,
+		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter:      docSorter,
 	}, p)
@@ -561,6 +565,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: nil,
+		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter:      defaultSorter,
 	}, p)
@@ -1114,6 +1119,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 }
 
 func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
+	pitID := "pitID"
 	request := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
@@ -1141,8 +1147,10 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 				},
 			},
 		},
+		PitId: pitID,
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(searchResult, nil)
+	s.mockESClient.EXPECT().OpenPointInTime(gomock.Any(), testIndex, gomock.Any()).Return(pitID, nil)
 	_, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
@@ -1158,7 +1166,10 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	request.Query = `ExecutionStatus = "Terminated"`
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(searchResult, nil)
 
-	token := &visibilityPageToken{SearchAfter: []interface{}{json.Number("1528358645123456789")}}
+	token := &visibilityPageToken{
+		SearchAfter:   []interface{}{json.Number("1528358645123456789")},
+		PointInTimeID: pitID,
+	}
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
@@ -1167,14 +1178,17 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	responseToken, err := s.visibilityStore.deserializePageToken(result.NextPageToken)
 	s.NoError(err)
 	s.Equal([]interface{}{json.Number("123")}, responseToken.SearchAfter)
+	s.Equal(pitID, responseToken.PointInTimeID)
 
 	// test last page
 	searchResult = &elastic.SearchResult{
 		Hits: &elastic.SearchHits{
 			Hits: []*elastic.SearchHit{},
 		},
+		PitId: pitID,
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(searchResult, nil)
+	s.mockESClient.EXPECT().ClosePointInTime(gomock.Any(), pitID).Return(true, nil)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
@@ -1188,6 +1202,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 }
 
 func (s *ESVisibilitySuite) TestScanWorkflowExecutions_OldPageToken() {
+	pitID := "pitID"
 	request := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
@@ -1215,8 +1230,10 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions_OldPageToken() {
 				},
 			},
 		},
+		PitId: pitID,
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(searchResult, nil)
+	s.mockESClient.EXPECT().OpenPointInTime(gomock.Any(), testIndex, gomock.Any()).Return(pitID, nil)
 	_, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 

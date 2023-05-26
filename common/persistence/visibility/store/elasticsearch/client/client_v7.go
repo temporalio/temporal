@@ -117,6 +117,10 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 		Query(p.Query).
 		SortBy(p.Sorter...)
 
+	if p.PointInTime != nil {
+		searchSource.PointInTime(p.PointInTime)
+	}
+
 	if p.PageSize != 0 {
 		searchSource.Size(p.PageSize)
 	}
@@ -125,8 +129,29 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 		searchSource.SearchAfter(p.SearchAfter...)
 	}
 
-	searchService := c.esClient.Search(p.Index).SearchSource(searchSource)
+	searchService := c.esClient.Search().SearchSource(searchSource)
+	// If pit is specified, index must not be used.
+	if p.PointInTime == nil {
+		searchService.Index(p.Index)
+	}
+
 	return searchService.Do(ctx)
+}
+
+func (c *clientImpl) OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error) {
+	resp, err := c.esClient.OpenPointInTime(index).KeepAlive(keepAliveInterval).Do(ctx)
+	if err != nil {
+		return "", err
+	}
+	return resp.Id, nil
+}
+
+func (c *clientImpl) ClosePointInTime(ctx context.Context, id string) (bool, error) {
+	resp, err := c.esClient.ClosePointInTime(id).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Succeeded, nil
 }
 
 func (c *clientImpl) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {

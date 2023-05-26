@@ -11,8 +11,8 @@ buildkite-agent artifact download ".coverage/functional_cassandra_coverprofile.o
 mv ./.coverage/functional_cassandra_coverprofile.out ./.coverage/functional_cassandra_es8_coverprofile.out
 
 # OpenSearch 2.
-buildkite-agent artifact download ".coverage/functional_cassandra_coverprofile.out" . --step ":golang: functional test with cassandra (OpenSearch 2)" --build "${BUILDKITE_BUILD_ID}"
-mv ./.coverage/functional_cassandra_coverprofile.out ./.coverage/functional_cassandra_os2_coverprofile.out
+# buildkite-agent artifact download ".coverage/functional_cassandra_coverprofile.out" . --step ":golang: functional test with cassandra (OpenSearch 2)" --build "${BUILDKITE_BUILD_ID}"
+# mv ./.coverage/functional_cassandra_coverprofile.out ./.coverage/functional_cassandra_os2_coverprofile.out
 
 # Cassandra.
 buildkite-agent artifact download ".coverage/functional_cassandra_coverprofile.out" . --step ":golang: functional test with cassandra" --build "${BUILDKITE_BUILD_ID}"
