@@ -477,12 +477,12 @@ func (s *versioningIntegSuite) dispatchActivity() {
 		fut1 := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ScheduleToCloseTimeout: time.Minute,
 			DisableEagerExecution:  true,
-			VersioningIntent:       worker.CompatibleVersion,
+			VersioningIntent:       temporal.VersioningIntentCompatible,
 		}), "act")
 		fut2 := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ScheduleToCloseTimeout: time.Minute,
 			DisableEagerExecution:  true,
-			VersioningIntent:       worker.UseDefaultVersion, // this one should go to latest
+			VersioningIntent:       temporal.VersioningIntentDefault, // this one should go to default
 		}), "act")
 		var val1, val2 string
 		s.NoError(fut1.Get(ctx, &val1))
@@ -558,7 +558,7 @@ func (s *versioningIntegSuite) dispatchChildWorkflow() {
 		// run two child workflows
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{}), "child")
 		fut2 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			VersioningIntent: worker.UseDefaultVersion, // this one should go to latest
+			VersioningIntent: temporal.VersioningIntentDefault, // this one should go to default
 		}), "child")
 		var val1, val2 string
 		s.NoError(fut1.Get(ctx, &val1))
@@ -626,11 +626,6 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	wf1 := func(ctx workflow.Context, attempt int) (string, error) {
 		started1 <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
-		// TODO: shouldn't be WithChildOptions
-		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			VersioningIntent: worker.UseDefaultVersion, // this one should go to latest
-		})
-		_ = newCtx
 		switch attempt {
 		case 0:
 			// TODO: after fixing stickiness, comment this out:
@@ -645,15 +640,12 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	wf11 := func(ctx workflow.Context, attempt int) (string, error) {
 		started11 <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
-		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			VersioningIntent: worker.UseDefaultVersion,
-		})
-		_ = newCtx
 		switch attempt {
 		case 0:
 			// TODO: after fixing stickiness, uncomment this:
 			// return "", workflow.NewContinueAsNewError(ctx, "wf", attempt+1)
 		case 1:
+			newCtx := workflow.WithWorkflowVersioningIntent(ctx, temporal.VersioningIntentDefault) // this one should go to default
 			return "", workflow.NewContinueAsNewError(newCtx, "wf", attempt+1)
 		case 2:
 			// return "done!", nil
@@ -663,10 +655,6 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	wf2 := func(ctx workflow.Context, attempt int) (string, error) {
 		started2 <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
-		newCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			VersioningIntent: worker.UseDefaultVersion,
-		})
-		_ = newCtx
 		switch attempt {
 		case 0:
 			// return "",workflow.NewContinueAsNewError(ctx, "wf", attempt+1)

@@ -1982,12 +1982,12 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 			workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
 
 			// Start compatible child
-			c1Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId1, TaskQueue: taskQueue, VersioningIntent: worker.CompatibleVersion})
+			c1Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId1, TaskQueue: taskQueue, VersioningIntent: temporal.VersioningIntentCompatible})
 			if err := workflow.ExecuteChildWorkflow(c1Ctx, "doesnt-exist").GetChildWorkflowExecution().Get(ctx, nil); err != nil {
 				return err
 			}
-			// Start latest child
-			c2Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId2, TaskQueue: taskQueue, VersioningIntent: worker.UseDefaultVersion})
+			// Start default child
+			c2Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId2, TaskQueue: taskQueue, VersioningIntent: temporal.VersioningIntentDefault})
 			if err := workflow.ExecuteChildWorkflow(c2Ctx, "doesnt-exist").GetChildWorkflowExecution().Get(ctx, nil); err != nil {
 				return err
 			}
@@ -1998,12 +1998,9 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 			startedCh <- info.WorkflowExecution.RunID
 		}
 		workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
-		// TODO: shouldn't be WithChildOptions
-		useLatestCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			VersioningIntent: worker.UseDefaultVersion,
-		})
+		useDefault := workflow.WithWorkflowVersioningIntent(ctx, temporal.VersioningIntentDefault)
 		// Finally continue-as-new to latest
-		return workflow.NewContinueAsNewError(useLatestCtx, "doesnt-exist")
+		return workflow.NewContinueAsNewError(useDefault, "doesnt-exist")
 	}
 
 	// Declare v1
