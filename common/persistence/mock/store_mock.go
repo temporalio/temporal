@@ -208,7 +208,7 @@ func (mr *MockTaskStoreMockRecorder) CompleteTasksLessThan(ctx, request interfac
 }
 
 // CountTaskQueuesByBuildId mocks base method.
-func (m *MockTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) (int, error) {
+func (m *MockTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountTaskQueuesByBuildId", ctx, request)
 	ret0, _ := ret[0].(int)
