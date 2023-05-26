@@ -312,7 +312,8 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	)
 	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
 		r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-minAckedTaskID,
-		metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
+		metrics.TargetClusterTag(currentClusterName),
+		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)

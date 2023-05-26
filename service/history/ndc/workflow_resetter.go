@@ -565,10 +565,8 @@ func (r *workflowResetterImpl) terminateWorkflow(
 	terminateReason string,
 ) error {
 
-	eventBatchFirstEventID := mutableState.GetNextEventID()
 	return workflow.TerminateWorkflow(
 		mutableState,
-		eventBatchFirstEventID,
 		terminateReason,
 		nil,
 		consts.IdentityResetter,

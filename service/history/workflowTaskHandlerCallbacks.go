@@ -686,10 +686,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				return nil, err
 			}
 
-			eventBatchFirstEventID := ms.GetNextEventID()
 			if err := workflow.TerminateWorkflow(
 				ms,
-				eventBatchFirstEventID,
 				common.FailureReasonTransactionSizeExceedsLimit,
 				payloads.EncodeString(updateErr.Error()),
 				consts.IdentityHistoryService,
@@ -974,7 +972,7 @@ func failWorkflowTask(
 	if err != nil {
 		return nil, common.EmptyEventID, err
 	}
-	if _, err = mutableState.AddWorkflowTaskFailedEvent(
+	wtFailedEvent, err := mutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		wtFailedCause.failedCause,
 		failure.NewServerFailure(wtFailedCause.Message(), true),
@@ -982,13 +980,13 @@ func failWorkflowTask(
 		request.GetBinaryChecksum(),
 		"",
 		"",
-		0); err != nil {
+		0)
+	if err != nil {
 		return nil, common.EmptyEventID, err
 	}
 
-	nextEventBatchId := mutableState.GetNextEventID() - 1
 	// Return new mutable state back to the caller for further updates
-	return mutableState, nextEventBatchId, nil
+	return mutableState, wtFailedEvent.GetEventId(), nil
 }
 
 // Filter function to be passed to mutable_state.HasAnyBufferedEvent

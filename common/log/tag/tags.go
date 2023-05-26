@@ -332,6 +332,11 @@ func WorkflowHistorySizeBytes(historySizeBytes int) ZapTag {
 	return NewInt("wf-history-size-bytes", historySizeBytes)
 }
 
+// WorkflowMutableStateSize returns tag for MutableStateSize
+func WorkflowMutableStateSize(mutableStateSize int) ZapTag {
+	return NewInt("wf-mutable-state-size", mutableStateSize)
+}
+
 // WorkflowEventCount returns tag for EventCount
 func WorkflowEventCount(eventCount int) ZapTag {
 	return NewInt("wf-event-count", eventCount)
