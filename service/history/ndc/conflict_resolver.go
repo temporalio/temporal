@@ -144,8 +144,9 @@ func (r *ConflictResolverImpl) rebuild(
 		executionInfo.WorkflowId,
 		executionState.RunId,
 	)
+	historySize := r.mutableState.GetHistorySize()
 
-	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.Rebuild(
+	rebuildMutableState, _, err := r.stateRebuilder.Rebuild(
 		ctx,
 		timestamp.TimeValue(executionInfo.StartTime),
 		workflowKey,
@@ -180,7 +181,7 @@ func (r *ConflictResolverImpl) rebuild(
 		return nil, err
 	}
 	rebuildMutableState.GetExecutionInfo().VersionHistories = versionHistories
-	rebuildMutableState.AddHistorySize(rebuiltHistorySize)
+	rebuildMutableState.AddHistorySize(historySize)
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
 
