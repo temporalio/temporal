@@ -418,13 +418,13 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 func (s *ESVisibilitySuite) TestGetListFieldSorter() {
 
 	// test defaultSorter is returned when fieldSorts is empty
-	fieldSorts := make([]*elastic.FieldSort, 0)
+	fieldSorts := make([]elastic.Sorter, 0)
 	sorter, err := s.visibilityStore.getListFieldSorter(fieldSorts)
 	s.NoError(err)
 	s.Equal(defaultSorter, sorter)
 
 	// test passing non-empty fieldSorts
-	testFieldSorts := [2]*elastic.FieldSort{elastic.NewFieldSort("_test"), elastic.NewFieldSort("_second_tes")}
+	testFieldSorts := []elastic.Sorter{elastic.NewFieldSort("_test"), elastic.NewFieldSort("_second_tes")}
 	sorter, err = s.visibilityStore.getListFieldSorter(testFieldSorts[:])
 	expectedSorter := make([]elastic.Sorter, len(testFieldSorts)+1)
 	expectedSorter[0] = testFieldSorts[0]
@@ -437,13 +437,13 @@ func (s *ESVisibilitySuite) TestGetListFieldSorter() {
 
 func (s *ESVisibilitySuite) TestGetScanFieldSorter() {
 	// test docSorter is returned when fieldSorts is empty
-	fieldSorts := make([]*elastic.FieldSort, 0)
+	fieldSorts := make([]elastic.Sorter, 0)
 	sorter, err := s.visibilityStore.getScanFieldSorter(fieldSorts)
 	s.NoError(err)
 	s.Equal(docSorter, sorter)
 
 	// test error is returned if fieldSorts is not empty
-	testFieldSorts := [2]*elastic.FieldSort{elastic.NewFieldSort("_test"), elastic.NewFieldSort("_second_tes")}
+	testFieldSorts := []elastic.Sorter{elastic.NewFieldSort("_test"), elastic.NewFieldSort("_second_tes")}
 	sorter, err = s.visibilityStore.getScanFieldSorter(testFieldSorts[:])
 	s.Error(err)
 	s.Nil(sorter)
@@ -526,6 +526,8 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 
 	// test with Scan API with custom sort
 	request.Query = `Order bY WorkflowId`
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	p, err = s.visibilityStore.buildSearchParametersV2(request, s.visibilityStore.getScanFieldSorter)
 	s.Error(err)
 	s.Nil(p)
@@ -585,7 +587,7 @@ func (s *ESVisibilitySuite) queryToJSON(q elastic.Query) string {
 	return string(b)
 }
 
-func (s *ESVisibilitySuite) sorterToJSON(sorters []*elastic.FieldSort) string {
+func (s *ESVisibilitySuite) sorterToJSON(sorters []elastic.Sorter) string {
 	var ms []interface{}
 	for _, sorter := range sorters {
 		m, err := sorter.Source()
@@ -599,108 +601,107 @@ func (s *ESVisibilitySuite) sorterToJSON(sorters []*elastic.FieldSort) string {
 
 func (s *ESVisibilitySuite) Test_convertQuery() {
 	query := `WorkflowId = 'wid'`
-	qry, srt, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' or WorkflowId = 'another-wid'`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"match":{"WorkflowId":{"query":"wid"}}},{"match":{"WorkflowId":{"query":"another-wid"}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"match":{"WorkflowId":{"query":"wid"}}},{"match":{"WorkflowId":{"query":"another-wid"}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' order by StartTime desc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Equal(`[{"StartTime":{"order":"desc"}}]`, s.sorterToJSON(srt))
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `WorkflowId = 'wid' and CloseTime is null`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"match":{"WorkflowId":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"match":{"WorkflowId":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' or CloseTime is null`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"match":{"WorkflowId":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"match":{"WorkflowId":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `CloseTime is null order by CloseTime desc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Equal(`[{"CloseTime":{"order":"desc"}}]`, s.sorterToJSON(srt))
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`[{"CloseTime":{"order":"desc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `StartTime = "2018-06-07T15:04:05.123456789-08:00"`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"StartTime":{"query":"2018-06-07T15:04:05.123456789-08:00"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"StartTime":{"query":"2018-06-07T15:04:05.123456789-08:00"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `WorkflowId = 'wid' and StartTime > "2018-06-07T15:04:05+00:00"`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"match":{"WorkflowId":{"query":"wid"}}},{"range":{"StartTime":{"from":"2018-06-07T15:04:05+00:00","include_lower":false,"include_upper":true,"to":null}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"match":{"WorkflowId":{"query":"wid"}}},{"range":{"StartTime":{"from":"2018-06-07T15:04:05+00:00","include_lower":false,"include_upper":true,"to":null}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `ExecutionTime < 1000000`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"1970-01-01T00:00:00.001Z"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"1970-01-01T00:00:00.001Z"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `ExecutionTime between 1 and 2`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"ExecutionTime":{"from":"1970-01-01T00:00:00.000000001Z","include_lower":true,"include_upper":true,"to":"1970-01-01T00:00:00.000000002Z"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"ExecutionTime":{"from":"1970-01-01T00:00:00.000000001Z","include_lower":true,"include_upper":true,"to":"1970-01-01T00:00:00.000000002Z"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `ExecutionTime < 1000000 or ExecutionTime > 2000000`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"1970-01-01T00:00:00.001Z"}}},{"range":{"ExecutionTime":{"from":"1970-01-01T00:00:00.002Z","include_lower":false,"include_upper":true,"to":null}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"1970-01-01T00:00:00.001Z"}}},{"range":{"ExecutionTime":{"from":"1970-01-01T00:00:00.002Z","include_lower":false,"include_upper":true,"to":null}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `order by ExecutionTime`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(srt))
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by StartTime desc, CloseTime asc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Equal(`[{"StartTime":{"order":"desc"}},{"CloseTime":{"order":"asc"}}]`, s.sorterToJSON(srt))
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"CloseTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by CustomTextField desc`
-	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "invalid query: unable to convert 'order by' column name: unable to sort by field of Text type, use field of type Keyword")
 
 	query = `order by CustomIntField asc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Equal(`[{"CustomIntField":{"order":"asc"}}]`, s.sorterToJSON(srt))
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`[{"CustomIntField":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `ExecutionTime < "unable to parse"`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	// Wrong dates goes directly to Elasticsearch, and it returns an error.
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"unable to parse"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"unable to parse"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	// invalid union injection
 	query = `WorkflowId = 'wid' union select * from dummy`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
-	s.Nil(qry)
-	s.Nil(srt)
+	s.Nil(queryParams)
 }
 
 func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
@@ -710,50 +711,50 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.visibilityStore.searchAttributesMapperProvider = s.mockSearchAttributesMapperProvider
 
 	query := `WorkflowId = 'wid'`
-	qry, srt, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `AliasForCustomKeywordField = 'pid'`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"CustomKeywordField":{"query":"pid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"CustomKeywordField":{"query":"pid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `CustomKeywordField = 'pid'`
-	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")
 
 	query = `AliasForUnknownField = 'pid'`
-	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left side of \"AliasForUnknownField = 'pid'\": invalid search attribute: AliasForUnknownField")
 
 	query = `order by ExecutionTime`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(srt))
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by AliasForCustomKeywordField asc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Equal(`[{"CustomKeywordField":{"order":"asc"}}]`, s.sorterToJSON(srt))
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`[{"CustomKeywordField":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by CustomKeywordField asc`
-	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")
 
 	query = `order by AliasForUnknownField asc`
-	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert 'order by' column name: invalid search attribute: AliasForUnknownField")
@@ -767,26 +768,26 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper_Error() {
 	s.visibilityStore.searchAttributesMapperProvider = s.mockSearchAttributesMapperProvider
 
 	query := `WorkflowId = 'wid'`
-	qry, srt, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err := s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Nil(srt)
+	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"WorkflowId":{"query":"wid"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
 
 	query = `ProductId = 'pid'`
-	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")
 
 	query = `order by ExecutionTime`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(qry))
-	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(srt))
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by CustomIntField asc`
-	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")
