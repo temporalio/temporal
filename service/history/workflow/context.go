@@ -991,12 +991,8 @@ func (c *ContextImpl) forceTerminateWorkflow(
 		return err
 	}
 
-	// Terminate workflow is written as a separate batch and might result in more than one event as we close the
-	// outstanding workflow task before terminating the workflow
-	eventBatchFirstEventID := mutableState.GetNextEventID()
 	return TerminateWorkflow(
 		mutableState,
-		eventBatchFirstEventID,
 		failureReason,
 		nil,
 		consts.IdentityHistoryService,
