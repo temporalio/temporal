@@ -1781,7 +1781,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 
 	// Complete workflow.
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
-	s.Error(err, "update was never successfully accepted so it prevents completion")
+	s.NoError(err)
 
 	s.Equal(5, wtHandlerCalls)
 	s.Equal(5, msgHandlerCalls)
@@ -1795,7 +1795,11 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskFailed`, events)
+  8 WorkflowTaskFailed
+  9 WorkflowTaskScheduled
+ 10 WorkflowTaskStarted
+ 11 WorkflowTaskCompleted
+ 12 WorkflowExecutionCompleted`, events)
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTaskToNormal_BecauseOfBufferedSignal() {
@@ -2558,4 +2562,135 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 	s.NoError(err)
 	// completion_event_batch_id should point to WFTerminated event.
 	s.EqualValues(6, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId())
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
+	testCases := []struct {
+		Name         string
+		UpdateErrMsg string
+		Commands     func(tv *testvars.TestVars) []*commandpb.Command
+		Messages     func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message
+	}{
+		{
+			Name:         "requested",
+			UpdateErrMsg: "update canceled",
+			Commands:     func(_ *testvars.TestVars) []*commandpb.Command { return nil },
+			Messages:     func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
+		},
+		{
+			Name:         "accepted",
+			UpdateErrMsg: "update canceled",
+			Commands:     func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptUpdateCommands(tv, "1") },
+			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
+				return s.acceptUpdateMessages(tv, updRequestMsg, "1")
+			},
+		},
+		{
+			Name:         "completed",
+			UpdateErrMsg: "",
+			Commands:     func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptCompleteUpdateCommands(tv, "1") },
+			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
+				return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.Name, func(t *testing.T) {
+			tv := testvars.New(t.Name())
+
+			tv = s.startWorkflow(tv)
+
+			wtHandlerCalls := 0
+			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+				wtHandlerCalls++
+				switch wtHandlerCalls {
+				case 1:
+					// Completes first WT with update unrelated command.
+					return []*commandpb.Command{{
+						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             tv.ActivityID(),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+						}},
+					}}, nil
+				case 2:
+					return append(tc.Commands(tv), &commandpb.Command{
+						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+					}), nil
+				default:
+					s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+					return nil, nil
+				}
+			}
+
+			msgHandlerCalls := 0
+			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+				msgHandlerCalls++
+				switch msgHandlerCalls {
+				case 1:
+					return nil, nil
+				case 2:
+					updRequestMsg := task.Messages[0]
+					return tc.Messages(tv, updRequestMsg), nil
+				default:
+					s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+					return nil, nil
+				}
+			}
+
+			poller := &TaskPoller{
+				Engine:              s.engine,
+				Namespace:           s.namespace,
+				TaskQueue:           tv.TaskQueue(),
+				WorkflowTaskHandler: wtHandler,
+				MessageHandler:      msgHandler,
+				Logger:              s.Logger,
+				T:                   s.T(),
+			}
+
+			// Drain exiting first workflow task.
+			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			s.NoError(err)
+
+			updateResultCh := make(chan struct{})
+			go func(updateErrMsg string) {
+				halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
+				defer cancel()
+
+				resp, err1 := s.engine.UpdateWorkflowExecution(halfSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+					Namespace:         s.namespace,
+					WorkflowExecution: tv.WorkflowExecution(),
+					Request: &updatepb.Request{
+						Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+						Input: &updatepb.Input{
+							Name: tv.HandlerName(),
+							Args: payloads.EncodeString(tv.String("args", "1")),
+						},
+					},
+				})
+
+				if updateErrMsg == "" {
+					s.NoError(err1)
+					s.NotNil(resp)
+				} else {
+					s.Error(err1)
+					s.True(common.IsContextDeadlineExceededErr(err1))
+					s.Nil(resp)
+				}
+				updateResultCh <- struct{}{}
+			}(tc.UpdateErrMsg)
+
+			// Complete workflow.
+			_, err = poller.PollAndProcessWorkflowTask(false, false)
+			s.NoError(err)
+			<-updateResultCh
+
+			s.Equal(2, wtHandlerCalls)
+			s.Equal(2, msgHandlerCalls)
+		})
+	}
 }
