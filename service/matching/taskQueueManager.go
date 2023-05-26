@@ -142,7 +142,6 @@ type (
 		String() string
 		QueueID() *taskQueueID
 		TaskQueueKind() enumspb.TaskQueueKind
-		CheckNormalName(normalName string)
 	}
 
 	// Single task queue in memory state
@@ -364,18 +363,6 @@ func (c *taskQueueManagerImpl) shouldFetchUserData() bool {
 	// 1. If the db stores it, then we definitely should not be fetching.
 	// 2. Additionally, we should not fetch for "versioned" tqms.
 	return !c.db.DbStoresUserData() && !c.isVersioned()
-}
-
-// CheckNormalName verifies that the "normal_name" field in TaskQueue is being set
-// consistently. This could indicate a bug in the server or in an SDK.
-func (c *taskQueueManagerImpl) CheckNormalName(normalName string) {
-	if normalName != c.normalName {
-		c.logger.Warn("task queue normal name set inconsistently",
-			tag.NewStringTag("sticky-queue-name", c.taskQueueID.BaseNameString()),
-			tag.NewStringTag("first-normal-name", c.normalName),
-			tag.NewStringTag("second-normal-name", normalName),
-		)
-	}
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {

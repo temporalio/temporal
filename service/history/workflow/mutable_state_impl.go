@@ -639,8 +639,9 @@ func (ms *MutableStateImpl) IsStickyTaskQueueEnabled() bool {
 func (ms *MutableStateImpl) TaskQueue() *taskqueuepb.TaskQueue {
 	if ms.IsStickyTaskQueueEnabled() {
 		return &taskqueuepb.TaskQueue{
-			Name: ms.executionInfo.StickyTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+			Name:       ms.executionInfo.StickyTaskQueue,
+			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+			NormalName: ms.executionInfo.TaskQueue,
 		}
 	}
 	return &taskqueuepb.TaskQueue{

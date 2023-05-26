@@ -231,6 +231,14 @@ func (e *matchingEngineImpl) String() string {
 // Returns taskQueueManager for a task queue. If not already cached, and create is true, tries
 // to get new range from DB and create one. This blocks (up to the context deadline) for the
 // task queue to be initialized.
+//
+// Note that stickyInfo is not used as part of the task queue identity. That means that if
+// getTaskQueueManager is called twice with the same taskQueue but different stickyInfo, the
+// properties of the taskQueueManager will depend on which call came first. In general we can
+// rely on kind being the same for all calls now, but normalName was a later addition to the
+// protocol and is not always set consistently. normalName is only required when using
+// versioning, and SDKs that support versioning will always set it. The current server version
+// will also set it when adding tasks from history. So that particular inconsistency is okay.
 func (e *matchingEngineImpl) getTaskQueueManager(
 	ctx context.Context,
 	taskQueue *taskQueueID,
@@ -267,8 +275,6 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 			e.updateTaskQueueGauge(countKey, taskQueueCount)
 		}
 		e.taskQueuesLock.Unlock()
-	} else {
-		tqm.CheckNormalName(stickyInfo.normalName)
 	}
 
 	if err := tqm.WaitUntilInitialized(ctx); err != nil {

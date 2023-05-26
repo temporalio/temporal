@@ -237,6 +237,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
+	originalTaskQueue := executionInfo.TaskQueue
 
 	// NOTE: previously this section check whether mutable state has enabled
 	// sticky workflowTask, if so convert the workflowTask to a sticky workflowTask.
@@ -245,12 +246,13 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// task or not.
 	var taskQueue *taskqueuepb.TaskQueue
 	taskScheduleToStartTimeoutSeconds := int64(0)
-	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
+	if originalTaskQueue != task.TaskQueue {
 		// this workflowTask is an sticky workflowTask
 		// there shall already be an timer set
 		taskQueue = &taskqueuepb.TaskQueue{
-			Name: task.TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+			Name:       task.TaskQueue,
+			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+			NormalName: originalTaskQueue,
 		}
 		taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
 	} else {
@@ -262,7 +264,6 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
 	}
 
-	originalTaskQueue := mutableState.GetExecutionInfo().TaskQueue
 	directive := common.MakeVersionDirectiveForWorkflowTask(
 		mutableState.GetWorkerVersionStamp(),
 		mutableState.GetLastWorkflowTaskStartedEventID(),
