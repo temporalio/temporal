@@ -60,6 +60,21 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// ClosePointInTime mocks base method.
+func (m *MockClient) ClosePointInTime(ctx context.Context, id string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClosePointInTime", ctx, id)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClosePointInTime indicates an expected call of ClosePointInTime.
+func (mr *MockClientMockRecorder) ClosePointInTime(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClosePointInTime", reflect.TypeOf((*MockClient)(nil).ClosePointInTime), ctx, id)
+}
+
 // Count mocks base method.
 func (m *MockClient) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
 	m.ctrl.T.Helper()
@@ -103,6 +118,21 @@ func (m *MockClient) GetMapping(ctx context.Context, index string) (map[string]s
 func (mr *MockClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMapping", reflect.TypeOf((*MockClient)(nil).GetMapping), ctx, index)
+}
+
+// OpenPointInTime mocks base method.
+func (m *MockClient) OpenPointInTime(ctx context.Context, index, keepAliveInterval string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OpenPointInTime", ctx, index, keepAliveInterval)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OpenPointInTime indicates an expected call of OpenPointInTime.
+func (mr *MockClientMockRecorder) OpenPointInTime(ctx, index, keepAliveInterval interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenPointInTime", reflect.TypeOf((*MockClient)(nil).OpenPointInTime), ctx, index, keepAliveInterval)
 }
 
 // PutMapping mocks base method.
@@ -188,6 +218,21 @@ func (m *MockCLIClient) EXPECT() *MockCLIClientMockRecorder {
 	return m.recorder
 }
 
+// ClosePointInTime mocks base method.
+func (m *MockCLIClient) ClosePointInTime(ctx context.Context, id string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClosePointInTime", ctx, id)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClosePointInTime indicates an expected call of ClosePointInTime.
+func (mr *MockCLIClientMockRecorder) ClosePointInTime(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClosePointInTime", reflect.TypeOf((*MockCLIClient)(nil).ClosePointInTime), ctx, id)
+}
+
 // Count mocks base method.
 func (m *MockCLIClient) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
 	m.ctrl.T.Helper()
@@ -245,6 +290,21 @@ func (m *MockCLIClient) GetMapping(ctx context.Context, index string) (map[strin
 func (mr *MockCLIClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMapping", reflect.TypeOf((*MockCLIClient)(nil).GetMapping), ctx, index)
+}
+
+// OpenPointInTime mocks base method.
+func (m *MockCLIClient) OpenPointInTime(ctx context.Context, index, keepAliveInterval string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OpenPointInTime", ctx, index, keepAliveInterval)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OpenPointInTime indicates an expected call of OpenPointInTime.
+func (mr *MockCLIClientMockRecorder) OpenPointInTime(ctx, index, keepAliveInterval interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenPointInTime", reflect.TypeOf((*MockCLIClient)(nil).OpenPointInTime), ctx, index, keepAliveInterval)
 }
 
 // PutMapping mocks base method.

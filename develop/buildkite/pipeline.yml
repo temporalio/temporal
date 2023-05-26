@@ -65,20 +65,21 @@ steps:
           run: integration-test-cassandra
           config: ./develop/buildkite/docker-compose-es8.yml
 
-  - label: ":golang: functional test with cassandra (OpenSearch 2)"
-    agents:
-      queue: "default"
-      docker: "*"
-    command: "make functional-test-coverage"
-    artifact_paths:
-      - ".coverage/*.out"
-    retry:
-      automatic:
-        limit: 1
-    plugins:
-      - docker-compose#v3.8.0:
-          run: integration-test-cassandra
-          config: ./develop/buildkite/docker-compose-os2.yml
+  # TODO(rodrigozhou): olivere client is incompatible with OpenSearch PIT
+  # - label: ":golang: functional test with cassandra (OpenSearch 2)"
+  #   agents:
+  #     queue: "default"
+  #     docker: "*"
+  #   command: "make functional-test-coverage"
+  #   artifact_paths:
+  #     - ".coverage/*.out"
+  #   retry:
+  #     automatic:
+  #       limit: 1
+  #   plugins:
+  #     - docker-compose#v3.8.0:
+  #         run: integration-test-cassandra
+  #         config: ./develop/buildkite/docker-compose-os2.yml
 
   - label: ":golang: functional xdc test with cassandra"
     agents:

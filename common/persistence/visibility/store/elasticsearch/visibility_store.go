@@ -54,7 +54,8 @@ import (
 const (
 	PersistenceName = "elasticsearch"
 
-	delimiter = "~"
+	delimiter                    = "~"
+	pointInTimeKeepAliveInterval = "1m"
 )
 
 type (
@@ -71,7 +72,8 @@ type (
 	}
 
 	visibilityPageToken struct {
-		SearchAfter []interface{}
+		SearchAfter   []interface{}
+		PointInTimeID string
 	}
 
 	fieldSort struct {
@@ -482,9 +484,26 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 		return nil, err
 	}
 
+	// First call doesn't have token with PointInTimeID.
+	if len(request.NextPageToken) == 0 {
+		pitID, err := s.esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
+		if err != nil {
+			return nil, convertElasticsearchClientError("Unable to create point in time", err)
+		}
+		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval)
+	}
+
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", err)
+	}
+
+	// Number hits smaller than the page size indicate that this is the last page.
+	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
+		_, err := s.esClient.ClosePointInTime(ctx, searchResult.PitId)
+		if err != nil {
+			return nil, convertElasticsearchClientError("Unable to close point in time", err)
+		}
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
@@ -652,6 +671,14 @@ func (s *visibilityStore) processPageToken(
 	if pageToken == nil || len(pageToken.SearchAfter) == 0 {
 		return nil
 	}
+	if pageToken.PointInTimeID != "" {
+		params.SearchAfter = pageToken.SearchAfter
+		params.PointInTime = elastic.NewPointInTimeWithKeepAlive(
+			pageToken.PointInTimeID,
+			pointInTimeKeepAliveInterval,
+		)
+		return nil
+	}
 	if len(pageToken.SearchAfter) != len(params.Sorter) {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf(
 			"Invalid page token for given sort fields: expected %d fields, got %d",
@@ -780,7 +807,8 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 
 	if len(searchResult.Hits.Hits) == pageSize && lastHitSort != nil { // this means the response is not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
-			SearchAfter: lastHitSort,
+			SearchAfter:   lastHitSort,
+			PointInTimeID: searchResult.PitId,
 		})
 		if err != nil {
 			return nil, err
