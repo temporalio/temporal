@@ -64,8 +64,6 @@ type (
 		// and notifies update aPI callers with corresponding error.
 		TerminateUpdates(ctx context.Context, eventStore EventStore)
 
-		TerminateUpdates(ctx context.Context, eventStore EventStore)
-
 		// HasOutgoing returns true if the registry has any Updates that want to
 		// sent messages to a worker.
 		HasOutgoing() bool
@@ -167,12 +165,6 @@ func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.findLocked(ctx, id)
-}
-
-func (r *RegistryImpl) TerminateUpdates(_ context.Context, _ EventStore) {
-	// TODO (alex-update): implement
-	// This method is not implemented and update API callers will just timeout.
-	// In future, it should remove all existing updates and notify callers with better error.
 }
 
 func (r *RegistryImpl) TerminateUpdates(ctx context.Context, eventStore EventStore) {
