@@ -64,7 +64,7 @@ type (
 		// and notifies update aPI callers with corresponding error.
 		TerminateUpdates(ctx context.Context, eventStore EventStore)
 
-		CancelUpdates(ctx context.Context, eventStore EventStore)
+		TerminateUpdates(ctx context.Context, eventStore EventStore)
 
 		// HasOutgoing returns true if the registry has any Updates that want to
 		// sent messages to a worker.
@@ -175,11 +175,22 @@ func (r *RegistryImpl) TerminateUpdates(_ context.Context, _ EventStore) {
 	// In future, it should remove all existing updates and notify callers with better error.
 }
 
-func (r *RegistryImpl) CancelUpdates(ctx context.Context, eventStore EventStore) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, upd := range r.updates {
-		upd.cancel(ctx, eventStore)
+func (r *RegistryImpl) TerminateUpdates(ctx context.Context, eventStore EventStore) {
+	updatesToCancel := make([]*Update, 0, len(r.updates))
+
+	// It is important to release registry lock before upd.terminate call
+	// because it will call onComplete callback, which will try to acquire lock again
+	// to remove update from the registry.
+	func() {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		for _, upd := range r.updates {
+			updatesToCancel = append(updatesToCancel, upd)
+		}
+	}()
+
+	for _, upd := range updatesToCancel {
+		upd.terminate(ctx, eventStore)
 	}
 }
 

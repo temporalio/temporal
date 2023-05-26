@@ -40,7 +40,7 @@ import (
 )
 
 var (
-	CancelErr = serviceerror.NewCanceled("update canceled")
+	ErrTerminated = serviceerror.NewCanceled("update has been terminated")
 )
 
 type (
@@ -356,24 +356,24 @@ func (u *Update) onResponseMsg(
 	return nil
 }
 
-func (u *Update) cancel(
+func (u *Update) terminate(
 	_ context.Context,
 	eventStore EventStore,
 ) {
-	const waitAccepted = stateAdmitted | stateProvisionallyRequested | stateRequested
-	const waitCompleted = stateAccepted | stateProvisionallyAccepted
+	const waitAccepted = stateSet(stateAdmitted | stateProvisionallyRequested | stateRequested)
+	const waitCompleted = stateSet(stateAccepted | stateProvisionallyAccepted)
 
 	prevState := u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
-		if prevState.Matches(stateSet(waitAccepted)) {
+		if prevState.Matches(waitAccepted) {
 			u.request = nil
 			u.setState(stateCompleted)
-			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, CancelErr)
-			u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, CancelErr)
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, ErrTerminated)
+			u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, ErrTerminated)
 			u.onComplete()
-		} else if prevState.Matches(stateSet(waitCompleted)) {
+		} else if prevState.Matches(waitCompleted) {
 			u.setState(stateCompleted)
-			u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, CancelErr)
+			u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, ErrTerminated)
 			u.onComplete()
 		}
 		// No op if state is stateCompleted or stateProvisionallyCompleted.
