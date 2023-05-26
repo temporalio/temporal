@@ -488,7 +488,6 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 	return c.db.GetUserData(ctx)
 }
 
-//nolint:revive // control coupling
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
 	newData, err := c.db.UpdateUserData(ctx, updateFn, options.TaskQueueLimitPerBuildId)
 	if err != nil {

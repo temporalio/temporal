@@ -340,7 +340,7 @@ func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.U
 	return nil
 }
 
-func (mdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddBuildIdsToTaskQueueMapping) error {
+func (mdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddToBuildIdToTaskQueueMapping) error {
 	query := addBuildIdToTaskQueueMappingQry
 	var params []any
 	for idx, buildId := range request.BuildIds {
@@ -356,7 +356,7 @@ func (mdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplug
 	return err
 }
 
-func (mdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveBuildIdsToTaskQueueMapping) error {
+func (mdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveFromBuildIdToTaskQueueMapping) error {
 	// TODO(bergundy): implement when we support deletion
 	panic("not implemented")
 }
@@ -380,7 +380,7 @@ func (mdb *db) GetTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.Ge
 	return taskQueues, err
 }
 
-func (mdb *db) CountTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.GetTaskQueuesByBuildIdRequest) (int, error) {
+func (mdb *db) CountTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.CountTaskQueuesByBuildIdRequest) (int, error) {
 	var count int
 	err := mdb.conn.GetContext(ctx, &count, countTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
 	return count, err

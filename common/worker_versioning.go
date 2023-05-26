@@ -24,14 +24,18 @@
 
 package common
 
-import commonpb "go.temporal.io/api/common/v1"
+import (
+	commonpb "go.temporal.io/api/common/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+)
 
-const buildIdSearchAttributePrefixVersioned = "versioned"
-const buildIdSearchAttributePrefixUnversioned = "unversioned"
-const BuildIdSearchAttributeDelimiter = ":"
-
-// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
-const UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
+const (
+	buildIdSearchAttributePrefixVersioned   = "versioned"
+	buildIdSearchAttributePrefixUnversioned = "unversioned"
+	BuildIdSearchAttributeDelimiter         = ":"
+	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
+	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
+)
 
 // VersionedBuildIdSearchAttribute returns the search attribute value for an unversioned build id
 func VersionedBuildIdSearchAttribute(buildId string) string {
@@ -52,4 +56,21 @@ func VersionStampToBuildIdSearchAttribute(stamp *commonpb.WorkerVersionStamp) st
 		return VersionedBuildIdSearchAttribute(stamp.BuildId)
 	}
 	return UnversionedBuildIdSearchAttribute(stamp.BuildId)
+}
+
+func FindBuildId(versionSets []*taskqueuepb.CompatibleVersionSet, buildId string) (setIndex, indexInSet int) {
+	setIndex = -1
+	indexInSet = -1
+	if len(versionSets) > 0 {
+		for sidx, set := range versionSets {
+			for bidx, id := range set.BuildIds {
+				if buildId == id {
+					setIndex = sidx
+					indexInSet = bidx
+					break
+				}
+			}
+		}
+	}
+	return setIndex, indexInSet
 }

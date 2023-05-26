@@ -374,7 +374,7 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 		// We iterate here but in practice there should only be a single build Id added when the limit is enforced.
 		// We do not enforce the limit when applying replication events.
 		for _, buildId := range added {
-			numTaskQueues, err := db.store.CountTaskQueuesByBuildId(ctx, &persistence.GetTaskQueuesByBuildIdRequest{
+			numTaskQueues, err := db.store.CountTaskQueuesByBuildId(ctx, &persistence.CountTaskQueuesByBuildIdRequest{
 				NamespaceID: db.namespaceID.String(),
 				BuildID:     buildId,
 			})

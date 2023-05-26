@@ -30,61 +30,41 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/xwb1989/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 )
 
 // Helper for deduping GetWorkerBuildIdCompatibility matching requests.
 type versionSetFetcher struct {
-	sync.Mutex
-	matchingClient  matchingservice.MatchingServiceClient
-	notificationChs map[string]chan struct{}
-	responses       map[string]versionSetFetcherResponse
-}
-
-type versionSetFetcherResponse struct {
-	value *matchingservice.GetWorkerBuildIdCompatibilityResponse
-	err   error
+	lock           sync.Mutex
+	matchingClient matchingservice.MatchingServiceClient
+	futures        map[string]future.Future[*matchingservice.GetWorkerBuildIdCompatibilityResponse]
 }
 
 func newVersionSetFetcher(matchingClient matchingservice.MatchingServiceClient) *versionSetFetcher {
 	return &versionSetFetcher{
-		matchingClient:  matchingClient,
-		notificationChs: make(map[string]chan struct{}),
-		responses:       make(map[string]versionSetFetcherResponse),
+		matchingClient: matchingClient,
+		futures:        make(map[string]future.Future[*matchingservice.GetWorkerBuildIdCompatibilityResponse]),
 	}
 }
 
-func (f *versionSetFetcher) getStoredResponse(taskQueue string) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
-	f.Lock()
-	defer f.Unlock()
-	if response, found := f.responses[taskQueue]; found {
-		return response.value, response.err
-	}
-	return nil, nil
-}
-
-func (f *versionSetFetcher) fetchTaskQueueVersions(ctx context.Context, ns *namespace.Namespace, taskQueue string) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
-	response, err := f.getStoredResponse(taskQueue)
-	if err != nil || response != nil {
-		return response, err
-	}
-
-	f.Lock()
-	var waitCh chan struct{}
-	if ch, found := f.notificationChs[taskQueue]; found {
-		waitCh = ch
-	} else {
-		waitCh = make(chan struct{})
-		f.notificationChs[taskQueue] = waitCh
-
+func (f *versionSetFetcher) getFuture(ctx context.Context, ns *namespace.Namespace, taskQueue string) future.Future[*matchingservice.GetWorkerBuildIdCompatibilityResponse] {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	_, found := f.futures[taskQueue]
+	if !found {
+		fut := future.NewFuture[*matchingservice.GetWorkerBuildIdCompatibilityResponse]()
+		f.futures[taskQueue] = fut
 		go func() {
 			value, err := f.matchingClient.GetWorkerBuildIdCompatibility(ctx, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 				NamespaceId: ns.ID().String(),
@@ -93,16 +73,14 @@ func (f *versionSetFetcher) fetchTaskQueueVersions(ctx context.Context, ns *name
 					TaskQueue: taskQueue,
 				},
 			})
-			f.Lock()
-			defer f.Unlock()
-			f.responses[taskQueue] = versionSetFetcherResponse{value: value, err: err}
-			close(waitCh)
+			fut.Set(value, err)
 		}()
 	}
-	f.Unlock()
+	return f.futures[taskQueue]
+}
 
-	<-waitCh
-	return f.getStoredResponse(taskQueue)
+func (f *versionSetFetcher) fetchTaskQueueVersions(ctx context.Context, ns *namespace.Namespace, taskQueue string) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
+	return f.getFuture(ctx, ns, taskQueue).Get(ctx)
 }
 
 // Implementation of the GetWorkerTaskReachability API. Expects an already validated request.
@@ -202,23 +180,10 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		// Query for the unversioned worker
 		isDefaultInQueue = len(request.versionSets) == 0
 		// Query workflows that have completed tasks marked with a sentinel "unversioned" search attribute.
-		buildIdsFilter = fmt.Sprintf("BuildIds = %q", common.UnversionedSearchAttribute)
+		buildIdsFilter = fmt.Sprintf(`%s = "%s"`, searchattribute.BuildIds, common.UnversionedSearchAttribute)
 	} else {
 		// Query for a versioned worker
-		setIdx := -1
-		buildIdIdx := -1
-		if len(request.versionSets) > 0 {
-			for sidx, set := range request.versionSets {
-				for bidx, id := range set.BuildIds {
-					if request.buildId == id {
-						setIdx = sidx
-						buildIdIdx = bidx
-						break
-					}
-				}
-			}
-		}
-
+		setIdx, buildIdIdx := common.FindBuildId(request.versionSets, request.buildId)
 		if setIdx == -1 {
 			// build id not in set - unreachable
 			return &taskQueueReachability, nil
@@ -234,9 +199,9 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		isDefaultInQueue = setIdx == len(request.versionSets)-1
 		escapedBuildIds := make([]string, len(set.GetBuildIds()))
 		for i, buildId := range set.GetBuildIds() {
-			escapedBuildIds[i] = fmt.Sprintf("%q", common.VersionedBuildIdSearchAttribute(buildId))
+			escapedBuildIds[i] = sqlparser.String(sqlparser.NewStrVal([]byte(common.VersionedBuildIdSearchAttribute(buildId))))
 		}
-		buildIdsFilter = fmt.Sprintf("BuildIds IN (%s)", strings.Join(escapedBuildIds, ","))
+		buildIdsFilter = fmt.Sprintf("%s IN (%s)", searchattribute.BuildIds, strings.Join(escapedBuildIds, ","))
 	}
 
 	if isDefaultInQueue {
@@ -246,7 +211,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		)
 		// Take into account started workflows that have not yet been processed by any worker.
 		if request.reachabilityType != enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS {
-			buildIdsFilter = fmt.Sprintf("(BuildIds IS NULL OR %s)", buildIdsFilter)
+			buildIdsFilter = fmt.Sprintf("(%s IS NULL OR %s)", searchattribute.BuildIds, buildIdsFilter)
 		}
 	}
 
@@ -268,9 +233,9 @@ func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
 	statusFilter := ""
 	switch reachabilityType {
 	case enumspb.TASK_REACHABILITY_OPEN_WORKFLOWS:
-		statusFilter = " AND ExecutionStatus = \"Running\""
+		statusFilter = fmt.Sprintf(` AND %s = "Running"`, searchattribute.ExecutionStatus)
 	case enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS:
-		statusFilter = " AND ExecutionStatus != \"Running\""
+		statusFilter = fmt.Sprintf(` AND %s != "Running"`, searchattribute.ExecutionStatus)
 	case enumspb.TASK_REACHABILITY_UNSPECIFIED:
 		reachabilityType = enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS
 		statusFilter = ""
@@ -285,7 +250,7 @@ func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
 	req := manager.CountWorkflowExecutionsRequest{
 		NamespaceID: ns.ID(),
 		Namespace:   ns.Name(),
-		Query:       fmt.Sprintf("TaskQueue = %q AND %s%s", taskQueue, buildIdsFilter, statusFilter),
+		Query:       fmt.Sprintf("%s = %q AND %s%s", searchattribute.TaskQueue, taskQueue, buildIdsFilter, statusFilter),
 	}
 
 	// TODO(bergundy): is count more efficient than select with page size of 1?

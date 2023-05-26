@@ -64,13 +64,13 @@ type (
 		DataEncoding  string
 	}
 
-	AddBuildIdsToTaskQueueMapping struct {
+	AddToBuildIdToTaskQueueMapping struct {
 		NamespaceID   []byte
 		TaskQueueName string
 		BuildIds      []string
 	}
 
-	RemoveBuildIdsToTaskQueueMapping struct {
+	RemoveFromBuildIdToTaskQueueMapping struct {
 		NamespaceID   []byte
 		TaskQueueName string
 		BuildIds      []string
@@ -81,7 +81,10 @@ type (
 		BuildID     string
 	}
 
-	CountTaskQueuesByBuildIdRequest = GetTaskQueuesByBuildIdRequest
+	CountTaskQueuesByBuildIdRequest struct {
+		NamespaceID []byte
+		BuildID     string
+	}
 
 	VersionedBlob struct {
 		Version      int64
@@ -114,8 +117,8 @@ type (
 		LockTaskQueues(ctx context.Context, filter TaskQueuesFilter) (int64, error)
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*VersionedBlob, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueDataRequest) error
-		AddBuildIdToTaskQueueMapping(ctx context.Context, request AddBuildIdsToTaskQueueMapping) error
-		RemoveBuildIdToTaskQueueMapping(ctx context.Context, request RemoveBuildIdsToTaskQueueMapping) error
+		AddBuildIdToTaskQueueMapping(ctx context.Context, request AddToBuildIdToTaskQueueMapping) error
+		RemoveBuildIdToTaskQueueMapping(ctx context.Context, request RemoveFromBuildIdToTaskQueueMapping) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) ([]TaskQueueUserDataEntry, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
 		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
