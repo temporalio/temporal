@@ -78,6 +78,7 @@ var (
 		"client.frontend.ListArchivedWorkflowExecutions": true,
 		"client.frontend.PollActivityTaskQueue":          true,
 		"client.frontend.PollWorkflowTaskQueue":          true,
+		"client.matching.GetTaskQueueUserData":           true,
 	}
 	largeTimeoutContext = map[string]bool{
 		"client.admin.GetReplicationMessages": true,
@@ -362,7 +363,7 @@ func (c *clientImpl) {{.Method}}(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.create{{or .LongPoll ""}}Context(ctx)
 	defer cancel()
 	return client.{{.Method}}(ctx, request, opts...)
 }

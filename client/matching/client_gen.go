@@ -122,7 +122,7 @@ func (c *clientImpl) GetTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return client.GetTaskQueueUserData(ctx, request, opts...)
 }
