@@ -75,6 +75,8 @@ type (
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*InternalGetTaskQueueUserDataResponse, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *InternalUpdateTaskQueueUserDataRequest) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*InternalListTaskQueueUserDataEntriesResponse, error)
+		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
+		CountTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) (int, error)
 	}
 	// MetadataStore is a lower level of MetadataManager
 	MetadataStore interface {
@@ -264,6 +266,9 @@ type (
 		TaskQueue   string
 		Version     int64
 		UserData    *commonpb.DataBlob
+		// Used to build an index of build_id to task_queues
+		BuildIdsAdded   []string
+		BuildIdsRemoved []string
 	}
 
 	InternalTaskQueueUserDataEntry struct {

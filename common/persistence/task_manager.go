@@ -269,10 +269,12 @@ func (m *taskManagerImpl) UpdateTaskQueueUserData(ctx context.Context, request *
 		return err
 	}
 	internalRequest := &InternalUpdateTaskQueueUserDataRequest{
-		NamespaceID: request.NamespaceID,
-		TaskQueue:   request.TaskQueue,
-		Version:     request.UserData.Version,
-		UserData:    userData,
+		NamespaceID:     request.NamespaceID,
+		TaskQueue:       request.TaskQueue,
+		Version:         request.UserData.Version,
+		UserData:        userData,
+		BuildIdsAdded:   request.BuildIdsAdded,
+		BuildIdsRemoved: request.BuildIdsRemoved,
 	}
 	return m.taskStore.UpdateTaskQueueUserData(ctx, internalRequest)
 }
@@ -297,4 +299,12 @@ func (m *taskManagerImpl) ListTaskQueueUserDataEntries(ctx context.Context, requ
 		NextPageToken: response.NextPageToken,
 		Entries:       entries,
 	}, nil
+}
+
+func (m *taskManagerImpl) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	return m.taskStore.GetTaskQueuesByBuildId(ctx, request)
+}
+
+func (m *taskManagerImpl) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
+	return m.taskStore.CountTaskQueuesByBuildId(ctx, request)
 }

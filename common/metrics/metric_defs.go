@@ -463,6 +463,8 @@ const (
 	MatchingClientCancelOutstandingPollScope = "MatchingClientCancelOutstandingPoll"
 	// MatchingClientDescribeTaskQueueScope tracks RPC calls to matching service
 	MatchingClientDescribeTaskQueueScope = "MatchingClientDescribeTaskQueue"
+	// MatchingClientGetBuildIdTaskQueueMappingScope tracks RPC calls to matching service
+	MatchingClientGetBuildIdTaskQueueMappingScope = "MatchingClientGetBuildIdTaskQueueMapping"
 	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskQueuePartitionsScope = "MatchingClientListTaskQueuePartitions"
 	// MatchingClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
@@ -475,6 +477,10 @@ const (
 	MatchingClientApplyTaskQueueUserDataReplicationEventScope = "MatchingClientApplyTaskQueueUserDataReplicationEvent"
 	// MatchingClientForceUnloadTaskQueueScope tracks RPC calls to matching service
 	MatchingClientForceUnloadTaskQueueScope = "MatchingClientForceUnloadTaskQueue"
+	// MatchingClientUpdateTaskQueueUserDataScope tracks RPC calls to matching service
+	MatchingClientUpdateTaskQueueUserDataScope = "MatchingClientUpdateTaskQueueUserData"
+	// MatchingClientReplicateTaskQueueUserDataScope tracks RPC calls to matching service
+	MatchingClientReplicateTaskQueueUserDataScope = "MatchingClientReplicateTaskQueueUserData"
 )
 
 // Worker
@@ -640,6 +646,10 @@ const (
 	PersistenceUpdateTaskQueueUserDataScope = "UpdateTaskQueueUserData"
 	// PersistenceListTaskQueueUserDataEntriesScope is the metric scope for persistence.TaskManager.ListTaskQueueUserDataEntries API
 	PersistenceListTaskQueueUserDataEntriesScope = "ListTaskQueueUserDataEntries"
+	// PersistenceGetTaskQueuesByBuildIdScope is the metric scope for persistence.TaskManager.GetTaskQueuesByBuildId API
+	PersistenceGetTaskQueuesByBuildIdScope = "GetTaskQueuesByBuildId"
+	// PersistenceCountTaskQueuesByBuildIdScope is the metric scope for persistence.TaskManager.CountTaskQueuesByBuildId API
+	PersistenceCountTaskQueuesByBuildIdScope = "CountTaskQueuesByBuildId"
 	// PersistenceAppendHistoryEventsScope tracks AppendHistoryEvents calls made by service to persistence layer
 	PersistenceAppendHistoryEventsScope = "AppendHistoryEvents"
 	// PersistenceGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory calls made by service to persistence layer

@@ -100,6 +100,14 @@ CREATE TABLE task_queue_user_data (
   PRIMARY KEY (namespace_id, task_queue_name)
 );
 
+-- Stores a mapping between build ids and task queues
+CREATE TABLE build_id_to_task_queue (
+  namespace_id    BYTEA NOT NULL,
+  build_id        VARCHAR(255) NOT NULL,
+  task_queue_name VARCHAR(255) NOT NULL,
+  PRIMARY KEY (namespace_id, build_id, task_queue_name)
+);
+
 CREATE TABLE history_immediate_tasks(
   shard_id INTEGER NOT NULL,
   category_id INTEGER NOT NULL,

@@ -836,7 +836,7 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
 	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	err = subTq.UpdateUserData(ctx, false, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+	err = subTq.UpdateUserData(ctx, UserDataUpdateOptions{Replicate: false}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		return data, nil
 	})
 	require.Error(t, err)
@@ -847,7 +847,7 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 	actTqCfg := defaultTqmTestOpts(controller)
 	actTqCfg.tqId = actTqId
 	actTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, actTqCfg)
-	err = actTq.UpdateUserData(ctx, false, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+	err = actTq.UpdateUserData(ctx, UserDataUpdateOptions{Replicate: false}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		return data, nil
 	})
 	require.Error(t, err)

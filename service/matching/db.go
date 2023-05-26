@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -59,6 +60,7 @@ type (
 		userDataChanged chan struct{}
 		store           persistence.TaskManager
 		logger          log.Logger
+		matchingClient  matchingservice.MatchingServiceClient
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -86,6 +88,7 @@ var (
 //     spread out and happen in background routines
 func newTaskQueueDB(
 	store persistence.TaskManager,
+	matchingClient matchingservice.MatchingServiceClient,
 	namespaceID namespace.ID,
 	taskQueue *taskQueueID,
 	kind enumspb.TaskQueueKind,
@@ -98,6 +101,7 @@ func newTaskQueueDB(
 		store:           store,
 		logger:          logger,
 		userDataChanged: make(chan struct{}),
+		matchingClient:  matchingClient,
 	}
 }
 
@@ -348,8 +352,10 @@ func (db *taskQueueDB) getUserDataLocked(
 // Note that the user data's clock may be nil and should be initialized externally where there's access to the cluster
 // metadata and the cluster ID can be obtained.
 //
+// The DB write is performed remotely on an owning node for all user data updates in the namespace.
+//
 // On success returns a pointer to the updated data, which must *not* be mutated.
-func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)) (*persistencespb.VersionedTaskQueueUserData, error) {
+func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error), taskQueueLimitPerBuildId int) (*persistencespb.VersionedTaskQueueUserData, error) {
 	if !db.DbStoresUserData() {
 		return nil, errUserDataNoMutateNonRoot
 	}
@@ -369,10 +375,30 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 	if err != nil {
 		return nil, err
 	}
-	err = db.store.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID: db.namespaceID.String(),
-		TaskQueue:   db.cachedQueueInfo().Name,
-		UserData:    &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion(), Data: updatedUserData},
+	added, removed := GetBuildIdDeltas(preUpdateData.GetVersioningData(), updatedUserData.GetVersioningData())
+	if taskQueueLimitPerBuildId > 0 && len(added) > 0 {
+		// We iterate here but in practice there should only be a single build Id added when the limit is enforced.
+		// We do not enforce the limit when applying replication events.
+		for _, buildId := range added {
+			numTaskQueues, err := db.store.CountTaskQueuesByBuildId(ctx, &persistence.GetTaskQueuesByBuildIdRequest{
+				NamespaceID: db.namespaceID.String(),
+				BuildID:     buildId,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if numTaskQueues >= taskQueueLimitPerBuildId {
+				return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build id: %d", taskQueueLimitPerBuildId))
+			}
+		}
+	}
+
+	_, err = db.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
+		NamespaceId:     db.namespaceID.String(),
+		TaskQueue:       db.cachedQueueInfo().Name,
+		UserData:        &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion(), Data: updatedUserData},
+		BuildIdsAdded:   added,
+		BuildIdsRemoved: removed,
 	})
 	if err == nil {
 		db.setUserDataLocked(&persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData})
