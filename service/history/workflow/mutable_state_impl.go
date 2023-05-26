@@ -785,10 +785,13 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingActivityScheduledEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingActivityScheduledEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -865,10 +868,13 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingChildWorkflowInitiatedEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingChildWorkflowInitiatedEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -908,10 +914,13 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingRequestCancelInfo
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingRequestCancelInfo
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -982,10 +991,13 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingSignalInitiatedEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingSignalInitiatedEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -1020,10 +1032,13 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingWorkflowCompletionEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingWorkflowCompletionEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -1070,10 +1085,13 @@ func (ms *MutableStateImpl) GetStartEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingWorkflowStartEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingWorkflowStartEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -4762,7 +4780,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	}
 
 	// we have a workflow task with buffered events on the fly with a lower version, fail it
-	if err := failWorkflowTask(
+	if _, err := failWorkflowTask(
 		ms,
 		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
@@ -4827,7 +4845,7 @@ func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 	// Handling buffered events size issue
 	if workflowTask := ms.GetStartedWorkflowTask(); workflowTask != nil {
 		// we have a workflow task on the fly with a lower version, fail it
-		if err := failWorkflowTask(
+		if _, err := failWorkflowTask(
 			ms,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,

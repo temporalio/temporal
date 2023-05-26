@@ -528,12 +528,13 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		ScheduledEventID: 1234,
 		StartedEventID:   5678,
 	}
-	nextEventID := int64(666)
+	wtFailedEventID := int64(666)
 	terminateReason := "some random terminate reason"
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 
-	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	randomEventID := int64(2208)
+	mutableState.EXPECT().GetNextEventID().Return(randomEventID).AnyTimes() // This doesn't matter, GetNextEventID is not used if there is started WT.
 	mutableState.EXPECT().GetStartedWorkflowTask().Return(workflowTask)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTask,
@@ -544,10 +545,10 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		"",
 		"",
 		int64(0),
-	).Return(&historypb.HistoryEvent{}, nil)
+	).Return(&historypb.HistoryEvent{EventId: wtFailedEventID}, nil)
 	mutableState.EXPECT().FlushBufferedEvents()
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		nextEventID,
+		wtFailedEventID,
 		terminateReason,
 		nil,
 		consts.IdentityResetter,

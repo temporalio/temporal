@@ -509,7 +509,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		return err
 	}
 
-	eventBatchFirstEventID := mutableState.GetNextEventID()
 	timeoutFailure := failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval := backoff.NoBackoff
 	retryState := enumspb.RETRY_STATE_TIMEOUT
@@ -535,7 +534,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	// First add timeout workflow event, no matter what we're doing next.
 	if err := workflow.TimeoutWorkflow(
 		mutableState,
-		eventBatchFirstEventID,
 		retryState,
 		newRunID,
 	); err != nil {
