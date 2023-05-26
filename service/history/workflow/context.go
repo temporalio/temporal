@@ -823,6 +823,11 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 					return c.config.WorkflowExecutionMaxInFlightUpdates(nsIDStr)
 				},
 			),
+			update.WithTotalLimit(
+				func() int {
+					return c.config.WorkflowExecutionMaxUpdates(nsIDStr)
+				},
+			),
 		)
 	}
 	return c.updateRegistry

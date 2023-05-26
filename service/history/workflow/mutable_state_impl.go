@@ -3565,6 +3565,10 @@ func (ms *MutableStateImpl) GetUpdateInfo(ctx context.Context, updateID string) 
 	return info, ok
 }
 
+func (ms *MutableStateImpl) GetUpdatesCount(_ context.Context) int {
+	return len(ms.updateInfos)
+}
+
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
 	event *historypb.HistoryEvent,
 ) error {

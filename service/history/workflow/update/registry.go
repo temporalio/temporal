@@ -78,6 +78,7 @@ type (
 		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
 		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetUpdatesCount(ctx context.Context) int
 	}
 
 	RegistryImpl struct {
@@ -86,6 +87,7 @@ type (
 		store           UpdateStore
 		instrumentation instrumentation
 		maxInFlight     func() int
+		maxTotal        func() int
 	}
 
 	regOpt func(*RegistryImpl)
@@ -98,6 +100,13 @@ type (
 func WithInFlightLimit(f func() int) regOpt {
 	return func(r *RegistryImpl) {
 		r.maxInFlight = f
+	}
+}
+
+// WithTotalLimit provides an optional limit to the total number of updates for workflow.
+func WithTotalLimit(f func() int) regOpt {
+	return func(r *RegistryImpl) {
+		r.maxTotal = f
 	}
 }
 
@@ -224,14 +233,21 @@ func (r *RegistryImpl) remover(id string) updateOpt {
 	)
 }
 
-func (r *RegistryImpl) admit(context.Context) error {
-	max := r.maxInFlight()
-	if len(r.updates) >= max {
+func (r *RegistryImpl) admit(ctx context.Context) error {
+	if len(r.updates) >= r.maxInFlight() {
 		return serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			fmt.Sprintf("update concurrent in-flight limit has been reached (%v)", max),
+			fmt.Sprintf("update concurrent in-flight limit has been reached (%v)", r.maxInFlight()),
 		)
 	}
+
+	if r.store.GetUpdatesCount(ctx) >= r.maxTotal() {
+		return serviceerror.NewResourceExhausted(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			fmt.Sprintf("update limit has been reached (%v)", r.maxTotal()),
+		)
+	}
+
 	return nil
 }
 

@@ -306,6 +306,7 @@ type Config struct {
 	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
 
 	WorkflowExecutionMaxInFlightUpdates dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxUpdates         dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 const (
@@ -551,6 +552,7 @@ func NewConfig(
 
 		// workflow update related
 		WorkflowExecutionMaxInFlightUpdates: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 10),
+		WorkflowExecutionMaxUpdates:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkflowExecutionMaxUpdates, 2000),
 	}
 
 	return cfg
