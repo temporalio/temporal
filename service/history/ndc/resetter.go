@@ -154,9 +154,9 @@ func (r *resetterImpl) resetWorkflow(
 	if err != nil {
 		return nil, err
 	}
+	rebuildMutableState.AddHistorySize(rebuiltHistorySize)
 
 	r.newContext.Clear()
-	r.newContext.SetHistorySize(rebuiltHistorySize)
 	return rebuildMutableState, nil
 }
 

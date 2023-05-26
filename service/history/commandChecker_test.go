@@ -895,7 +895,7 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 				numPendingActivitiesLimit:      c.PendingActivitiesLimit,
 				numPendingCancelsRequestLimit:  c.PendingCancelRequestsLimit,
 				numPendingSignalsLimit:         c.PendingSignalsLimit,
-			}, mutableState, nil, nil, metricsHandler, logger)
+			}, mutableState, nil, metricsHandler, logger)
 
 			err := checker.checkIfNumChildWorkflowsExceedsLimit()
 			if len(c.ExpectedChildExecutionsErrorMsg) > 0 {

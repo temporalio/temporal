@@ -79,9 +79,6 @@ type (
 		Lock(ctx context.Context, lockPriority LockPriority) error
 		Unlock(lockPriority LockPriority)
 
-		GetHistorySize() int64
-		SetHistorySize(size int64)
-
 		ReapplyEvents(
 			ctx context.Context,
 			eventBatches []*persistence.WorkflowEvents,
@@ -158,7 +155,6 @@ type (
 		mutex          locks.PriorityMutex
 		MutableState   MutableState
 		updateRegistry update.Registry
-		stats          *persistencespb.ExecutionStats
 	}
 )
 
@@ -180,9 +176,6 @@ func NewContext(
 		config:          shard.GetConfig(),
 		mutex:           locks.NewPriorityMutex(),
 		transaction:     NewTransaction(shard),
-		stats: &persistencespb.ExecutionStats{
-			HistorySize: 0,
-		},
 	}
 }
 
@@ -219,9 +212,6 @@ func (c *ContextImpl) Clear() {
 		c.MutableState.GetQueryRegistry().Clear()
 	}
 	c.MutableState = nil
-	c.stats = &persistencespb.ExecutionStats{
-		HistorySize: 0,
-	}
 }
 
 func (c *ContextImpl) GetWorkflowKey() definition.WorkflowKey {
@@ -238,20 +228,12 @@ func (c *ContextImpl) GetNamespace() namespace.Name {
 	return namespaceEntry.Name()
 }
 
-func (c *ContextImpl) GetHistorySize() int64 {
-	return c.stats.HistorySize
-}
-
-func (c *ContextImpl) SetHistorySize(size int64) {
-	c.stats.HistorySize = size
-}
-
 func (c *ContextImpl) LoadExecutionStats(ctx context.Context) (*persistencespb.ExecutionStats, error) {
 	_, err := c.LoadMutableState(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return c.stats, nil
+	return c.MutableState.GetExecutionInfo().ExecutionStats, nil
 }
 
 func (c *ContextImpl) LoadMutableState(ctx context.Context) (MutableState, error) {
@@ -284,8 +266,6 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context) (MutableState, error
 		if err != nil {
 			return nil, err
 		}
-
-		c.stats = response.State.ExecutionInfo.ExecutionStats
 	}
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)
@@ -347,7 +327,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		NewWorkflowEvents:   newWorkflowEvents,
 	}
 
-	resp, err := createWorkflowExecution(
+	_, err := createWorkflowExecution(
 		ctx,
 		c.shard,
 		newMutableState.GetCurrentVersion(),
@@ -356,7 +336,6 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	c.SetHistorySize(int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff))
 
 	engine, err := c.shard.GetEngine(ctx)
 	if err != nil {
@@ -391,9 +370,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	resetWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-		HistorySize: c.GetHistorySize(),
-	}
 
 	var newWorkflow *persistence.WorkflowSnapshot
 	var newWorkflowEventsSeq []*persistence.WorkflowEvents
@@ -410,9 +386,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		)
 		if err != nil {
 			return err
-		}
-		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-			HistorySize: newContext.GetHistorySize(),
 		}
 	}
 
@@ -432,9 +405,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		if err != nil {
 			return err
 		}
-		currentWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-			HistorySize: currentContext.GetHistorySize(),
-		}
 	}
 
 	if err := c.conflictResolveEventReapply(
@@ -447,7 +417,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		return err
 	}
 
-	if resetWorkflowSizeDiff, newWorkflowSizeDiff, currentWorkflowSizeDiff, err := c.transaction.ConflictResolveWorkflowExecution(
+	if _, _, _, err := c.transaction.ConflictResolveWorkflowExecution(
 		ctx,
 		conflictResolveMode,
 		resetMutableState.GetCurrentVersion(),
@@ -461,14 +431,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		currentWorkflowEventsSeq,
 	); err != nil {
 		return err
-	} else {
-		c.SetHistorySize(c.GetHistorySize() + resetWorkflowSizeDiff)
-		if newContext != nil {
-			newContext.SetHistorySize(newContext.GetHistorySize() + newWorkflowSizeDiff)
-		}
-		if currentContext != nil {
-			currentContext.SetHistorySize(currentContext.GetHistorySize() + currentWorkflowSizeDiff)
-		}
 	}
 
 	emitStateTransitionCount(c.metricsHandler, c.clusterMetadata, resetMutableState)
@@ -587,9 +549,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if err != nil {
 		return err
 	}
-	currentWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-		HistorySize: c.GetHistorySize(),
-	}
 
 	var newWorkflow *persistence.WorkflowSnapshot
 	var newWorkflowEventsSeq []*persistence.WorkflowEvents
@@ -605,9 +564,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		)
 		if err != nil {
 			return err
-		}
-		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-			HistorySize: newContext.GetHistorySize(),
 		}
 	}
 
@@ -628,7 +584,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		return err
 	}
 
-	if currentWorkflowSizeDiff, newWorkflowSizeDiff, err := c.transaction.UpdateWorkflowExecution(
+	if _, _, err := c.transaction.UpdateWorkflowExecution(
 		ctx,
 		updateMode,
 		c.MutableState.GetCurrentVersion(),
@@ -639,11 +595,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		newWorkflowEventsSeq,
 	); err != nil {
 		return err
-	} else {
-		c.SetHistorySize(c.GetHistorySize() + currentWorkflowSizeDiff)
-		if newContext != nil {
-			newContext.SetHistorySize(newContext.GetHistorySize() + newWorkflowSizeDiff)
-		}
 	}
 
 	emitStateTransitionCount(c.metricsHandler, c.clusterMetadata, c.MutableState)
@@ -654,7 +605,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	emitWorkflowHistoryStats(
 		c.metricsHandler,
 		namespace,
-		int(c.GetHistorySize()),
+		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
 		int(c.MutableState.GetNextEventID()-1),
 	)
 
@@ -679,10 +630,6 @@ func (c *ContextImpl) SetWorkflowExecution(
 	if len(resetWorkflowEventsSeq) != 0 {
 		c.metricsHandler.Counter(metrics.ClosedWorkflowBufferEventCount.GetMetricName()).Record(1)
 		c.logger.Warn("SetWorkflowExecution encountered new events")
-	}
-
-	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-		HistorySize: c.GetHistorySize(),
 	}
 
 	return c.transaction.SetWorkflowExecution(
@@ -905,7 +852,7 @@ func (c *ContextImpl) maxHistorySizeExceeded() bool {
 	historyCountLimitWarn := c.config.HistoryCountLimitWarn(namespaceName)
 	historyCountLimitError := c.config.HistoryCountLimitError(namespaceName)
 
-	historySize := int(c.GetHistorySize())
+	historySize := int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize)
 	historyCount := int(c.MutableState.GetNextEventID() - 1)
 
 	if (historySize > historySizeLimitError || historyCount > historyCountLimitError) &&

@@ -39,50 +39,6 @@ import (
 	"go.temporal.io/server/tests"
 )
 
-func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
-	s.T().SkipNow()
-
-	workflowID := "replication-message-test" + uuid.New()
-	runID := uuid.New()
-	workflowType := "event-generator-workflow-type"
-	taskqueue := "event-generator-taskQueue"
-
-	var historyBatch []*historypb.History
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, 2)
-
-	for s.generator.HasNextVertex() {
-		events := s.generator.GetNextVertices()
-		historyEvents := &historypb.History{}
-		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
-		}
-		historyBatch = append(historyBatch, historyEvents)
-	}
-
-	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
-
-	s.applyEventsThroughFetcher(
-		workflowID,
-		runID,
-		workflowType,
-		taskqueue,
-		versionHistory,
-		historyBatch,
-	)
-
-	// Applying replication messages through fetcher is Async.
-	// So we need to retry a couple of times.
-	for i := 0; i < 10; i++ {
-		time.Sleep(time.Second)
-		err := s.verifyEventHistory(workflowID, runID, historyBatch)
-		if err == nil {
-			return
-		}
-	}
-
-	s.Fail("Verification of replicated messages failed")
-}
-
 func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 	s.T().SkipNow()
 
