@@ -513,12 +513,12 @@ func (s *visibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	boolQuery, _, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+	queryParams, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
 	if err != nil {
 		return nil, err
 	}
 
-	count, err := s.esClient.Count(ctx, s.index, boolQuery)
+	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
 	if err != nil {
 		return nil, convertElasticsearchClientError("CountWorkflowExecutions failed", err)
 	}
@@ -613,9 +613,9 @@ func (s *visibilityStore) buildSearchParameters(
 
 func (s *visibilityStore) buildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
-	getFieldSorter func([]*elastic.FieldSort) ([]elastic.Sorter, error),
+	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 ) (*client.SearchParameters, error) {
-	boolQuery, fieldSorts, err := s.convertQuery(
+	queryParams, err := s.convertQuery(
 		request.Namespace,
 		request.NamespaceID,
 		request.Query,
@@ -624,43 +624,42 @@ func (s *visibilityStore) buildSearchParametersV2(
 		return nil, err
 	}
 
+	searchParams := &client.SearchParameters{
+		Index:    s.index,
+		PageSize: request.PageSize,
+		Query:    queryParams.Query,
+	}
+
 	// TODO(rodrigozhou): investigate possible solutions to slow ORDER BY.
 	// ORDER BY clause can be slow if there is a large number of documents and
 	// using a field that was not indexed by ES. Since slow queries can block
 	// writes for unreasonably long, this option forbids the usage of ORDER BY
 	// clause to prevent slow down issues.
-	if s.disableOrderByClause(request.Namespace.String()) && len(fieldSorts) > 0 {
+	if s.disableOrderByClause(request.Namespace.String()) && len(queryParams.Sorter) > 0 {
 		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
-	sorter, err := getFieldSorter(fieldSorts)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(fieldSorts) > 0 {
-		// If fieldSorts is not empty, then it's using custom order by.
+	if len(queryParams.Sorter) > 0 {
+		// If params.Sorter is not empty, then it's using custom order by.
 		s.metricsHandler.WithTags(metrics.NamespaceTag(request.Namespace.String())).
 			Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
 	}
 
-	params := &client.SearchParameters{
-		Index:    s.index,
-		Query:    boolQuery,
-		PageSize: request.PageSize,
-		Sorter:   sorter,
+	searchParams.Sorter, err = getFieldSorter(queryParams.Sorter)
+	if err != nil {
+		return nil, err
 	}
 
 	pageToken, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
-	err = s.processPageToken(params, pageToken, request.Namespace)
+	err = s.processPageToken(searchParams, pageToken, request.Namespace)
 	if err != nil {
 		return nil, err
 	}
 
-	return params, nil
+	return searchParams, nil
 }
 
 func (s *visibilityStore) processPageToken(
@@ -721,21 +720,21 @@ func (s *visibilityStore) convertQuery(
 	namespace namespace.Name,
 	namespaceID namespace.ID,
 	requestQueryStr string,
-) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
+) (*query.QueryParams, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapperProvider)
 	queryConverter := newQueryConverter(nameInterceptor, NewValuesInterceptor())
-	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
+	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
 		var converterErr *query.ConverterError
 		if errors.As(err, &converterErr) {
-			return nil, nil, converterErr.ToInvalidArgument()
+			return nil, converterErr.ToInvalidArgument()
 		}
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Create new bool query because request query might have only "should" (="or") queries.
@@ -747,14 +746,15 @@ func (s *visibilityStore) convertQuery(
 		namespaceFilterQuery.MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision))
 	}
 
-	if requestQuery != nil {
-		namespaceFilterQuery.Filter(requestQuery)
+	if queryParams.Query != nil {
+		namespaceFilterQuery.Filter(queryParams.Query)
 	}
 
-	return namespaceFilterQuery, fieldSorts, nil
+	queryParams.Query = namespaceFilterQuery
+	return queryParams, nil
 }
 
-func (s *visibilityStore) getScanFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
+func (s *visibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	// custom order is not supported by Scan API
 	if len(fieldSorts) > 0 {
 		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
@@ -763,7 +763,7 @@ func (s *visibilityStore) getScanFieldSorter(fieldSorts []*elastic.FieldSort) ([
 	return docSorter, nil
 }
 
-func (s *visibilityStore) getListFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
+func (s *visibilityStore) getListFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	if len(fieldSorts) == 0 {
 		return defaultSorter, nil
 	}
