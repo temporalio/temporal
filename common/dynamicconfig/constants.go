@@ -106,6 +106,14 @@ const (
 	EnableEagerWorkflowStart = "system.enableEagerWorkflowStart"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
+	// PersistenceHealthSignalCollectionEnabled determines whether persistence health signal collection/aggregation is enabled
+	PersistenceHealthSignalCollectionEnabled = "system.persistenceHealthSignalCollectionEnabled"
+	// PersistenceHealthSignalWindowSize is the time window size in seconds for aggregating persistence signals
+	PersistenceHealthSignalWindowSize = "system.persistenceHealthSignalWindowSize"
+	// PersistenceHealthSignalBufferSize is the maximum number of persistence signals to buffer in memory per signal key
+	PersistenceHealthSignalBufferSize = "system.persistenceHealthSignalBufferSize"
+	// ShardRPSWarnLimit is the per-shard RPS limit for warning
+	ShardRPSWarnLimit = "system.shardRPSWarnLimit"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"

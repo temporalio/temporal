@@ -122,12 +122,12 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 		tasks.CategoryTimer,
 		time.Time{},
 	)
-	tasks := map[tasks.Category][]tasks.Task{
+	testTasks := map[tasks.Category][]tasks.Task{
 		tasks.CategoryTimer: {fakeTask},
 	}
 
 	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	s.mockHistoryEngine.EXPECT().NotifyNewTasks(tasks).AnyTimes()
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(testTasks).AnyTimes()
 
 	testCases := []struct {
 		taskTimestamp     time.Time
@@ -162,7 +162,7 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 				NamespaceID: workflowKey.NamespaceID,
 				WorkflowID:  workflowKey.WorkflowID,
 				RunID:       workflowKey.RunID,
-				Tasks:       tasks,
+				Tasks:       testTasks,
 			},
 		)
 		s.NoError(err)
