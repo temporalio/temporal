@@ -100,6 +100,11 @@ type (
 		forwardedFrom string
 	}
 
+	stickyInfo struct {
+		kind       enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		normalName string                // if kind is sticky, name of normal queue
+	}
+
 	UserDataUpdateOptions struct {
 		Replicate                bool
 		TaskQueueLimitPerBuildId int
@@ -141,10 +146,10 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status               int32
-		engine               *matchingEngineImpl
-		taskQueueID          *taskQueueID
-		taskQueueKind        enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		status      int32
+		engine      *matchingEngineImpl
+		taskQueueID *taskQueueID
+		stickyInfo
 		config               *taskQueueConfig
 		db                   *taskQueueDB
 		taskWriter           *taskWriter
@@ -179,7 +184,12 @@ type (
 
 var _ taskQueueManager = (*taskQueueManagerImpl)(nil)
 
-var errRemoteSyncMatchFailed = serviceerror.NewCanceled("remote sync match failed")
+var (
+	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
+	errMissingNormalQueueName = errors.New("missing normal queue name")
+
+	normalStickyInfo = stickyInfo{kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+)
 
 func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	return func(tqm *taskQueueManagerImpl) {
@@ -187,10 +197,17 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	}
 }
 
+func stickyInfoFromTaskQueue(tq *taskqueuepb.TaskQueue) stickyInfo {
+	return stickyInfo{
+		kind:       tq.GetKind(),
+		normalName: tq.GetNormalName(),
+	}
+}
+
 func newTaskQueueManager(
 	e *matchingEngineImpl,
 	taskQueue *taskQueueID,
-	taskQueueKind enumspb.TaskQueueKind,
+	stickyInfo stickyInfo,
 	config *Config,
 	clusterMeta cluster.Metadata,
 	opts ...taskQueueManagerOpt,
@@ -203,7 +220,7 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, e.matchingClient, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
+	db := newTaskQueueDB(e.taskManager, e.matchingClient, taskQueue.namespaceID, taskQueue, stickyInfo.kind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -212,7 +229,7 @@ func newTaskQueueManager(
 		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType)),
 		nsName.String(),
 		taskQueue.FullName(),
-		taskQueueKind,
+		stickyInfo.kind,
 	)
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
@@ -221,7 +238,7 @@ func newTaskQueueManager(
 		matchingClient:       e.matchingClient,
 		metricsHandler:       e.metricsHandler,
 		taskQueueID:          taskQueue,
-		taskQueueKind:        taskQueueKind,
+		stickyInfo:           stickyInfo,
 		logger:               logger,
 		db:                   db,
 		taskAckManager:       newAckManager(e.logger),
@@ -245,11 +262,11 @@ func newTaskQueueManager(
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
 	var fwdr *Forwarder
-	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
+	if tlMgr.isFowardingAllowed(taskQueue, stickyInfo.kind) {
 		// Forward without version set, the target will resolve the correct version set from
 		// the build id itself. TODO: check if we still need this here after tqm refactoring
 		forwardTaskQueue := newTaskQueueIDWithVersionSet(taskQueue, "")
-		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, taskQueueKind, e.matchingClient)
+		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, stickyInfo.kind, e.matchingClient)
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
@@ -291,7 +308,9 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	c.goroGroup.Go(c.fetchUserDataLoop)
+	if c.shouldFetchUserData() {
+		c.goroGroup.Go(c.fetchUserDataLoop)
+	}
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
@@ -335,6 +354,15 @@ func (c *taskQueueManagerImpl) Stop() {
 // version set should not be interacted with outside of the matching service.
 func (c *taskQueueManagerImpl) isVersioned() bool {
 	return c.taskQueueID.VersionSet() != ""
+}
+
+// shouldFetchUserData consolidates the logic for when to fetch user data from another task
+// queue or (maybe) read it from the db. We set the userDataInitialFetch future from two
+// places, so they need to agree on which one should set it.
+func (c *taskQueueManagerImpl) shouldFetchUserData() bool {
+	// 1. If the db stores it, then we definitely should not be fetching.
+	// 2. Additionally, we should not fetch for "versioned" tqms.
+	return !c.db.DbStoresUserData() && !c.isVersioned()
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -703,7 +731,7 @@ func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
 }
 
 func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
-	return c.taskQueueKind
+	return c.kind
 }
 
 func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
@@ -717,6 +745,15 @@ func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFu
 }
 
 func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
+	if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// Sticky queues get data from their corresponding normal queue
+		if c.normalName == "" {
+			// Older SDKs don't send the normal name. That's okay, they just can't use versioning.
+			return "", errMissingNormalQueueName
+		}
+		return c.normalName, nil
+	}
+
 	degree := c.config.ForwarderMaxChildrenPerNode()
 	parent, err := c.taskQueueID.Parent(degree)
 	if err == tqname.ErrNoParent {
@@ -732,13 +769,12 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
-	// root workflow partition reads data from db; versioned tqm has no user data
-	if c.taskQueueID.OwnsUserData() || c.isVersioned() {
-		return nil
-	}
-
 	fetchSource, err := c.userDataFetchSource()
 	if err != nil {
+		if err == errMissingNormalQueueName {
+			// pretend we have no user data
+			c.userDataInitialFetch.Set(struct{}{}, nil)
+		}
 		return err
 	}
 

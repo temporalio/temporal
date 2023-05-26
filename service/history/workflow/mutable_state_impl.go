@@ -677,8 +677,9 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 	if ms.IsStickyTaskQueueSet() {
 		return &taskqueuepb.TaskQueue{
-			Name: ms.executionInfo.StickyTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+			Name:       ms.executionInfo.StickyTaskQueue,
+			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+			NormalName: ms.executionInfo.TaskQueue,
 		}
 	}
 	return &taskqueuepb.TaskQueue{
@@ -707,8 +708,9 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *time.Duration) {
 	if ms.executionInfo.TaskQueue != name {
 		return &taskqueuepb.TaskQueue{
-			Name: ms.executionInfo.StickyTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+			Name:       ms.executionInfo.StickyTaskQueue,
+			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+			NormalName: ms.executionInfo.TaskQueue,
 		}, ms.executionInfo.StickyScheduleToStartTimeout
 	}
 	return &taskqueuepb.TaskQueue{

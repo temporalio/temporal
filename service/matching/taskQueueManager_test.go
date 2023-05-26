@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -350,8 +351,7 @@ func createTestTaskQueueManagerWithConfig(
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns-name"), nil).AnyTimes()
 	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	me := newMatchingEngine(testOpts.config, tm, nil, logger, mockNamespaceCache, testOpts.matchingClientMock)
-	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
-	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, tlKind, testOpts.config, cmeta, opts...)
+	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, cmeta, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -760,6 +760,63 @@ func TestTQMFetchesUserDataActivityToWorkflow(t *testing.T) {
 		}, nil)
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
+	tq.Start()
+	require.NoError(t, tq.WaitUntilInitialized(ctx))
+	userData, _, err := tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data1, userData)
+	tq.Stop()
+}
+
+func TestTQMFetchesUserDataStickyToNormal(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	tqCfg := defaultTqmTestOpts(controller)
+
+	normalName := "normal-queue"
+	stickyName := uuid.New()
+
+	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, stickyName, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	require.NoError(t, err)
+	tqCfg.tqId = tqId
+
+	data1 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    mkUserData(1),
+	}
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                normalName,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0,
+			WaitNewData:              false,
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			TaskQueueHasUserData: true,
+			UserData:             data1,
+		}, nil)
+
+	// have to create manually to get sticky
+	logger := log.NewTestLogger()
+	tm := newTestTaskManager(logger)
+	mockNamespaceCache := namespace.NewMockRegistry(controller)
+	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns-name"), nil).AnyTimes()
+	me := newMatchingEngine(tqCfg.config, tm, nil, logger, mockNamespaceCache, tqCfg.matchingClientMock)
+	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
+	stickyInfo := stickyInfo{
+		kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+		normalName: normalName,
+	}
+	tlMgr, err := newTaskQueueManager(me, tqCfg.tqId, stickyInfo, tqCfg.config, cmeta)
+	require.NoError(t, err)
+	tq := tlMgr.(*taskQueueManagerImpl)
+
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))

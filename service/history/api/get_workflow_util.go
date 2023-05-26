@@ -205,8 +205,9 @@ func MutableStateToGetResponse(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		StickyTaskQueue: &taskqueuepb.TaskQueue{
-			Name: executionInfo.StickyTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+			Name:       executionInfo.StickyTaskQueue,
+			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+			NormalName: executionInfo.TaskQueue,
 		},
 		StickyTaskQueueScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
 		CurrentBranchToken:                    currentBranchToken,

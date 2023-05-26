@@ -2642,8 +2642,9 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 	timeout := executionInfo.WorkflowRunTimeout
-	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
+	if executionInfo.TaskQueue != task.TaskQueue {
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
+		taskQueue.NormalName = executionInfo.TaskQueue
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 

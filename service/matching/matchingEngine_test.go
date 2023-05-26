@@ -280,14 +280,14 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	tqm, err := s.matchingEngine.getTaskQueueManager(
 		context.Background(),
 		queueID,
-		enumspb.TASK_QUEUE_KIND_NORMAL,
+		normalStickyInfo,
 		true)
 	s.Require().NoError(err)
 
 	tqm2, err := newTaskQueueManager(
 		s.matchingEngine,
 		queueID, // same queueID as above
-		enumspb.TASK_QUEUE_KIND_NORMAL,
+		normalStickyInfo,
 		s.matchingEngine.config,
 		s.matchingEngine.clusterMeta,
 	)
@@ -297,7 +297,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	s.matchingEngine.unloadTaskQueue(tqm2)
 
 	got, err := s.matchingEngine.getTaskQueueManager(
-		context.Background(), queueID, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+		context.Background(), queueID, normalStickyInfo, true)
 	s.Require().NoError(err)
 	s.Require().Same(tqm, got,
 		"Unload call with non-matching taskQueueManager should not cause unload")
@@ -306,7 +306,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	s.matchingEngine.unloadTaskQueue(tqm)
 
 	got, err = s.matchingEngine.getTaskQueueManager(
-		context.Background(), queueID, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+		context.Background(), queueID, normalStickyInfo, true)
 	s.Require().NoError(err)
 	s.Require().NotSame(tqm, got,
 		"Unload call with matching incarnation should have caused unload")
@@ -630,8 +630,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
-	tlm, err := s.matchingEngine.getTaskQueueManager(context.Background(), tlID, tlKind, true)
+	tlm, err := s.matchingEngine.getTaskQueueManager(context.Background(), tlID, normalStickyInfo, true)
 	s.Nil(err)
 
 	addRequest := matchingservice.AddActivityTaskRequest{
@@ -787,7 +786,6 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
@@ -795,7 +793,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	var err error
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config, s.matchingEngine.clusterMeta)
+	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config, s.matchingEngine.clusterMeta)
 	s.NoError(err)
 
 	mgrImpl, ok := mgr.(*taskQueueManagerImpl)
@@ -1009,12 +1007,11 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	var err error
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config, s.matchingEngine.clusterMeta)
+	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config, s.matchingEngine.clusterMeta)
 	s.NoError(err)
 
 	mgrImpl := mgr.(*taskQueueManagerImpl)
@@ -1619,7 +1616,6 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
 
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
@@ -1639,12 +1635,12 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 
-	ctx, err := s.matchingEngine.getTask(context.Background(), tlID, tlKind, &pollMetadata{})
+	ctx, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
 
 	ctx.finish(errors.New("test error"))
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
-	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID, tlKind, &pollMetadata{})
+	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
 
 	s.NotEqual(ctx.event.GetTaskId(), ctx2.event.GetTaskId())
@@ -1755,13 +1751,12 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tlNormal := enumspb.TASK_QUEUE_KIND_NORMAL
 
 	const rangeSize = 10
 	const maxReadLevel = int64(120)
 	config := defaultTestConfig()
 	config.RangeSize = rangeSize
-	tlMgr0, err := newTaskQueueManager(s.matchingEngine, tlID, tlNormal, config, s.matchingEngine.clusterMeta)
+	tlMgr0, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config, s.matchingEngine.clusterMeta)
 	s.NoError(err)
 
 	tlMgr, ok := tlMgr0.(*taskQueueManagerImpl)
@@ -1793,13 +1788,12 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tlNormal := enumspb.TASK_QUEUE_KIND_NORMAL
 	config := defaultTestConfig()
 
 	for i := 0; i < 4; i++ {
 		prevGetTasksCount := s.taskManager.getGetTasksCount(tlID)
 
-		tlMgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlNormal, config, s.matchingEngine.clusterMeta)
+		tlMgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config, s.matchingEngine.clusterMeta)
 		s.NoError(err)
 
 		tlMgr.Start()
