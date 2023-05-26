@@ -58,9 +58,8 @@ import (
 )
 
 const (
-	taskTimeout             = time.Second * 3 * debug.TimeoutMultiplier
-	taskGetExecutionTimeout = time.Second * debug.TimeoutMultiplier
-	taskHistoryOpTimeout    = 20 * time.Second
+	taskTimeout          = time.Second * 3 * debug.TimeoutMultiplier
+	taskHistoryOpTimeout = 20 * time.Second
 )
 
 var errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")

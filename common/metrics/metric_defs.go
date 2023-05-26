@@ -1334,7 +1334,6 @@ var (
 	TaskLoadLatency                                   = NewTimerDef("task_latency_load")       // latency from task generation to task loading (persistence scheduleToStart)
 	TaskScheduleLatency                               = NewTimerDef("task_latency_schedule")   // latency from task submission to in-memory queue to processing (in-memory scheduleToStart)
 	TaskProcessingLatency                             = NewTimerDef("task_latency_processing") // latency for processing task one time
-	TaskProcessingUserLatency                         = NewTimerDef("task_latency_user")       // latency for locking workflow execution
 	TaskLatency                                       = NewTimerDef("task_latency")            // task in-memory latency across multiple attempts
 	TaskQueueLatency                                  = NewTimerDef("task_latency_queue")      // task e2e latency
 	TaskAttempt                                       = NewDimensionlessHistogramDef("task_attempt")

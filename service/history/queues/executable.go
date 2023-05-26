@@ -34,6 +34,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
@@ -73,10 +74,6 @@ type (
 )
 
 var (
-	// schedulerRetryPolicy is the retry policy for retrying the executable
-	// in one submission to scheduler, the goroutine for processing this executable
-	// is held during the retry
-	schedulerRetryPolicy = common.CreateTaskProcessingRetryPolicy()
 	// reschedulePolicy is the policy for determine reschedule backoff duration
 	// across multiple submissions to scheduler
 	reschedulePolicy                           = common.CreateTaskReschedulePolicy()
@@ -116,16 +113,18 @@ type (
 		timeSource        clock.TimeSource
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
+		logger            log.Logger
+		metricsHandler    metrics.Handler
 
-		readerID               int64
-		loadTime               time.Time
-		scheduledTime          time.Time
-		userLatency            time.Duration
-		lastActiveness         bool
-		resourceExhaustedCount int
-		logger                 log.Logger
-		metricsHandler         metrics.Handler
-		taggedMetricsHandler   metrics.Handler
+		readerID                     int64
+		loadTime                     time.Time
+		scheduledTime                time.Time
+		scheduleLatency              time.Duration
+		attemptNoUserLatency         time.Duration
+		inMemoryNoUserLatency        time.Duration
+		lastActiveness               bool
+		systemResourceExhaustedCount int
+		taggedMetricsHandler         metrics.Handler
 	}
 )
 
@@ -169,6 +168,10 @@ func NewExecutable(
 }
 
 func (e *executableImpl) Execute() (retErr error) {
+
+	startTime := e.timeSource.Now()
+	e.scheduleLatency = startTime.Sub(e.scheduledTime)
+
 	e.Lock()
 	if e.state != ctasks.TaskStatePending {
 		e.Unlock()
@@ -204,9 +207,21 @@ func (e *executableImpl) Execute() (retErr error) {
 			// is actually used which is upto the executor implementation
 			e.taggedMetricsHandler = e.metricsHandler.WithTags(e.estimateTaskMetricTag()...)
 		}
-	}()
 
-	startTime := e.timeSource.Now()
+		attemptUserLatency := time.Duration(0)
+		if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName()); ok {
+			attemptUserLatency = time.Duration(duration)
+		}
+
+		attemptLatency := e.timeSource.Now().Sub(startTime)
+		e.attemptNoUserLatency = attemptLatency - attemptUserLatency
+		// emit total attempt latency so that we know how much time a task will occpy a worker goroutine
+		e.taggedMetricsHandler.Timer(metrics.TaskProcessingLatency.GetMetricName()).Record(attemptLatency)
+
+		priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
+		priorityTaggedProvider.Counter(metrics.TaskRequests.GetMetricName()).Record(1)
+		priorityTaggedProvider.Timer(metrics.TaskScheduleLatency.GetMetricName()).Record(e.scheduleLatency)
+	}()
 
 	metricsTags, isActive, err := e.executor.Execute(ctx, e)
 	e.taggedMetricsHandler = e.metricsHandler.WithTags(metricsTags...)
@@ -218,23 +233,16 @@ func (e *executableImpl) Execute() (retErr error) {
 	}
 	e.lastActiveness = isActive
 
-	e.userLatency = 0
-	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName()); ok {
-		e.userLatency = time.Duration(duration)
-	}
-
-	e.taggedMetricsHandler.Timer(metrics.TaskProcessingLatency.GetMetricName()).Record(time.Since(startTime))
-	e.taggedMetricsHandler.Timer(metrics.TaskProcessingUserLatency.GetMetricName()).Record(e.userLatency)
-
-	priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
-	priorityTaggedProvider.Counter(metrics.TaskRequests.GetMetricName()).Record(1)
-	priorityTaggedProvider.Timer(metrics.TaskScheduleLatency.GetMetricName()).Record(startTime.Sub(e.scheduledTime))
-
 	return err
 }
 
 func (e *executableImpl) HandleErr(err error) (retErr error) {
 	defer func() {
+		if retErr != consts.ErrResourceExhaustedBusyWorkflow {
+			// if err is due to workflow busy, do not take any latency related to this attempt into account
+			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
+		}
+
 		if retErr != nil {
 			e.Lock()
 			defer e.Unlock()
@@ -251,12 +259,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	if common.IsResourceExhausted(err) {
-		e.resourceExhaustedCount++
-		e.taggedMetricsHandler.Counter(metrics.TaskThrottledCounter.GetMetricName()).Record(1)
-		return err
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	if errors.As(err, &resourceExhaustedErr) {
+		if resourceExhaustedErr.Cause != enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			e.systemResourceExhaustedCount++
+			e.taggedMetricsHandler.Counter(metrics.TaskThrottledCounter.GetMetricName()).Record(1)
+			return err
+		}
+
+		err = consts.ErrResourceExhaustedBusyWorkflow
 	}
-	e.resourceExhaustedCount = 0
+	e.systemResourceExhaustedCount = 0
 
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		return nil
@@ -277,7 +290,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return err
 	}
 
-	if err == consts.ErrWorkflowBusy {
+	if err == consts.ErrResourceExhaustedBusyWorkflow {
 		e.taggedMetricsHandler.Counter(metrics.TaskWorkflowBusyCounter.GetMetricName()).Record(1)
 		return err
 	}
@@ -323,40 +336,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 func (e *executableImpl) IsRetryableError(err error) bool {
 	// this determines if the executable should be retried when hold the worker goroutine
-
-	if e.State() != ctasks.TaskStatePending {
-		return false
-	}
-
-	if shard.IsShardOwnershipLostError(err) {
-		return false
-	}
-
-	// don't retry immediately for resource exhausted which may incur more load
-	// context deadline exceed may also suggested downstream is overloaded, so don't retry immediately
-	if common.IsResourceExhausted(err) || common.IsContextDeadlineExceededErr(err) {
-		return false
-	}
-
-	// Internal error is non-retryable and usually means unexpected error has happened,
-	// e.g. unknown task, corrupted state, panic etc.
-	if common.IsInternalError(err) {
-		return false
-	}
-
-	// ErrTaskRetry means mutable state is not ready for standby task processing
-	// there's no point for retrying the task immediately which will hold the worker corouinte
-	// TODO: change ErrTaskRetry to a better name
-	return err != consts.ErrTaskRetry &&
-		err != consts.ErrWorkflowBusy &&
-		err != consts.ErrDependencyTaskNotCompleted &&
-		err != consts.ErrNamespaceHandover
+	//
+	// never retry task while holding the goroutine, and rely on shouldResubmitOnNack
+	return false
 }
 
 func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
 	// this is the retry policy for one submission
 	// not for calculating the backoff after the task is nacked
-	return schedulerRetryPolicy
+	//
+	// never retry task while holding the goroutine, and rely on shouldResubmitOnNack
+	return backoff.DisabledRetryPolicy
 }
 
 func (e *executableImpl) Abort() {
@@ -394,7 +384,7 @@ func (e *executableImpl) Ack() {
 	e.taggedMetricsHandler.Histogram(metrics.TaskAttempt.GetMetricName(), metrics.TaskAttempt.GetMetricUnit()).Record(int64(e.attempt))
 
 	priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
-	priorityTaggedProvider.Timer(metrics.TaskLatency.GetMetricName()).Record(time.Since(e.loadTime))
+	priorityTaggedProvider.Timer(metrics.TaskLatency.GetMetricName()).Record(e.inMemoryNoUserLatency)
 
 	readerIDTaggedProvider := priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))
 	readerIDTaggedProvider.Timer(metrics.TaskQueueLatency.GetMetricName()).Record(time.Since(e.GetVisibilityTime()))
@@ -418,7 +408,11 @@ func (e *executableImpl) Nack(err error) {
 	}
 
 	if !submitted {
-		e.rescheduler.Add(e, e.rescheduleTime(err, e.Attempt()))
+		backoffDuration := e.backoffDuration(err, e.Attempt())
+		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration))
+		if err != consts.ErrResourceExhaustedBusyWorkflow {
+			e.inMemoryNoUserLatency += backoffDuration
+		}
 	}
 }
 
@@ -430,7 +424,7 @@ func (e *executableImpl) Reschedule() {
 
 	e.updatePriority()
 
-	e.rescheduler.Add(e, e.rescheduleTime(nil, e.Attempt()))
+	e.rescheduler.Add(e, e.timeSource.Now().Add(e.backoffDuration(nil, e.Attempt())))
 }
 
 func (e *executableImpl) State() ctasks.State {
@@ -474,8 +468,9 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 		return false
 	}
 
-	if common.IsResourceExhausted(err) &&
-		e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
+	if err != consts.ErrResourceExhaustedBusyWorkflow &&
+		common.IsResourceExhausted(err) &&
+		e.systemResourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
 		return false
 	}
 
@@ -492,10 +487,10 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 		err != consts.ErrNamespaceHandover
 }
 
-func (e *executableImpl) rescheduleTime(
+func (e *executableImpl) backoffDuration(
 	err error,
 	attempt int,
-) time.Time {
+) time.Duration {
 	// elapsedTime, the first parameter in ComputeNextDelay is not relevant here
 	// since reschedule policy has no expiration interval.
 
@@ -504,22 +499,24 @@ func (e *executableImpl) rescheduleTime(
 		common.IsInternalError(err) {
 		// using a different reschedule policy to slow down retry
 		// as immediate retry typically won't resolve the issue.
-		return e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
+		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt)
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		return e.timeSource.Now().Add(dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt))
+		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt)
 	}
 
 	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt)
-	if common.IsResourceExhausted(err) {
+	if err != consts.ErrResourceExhaustedBusyWorkflow && common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
-		// upon resource exhausted error and pick the longer backoff
-		// duration
-		backoffDuration = util.Max(backoffDuration, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
+		// upon system resource exhausted error and pick the longer backoff duration
+		backoffDuration = util.Max(
+			backoffDuration,
+			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.systemResourceExhaustedCount),
+		)
 	}
 
-	return e.timeSource.Now().Add(backoffDuration)
+	return backoffDuration
 }
 
 func (e *executableImpl) updatePriority() {
