@@ -47,6 +47,7 @@ type mockUpdateStore struct {
 	GetAcceptedWorkflowExecutionUpdateIDsFunc func(context.Context) []string
 	GetUpdateInfoFunc                         func(context.Context, string) (*persistencespb.UpdateInfo, bool)
 	GetUpdateOutcomeFunc                      func(context.Context, string) (*updatepb.Outcome, error)
+	GetUpdatesCountFunc                       func(context.Context) int
 }
 
 func (m mockUpdateStore) GetAcceptedWorkflowExecutionUpdateIDs(
@@ -69,6 +70,12 @@ func (m mockUpdateStore) GetUpdateOutcome(
 	return m.GetUpdateOutcomeFunc(ctx, updateID)
 }
 
+func (m mockUpdateStore) GetUpdatesCount(
+	ctx context.Context,
+) int {
+	return m.GetUpdatesCountFunc(ctx)
+}
+
 var emptyUpdateStore = mockUpdateStore{
 	GetAcceptedWorkflowExecutionUpdateIDsFunc: func(context.Context) []string {
 		return nil
@@ -78,6 +85,9 @@ var emptyUpdateStore = mockUpdateStore{
 	},
 	GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
 		return nil, serviceerror.NewNotFound("not found")
+	},
+	GetUpdatesCountFunc: func(context.Context) int {
+		return 0
 	},
 }
 
@@ -95,6 +105,9 @@ func TestFind(t *testing.T) {
 				updateID string,
 			) (*persistencespb.UpdateInfo, bool) {
 				return nil, false
+			},
+			GetUpdatesCountFunc: func(context.Context) int {
+				return 0
 			},
 		}
 		reg = update.NewRegistry(store)
@@ -126,6 +139,9 @@ func TestHasOutgoing(t *testing.T) {
 				updateID string,
 			) (*persistencespb.UpdateInfo, bool) {
 				return nil, false
+			},
+			GetUpdatesCountFunc: func(context.Context) int {
+				return 0
 			},
 		}
 		reg = update.NewRegistry(store)
@@ -190,6 +206,9 @@ func TestFindOrCreate(t *testing.T) {
 					return completedOutcome, nil
 				}
 				return nil, serviceerror.NewNotFound("not found")
+			},
+			GetUpdatesCountFunc: func(context.Context) int {
+				return len(storeData)
 			},
 		}
 		reg = update.NewRegistry(store)

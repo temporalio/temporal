@@ -98,7 +98,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			logger,
 		)
 		out.handler = newWorkflowTaskHandler( // 😲
-			t.Name(), //identity
+			t.Name(), // identity
 			123,      // workflowTaskCompletedID
 			out.ms,
 			out.updates,
@@ -111,7 +111,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			newWorkflowSizeChecker(
 				workflowSizeLimits{blobSizeLimitError: blobSizeLimit},
 				out.ms,
-				nil, //searchAttributesValidator
+				nil, // searchAttributesValidator
 				metricsHandler,
 				logger,
 			),
@@ -255,6 +255,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
 		tc.ms.EXPECT().GetUpdateInfo(gomock.Any(), updateID).Return(nil, false)
+		tc.ms.EXPECT().GetUpdatesCount(gomock.Any()).Return(100)
 
 		t.Log("create the expected protocol instance")
 		_, _, err := tc.updates.FindOrCreate(context.Background(), updateID)
@@ -291,6 +292,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
 		tc.ms.EXPECT().GetUpdateInfo(gomock.Any(), updateID).Return(nil, false)
+		tc.ms.EXPECT().GetUpdatesCount(gomock.Any()).Return(100)
 
 		t.Log("create the expected protocol instance")
 		_, _, err := tc.updates.FindOrCreate(context.Background(), updateID)

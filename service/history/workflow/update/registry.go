@@ -144,6 +144,7 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 		store:           store,
 		instrumentation: noopInstrumentation,
 		maxInFlight:     func() int { return math.MaxInt },
+		maxTotal:        func() int { return math.MaxInt },
 	}
 	for _, opt := range opts {
 		opt(r)
