@@ -242,8 +242,7 @@ func (r *RegistryImpl) admit(ctx context.Context) error {
 	}
 
 	if r.store.GetUpdatesCount(ctx) >= r.maxTotal() {
-		return serviceerror.NewResourceExhausted(
-			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("update limit has been reached (%v)", r.maxTotal()),
 		)
 	}
