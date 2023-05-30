@@ -35,6 +35,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,6 +43,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -131,8 +133,10 @@ const (
 	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
 	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
-	// FailureReasonSizeExceedsLimit is reason to fail workflow when history size or count exceed limit
-	FailureReasonSizeExceedsLimit = "Workflow history size / count exceeds limit."
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size or count exceed limit
+	FailureReasonHistorySizeExceedsLimit = "Workflow history size / count exceeds limit."
+	// FailureReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
+	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
 	FailureReasonTransactionSizeExceedsLimit = "Transaction size exceeds limit."
 )
@@ -330,9 +334,12 @@ func IsServiceClientTransientError(err error) bool {
 		return true
 	}
 
-	switch err.(type) {
-	case *serviceerror.ResourceExhausted,
-		*serviceerrors.ShardOwnershipLost:
+	switch err := err.(type) {
+	case *serviceerror.ResourceExhausted:
+		if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			return true
+		}
+	case *serviceerrors.ShardOwnershipLost:
 		return true
 	}
 	return false
@@ -373,6 +380,12 @@ func IsResourceExhausted(err error) bool {
 func IsInternalError(err error) bool {
 	var internalErr *serviceerror.Internal
 	return errors.As(err, &internalErr)
+}
+
+// IsNotFoundError checks if the error is a not found error.
+func IsNotFoundError(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	return errors.As(err, &notFoundErr)
 }
 
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
@@ -779,6 +792,44 @@ func OverrideWorkflowTaskTimeout(
 	}
 
 	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
+}
+
+// StampIfUsingVersioning returns the given WorkerVersionStamp if it is using versioning,
+// otherwise returns nil.
+func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.WorkerVersionStamp {
+	if stamp.GetUseVersioning() {
+		return stamp
+	}
+	return nil
+}
+
+func MakeVersionDirectiveForWorkflowTask(
+	stamp *commonpb.WorkerVersionStamp,
+	lastWorkflowTaskStartedEventID int64,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
+	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
+		// first workflow task
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	}
+	// else: unversioned queue
+	return &directive
+}
+
+func MakeVersionDirectiveForActivityTask(
+	stamp *commonpb.WorkerVersionStamp,
+	useCompatibleVersion bool,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	if !useCompatibleVersion {
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
+	}
+	// else: unversioned queue
+	return &directive
 }
 
 // CloneProto is a generic typed version of proto.Clone from gogoproto.

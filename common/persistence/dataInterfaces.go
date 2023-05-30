@@ -544,6 +544,52 @@ type (
 		TaskQueueInfo *persistencespb.TaskQueueInfo
 	}
 
+	// GetTaskQueueUserDataRequest is the input type for the GetTaskQueueUserData API
+	GetTaskQueueUserDataRequest struct {
+		NamespaceID string
+		TaskQueue   string
+	}
+
+	// GetTaskQueueUserDataResponse is the output type for the GetTaskQueueUserData API
+	GetTaskQueueUserDataResponse struct {
+		UserData *persistencespb.VersionedTaskQueueUserData
+	}
+
+	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API
+	UpdateTaskQueueUserDataRequest struct {
+		NamespaceID     string
+		TaskQueue       string
+		UserData        *persistencespb.VersionedTaskQueueUserData
+		BuildIdsAdded   []string
+		BuildIdsRemoved []string
+	}
+
+	ListTaskQueueUserDataEntriesRequest struct {
+		NamespaceID   string
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	TaskQueueUserDataEntry struct {
+		TaskQueue string
+		Data      *persistencespb.TaskQueueUserData
+	}
+
+	ListTaskQueueUserDataEntriesResponse struct {
+		NextPageToken []byte
+		Entries       []*TaskQueueUserDataEntry
+	}
+
+	GetTaskQueuesByBuildIdRequest struct {
+		NamespaceID string
+		BuildID     string
+	}
+
+	CountTaskQueuesByBuildIdRequest struct {
+		NamespaceID string
+		BuildID     string
+	}
+
 	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
 	ListTaskQueueRequest struct {
 		PageSize  int
@@ -1120,6 +1166,19 @@ type (
 		//  - UnknownNumRowsAffected (this means all rows below value are deleted)
 		//  - number of rows deleted, which may be equal to limit
 		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
+
+		// GetTaskQueueUserData gets versioned user data.
+		// This data would only exist if a user uses APIs that generate it, such as the worker versioning related APIs.
+		// The caller should be prepared to gracefully handle the "NotFound" service error.
+		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
+		// UpdateTaskQueueUserData updates the user data for a given task queue.
+		// The request takes the _current_ known version along with the data to update.
+		// The caller should +1 increment the cached version number if this call succeeds.
+		// Fails with ConditionFailedError if the user data was updated concurrently.
+		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error
+		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error)
+		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
+		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities

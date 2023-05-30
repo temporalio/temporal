@@ -29,6 +29,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -55,6 +56,7 @@ type (
 
 		namespaceProcessorsLock sync.Mutex
 		namespaceProcessors     map[string]*namespaceReplicationMessageProcessor
+		matchingClient          matchingservice.MatchingServiceClient
 	}
 
 	// Config contains all the replication config for worker
@@ -72,6 +74,7 @@ func NewReplicator(
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *Replicator {
 
 	return &Replicator{
@@ -85,6 +88,7 @@ func NewReplicator(
 		logger:                           log.With(logger, tag.ComponentReplicator),
 		metricsHandler:                   metricsHandler,
 		namespaceReplicationQueue:        namespaceReplicationQueue,
+		matchingClient:                   matchingClient,
 	}
 }
 
@@ -156,6 +160,7 @@ func (r *Replicator) listenToClusterMetadataChange() {
 						r.hostInfo,
 						r.serviceResolver,
 						r.namespaceReplicationQueue,
+						r.matchingClient,
 					)
 					processor.Start()
 					r.namespaceProcessors[clusterName] = processor

@@ -40,8 +40,10 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/internal/effect"
@@ -50,6 +52,11 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+)
+
+const (
+	// Fail update fast if workflow task keeps failing (attempt >= 3).
+	failUpdateWorkflowTaskAttemptCount = 3
 )
 
 func Invoke(
@@ -96,6 +103,7 @@ func Invoke(
 		normalTaskQueueName    string
 		scheduledEventID       int64
 		scheduleToStartTimeout time.Duration
+		directive              *taskqueuespb.TaskVersionDirective
 	)
 
 	// Wrapping workflow context related operation in separate func to prevent usage of its fields
@@ -125,6 +133,19 @@ func Invoke(
 
 		if req.GetRequest().GetFirstExecutionRunId() != "" && ms.GetExecutionInfo().GetFirstExecutionRunId() != req.GetRequest().GetFirstExecutionRunId() {
 			return consts.ErrWorkflowExecutionNotFound
+		}
+
+		if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
+			// If workflow task is constantly failing, the update to that workflow will also fail.
+			// Additionally, workflow update can't "fix" workflow state because updates (delivered with messages)
+			// are applied after events.
+			// Failing API call fast here to prevent wasting resources for an update that will fail.
+			shardCtx.GetLogger().Info("Fail update fast due to WorkflowTask in failed state.",
+				tag.WorkflowNamespace(req.Request.Namespace),
+				tag.WorkflowNamespaceID(wfKey.NamespaceID),
+				tag.WorkflowID(wfKey.WorkflowID),
+				tag.WorkflowRunID(wfKey.RunID))
+			return serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to Workflow Task in failed state.")
 		}
 
 		updateID := req.GetRequest().GetRequest().GetMeta().GetUpdateId()
@@ -158,11 +179,12 @@ func Invoke(
 			if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
 				scheduleToStartTimeout = *scheduleToStartTimeoutPtr
 			}
-			taskQueue = taskqueuepb.TaskQueue{
-				Name: newWorkflowTask.TaskQueue.Name,
-				Kind: newWorkflowTask.TaskQueue.Kind,
-			}
+			taskQueue = *newWorkflowTask.TaskQueue
 			normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
+			directive = common.MakeVersionDirectiveForWorkflowTask(
+				ms.GetWorkerVersionStamp(),
+				ms.GetLastWorkflowTaskStartedEventID(),
+			)
 		}
 		return nil
 	}
@@ -175,7 +197,7 @@ func Invoke(
 	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 	//   Helper function needs to be extracted to avoid code duplication.
 	if scheduledEventID != common.EmptyEventID {
-		err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), shardCtx, matchingClient)
+		err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
 			// If sticky worker is unavailable, switch to original normal task queue.
@@ -183,7 +205,7 @@ func Invoke(
 				Name: normalTaskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}
-			err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), shardCtx, matchingClient)
+			err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
 		}
 
 		if err != nil {
@@ -219,6 +241,7 @@ func addWorkflowTaskToMatching(
 	scheduledEventID int64,
 	wtScheduleToStartTimeout *time.Duration,
 	nsID namespace.ID,
+	directive *taskqueuespb.TaskVersionDirective,
 	shardCtx shard.Context,
 	matchingClient matchingservice.MatchingServiceClient,
 ) error {
@@ -237,6 +260,7 @@ func addWorkflowTaskToMatching(
 		ScheduledEventId:       scheduledEventID,
 		ScheduleToStartTimeout: wtScheduleToStartTimeout,
 		Clock:                  clock,
+		VersionDirective:       directive,
 	})
 	if err != nil {
 		return err

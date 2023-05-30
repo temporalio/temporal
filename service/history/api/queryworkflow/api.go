@@ -32,6 +32,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/log/tag"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -129,7 +130,7 @@ func Invoke(
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID))
-		return nil, serviceerror.NewWorkflowNotReady("Cannot query workflow due to Workflow Task in failed state.")
+		return nil, serviceerror.NewWorkflowNotReady("Unable to query workflow due to Workflow Task in failed state.")
 	}
 
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
@@ -250,14 +251,20 @@ func queryDirectlyThroughMatching(
 		metricsHandler.Timer(metrics.DirectQueryDispatchLatency.GetMetricName()).Record(time.Since(startTime))
 	}()
 
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		msResp.GetWorkerVersionStamp(),
+		msResp.GetPreviousStartedEventId(),
+	)
+
 	if msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
 		shard.GetConfig().EnableStickyQuery(queryRequest.GetNamespace()) {
 
 		stickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-			NamespaceId:  namespaceID,
-			QueryRequest: queryRequest,
-			TaskQueue:    msResp.GetStickyTaskQueue(),
+			NamespaceId:      namespaceID,
+			QueryRequest:     queryRequest,
+			TaskQueue:        msResp.GetStickyTaskQueue(),
+			VersionDirective: directive,
 		}
 
 		// using a clean new context in case customer provide a context which has
@@ -300,9 +307,10 @@ func queryDirectlyThroughMatching(
 	}
 
 	nonStickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-		NamespaceId:  namespaceID,
-		QueryRequest: queryRequest,
-		TaskQueue:    msResp.TaskQueue,
+		NamespaceId:      namespaceID,
+		QueryRequest:     queryRequest,
+		TaskQueue:        msResp.TaskQueue,
+		VersionDirective: directive,
 	}
 
 	nonStickyStartTime := time.Now().UTC()

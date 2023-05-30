@@ -192,6 +192,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		Memo:                            req.Memo,
 		SearchAttributes:                req.SearchAttributes,
 		WorkflowId:                      req.WorkflowId,
+		SourceVersionStamp:              request.SourceVersionStamp,
 	}
 	parentInfo := request.ParentExecutionInfo
 	if parentInfo != nil {
@@ -253,6 +254,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	startedEventID int64,
 	identity string,
 	checksum string,
+	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
 ) *historypb.HistoryEvent {
@@ -263,6 +265,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 			StartedEventId:   startedEventID,
 			Identity:         identity,
 			BinaryChecksum:   checksum,
+			WorkerVersion:    workerVersionStamp,
 			SdkMetadata:      sdkMetadata,
 			MeteringMetadata: meteringMetadata,
 		},
@@ -334,6 +337,7 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 			StartToCloseTimeout:          command.StartToCloseTimeout,
 			HeartbeatTimeout:             command.HeartbeatTimeout,
 			RetryPolicy:                  command.RetryPolicy,
+			UseCompatibleVersion:         command.UseCompatibleVersion,
 		},
 	}
 
@@ -533,6 +537,7 @@ func (b *HistoryBuilder) AddContinuedAsNewEvent(
 		LastCompletionResult:         command.LastCompletionResult,
 		Memo:                         command.Memo,
 		SearchAttributes:             command.SearchAttributes,
+		UseCompatibleVersion:         command.UseCompatibleVersion,
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
@@ -908,6 +913,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 			Memo:                         command.Memo,
 			SearchAttributes:             command.SearchAttributes,
 			ParentClosePolicy:            command.GetParentClosePolicy(),
+			UseCompatibleVersion:         command.UseCompatibleVersion,
 		},
 	}
 

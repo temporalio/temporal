@@ -27,6 +27,7 @@ package consts
 import (
 	"errors"
 
+	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -68,6 +69,8 @@ var (
 	ErrDeserializingToken = serviceerror.NewInvalidArgument("error deserializing task token")
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = serviceerror.NewInvalidArgument("exceeded workflow execution limit for signal events")
+	// ErrWorkflowClosing is the error indicating requests to workflow got rejected due to workflow is closing
+	ErrWorkflowClosing = serviceerror.NewUnavailable("workflow operation rejected because workflow is closing")
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
 	ErrEventsAterWorkflowFinish = serviceerror.NewInternal("error validating last event being workflow finish event")
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
@@ -76,8 +79,10 @@ var (
 	ErrConsistentQueryBufferExceeded = serviceerror.NewUnavailable("consistent query buffer is full, cannot accept new consistent queries")
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
 	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encountered empty history batch")
-	// ErrSizeExceedsLimit is error indicating workflow execution has exceeded system defined limit
-	ErrSizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonSizeExceedsLimit)
+	// ErrHistorySizeExceedsLimit is error indicating workflow execution has exceeded system defined history size limit
+	ErrHistorySizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonHistorySizeExceedsLimit)
+	// ErrMutableStateSizeExceedsLimit is error indicating workflow execution has exceeded system defined mutable state size limit
+	ErrMutableStateSizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonMutableStateSizeExceedsLimit)
 	// ErrUnknownCluster is error indicating unknown cluster
 	ErrUnknownCluster = serviceerror.NewInvalidArgument("unknown cluster")
 	// ErrBufferedQueryCleared is error indicating mutable state is cleared while buffered query is pending
@@ -94,6 +99,8 @@ var (
 	ErrNamespaceHandover = common.ErrNamespaceHandover
 	// ErrWorkflowTaskStateInconsistent is error indicating workflow task state is inconsistent, for example there was no workflow task scheduled but buffered events are present.
 	ErrWorkflowTaskStateInconsistent = serviceerror.NewUnavailable("Workflow task state is inconsistent.")
+	// ErrResourceExhaustedBusyWorkflow is an error indicating workflow resource is exhausted and should not be retried by service handler and client
+	ErrResourceExhaustedBusyWorkflow = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow is busy.")
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API

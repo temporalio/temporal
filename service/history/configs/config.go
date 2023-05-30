@@ -58,6 +58,7 @@ type Config struct {
 
 	EmitShardLagLog       dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxTrackedBuildIds    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ThrottledLogRPS       dynamicconfig.IntPropertyFn
 	EnableStickyQuery     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration dynamicconfig.DurationPropertyFn
@@ -195,6 +196,8 @@ type Config struct {
 	HistoryCountSuggestContinueAsNew          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateActivityFailureSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateSizeLimitError                dynamicconfig.IntPropertyFn
+	MutableStateSizeLimitWarn                 dynamicconfig.IntPropertyFn
 	NumPendingChildExecutionsLimit            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumPendingActivitiesLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumPendingSignalsLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -307,6 +310,7 @@ type Config struct {
 
 const (
 	DefaultHistoryMaxAutoResetPoints = 20
+	DefaultHistoryMaxTrackedBuildIds = 20
 )
 
 // NewConfig returns new service config with default values
@@ -330,6 +334,7 @@ func NewConfig(
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistencePriorityRateLimiting, true),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0*time.Second),
 		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
+		MaxTrackedBuildIds:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxTrackedBuildIds, DefaultHistoryMaxTrackedBuildIds),
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
 
@@ -458,6 +463,8 @@ func NewConfig(
 		HistoryCountSuggestContinueAsNew:          dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountSuggestContinueAsNew, 4*1024),
 		MutableStateActivityFailureSizeLimitError: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateActivityFailureSizeLimitError, 4*1024),
 		MutableStateActivityFailureSizeLimitWarn:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateActivityFailureSizeLimitWarn, 2*1024),
+		MutableStateSizeLimitError:                dc.GetIntProperty(dynamicconfig.MutableStateSizeLimitError, 8*1024*1024),
+		MutableStateSizeLimitWarn:                 dc.GetIntProperty(dynamicconfig.MutableStateSizeLimitWarn, 1*1024*1024),
 
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),

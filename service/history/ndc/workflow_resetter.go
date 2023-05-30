@@ -36,7 +36,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -152,9 +151,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		)
 		if err != nil {
 			return err
-		}
-		currentWorkflowMutation.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-			HistorySize: currentWorkflow.GetContext().GetHistorySize(),
 		}
 
 		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
@@ -350,12 +346,9 @@ func (r *workflowResetterImpl) persistToDB(
 	if err != nil {
 		return err
 	}
-	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-		HistorySize: resetWorkflow.GetContext().GetHistorySize(),
-	}
 
 	if currentWorkflowMutation != nil {
-		if currentWorkflowSizeDiff, resetWorkflowSizeDiff, err := r.transaction.UpdateWorkflowExecution(
+		if _, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
 			currentWorkflow.GetMutableState().GetCurrentVersion(),
@@ -366,9 +359,6 @@ func (r *workflowResetterImpl) persistToDB(
 			resetWorkflowEventsSeq,
 		); err != nil {
 			return err
-		} else {
-			currentWorkflow.GetContext().SetHistorySize(currentWorkflow.GetContext().GetHistorySize() + currentWorkflowSizeDiff)
-			resetWorkflow.GetContext().SetHistorySize(resetWorkflow.GetContext().GetHistorySize() + resetWorkflowSizeDiff)
 		}
 		return nil
 	}
@@ -452,8 +442,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 	)
-
-	resetContext.SetHistorySize(resetHistorySize)
+	resetMutableState.AddHistorySize(resetHistorySize)
 	return NewWorkflow(
 		ctx,
 		r.namespaceRegistry,
@@ -576,10 +565,8 @@ func (r *workflowResetterImpl) terminateWorkflow(
 	terminateReason string,
 ) error {
 
-	eventBatchFirstEventID := mutableState.GetNextEventID()
 	return workflow.TerminateWorkflow(
 		mutableState,
-		eventBatchFirstEventID,
 		terminateReason,
 		nil,
 		consts.IdentityResetter,

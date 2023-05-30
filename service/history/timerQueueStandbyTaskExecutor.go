@@ -288,7 +288,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, *activityInfo.ScheduleToStartTimeout)
+		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, *activityInfo.ScheduleToStartTimeout, activityInfo.UseCompatibleVersion)
 	}
 
 	return t.processTimer(
@@ -570,6 +570,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		ScheduledEventId:       activityTask.EventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), activityTask.TaskID),
+		VersionDirective:       pushActivityInfo.versionDirective,
 	})
 	return err
 }

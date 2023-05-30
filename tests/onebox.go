@@ -44,6 +44,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -97,6 +98,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
+		matchingClient                   matchingservice.MatchingServiceClient
 		dcClient                         *dcClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
@@ -123,12 +125,14 @@ type (
 
 	// HistoryConfig contains configs for history service
 	HistoryConfig struct {
-		NumHistoryShards       int32
-		NumHistoryHosts        int
-		HistoryCountLimitError int
-		HistoryCountLimitWarn  int
-		BlobSizeLimitError     int
-		BlobSizeLimitWarn      int
+		NumHistoryShards           int32
+		NumHistoryHosts            int
+		HistoryCountLimitError     int
+		HistoryCountLimitWarn      int
+		BlobSizeLimitError         int
+		BlobSizeLimitWarn          int
+		MutableStateSizeLimitError int
+		MutableStateSizeLimitWarn  int
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -341,6 +345,12 @@ func (c *temporalImpl) GetFrontendClient() workflowservice.WorkflowServiceClient
 
 func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
+}
+
+func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient {
+	// Note that this matching client does not do routing. But it doesn't matter since we have
+	// only one matching node in testing.
+	return c.matchingClient
 }
 
 func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
@@ -584,6 +594,12 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 			}
 		}
 	}
+
+	matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger)
+	if err != nil {
+		c.logger.Fatal("Failed to create connection for matching", tag.Error(err))
+	}
+	c.matchingClient = matchingservice.NewMatchingServiceClient(matchingConnection)
 	c.matchingApp = app
 	c.matchingService = matchingService
 	c.matchingNamespaceRegistry = namespaceRegistry
@@ -706,6 +722,12 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	}
 	if c.historyConfig.BlobSizeLimitWarn != 0 {
 		client.OverrideValue(dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
+	}
+	if c.historyConfig.MutableStateSizeLimitError != 0 {
+		client.OverrideValue(dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
+	}
+	if c.historyConfig.MutableStateSizeLimitWarn != 0 {
+		client.OverrideValue(dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
 	}
 
 	// For DeleteWorkflowExecution tests

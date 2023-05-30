@@ -197,12 +197,13 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), ai.UseCompatibleVersion)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushActivity(ctx, task, &timeout)
+	return t.pushActivity(ctx, task, &timeout, directive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -243,12 +244,17 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
 
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		mutableState.GetWorkerVersionStamp(),
+		mutableState.GetLastWorkflowTaskStartedEventID(),
+	)
+
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
 	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
 	release(nil)
 
-	err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout)
+	err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, directive)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
 		// sticky worker is unavailable, switch to original normal task queue
@@ -263,7 +269,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
 		// will re-create a new non-sticky task and reset sticky.
-		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout)
+		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, directive)
 	}
 	return err
 }
@@ -809,6 +815,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName = namespaceEntry.Name()
 	}
 
+	// copy version stamp from parent to child if:
+	// - command says to use compatible version
+	// - parent is using versioning
+	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	if attributes.UseCompatibleVersion {
+		sourceVersionStamp = common.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
+	}
+
 	childRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
@@ -816,6 +830,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName,
 		childInfo.CreateRequestId,
 		attributes,
+		sourceVersionStamp,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1301,6 +1316,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	targetNamespace namespace.Name,
 	childRequestID string,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
+	sourceVersionStamp *commonpb.WorkerVersionStamp,
 ) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1336,6 +1352,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		},
 		t.shard.GetTimeSource().Now(),
 	)
+
+	request.SourceVersionStamp = sourceVersionStamp
 
 	response, err := t.historyClient.StartWorkflowExecution(ctx, request)
 	if err != nil {

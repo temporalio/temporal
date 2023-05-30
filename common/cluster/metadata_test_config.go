@@ -50,7 +50,7 @@ var (
 			Enabled:                true,
 			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
 			RPCAddress:             TestCurrentClusterFrontendAddress,
-			ShardCount:             4,
+			ShardCount:             8,
 		},
 		TestAlternativeClusterName: {
 			Enabled:                true,

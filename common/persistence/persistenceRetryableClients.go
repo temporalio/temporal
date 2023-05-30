@@ -776,6 +776,72 @@ func (p *taskRetryablePersistenceClient) DeleteTaskQueue(
 	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 }
 
+func (p *taskRetryablePersistenceClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *GetTaskQueueUserDataRequest,
+) (*GetTaskQueueUserDataResponse, error) {
+	var response *GetTaskQueueUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.GetTaskQueueUserData(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
+func (p *taskRetryablePersistenceClient) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *UpdateTaskQueueUserDataRequest,
+) error {
+	op := func(ctx context.Context) error {
+		return p.persistence.UpdateTaskQueueUserData(ctx, request)
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return err
+}
+
+func (p *taskRetryablePersistenceClient) ListTaskQueueUserDataEntries(
+	ctx context.Context,
+	request *ListTaskQueueUserDataEntriesRequest,
+) (*ListTaskQueueUserDataEntriesResponse, error) {
+	var response *ListTaskQueueUserDataEntriesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.ListTaskQueueUserDataEntries(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
+func (p *taskRetryablePersistenceClient) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	var response []string
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.GetTaskQueuesByBuildId(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
+func (p *taskRetryablePersistenceClient) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
+	var response int
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.CountTaskQueuesByBuildId(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
 func (p *taskRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }
