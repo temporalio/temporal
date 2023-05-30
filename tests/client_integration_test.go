@@ -1533,6 +1533,7 @@ func (s *clientIntegrationSuite) TestBatchSignal() {
 	workflowRun, err := s.sdkClient.ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
 		ID:        uuid.New(),
 		TaskQueue: s.taskQueue,
+		WorkflowExecutionTimeout: 10 * time.Second,
 	}, workflowFn);
 	s.NoError(err)
 
