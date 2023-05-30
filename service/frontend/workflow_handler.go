@@ -3711,11 +3711,26 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Namespace: request.GetNamespace(),
 		Query:     batcher.OpenBatchOperationQuery,
 	})
-	if err != nil {
-		return nil, err
-	}
-	if countResp.GetCount() >= int64(wh.config.MaxConcurrentBatchOperation(request.GetNamespace())) {
-		return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached")
+	if err == nil {
+		if countResp.GetCount() >= int64(wh.config.MaxConcurrentBatchOperation(request.GetNamespace())) {
+			return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached")
+		}
+	} else {
+		listResp,err := wh.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
+			Namespace: request.GetNamespace(),
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
+				TypeFilter: &filterpb.WorkflowTypeFilter{
+					Name: batcher.BatchWFTypeName,
+				},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		openCount := len(listResp.Executions)
+		if openCount >= 1 {
+			return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached (max = 1 due to standard visibility)")
+		}
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
