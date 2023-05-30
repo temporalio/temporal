@@ -899,13 +899,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		}
 	}
 
-	var newTasks map[tasks.Category][]tasks.Task
-	defer func() {
-		if OperationPossiblySucceeded(retErr) && newTasks != nil {
-			engine.NotifyNewTasks(newTasks)
-		}
-	}()
-
 	// Don't acquire shard lock if all stages that require lock are already processed.
 	if !stage.IsProcessed(
 		tasks.DeleteWorkflowExecutionStageVisibility |
@@ -930,7 +923,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			// Stage 1. Delete visibility.
 			if deleteVisibilityRecord && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
 				// TODO: move to existing task generator logic
-				newTasks = map[tasks.Category][]tasks.Task{
+				newTasks := map[tasks.Category][]tasks.Task{
 					tasks.CategoryVisibility: {
 						&tasks.DeleteExecutionVisibilityTask{
 							// TaskID is set by addTasksLocked
@@ -950,7 +943,11 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 
 					Tasks: newTasks,
 				}
-				if err := s.addTasksLocked(ctx, addTasksRequest, namespaceEntry); err != nil {
+				err := s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
+				if OperationPossiblySucceeded(err) {
+					engine.NotifyNewTasks(newTasks)
+				}
+				if err != nil {
 					return err
 				}
 			}
