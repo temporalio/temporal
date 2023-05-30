@@ -87,9 +87,6 @@ const (
 	completeTaskRetryMaxInterval     = 1 * time.Second
 	completeTaskRetryMaxAttempts     = 10
 
-	taskProcessingRetryInitialInterval = 50 * time.Millisecond
-	taskProcessingRetryMaxAttempts     = 1
-
 	taskRescheduleInitialInterval    = 1 * time.Second
 	taskRescheduleBackoffCoefficient = 1.1
 	taskRescheduleMaxInterval        = 3 * time.Minute
@@ -233,12 +230,6 @@ func CreateCompleteTaskRetryPolicy() backoff.RetryPolicy {
 	return backoff.NewExponentialRetryPolicy(completeTaskRetryInitialInterval).
 		WithMaximumInterval(completeTaskRetryMaxInterval).
 		WithMaximumAttempts(completeTaskRetryMaxAttempts)
-}
-
-// CreateTaskProcessingRetryPolicy creates a retry policy for task processing
-func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(taskProcessingRetryInitialInterval).
-		WithMaximumAttempts(taskProcessingRetryMaxAttempts)
 }
 
 // CreateTaskReschedulePolicy creates a retry policy for rescheduling task with errors not equal to ErrTaskRetry
