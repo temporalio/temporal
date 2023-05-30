@@ -27,7 +27,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -196,11 +195,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 		},
 	}
 
-	rootT := s.T()
 	for _, tc := range testCases {
-		s.SetT(rootT)
-		s.T().Run(tc.Name, func(t *testing.T) {
-			s.SetT(t)
+		s.Run(tc.Name, func() {
 			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
@@ -347,11 +343,8 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalStartedWorkflowTask_Acc
 		},
 	}
 
-	rootT := s.T()
 	for _, tc := range testCases {
-		s.SetT(rootT)
-		s.T().Run(tc.Name, func(t *testing.T) {
-			s.SetT(t)
+		s.Run(tc.Name, func() {
 			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
@@ -475,11 +468,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Accept
 		},
 	}
 
-	rootT := s.T()
 	for _, tc := range testCases {
-		s.SetT(rootT)
-		s.T().Run(tc.Name, func(t *testing.T) {
-			s.SetT(t)
+		s.Run(tc.Name, func() {
 			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
@@ -891,11 +881,8 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 		},
 	}
 
-	rootT := s.T()
 	for _, tc := range testCases {
-		s.SetT(rootT)
-		s.T().Run(tc.Name, func(t *testing.T) {
-			s.SetT(t)
+		s.Run(tc.Name, func() {
 			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
@@ -958,10 +945,10 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			_, err := poller.PollAndProcessWorkflowTask(false, false)
 			if tc.RespondWorkflowTaskError != "" {
 				// respond workflow task should return error
-				require.Error(t, err, "RespondWorkflowTaskCompleted should return an error contains`%v`", tc.RespondWorkflowTaskError)
-				require.Contains(t, err.Error(), tc.RespondWorkflowTaskError)
+				require.Error(s.T(), err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
+				require.Contains(s.T(), err.Error(), tc.RespondWorkflowTaskError)
 			} else {
-				require.NoError(t, err)
+				require.NoError(s.T(), err)
 			}
 			<-updateResultCh
 		})
@@ -983,11 +970,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 		},
 	}
 
-	rootT := s.T()
 	for _, tc := range testCases {
-		s.SetT(rootT)
-		s.T().Run(tc.Name, func(t *testing.T) {
-			s.SetT(t)
+		s.Run(tc.Name, func() {
 			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
@@ -2764,11 +2748,8 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 		},
 	}
 
-	rootT := s.T()
 	for _, tc := range testCases {
-		s.SetT(rootT)
-		s.T().Run(tc.Name, func(t *testing.T) {
-			s.SetT(t)
+		s.Run(tc.Name, func() {
 			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
