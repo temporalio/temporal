@@ -1525,16 +1525,16 @@ func (s *clientIntegrationSuite) TestBatchSignal() {
 
 	workflowFn := func(ctx workflow.Context) (myData, error) {
 		var receivedData myData
-		workflow.GetSignalChannel(ctx, "my-signal").Receive(ctx, &receivedData);
+		workflow.GetSignalChannel(ctx, "my-signal").Receive(ctx, &receivedData)
 		return receivedData, nil
 	}
 	s.worker.RegisterWorkflow(workflowFn)
 
 	workflowRun, err := s.sdkClient.ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
-		ID:        uuid.New(),
-		TaskQueue: s.taskQueue,
+		ID:                       uuid.New(),
+		TaskQueue:                s.taskQueue,
 		WorkflowExecutionTimeout: 10 * time.Second,
-	}, workflowFn);
+	}, workflowFn)
 	s.NoError(err)
 
 	input1 := myData{
@@ -1547,9 +1547,9 @@ func (s *clientIntegrationSuite) TestBatchSignal() {
 	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.namespace,
 		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation:&batch.BatchOperationSignal{
+			SignalOperation: &batch.BatchOperationSignal{
 				Signal: "my-signal",
-				Input: inputPayloads,
+				Input:  inputPayloads,
 			},
 		},
 		Executions: []*commonpb.WorkflowExecution{
@@ -1558,7 +1558,7 @@ func (s *clientIntegrationSuite) TestBatchSignal() {
 				RunId:      workflowRun.GetRunID(),
 			},
 		},
-		JobId: uuid.New(),
+		JobId:  uuid.New(),
 		Reason: "test",
 	})
 	s.NoError(err)
