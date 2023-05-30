@@ -128,7 +128,6 @@ message WorkflowExecutionInfo {
     int64 user_timer_count = 73;
     int64 request_cancel_external_count = 74;
     int64 signal_external_count = 75;
-    int64 update_count = 77;
     reserved 47;
     reserved 48;
     reserved 49;
