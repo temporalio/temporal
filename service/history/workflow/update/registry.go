@@ -238,13 +238,13 @@ func (r *RegistryImpl) admit(ctx context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
 		return serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			fmt.Sprintf("update concurrent in-flight limit has been reached (%v)", r.maxInFlight()),
+			fmt.Sprintf("number of concurrent in-flight updates limit has been reached (%v)", r.maxInFlight()),
 		)
 	}
 
-	if r.store.GetUpdatesCount(ctx) >= r.maxTotal() {
+	if len(r.updates)+r.store.GetUpdatesCount(ctx) >= r.maxTotal() {
 		return serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("update limit has been reached (%v)", r.maxTotal()),
+			fmt.Sprintf("number of total updates limit has been reached (%v)", r.maxTotal()),
 		)
 	}
 

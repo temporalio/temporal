@@ -393,6 +393,70 @@ func TestInFlightLimit(t *testing.T) {
 	})
 }
 
+func TestTotalLimit(t *testing.T) {
+	t.Parallel()
+	var (
+		ctx   = context.Background()
+		limit = 1
+		reg   = update.NewRegistry(emptyUpdateStore, update.WithTotalLimit(
+			func() int { return limit },
+		))
+	)
+	upd1, existed, err := reg.FindOrCreate(ctx, "update1")
+	require.NoError(t, err)
+	require.False(t, existed)
+	require.Equal(t, 1, reg.Len())
+
+	t.Run("exceed limit", func(t *testing.T) {
+		_, _, err = reg.FindOrCreate(ctx, "update2")
+		var failedPrecon *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPrecon)
+		require.Equal(t, 1, reg.Len())
+	})
+
+	// complete update1 so that it is removed from the registry
+	evStore := mockEventStore{Controller: effect.Immediate(ctx)}
+	req := updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: "update1"},
+		Input: &updatepb.Input{Name: "not_empty"},
+	}
+	rej := updatepb.Rejection{
+		RejectedRequestMessageId: "update1/request",
+		RejectedRequest:          &req,
+		Failure: &failurepb.Failure{
+			Message: "intentional failure in " + t.Name(),
+		},
+	}
+	require.NoError(t, upd1.OnMessage(ctx, &req, evStore))
+	require.NoError(t, upd1.OnMessage(ctx, &rej, evStore))
+
+	t.Run("try to admit next after completing previous", func(t *testing.T) {
+		_, existed, err = reg.FindOrCreate(ctx, "update2")
+		var failedPrecon *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPrecon)
+		require.Equal(t, 1, reg.Len())
+	})
+
+	t.Log("Increasing limit to 2; Update registry should honor the change")
+	limit = 2
+
+	t.Run("runtime limit increase is respected", func(t *testing.T) {
+		require.Equal(t, 1, reg.Len(),
+			"update2 from previous test should still be in registry")
+		_, existed, err := reg.FindOrCreate(ctx, "update3")
+		require.NoError(t, err,
+			"update should have been admitted under new higher limit")
+		require.False(t, existed)
+		require.Equal(t, 2, reg.Len())
+
+		_, _, err = reg.FindOrCreate(ctx, "update4")
+		var failedPrecon *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPrecon,
+			"third update should be rejected when limit = 2")
+		require.Equal(t, 2, reg.Len())
+	})
+}
+
 func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 	t.Parallel()
 	completedUpdateID := t.Name() + "-completed-update-id"
