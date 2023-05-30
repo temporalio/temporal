@@ -10,6 +10,7 @@ concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+
 jobs:
   build-docker-image:
     uses: temporalio/docker-builds/.github/workflows/docker-build-only.yml@main
@@ -19,32 +20,36 @@ jobs:
 
   feature-tests-ts:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/typescript.yaml@main
+    uses: temporalio/features/.github/workflows/typescript.yaml@load-correct-built-server-image
     with:
       version: 1.5.2
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      features-repo-ref: load-correct-built-server-image
 
   feature-tests-go:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/go.yaml@main
+    uses: temporalio/features/.github/workflows/go.yaml@load-correct-built-server-image
     with:
       version: v1.19.0
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      features-repo-ref: load-correct-built-server-image
 
   feature-tests-python:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/python.yaml@main
+    uses: temporalio/features/.github/workflows/python.yaml@load-correct-built-server-image
     with:
       version: 0.1b4
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      features-repo-ref: load-correct-built-server-image
 
   feature-tests-java:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/java.yaml@main
+    uses: temporalio/features/.github/workflows/java.yaml@load-correct-built-server-image
     with:
       version: v1.17.0
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      features-repo-ref: load-correct-built-server-image
