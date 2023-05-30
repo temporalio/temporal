@@ -238,7 +238,7 @@ func (e *executableImpl) Execute() (retErr error) {
 
 func (e *executableImpl) HandleErr(err error) (retErr error) {
 	defer func() {
-		if retErr != consts.ErrResourceExhaustedBusyWorkflow {
+		if errors.Is(retErr, consts.ErrResourceExhaustedBusyWorkflow) {
 			// if err is due to workflow busy, do not take any latency related to this attempt into account
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
 		}
@@ -290,7 +290,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return err
 	}
 
-	if err == consts.ErrResourceExhaustedBusyWorkflow {
+	if errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
 		e.taggedMetricsHandler.Counter(metrics.TaskWorkflowBusyCounter.GetMetricName()).Record(1)
 		return err
 	}
@@ -410,7 +410,7 @@ func (e *executableImpl) Nack(err error) {
 	if !submitted {
 		backoffDuration := e.backoffDuration(err, e.Attempt())
 		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration))
-		if err != consts.ErrResourceExhaustedBusyWorkflow {
+		if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
 			e.inMemoryNoUserLatency += backoffDuration
 		}
 	}
@@ -468,7 +468,7 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 		return false
 	}
 
-	if err != consts.ErrResourceExhaustedBusyWorkflow &&
+	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) &&
 		common.IsResourceExhausted(err) &&
 		e.systemResourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
 		return false
@@ -507,7 +507,7 @@ func (e *executableImpl) backoffDuration(
 	}
 
 	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt)
-	if err != consts.ErrResourceExhaustedBusyWorkflow && common.IsResourceExhausted(err) {
+	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon system resource exhausted error and pick the longer backoff duration
 		backoffDuration = util.Max(
