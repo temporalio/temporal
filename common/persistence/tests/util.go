@@ -76,7 +76,6 @@ func RandomSnapshot(
 		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
-		UpdateInfos:         RandomStringUpdateInfoMap(),
 
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer:    {},
@@ -117,8 +116,6 @@ func RandomMutation(
 		DeleteSignalInfos:         map[int64]struct{}{rand.Int63(): {}},
 		UpsertSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 		DeleteSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
-		UpsertUpdateInfos:         RandomStringUpdateInfoMap(),
-		DeleteUpdateInfos:         map[string]struct{}{uuid.NewString(): {}},
 		// NewBufferedEvents: see below
 		// ClearBufferedEvents: see below
 
@@ -205,12 +202,6 @@ func RandomInt64SignalInfoMap() map[int64]*persistencespb.SignalInfo {
 	}
 }
 
-func RandomStringUpdateInfoMap() map[string]*persistencespb.UpdateInfo {
-	return map[string]*persistencespb.UpdateInfo{
-		uuid.NewString(): RandomUpdateInfo(),
-	}
-}
-
 func RandomActivityInfo() *persistencespb.ActivityInfo {
 	// cannot use gofakeit due to RetryLastFailure is of type Failure
 	// and Failure can contain another Failure -> stack overflow
@@ -270,22 +261,6 @@ func RandomResetPoints() *workflowpb.ResetPoints {
 		ExpireTime:                   RandomTime(),
 		Resettable:                   rand.Int31()%2 == 0,
 	}}}
-}
-
-func RandomUpdateInfo() *persistencespb.UpdateInfo {
-	ptr := historyspb.HistoryEventPointer{EventId: rand.Int63()}
-	if rand.Intn(2) == 0 {
-		return &persistencespb.UpdateInfo{
-			Value: &persistencespb.UpdateInfo_AcceptancePointer{
-				AcceptancePointer: &ptr,
-			},
-		}
-	}
-	return &persistencespb.UpdateInfo{
-		Value: &persistencespb.UpdateInfo_CompletedPointer{
-			CompletedPointer: &ptr,
-		},
-	}
 }
 
 func RandomStringPayloadMap() map[string]*commonpb.Payload {

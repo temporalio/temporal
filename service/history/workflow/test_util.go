@@ -26,13 +26,8 @@ package workflow
 
 import (
 	"context"
-	"fmt"
-	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -54,38 +49,6 @@ func TestLocalMutableState(
 	_ = ms.SetHistoryTree(context.Background(), nil, nil, runID)
 
 	return ms
-}
-
-// NewMapEventCache is a functional event cache mock that wraps a simple Go map
-func NewMapEventCache(
-	t *testing.T,
-	m map[events.EventKey]*historypb.HistoryEvent,
-) events.Cache {
-	cache := events.NewMockCache(gomock.NewController(t))
-	cache.EXPECT().DeleteEvent(gomock.Any()).AnyTimes().Do(
-		func(k events.EventKey) { delete(m, k) },
-	)
-	cache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes().Do(
-		func(k events.EventKey, event *historypb.HistoryEvent) {
-			m[k] = event
-		},
-	)
-	cache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		AnyTimes().
-		DoAndReturn(
-			func(
-				_ context.Context,
-				key events.EventKey,
-				_ int64,
-				_ []byte,
-			) (*historypb.HistoryEvent, error) {
-				if event, ok := m[key]; ok {
-					return event, nil
-				}
-				return nil, serviceerror.NewNotFound(fmt.Sprintf("event %#v not found", key))
-			},
-		)
-	return cache
 }
 
 func TestGlobalMutableState(

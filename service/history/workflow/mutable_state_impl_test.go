@@ -25,9 +25,6 @@
 package workflow
 
 import (
-	"context"
-	"fmt"
-	"math"
 	"testing"
 	"time"
 
@@ -41,9 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	updatepb "go.temporal.io/api/update/v1"
 
 	"go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -720,7 +715,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 				{
 					BranchToken: []byte("token#1"),
 					Items: []*historyspb.VersionHistoryItem{
-						{EventId: math.MaxInt64, Version: 300},
+						{EventId: 1, Version: 300},
 					},
 				},
 			},
@@ -806,66 +801,6 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		SignalRequestedIds:  signalRequestIDs,
 		BufferedEvents:      bufferedEvents,
 	}
-}
-
-func (s *mutableStateSuite) TestUpdateInfos() {
-	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
-	dbstate := s.buildWorkflowMutableState()
-	var err error
-	s.mutableState, err = newMutableStateFromDB(
-		s.mockShard,
-		NewMapEventCache(s.T(), cacheStore),
-		s.logger,
-		tests.LocalNamespaceEntry,
-		dbstate,
-		123,
-	)
-	s.NoError(err)
-	err = s.mutableState.UpdateCurrentVersion(
-		dbstate.ExecutionInfo.VersionHistories.Histories[0].Items[0].Version, false)
-	s.Require().NoError(err)
-
-	acceptedUpdateID := s.T().Name() + "-accepted-update-id"
-	acceptedMsgID := s.T().Name() + "-accepted-msg-id"
-	for i := 0; i < 2; i++ {
-		updateID := fmt.Sprintf("%s-%d", acceptedUpdateID, i)
-		_, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
-			updateID,
-			&updatepb.Acceptance{
-				AcceptedRequestMessageId:         fmt.Sprintf("%s-%d", acceptedMsgID, i),
-				AcceptedRequestSequencingEventId: 1,
-				AcceptedRequest: &updatepb.Request{
-					Meta: &updatepb.Meta{UpdateId: updateID},
-				},
-			},
-		)
-		s.Require().NoError(err)
-	}
-	completedUpdateID := s.T().Name() + "-completed-update-id"
-	completedOutcome := &updatepb.Outcome{
-		Value: &updatepb.Outcome_Success{Success: testPayloads},
-	}
-	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
-		&updatepb.Response{
-			Meta:    &updatepb.Meta{UpdateId: completedUpdateID},
-			Outcome: completedOutcome,
-		},
-	)
-	s.Require().NoError(err)
-
-	// should now have one completed update and two accepted in MS
-	s.Require().Len(cacheStore, 3)
-
-	outcome, err := s.mutableState.GetUpdateOutcome(context.TODO(), completedUpdateID)
-	s.Require().NoError(err)
-	s.Require().Equal(completedOutcome, outcome)
-
-	_, err = s.mutableState.GetUpdateOutcome(context.TODO(), "not_an_update_id")
-	s.Require().Error(err)
-	s.Require().IsType((*serviceerror.NotFound)(nil), err)
-
-	incompletes := s.mutableState.GetAcceptedWorkflowExecutionUpdateIDs(context.TODO())
-	s.Require().Len(incompletes, 2)
 }
 
 func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {

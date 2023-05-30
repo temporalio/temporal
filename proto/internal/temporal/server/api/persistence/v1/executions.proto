@@ -362,12 +362,3 @@ message Checksum {
     temporal.server.api.enums.v1.ChecksumFlavor flavor = 2;
     bytes value = 3;
 }
-
-message UpdateInfo {
-    oneof value {
-        // update has been accepted and this is the pointer to the accepted event
-        temporal.server.api.history.v1.HistoryEventPointer acceptance_pointer = 1;
-        // update has been completed and this is the pointer to the completion event
-        temporal.server.api.history.v1.HistoryEventPointer completed_pointer = 2;
-    }
-}
