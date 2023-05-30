@@ -129,6 +129,7 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"PollActivityTaskQueue":            {},
 		"GetWorkerBuildIdCompatibility":    {},
 		"UpdateWorkerBuildIdCompatibility": {},
+		"GetWorkerTaskReachability":        {},
 		"DeleteWorkflowExecution":          {},
 
 		"ResetStickyTaskQueue":    {},

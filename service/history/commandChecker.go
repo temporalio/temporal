@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -76,7 +77,6 @@ type (
 
 		mutableState              workflow.MutableState
 		searchAttributesValidator *searchattribute.Validator
-		executionStats            *persistencespb.ExecutionStats
 		metricsHandler            metrics.Handler
 		logger                    log.Logger
 	}
@@ -106,7 +106,6 @@ func newWorkflowSizeChecker(
 	limits workflowSizeLimits,
 	mutableState workflow.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
-	executionStats *persistencespb.ExecutionStats,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *workflowSizeChecker {
@@ -114,7 +113,6 @@ func newWorkflowSizeChecker(
 		workflowSizeLimits:        limits,
 		mutableState:              mutableState,
 		searchAttributesValidator: searchAttributesValidator,
-		executionStats:            executionStats,
 		metricsHandler:            metricsHandler,
 		logger:                    logger,
 	}

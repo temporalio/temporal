@@ -25,6 +25,8 @@
 package client
 
 import (
+	"time"
+
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -32,6 +34,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
@@ -57,6 +60,7 @@ type (
 		ServiceName                        primitives.ServiceName
 		MetricsHandler                     metrics.Handler
 		Logger                             log.Logger
+		HealthSignals                      persistence.HealthSignalAggregator
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -66,6 +70,7 @@ var Module = fx.Options(
 	BeanModule,
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(DataStoreFactoryProvider),
+	fx.Provide(HealthSignalAggregatorProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -97,5 +102,24 @@ func FactoryProvider(
 		string(params.ClusterName),
 		params.MetricsHandler,
 		params.Logger,
+		params.HealthSignals,
 	)
+}
+
+func HealthSignalAggregatorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) persistence.HealthSignalAggregator {
+	if dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalCollectionEnabled, true)() {
+		return persistence.NewHealthSignalAggregatorImpl(
+			dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 3*time.Second)(),
+			dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 500)(),
+			metricsHandler,
+			dynamicCollection.GetIntProperty(dynamicconfig.ShardRPSWarnLimit, 50),
+			logger,
+		)
+	}
+
+	return persistence.NoopHealthSignalAggregator
 }

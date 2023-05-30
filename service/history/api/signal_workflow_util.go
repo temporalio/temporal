@@ -83,5 +83,14 @@ func ValidateSignal(
 		return consts.ErrSignalsLimitExceeded
 	}
 
+	if mutableState.IsWorkflowCloseAttempted() && mutableState.HasStartedWorkflowTask() {
+		shard.GetThrottledLogger().Info("Signal rejected because workflow is closing",
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+		)
+		return consts.ErrWorkflowClosing
+	}
+
 	return nil
 }

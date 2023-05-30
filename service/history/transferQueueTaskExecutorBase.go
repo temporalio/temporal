@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
@@ -119,6 +120,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx context.Context,
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout *time.Duration,
+	directive *taskqueuespb.TaskVersionDirective,
 ) error {
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -133,6 +135,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+		VersionDirective:       directive,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
@@ -148,6 +151,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	task *tasks.WorkflowTask,
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout *time.Duration,
+	directive *taskqueuespb.TaskVersionDirective,
 ) error {
 	_, err := t.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -159,6 +163,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+		VersionDirective:       directive,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls

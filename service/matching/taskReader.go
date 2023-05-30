@@ -34,7 +34,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -113,7 +112,7 @@ func (tr *taskReader) Signal() {
 }
 
 func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
-	ctx = tr.initContext(ctx)
+	ctx = tr.tlMgr.callerInfoContext(ctx)
 
 dispatchLoop:
 	for {
@@ -132,7 +131,7 @@ dispatchLoop:
 					// Don't try to set read level here because it may have been advanced already.
 					break
 				}
-				err := tr.tlMgr.DispatchTask(ctx, task)
+				err := tr.tlMgr.engine.DispatchSpooledTask(ctx, task, tr.tlMgr.taskQueueID, tr.tlMgr.stickyInfo)
 				if err == nil {
 					break
 				}
@@ -154,7 +153,7 @@ dispatchLoop:
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
-	ctx = tr.initContext(ctx)
+	ctx = tr.tlMgr.callerInfoContext(ctx)
 
 	if err := tr.tlMgr.WaitUntilInitialized(ctx); err != nil {
 		return err
@@ -310,12 +309,6 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 	// taskID in DB may not be continuous, especially when task list ownership changes.
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
 	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.GetMetricName()).Record(float64(maxReadLevel - ackLevel))
-}
-
-func (tr *taskReader) initContext(ctx context.Context) context.Context {
-	namespace, _ := tr.tlMgr.namespaceRegistry.GetNamespaceName(tr.tlMgr.taskQueueID.namespaceID)
-
-	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 }
 
 func (tr *taskReader) backoff(duration time.Duration) {

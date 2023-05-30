@@ -69,6 +69,8 @@ var (
 	ErrDeserializingToken = serviceerror.NewInvalidArgument("error deserializing task token")
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = serviceerror.NewInvalidArgument("exceeded workflow execution limit for signal events")
+	// ErrWorkflowClosing is the error indicating requests to workflow got rejected due to workflow is closing
+	ErrWorkflowClosing = serviceerror.NewUnavailable("workflow operation rejected because workflow is closing")
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
 	ErrEventsAterWorkflowFinish = serviceerror.NewInternal("error validating last event being workflow finish event")
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state

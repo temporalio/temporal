@@ -35,16 +35,22 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -84,7 +90,17 @@ type (
 	taskQueueCounterKey struct {
 		namespaceID namespace.ID
 		taskType    enumspb.TaskQueueType
-		queueType   enumspb.TaskQueueKind
+		kind        enumspb.TaskQueueKind
+	}
+
+	pollMetadata struct {
+		ratePerSecond             *float64
+		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
+	}
+
+	namespaceUpdateLocks struct {
+		updateLock      sync.Mutex
+		replicationLock sync.Mutex
 	}
 
 	matchingEngineImpl struct {
@@ -95,14 +111,21 @@ type (
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
 		metricsHandler       metrics.Handler
-		taskQueuesLock       sync.RWMutex                     // locks mutation of taskQueues
-		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
-		taskQueueCount       map[taskQueueCounterKey]int      // per-namespace task queue counter
+		taskQueuesLock       sync.RWMutex // locks mutation of taskQueues
+		taskQueues           map[taskQueueID]taskQueueManager
+		taskQueueCount       map[taskQueueCounterKey]int // per-namespace task queue counter
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
 		namespaceRegistry    namespace.Registry
 		keyResolver          membership.ServiceResolver
 		clusterMeta          cluster.Metadata
+		timeSource           clock.TimeSource
+		// Only set if global namespaces are enabled on the cluster.
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
+		// Disables concurrent task queue user data updates and replication requests (due to a cassandra limitation)
+		namespaceUpdateLockMap map[string]*namespaceUpdateLocks
+		// Serializes access to the per namespace lock map
+		namespaceUpdateLockMapLock sync.Mutex
 	}
 )
 
@@ -133,23 +156,27 @@ func NewEngine(
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 ) Engine {
 
 	return &matchingEngineImpl{
-		status:               common.DaemonStatusInitialized,
-		taskManager:          taskManager,
-		historyClient:        historyClient,
-		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
-		taskQueues:           make(map[taskQueueID]taskQueueManager),
-		taskQueueCount:       make(map[taskQueueCounterKey]int),
-		logger:               log.With(logger, tag.ComponentMatchingEngine),
-		metricsHandler:       metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
-		matchingClient:       matchingClient,
-		config:               config,
-		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
-		namespaceRegistry:    namespaceRegistry,
-		keyResolver:          resolver,
-		clusterMeta:          clusterMeta,
+		status:                    common.DaemonStatusInitialized,
+		taskManager:               taskManager,
+		historyClient:             historyClient,
+		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
+		taskQueues:                make(map[taskQueueID]taskQueueManager),
+		taskQueueCount:            make(map[taskQueueCounterKey]int),
+		logger:                    log.With(logger, tag.ComponentMatchingEngine),
+		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
+		matchingClient:            matchingClient,
+		config:                    config,
+		lockableQueryTaskMap:      lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
+		namespaceRegistry:         namespaceRegistry,
+		keyResolver:               resolver,
+		clusterMeta:               clusterMeta,
+		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
+		namespaceReplicationQueue: namespaceReplicationQueue,
+		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
 	}
 }
 
@@ -204,7 +231,20 @@ func (e *matchingEngineImpl) String() string {
 // Returns taskQueueManager for a task queue. If not already cached, and create is true, tries
 // to get new range from DB and create one. This blocks (up to the context deadline) for the
 // task queue to be initialized.
-func (e *matchingEngineImpl) getTaskQueueManager(ctx context.Context, taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind, create bool) (taskQueueManager, error) {
+//
+// Note that stickyInfo is not used as part of the task queue identity. That means that if
+// getTaskQueueManager is called twice with the same taskQueue but different stickyInfo, the
+// properties of the taskQueueManager will depend on which call came first. In general we can
+// rely on kind being the same for all calls now, but normalName was a later addition to the
+// protocol and is not always set consistently. normalName is only required when using
+// versioning, and SDKs that support versioning will always set it. The current server version
+// will also set it when adding tasks from history. So that particular inconsistency is okay.
+func (e *matchingEngineImpl) getTaskQueueManager(
+	ctx context.Context,
+	taskQueue *taskQueueID,
+	stickyInfo stickyInfo,
+	create bool,
+) (taskQueueManager, error) {
 	e.taskQueuesLock.RLock()
 	tqm, ok := e.taskQueues[*taskQueue]
 	e.taskQueuesLock.RUnlock()
@@ -218,14 +258,18 @@ func (e *matchingEngineImpl) getTaskQueueManager(ctx context.Context, taskQueue 
 		e.taskQueuesLock.Lock()
 		if tqm, ok = e.taskQueues[*taskQueue]; !ok {
 			var err error
-			tqm, err = newTaskQueueManager(e, taskQueue, taskQueueKind, e.config, e.clusterMeta)
+			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config, e.clusterMeta)
 			if err != nil {
 				e.taskQueuesLock.Unlock()
 				return nil, err
 			}
 			tqm.Start()
 			e.taskQueues[*taskQueue] = tqm
-			countKey := taskQueueCounterKey{namespaceID: taskQueue.namespaceID, taskType: taskQueue.taskType, queueType: taskQueueKind}
+			countKey := taskQueueCounterKey{
+				namespaceID: taskQueue.namespaceID,
+				taskType:    taskQueue.taskType,
+				kind:        stickyInfo.kind,
+			}
 			e.taskQueueCount[countKey]++
 			taskQueueCount := e.taskQueueCount[countKey]
 			e.updateTaskQueueGauge(countKey, taskQueueCount)
@@ -254,16 +298,24 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 ) (bool, error) {
 	namespaceID := namespace.ID(addRequest.GetNamespaceId())
 	taskQueueName := addRequest.TaskQueue.GetName()
-	taskQueueKind := addRequest.TaskQueue.GetKind()
+	stickyInfo := stickyInfoFromTaskQueue(addRequest.TaskQueue)
 
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	origTaskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return false, err
 	}
 
-	sticky := taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY
+	// We don't need the userDataChanged channel here because:
+	// - if we sync match or sticky worker unavailable, we're done
+	// - if we spool to db, we'll re-resolve when it comes out of the db
+	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
+	if err != nil {
+		return false, err
+	}
+
+	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, !sticky)
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return false, err
 	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
@@ -287,6 +339,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		Clock:            addRequest.GetClock(),
 		ExpiryTime:       expirationTime,
 		CreateTime:       now,
+		VersionDirective: addRequest.VersionDirective,
 	}
 
 	return tqm.AddTask(ctx, addTaskParams{
@@ -305,14 +358,22 @@ func (e *matchingEngineImpl) AddActivityTask(
 	namespaceID := namespace.ID(addRequest.GetNamespaceId())
 	runID := addRequest.Execution.GetRunId()
 	taskQueueName := addRequest.TaskQueue.GetName()
-	taskQueueKind := addRequest.TaskQueue.GetKind()
+	stickyInfo := stickyInfoFromTaskQueue(addRequest.TaskQueue)
 
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	origTaskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	if err != nil {
 		return false, err
 	}
 
-	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
+	// We don't need the userDataChanged channel here because:
+	// - if we sync match, we're done
+	// - if we spool to db, we'll re-resolve when it comes out of the db
+	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
+	if err != nil {
+		return false, err
+	}
+
+	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return false, err
 	}
@@ -333,6 +394,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		Clock:            addRequest.GetClock(),
 		CreateTime:       now,
 		ExpiryTime:       expirationTime,
+		VersionDirective: addRequest.VersionDirective,
 	}
 
 	return tlMgr.AddTask(ctx, addTaskParams{
@@ -341,6 +403,37 @@ func (e *matchingEngineImpl) AddActivityTask(
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
 	})
+}
+
+func (e *matchingEngineImpl) DispatchSpooledTask(
+	ctx context.Context,
+	task *internalTask,
+	origTaskQueue *taskQueueID,
+	stickyInfo stickyInfo,
+) error {
+	taskInfo := task.event.GetData()
+	// This task came from taskReader so task.event is always set here.
+	directive := taskInfo.GetVersionDirective()
+	// If this came from a versioned queue, ignore the version and re-resolve, in case we're
+	// going to the default and the default changed.
+	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
+	// Redirect and re-resolve if we're blocked in matcher and user data changes.
+	for {
+		taskQueue, userDataChanged, err := e.redirectToVersionedQueueForAdd(
+			ctx, unversionedOrigTaskQueue, directive, stickyInfo)
+		if err != nil {
+			return err
+		}
+		sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
+		tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
+		if err != nil {
+			return err
+		}
+		err = tqm.DispatchSpooledTask(ctx, task, userDataChanged)
+		if err != errInterrupted {
+			return err
+		}
+	}
 }
 
 // PollWorkflowTaskQueue tries to get the workflow task using exponential backoff.
@@ -353,6 +446,7 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
+	stickyInfo := stickyInfoFromTaskQueue(request.TaskQueue)
 	e.logger.Debug("Received PollWorkflowTaskQueue for taskQueue", tag.WorkflowTaskQueueName(taskQueueName))
 pollLoop:
 	for {
@@ -368,8 +462,10 @@ pollLoop:
 		if err != nil {
 			return nil, err
 		}
-		taskQueueKind := request.TaskQueue.GetKind()
-		task, err := e.getTask(pollerCtx, taskQueue, nil, taskQueueKind)
+		pollMetadata := &pollMetadata{
+			workerVersionCapabilities: request.WorkerVersionCapabilities,
+		}
+		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -464,6 +560,7 @@ func (e *matchingEngineImpl) PollActivityTaskQueue(
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
+	stickyInfo := stickyInfoFromTaskQueue(request.TaskQueue)
 	e.logger.Debug("Received PollActivityTaskQueue for taskQueue", tag.Name(taskQueueName))
 pollLoop:
 	for {
@@ -477,16 +574,17 @@ pollLoop:
 			return nil, err
 		}
 
-		var maxDispatch *float64
-		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
-			maxDispatch = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
-		}
 		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		taskQueueKind := request.TaskQueue.GetKind()
-		task, err := e.getTask(pollerCtx, taskQueue, maxDispatch, taskQueueKind)
+		pollMetadata := &pollMetadata{
+			workerVersionCapabilities: request.WorkerVersionCapabilities,
+		}
+		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
+			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
+		}
+		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			// TODO: Is empty poll the best reply for errPumpClosed?
 			if err == ErrNoTasks || err == errPumpClosed {
@@ -549,15 +647,23 @@ func (e *matchingEngineImpl) QueryWorkflow(
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	namespaceID := namespace.ID(queryRequest.GetNamespaceId())
 	taskQueueName := queryRequest.TaskQueue.GetName()
-	taskQueueKind := queryRequest.TaskQueue.GetKind()
-	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	stickyInfo := stickyInfoFromTaskQueue(queryRequest.TaskQueue)
+
+	origTaskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
 
-	sticky := taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY
+	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
+	// or fail with a relatively short timeout.
+	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, queryRequest.VersionDirective, stickyInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, !sticky)
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return nil, err
 	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
@@ -627,15 +733,15 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	taskQueueType := request.GetTaskQueueType()
 	taskQueueName := request.TaskQueue.GetName()
+	stickyInfo := stickyInfoFromTaskQueue(request.TaskQueue)
 	pollerID := request.GetPollerId()
 
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, taskQueueType)
 	if err != nil {
 		return err
 	}
-	taskQueueKind := request.TaskQueue.GetKind()
-	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
-	if err != nil {
+	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, false)
+	if err != nil || tlMgr == nil {
 		return err
 	}
 
@@ -650,12 +756,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	taskQueueType := request.DescRequest.GetTaskQueueType()
 	taskQueueName := request.DescRequest.TaskQueue.GetName()
+	stickyInfo := stickyInfoFromTaskQueue(request.DescRequest.TaskQueue)
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, taskQueueType)
 	if err != nil {
 		return nil, err
 	}
-	taskQueueKind := request.DescRequest.TaskQueue.GetKind()
-	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
+	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
@@ -719,12 +825,36 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.MutateVersioningData(ctx, func(data *persistencespb.VersioningData) error {
-		return UpdateVersionSets(data, req.GetRequest(), e.config.MaxVersionGraphSize())
+	updateOptions := UserDataUpdateOptions{
+		Replicate:                true,
+		TaskQueueLimitPerBuildId: e.config.TaskQueueLimitPerBuildId(),
+	}
+	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+		clock := data.GetClock()
+		if clock == nil {
+			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
+			clock = &tmp
+		}
+		updatedClock := hlc.Next(*clock, e.timeSource)
+		versioningData, err := UpdateVersionSets(
+			updatedClock,
+			data.GetVersioningData(),
+			req.GetRequest(),
+			e.config.VersionCompatibleSetLimitPerQueue(),
+			e.config.VersionBuildIdLimitPerQueue(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		// Avoid mutation
+		ret := *data
+		ret.Clock = &updatedClock
+		ret.VersioningData = versioningData
+		return &ret, nil
 	})
 	if err != nil {
 		return nil, err
@@ -742,14 +872,14 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
 		}
 		return nil, err
 	}
-	verDat, err := tqMgr.GetVersioningData(ctx)
+	userData, _, err := tqMgr.GetUserData(ctx)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
@@ -757,63 +887,173 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 		return nil, err
 	}
 	return &matchingservice.GetWorkerBuildIdCompatibilityResponse{
-		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxSets())),
+		Response: ToBuildIdOrderingResponse(userData.GetData().GetVersioningData(), int(req.GetRequest().GetMaxSets())),
 	}, nil
 }
 
-func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
+func (e *matchingEngineImpl) GetTaskQueueUserData(
 	ctx context.Context,
-	req *matchingservice.InvalidateTaskQueueMetadataRequest,
-) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
-	taskQueue, err := newTaskQueueID(namespace.ID(req.GetNamespaceId()), req.GetTaskQueue(), req.GetTaskQueueType())
+	req *matchingservice.GetTaskQueueUserDataRequest,
+) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueue, err := newTaskQueueID(namespaceID, req.GetTaskQueue(), req.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
-	if tqMgr == nil && err == nil {
-		// Task queue is not currently loaded, so nothing to do here
-		return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
-	}
+	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.InvalidateMetadata(req)
-	if err != nil {
-		return nil, err
+	version := req.GetLastKnownUserDataVersion()
+	if version < 0 {
+		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
 	}
-	return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+
+	if req.WaitNewData {
+		var cancel context.CancelFunc
+		ctx, cancel = newChildContext(ctx, e.config.GetUserDataLongPollTimeout(), returnEmptyTaskTimeBudget)
+		defer cancel()
+	}
+
+	for {
+		resp := &matchingservice.GetTaskQueueUserDataResponse{}
+		userData, userDataChanged, err := tqMgr.GetUserData(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if req.WaitNewData && userData.GetVersion() == version {
+			// long-poll: wait for data to change/appear
+			select {
+			case <-ctx.Done():
+				resp.TaskQueueHasUserData = userData != nil
+				return resp, nil
+			case <-userDataChanged:
+				continue
+			}
+		}
+		if userData != nil {
+			resp.TaskQueueHasUserData = true
+			if userData.Version > version {
+				resp.UserData = userData
+			} else if userData.Version < version {
+				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
+				// We rely on client retries in this case to let the system eventually self-heal.
+				return nil, serviceerror.NewFailedPrecondition(
+					"requested task queue user data for version greater than known version")
+			}
+		}
+		return resp, nil
+	}
 }
 
-func (e *matchingEngineImpl) GetTaskQueueMetadata(
+func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	ctx context.Context,
-	req *matchingservice.GetTaskQueueMetadataRequest,
-) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	tqMgr, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
-	resp := &matchingservice.GetTaskQueueMetadataResponse{}
-	verDatHash := req.GetWantVersioningDataCurhash()
-	// This isn't != nil, because gogoproto will round-trip serialize an empty byte array in a request
-	// into a nil field.
-	if len(verDatHash) > 0 {
-		vDat, err := tqMgr.GetVersioningData(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if !bytes.Equal(HashVersioningData(vDat), verDatHash) {
-			resp.VersioningDataResp = &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
-				VersioningData: vDat,
-			}
-		}
+	updateOptions := UserDataUpdateOptions{
+		Replicate: false,
+		// Avoid setting a limit to allow the replication event to always be applied
+		TaskQueueLimitPerBuildId: 0,
 	}
-	return resp, nil
+	err = tqMgr.UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+		mergedUserData := *current
+		mergedUserData.VersioningData = MergeVersioningData(current.GetVersioningData(), req.GetUserData().GetVersioningData())
+		return &mergedUserData, nil
+	})
+	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
+}
+
+func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
+	ctx context.Context,
+	req *matchingservice.GetBuildIdTaskQueueMappingRequest,
+) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
+	taskQueues, err := e.taskManager.GetTaskQueuesByBuildId(ctx, &persistence.GetTaskQueuesByBuildIdRequest{
+		NamespaceID: req.NamespaceId,
+		BuildID:     req.BuildId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.GetBuildIdTaskQueueMappingResponse{TaskQueues: taskQueues}, nil
+}
+
+func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+	ctx context.Context,
+	req *matchingservice.ForceUnloadTaskQueueRequest,
+) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueue, err := newTaskQueueID(namespaceID, req.TaskQueue, req.TaskQueueType)
+	if err != nil {
+		return nil, err
+	}
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, normalStickyInfo, false)
+	if err != nil {
+		return nil, err
+	}
+	if tqm == nil {
+		return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: false}, nil
+	}
+	e.unloadTaskQueue(tqm)
+	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: true}, nil
+}
+
+func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
+	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
+	locks.updateLock.Lock()
+	defer locks.updateLock.Unlock()
+
+	err := e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID:     request.GetNamespaceId(),
+		TaskQueue:       request.GetTaskQueue(),
+		UserData:        request.GetUserData(),
+		BuildIdsAdded:   request.BuildIdsAdded,
+		BuildIdsRemoved: request.BuildIdsRemoved,
+	})
+	return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+}
+
+func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
+	if e.namespaceReplicationQueue == nil {
+		return &matchingservice.ReplicateTaskQueueUserDataResponse{}, nil
+	}
+
+	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
+	locks.replicationLock.Lock()
+	defer locks.replicationLock.Unlock()
+
+	err := e.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
+		Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+			TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+				NamespaceId:   request.GetNamespaceId(),
+				TaskQueueName: request.GetTaskQueue(),
+				UserData:      request.GetUserData(),
+			},
+		},
+	})
+	return &matchingservice.ReplicateTaskQueueUserDataResponse{}, err
+
+}
+
+func (e *matchingEngineImpl) getNamespaceUpdateLocks(namespaceId string) *namespaceUpdateLocks {
+	e.namespaceUpdateLockMapLock.Lock()
+	defer e.namespaceUpdateLockMapLock.Unlock()
+	locks, found := e.namespaceUpdateLockMap[namespaceId]
+	if !found {
+		locks = &namespaceUpdateLocks{}
+		e.namespaceUpdateLockMap[namespaceId] = locks
+	}
+	return locks
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
@@ -847,18 +1087,26 @@ func (e *matchingEngineImpl) getAllPartitions(
 	return partitionKeys, nil
 }
 
-// Loads a task from persistence and wraps it in a task context
 func (e *matchingEngineImpl) getTask(
 	ctx context.Context,
-	taskQueue *taskQueueID,
-	maxDispatchPerSecond *float64,
-	taskQueueKind enumspb.TaskQueueKind,
+	origTaskQueue *taskQueueID,
+	stickyInfo stickyInfo,
+	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
-	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
+	taskQueue, err := e.redirectToVersionedQueueForPoll(
+		ctx,
+		origTaskQueue,
+		pollMetadata.workerVersionCapabilities,
+		stickyInfo,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return tlMgr.GetTask(ctx, maxDispatchPerSecond)
+	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	if err != nil {
+		return nil, err
+	}
+	return tlMgr.GetTask(ctx, pollMetadata)
 }
 
 func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
@@ -870,7 +1118,7 @@ func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
 		return
 	}
 	delete(e.taskQueues, *queueID)
-	countKey := taskQueueCounterKey{namespaceID: queueID.namespaceID, taskType: queueID.taskType, queueType: foundTQM.TaskQueueKind()}
+	countKey := taskQueueCounterKey{namespaceID: queueID.namespaceID, taskType: queueID.taskType, kind: foundTQM.TaskQueueKind()}
 	e.taskQueueCount[countKey]--
 	taskQueueCount := e.taskQueueCount[countKey]
 	e.taskQueuesLock.Unlock()
@@ -890,7 +1138,7 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, 
 		float64(taskQueueCount),
 		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
-		metrics.QueueTypeTag(countKey.queueType.String()),
+		metrics.QueueTypeTag(countKey.kind.String()),
 	)
 }
 
@@ -1046,6 +1294,90 @@ func (e *matchingEngineImpl) emitForwardedSourceStats(
 	default:
 		metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	}
+}
+
+func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
+	ctx context.Context,
+	taskQueue *taskQueueID,
+	workerVersionCapabilities *commonpb.WorkerVersionCapabilities,
+	stickyInfo stickyInfo,
+) (*taskQueueID, error) {
+	if !workerVersionCapabilities.GetUseVersioning() {
+		// Either this task queue is versioned, or there are still some workflows running on
+		// the "unversioned" set.
+		return taskQueue, nil
+	}
+
+	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	if err != nil {
+		return nil, err
+	}
+	// We don't need the userDataChanged channel here because polls have a timeout and the
+	// client will retry, so if we're blocked on the wrong matcher it'll just take one poll
+	// timeout to fix itself.
+	userData, _, err := unversionedTQM.GetUserData(ctx)
+	if err != nil {
+		return nil, err
+	}
+	data := userData.GetData().GetVersioningData()
+
+	if stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// In the sticky case we don't redirect, but we may kick off this worker if there's a
+		// newer one.
+		err := checkVersionForStickyPoll(data, workerVersionCapabilities)
+		return taskQueue, err
+	}
+
+	versionSet, err := lookupVersionSetForPoll(data, workerVersionCapabilities)
+	if err != nil {
+		return nil, err
+	}
+	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), nil
+}
+
+func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
+	ctx context.Context,
+	taskQueue *taskQueueID,
+	directive *taskqueuespb.TaskVersionDirective,
+	stickyInfo stickyInfo,
+) (*taskQueueID, chan struct{}, error) {
+	var buildId string
+	switch dir := directive.GetValue().(type) {
+	case *taskqueuespb.TaskVersionDirective_UseDefault:
+		// leave buildId = "", lookupVersionSetForAdd understands that to mean "default"
+	case *taskqueuespb.TaskVersionDirective_BuildId:
+		buildId = dir.BuildId
+	default:
+		// Unversioned task, leave on unversioned queue.
+		return taskQueue, nil, nil
+	}
+
+	// Have to look up versioning data.
+	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	userData, userDataChanged, err := unversionedTQM.GetUserData(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	data := userData.GetData().GetVersioningData()
+
+	if stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// In the sticky case we don't redirect, but we may kick off this worker if there's a
+		// newer one.
+		err := checkVersionForStickyAdd(data, buildId)
+		return taskQueue, userDataChanged, err
+	}
+
+	versionSet, err := lookupVersionSetForAdd(data, buildId)
+	if err == errEmptyVersioningData {
+		// default was requested for an unversioned queue
+		return taskQueue, userDataChanged, nil
+	} else if err != nil {
+		return nil, nil, err
+	}
+	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), userDataChanged, nil
 }
 
 func (m *lockableQueryTaskMap) put(key string, value chan *queryResult) {

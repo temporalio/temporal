@@ -309,6 +309,7 @@ func (ti *TelemetryInterceptor) handleError(
 		*serviceerror.ClientVersionNotSupported,
 		*serviceerror.ServerVersionNotSupported,
 		*serviceerror.PermissionDenied,
+		*serviceerror.NewerBuildExists,
 		*serviceerrors.StickyWorkerUnavailable,
 		*serviceerrors.ShardOwnershipLost,
 		*serviceerrors.TaskAlreadyStarted,

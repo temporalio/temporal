@@ -840,6 +840,10 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+		return nil, err
+	}
+
 	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
 		return nil, err
 	}
@@ -871,6 +875,12 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
+		}
+
+		// For newer build error, return silently.
+		var newerBuild *serviceerror.NewerBuildExists
+		if errors.As(err, &newerBuild) {
+			return nil, err
 		}
 
 		// For all other errors log an error and return it back to client.
@@ -910,7 +920,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
-
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -919,6 +928,14 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
+	}
+
+	if err := wh.validateVersioningInfo(
+		request.Namespace,
+		request.WorkerVersionStamp,
+		request.StickyAttributes.GetWorkerTaskQueue(),
+	); err != nil {
+		return nil, err
 	}
 
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
@@ -1069,6 +1086,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -1090,6 +1111,12 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollActivityTaskQueueResponse{}, nil
+		}
+
+		// For newer build error, return silently.
+		var newerBuild *serviceerror.NewerBuildExists
+		if errors.As(err, &newerBuild) {
+			return nil, err
 		}
 
 		// For all other errors log an error and return it back to client.
@@ -2728,6 +2755,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			UpsertMemo:                      true,
 			EagerWorkflowStart:              true,
 			SdkMetadata:                     true,
+			BuildIdBasedVersioning:          true,
 		},
 	}, nil
 }
@@ -3523,7 +3551,7 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
-	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
 		return nil, errWorkerVersioningNotAllowed
 	}
 
@@ -3559,7 +3587,7 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 		return nil, errRequestNotSet
 	}
 
-	if !wh.config.EnableWorkerVersioning(request.Namespace) {
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
 		return nil, errWorkerVersioningNotAllowed
 	}
 
@@ -3582,6 +3610,60 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 	}
 
 	return matchingResponse.Response, err
+}
+
+func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, request *workflowservice.GetWorkerTaskReachabilityRequest) (_ *workflowservice.GetWorkerTaskReachabilityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableWorkerVersioningData(request.Namespace) {
+		return nil, errWorkerVersioningNotAllowed
+	}
+
+	if len(request.GetBuildIds()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("Must query at least one build id (or empty string for unversioned worker)")
+	}
+	if len(request.GetBuildIds()) > wh.config.ReachabilityQueryBuildIdLimit() {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Too many build ids queried at once, limit: %d", wh.config.ReachabilityQueryBuildIdLimit()))
+	}
+	gotUnversionedRequest := false
+	for _, buildId := range request.GetBuildIds() {
+		if buildId == "" {
+			gotUnversionedRequest = true
+		}
+		if len(buildId) > wh.config.WorkerBuildIdSizeLimit() {
+			return nil, errBuildIdTooLong
+		}
+	}
+	if gotUnversionedRequest && len(request.GetTaskQueues()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue (empty build id is interpereted as unversioned)")
+	}
+	for _, taskQueue := range request.GetTaskQueues() {
+		taskQueue := &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+		if err := wh.validateTaskQueue(taskQueue); err != nil {
+			return nil, err
+		}
+	}
+
+	ns, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.getWorkerTaskReachabilityValidated(ctx, ns, request)
+	if err != nil {
+		var invalidArgument *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgument) {
+			return nil, err
+		}
+		// Intentionally treat all errors as internal errors
+		wh.logger.Error("Failed getting worker task reachability", tag.Error(err))
+		return nil, serviceerror.NewInternal("Internal error")
+	}
+	return response, nil
 }
 
 func (wh *WorkflowHandler) StartBatchOperation(
@@ -4187,6 +4269,27 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
+	return nil
+}
+
+type buildIdAndFlag interface {
+	GetBuildId() string
+	GetUseVersioning() bool
+}
+
+func (wh *WorkflowHandler) validateVersioningInfo(namespace string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(namespace) {
+		return errWorkerVersioningNotAllowed
+	}
+	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {
+		return errUseVersioningWithoutNormalName
+	}
+	if id.GetUseVersioning() && len(id.GetBuildId()) == 0 {
+		return errUseVersioningWithoutBuildId
+	}
+	if len(id.GetBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+		return errBuildIdTooLong
+	}
 	return nil
 }
 

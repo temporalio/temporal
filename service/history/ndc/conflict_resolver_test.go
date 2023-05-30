@@ -26,6 +26,7 @@ package ndc
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -139,6 +140,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetHistorySize().Return(historySize).AnyTimes()
 
 	workflowKey := definition.NewWorkflowKey(
 		s.namespaceID,
@@ -155,7 +157,8 @@ func (s *conflictResolverSuite) TestRebuild() {
 				),
 			),
 		},
-	).Times(2)
+	).AnyTimes()
+	mockRebuildMutableState.EXPECT().AddHistorySize(historySize)
 	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
@@ -168,10 +171,9 @@ func (s *conflictResolverSuite) TestRebuild() {
 		workflowKey,
 		branchToken1,
 		requestID,
-	).Return(mockRebuildMutableState, historySize, nil)
+	).Return(mockRebuildMutableState, rand.Int63(), nil)
 
 	s.mockContext.EXPECT().Clear()
-	s.mockContext.EXPECT().SetHistorySize(historySize)
 	rebuiltMutableState, err := s.nDCConflictResolver.rebuild(ctx, 1, requestID)
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)
@@ -236,6 +238,7 @@ func (s *conflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetHistorySize().Return(historySize).AnyTimes()
 
 	workflowKey := definition.NewWorkflowKey(
 		s.namespaceID,
@@ -252,7 +255,8 @@ func (s *conflictResolverSuite) TestPrepareMutableState_Rebuild() {
 				),
 			),
 		},
-	).Times(2)
+	).AnyTimes()
+	mockRebuildMutableState.EXPECT().AddHistorySize(historySize)
 	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
@@ -265,10 +269,9 @@ func (s *conflictResolverSuite) TestPrepareMutableState_Rebuild() {
 		workflowKey,
 		branchToken1,
 		gomock.Any(),
-	).Return(mockRebuildMutableState, historySize, nil)
+	).Return(mockRebuildMutableState, rand.Int63(), nil)
 
 	s.mockContext.EXPECT().Clear()
-	s.mockContext.EXPECT().SetHistorySize(historySize)
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(ctx, 1, incomingVersion)
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)

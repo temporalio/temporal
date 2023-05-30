@@ -73,6 +73,7 @@ var (
 		"GetWorkflowExecutionHistoryReverse": 2,
 		"GetWorkerBuildIdCompatibility":      2,
 		"UpdateWorkerBuildIdCompatibility":   2,
+		"GetWorkerTaskReachability":          2,
 		"DeleteWorkflowExecution":            2,
 
 		// priority 3

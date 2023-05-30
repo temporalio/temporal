@@ -40,6 +40,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
@@ -102,6 +103,7 @@ func Invoke(
 		normalTaskQueueName    string
 		scheduledEventID       int64
 		scheduleToStartTimeout time.Duration
+		directive              *taskqueuespb.TaskVersionDirective
 	)
 
 	// Wrapping workflow context related operation in separate func to prevent usage of its fields
@@ -177,11 +179,12 @@ func Invoke(
 			if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
 				scheduleToStartTimeout = *scheduleToStartTimeoutPtr
 			}
-			taskQueue = taskqueuepb.TaskQueue{
-				Name: newWorkflowTask.TaskQueue.Name,
-				Kind: newWorkflowTask.TaskQueue.Kind,
-			}
+			taskQueue = *newWorkflowTask.TaskQueue
 			normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
+			directive = common.MakeVersionDirectiveForWorkflowTask(
+				ms.GetWorkerVersionStamp(),
+				ms.GetLastWorkflowTaskStartedEventID(),
+			)
 		}
 		return nil
 	}
@@ -194,7 +197,7 @@ func Invoke(
 	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 	//   Helper function needs to be extracted to avoid code duplication.
 	if scheduledEventID != common.EmptyEventID {
-		err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), shardCtx, matchingClient)
+		err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
 			// If sticky worker is unavailable, switch to original normal task queue.
@@ -202,7 +205,7 @@ func Invoke(
 				Name: normalTaskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}
-			err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), shardCtx, matchingClient)
+			err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
 		}
 
 		if err != nil {
@@ -238,6 +241,7 @@ func addWorkflowTaskToMatching(
 	scheduledEventID int64,
 	wtScheduleToStartTimeout *time.Duration,
 	nsID namespace.ID,
+	directive *taskqueuespb.TaskVersionDirective,
 	shardCtx shard.Context,
 	matchingClient matchingservice.MatchingServiceClient,
 ) error {
@@ -256,6 +260,7 @@ func addWorkflowTaskToMatching(
 		ScheduledEventId:       scheduledEventID,
 		ScheduleToStartTimeout: wtScheduleToStartTimeout,
 		Clock:                  clock,
+		VersionDirective:       directive,
 	})
 	if err != nil {
 		return err

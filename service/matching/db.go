@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -50,14 +51,16 @@ const (
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		namespaceID    namespace.ID
-		taskQueue      *taskQueueID
-		taskQueueKind  enumspb.TaskQueueKind
-		rangeID        int64
-		ackLevel       int64
-		versioningData *persistencespb.VersioningData
-		store          persistence.TaskManager
-		logger         log.Logger
+		namespaceID     namespace.ID
+		taskQueue       *taskQueueID
+		taskQueueKind   enumspb.TaskQueueKind
+		rangeID         int64
+		ackLevel        int64
+		userData        *persistencespb.VersionedTaskQueueUserData
+		userDataChanged chan struct{}
+		store           persistence.TaskManager
+		logger          log.Logger
+		matchingClient  matchingservice.MatchingServiceClient
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -66,8 +69,11 @@ type (
 )
 
 var (
-	errVersioningDataNotPresentOnPartition = errors.New("versioning data is only present on root workflow partition")
-	errVersioningDataNoMutateNonRoot       = errors.New("can only mutate versioning data on root workflow task queue")
+	errUserDataNoMutateNonRoot = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
+
+	// This is an internal error when requesting user data on a TQM created for a specific
+	// version set. This indicates a bug in the server since nothing should be using this data.
+	errNoUserDataOnVersionedTQM = serviceerror.NewInternal("should not get user data on versioned tqm")
 )
 
 // newTaskQueueDB returns an instance of an object that represents
@@ -80,13 +86,22 @@ var (
 //   - To provide the guarantee that there is only writer who updates taskQueue in persistence at any given point in time
 //     This guarantee makes some of the other code simpler and there is no impact to perf because updates to taskqueue are
 //     spread out and happen in background routines
-func newTaskQueueDB(store persistence.TaskManager, namespaceID namespace.ID, taskQueue *taskQueueID, kind enumspb.TaskQueueKind, logger log.Logger) *taskQueueDB {
+func newTaskQueueDB(
+	store persistence.TaskManager,
+	matchingClient matchingservice.MatchingServiceClient,
+	namespaceID namespace.ID,
+	taskQueue *taskQueueID,
+	kind enumspb.TaskQueueKind,
+	logger log.Logger,
+) *taskQueueDB {
 	return &taskQueueDB{
-		namespaceID:   namespaceID,
-		taskQueue:     taskQueue,
-		taskQueueKind: kind,
-		store:         store,
-		logger:        logger,
+		namespaceID:     namespaceID,
+		taskQueue:       taskQueue,
+		taskQueueKind:   kind,
+		store:           store,
+		logger:          logger,
+		userDataChanged: make(chan struct{}),
+		matchingClient:  matchingClient,
 	}
 }
 
@@ -130,7 +145,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		response.TaskQueueInfo.Kind = db.taskQueueKind
 		response.TaskQueueInfo.ExpiryTime = db.expiryTime()
 		response.TaskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-		_, err := db.updateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+		_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 			RangeID:       response.RangeID + 1,
 			TaskQueueInfo: response.TaskQueueInfo,
 			PrevRangeID:   response.RangeID,
@@ -140,8 +155,8 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		}
 		db.ackLevel = response.TaskQueueInfo.AckLevel
 		db.rangeID = response.RangeID + 1
-		db.versioningData = response.TaskQueueInfo.VersioningData
-		return nil
+		_, _, err = db.getUserDataLocked(ctx)
+		return err
 
 	case *serviceerror.NotFound:
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
@@ -151,7 +166,8 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			return err
 		}
 		db.rangeID = initialRangeID
-		return nil
+		_, _, err = db.getUserDataLocked(ctx)
+		return err
 
 	default:
 		return err
@@ -162,7 +178,7 @@ func (db *taskQueueDB) renewTaskQueueLocked(
 	ctx context.Context,
 	rangeID int64,
 ) error {
-	if _, err := db.updateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+	if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 		RangeID:       rangeID,
 		TaskQueueInfo: db.cachedQueueInfo(),
 		PrevRangeID:   db.rangeID,
@@ -183,7 +199,7 @@ func (db *taskQueueDB) UpdateState(
 	defer db.Unlock()
 	queueInfo := db.cachedQueueInfo()
 	queueInfo.AckLevel = ackLevel
-	_, err := db.updateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+	_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 		RangeID:       db.rangeID,
 		TaskQueueInfo: queueInfo,
 		PrevRangeID:   db.rangeID,
@@ -281,99 +297,119 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	return n, err
 }
 
-// GetVersioningData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
+// Returns true if we are storing user data in the db. We need to be the root partition,
+// workflow type, unversioned, and also a normal queue.
+func (db *taskQueueDB) DbStoresUserData() bool {
+	return db.taskQueue.OwnsUserData() && db.taskQueueKind == enumspb.TASK_QUEUE_KIND_NORMAL
+}
+
+// GetUserData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
 // will cause cache inconsistency.
-func (db *taskQueueDB) GetVersioningData(
+func (db *taskQueueDB) GetUserData(
 	ctx context.Context,
-) (*persistencespb.VersioningData, error) {
+) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	db.Lock()
 	defer db.Unlock()
-	return db.getVersioningDataLocked(ctx)
+	return db.getUserDataLocked(ctx)
 }
 
-// db.Lock() must be held before calling
-func (db *taskQueueDB) getVersioningDataLocked(
+func (db *taskQueueDB) setUserDataLocked(userData *persistencespb.VersionedTaskQueueUserData) {
+	db.userData = userData
+	close(db.userDataChanged)
+	db.userDataChanged = make(chan struct{})
+}
+
+// db.Lock() must be held before calling.
+// Returns in-memory cached value or reads from DB and updates the cached value.
+// Note: can return nil value with no error.
+func (db *taskQueueDB) getUserDataLocked(
 	ctx context.Context,
-) (*persistencespb.VersioningData, error) {
-	if db.versioningData != nil {
-		return db.versioningData, nil
+) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+	if db.userData == nil {
+		if !db.DbStoresUserData() {
+			return nil, db.userDataChanged, nil
+		}
+
+		response, err := db.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
+			NamespaceID: db.namespaceID.String(),
+			TaskQueue:   db.taskQueue.BaseNameString(),
+		})
+		if err != nil {
+			var notFoundError *serviceerror.NotFound
+			if errors.As(err, &notFoundError) {
+				return nil, db.userDataChanged, nil
+			}
+			return nil, nil, err
+		}
+		db.setUserDataLocked(response.UserData)
 	}
 
-	if !db.taskQueue.IsRoot() || db.taskQueue.taskType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-		return nil, errVersioningDataNotPresentOnPartition
-	}
-
-	tqInfo, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
-		NamespaceID: db.namespaceID.String(),
-		TaskQueue:   db.taskQueue.FullName(),
-		TaskType:    db.taskQueue.taskType,
-	})
-	if err != nil {
-		return nil, err
-	}
-	db.versioningData = tqInfo.TaskQueueInfo.GetVersioningData()
-
-	return tqInfo.TaskQueueInfo.GetVersioningData(), nil
+	return db.userData, db.userDataChanged, nil
 }
 
-// MutateVersioningData allows callers to update versioning data for this task queue. The pointer passed to the
-// mutating function is guaranteed to be non-nil.
+// UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed
+// to the update function is guaranteed to be non-nil.
+// Note that the user data's clock may be nil and should be initialized externally where there's access to the cluster
+// metadata and the cluster ID can be obtained.
 //
-// On success returns a pointer to the updated data (which must not be mutated).
-func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) (*persistencespb.VersioningData, error) {
-	if !db.taskQueue.IsRoot() || db.taskQueue.taskType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-		return nil, errVersioningDataNoMutateNonRoot
+// The DB write is performed remotely on an owning node for all user data updates in the namespace.
+//
+// On success returns a pointer to the updated data, which must *not* be mutated.
+func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error), taskQueueLimitPerBuildId int) (*persistencespb.VersionedTaskQueueUserData, error) {
+	if !db.DbStoresUserData() {
+		return nil, errUserDataNoMutateNonRoot
 	}
 	db.Lock()
 	defer db.Unlock()
 
-	verDat, err := db.getVersioningDataLocked(ctx)
+	userData, _, err := db.getUserDataLocked(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if verDat == nil {
-		verDat = &persistencespb.VersioningData{}
+	preUpdateData := userData.GetData()
+	if preUpdateData == nil {
+		preUpdateData = &persistencespb.TaskQueueUserData{}
 	}
-	if err := mutator(verDat); err != nil {
+	updatedUserData, err := updateFn(preUpdateData)
+	if err != nil {
 		return nil, err
 	}
+	added, removed := GetBuildIdDeltas(preUpdateData.GetVersioningData(), updatedUserData.GetVersioningData())
+	if taskQueueLimitPerBuildId > 0 && len(added) > 0 {
+		// We iterate here but in practice there should only be a single build Id added when the limit is enforced.
+		// We do not enforce the limit when applying replication events.
+		for _, buildId := range added {
+			numTaskQueues, err := db.store.CountTaskQueuesByBuildId(ctx, &persistence.CountTaskQueuesByBuildIdRequest{
+				NamespaceID: db.namespaceID.String(),
+				BuildID:     buildId,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if numTaskQueues >= taskQueueLimitPerBuildId {
+				return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build id: %d", taskQueueLimitPerBuildId))
+			}
+		}
+	}
 
-	queueInfo := db.cachedQueueInfo()
-	queueInfo.VersioningData = verDat
-
-	_, err = db.updateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-		RangeID:       db.rangeID,
-		TaskQueueInfo: queueInfo,
-		PrevRangeID:   db.rangeID,
+	_, err = db.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
+		NamespaceId:     db.namespaceID.String(),
+		TaskQueue:       db.cachedQueueInfo().Name,
+		UserData:        &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion(), Data: updatedUserData},
+		BuildIdsAdded:   added,
+		BuildIdsRemoved: removed,
 	})
 	if err == nil {
-		db.versioningData = verDat
+		db.setUserDataLocked(&persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData})
 	}
-	return verDat, err
+	return db.userData, err
 }
 
-func (db *taskQueueDB) setVersioningDataForNonRootPartition(verDat *persistencespb.VersioningData) {
+func (db *taskQueueDB) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
 	db.Lock()
 	defer db.Unlock()
-	db.versioningData = verDat
-}
-
-// Use this rather than calling UpdateTaskQueue directly on the store
-func (db *taskQueueDB) updateTaskQueue(
-	ctx context.Context,
-	request *persistence.UpdateTaskQueueRequest,
-) (*persistence.UpdateTaskQueueResponse, error) {
-	reqToPersist := request
-	// Only the root task queue stores versioning information
-	if !db.taskQueue.IsRoot() {
-		tqInfoSansVerDat := *request.TaskQueueInfo
-		tqInfoSansVerDat.VersioningData = nil
-		reqClone := *request
-		reqClone.TaskQueueInfo = &tqInfoSansVerDat
-		reqToPersist = &reqClone
-	}
-	return db.store.UpdateTaskQueue(ctx, reqToPersist)
+	db.setUserDataLocked(userData)
 }
 
 func (db *taskQueueDB) expiryTime() *time.Time {
@@ -394,7 +430,6 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		TaskType:       db.taskQueue.taskType,
 		Kind:           db.taskQueueKind,
 		AckLevel:       db.ackLevel,
-		VersioningData: db.versioningData,
 		ExpiryTime:     db.expiryTime(),
 		LastUpdateTime: timestamp.TimeNowPtrUtc(),
 	}

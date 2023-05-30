@@ -544,6 +544,50 @@ func (p *taskRateLimitedPersistenceClient) DeleteTaskQueue(
 	return p.persistence.DeleteTaskQueue(ctx, request)
 }
 
+func (p taskRateLimitedPersistenceClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *GetTaskQueueUserDataRequest,
+) (*GetTaskQueueUserDataResponse, error) {
+	if ok := allow(ctx, "GetTaskQueueUserData", CallerSegmentMissing, p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.GetTaskQueueUserData(ctx, request)
+}
+
+func (p taskRateLimitedPersistenceClient) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *UpdateTaskQueueUserDataRequest,
+) error {
+	if ok := allow(ctx, "UpdateTaskQueueUserData", CallerSegmentMissing, p.rateLimiter); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return p.persistence.UpdateTaskQueueUserData(ctx, request)
+}
+
+func (p taskRateLimitedPersistenceClient) ListTaskQueueUserDataEntries(
+	ctx context.Context,
+	request *ListTaskQueueUserDataEntriesRequest,
+) (*ListTaskQueueUserDataEntriesResponse, error) {
+	if ok := allow(ctx, "ListTaskQueueUserDataEntries", CallerSegmentMissing, p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.ListTaskQueueUserDataEntries(ctx, request)
+}
+
+func (p taskRateLimitedPersistenceClient) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	if ok := allow(ctx, "GetTaskQueuesByBuildId", CallerSegmentMissing, p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.GetTaskQueuesByBuildId(ctx, request)
+}
+
+func (p taskRateLimitedPersistenceClient) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
+	if ok := allow(ctx, "CountTaskQueuesByBuildId", CallerSegmentMissing, p.rateLimiter); !ok {
+		return 0, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.CountTaskQueuesByBuildId(ctx, request)
+}
+
 func (p *taskRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

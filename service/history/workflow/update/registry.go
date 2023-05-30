@@ -35,6 +35,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
@@ -55,14 +56,13 @@ type (
 		// new update if no update is found.
 		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
 
-		// ReadOutoundMessages polls each registered Update for outbound
+		// ReadOutgoingMessages polls each registered Update for outbound
 		// messages and returns them.
 		ReadOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
 
-		// HasUndeliveredUpdates returns true if the registry has Updates that
-		// are not known to have been seen by user workflow code. In practice
-		// this means updates that have not yet been accepted or rejected.
-		HasUndeliveredUpdates() bool
+		// TerminateUpdates terminates all existing updates in the registry
+		// and notifies update aPI callers with corresponding error.
+		TerminateUpdates(ctx context.Context, eventStore EventStore)
 
 		// HasOutgoing returns true if the registry has any Updates that want to
 		// sent messages to a worker.
@@ -167,15 +167,10 @@ func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool) {
 	return r.findLocked(ctx, id)
 }
 
-func (r *RegistryImpl) HasUndeliveredUpdates() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, upd := range r.updates {
-		if !upd.hasBeenSeenByWorkflowExecution() {
-			return true
-		}
-	}
-	return false
+func (r *RegistryImpl) TerminateUpdates(_ context.Context, _ EventStore) {
+	// TODO (alex-update): implement
+	// This method is not implemented and update API callers will just timeout.
+	// In future, it should remove all existing updates and notify callers with better error.
 }
 
 func (r *RegistryImpl) HasOutgoing() bool {

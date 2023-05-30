@@ -327,6 +327,8 @@ const (
 	FrontendClientUpdateWorkflowExecutionScope = "FrontendClientUpdateWorkflowExecution"
 	// FrontendClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
 	FrontendClientGetWorkerBuildIdCompatibilityScope = "FrontendClientGetWorkerBuildIdCompatibility"
+	// FrontendClientGetWorkerTaskReachabilityScope tracks RPC calls to frontend service
+	FrontendClientGetWorkerTaskReachabilityScope = "FrontendClientGetWorkerTaskReachability"
 	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
 	FrontendClientDescribeBatchOperationScope = "FrontendClientDescribeBatchOperation"
 	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
@@ -461,16 +463,24 @@ const (
 	MatchingClientCancelOutstandingPollScope = "MatchingClientCancelOutstandingPoll"
 	// MatchingClientDescribeTaskQueueScope tracks RPC calls to matching service
 	MatchingClientDescribeTaskQueueScope = "MatchingClientDescribeTaskQueue"
+	// MatchingClientGetBuildIdTaskQueueMappingScope tracks RPC calls to matching service
+	MatchingClientGetBuildIdTaskQueueMappingScope = "MatchingClientGetBuildIdTaskQueueMapping"
 	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskQueuePartitionsScope = "MatchingClientListTaskQueuePartitions"
 	// MatchingClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
 	MatchingClientUpdateWorkerBuildIdCompatibilityScope = "MatchingClientUpdateWorkerBuildIdCompatibility"
 	// MatchingClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
 	MatchingClientGetWorkerBuildIdCompatibilityScope = "MatchingClientGetWorkerBuildIdCompatibility"
-	// MatchingClientInvalidateTaskQueueMetadataScope tracks RPC calls to matching service
-	MatchingClientInvalidateTaskQueueMetadataScope = "MatchingClientInvalidateTaskQueueMetadata"
-	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
-	MatchingClientGetTaskQueueMetadataScope = "MatchingClientGetTaskQueueMetadata"
+	// MatchingClientGetTaskQueueUserDataScope tracks RPC calls to matching service
+	MatchingClientGetTaskQueueUserDataScope = "MatchingClientGetTaskQueueUserData"
+	// MatchingClientApplyTaskQueueUserDataReplicationEventScope tracks RPC calls to matching service
+	MatchingClientApplyTaskQueueUserDataReplicationEventScope = "MatchingClientApplyTaskQueueUserDataReplicationEvent"
+	// MatchingClientForceUnloadTaskQueueScope tracks RPC calls to matching service
+	MatchingClientForceUnloadTaskQueueScope = "MatchingClientForceUnloadTaskQueue"
+	// MatchingClientUpdateTaskQueueUserDataScope tracks RPC calls to matching service
+	MatchingClientUpdateTaskQueueUserDataScope = "MatchingClientUpdateTaskQueueUserData"
+	// MatchingClientReplicateTaskQueueUserDataScope tracks RPC calls to matching service
+	MatchingClientReplicateTaskQueueUserDataScope = "MatchingClientReplicateTaskQueueUserData"
 )
 
 // Worker
@@ -630,6 +640,16 @@ const (
 	PersistenceListTaskQueueScope = "ListTaskQueue"
 	// PersistenceDeleteTaskQueueScope is the metric scope for persistence.TaskManager.DeleteTaskQueue API
 	PersistenceDeleteTaskQueueScope = "DeleteTaskQueue"
+	// PersistenceGetTaskQueueUserDataScope is the metric scope for persistence.TaskManager.GetTaskQueueUserData API
+	PersistenceGetTaskQueueUserDataScope = "GetTaskQueueUserData"
+	// PersistenceUpdateTaskQueueUserDataScope is the metric scope for persistence.TaskManager.UpdateTaskQueueUserData API
+	PersistenceUpdateTaskQueueUserDataScope = "UpdateTaskQueueUserData"
+	// PersistenceListTaskQueueUserDataEntriesScope is the metric scope for persistence.TaskManager.ListTaskQueueUserDataEntries API
+	PersistenceListTaskQueueUserDataEntriesScope = "ListTaskQueueUserDataEntries"
+	// PersistenceGetTaskQueuesByBuildIdScope is the metric scope for persistence.TaskManager.GetTaskQueuesByBuildId API
+	PersistenceGetTaskQueuesByBuildIdScope = "GetTaskQueuesByBuildId"
+	// PersistenceCountTaskQueuesByBuildIdScope is the metric scope for persistence.TaskManager.CountTaskQueuesByBuildId API
+	PersistenceCountTaskQueuesByBuildIdScope = "CountTaskQueuesByBuildId"
 	// PersistenceAppendHistoryEventsScope tracks AppendHistoryEvents calls made by service to persistence layer
 	PersistenceAppendHistoryEventsScope = "AppendHistoryEvents"
 	// PersistenceGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory calls made by service to persistence layer
@@ -1098,10 +1118,10 @@ const (
 	MatchingUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
 	// MatchingGetWorkerBuildIdCompatibilityScope tracks GetWorkerBuildIdCompatibility API calls received by service
 	MatchingGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
-	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
-	MatchingInvalidateTaskQueueMetadataScope = "InvalidateTaskQueueMetadata"
-	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdCompatibility API calls received by service
-	MatchingGetTaskQueueMetadataScope = "GetTaskQueueMetadata"
+	// MatchingGetTaskQueueUserDataScope tracks GetTaskQueueUserData API calls received by service
+	MatchingGetTaskQueueUserDataScope = "GetTaskQueueUserData"
+	// MatchingApplyTaskQueueUserDataReplicationEventScope tracks ApplyTaskQueueUserDataReplicationEvent API calls received by service
+	MatchingApplyTaskQueueUserDataReplicationEventScope = "MatchingApplyTaskQueueUserDataReplicationEvent"
 )
 
 // Worker Scope
@@ -1648,6 +1668,7 @@ var (
 	PersistenceFailures                                 = NewCounterDef("persistence_errors")
 	PersistenceErrorWithType                            = NewCounterDef("persistence_error_with_type")
 	PersistenceLatency                                  = NewTimerDef("persistence_latency")
+	PersistenceShardRPS                                 = NewDimensionlessHistogramDef("persistence_shard_rps")
 	PersistenceErrShardExistsCounter                    = NewCounterDef("persistence_errors_shard_exists")
 	PersistenceErrShardOwnershipLostCounter             = NewCounterDef("persistence_errors_shard_ownership_lost")
 	PersistenceErrConditionFailedCounter                = NewCounterDef("persistence_errors_condition_failed")

@@ -247,13 +247,15 @@ func (r *transactionMgrImpl) backfillWorkflow(
 		}
 	}()
 
-	if _, err := targetWorkflow.GetContext().PersistWorkflowEvents(
+	sizeSiff, err := targetWorkflow.GetContext().PersistWorkflowEvents(
 		ctx,
 		targetWorkflowEventsSlice...,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
+	targetWorkflow.GetMutableState().AddHistorySize(sizeSiff)
 	updateMode, transactionPolicy, err := r.backfillWorkflowEventsReapply(
 		ctx,
 		targetWorkflow,

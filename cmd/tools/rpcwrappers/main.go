@@ -78,6 +78,7 @@ var (
 		"client.frontend.ListArchivedWorkflowExecutions": true,
 		"client.frontend.PollActivityTaskQueue":          true,
 		"client.frontend.PollWorkflowTaskQueue":          true,
+		"client.matching.GetTaskQueueUserData":           true,
 	}
 	largeTimeoutContext = map[string]bool{
 		"client.admin.GetReplicationMessages": true,
@@ -184,11 +185,22 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 
 	var tqtPath string
 	switch t.Name() {
+	case "GetBuildIdTaskQueueMappingRequest":
+		// Pick a random node for this request, it's not associated with a specific task queue.
+		tqPath = "&taskqueuepb.TaskQueue{Name: fmt.Sprintf(\"not-applicable-%s\", rand.Int())}"
+		tqtPath = "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"
+		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
+	case "UpdateTaskQueueUserDataRequest",
+		"ReplicateTaskQueueUserDataRequest":
+		// Always route these requests to the same matching node by namespace.
+		tqPath = "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"
+		tqtPath = "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"
+		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
 	case "GetWorkerBuildIdCompatibilityRequest",
 		"UpdateWorkerBuildIdCompatibilityRequest",
 		"RespondQueryTaskCompletedRequest",
 		"ListTaskQueuePartitionsRequest",
-		"GetTaskQueueMetadataRequest":
+		"ApplyTaskQueueUserDataReplicationEventRequest":
 		tqtPath = "enumspb.TASK_QUEUE_TYPE_WORKFLOW"
 	default:
 		tqtPath = pathToField(t, "TaskQueueType", "request", 2)
@@ -330,6 +342,8 @@ package {{.ServiceName}}
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -349,7 +363,7 @@ func (c *clientImpl) {{.Method}}(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.create{{or .LongPoll ""}}Context(ctx)
 	defer cancel()
 	return client.{{.Method}}(ctx, request, opts...)
 }
