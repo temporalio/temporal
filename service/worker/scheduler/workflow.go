@@ -61,7 +61,7 @@ const (
 	// skip over entire time range if paused and batch and cache getNextTime queries
 	BatchAndCacheTimeQueries
 	// terminate schedule bfter it runs out of actions
-	FinishScheduleWithNoActionsLeft
+	FinishIdleSchedule
 )
 
 const (
@@ -174,7 +174,7 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		Version:                           FinishScheduleWithNoActionsLeft,
+		Version:                           FinishIdleSchedule,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -249,7 +249,7 @@ func (s *scheduler) run() error {
 		}
 		s.updateMemoAndSearchAttributes()
 		// if run out of actions, finish the schedule workflow
-		if s.hasMinVersion(FinishScheduleWithNoActionsLeft) && (nextWakeup.IsZero() || !s.Schedule.State.Paused && !s.canTakeScheduledAction(false, false)) {
+		if s.hasMinVersion(FinishIdleSchedule) && (nextWakeup.IsZero() || !s.Schedule.State.Paused && !s.canTakeScheduledAction(false, false)) {
 			return nil
 		}
 		// sleep returns on any of:
