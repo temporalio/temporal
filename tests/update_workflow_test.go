@@ -27,7 +27,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -197,8 +196,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.Name, func(t *testing.T) {
-			tv := testvars.New(t.Name())
+		s.Run(tc.Name, func() {
+			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -328,7 +327,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_AcceptComplete() {
+func (s *integrationSuite) TestUpdateWorkflow_FirstNormalStartedWorkflowTask_AcceptComplete() {
 
 	testCases := []struct {
 		Name     string
@@ -345,8 +344,8 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_AcceptComp
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.Name, func(t *testing.T) {
-			tv := testvars.New(t.Name())
+		s.Run(tc.Name, func() {
+			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -453,19 +452,173 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_AcceptComp
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
-	tv := testvars.New(s.T().Name())
+func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptComplete() {
 
+	testCases := []struct {
+		Name     string
+		UseRunID bool
+	}{
+		{
+			Name:     "with RunID",
+			UseRunID: true,
+		},
+		{
+			Name:     "without RunID",
+			UseRunID: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.Name, func() {
+			tv := testvars.New(s.T().Name())
+
+			tv = s.startWorkflow(tv)
+			if !tc.UseRunID {
+				tv = tv.WithRunID("")
+			}
+
+			wtHandlerCalls := 0
+			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+				wtHandlerCalls++
+				switch wtHandlerCalls {
+				case 1:
+					// Completes first WT with update unrelated command.
+					return []*commandpb.Command{{
+						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             tv.ActivityID(),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+						}},
+					}}, nil
+				case 2:
+					s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted`, history)
+					return s.acceptCompleteUpdateCommands(tv, "1"), nil
+				case 3:
+					s.EqualHistory(`
+  9 WorkflowTaskCompleted
+ 10 WorkflowExecutionUpdateAccepted
+ 11 WorkflowExecutionUpdateCompleted
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted`, history)
+					return []*commandpb.Command{{
+						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+					}}, nil
+				default:
+					s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+					return nil, nil
+				}
+			}
+
+			msgHandlerCalls := 0
+			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+				msgHandlerCalls++
+				switch msgHandlerCalls {
+				case 1:
+					return nil, nil
+				case 2:
+					updRequestMsg := task.Messages[0]
+					updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+
+					s.Equal(tv.String("args", "1"), decodeString(s, updRequest.GetInput().GetArgs()))
+					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
+					s.EqualValues(7, updRequestMsg.GetEventId())
+
+					return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+				case 3:
+					return nil, nil
+				default:
+					s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+					return nil, nil
+				}
+			}
+
+			poller := &TaskPoller{
+				Engine:              s.engine,
+				Namespace:           s.namespace,
+				TaskQueue:           tv.TaskQueue(),
+				WorkflowTaskHandler: wtHandler,
+				MessageHandler:      msgHandler,
+				Logger:              s.Logger,
+				T:                   s.T(),
+			}
+
+			// Drain first WT.
+			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			s.NoError(err)
+
+			// Send signal to schedule new WT.
+			err = s.sendSignal(s.namespace, tv.WorkflowExecution(), tv.Any(), payloads.EncodeString(tv.Any()), tv.Any())
+			s.NoError(err)
+
+			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+			go func() {
+				updateResultCh <- s.sendUpdateNoError(tv, "1")
+			}()
+
+			// Process update in workflow. It will be attached to existing WT.
+			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+			s.NoError(err)
+
+			updateResult := <-updateResultCh
+			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
+			s.EqualValues(0, updateResp.ResetHistoryEventId)
+			lastWorkflowTask := updateResp.GetWorkflowTask()
+
+			s.NotNil(lastWorkflowTask)
+			// Complete workflow.
+			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(lastWorkflowTask, true)
+			s.NoError(err)
+			s.NotNil(completeWorkflowResp)
+			s.Nil(completeWorkflowResp.GetWorkflowTask())
+			s.EqualValues(0, completeWorkflowResp.ResetHistoryEventId)
+
+			s.Equal(3, wtHandlerCalls)
+			s.Equal(3, msgHandlerCalls)
+
+			events := s.getHistory(s.namespace, tv.WorkflowExecution())
+
+			s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 WorkflowExecutionUpdateAccepted
+ 11 WorkflowExecutionUpdateCompleted
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted
+ 14 WorkflowTaskCompleted
+ 15 WorkflowExecutionCompleted`, events)
+		})
+	}
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 	testCases := []struct {
 		Name                     string
 		RespondWorkflowTaskError string
-		MessageFn                func(reqMsg *protocolpb.Message) []*protocolpb.Message
-		CommandFn                func(history *historypb.History) []*commandpb.Command
+		MessageFn                func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message
+		CommandFn                func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command
 	}{
 		{
 			Name:                     "message-update-id-not-found",
 			RespondWorkflowTaskError: "not found",
-			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
@@ -480,7 +633,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					},
 				}
 			},
-			CommandFn: func(history *historypb.History) []*commandpb.Command {
+			CommandFn: func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command {
 				return []*commandpb.Command{
 					{
 						CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
@@ -494,7 +647,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 		{
 			Name:                     "command-reference-missed-message",
 			RespondWorkflowTaskError: "referenced absent message ID",
-			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
@@ -509,7 +662,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					},
 				}
 			},
-			CommandFn: func(history *historypb.History) []*commandpb.Command {
+			CommandFn: func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command {
 				return []*commandpb.Command{
 					{
 						CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
@@ -523,7 +676,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 		{
 			Name:                     "complete-without-accept",
 			RespondWorkflowTaskError: "invalid state transition attempted",
-			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
@@ -541,7 +694,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					},
 				}
 			},
-			CommandFn: func(history *historypb.History) []*commandpb.Command {
+			CommandFn: func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command {
 				return []*commandpb.Command{
 					{
 						CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
@@ -555,7 +708,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 		{
 			Name:                     "accept-twice",
 			RespondWorkflowTaskError: "invalid state transition attempted",
-			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
@@ -580,7 +733,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					},
 				}
 			},
-			CommandFn: func(history *historypb.History) []*commandpb.Command {
+			CommandFn: func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command {
 				return []*commandpb.Command{
 					{
 						CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
@@ -600,7 +753,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 		{
 			Name:                     "success-case",
 			RespondWorkflowTaskError: "",
-			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
@@ -628,7 +781,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					},
 				}
 			},
-			CommandFn: func(history *historypb.History) []*commandpb.Command {
+			CommandFn: func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command {
 				return []*commandpb.Command{
 					{
 						CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
@@ -648,7 +801,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 		{
 			Name:                     "success-case-no-commands", // PROTOCOL_MESSAGE commands are optional.
 			RespondWorkflowTaskError: "",
-			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
@@ -680,7 +833,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 		{
 			Name:                     "invalid-command-order",
 			RespondWorkflowTaskError: "invalid state transition attempted",
-			MessageFn: func(reqMsg *protocolpb.Message) []*protocolpb.Message {
+			MessageFn: func(tv *testvars.TestVars, reqMsg *protocolpb.Message) []*protocolpb.Message {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
@@ -708,7 +861,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					},
 				}
 			},
-			CommandFn: func(history *historypb.History) []*commandpb.Command {
+			CommandFn: func(tv *testvars.TestVars, history *historypb.History) []*commandpb.Command {
 				return []*commandpb.Command{
 					// Complete command goes before Accept command.
 					{
@@ -729,8 +882,8 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.Name, func(t *testing.T) {
-			tv := testvars.New(t.Name())
+		s.Run(tc.Name, func() {
+			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
 
@@ -738,7 +891,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 				if tc.CommandFn == nil {
 					return nil, nil
 				}
-				return tc.CommandFn(history), nil
+				return tc.CommandFn(tv, history), nil
 			}
 
 			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
@@ -746,7 +899,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					return nil, nil
 				}
 				updRequestMsg := task.Messages[0]
-				return tc.MessageFn(updRequestMsg), nil
+				return tc.MessageFn(tv, updRequestMsg), nil
 			}
 
 			poller := &TaskPoller{
@@ -792,10 +945,10 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			_, err := poller.PollAndProcessWorkflowTask(false, false)
 			if tc.RespondWorkflowTaskError != "" {
 				// respond workflow task should return error
-				require.Error(t, err, "RespondWorkflowTaskCompleted should return an error contains`%v`", tc.RespondWorkflowTaskError)
-				require.Contains(t, err.Error(), tc.RespondWorkflowTaskError)
+				require.Error(s.T(), err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
+				require.Contains(s.T(), err.Error(), tc.RespondWorkflowTaskError)
 			} else {
-				require.NoError(t, err)
+				require.NoError(s.T(), err)
 			}
 			<-updateResultCh
 		})
@@ -818,8 +971,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.Name, func(t *testing.T) {
-			tv := testvars.New(t.Name())
+		s.Run(tc.Name, func() {
+			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
 			if !tc.UseRunID {
@@ -2205,7 +2358,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
  14 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_ScheduleToCloseTimeoutSpeculativeWorkflowTask() {
+func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWorkflowTask() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -2564,7 +2717,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 	s.EqualValues(6, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId())
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
+func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() {
 	testCases := []struct {
 		Name         string
 		UpdateErrMsg string
@@ -2573,13 +2726,13 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 	}{
 		{
 			Name:         "requested",
-			UpdateErrMsg: "update canceled",
+			UpdateErrMsg: "update has been terminated",
 			Commands:     func(_ *testvars.TestVars) []*commandpb.Command { return nil },
 			Messages:     func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
 		},
 		{
 			Name:         "accepted",
-			UpdateErrMsg: "update canceled",
+			UpdateErrMsg: "update has been terminated",
 			Commands:     func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptUpdateCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 				return s.acceptUpdateMessages(tv, updRequestMsg, "1")
@@ -2596,8 +2749,8 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.Name, func(t *testing.T) {
-			tv := testvars.New(t.Name())
+		s.Run(tc.Name, func() {
+			tv := testvars.New(s.T().Name())
 
 			tv = s.startWorkflow(tv)
 
