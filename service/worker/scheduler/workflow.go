@@ -249,7 +249,7 @@ func (s *scheduler) run() error {
 		}
 		s.updateMemoAndSearchAttributes()
 		// if run out of actions, finish the schedule workflow
-		if s.hasMinVersion(FinishScheduleWithNoActionsLeft) && !s.Schedule.State.Paused && !s.canTakeScheduledAction(false, false) {
+		if s.hasMinVersion(FinishScheduleWithNoActionsLeft) && (nextWakeup.IsZero() || !s.Schedule.State.Paused && !s.canTakeScheduledAction(false, false)) {
 			return nil
 		}
 		// sleep returns on any of:
