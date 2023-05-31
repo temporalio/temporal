@@ -153,6 +153,9 @@ type (
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, updAcceptance *updatepb.Acceptance) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(updResp *updatepb.Response) (*historypb.HistoryEvent, error)
+		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
+		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
+		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
@@ -160,7 +163,6 @@ type (
 		GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
-		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
 		GetWorkflowKey() definition.WorkflowKey
 		GetActivityByActivityID(string) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistencespb.ActivityInfo, bool)
@@ -202,8 +204,6 @@ type (
 		GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus)
 		GetQueryRegistry() QueryRegistry
 		GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
-		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
-		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
 		GetWorkerVersionStamp() *commonpb.WorkerVersionStamp
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error

@@ -159,6 +159,9 @@ message WorkflowExecutionInfo {
     // If using build-id based versioning: version stamp of the last worker to process a
     // workflow taks for this workflow.
     temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 78;
+
+    // index of update IDs and pointers to associated history events.
+    map<string, UpdateInfo> update_infos = 79;
 }
 
 message ExecutionStats {
