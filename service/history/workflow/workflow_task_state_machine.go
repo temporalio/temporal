@@ -819,55 +819,7 @@ func (m *workflowTaskStateMachine) GetWorkflowTaskByID(scheduledEventID int64) *
 		return workflowTask
 	}
 
-	workflowTask = m.tryRestoreSpeculativeWorkflowTask(scheduledEventID)
-	if workflowTask != nil {
-		return workflowTask
-	}
-
 	return nil
-}
-
-func (m *workflowTaskStateMachine) tryRestoreSpeculativeWorkflowTask(
-	scheduledEventID int64,
-) *WorkflowTaskInfo {
-	// TODO (alex-update): Uncomment this code to support speculative workflow task restoration.
-	/*
-		// ScheduledEventID might be lost (cleared) for speculative workflow task due to shard reload or history service restart.
-		// It is still considered to be valid speculative workflow task if ScheduledEventID from token is equal to the next event ID.
-		if m.ms.executionInfo.WorkflowTaskScheduledEventId == common.EmptyEventID && m.ms.GetNextEventID() == scheduledEventID {
-			workflowTask := &WorkflowTaskInfo{
-				Version:          m.ms.GetCurrentVersion(), // For version check to pass, speculative workflow tasks are not replicated.
-				ScheduledEventID: scheduledEventID,
-				ScheduledTime:    timestamp.TimePtr(m.ms.timeSource.Now().UTC()),
-				Type:             enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE,
-
-				StartedEventID:        common.EmptyEventID,
-				RequestID:             emptyUUID,
-				WorkflowTaskTimeout:   timestamp.DurationFromSeconds(0),
-				StartedTime:           timestamp.UnixOrZeroTimePtr(0),
-				TaskQueue:             nil,
-				OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
-				Attempt:               1,
-			}
-			m.UpdateWorkflowTask(workflowTask)
-			return workflowTask
-		}
-	*/
-	return nil
-}
-
-func (m *workflowTaskStateMachine) setSpeculativeWorkflowTaskStartedEventID(
-	workflowTask *WorkflowTaskInfo,
-) {
-	// TODO (alex-update): Uncomment this code to support speculative workflow task restoration.
-
-	/*
-		// StartedEventID might be lost (cleared) for speculative workflow task due to shard reload or history service restart.
-		if workflowTask != nil && workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && workflowTask.StartedEventID == common.EmptyEventID {
-			workflowTask.StartedEventID = workflowTask.ScheduledEventID + 1
-			m.UpdateWorkflowTask(workflowTask)
-		}
-	*/
 }
 
 func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
