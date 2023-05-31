@@ -3733,9 +3733,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 					},
 				},
 				MaximumPageSize: int32(maxConcurrentBatchOperation - openCount),
-				NextPageToken: nextPageToken,
+				NextPageToken:   nextPageToken,
 			})
-			if (err != nil) {
+			if err != nil {
 				return nil, err
 			}
 			openCount += len(listResp.Executions)

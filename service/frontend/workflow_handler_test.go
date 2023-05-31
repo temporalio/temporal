@@ -2340,7 +2340,6 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMan
 			CancellationOperation: &batchpb.BatchOperationCancellation{
 				Identity: identity,
 			},
-
 		},
 		Reason:     reason,
 		Executions: executions,
