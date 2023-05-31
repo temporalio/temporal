@@ -44,23 +44,14 @@ import (
 
 type mockUpdateStore struct {
 	update.UpdateStore
-	GetAcceptedWorkflowExecutionUpdateIDsFunc func(context.Context) []string
-	GetUpdateInfoFunc                         func(context.Context, string) (*persistencespb.UpdateInfo, bool)
-	GetUpdateOutcomeFunc                      func(context.Context, string) (*updatepb.Outcome, error)
-	GetUpdatesCountFunc                       func(context.Context) int
+	GetUpdateInfosFunc   func(context.Context) map[string]*persistencespb.UpdateInfo
+	GetUpdateOutcomeFunc func(context.Context, string) (*updatepb.Outcome, error)
 }
 
-func (m mockUpdateStore) GetAcceptedWorkflowExecutionUpdateIDs(
+func (m mockUpdateStore) GetUpdateInfos(
 	ctx context.Context,
-) []string {
-	return m.GetAcceptedWorkflowExecutionUpdateIDsFunc(ctx)
-}
-
-func (m mockUpdateStore) GetUpdateInfo(
-	ctx context.Context,
-	updateID string,
-) (*persistencespb.UpdateInfo, bool) {
-	return m.GetUpdateInfoFunc(ctx, updateID)
+) map[string]*persistencespb.UpdateInfo {
+	return m.GetUpdateInfosFunc(ctx)
 }
 
 func (m mockUpdateStore) GetUpdateOutcome(
@@ -70,24 +61,12 @@ func (m mockUpdateStore) GetUpdateOutcome(
 	return m.GetUpdateOutcomeFunc(ctx, updateID)
 }
 
-func (m mockUpdateStore) GetUpdatesCount(
-	ctx context.Context,
-) int {
-	return m.GetUpdatesCountFunc(ctx)
-}
-
 var emptyUpdateStore = mockUpdateStore{
-	GetAcceptedWorkflowExecutionUpdateIDsFunc: func(context.Context) []string {
+	GetUpdateInfosFunc: func(context.Context) map[string]*persistencespb.UpdateInfo {
 		return nil
-	},
-	GetUpdateInfoFunc: func(context.Context, string) (*persistencespb.UpdateInfo, bool) {
-		return nil, false
 	},
 	GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
 		return nil, serviceerror.NewNotFound("not found")
-	},
-	GetUpdatesCountFunc: func(context.Context) int {
-		return 0
 	},
 }
 
@@ -97,17 +76,10 @@ func TestFind(t *testing.T) {
 		ctx      = context.Background()
 		updateID = t.Name() + "-update-id"
 		store    = mockUpdateStore{
-			GetAcceptedWorkflowExecutionUpdateIDsFunc: func(context.Context) []string {
-				return nil
-			},
-			GetUpdateInfoFunc: func(
+			GetUpdateInfosFunc: func(
 				ctx context.Context,
-				updateID string,
-			) (*persistencespb.UpdateInfo, bool) {
-				return nil, false
-			},
-			GetUpdatesCountFunc: func(context.Context) int {
-				return 0
+			) map[string]*persistencespb.UpdateInfo {
+				return nil
 			},
 		}
 		reg = update.NewRegistry(store)
@@ -129,19 +101,10 @@ func TestHasOutgoing(t *testing.T) {
 		ctx      = context.Background()
 		updateID = t.Name() + "-update-id"
 		store    = mockUpdateStore{
-			GetAcceptedWorkflowExecutionUpdateIDsFunc: func(
-				context.Context,
-			) []string {
-				return nil
-			},
-			GetUpdateInfoFunc: func(
+			GetUpdateInfosFunc: func(
 				ctx context.Context,
-				updateID string,
-			) (*persistencespb.UpdateInfo, bool) {
-				return nil, false
-			},
-			GetUpdatesCountFunc: func(context.Context) int {
-				return 0
+			) map[string]*persistencespb.UpdateInfo {
+				return nil
 			},
 		}
 		reg = update.NewRegistry(store)
@@ -169,14 +132,14 @@ func TestFindOrCreate(t *testing.T) {
 		completedOutcome  = successOutcome(t, "success!")
 
 		storeData = map[string]*persistencespb.UpdateInfo{
-			acceptedUpdateID: &persistencespb.UpdateInfo{
+			acceptedUpdateID: {
 				Value: &persistencespb.UpdateInfo_AcceptancePointer{
 					AcceptancePointer: &historyspb.HistoryEventPointer{
 						EventId: 120,
 					},
 				},
 			},
-			completedUpdateID: &persistencespb.UpdateInfo{
+			completedUpdateID: {
 				Value: &persistencespb.UpdateInfo_CompletedPointer{
 					CompletedPointer: &historyspb.HistoryEventPointer{
 						EventId: 123,
@@ -186,17 +149,10 @@ func TestFindOrCreate(t *testing.T) {
 		}
 		// make a store with 1 accepted and 1 completed update
 		store = mockUpdateStore{
-			GetAcceptedWorkflowExecutionUpdateIDsFunc: func(
-				context.Context,
-			) []string {
-				return []string{acceptedUpdateID}
-			},
-			GetUpdateInfoFunc: func(
+			GetUpdateInfosFunc: func(
 				ctx context.Context,
-				updateID string,
-			) (*persistencespb.UpdateInfo, bool) {
-				ui, ok := storeData[updateID]
-				return ui, ok
+			) map[string]*persistencespb.UpdateInfo {
+				return storeData
 			},
 			GetUpdateOutcomeFunc: func(
 				ctx context.Context,
@@ -206,9 +162,6 @@ func TestFindOrCreate(t *testing.T) {
 					return completedOutcome, nil
 				}
 				return nil, serviceerror.NewNotFound("not found")
-			},
-			GetUpdatesCountFunc: func(context.Context) int {
-				return len(storeData)
 			},
 		}
 		reg = update.NewRegistry(store)
@@ -253,10 +206,18 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 		ctx                    = context.Background()
 		storedAcceptedUpdateID = t.Name() + "-accepted-update-id"
 		regStore               = mockUpdateStore{
-			GetAcceptedWorkflowExecutionUpdateIDsFunc: func(
+			GetUpdateInfosFunc: func(
 				context.Context,
-			) []string {
-				return []string{storedAcceptedUpdateID}
+			) map[string]*persistencespb.UpdateInfo {
+				return map[string]*persistencespb.UpdateInfo{
+					storedAcceptedUpdateID: {
+						Value: &persistencespb.UpdateInfo_AcceptancePointer{
+							AcceptancePointer: &historyspb.HistoryEventPointer{
+								EventId: 120,
+							},
+						},
+					},
+				}
 			},
 		}
 		reg = update.NewRegistry(regStore)
@@ -414,7 +375,7 @@ func TestTotalLimit(t *testing.T) {
 		require.Equal(t, 1, reg.Len())
 	})
 
-	// complete update1 so that it is removed from the registry
+	// complete update1 so that it is removed from the registry and incremented counter
 	evStore := mockEventStore{Controller: effect.Immediate(ctx)}
 	req := updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
@@ -434,26 +395,26 @@ func TestTotalLimit(t *testing.T) {
 		_, existed, err = reg.FindOrCreate(ctx, "update2")
 		var failedPrecon *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPrecon)
-		require.Equal(t, 1, reg.Len())
+		require.Equal(t, 0, reg.Len())
 	})
 
 	t.Log("Increasing limit to 2; Update registry should honor the change")
 	limit = 2
 
 	t.Run("runtime limit increase is respected", func(t *testing.T) {
-		require.Equal(t, 1, reg.Len(),
-			"update2 from previous test should still be in registry")
-		_, existed, err := reg.FindOrCreate(ctx, "update3")
+		require.Equal(t, 0, reg.Len(),
+			"registry should be empty")
+		_, existed, err := reg.FindOrCreate(ctx, "update2")
 		require.NoError(t, err,
-			"update should have been admitted under new higher limit")
+			"update2 should have been admitted under new higher limit")
 		require.False(t, existed)
-		require.Equal(t, 2, reg.Len())
+		require.Equal(t, 1, reg.Len())
 
-		_, _, err = reg.FindOrCreate(ctx, "update4")
+		_, _, err = reg.FindOrCreate(ctx, "update3")
 		var failedPrecon *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPrecon,
-			"third update should be rejected when limit = 2")
-		require.Equal(t, 2, reg.Len())
+			"update3 should be rejected when limit = 2")
+		require.Equal(t, 1, reg.Len())
 	})
 }
 
@@ -462,23 +423,16 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 	completedUpdateID := t.Name() + "-completed-update-id"
 	expectError := fmt.Errorf("expected error in %s", t.Name())
 	regStore := mockUpdateStore{
-		GetAcceptedWorkflowExecutionUpdateIDsFunc: func(
-			context.Context,
-		) []string {
-			return nil
-		},
-		GetUpdateInfoFunc: func(
+		GetUpdateInfosFunc: func(
 			ctx context.Context,
-			updateID string,
-		) (*persistencespb.UpdateInfo, bool) {
-			if updateID == completedUpdateID {
-				return &persistencespb.UpdateInfo{
+		) map[string]*persistencespb.UpdateInfo {
+			return map[string]*persistencespb.UpdateInfo{
+				completedUpdateID: {
 					Value: &persistencespb.UpdateInfo_CompletedPointer{
 						CompletedPointer: &historyspb.HistoryEventPointer{EventId: 123},
 					},
-				}, true
+				},
 			}
-			return nil, false
 		},
 		GetUpdateOutcomeFunc: func(
 			ctx context.Context,

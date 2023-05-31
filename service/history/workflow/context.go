@@ -825,7 +825,7 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 			),
 			update.WithTotalLimit(
 				func() int {
-					return c.config.WorkflowExecutionMaxUpdates(nsIDStr)
+					return c.config.WorkflowExecutionMaxTotalUpdates(nsIDStr)
 				},
 			),
 		)

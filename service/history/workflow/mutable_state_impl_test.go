@@ -864,8 +864,8 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.Require().Error(err)
 	s.Require().IsType((*serviceerror.NotFound)(nil), err)
 
-	incompletes := s.mutableState.GetAcceptedWorkflowExecutionUpdateIDs(ctx)
-	s.Require().Len(incompletes, 2)
+	updateInfos := s.mutableState.GetUpdateInfos(ctx)
+	s.Require().Len(updateInfos, 3, "expected 1 completed and 2 accepted ")
 
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
 	s.Require().NoError(err)

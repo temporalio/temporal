@@ -75,10 +75,8 @@ type (
 	// UpdateStore represents the update package's requirements for writing
 	// events and restoring ephemeral state from an event index.
 	UpdateStore interface {
-		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
-		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
+		GetUpdateInfos(ctx context.Context) map[string]*persistencespb.UpdateInfo
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
-		GetUpdatesCount(ctx context.Context) int
 	}
 
 	RegistryImpl struct {
@@ -88,6 +86,7 @@ type (
 		instrumentation instrumentation
 		maxInFlight     func() int
 		maxTotal        func() int
+		completedCount  int
 	}
 
 	regOpt func(*RegistryImpl)
@@ -151,8 +150,13 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 	}
 
 	// need to eager load here so that Len and admit are correct.
-	for _, id := range store.GetAcceptedWorkflowExecutionUpdateIDs(context.Background()) {
-		r.updates[id] = newAccepted(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	for id, updInfo := range store.GetUpdateInfos(context.Background()) {
+		if updInfo.GetAcceptancePointer() != nil {
+			r.updates[id] = newAccepted(id, r.remover(id), withInstrumentation(&r.instrumentation))
+		}
+		if updInfo.GetCompletedPointer() != nil {
+			r.completedCount++
+		}
 	}
 	return r
 }
@@ -230,6 +234,7 @@ func (r *RegistryImpl) remover(id string) updateOpt {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			delete(r.updates, id)
+			r.completedCount++
 		},
 	)
 }
@@ -242,7 +247,7 @@ func (r *RegistryImpl) admit(ctx context.Context) error {
 		)
 	}
 
-	if len(r.updates)+r.store.GetUpdatesCount(ctx) >= r.maxTotal() {
+	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("number of total updates limit has been reached (%v)", r.maxTotal()),
 		)
@@ -252,15 +257,19 @@ func (r *RegistryImpl) admit(ctx context.Context) error {
 }
 
 func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool) {
-	upd, ok := r.updates[id]
-	if ok {
+
+	if upd, ok := r.updates[id]; ok {
 		return upd, true
 	}
 
 	// update not found in ephemeral state, but could have already completed so
 	// check in registry storage
 
-	if info, ok := r.store.GetUpdateInfo(ctx, id); ok {
+	updateInfos := r.store.GetUpdateInfos(ctx)
+	if updateInfos == nil {
+		return nil, false
+	}
+	if info, ok := updateInfos[id]; ok {
 		if info.GetCompletedPointer() != nil {
 			// Completed, create the Update object but do not add to registry. this
 			// should not happen often.

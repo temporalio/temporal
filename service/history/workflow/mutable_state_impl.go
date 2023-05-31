@@ -3544,29 +3544,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(
 	return event, nil
 }
 
-func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string {
-	if ms.executionInfo.UpdateInfos == nil {
-		return nil
-	}
-	out := make([]string, 0)
-	for id, updateInfo := range ms.executionInfo.UpdateInfos {
-		if updateInfo.GetAcceptancePointer() != nil {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-func (ms *MutableStateImpl) GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool) {
-	if ms.executionInfo.UpdateInfos == nil {
-		return nil, false
-	}
-	info, ok := ms.executionInfo.UpdateInfos[updateID]
-	return info, ok
-}
-
-func (ms *MutableStateImpl) GetUpdatesCount(_ context.Context) int {
-	return len(ms.updateInfos)
+func (ms *MutableStateImpl) GetUpdateInfos(_ context.Context) map[string]*persistencespb.UpdateInfo {
+	return ms.executionInfo.GetUpdateInfos()
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
