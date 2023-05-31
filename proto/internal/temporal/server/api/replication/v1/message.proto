@@ -32,6 +32,7 @@ import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
+import "temporal/server/api/persistence/v1/task_queues.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/namespace/v1/message.proto";
@@ -50,6 +51,7 @@ message ReplicationTask {
         SyncActivityTaskAttributes sync_activity_task_attributes = 6;
         HistoryTaskAttributes history_task_attributes = 8;
         SyncWorkflowStateTaskAttributes sync_workflow_state_task_attributes = 10;
+        TaskQueueUserDataAttributes task_queue_user_data_attributes = 11;
     }
     google.protobuf.Timestamp visibility_time = 9 [(gogoproto.stdtime) = true];
 }
@@ -152,4 +154,10 @@ message HistoryTaskAttributes {
 
 message SyncWorkflowStateTaskAttributes {
     temporal.server.api.persistence.v1.WorkflowMutableState workflow_state = 1;
+}
+
+message TaskQueueUserDataAttributes {
+    string namespace_id = 1;
+    string task_queue_name = 2;
+    temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
 }

@@ -28,9 +28,9 @@ import "google/protobuf/timestamp.proto";
 import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/enums/v1/task_queue.proto";
-import "temporal/api/taskqueue/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 
 // task column
 message AllocatedTaskInfo {
@@ -46,6 +46,9 @@ message TaskInfo {
     google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
     temporal.server.api.clock.v1.VectorClock clock = 7;
+    // How this task should be directed. (Missing means the default for
+    // TaskVersionDirective, which is unversioned.)
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
 }
 
 // task_queue column
@@ -57,13 +60,6 @@ message TaskQueueInfo {
     int64 ack_level = 5;
     google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp last_update_time = 7 [(gogoproto.stdtime) = true];
-    VersioningData versioning_data = 8;
-}
-
-// Holds all the data related to worker versioning for a task queue.
-// Backwards-incompatible changes cannot be made, as this would make existing stored data unreadable
-message VersioningData {
-    repeated temporal.api.taskqueue.v1.CompatibleVersionSet version_sets = 1;
 }
 
 message TaskKey {

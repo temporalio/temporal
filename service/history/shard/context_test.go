@@ -355,6 +355,46 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageHistory, stage)
 }
 
+func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotifiction() {
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  tests.WorkflowID,
+		RunID:       tests.RunID,
+	}
+	branchToken := []byte("branchToken")
+	stage := tasks.DeleteWorkflowExecutionStageNone
+
+	// add task fails with error that suggests operation can't possibly succeed, no task notification
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(persistence.ErrPersistenceLimitExceeded).Times(1)
+	err := s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
+	s.Error(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageNone, stage)
+
+	// add task succeeds but second operation fails, send task notification
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).Times(1)
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(persistence.ErrPersistenceLimitExceeded).Times(1)
+	err = s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		branchToken,
+		nil,
+		nil,
+		0,
+		&stage,
+	)
+	s.Error(err)
+	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility, stage)
+}
+
 func (s *contextSuite) TestAcquireShardOwnershipLostErrorIsNotRetried() {
 	s.mockShard.state = contextStateAcquiring
 	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).

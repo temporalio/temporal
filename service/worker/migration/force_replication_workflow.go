@@ -26,15 +26,31 @@ package migration
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
 type (
+	TaskQueueUserDataReplicationParams struct {
+		// PageSize for the SeedReplicationQueueWithUserDataEntries activity
+		PageSize int
+		// RPS limits the number of task queue user data entries pages requested per second.
+		RPS float64
+	}
+
+	// TaskQueueUserDataReplicationParamsWithNamespace is used for child workflow / activity input
+	TaskQueueUserDataReplicationParamsWithNamespace struct {
+		TaskQueueUserDataReplicationParams
+		// Namespace name
+		Namespace string
+	}
+
 	ForceReplicationParams struct {
 		Namespace               string
 		Query                   string // query to list workflows for replication
@@ -45,15 +61,25 @@ type (
 		NextPageToken           []byte  // used by continue as new
 
 		// Used by query handler to indicate overall progress of replication
-		LastCloseTime       time.Time
-		LastStartTime       time.Time
-		ContinuedAsNewCount int
+		LastCloseTime                      time.Time
+		LastStartTime                      time.Time
+		ContinuedAsNewCount                int
+		TaskQueueUserDataReplicationParams TaskQueueUserDataReplicationParams
+
+		// Carry over the replication status after continue-as-new.
+		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
+	}
+
+	TaskQueueUserDataReplicationStatus struct {
+		Done           bool
+		FailureMessage string
 	}
 
 	ForceReplicationStatus struct {
-		LastCloseTime       time.Time
-		LastStartTime       time.Time
-		ContinuedAsNewCount int
+		LastCloseTime                      time.Time
+		LastStartTime                      time.Time
+		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
+		ContinuedAsNewCount                int
 	}
 
 	listWorkflowsResponse struct {
@@ -90,15 +116,18 @@ var (
 )
 
 const (
-	forceReplicationStatusQueryType = "force-replication-status"
+	forceReplicationStatusQueryType            = "force-replication-status"
+	taskQueueUserDataReplicationDoneSignalType = "task-queue-user-data-replication-done"
+	taskQueueUserDataReplicationVersionMarker  = "replicate-task-queue-user-data"
 )
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
 	workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
 		return ForceReplicationStatus{
-			LastCloseTime:       params.LastCloseTime,
-			LastStartTime:       params.LastStartTime,
-			ContinuedAsNewCount: params.ContinuedAsNewCount,
+			LastCloseTime:                      params.LastCloseTime,
+			LastStartTime:                      params.LastStartTime,
+			ContinuedAsNewCount:                params.ContinuedAsNewCount,
+			TaskQueueUserDataReplicationStatus: params.TaskQueueUserDataReplicationStatus,
 		}, nil
 	})
 
@@ -111,8 +140,17 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		return err
 	}
 
-	workflowExecutionsCh := workflow.NewBufferedChannel(ctx, params.PageCountPerExecution)
+	if !params.TaskQueueUserDataReplicationStatus.Done {
+		err = maybeKickoffTaskQueueUserDataReplication(ctx, params, func(failureReason string) {
+			params.TaskQueueUserDataReplicationStatus.FailureMessage = failureReason
+			params.TaskQueueUserDataReplicationStatus.Done = true
+		})
+		if err != nil {
+			return err
+		}
+	}
 
+	workflowExecutionsCh := workflow.NewBufferedChannel(ctx, params.PageCountPerExecution)
 	var listWorkflowsErr error
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		listWorkflowsErr = listWorkflowsForReplication(ctx, workflowExecutionsCh, &params)
@@ -131,6 +169,15 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	}
 
 	if params.NextPageToken == nil {
+		if workflow.GetVersion(ctx, taskQueueUserDataReplicationVersionMarker, workflow.DefaultVersion, 1) > workflow.DefaultVersion {
+			err := workflow.Await(ctx, func() bool { return params.TaskQueueUserDataReplicationStatus.Done })
+			if err != nil {
+				return err
+			}
+			if params.TaskQueueUserDataReplicationStatus.FailureMessage != "" {
+				return fmt.Errorf("task queue user data replication failed: %v", params.TaskQueueUserDataReplicationStatus.FailureMessage)
+			}
+		}
 		return nil
 	}
 
@@ -139,6 +186,67 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	// There are still more workflows to replicate. Continue-as-new to process on a new run.
 	// This prevents history size from exceeding the server-defined limit
 	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflow, params)
+}
+
+func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params ForceReplicationParams, onDone func(failureReason string)) error {
+	if workflow.GetVersion(ctx, taskQueueUserDataReplicationVersionMarker, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return nil
+	}
+
+	workflow.Go(ctx, func(ctx workflow.Context) {
+		taskQueueUserDataReplicationDoneCh := workflow.GetSignalChannel(ctx, taskQueueUserDataReplicationDoneSignalType)
+		var errStr string
+		// We don't care if there's more data to receive
+		_ = taskQueueUserDataReplicationDoneCh.Receive(ctx, &errStr)
+		onDone(errStr)
+	})
+
+	// We only start the child workflow before we continue as new to avoid starting the child workflow more than once.
+	if params.ContinuedAsNewCount > 0 {
+		return nil
+	}
+
+	options := workflow.ChildWorkflowOptions{
+		WorkflowID: fmt.Sprintf("%s-task-queue-user-data-replicator", workflow.GetInfo(ctx).WorkflowExecution.ID),
+		// We're going to continue-as-new, and cannot wait for this child to complete, instead child will notify of
+		// its completion via signal.
+		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
+	}
+	childCtx := workflow.WithChildOptions(ctx, options)
+	input := TaskQueueUserDataReplicationParamsWithNamespace{
+		TaskQueueUserDataReplicationParams: params.TaskQueueUserDataReplicationParams,
+		Namespace:                          params.Namespace,
+	}
+
+	child := workflow.ExecuteChildWorkflow(childCtx, ForceTaskQueueUserDataReplicationWorkflow, input)
+	var childExecution workflow.Execution
+	// Wait for the child workflow to be started.
+	err := child.GetChildWorkflowExecution().Get(ctx, &childExecution)
+	return err
+}
+
+func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params TaskQueueUserDataReplicationParamsWithNamespace) error {
+	var a *activities
+	ao := workflow.ActivityOptions{
+		// This shouldn't take "too long", just set an arbitrary long timeout here and rely on heartbeats for liveness detection.
+		StartToCloseTimeout: time.Hour * 24 * 7,
+		HeartbeatTimeout:    time.Second * 30,
+		// Give the system some time to recover before the next attempt.
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Second * 10,
+			MaximumInterval: time.Minute * 5,
+		},
+	}
+
+	actx := workflow.WithActivityOptions(ctx, ao)
+
+	err := workflow.ExecuteActivity(actx, a.SeedReplicationQueueWithUserDataEntries, params).Get(ctx, nil)
+	errStr := ""
+	if err != nil {
+		errStr = err.Error()
+	}
+	err = workflow.SignalExternalWorkflow(ctx, workflow.GetInfo(ctx).ParentWorkflowExecution.ID, "", taskQueueUserDataReplicationDoneSignalType, errStr).Get(ctx, nil)
+	return err
 }
 
 func validateAndSetForceReplicationParams(params *ForceReplicationParams) error {

@@ -35,6 +35,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,6 +43,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -84,9 +86,6 @@ const (
 	completeTaskRetryInitialInterval = 100 * time.Millisecond
 	completeTaskRetryMaxInterval     = 1 * time.Second
 	completeTaskRetryMaxAttempts     = 10
-
-	taskProcessingRetryInitialInterval = 50 * time.Millisecond
-	taskProcessingRetryMaxAttempts     = 1
 
 	taskRescheduleInitialInterval    = 1 * time.Second
 	taskRescheduleBackoffCoefficient = 1.1
@@ -233,12 +232,6 @@ func CreateCompleteTaskRetryPolicy() backoff.RetryPolicy {
 		WithMaximumAttempts(completeTaskRetryMaxAttempts)
 }
 
-// CreateTaskProcessingRetryPolicy creates a retry policy for task processing
-func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(taskProcessingRetryInitialInterval).
-		WithMaximumAttempts(taskProcessingRetryMaxAttempts)
-}
-
 // CreateTaskReschedulePolicy creates a retry policy for rescheduling task with errors not equal to ErrTaskRetry
 func CreateTaskReschedulePolicy() backoff.RetryPolicy {
 	return backoff.NewExponentialRetryPolicy(taskRescheduleInitialInterval).
@@ -378,6 +371,12 @@ func IsResourceExhausted(err error) bool {
 func IsInternalError(err error) bool {
 	var internalErr *serviceerror.Internal
 	return errors.As(err, &internalErr)
+}
+
+// IsNotFoundError checks if the error is a not found error.
+func IsNotFoundError(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	return errors.As(err, &notFoundErr)
 }
 
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
@@ -784,6 +783,44 @@ func OverrideWorkflowTaskTimeout(
 	}
 
 	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
+}
+
+// StampIfUsingVersioning returns the given WorkerVersionStamp if it is using versioning,
+// otherwise returns nil.
+func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.WorkerVersionStamp {
+	if stamp.GetUseVersioning() {
+		return stamp
+	}
+	return nil
+}
+
+func MakeVersionDirectiveForWorkflowTask(
+	stamp *commonpb.WorkerVersionStamp,
+	lastWorkflowTaskStartedEventID int64,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
+	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
+		// first workflow task
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	}
+	// else: unversioned queue
+	return &directive
+}
+
+func MakeVersionDirectiveForActivityTask(
+	stamp *commonpb.WorkerVersionStamp,
+	useCompatibleVersion bool,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	if !useCompatibleVersion {
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
+	}
+	// else: unversioned queue
+	return &directive
 }
 
 // CloneProto is a generic typed version of proto.Clone from gogoproto.

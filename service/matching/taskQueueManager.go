@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	uberatomic "go.uber.org/atomic"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -48,7 +47,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -56,7 +54,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tqname"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/internal/goro"
 )
 
 const (
@@ -77,8 +77,12 @@ var (
 	// this retry policy is currenly only used for matching persistence operations
 	// that, if failed, the entire task queue needs to be reload
 	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithMaximumInterval(1 * time.Second).
-		WithExpirationInterval(30 * time.Second)
+					WithMaximumInterval(1 * time.Second).
+					WithExpirationInterval(30 * time.Second)
+
+	// Retry policy for getting user data from root partition. Should retry forever.
+	getUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
+				WithMaximumInterval(5 * time.Minute)
 )
 
 type (
@@ -96,6 +100,17 @@ type (
 		forwardedFrom string
 	}
 
+	stickyInfo struct {
+		kind       enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		normalName string                // if kind is sticky, name of normal queue
+	}
+
+	UserDataUpdateOptions struct {
+		Replicate                bool
+		TaskQueueLimitPerBuildId int
+	}
+	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)
+
 	taskQueueManager interface {
 		Start()
 		Stop()
@@ -107,19 +122,18 @@ type (
 		// GetTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
-		GetTask(ctx context.Context, maxDispatchPerSecond *float64) (*internalTask, error)
-		// DispatchTask dispatches a task to a poller. When there are no pollers to pick
+		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
-		DispatchTask(ctx context.Context, task *internalTask) error
+		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged chan struct{}) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		// GetVersioningData returns the versioning data for this task queue
-		GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error)
-		// MutateVersioningData allows callers to update versioning data for this task queue
-		MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error
-		// InvalidateMetadata allows callers to invalidate cached data on this task queue
-		InvalidateMetadata(request *matchingservice.InvalidateTaskQueueMetadataRequest) error
+		// GetUserData returns the verioned user data for this task queue
+		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
+		// UpdateUserData allows callers to update user data for this task queue
+		// Extra care should be taken to avoid mutating the existing data in the update function.
+		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -132,10 +146,10 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status               int32
-		engine               *matchingEngineImpl
-		taskQueueID          *taskQueueID
-		taskQueueKind        enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		status      int32
+		engine      *matchingEngineImpl
+		taskQueueID *taskQueueID
+		stickyInfo
 		config               *taskQueueConfig
 		db                   *taskQueueDB
 		taskWriter           *taskWriter
@@ -160,25 +174,22 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 		clusterMeta          cluster.Metadata
+		goroGroup            goro.Group
 		initializedError     *future.FutureImpl[struct{}]
-		// metadataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
+		// userDataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
-		metadataInitialFetch *future.FutureImpl[struct{}]
-		metadataPoller       metadataPoller
-	}
-
-	metadataPoller struct {
-		// Ensures that we launch the goroutine for polling for updates only one time
-		running           *uberatomic.Bool
-		pollIntervalCfgFn dynamicconfig.DurationPropertyFn
-		stopChan          chan struct{}
-		tqMgr             *taskQueueManagerImpl
+		userDataInitialFetch *future.FutureImpl[struct{}]
 	}
 )
 
 var _ taskQueueManager = (*taskQueueManagerImpl)(nil)
 
-var errRemoteSyncMatchFailed = serviceerror.NewCanceled("remote sync match failed")
+var (
+	errRemoteSyncMatchFailed  = serviceerror.NewCanceled("remote sync match failed")
+	errMissingNormalQueueName = errors.New("missing normal queue name")
+
+	normalStickyInfo = stickyInfo{kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+)
 
 func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	return func(tqm *taskQueueManagerImpl) {
@@ -186,10 +197,17 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	}
 }
 
+func stickyInfoFromTaskQueue(tq *taskqueuepb.TaskQueue) stickyInfo {
+	return stickyInfo{
+		kind:       tq.GetKind(),
+		normalName: tq.GetNormalName(),
+	}
+}
+
 func newTaskQueueManager(
 	e *matchingEngineImpl,
 	taskQueue *taskQueueID,
-	taskQueueKind enumspb.TaskQueueKind,
+	stickyInfo stickyInfo,
 	config *Config,
 	clusterMeta cluster.Metadata,
 	opts ...taskQueueManagerOpt,
@@ -202,7 +220,7 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
+	db := newTaskQueueDB(e.taskManager, e.matchingClient, taskQueue.namespaceID, taskQueue, stickyInfo.kind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -211,7 +229,7 @@ func newTaskQueueManager(
 		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType)),
 		nsName.String(),
 		taskQueue.FullName(),
-		taskQueueKind,
+		stickyInfo.kind,
 	)
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
@@ -220,7 +238,7 @@ func newTaskQueueManager(
 		matchingClient:       e.matchingClient,
 		metricsHandler:       e.metricsHandler,
 		taskQueueID:          taskQueue,
-		taskQueueKind:        taskQueueKind,
+		stickyInfo:           stickyInfo,
 		logger:               logger,
 		db:                   db,
 		taskAckManager:       newAckManager(e.logger),
@@ -232,14 +250,8 @@ func newTaskQueueManager(
 		namespace:            nsName,
 		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),
-		metadataInitialFetch: future.NewFuture[struct{}](),
-		metadataPoller: metadataPoller{
-			running:           uberatomic.NewBool(false),
-			pollIntervalCfgFn: e.config.MetadataPollFrequency,
-			stopChan:          make(chan struct{}),
-		},
+		userDataInitialFetch: future.NewFuture[struct{}](),
 	}
-	tlMgr.metadataPoller.tqMgr = tlMgr
 
 	tlMgr.liveness = newLiveness(
 		clockwork.NewRealClock(),
@@ -250,8 +262,11 @@ func newTaskQueueManager(
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
 	var fwdr *Forwarder
-	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
-		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, taskQueue, taskQueueKind, e.matchingClient)
+	if tlMgr.isFowardingAllowed(taskQueue, stickyInfo.kind) {
+		// Forward without version set, the target will resolve the correct version set from
+		// the build id itself. TODO: check if we still need this here after tqm refactoring
+		forwardTaskQueue := newTaskQueueIDWithVersionSet(taskQueue, "")
+		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, stickyInfo.kind, e.matchingClient)
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
@@ -293,7 +308,9 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	go c.fetchMetadataFromRootPartitionOnInit(context.TODO())
+	if c.shouldFetchUserData() {
+		c.goroGroup.Go(c.fetchUserDataLoop)
+	}
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
@@ -319,14 +336,33 @@ func (c *taskQueueManagerImpl) Stop() {
 		}
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
-	c.metadataPoller.Stop()
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
+	c.goroGroup.Cancel()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
 	c.unloadFromEngine()
+}
+
+// isVersioned returns true if this is a tqm for a "versioned [low-level] task queue". Note
+// that this is a different concept from the overall [high-level] task queue having versioning
+// data associated with it, which is the usual meaning of "versioned task queue". In this case,
+// it means whether this is a tqm processing a specific version set id. Unlike non-root
+// partitions which are known (at some level) by other services, [low-level] task queues with a
+// version set should not be interacted with outside of the matching service.
+func (c *taskQueueManagerImpl) isVersioned() bool {
+	return c.taskQueueID.VersionSet() != ""
+}
+
+// shouldFetchUserData consolidates the logic for when to fetch user data from another task
+// queue or (maybe) read it from the db. We set the userDataInitialFetch future from two
+// places, so they need to agree on which one should set it.
+func (c *taskQueueManagerImpl) shouldFetchUserData() bool {
+	// 1. If the db stores it, then we definitely should not be fetching.
+	// 2. Additionally, we should not fetch for "versioned" tqms.
+	return !c.db.DbStoresUserData() && !c.isVersioned()
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -334,9 +370,7 @@ func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// We don't really care if the initial fetch worked or not, anything that *requires* a bit of metadata should fail
-	// that operation if it's never fetched OK. If the initial fetch errored, the metadataPoller will have been started.
-	_, _ = c.metadataInitialFetch.Get(ctx)
+	_, err = c.userDataInitialFetch.Get(ctx)
 	return err
 }
 
@@ -391,7 +425,7 @@ func (c *taskQueueManagerImpl) AddTask(
 // to be dispatched from this task queue to pollers
 func (c *taskQueueManagerImpl) GetTask(
 	ctx context.Context,
-	maxDispatchPerSecond *float64,
+	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
 	c.liveness.markAlive()
 
@@ -399,7 +433,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	childCtx, cancel := c.newChildContext(ctx, c.config.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	childCtx, cancel := newChildContext(ctx, c.config.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	pollerID, ok := ctx.Value(pollerIDKey).(string)
@@ -418,10 +452,10 @@ func (c *taskQueueManagerImpl) GetTask(
 
 	identity, ok := ctx.Value(identityKey).(string)
 	if ok && identity != "" {
-		c.pollerHistory.updatePollerInfo(pollerIdentity(identity), maxDispatchPerSecond)
+		c.pollerHistory.updatePollerInfo(pollerIdentity(identity), pollMetadata)
 		defer func() {
 			// to update timestamp when long poll ends
-			c.pollerHistory.updatePollerInfo(pollerIdentity(identity), maxDispatchPerSecond)
+			c.pollerHistory.updatePollerInfo(pollerIdentity(identity), pollMetadata)
 		}()
 	}
 
@@ -435,13 +469,13 @@ func (c *taskQueueManagerImpl) GetTask(
 	// one rateLimiter for this entire task queue and as we get polls,
 	// we update the ratelimiter rps if it has changed from the last
 	// value. Last poller wins if different pollers provide different values
-	c.matcher.UpdateRatelimit(maxDispatchPerSecond)
+	c.matcher.UpdateRatelimit(pollMetadata.ratePerSecond)
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		return c.matcher.PollForQuery(childCtx)
+		return c.matcher.PollForQuery(childCtx, pollMetadata)
 	}
 
-	task, err := c.matcher.Poll(childCtx)
+	task, err := c.matcher.Poll(childCtx, pollMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -451,14 +485,15 @@ func (c *taskQueueManagerImpl) GetTask(
 	return task, nil
 }
 
-// DispatchTask dispatches a task to a poller. When there are no pollers to pick
+// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 // up the task or if rate limit is exceeded, this method will return error. Task
 // *will not* be persisted to db
-func (c *taskQueueManagerImpl) DispatchTask(
+func (c *taskQueueManagerImpl) DispatchSpooledTask(
 	ctx context.Context,
 	task *internalTask,
+	userDataChanged chan struct{},
 ) error {
-	return c.matcher.MustOffer(ctx, task)
+	return c.matcher.MustOffer(ctx, task, userDataChanged)
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
@@ -472,67 +507,44 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
-// GetVersioningData returns the versioning data for the task queue if any. If this task queue is a sub-partition and
-// has no cached data, it will explicitly attempt a fetch from the root partition.
-func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
-	vd, err := c.db.GetVersioningData(ctx)
-	if errors.Is(err, errVersioningDataNotPresentOnPartition) {
-		// If this is a non-root-partition with no versioning data, this call is indicating we might expect to find
-		// some. Since we may not have started the poller, we want to explicitly attempt to fetch now, because
-		// it's possible some was added to the root partition, but it failed to invalidate this partition.
-		return c.fetchMetadataFromRootPartition(ctx)
+// GetUserData returns the user data for the task queue if any.
+// Note: can return nil value with no error.
+func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+	if c.isVersioned() {
+		return nil, nil, errNoUserDataOnVersionedTQM
 	}
-	return vd, err
+	return c.db.GetUserData(ctx)
 }
 
-func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
-	newDat, err := c.db.MutateVersioningData(ctx, mutator)
-	c.signalIfFatal(err)
+func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
+	newData, err := c.db.UpdateUserData(ctx, updateFn, options.TaskQueueLimitPerBuildId)
 	if err != nil {
 		return err
 	}
-	// We will have errored already if this was not the root workflow partition.
-	// Now notify partitions that they should fetch changed data from us
-	numParts := util.Max(c.config.NumReadPartitions(), c.config.NumWritePartitions())
-	wg := &sync.WaitGroup{}
-	for i := 0; i < numParts; i++ {
-		for _, tqt := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
-			if i == 0 && tqt == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-				continue // Root workflow partition owns the data, skip it.
-			}
-			wg.Add(1)
-			go func(i int, tqt enumspb.TaskQueueType) {
-				tq := c.taskQueueID.WithPartition(i).FullName()
-				_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
-					&matchingservice.InvalidateTaskQueueMetadataRequest{
-						NamespaceId:    c.taskQueueID.namespaceID.String(),
-						TaskQueue:      tq,
-						TaskQueueType:  tqt,
-						VersioningData: newDat,
-					})
-				if err != nil {
-					c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
-						tag.WorkflowTaskQueueName(tq), tag.Error(err))
-				}
-				wg.Done()
-			}(i, tqt)
-		}
+	c.signalIfFatal(err)
+	if !options.Replicate {
+		return nil
 	}
-	wg.Wait()
-	return nil
-}
 
-func (c *taskQueueManagerImpl) InvalidateMetadata(request *matchingservice.InvalidateTaskQueueMetadataRequest) error {
-	if request.GetVersioningData() != nil {
-		if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-			// Should never happen. Root partitions do not get their versioning data invalidated.
-			c.logger.Warn("A root workflow partition was told to invalidate its versioning data, this should not happen")
-			return nil
-		}
-		c.db.setVersioningDataForNonRootPartition(request.GetVersioningData())
-		c.metadataPoller.StartIfUnstarted()
+	// Only replicate if namespace is global and has at least 2 clusters registered.
+	ns, err := c.namespaceRegistry.GetNamespaceByID(c.db.namespaceID)
+	if err != nil {
+		return err
 	}
-	return nil
+	if !ns.IsGlobalNamespace() || len(ns.ClusterNames()) < 2 {
+		return nil
+	}
+
+	_, err = c.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
+		NamespaceId: c.db.namespaceID.String(),
+		TaskQueue:   c.taskQueueID.BaseNameString(),
+		UserData:    newData.GetData(),
+	})
+	if err != nil {
+		c.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
+		return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
+	}
+	return err
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
@@ -669,18 +681,20 @@ func executeWithRetry(
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
-	childCtx, cancel := c.newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
+	if params.forwardedFrom == "" && c.config.TestDisableSyncMatch() {
+		return false, nil
+	}
+	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
+	defer cancel()
 
-	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
+	// Use fake TaskId for sync match as it hasn't been allocated yet
 	fakeTaskIdWrapper := &persistencespb.AllocatedTaskInfo{
 		Data:   params.taskInfo,
 		TaskId: syncMatchTaskId,
 	}
 
 	task := newInternalTask(fakeTaskIdWrapper, nil, params.source, params.forwardedFrom, true)
-	matched, err := c.matcher.Offer(childCtx, task)
-	cancel()
-	return matched, err
+	return c.matcher.Offer(childCtx, task)
 }
 
 // newChildContext creates a child context with desired timeout.
@@ -689,23 +703,21 @@ func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskP
 // method to create child context when childContext cannot use
 // all of parent's deadline but instead there is a need to leave
 // some time for parent to do some post-work
-func (c *taskQueueManagerImpl) newChildContext(
+func newChildContext(
 	parent context.Context,
 	timeout time.Duration,
 	tailroom time.Duration,
 ) (context.Context, context.CancelFunc) {
-	select {
-	case <-parent.Done():
+	if parent.Err() != nil {
 		return parent, func() {}
-	default:
 	}
 	deadline, ok := parent.Deadline()
 	if !ok {
 		return context.WithTimeout(parent, timeout)
 	}
-	remaining := deadline.Sub(time.Now().UTC()) - tailroom
+	remaining := time.Until(deadline) - tailroom
 	if remaining < timeout {
-		timeout = time.Duration(util.Max(0, int64(remaining)))
+		timeout = util.Max(0, remaining)
 	}
 	return context.WithTimeout(parent, timeout)
 }
@@ -719,100 +731,111 @@ func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
 }
 
 func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
-	return c.taskQueueKind
+	return c.kind
+}
+
+func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
+	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 }
 
 func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-
-	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
-
-	return ctx, cancel
+	return c.callerInfoContext(ctx), cancel
 }
 
-func (c *taskQueueManagerImpl) fetchMetadataFromRootPartitionOnInit(ctx context.Context) {
-	if c.metadataInitialFetch.Ready() {
-		return
+func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
+	if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// Sticky queues get data from their corresponding normal queue
+		if c.normalName == "" {
+			// Older SDKs don't send the normal name. That's okay, they just can't use versioning.
+			return "", errMissingNormalQueueName
+		}
+		return c.normalName, nil
 	}
-	_, err := c.fetchMetadataFromRootPartition(ctx)
-	c.metadataInitialFetch.Set(struct{}{}, err)
+
+	degree := c.config.ForwarderMaxChildrenPerNode()
+	parent, err := c.taskQueueID.Parent(degree)
+	if err == tqname.ErrNoParent {
+		// we're the root activity task queue, ask the root workflow task queue
+		return c.taskQueueID.FullName(), nil
+	} else if err != nil {
+		// invalid degree
+		return "", err
+	}
+	return parent.FullName(), nil
 }
 
-// fetchMetadataFromRootPartition fetches metadata from root partition iff this partition is not a root partition.
-// Returns the fetched data, if fetching was necessary and successful.
-func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Context) (*persistencespb.VersioningData, error) {
-	// Nothing to do if we are the root partition of a workflow queue, since we should own the data.
-	// (for versioning - any later added metadata may need to not abort so early)
-	if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
-		return nil, nil
-	}
+func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
+	ctx = c.callerInfoContext(ctx)
 
-	curDat, err := c.db.GetVersioningData(ctx)
-	if err != nil && !errors.Is(err, errVersioningDataNotPresentOnPartition) {
-		return nil, err
-	}
-	curHash := HashVersioningData(curDat)
-
-	rootTqName := c.taskQueueID.Root().FullName()
-	if len(curHash) == 0 {
-		// if we have no data, make sure we send a sigil value, so it's known we desire versioning data
-		curHash = []byte{0}
-	}
-	res, err := c.matchingClient.GetTaskQueueMetadata(ctx, &matchingservice.GetTaskQueueMetadataRequest{
-		NamespaceId:               c.taskQueueID.namespaceID.String(),
-		TaskQueue:                 rootTqName,
-		WantVersioningDataCurhash: curHash,
-	})
-	// If the root partition returns nil here, then that means our data matched, and we don't need to update.
-	// If it's nil because it never existed, then we'd never have any data.
-	// It can't be nil due to removing versions, as that would result in a non-nil container with
-	// nil inner fields.
-	if !res.GetMatchedReqHash() {
-		c.db.setVersioningDataForNonRootPartition(res.GetVersioningData())
-	}
-	// We want to start the poller as long as the root partition has any kind of data (or fetching hasn't worked)
-	if res.GetMatchedReqHash() || res.GetVersioningData() != nil || err != nil {
-		c.metadataPoller.StartIfUnstarted()
-	}
+	fetchSource, err := c.userDataFetchSource()
 	if err != nil {
-		return nil, err
+		if err == errMissingNormalQueueName {
+			// pretend we have no user data
+			c.userDataInitialFetch.Set(struct{}{}, nil)
+		}
+		return err
 	}
-	return res.GetVersioningData(), nil
-}
 
-// StartIfUnstarted starts the poller if it's not already started. The passed in function is called repeatedly
-// and if it returns true, the poller will shut down, at which point it may be started again.
-func (mp *metadataPoller) StartIfUnstarted() {
-	if mp.running.Load() {
-		return
+	firstCall := true
+
+	op := func(ctx context.Context) error {
+		knownUserData, _, err := c.GetUserData(ctx)
+		if err != nil {
+			return err
+		}
+
+		callCtx, cancel := context.WithTimeout(ctx, c.config.GetUserDataLongPollTimeout())
+		defer cancel()
+
+		res, err := c.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              c.taskQueueID.namespaceID.String(),
+			TaskQueue:                fetchSource,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: knownUserData.GetVersion(),
+			WaitNewData:              !firstCall,
+		})
+		if err != nil {
+			return err
+		}
+		// If the root partition returns nil here, then that means our data matched, and we don't need to update.
+		// If it's nil because it never existed, then we'd never have any data.
+		// It can't be nil due to removing versions, as that would result in a non-nil container with
+		// nil inner fields.
+		if res.GetUserData() != nil {
+			c.db.setUserDataForNonOwningPartition(res.GetUserData())
+		}
+		if firstCall {
+			c.userDataInitialFetch.Set(struct{}{}, err)
+			firstCall = false
+		}
+		return nil
 	}
-	go mp.pollLoop()
-}
 
-func (mp *metadataPoller) pollLoop() {
-	mp.running.Store(true)
-	defer mp.running.Store(false)
-	ticker := time.NewTicker(mp.pollIntervalCfgFn())
-	defer ticker.Stop()
+	minWaitTime := c.config.GetUserDataMinWaitTime
 
-	for {
-		select {
-		case <-mp.stopChan:
-			return
-		case <-ticker.C:
-			// In case the interval has changed
-			ticker.Reset(mp.pollIntervalCfgFn())
-			dat, err := mp.tqMgr.fetchMetadataFromRootPartition(context.TODO())
-			if dat == nil && err == nil {
-				// Can stop polling since there is no versioning data. Loop will be restarted if we
-				// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
-				return
+	for ctx.Err() == nil {
+		start := time.Now()
+		_ = backoff.ThrottleRetryContext(ctx, op, getUserDataRetryPolicy, nil)
+		elapsed := time.Since(start)
+
+		// In general we want to start a new call immediately on completion of the previous
+		// one. But if the remote is broken and returns success immediately, we might end up
+		// spinning. So enforce a minimum wait time that increases as long as we keep getting
+		// very fast replies.
+		if elapsed < minWaitTime {
+			select {
+			case <-ctx.Done():
+			case <-time.After(minWaitTime - elapsed):
 			}
+			// Don't let this get near our call timeout, otherwise we can't tell the difference
+			// between a fast reply and a timeout.
+			minWaitTime = util.Min(minWaitTime*2, c.config.GetUserDataLongPollTimeout()/2)
+		} else {
+			minWaitTime = c.config.GetUserDataMinWaitTime
 		}
 	}
-}
 
-func (mp *metadataPoller) Stop() {
-	close(mp.stopChan)
+	return ctx.Err()
 }

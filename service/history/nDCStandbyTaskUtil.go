@@ -30,7 +30,9 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -105,6 +107,7 @@ type (
 
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
+		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
 
 	workflowTaskPostActionInfo struct {
@@ -112,6 +115,7 @@ type (
 
 		workflowTaskScheduleToStartTimeout *time.Duration
 		taskqueue                          taskqueuepb.TaskQueue
+		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
 
 	startChildExecutionPostActionInfo struct {
@@ -140,15 +144,19 @@ func newHistoryResendInfo(
 func newActivityTaskPostActionInfo(
 	mutableState workflow.MutableState,
 	activityScheduleToStartTimeout time.Duration,
+	useCompatibleVersion bool,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		versionDirective:                   directive,
 	}, nil
 }
 
@@ -156,16 +164,20 @@ func newActivityRetryTimePostActionInfo(
 	mutableState workflow.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
+	useCompatibleVersion bool,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		versionDirective:                   directive,
 	}, nil
 }
 
@@ -179,10 +191,16 @@ func newWorkflowTaskPostActionInfo(
 		return nil, err
 	}
 
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		mutableState.GetWorkerVersionStamp(),
+		mutableState.GetLastWorkflowTaskStartedEventID(),
+	)
+
 	return &workflowTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
+		versionDirective:                   directive,
 	}, nil
 }
 

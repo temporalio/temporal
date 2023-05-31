@@ -105,7 +105,6 @@ var Module = fx.Options(
 		func(p namespace.Registry) common.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
 	)),
-	fx.Provide(PersistenceHealthSignalAggregatorProvider),
 	fx.Provide(serialization.NewSerializer),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
@@ -211,21 +210,8 @@ func NamespaceRegistryProvider(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
+		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false),
 		metricsHandler,
-		logger,
-	)
-}
-
-func PersistenceHealthSignalAggregatorProvider(
-	dynamicCollection *dynamicconfig.Collection,
-	metricsHandler metrics.Handler,
-	logger log.Logger,
-) persistence.HealthSignalAggregator {
-	return persistence.NewHealthSignalAggregatorImpl(
-		dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 3*time.Second),
-		dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 500),
-		metricsHandler,
-		dynamicCollection.GetIntProperty(dynamicconfig.ShardRPSWarnLimit, 50),
 		logger,
 	)
 }

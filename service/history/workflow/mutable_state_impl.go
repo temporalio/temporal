@@ -166,6 +166,11 @@ type (
 		// record if a event has been applied to mutable state
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
+		// a flag indicating if workflow has attempted to close (complete/cancel/continue as new)
+		// but failed due to undelievered buffered events
+		// the flag will be unset whenever workflow task successfully completed, timedout or failed
+		// due to cause other than UnhandledCommand
+		workflowCloseAttempted bool
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
@@ -672,8 +677,9 @@ func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 func (ms *MutableStateImpl) CurrentTaskQueue() *taskqueuepb.TaskQueue {
 	if ms.IsStickyTaskQueueSet() {
 		return &taskqueuepb.TaskQueue{
-			Name: ms.executionInfo.StickyTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+			Name:       ms.executionInfo.StickyTaskQueue,
+			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+			NormalName: ms.executionInfo.TaskQueue,
 		}
 	}
 	return &taskqueuepb.TaskQueue{
@@ -702,8 +708,9 @@ func (ms *MutableStateImpl) IsStickyTaskQueueSet() bool {
 func (ms *MutableStateImpl) TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *time.Duration) {
 	if ms.executionInfo.TaskQueue != name {
 		return &taskqueuepb.TaskQueue{
-			Name: ms.executionInfo.StickyTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+			Name:       ms.executionInfo.StickyTaskQueue,
+			Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+			NormalName: ms.executionInfo.TaskQueue,
 		}, ms.executionInfo.StickyScheduleToStartTimeout
 	}
 	return &taskqueuepb.TaskQueue{
@@ -785,10 +792,13 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingActivityScheduledEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingActivityScheduledEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -865,10 +875,13 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingChildWorkflowInitiatedEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingChildWorkflowInitiatedEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -908,10 +921,13 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingRequestCancelInfo
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingRequestCancelInfo
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -982,10 +998,13 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingSignalInitiatedEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingSignalInitiatedEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -1020,10 +1039,13 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingWorkflowCompletionEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingWorkflowCompletionEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -1070,10 +1092,13 @@ func (ms *MutableStateImpl) GetStartEvent(
 		currentBranchToken,
 	)
 	if err != nil {
-		// do not return the original error
-		// since original error can be of type entity not exists
-		// which can cause task processing side to fail silently
-		return nil, ErrMissingWorkflowStartEvent
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingWorkflowStartEvent
+		}
+		return nil, err
 	}
 	return event, nil
 }
@@ -1474,6 +1499,10 @@ func (ms *MutableStateImpl) ClearTransientWorkflowTask() error {
 	return nil
 }
 
+func (ms *MutableStateImpl) GetWorkerVersionStamp() *commonpb.WorkerVersionStamp {
+	return ms.executionInfo.WorkerVersionStamp
+}
+
 func (ms *MutableStateImpl) HasBufferedEvents() bool {
 	return ms.hBuilder.HasBufferEvents()
 }
@@ -1481,11 +1510,6 @@ func (ms *MutableStateImpl) HasBufferedEvents() bool {
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
 func (ms *MutableStateImpl) HasAnyBufferedEvent(filter BufferedEventFilter) bool {
 	return ms.hBuilder.HasAnyBufferedEvent(filter)
-}
-
-// DeleteWorkflowTask deletes a workflow task.
-func (ms *MutableStateImpl) DeleteWorkflowTask() {
-	ms.workflowTaskManager.DeleteWorkflowTask()
 }
 
 // GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
@@ -1523,6 +1547,10 @@ func (ms *MutableStateImpl) IsWorkflowExecutionRunning() bool {
 
 func (ms *MutableStateImpl) IsCancelRequested() bool {
 	return ms.executionInfo.CancelRequested
+}
+
+func (ms *MutableStateImpl) IsWorkflowCloseAttempted() bool {
+	return ms.workflowCloseAttempted
 }
 
 func (ms *MutableStateImpl) IsSignalRequested(
@@ -1621,7 +1649,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		WorkflowId:               execution.WorkflowId,
 		TaskQueue:                tq,
 		WorkflowType:             wType,
-		WorkflowExecutionTimeout: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
+		WorkflowExecutionTimeout: previousExecutionInfo.WorkflowExecutionTimeout,
 		WorkflowRunTimeout:       runTimeout,
 		WorkflowTaskTimeout:      taskTimeout,
 		Input:                    command.Input,
@@ -1636,6 +1664,14 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
 
+	// Copy version stamp to new workflow only if:
+	// - command says to use compatible version
+	// - using versioning
+	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	if command.UseCompatibleVersion {
+		sourceVersionStamp = common.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
+	}
+
 	req := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            ms.namespaceEntry.ID().String(),
 		StartRequest:           createRequest,
@@ -1645,6 +1681,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		ContinueAsNewInitiator: command.Initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
 		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
+		SourceVersionStamp:       sourceVersionStamp,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -1868,8 +1905,17 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	if event.SearchAttributes != nil {
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
+	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+		limit := ms.config.MaxTrackedBuildIds(string(ms.namespaceEntry.Name()))
+		if err := ms.addBuildIdWithNoVisibilityTask(common.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId), limit); err != nil {
+			return err
+		}
+	}
+
+	ms.executionInfo.WorkerVersionStamp = event.SourceVersionStamp
 
 	ms.approximateSize += ms.executionInfo.Size()
+
 	ms.writeEventToCache(startEvent)
 	return nil
 }
@@ -1984,49 +2030,18 @@ func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
 	if len(binChecksum) == 0 {
 		return nil
 	}
+	if !ms.addResetPointFromCompletion(binChecksum, event.GetEventId(), maxResetPoints) {
+		return nil
+	}
 	exeInfo := ms.executionInfo
-	var currResetPoints []*workflowpb.ResetPointInfo
-	if exeInfo.AutoResetPoints != nil && exeInfo.AutoResetPoints.Points != nil {
-		currResetPoints = ms.executionInfo.AutoResetPoints.Points
-	} else {
-		currResetPoints = make([]*workflowpb.ResetPointInfo, 0, 1)
-	}
-
+	resetPoints := exeInfo.AutoResetPoints.Points
 	// List of all recent binary checksums associated with the workflow.
-	var recentBinaryChecksums []string
+	recentBinaryChecksums := make([]string, len(resetPoints))
 
-	for _, rp := range currResetPoints {
-		recentBinaryChecksums = append(recentBinaryChecksums, rp.GetBinaryChecksum())
-		if rp.GetBinaryChecksum() == binChecksum {
-			// this checksum already exists
-			return nil
-		}
+	for i, rp := range resetPoints {
+		recentBinaryChecksums[i] = rp.GetBinaryChecksum()
 	}
 
-	if len(currResetPoints) == maxResetPoints {
-		// If exceeding the max limit, do rotation by taking the oldest one out.
-		currResetPoints = currResetPoints[1:]
-		recentBinaryChecksums = recentBinaryChecksums[1:]
-	}
-	// Adding current version of the binary checksum.
-	recentBinaryChecksums = append(recentBinaryChecksums, binChecksum)
-
-	resettable := true
-	err := ms.CheckResettable()
-	if err != nil {
-		resettable = false
-	}
-	info := &workflowpb.ResetPointInfo{
-		BinaryChecksum:               binChecksum,
-		RunId:                        ms.executionState.GetRunId(),
-		FirstWorkflowTaskCompletedId: event.GetEventId(),
-		CreateTime:                   timestamp.TimePtr(ms.timeSource.Now()),
-		Resettable:                   resettable,
-	}
-	currResetPoints = append(currResetPoints, info)
-	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
-		Points: currResetPoints,
-	}
 	checksumsPayload, err := searchattribute.EncodeValue(recentBinaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
@@ -2036,6 +2051,152 @@ func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
 	}
 	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+// Add a reset point for current task completion if needed.
+// Returns true if the reset point was added or false if there was no need or no ability to add.
+func (ms *MutableStateImpl) addResetPointFromCompletion(
+	binaryChecksum string,
+	eventID int64,
+	maxResetPoints int,
+) bool {
+	if maxResetPoints < 1 {
+		// Nothing to do here
+		return false
+	}
+	exeInfo := ms.executionInfo
+	var resetPoints []*workflowpb.ResetPointInfo
+	if exeInfo.AutoResetPoints != nil && exeInfo.AutoResetPoints.Points != nil {
+		resetPoints = ms.executionInfo.AutoResetPoints.Points
+		if len(resetPoints) >= maxResetPoints {
+			// If limit is exceeded, drop the oldest ones.
+			resetPoints = resetPoints[len(resetPoints)-maxResetPoints+1:]
+		}
+	} else {
+		resetPoints = make([]*workflowpb.ResetPointInfo, 0, 1)
+	}
+
+	for _, rp := range resetPoints {
+		if rp.GetBinaryChecksum() == binaryChecksum {
+			return false
+		}
+	}
+
+	info := &workflowpb.ResetPointInfo{
+		BinaryChecksum:               binaryChecksum,
+		RunId:                        ms.executionState.GetRunId(),
+		FirstWorkflowTaskCompletedId: eventID,
+		CreateTime:                   timestamp.TimePtr(ms.timeSource.Now()),
+		Resettable:                   ms.CheckResettable() == nil,
+	}
+	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
+		Points: append(resetPoints, info),
+	}
+	return true
+}
+
+// Similar to (the to-be-deprecated) addBinaryCheckSumIfNotExists but works on build IDs.
+func (ms *MutableStateImpl) trackBuildIdFromCompletion(
+	version *commonpb.WorkerVersionStamp,
+	eventID int64,
+	limits WorkflowTaskCompletionLimits,
+) error {
+	buildIds, err := ms.loadBuildIds()
+	if err != nil {
+		return err
+	}
+	anyAdded := false
+	if !version.GetUseVersioning() {
+		var added bool
+		// Make sure unversioned workflow tasks are easily locatable with just the prefix
+		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, common.UnversionedSearchAttribute, limits.MaxTrackedBuildIds)
+		anyAdded = anyAdded || added
+	}
+	if version.GetBuildId() != "" {
+		var added bool
+		ms.addResetPointFromCompletion(version.GetBuildId(), eventID, limits.MaxResetPoints)
+		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, common.VersionStampToBuildIdSearchAttribute(version), limits.MaxTrackedBuildIds)
+		anyAdded = anyAdded || added
+	}
+	if !anyAdded {
+		return nil
+	}
+	if err := ms.saveBuildIds(buildIds); err != nil {
+		return err
+	}
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
+}
+
+func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
+	searchAttributes := ms.executionInfo.SearchAttributes
+	if searchAttributes == nil {
+		return []string{}, nil
+	}
+	saPayload, found := searchAttributes[searchattribute.BuildIds]
+	if !found {
+		return []string{}, nil
+	} else {
+		decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+		if err != nil {
+			return nil, err
+		}
+		searchAttributeValues, ok := decoded.([]string)
+		if !ok {
+			return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
+		}
+		return searchAttributeValues, nil
+	}
+}
+
+// Takes a list of loaded build IDs from a search attribute and added a new build ID to it while respecting provided limits.
+// Returns a potentially modified list and a flag indicating whether it was modified.
+func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(searchAttributeValues []string, searchAttributeValue string, maxTrackedBuildIds int) ([]string, bool) {
+	if maxTrackedBuildIds < 1 {
+		// Can't track this build ID
+		return searchAttributeValues, false
+	}
+	for _, exisitingValue := range searchAttributeValues {
+		if exisitingValue == searchAttributeValue {
+			return searchAttributeValues, false
+		}
+	}
+	if len(searchAttributeValues) >= maxTrackedBuildIds {
+		hasUnversioned := searchAttributeValues[0] == common.UnversionedSearchAttribute
+		searchAttributeValues = searchAttributeValues[len(searchAttributeValues)-maxTrackedBuildIds+1:]
+		// Make sure not to lose the unversioned value, it's required for the reachability API
+		if hasUnversioned {
+			searchAttributeValues[0] = common.UnversionedSearchAttribute
+		}
+	}
+	return append(searchAttributeValues, searchAttributeValue), true
+}
+
+func (ms *MutableStateImpl) saveBuildIds(buildIds []string) error {
+	searchAttributes := ms.executionInfo.SearchAttributes
+	if searchAttributes == nil {
+		searchAttributes = make(map[string]*commonpb.Payload, 1)
+		ms.executionInfo.SearchAttributes = searchAttributes
+	}
+
+	saPayload, err := searchattribute.EncodeValue(buildIds, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		return err
+	}
+	searchAttributes[searchattribute.BuildIds] = saPayload
+	return nil
+}
+
+func (ms *MutableStateImpl) addBuildIdWithNoVisibilityTask(searchAttributeValue string, maxTrackedBuildIds int) error {
+	buildIds, err := ms.loadBuildIds()
+	if err != nil {
+		return err
+	}
+	var added bool
+	buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, searchAttributeValue, maxTrackedBuildIds)
+	if !added {
+		return nil
+	}
+	return ms.saveBuildIds(buildIds)
 }
 
 // TODO: we will release the restriction when reset API allow those pending
@@ -2057,13 +2218,13 @@ func (ms *MutableStateImpl) CheckResettable() error {
 func (ms *MutableStateImpl) AddWorkflowTaskCompletedEvent(
 	workflowTask *WorkflowTaskInfo,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-	maxResetPoints int,
+	limits WorkflowTaskCompletionLimits,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskCompleted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskCompletedEvent(workflowTask, request, maxResetPoints)
+	return ms.workflowTaskManager.AddWorkflowTaskCompletedEvent(workflowTask, request, limits)
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowTaskCompletedEvent(
@@ -2190,6 +2351,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		TaskQueue:               attributes.TaskQueue.GetName(),
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
+		UseCompatibleVersion:    attributes.UseCompatibleVersion,
 	}
 	if ai.HasRetryPolicy {
 		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()
@@ -4131,6 +4293,14 @@ func (ms *MutableStateImpl) truncateRetryableActivityFailure(
 	return serverFailure
 }
 
+func (ms *MutableStateImpl) GetHistorySize() int64 {
+	return ms.executionInfo.ExecutionStats.HistorySize
+}
+
+func (ms *MutableStateImpl) AddHistorySize(size int64) {
+	ms.executionInfo.ExecutionStats.HistorySize += size
+}
+
 // TODO mutable state should generate corresponding transfer / timer tasks according to
 //  updates accumulated, while currently all transfer / timer tasks are managed manually
 
@@ -4762,7 +4932,7 @@ func (ms *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, 
 	}
 
 	// we have a workflow task with buffered events on the fly with a lower version, fail it
-	if err := failWorkflowTask(
+	if _, err := failWorkflowTask(
 		ms,
 		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
@@ -4827,7 +4997,7 @@ func (ms *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 	// Handling buffered events size issue
 	if workflowTask := ms.GetStartedWorkflowTask(); workflowTask != nil {
 		// we have a workflow task on the fly with a lower version, fail it
-		if err := failWorkflowTask(
+		if _, err := failWorkflowTask(
 			ms,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,

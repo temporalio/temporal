@@ -35,6 +35,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/internal/effect"
@@ -104,7 +105,6 @@ func TestFind(t *testing.T) {
 	_, found, err := reg.FindOrCreate(ctx, updateID)
 	require.NoError(t, err)
 	require.False(t, found)
-	require.True(t, reg.HasUndeliveredUpdates())
 
 	_, ok = reg.Find(ctx, updateID)
 	require.True(t, ok)
@@ -195,8 +195,6 @@ func TestFindOrCreate(t *testing.T) {
 		reg = update.NewRegistry(store)
 	)
 
-	require.False(t, reg.HasUndeliveredUpdates())
-
 	t.Run("new update", func(t *testing.T) {
 		updateID := "a completely new update ID"
 		_, found, err := reg.FindOrCreate(ctx, updateID)
@@ -253,7 +251,6 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 	evStore := mockEventStore{Controller: &effects}
 	meta := updatepb.Meta{UpdateId: storedAcceptedUpdateID}
 	outcome := successOutcome(t, "success!")
-	require.False(t, reg.HasUndeliveredUpdates(), "accepted is not undelivered")
 
 	err = upd.OnMessage(
 		ctx,
@@ -262,7 +259,6 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	require.False(t, reg.HasUndeliveredUpdates(), "updates should be ProvisionallyCompleted")
 	require.Equal(t, 1, reg.Len(), "update should still be present in map")
 	effects.Apply(ctx)
 	require.Equal(t, 0, reg.Len(), "update should have been removed")

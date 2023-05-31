@@ -103,17 +103,59 @@ func (s *executableSuite) TestExecute_TaskExecuted() {
 	s.NoError(executable.Execute())
 }
 
-func (s *executableSuite) TestExecute_UserLatency() {
+func (s *executableSuite) TestExecute_InMemoryNoUserLatency() {
 	executable := s.newTestExecutable()
 
-	expectedUserLatency := int64(133)
-	updateContext := func(ctx context.Context, taskInfo interface{}) {
-		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(), expectedUserLatency)
-	}
+	scheduleLatency := 100 * time.Millisecond
+	userLatency := 500 * time.Millisecond
+	attemptLatency := time.Second
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(nil, true, nil)
-	s.NoError(executable.Execute())
-	s.Equal(time.Duration(expectedUserLatency), executable.(*executableImpl).userLatency)
+	now := time.Now()
+	s.timeSource.Update(now)
+	executable.SetScheduledTime(now)
+
+	now = now.Add(scheduleLatency)
+	s.timeSource.Update(now)
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+		metrics.ContextCounterAdd(
+			ctx,
+			metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
+			int64(userLatency),
+		)
+
+		now = now.Add(attemptLatency)
+		s.timeSource.Update(now)
+	}).Return(nil, true, consts.ErrResourceExhaustedBusyWorkflow)
+	err := executable.HandleErr(executable.Execute())
+	s.Equal(consts.ErrResourceExhaustedBusyWorkflow, err)
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.Any())
+	executable.Nack(err)
+
+	// backoff duration
+	now = now.Add(time.Second)
+	s.timeSource.Update(now)
+
+	executable.SetScheduledTime(now)
+	now = now.Add(scheduleLatency)
+	s.timeSource.Update(now)
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+		metrics.ContextCounterAdd(
+			ctx,
+			metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
+			int64(userLatency),
+		)
+
+		now = now.Add(attemptLatency)
+		s.timeSource.Update(now)
+	}).Return(nil, true, nil)
+	err = executable.HandleErr(executable.Execute())
+	s.NoError(err)
+
+	s.Equal(scheduleLatency+attemptLatency-userLatency, executable.(*executableImpl).inMemoryNoUserLatency)
 }
 
 func (s *executableSuite) TestExecute_CapturePanic() {

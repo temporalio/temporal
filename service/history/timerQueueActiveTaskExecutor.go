@@ -460,6 +460,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), activityInfo.UseCompatibleVersion)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
@@ -474,6 +475,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		ScheduledEventId:       task.EventID,
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+		VersionDirective:       directive,
 	})
 
 	return retError
@@ -509,7 +511,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		return err
 	}
 
-	eventBatchFirstEventID := mutableState.GetNextEventID()
 	timeoutFailure := failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval := backoff.NoBackoff
 	retryState := enumspb.RETRY_STATE_TIMEOUT
@@ -535,7 +536,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	// First add timeout workflow event, no matter what we're doing next.
 	if err := workflow.TimeoutWorkflow(
 		mutableState,
-		eventBatchFirstEventID,
 		retryState,
 		newRunID,
 	); err != nil {

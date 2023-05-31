@@ -1086,7 +1086,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskqueue := "taskqueue"
 	activityID := "activity"
 	activityType := "activity type"
 	timerTimeout := 2 * time.Second
@@ -1095,7 +1094,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 		event.GetEventId(),
 		activityID,
 		activityType,
-		taskqueue,
+		taskQueueName,
 		nil,
 		timerTimeout,
 		timerTimeout,
@@ -1138,6 +1137,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			ScheduledEventId:       activityInfo.ScheduledEventId,
 			ScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout,
 			Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
+			VersionDirective:       common.MakeVersionDirectiveForActivityTask(nil, false),
 		},
 		gomock.Any(),
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)

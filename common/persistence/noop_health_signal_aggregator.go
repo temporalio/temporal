@@ -25,7 +25,7 @@
 package persistence
 
 import (
-	"go.temporal.io/server/common/quotas"
+	"time"
 )
 
 var NoopHealthSignalAggregator HealthSignalAggregator = newNoopSignalAggregator()
@@ -40,9 +40,7 @@ func (a *noopSignalAggregator) Start() {}
 
 func (a *noopSignalAggregator) Stop() {}
 
-func (a *noopSignalAggregator) GetRecordFn(_ quotas.Request) func(error) {
-	return func(error) {}
-}
+func (a *noopSignalAggregator) Record(_ int32, _ time.Duration, _ error) {}
 
 func (a *noopSignalAggregator) AverageLatency() float64 {
 	return 0

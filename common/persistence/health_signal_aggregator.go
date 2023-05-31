@@ -29,14 +29,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/quotas"
 )
 
 const (
@@ -46,7 +44,7 @@ const (
 type (
 	HealthSignalAggregator interface {
 		common.Daemon
-		GetRecordFn(req quotas.Request) func(err error)
+		Record(callerSegment int32, latency time.Duration, err error)
 		AverageLatency() float64
 		ErrorRatio() float64
 	}
@@ -70,8 +68,8 @@ type (
 )
 
 func NewHealthSignalAggregatorImpl(
-	windowSize dynamicconfig.DurationPropertyFn,
-	maxBufferSize dynamicconfig.IntPropertyFn,
+	windowSize time.Duration,
+	maxBufferSize int,
 	metricsHandler metrics.Handler,
 	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
 	logger log.Logger,
@@ -80,8 +78,8 @@ func NewHealthSignalAggregatorImpl(
 		status:               common.DaemonStatusInitialized,
 		shutdownCh:           make(chan struct{}),
 		requestsPerShard:     make(map[int32]int64),
-		latencyAverage:       aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
-		errorRatio:           aggregate.NewMovingWindowAvgImpl(windowSize(), maxBufferSize()),
+		latencyAverage:       aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+		errorRatio:           aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
 		metricsHandler:       metricsHandler,
 		emitMetricsTimer:     time.NewTicker(emitMetricsInterval),
 		perShardRPSWarnLimit: perShardRPSWarnLimit,
@@ -104,20 +102,18 @@ func (s *HealthSignalAggregatorImpl) Stop() {
 	s.emitMetricsTimer.Stop()
 }
 
-func (s *HealthSignalAggregatorImpl) GetRecordFn(req quotas.Request) func(err error) {
-	start := time.Now()
-	return func(err error) {
-		s.latencyAverage.Record(time.Since(start).Milliseconds())
+func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, latency time.Duration, err error) {
+	// TODO: uncomment when adding dynamic rate limiter
+	//s.latencyAverage.Record(latency.Milliseconds())
+	//
+	//if isUnhealthyError(err) {
+	//	s.errorRatio.Record(1)
+	//} else {
+	//	s.errorRatio.Record(0)
+	//}
 
-		if isUnhealthyError(err) {
-			s.errorRatio.Record(1)
-		} else {
-			s.errorRatio.Record(0)
-		}
-
-		if req.CallerSegment != CallerSegmentMissing {
-			s.incrementShardRequestCount(req.CallerSegment)
-		}
+	if callerSegment != CallerSegmentMissing {
+		s.incrementShardRequestCount(callerSegment)
 	}
 }
 
@@ -157,18 +153,18 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 	}
 }
 
-func isUnhealthyError(err error) bool {
-	if err == nil {
-		return false
-	}
-	switch err.(type) {
-	case *ShardOwnershipLostError,
-		*AppendHistoryTimeoutError,
-		*TimeoutError,
-		*serviceerror.Unavailable:
-		return true
-
-	default:
-		return false
-	}
-}
+// TODO: uncomment when adding dynamic rate limiter
+//func isUnhealthyError(err error) bool {
+//	if err == nil {
+//		return false
+//	}
+//	switch err.(type) {
+//	case *ShardOwnershipLostError,
+//		*AppendHistoryTimeoutError,
+//		*TimeoutError:
+//		return true
+//
+//	default:
+//		return false
+//	}
+//}

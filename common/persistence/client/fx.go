@@ -25,6 +25,8 @@
 package client
 
 import (
+	"time"
+
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -82,6 +84,7 @@ var Module = fx.Options(
 	BeanModule,
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(DataStoreFactoryProvider),
+	fx.Provide(HealthSignalAggregatorProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -130,4 +133,22 @@ func FactoryProvider(
 		params.Logger,
 		params.HealthSignals,
 	)
+}
+
+func HealthSignalAggregatorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) persistence.HealthSignalAggregator {
+	if dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalCollectionEnabled, true)() {
+		return persistence.NewHealthSignalAggregatorImpl(
+			dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 3*time.Second)(),
+			dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 500)(),
+			metricsHandler,
+			dynamicCollection.GetIntProperty(dynamicconfig.ShardRPSWarnLimit, 50),
+			logger,
+		)
+	}
+
+	return persistence.NoopHealthSignalAggregator
 }

@@ -106,6 +106,8 @@ const (
 	EnableEagerWorkflowStart = "system.enableEagerWorkflowStart"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
+	// PersistenceHealthSignalCollectionEnabled determines whether persistence health signal collection/aggregation is enabled
+	PersistenceHealthSignalCollectionEnabled = "system.persistenceHealthSignalCollectionEnabled"
 	// PersistenceHealthSignalWindowSize is the time window size in seconds for aggregating persistence signals
 	PersistenceHealthSignalWindowSize = "system.persistenceHealthSignalWindowSize"
 	// PersistenceHealthSignalBufferSize is the maximum number of persistence signals to buffer in memory per signal key
@@ -173,11 +175,26 @@ const (
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit = "limit.maxIDLength"
 	// WorkerBuildIdSizeLimit is the byte length limit for a worker build id as used in the rpc methods for updating
-	// the version graph for a task queue
+	// the version sets for a task queue.
+	// Do not set this to a value higher than 255 for clusters using SQL based persistence due to predefined VARCHAR
+	// column width.
 	WorkerBuildIdSizeLimit = "limit.workerBuildIdSize"
-	// VersionGraphNodeLimit is the max number of nodes allowed in the version graph for a task queue. Update requests
-	// which would cause the graph size to exceed this number will result in the oldest versions being dropped.
-	VersionGraphNodeLimit = "limit.versionGraphNodeSize"
+	// VersionCompatibleSetLimitPerQueue is the max number of compatible sets allowed in the versioning data for a task
+	// queue. Update requests which would cause the versioning data to exceed this number will fail with a
+	// FailedPrecondition error.
+	VersionCompatibleSetLimitPerQueue = "limit.versionCompatibleSetLimitPerQueue"
+	// VersionBuildIdLimitPerQueue is the max number of build IDs allowed to be defined in the versioning data for a
+	// task queue. Update requests which would cause the versioning data to exceed this number will fail with a
+	// FailedPrecondition error.
+	VersionBuildIdLimitPerQueue = "limit.versionBuildIdLimitPerQueue"
+	// ReachabilityTaskQueueScanLimit limits the number of task queues to scan when responding to a
+	// GetWorkerTaskReachability query.
+	ReachabilityTaskQueueScanLimit = "limit.reachabilityTaskQueueScan"
+	// ReachabilityQueryBuildIdLimit limits the number of build ids that can be requested in a single call to the
+	// GetWorkerTaskReachability API.
+	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
+	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
+	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
 
 	// keys for frontend
 
@@ -296,8 +313,10 @@ const (
 	// lifecycle stage. Default value is `false`.
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = "frontend.enableUpdateWorkflowExecutionAsyncAccepted"
 
-	// FrontendEnableUpdateWorkflowExecution enables worker versioning data read / write APIs.
+	// FrontendEnableWorkerVersioningDataAPIs enables worker versioning data read / write APIs.
 	FrontendEnableWorkerVersioningDataAPIs = "frontend.workerVersioningDataAPIs"
+	// FrontendEnableWorkerVersioningWorkflowAPIs enables worker versioning in workflow progress APIs.
+	FrontendEnableWorkerVersioningWorkflowAPIs = "frontend.workerVersioningWorkflowAPIs"
 
 	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
@@ -364,8 +383,17 @@ const (
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
-	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
-	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
+	// MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.
+	MatchingGetUserDataLongPollTimeout = "matching.getUserDataLongPollTimeout"
+
+	// for matching testing only:
+
+	// TestMatchingDisableSyncMatch forces tasks to go through the db once
+	TestMatchingDisableSyncMatch = "test.matching.disableSyncMatch"
+	// TestMatchingLBForceReadPartition forces polls to go to a specific partition
+	TestMatchingLBForceReadPartition = "test.matching.lbForceReadPartition"
+	// TestMatchingLBForceWritePartition forces adds to go to a specific partition
+	TestMatchingLBForceWritePartition = "test.matching.lbForceWritePartition"
 
 	// keys for history
 
@@ -642,6 +670,8 @@ const (
 	DefaultWorkflowRetryPolicy = "history.defaultWorkflowRetryPolicy"
 	// HistoryMaxAutoResetPoints is the key for max number of auto reset points stored in mutableState
 	HistoryMaxAutoResetPoints = "history.historyMaxAutoResetPoints"
+	// HistoryMaxTrackedBuildIds indicates the max number of build IDs to store in the BuildIds search attribute
+	HistoryMaxTrackedBuildIds = "history.maxTrackedBuildIds"
 	// EnableParentClosePolicy whether to  ParentClosePolicy
 	EnableParentClosePolicy = "history.enableParentClosePolicy"
 	// ParentClosePolicyThreshold decides that parent close policy will be processed by sys workers(if enabled) if

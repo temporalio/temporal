@@ -231,10 +231,11 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 }
 
 func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
-	lastEventID := int64(2)
+	randomEventID := int64(2208)
+	wtFailedEventID := int64(2)
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
-	s.mockMutableState.EXPECT().GetNextEventID().Return(lastEventID + 1).AnyTimes()
+	s.mockMutableState.EXPECT().GetNextEventID().Return(randomEventID).AnyTimes() // This doesn't matter, GetNextEventID is not used if there is started WT.
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -294,11 +295,11 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		"",
 		"",
 		int64(0),
-	).Return(&historypb.HistoryEvent{}, nil)
+	).Return(&historypb.HistoryEvent{EventId: wtFailedEventID}, nil)
 	s.mockMutableState.EXPECT().FlushBufferedEvents()
 
 	s.mockMutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		lastEventID+1, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity, false,
+		wtFailedEventID, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity, false,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	// if workflow is in zombie or finished state, keep as is

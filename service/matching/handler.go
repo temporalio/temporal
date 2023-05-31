@@ -75,6 +75,7 @@ func NewHandler(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -91,6 +92,7 @@ func NewHandler(
 			namespaceRegistry,
 			matchingServiceResolver,
 			clusterMetadata,
+			namespaceReplicationQueue,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}
@@ -298,7 +300,7 @@ func (h *Handler) UpdateWorkerBuildIdCompatibility(
 	return h.engine.UpdateWorkerBuildIdCompatibility(ctx, request)
 }
 
-// GetWorkerBuildIdCompatibility fetches the worker versioning graph for a task queue
+// GetWorkerBuildIdCompatibility fetches the worker versioning data for a task queue
 func (h *Handler) GetWorkerBuildIdCompatibility(
 	ctx context.Context,
 	request *matchingservice.GetWorkerBuildIdCompatibilityRequest,
@@ -307,21 +309,52 @@ func (h *Handler) GetWorkerBuildIdCompatibility(
 	return h.engine.GetWorkerBuildIdCompatibility(ctx, request)
 }
 
-// InvalidateTaskQueueMetadata notifies a task queue that some data has changed, and should be invalidated/refreshed
-func (h *Handler) InvalidateTaskQueueMetadata(
+func (h *Handler) GetTaskQueueUserData(
 	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueMetadataRequest,
-) (_ *matchingservice.InvalidateTaskQueueMetadataResponse, retError error) {
+	request *matchingservice.GetTaskQueueUserDataRequest,
+) (_ *matchingservice.GetTaskQueueUserDataResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.InvalidateTaskQueueMetadata(ctx, request)
+	return h.engine.GetTaskQueueUserData(ctx, request)
 }
 
-func (h *Handler) GetTaskQueueMetadata(
+func (h *Handler) ApplyTaskQueueUserDataReplicationEvent(
 	ctx context.Context,
-	request *matchingservice.GetTaskQueueMetadataRequest,
-) (_ *matchingservice.GetTaskQueueMetadataResponse, retError error) {
+	request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+) (_ *matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.GetTaskQueueMetadata(ctx, request)
+	return h.engine.ApplyTaskQueueUserDataReplicationEvent(ctx, request)
+}
+
+func (h *Handler) GetBuildIdTaskQueueMapping(
+	ctx context.Context,
+	request *matchingservice.GetBuildIdTaskQueueMappingRequest,
+) (_ *matchingservice.GetBuildIdTaskQueueMappingResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.GetBuildIdTaskQueueMapping(ctx, request)
+}
+
+func (h *Handler) ForceUnloadTaskQueue(
+	ctx context.Context,
+	request *matchingservice.ForceUnloadTaskQueueRequest,
+) (_ *matchingservice.ForceUnloadTaskQueueResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.ForceUnloadTaskQueue(ctx, request)
+}
+
+func (h *Handler) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueUserDataRequest,
+) (_ *matchingservice.UpdateTaskQueueUserDataResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.UpdateTaskQueueUserData(ctx, request)
+}
+
+func (h *Handler) ReplicateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.ReplicateTaskQueueUserDataRequest,
+) (_ *matchingservice.ReplicateTaskQueueUserDataResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.ReplicateTaskQueueUserData(ctx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

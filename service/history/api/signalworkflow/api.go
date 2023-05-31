@@ -69,14 +69,13 @@ func Invoke(
 				}, nil
 			}
 
+			releaseFn := workflowContext.GetReleaseFn()
 			if !mutableState.IsWorkflowExecutionRunning() {
+				// in-memory mutable state is still clean, release the lock with nil error to prevent
+				// clearing and reloading mutable state
+				releaseFn(nil)
 				return nil, consts.ErrWorkflowCompleted
 			}
-
-			executionInfo := mutableState.GetExecutionInfo()
-
-			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() && !request.GetSkipGenerateWorkflowTask()
 
 			if err := api.ValidateSignal(
 				ctx,
@@ -85,14 +84,21 @@ func Invoke(
 				request.GetInput().Size(),
 				"SignalWorkflowExecution",
 			); err != nil {
+				releaseFn(nil)
 				return nil, err
 			}
+
+			executionInfo := mutableState.GetExecutionInfo()
+
+			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
+			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() && !request.GetSkipGenerateWorkflowTask()
 
 			if childWorkflowOnly {
 				parentWorkflowID := executionInfo.ParentWorkflowId
 				parentRunID := executionInfo.ParentRunId
 				if parentExecution.GetWorkflowId() != parentWorkflowID ||
 					parentExecution.GetRunId() != parentRunID {
+					releaseFn(nil)
 					return nil, consts.ErrWorkflowParent
 				}
 			}

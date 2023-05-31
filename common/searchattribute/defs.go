@@ -46,6 +46,7 @@ const (
 	StateTransitionCount  = "StateTransitionCount"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
+	BuildIds              = "BuildIds"
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 	HistorySizeBytes      = "HistorySizeBytes"
@@ -88,6 +89,7 @@ var (
 	predefined = map[string]enumspb.IndexedValueType{
 		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		BuildIds:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,

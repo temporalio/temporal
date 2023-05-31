@@ -170,9 +170,8 @@ func getWorkflowExecutionContext(
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
-	ctx, cancel := context.WithTimeout(ctx, taskGetExecutionTimeout)
-	defer cancel()
-
+	// workflowCache will automatically use short context timeout when
+	// locking workflow for all background calls, we don't need a separate context here
 	weContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
@@ -180,7 +179,7 @@ func getWorkflowExecutionContext(
 		workflow.LockPriorityLow,
 	)
 	if common.IsContextDeadlineExceededErr(err) {
-		err = consts.ErrWorkflowBusy
+		err = consts.ErrResourceExhaustedBusyWorkflow
 	}
 	return weContext, release, err
 }

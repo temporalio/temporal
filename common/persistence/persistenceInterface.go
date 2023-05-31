@@ -72,6 +72,11 @@ type (
 		GetTasks(ctx context.Context, request *GetTasksRequest) (*InternalGetTasksResponse, error)
 		CompleteTask(ctx context.Context, request *CompleteTaskRequest) error
 		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
+		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*InternalGetTaskQueueUserDataResponse, error)
+		UpdateTaskQueueUserData(ctx context.Context, request *InternalUpdateTaskQueueUserDataRequest) error
+		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*InternalListTaskQueueUserDataEntriesResponse, error)
+		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
+		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)
 	}
 	// MetadataStore is a lower level of MetadataManager
 	MetadataStore interface {
@@ -239,6 +244,11 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 	}
 
+	InternalGetTaskQueueUserDataResponse struct {
+		Version  int64
+		UserData *commonpb.DataBlob
+	}
+
 	InternalUpdateTaskQueueRequest struct {
 		NamespaceID   string
 		TaskQueue     string
@@ -250,6 +260,26 @@ type (
 		ExpiryTime    *time.Time
 
 		PrevRangeID int64
+	}
+
+	InternalUpdateTaskQueueUserDataRequest struct {
+		NamespaceID string
+		TaskQueue   string
+		Version     int64
+		UserData    *commonpb.DataBlob
+		// Used to build an index of build_id to task_queues
+		BuildIdsAdded   []string
+		BuildIdsRemoved []string
+	}
+
+	InternalTaskQueueUserDataEntry struct {
+		TaskQueue string
+		Data      *commonpb.DataBlob
+	}
+
+	InternalListTaskQueueUserDataEntriesResponse struct {
+		NextPageToken []byte
+		Entries       []InternalTaskQueueUserDataEntry
 	}
 
 	InternalCreateTasksRequest struct {

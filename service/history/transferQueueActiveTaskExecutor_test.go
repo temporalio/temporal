@@ -125,6 +125,8 @@ type (
 	}
 )
 
+var defaultWorkflowTaskCompletionLimits = workflow.WorkflowTaskCompletionLimits{MaxResetPoints: configs.DefaultHistoryMaxAutoResetPoints, MaxTrackedBuildIds: configs.DefaultHistoryMaxTrackedBuildIds}
+
 func TestTransferQueueActiveTaskExecutorSuite(t *testing.T) {
 	s := new(transferQueueActiveTaskExecutorSuite)
 	suite.Run(t, s)
@@ -949,7 +951,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 				}},
 			},
 		},
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
@@ -1074,7 +1076,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",
 		Commands: commands,
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
 		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -1168,7 +1170,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: "some random identity",
 		Commands: commands,
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	for i := 0; i < 10; i++ {
 		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -1267,7 +1269,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 				}},
 			},
 		},
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:  "child namespace1",
@@ -2499,6 +2501,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
+		VersionDirective:       common.MakeVersionDirectiveForActivityTask(nil, false),
 	}
 }
 
@@ -2639,10 +2642,16 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 	timeout := executionInfo.WorkflowRunTimeout
-	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
+	if executionInfo.TaskQueue != task.TaskQueue {
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
+		taskQueue.NormalName = executionInfo.TaskQueue
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
+
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		mutableState.GetWorkerVersionStamp(),
+		mutableState.GetLastWorkflowTaskStartedEventID(),
+	)
 
 	return &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -2654,6 +2663,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: timeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
+		VersionDirective:       directive,
 	}
 }
 

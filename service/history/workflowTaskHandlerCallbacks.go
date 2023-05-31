@@ -410,11 +410,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	weContext := workflowContext.GetContext()
 	ms := workflowContext.GetMutableState()
 
-	executionStats, err := weContext.LoadExecutionStats(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
 	// TODO (alex-update): call mutableState.SetSpeculativeWorkflowTaskStartedEventID(mutableState) here to set StartEventID.
 	if !ms.IsWorkflowExecutionRunning() || currentWorkflowTask == nil || currentWorkflowTask.Attempt != token.Attempt ||
@@ -422,8 +417,17 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name().String())
-	if ms.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {
+	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
+	if ms.GetWorkerVersionStamp().GetUseVersioning() && !request.GetWorkerVersionStamp().GetUseVersioning() {
+		return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
+	}
+
+	limits := workflow.WorkflowTaskCompletionLimits{
+		MaxResetPoints:     handler.config.MaxAutoResetPoints(namespaceEntry.Name().String()),
+		MaxTrackedBuildIds: handler.config.MaxTrackedBuildIds(namespaceEntry.Name().String()),
+	}
+	// TODO: this metric is inaccurate, it should only be emitted if a new binary checksum (or build ID) is added in this completion.
+	if ms.GetExecutionInfo().AutoResetPoints != nil && limits.MaxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {
 		handler.metricsHandler.Counter(metrics.AutoResetPointsLimitExceededCounter.GetMetricName()).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
@@ -452,13 +456,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			}
 			ms.ClearStickyTaskQueue()
 		} else {
-			completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, maxResetPoints)
+			completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, limits)
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, maxResetPoints)
+		completedEvent, err = ms.AddWorkflowTaskCompletedEvent(currentWorkflowTask, request, limits)
 		if err != nil {
 			return nil, err
 		}
@@ -508,7 +512,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			},
 			ms,
 			handler.searchAttributesValidator,
-			executionStats,
 			handler.metricsHandler.WithTags(
 				metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
 				metrics.NamespaceTag(namespace.String()),
@@ -692,10 +695,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				return nil, err
 			}
 
-			eventBatchFirstEventID := ms.GetNextEventID()
 			if err := workflow.TerminateWorkflow(
 				ms,
-				eventBatchFirstEventID,
 				common.FailureReasonTransactionSizeExceedsLimit,
 				payloads.EncodeString(updateErr.Error()),
 				consts.IdentityHistoryService,
@@ -734,10 +735,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	if workflowTaskHeartbeatTimeout {
 		// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
+		// release workflow lock with nil error to prevent mutable state from being cleared and reloaded
+		workflowContext.GetReleaseFn()(nil)
 		return nil, serviceerror.NewNotFound("workflow task heartbeat timeout")
 	}
 
 	if wtFailedCause != nil {
+		// release workflow lock with nil error to prevent mutable state from being cleared and reloaded
+		workflowContext.GetReleaseFn()(nil)
 		return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 	}
 
@@ -980,7 +985,7 @@ func failWorkflowTask(
 	if err != nil {
 		return nil, common.EmptyEventID, err
 	}
-	if _, err = mutableState.AddWorkflowTaskFailedEvent(
+	wtFailedEvent, err := mutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		wtFailedCause.failedCause,
 		failure.NewServerFailure(wtFailedCause.Message(), true),
@@ -988,13 +993,13 @@ func failWorkflowTask(
 		request.GetBinaryChecksum(),
 		"",
 		"",
-		0); err != nil {
+		0)
+	if err != nil {
 		return nil, common.EmptyEventID, err
 	}
 
-	nextEventBatchId := mutableState.GetNextEventID() - 1
 	// Return new mutable state back to the caller for further updates
-	return mutableState, nextEventBatchId, nil
+	return mutableState, wtFailedEvent.GetEventId(), nil
 }
 
 // Filter function to be passed to mutable_state.HasAnyBufferedEvent

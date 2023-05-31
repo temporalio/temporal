@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -1110,4 +1111,97 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.True(ok)
 	s.LessOrEqual(activityInfo.RetryLastFailure.Size(), failureSizeErrorLimit)
 	s.Equal(activityFailure.GetMessage(), activityInfo.RetryLastFailure.Cause.GetMessage())
+}
+
+func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
+	versioned := func(buildId string) *commonpb.WorkerVersionStamp {
+		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: true}
+	}
+	versionedSearchAttribute := func(buildIds ...string) []string {
+		attrs := []string{}
+		for _, buildId := range buildIds {
+			attrs = append(attrs, common.VersionedBuildIdSearchAttribute(buildId))
+		}
+		return attrs
+	}
+	unversioned := func(buildId string) *commonpb.WorkerVersionStamp {
+		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: false}
+	}
+	unversionedSearchAttribute := func(buildIds ...string) []string {
+		// assumed limit is 2
+		attrs := []string{common.UnversionedSearchAttribute, common.UnversionedBuildIdSearchAttribute(buildIds[len(buildIds)-1])}
+		return attrs
+	}
+
+	type testCase struct {
+		name            string
+		searchAttribute func(buildIds ...string) []string
+		stamp           func(buildId string) *commonpb.WorkerVersionStamp
+	}
+	matrix := []testCase{
+		{name: "versioned", searchAttribute: versionedSearchAttribute, stamp: versioned},
+		{name: "unversioned", searchAttribute: unversionedSearchAttribute, stamp: unversioned},
+	}
+	for _, c := range matrix {
+		s.T().Run(c.name, func(t *testing.T) {
+			dbState := s.buildWorkflowMutableState()
+			var err error
+			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.NoError(err)
+
+			// Max 0
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxTrackedBuildIds: 0})
+			s.NoError(err)
+			s.Equal([]string{}, s.getBuildIdsFromMutableState())
+			s.Equal([]string{}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+			// Add the same build ID
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.2"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.1", "0.2"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+			// Limit applies
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.3"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.2", "0.3"}, s.getResetPointsBinaryChecksumsFromMutableState())
+		})
+	}
+}
+
+func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
+	searchAttributes := s.mutableState.executionInfo.SearchAttributes
+	if searchAttributes == nil {
+		return []string{}
+	}
+
+	payload, found := searchAttributes[searchattribute.BuildIds]
+	if !found {
+		return []string{}
+	}
+	decoded, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	s.NoError(err)
+	buildIDs, ok := decoded.([]string)
+	s.True(ok)
+	return buildIDs
+}
+
+func (s *mutableStateSuite) getResetPointsBinaryChecksumsFromMutableState() []string {
+	resetPoints := s.mutableState.executionInfo.GetAutoResetPoints().GetPoints()
+	binaryChecksums := make([]string, len(resetPoints))
+	for i, point := range resetPoints {
+		binaryChecksums[i] = point.GetBinaryChecksum()
+	}
+	return binaryChecksums
 }
