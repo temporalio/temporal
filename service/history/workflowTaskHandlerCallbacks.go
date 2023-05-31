@@ -603,10 +603,15 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		ms.FlushBufferedEvents()
 	}
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
-	if ms.IsWorkflowExecutionRunning() && (wtFailedShouldCreateNewTask || bufferedEventShouldCreateNewTask || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled) {
-		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-	} else if ms.IsWorkflowExecutionRunning() && weContext.UpdateRegistry(ctx).HasOutgoing() {
-		newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+	if ms.IsWorkflowExecutionRunning() {
+		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
+			wtFailedShouldCreateNewTask ||
+			bufferedEventShouldCreateNewTask ||
+			activityNotStartedCancelled {
+			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+		} else if weContext.UpdateRegistry(ctx).HasOutgoing() {
+			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+		}
 	}
 
 	bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
