@@ -205,8 +205,7 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 		10000 * time.Millisecond,
 		10000 * time.Millisecond,
 		10000 * time.Millisecond,
-		6000 * time.Millisecond,
-		1300 * time.Millisecond,
+		7250 * time.Millisecond,
 		done,
 	}
 
@@ -215,9 +214,9 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 		if expected == done {
 			s.Equal(done, next, "backoff not done yet!!!")
 		} else {
-			min, _ := getNextBackoffRange(expected)
-			s.True(next >= min, "NextBackoff too low: actual: %v, expected: %v", next, expected)
-			// s.True(next < max, "NextBackoff too high: actual: %v, expected: %v", next, expected)
+			min, max := getNextBackoffRange(expected)
+			s.True(next >= min, "NextBackoff too low: actual: %v, min: %v", next, min)
+			s.True(next < max, "NextBackoff too high: actual: %v, max: %v", next, max)
 			clock.moveClock(expected)
 		}
 	}
