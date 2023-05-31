@@ -171,7 +171,7 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 
 func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 	ctx := NewContext()
-	tq := "integration-versioning-not-destroyed"
+	tq := "integration-versioning-persists"
 
 	s.addNewDefaultBuildId(ctx, tq, "foo")
 
@@ -528,7 +528,7 @@ func (s *versioningIntegSuite) dispatchActivity() {
 	s.NoError(err)
 	// wait for it to start on v1
 	s.waitForChan(ctx, started)
-	close(started) //force panic if replayed
+	close(started) // force panic if replayed
 
 	// now register v2 as default
 	s.addNewDefaultBuildId(ctx, tq, "v2")
@@ -550,6 +550,78 @@ func (s *versioningIntegSuite) dispatchActivity() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v1v2", out)
+}
+
+func (s *versioningIntegSuite) TestDispatchActivityCompatible() {
+	s.testWithMatchingBehavior(s.dispatchActivityCompatible)
+}
+
+func (s *versioningIntegSuite) dispatchActivityCompatible() {
+	tq := s.randomizeStr(s.T().Name())
+
+	started := make(chan struct{}, 2)
+
+	act1 := func() (string, error) { return "v1", nil }
+	act11 := func() (string, error) { return "v1.1", nil }
+	wf1 := func(ctx workflow.Context) (string, error) {
+		started <- struct{}{}
+		// wait for signal
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		// run activity
+		fut11 := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ScheduleToCloseTimeout: time.Minute,
+			DisableEagerExecution:  true,
+			VersioningIntent:       temporal.VersioningIntentCompatible,
+		}), "act")
+		var val11 string
+		s.NoError(fut11.Get(ctx, &val11))
+		return val11, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	// wait for it to start on v1
+	s.waitForChan(ctx, started)
+
+	// now register v1.1 as compatible
+	s.addCompatibleBuildId(ctx, tq, "v1.1", "v1", false)
+	s.waitForPropagation(ctx, tq, "v1.1")
+	// start worker for v1.1
+	w11 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1.1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w11.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	w11.RegisterActivityWithOptions(act11, activity.RegisterOptions{Name: "act"})
+	s.NoError(w11.Start())
+	defer w11.Stop()
+
+	// wait for w1 long polls to all time out
+	time.Sleep(longPollTime)
+
+	// unblock the workflow
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("v1.1", out)
 }
 
 func (s *versioningIntegSuite) TestDispatchChildWorkflow() {
