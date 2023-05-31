@@ -2358,7 +2358,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
  14 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_ScheduleToCloseTimeoutSpeculativeWorkflowTask() {
+func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWorkflowTask() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -2717,7 +2717,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 	s.EqualValues(6, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId())
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
+func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() {
 	testCases := []struct {
 		Name         string
 		UpdateErrMsg string
@@ -2726,13 +2726,13 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_CancelUpdate() {
 	}{
 		{
 			Name:         "requested",
-			UpdateErrMsg: "update canceled",
+			UpdateErrMsg: "update has been terminated",
 			Commands:     func(_ *testvars.TestVars) []*commandpb.Command { return nil },
 			Messages:     func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
 		},
 		{
 			Name:         "accepted",
-			UpdateErrMsg: "update canceled",
+			UpdateErrMsg: "update has been terminated",
 			Commands:     func(tv *testvars.TestVars) []*commandpb.Command { return s.acceptUpdateCommands(tv, "1") },
 			Messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 				return s.acceptUpdateMessages(tv, updRequestMsg, "1")
