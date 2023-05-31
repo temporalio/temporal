@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -103,14 +104,13 @@ func (s *HealthSignalAggregatorImpl) Stop() {
 }
 
 func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, latency time.Duration, err error) {
-	// TODO: uncomment when adding dynamic rate limiter
-	//s.latencyAverage.Record(latency.Milliseconds())
-	//
-	//if isUnhealthyError(err) {
-	//	s.errorRatio.Record(1)
-	//} else {
-	//	s.errorRatio.Record(0)
-	//}
+	s.latencyAverage.Record(latency.Milliseconds())
+
+	if isUnhealthyError(err) {
+		s.errorRatio.Record(1)
+	} else {
+		s.errorRatio.Record(0)
+	}
 
 	if callerSegment != CallerSegmentMissing {
 		s.incrementShardRequestCount(callerSegment)
@@ -153,18 +153,18 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 	}
 }
 
-// TODO: uncomment when adding dynamic rate limiter
-//func isUnhealthyError(err error) bool {
-//	if err == nil {
-//		return false
-//	}
-//	switch err.(type) {
-//	case *ShardOwnershipLostError,
-//		*AppendHistoryTimeoutError,
-//		*TimeoutError:
-//		return true
-//
-//	default:
-//		return false
-//	}
-//}
+func isUnhealthyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	switch err.(type) {
+	case *ShardOwnershipLostError,
+		*AppendHistoryTimeoutError,
+		*TimeoutError,
+		*serviceerror.Unavailable:
+		return true
+
+	default:
+		return false
+	}
+}
