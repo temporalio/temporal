@@ -72,7 +72,8 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 	}
 
 	return CounterFunc(func(i int64, t ...Tag) {
-		c.Add(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		option := metric.WithAttributes(tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Add(context.Background(), i, option)
 	})
 }
 
@@ -85,7 +86,8 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 
 	return GaugeFunc(func(i float64, t ...Tag) {
 		_, err = omp.provider.GetMeter().RegisterCallback(func(ctx context.Context, o metric.Observer) error {
-			o.ObserveFloat64(c, i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+			option := metric.WithAttributes(tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+			o.ObserveFloat64(c, i, option)
 			return nil
 		}, c)
 		if err != nil {
@@ -102,7 +104,8 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 	}
 
 	return TimerFunc(func(i time.Duration, t ...Tag) {
-		c.Record(context.Background(), i.Milliseconds(), tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		option := metric.WithAttributes(tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Record(context.Background(), i.Milliseconds(), option)
 	})
 }
 
@@ -114,7 +117,8 @@ func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) Hist
 	}
 
 	return CounterFunc(func(i int64, t ...Tag) {
-		c.Record(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		option := metric.WithAttributes(tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Record(context.Background(), i, option)
 	})
 }
 

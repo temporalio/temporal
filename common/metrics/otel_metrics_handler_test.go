@@ -147,13 +147,13 @@ func TestMeter(t *testing.T) {
 		},
 		{
 			Name: "latency",
-			Data: metricdata.Histogram{
-				DataPoints: []metricdata.HistogramDataPoint{
+			Data: metricdata.Histogram[int64]{
+				DataPoints: []metricdata.HistogramDataPoint[int64]{
 					{
 						Count:        2,
 						BucketCounts: []uint64{0, 0, 0, 1, 1, 0},
-						Min:          metricdata.NewExtrema(minLatency),
-						Max:          metricdata.NewExtrema(maxLatency),
+						Min:          metricdata.NewExtrema[int64](int64(minLatency)),
+						Max:          metricdata.NewExtrema[int64](int64(maxLatency)),
 						Sum:          6503,
 					},
 				},
@@ -174,14 +174,14 @@ func TestMeter(t *testing.T) {
 		},
 		{
 			Name: "transmission",
-			Data: metricdata.Histogram{
-				DataPoints: []metricdata.HistogramDataPoint{
+			Data: metricdata.Histogram[int64]{
+				DataPoints: []metricdata.HistogramDataPoint[int64]{
 					{
 						Count:        1,
 						BucketCounts: []uint64{0, 0, 1},
-						Min:          metricdata.NewExtrema(testBytes),
-						Max:          metricdata.NewExtrema(testBytes),
-						Sum:          testBytes,
+						Min:          metricdata.NewExtrema[int64](int64(testBytes)),
+						Max:          metricdata.NewExtrema[int64](int64(testBytes)),
+						Sum:          int64(testBytes),
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -190,7 +190,7 @@ func TestMeter(t *testing.T) {
 		},
 	}
 	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,
-		cmp.Comparer(func(e1, e2 metricdata.Extrema) bool {
+		cmp.Comparer(func(e1, e2 metricdata.Extrema[int64]) bool {
 			v1, ok1 := e1.Value()
 			v2, ok2 := e2.Value()
 			return ok1 && ok2 && v1 == v2
@@ -203,9 +203,9 @@ func TestMeter(t *testing.T) {
 		}),
 		cmpopts.IgnoreFields(metricdata.DataPoint[int64]{}, "StartTime", "Time"),
 		cmpopts.IgnoreFields(metricdata.DataPoint[float64]{}, "StartTime", "Time"),
-		cmpopts.IgnoreFields(metricdata.HistogramDataPoint{}, "StartTime", "Time", "Bounds"),
+		cmpopts.IgnoreFields(metricdata.HistogramDataPoint[int64]{}, "StartTime", "Time", "Bounds"),
 	); diff != "" {
-		t.Errorf("mismatch (-want, got):\n%s", diff)
+		t.Errorf("mismatch (-want, +got):\n%s", diff)
 	}
 }
 
