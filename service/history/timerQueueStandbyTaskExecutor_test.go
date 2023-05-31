@@ -760,7 +760,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 					DeleteSignalInfos:         map[int64]struct{}{},
 					UpsertSignalRequestedIDs:  map[string]struct{}{},
 					DeleteSignalRequestedIDs:  map[string]struct{}{},
-					UpsertUpdateInfos:         map[string]*persistencespb.UpdateInfo{},
 					NewBufferedEvents:         nil,
 					ClearBufferedEvents:       false,
 				},

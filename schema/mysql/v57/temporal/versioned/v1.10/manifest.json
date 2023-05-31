@@ -3,7 +3,6 @@
   "MinCompatibleVersion": "1.0",
   "Description": "add storage for update records and create task_queue_user_data table",
   "SchemaUpdateCqlFiles": [
-    "update_info_maps_table.sql",
     "task_queue_user_data.sql"
   ]
 }

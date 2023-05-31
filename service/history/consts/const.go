@@ -87,8 +87,6 @@ var (
 	ErrUnknownCluster = serviceerror.NewInvalidArgument("unknown cluster")
 	// ErrBufferedQueryCleared is error indicating mutable state is cleared while buffered query is pending
 	ErrBufferedQueryCleared = serviceerror.NewUnavailable("buffered query cleared, please retry")
-	// ErrWorkflowBusy is error indicating workflow is currently busy and workflow context can't be locked within specified timeout
-	ErrWorkflowBusy = serviceerror.NewUnavailable("timeout locking workflow execution")
 	// ErrChildExecutionNotFound is error indicating pending child execution can't be found in workflow mutable state current branch
 	ErrChildExecutionNotFound = serviceerror.NewNotFound("Pending child execution not found.")
 	// ErrWorkflowNotReady is error indicating workflow mutable state is missing necessary information for handling the request
