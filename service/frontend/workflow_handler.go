@@ -77,6 +77,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -3707,30 +3708,44 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	}
 
 	// Validate concurrent batch operation
+	maxConcurrentBatchOperation := wh.config.MaxConcurrentBatchOperation(request.GetNamespace())
 	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: request.GetNamespace(),
 		Query:     batcher.OpenBatchOperationQuery,
 	})
 	if err == nil {
-		if countResp.GetCount() >= int64(wh.config.MaxConcurrentBatchOperation(request.GetNamespace())) {
+		if countResp.GetCount() >= int64(maxConcurrentBatchOperation) {
+			return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached")
+		}
+	} else if err == store.OperationNotSupportedErr {
+		// Some std visibility stores don't yet support CountWorkflowExecutions, even though some
+		// batch operations are still possible on those store (eg. by specyfing a list of Executions
+		// rather than a VisibilityQuery). Fallback to ListOpenWorkflowExecutions in these cases.
+		// TODO: Remove this once all std visibility stores support CountWorkflowExecutions.
+		openCount := 0
+		nextPageToken := []byte{}
+		for nextPageToken != nil && openCount < maxConcurrentBatchOperation {
+			listResp, err := wh.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
+				Namespace: request.GetNamespace(),
+				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
+					TypeFilter: &filterpb.WorkflowTypeFilter{
+						Name: batcher.BatchWFTypeName,
+					},
+				},
+				MaximumPageSize: int32(maxConcurrentBatchOperation - openCount),
+				NextPageToken: nextPageToken,
+			})
+			if (err != nil) {
+				return nil, err
+			}
+			openCount += len(listResp.Executions)
+			nextPageToken = listResp.NextPageToken
+		}
+		if openCount >= maxConcurrentBatchOperation {
 			return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached")
 		}
 	} else {
-		listResp, err := wh.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace: request.GetNamespace(),
-			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
-				TypeFilter: &filterpb.WorkflowTypeFilter{
-					Name: batcher.BatchWFTypeName,
-				},
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
-		openCount := len(listResp.Executions)
-		if openCount >= 1 {
-			return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached (max = 1 due to standard visibility)")
-		}
+		return nil, err
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
