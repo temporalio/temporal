@@ -3716,7 +3716,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached")
 		}
 	} else {
-		listResp,err := wh.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
+		listResp, err := wh.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace: request.GetNamespace(),
 			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
 				TypeFilter: &filterpb.WorkflowTypeFilter{
