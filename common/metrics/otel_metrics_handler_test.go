@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/unit"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -67,33 +66,33 @@ func TestMeter(t *testing.T) {
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: unit.Bytes,
+					Unit: "By",
 				},
 				sdkmetrics.Stream{
 					Aggregation: aggregation.ExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[string(unit.Bytes)],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries["By"],
 					},
 				},
 			),
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: unit.Dimensionless,
+					Unit: "1",
 				},
 				sdkmetrics.Stream{
 					Aggregation: aggregation.ExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[string(unit.Dimensionless)],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries["1"],
 					},
 				},
 			),
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: unit.Milliseconds,
+					Unit: "ms",
 				},
 				sdkmetrics.Stream{
 					Aggregation: aggregation.ExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[string(unit.Milliseconds)],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries["ms"],
 					},
 				},
 			),
@@ -102,7 +101,8 @@ func TestMeter(t *testing.T) {
 	p := NewOtelMetricsHandler(log.NewTestLogger(), &testProvider{meter: provider.Meter("test")}, defaultConfig)
 	recordMetrics(p)
 
-	got, err := rdr.Collect(ctx)
+	var got metricdata.ResourceMetrics
+	err := rdr.Collect(ctx, &got)
 	assert.Nil(t, err)
 
 	want := []metricdata.Metrics{
@@ -159,7 +159,7 @@ func TestMeter(t *testing.T) {
 				},
 				Temporality: metricdata.CumulativeTemporality,
 			},
-			Unit: unit.Milliseconds,
+			Unit: "ms",
 		},
 		{
 			Name: "temp",
@@ -186,7 +186,7 @@ func TestMeter(t *testing.T) {
 				},
 				Temporality: metricdata.CumulativeTemporality,
 			},
-			Unit: unit.Bytes,
+			Unit: "By",
 		},
 	}
 	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,

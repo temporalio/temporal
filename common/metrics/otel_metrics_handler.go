@@ -30,8 +30,6 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/instrument"
-	otelunit "go.opentelemetry.io/otel/metric/unit"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -98,7 +96,7 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 
 // Timer obtains a timer for the given name and MetricOptions.
 func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
-	c, err := omp.provider.GetMeter().Int64Histogram(timer, instrument.WithUnit(otelunit.Unit(Milliseconds)))
+	c, err := omp.provider.GetMeter().Int64Histogram(timer, metric.WithUnit(Milliseconds))
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
 	}
@@ -110,7 +108,7 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 
 // Histogram obtains a histogram for the given name and MetricOptions.
 func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
-	c, err := omp.provider.GetMeter().Int64Histogram(histogram, instrument.WithUnit(otelunit.Unit(unit)))
+	c, err := omp.provider.GetMeter().Int64Histogram(histogram, metric.WithUnit(string(unit)))
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
 	}
