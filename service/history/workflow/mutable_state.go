@@ -153,6 +153,9 @@ type (
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, updAcceptance *updatepb.Acceptance) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(updResp *updatepb.Response) (*historypb.HistoryEvent, error)
+		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
+		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
+		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
@@ -268,6 +271,8 @@ type (
 		ReplicateWorkflowExecutionStartedEvent(*clockspb.VectorClock, commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionUpdateCompletedEvent(*historypb.HistoryEvent) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *HistoryBuilder)
 		SetHistoryTree(ctx context.Context, executionTimeout *time.Duration, runTimeout *time.Duration, treeID string) error

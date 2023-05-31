@@ -715,6 +715,44 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
 }
 
+func (ms *MutableStateImpl) GetUpdateOutcome(
+	ctx context.Context,
+	updateID string,
+) (*updatepb.Outcome, error) {
+	if ms.executionInfo.UpdateInfos == nil {
+		return nil, serviceerror.NewNotFound("update not found")
+	}
+	rec, ok := ms.executionInfo.UpdateInfos[updateID]
+	if !ok {
+		return nil, serviceerror.NewNotFound("update not found")
+	}
+	compPtr := rec.GetCompletedPointer()
+	if compPtr == nil {
+		// not an error because update was found, but update has not completed
+		return nil, nil
+	}
+	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(compPtr.EventId)
+	if err != nil {
+		return nil, err
+	}
+	eventKey := events.EventKey{
+		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
+		WorkflowID:  ms.executionInfo.WorkflowId,
+		RunID:       ms.executionState.RunId,
+		EventID:     compPtr.EventId,
+		Version:     version,
+	}
+	event, err := ms.eventsCache.GetEvent(ctx, eventKey, compPtr.EventId-1, currentBranchToken)
+	if err != nil {
+		return nil, err
+	}
+	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
+	if attrs == nil {
+		return nil, serviceerror.NewInternal("event pointer does not reference an update completed event")
+	}
+	return attrs.GetOutcome(), nil
+}
+
 func (ms *MutableStateImpl) GetActivityScheduledEvent(
 	ctx context.Context,
 	scheduledEventID int64,
@@ -1143,6 +1181,8 @@ func (ms *MutableStateImpl) writeEventToCache(
 	// load it from database
 	// For completion event: store it within events cache so we can communicate the result to parent execution
 	// during the processing of DeleteTransferTask without loading this event from database
+	// For Update Accepted/Completed event: store it in here so that Update
+	// disposition lookups can be fast
 	ms.eventsCache.PutEvent(
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
@@ -3448,24 +3488,110 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	return event, nil
 }
 
-func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, updAcceptance *updatepb.Acceptance) (*historypb.HistoryEvent, error) {
+func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAcceptedEvent(
+	protocolInstanceID string,
+	updAcceptance *updatepb.Acceptance,
+) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionUpdateAccepted); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID, updAcceptance)
-	// TODO (alex-update): Async workflow update will require ReplicateWorkflowExecutionUpdateAcceptedEvent
-	// which restores update in the registry if it is not there.
+	if err := ms.ReplicateWorkflowExecutionUpdateAcceptedEvent(event); err != nil {
+		return nil, err
+	}
 	return event, nil
 }
 
-func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(updResp *updatepb.Response) (*historypb.HistoryEvent, error) {
+func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateAcceptedEvent(
+	event *historypb.HistoryEvent,
+) error {
+	attrs := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+	if attrs == nil {
+		return serviceerror.NewInternal("wrong event type in call to ReplicateWorkflowExecutionUpdateAcceptedEvent")
+	}
+	if ms.executionInfo.UpdateInfos == nil {
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
+	}
+	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
+	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+		ui.Value = &persistencespb.UpdateInfo_AcceptancePointer{
+			AcceptancePointer: &historyspb.HistoryEventPointer{EventId: event.EventId},
+		}
+	} else {
+		ui := persistencespb.UpdateInfo{
+			Value: &persistencespb.UpdateInfo_AcceptancePointer{
+				AcceptancePointer: &historyspb.HistoryEventPointer{EventId: event.EventId},
+			},
+		}
+		ms.executionInfo.UpdateInfos[updateID] = &ui
+		ms.executionInfo.UpdateCount++
+		ms.approximateSize += ui.Size() + len(updateID)
+	}
+	ms.writeEventToCache(event)
+	return nil
+}
+
+func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(
+	updResp *updatepb.Response,
+) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionUpdateCompleted); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddWorkflowExecutionUpdateCompletedEvent(updResp)
-	// TODO (alex-update): Async workflow update will require ReplicateWorkflowExecutionUpdateCompletedEvent
-	// which removes it from registry and notify update result pollers.
+	if err := ms.ReplicateWorkflowExecutionUpdateCompletedEvent(event); err != nil {
+		return nil, err
+	}
 	return event, nil
+}
+
+func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string {
+	if ms.executionInfo.UpdateInfos == nil {
+		return nil
+	}
+	out := make([]string, 0)
+	for id, updateInfo := range ms.executionInfo.UpdateInfos {
+		if updateInfo.GetAcceptancePointer() != nil {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func (ms *MutableStateImpl) GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool) {
+	if ms.executionInfo.UpdateInfos == nil {
+		return nil, false
+	}
+	info, ok := ms.executionInfo.UpdateInfos[updateID]
+	return info, ok
+}
+
+func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
+	event *historypb.HistoryEvent,
+) error {
+	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
+	if attrs == nil {
+		return serviceerror.NewInternal("wrong event type in call to ReplicateWorkflowExecutionUpdateCompletedEvent")
+	}
+	if ms.executionInfo.UpdateInfos == nil {
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
+	}
+	updateID := attrs.GetMeta().GetUpdateId()
+	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+		ui.Value = &persistencespb.UpdateInfo_CompletedPointer{
+			CompletedPointer: &historyspb.HistoryEventPointer{EventId: event.EventId},
+		}
+	} else {
+		ui := persistencespb.UpdateInfo{
+			Value: &persistencespb.UpdateInfo_CompletedPointer{
+				CompletedPointer: &historyspb.HistoryEventPointer{EventId: event.EventId},
+			},
+		}
+		ms.executionInfo.UpdateInfos[updateID] = &ui
+		ms.executionInfo.UpdateCount++
+		ms.approximateSize += ui.Size() + len(updateID)
+	}
+	ms.writeEventToCache(event)
+	return nil
 }
 
 func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.Rejection) error {

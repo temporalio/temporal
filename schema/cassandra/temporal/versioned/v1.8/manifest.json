@@ -2,5 +2,5 @@
   "CurrVersion": "1.8",
   "MinCompatibleVersion": "1.0",
   "Description": "add storage for update records and create task_queue_user_data table",
-  "SchemaUpdateCqlFiles": ["executions.cql", "task_queue_user_data.cql"]
+  "SchemaUpdateCqlFiles": ["task_queue_user_data.cql"]
 }

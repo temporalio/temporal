@@ -1789,16 +1789,66 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionSi
 	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
 }
 
-func (s *stateBuilderSuite) TestApplyEventsNewEventsNotHandled() {
-	eventTypes := enumspb.EventType_value
-	s.Equal(
-		47,
-		len(eventTypes),
-		"If you see this error, you are adding new event type. Before updating "+
-			"the number to make this test pass, please make sure you update "+
-			"`MutableStateRebuilderImpl.ApplyEvents` method to handle the new "+
-			"command type. Otherwise cross dc will not work on the new event.",
-	)
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionUpdateAccepted() {
+	version := int64(1)
+	requestID := uuid.New()
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      tests.RunID,
+	}
+
+	now := time.Now().UTC()
+	evenType := enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED
+	event := &historypb.HistoryEvent{
+		TaskId:    rand.Int63(),
+		Version:   version,
+		EventId:   130,
+		EventTime: &now,
+		EventType: evenType,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
+			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+				ProtocolInstanceId: s.T().Name(),
+			},
+		},
+	}
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionUpdateAcceptedEvent(event).Return(nil)
+	s.mockUpdateVersion(event)
+	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
+
+	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil)
+	s.NoError(err)
+	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
+}
+
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionUpdateCompleted() {
+	version := int64(1)
+	requestID := uuid.New()
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      tests.RunID,
+	}
+
+	now := time.Now().UTC()
+	evenType := enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED
+	event := &historypb.HistoryEvent{
+		TaskId:    rand.Int63(),
+		Version:   version,
+		EventId:   130,
+		EventTime: &now,
+		EventType: evenType,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateCompletedEventAttributes{
+			WorkflowExecutionUpdateCompletedEventAttributes: &historypb.WorkflowExecutionUpdateCompletedEventAttributes{},
+		},
+	}
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionUpdateCompletedEvent(event).Return(nil)
+	s.mockUpdateVersion(event)
+	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
+
+	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil)
+	s.NoError(err)
+	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
 }
 
 func (p *testTaskGeneratorProvider) NewTaskGenerator(

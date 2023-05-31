@@ -34,7 +34,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
@@ -72,9 +75,9 @@ type (
 	// UpdateStore represents the update package's requirements for writing
 	// events and restoring ephemeral state from an event index.
 	UpdateStore interface {
-		//GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
-		//GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
-		//GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
+		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
+		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 	}
 
 	RegistryImpl struct {
@@ -138,11 +141,9 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 	}
 
 	// need to eager load here so that Len and admit are correct.
-	/*
-		for _, id := range store.GetAcceptedWorkflowExecutionUpdateIDs(context.Background()) {
-			r.updates[id] = newAccepted(id, r.remover(id), withInstrumentation(&r.instrumentation))
-		}
-	*/
+	for _, id := range store.GetAcceptedWorkflowExecutionUpdateIDs(context.Background()) {
+		r.updates[id] = newAccepted(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	}
 	return r
 }
 
@@ -243,19 +244,17 @@ func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool
 	// update not found in ephemeral state, but could have already completed so
 	// check in registry storage
 
-	/*
-		if info, ok := r.store.GetUpdateInfo(ctx, id); ok {
-			if info.GetCompletedPointer() != nil {
-				// Completed, create the Update object but do not add to registry. this
-				// should not happen often.
-				fut := future.NewReadyFuture(r.store.GetUpdateOutcome(ctx, id))
-				return newCompleted(
-					id,
-					fut,
-					withInstrumentation(&r.instrumentation),
-				), true
-			}
+	if info, ok := r.store.GetUpdateInfo(ctx, id); ok {
+		if info.GetCompletedPointer() != nil {
+			// Completed, create the Update object but do not add to registry. this
+			// should not happen often.
+			fut := future.NewReadyFuture(r.store.GetUpdateOutcome(ctx, id))
+			return newCompleted(
+				id,
+				fut,
+				withInstrumentation(&r.instrumentation),
+			), true
 		}
-	*/
+	}
 	return nil, false
 }

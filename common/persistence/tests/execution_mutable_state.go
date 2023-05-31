@@ -1760,11 +1760,9 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 	mutations ...*p.WorkflowMutation,
 ) (*persistencespb.WorkflowMutableState, int64) {
 	mutableState := &persistencespb.WorkflowMutableState{
-		ExecutionInfo:  snapshot.ExecutionInfo,
-		ExecutionState: snapshot.ExecutionState,
-
-		NextEventId: snapshot.NextEventID,
-
+		ExecutionInfo:       snapshot.ExecutionInfo,
+		ExecutionState:      snapshot.ExecutionState,
+		NextEventId:         snapshot.NextEventID,
 		ActivityInfos:       snapshot.ActivityInfos,
 		TimerInfos:          snapshot.TimerInfos,
 		ChildExecutionInfos: snapshot.ChildExecutionInfos,

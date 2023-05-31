@@ -128,6 +128,7 @@ message WorkflowExecutionInfo {
     int64 user_timer_count = 73;
     int64 request_cancel_external_count = 74;
     int64 signal_external_count = 75;
+    int64 update_count = 77;
     reserved 47;
     reserved 48;
     reserved 49;
@@ -158,6 +159,9 @@ message WorkflowExecutionInfo {
     // If using build-id based versioning: version stamp of the last worker to process a
     // workflow taks for this workflow.
     temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 78;
+
+    // index of update IDs and pointers to associated history events.
+    map<string, UpdateInfo> update_infos = 79;
 }
 
 message ExecutionStats {
@@ -361,4 +365,13 @@ message Checksum {
     int32 version = 1;
     temporal.server.api.enums.v1.ChecksumFlavor flavor = 2;
     bytes value = 3;
+}
+
+message UpdateInfo {
+    oneof value {
+        // update has been accepted and this is the pointer to the accepted event
+        temporal.server.api.history.v1.HistoryEventPointer acceptance_pointer = 1;
+        // update has been completed and this is the pointer to the completion event
+        temporal.server.api.history.v1.HistoryEventPointer completed_pointer = 2;
+    }
 }
