@@ -60,7 +60,7 @@ const (
 	InitialVersion SchedulerWorkflowVersion = iota
 	// skip over entire time range if paused and batch and cache getNextTime queries
 	BatchAndCacheTimeQueries
-	// terminate schedule bfter it runs out of actions
+	// terminate idle schedules by default
 	FinishIdleSchedule
 )
 
