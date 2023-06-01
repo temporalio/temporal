@@ -360,8 +360,6 @@ type (
 		DeleteSignalInfos         map[int64]struct{}
 		UpsertSignalRequestedIDs  map[string]struct{}
 		DeleteSignalRequestedIDs  map[string]struct{}
-		UpsertUpdateInfos         map[string]*persistencespb.UpdateInfo
-		DeleteUpdateInfos         map[string]struct{}
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
@@ -386,7 +384,6 @@ type (
 		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
 		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
-		UpdateInfos         map[string]*persistencespb.UpdateInfo
 
 		Tasks map[tasks.Category][]tasks.Task
 
@@ -736,6 +733,7 @@ type (
 		SignalInfoSize        int
 		SignalRequestIDSize   int
 		BufferedEventsSize    int
+		// UpdateInfoSize is included in ExecutionInfoSize
 
 		// Item count for various information captured within mutable state
 		ActivityInfoCount      int
@@ -746,6 +744,7 @@ type (
 		SignalRequestIDCount   int
 		BufferedEventsCount    int
 		TaskCountByCategory    map[string]int
+		UpdateInfoCount        int
 
 		// Total item count for various information captured within mutable state
 		TotalActivityCount              int64
@@ -754,6 +753,7 @@ type (
 		TotalRequestCancelExternalCount int64
 		TotalSignalExternalCount        int64
 		TotalSignalCount                int64
+		TotalUpdateCount                int64
 	}
 
 	HistoryStatistics struct {

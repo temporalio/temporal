@@ -68,6 +68,9 @@ func statusOfInternalWorkflow(
 	bufferedEventsCount := len(internalState.BufferedEvents)
 	bufferedEventsSize := sizeOfBlobSlice(internalState.BufferedEvents)
 
+	totalUpdateCount := state.ExecutionInfo.UpdateCount
+	updateInfoCount := len(state.ExecutionInfo.UpdateInfos)
+
 	totalSize := executionInfoSize
 	totalSize += executionStateSize
 	totalSize += activityInfoSize
@@ -111,6 +114,9 @@ func statusOfInternalWorkflow(
 
 		BufferedEventsSize:  bufferedEventsSize,
 		BufferedEventsCount: bufferedEventsCount,
+
+		UpdateInfoCount:  updateInfoCount,
+		TotalUpdateCount: totalUpdateCount,
 	}
 }
 
@@ -160,6 +166,9 @@ func statusOfInternalWorkflowMutation(
 	signalRequestIDCount += len(mutation.DeleteSignalRequestedIDs)
 	signalRequestIDSize := sizeOfStringSet(mutation.UpsertSignalRequestedIDs)
 	signalRequestIDSize += sizeOfStringSet(mutation.DeleteSignalRequestedIDs)
+
+	totalUpdateCount := mutation.ExecutionInfo.UpdateCount
+	updateInfoCount := len(mutation.ExecutionInfo.UpdateInfos)
 
 	bufferedEventsCount := 0
 	bufferedEventsSize := 0
@@ -217,6 +226,9 @@ func statusOfInternalWorkflowMutation(
 		BufferedEventsCount: bufferedEventsCount,
 
 		TaskCountByCategory: taskCountByCategory,
+
+		TotalUpdateCount: totalUpdateCount,
+		UpdateInfoCount:  updateInfoCount,
 	}
 }
 
@@ -262,6 +274,9 @@ func statusOfInternalWorkflowSnapshot(
 	totalSignalCount := snapshot.ExecutionInfo.SignalCount
 	signalRequestIDCount := len(snapshot.SignalRequestedIDs)
 	signalRequestIDSize := sizeOfStringSet(snapshot.SignalRequestedIDs)
+
+	totalUpdateCount := snapshot.ExecutionInfo.UpdateCount
+	updateInfoCount := len(snapshot.ExecutionInfo.UpdateInfos)
 
 	bufferedEventsCount := 0
 	bufferedEventsSize := 0
@@ -313,5 +328,8 @@ func statusOfInternalWorkflowSnapshot(
 		BufferedEventsCount: bufferedEventsCount,
 
 		TaskCountByCategory: taskCountByCategory,
+
+		TotalUpdateCount: totalUpdateCount,
+		UpdateInfoCount:  updateInfoCount,
 	}
 }
