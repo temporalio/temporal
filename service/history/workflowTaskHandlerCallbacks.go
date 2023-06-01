@@ -321,7 +321,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 
 			scheduledEventID := token.GetScheduledEventId()
 			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
-			// TODO (alex-update): call mutableState.SetSpeculativeWorkflowTaskStartedEventID(mutableState) here to set StartEventID.
 
 			if workflowTask == nil || workflowTask.Attempt != token.Attempt || workflowTask.StartedEventID == common.EmptyEventID {
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
@@ -411,7 +410,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	ms := workflowContext.GetMutableState()
 
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
-	// TODO (alex-update): call mutableState.SetSpeculativeWorkflowTaskStartedEventID(mutableState) here to set StartEventID.
 	if !ms.IsWorkflowExecutionRunning() || currentWorkflowTask == nil || currentWorkflowTask.Attempt != token.Attempt ||
 		currentWorkflowTask.StartedEventID == common.EmptyEventID {
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
