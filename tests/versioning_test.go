@@ -512,11 +512,27 @@ func (s *versioningIntegSuite) dispatchUpgrade(stopOld bool) {
 	s.Equal("done from 1.1!", out)
 }
 
+type activityFailMode int
+
+const (
+	dontFailActivity = iota
+	failActivity
+	timeoutActivity
+)
+
 func (s *versioningIntegSuite) TestDispatchActivity() {
-	s.testWithMatchingBehavior(s.dispatchActivity)
+	s.testWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity) })
 }
 
-func (s *versioningIntegSuite) dispatchActivity() {
+func (s *versioningIntegSuite) TestDispatchActivityFail() {
+	s.testWithMatchingBehavior(func() { s.dispatchActivity(failActivity) })
+}
+
+func (s *versioningIntegSuite) TestDispatchActivityTimeout() {
+	s.testWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity) })
+}
+
+func (s *versioningIntegSuite) dispatchActivity(failMode activityFailMode) {
 	// This also implicitly tests that a workflow stays on a compatible version set if a new
 	// incompatible set is registered, because wf2 just panics. It further tests that
 	// stickiness on v1 is not broken by registering v2, because the channel send will panic on
@@ -526,8 +542,32 @@ func (s *versioningIntegSuite) dispatchActivity() {
 
 	started := make(chan struct{}, 1)
 
-	act1 := func() (string, error) { return "v1", nil }
-	act2 := func() (string, error) { return "v2", nil }
+	var act1state, act2state atomic.Int32
+
+	act1 := func() (string, error) {
+		if act1state.Add(1) == 1 {
+			switch failMode {
+			case failActivity:
+				return "", errors.New("try again")
+			case timeoutActivity:
+				time.Sleep(5 * time.Second)
+				return "ignored", nil
+			}
+		}
+		return "v1", nil
+	}
+	act2 := func() (string, error) {
+		if act2state.Add(1) == 1 {
+			switch failMode {
+			case failActivity:
+				return "", errors.New("try again")
+			case timeoutActivity:
+				time.Sleep(5 * time.Second)
+				return "ignored", nil
+			}
+		}
+		return "v2", nil
+	}
 	wf1 := func(ctx workflow.Context) (string, error) {
 		started <- struct{}{}
 		// wait for signal
@@ -537,11 +577,13 @@ func (s *versioningIntegSuite) dispatchActivity() {
 			ScheduleToCloseTimeout: time.Minute,
 			DisableEagerExecution:  true,
 			VersioningIntent:       temporal.VersioningIntentCompatible,
+			StartToCloseTimeout:    1 * time.Second,
 		}), "act")
 		fut2 := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ScheduleToCloseTimeout: time.Minute,
 			DisableEagerExecution:  true,
 			VersioningIntent:       temporal.VersioningIntentDefault, // this one should go to default
+			StartToCloseTimeout:    1 * time.Second,
 		}), "act")
 		var val1, val2 string
 		s.NoError(fut1.Get(ctx, &val1))
