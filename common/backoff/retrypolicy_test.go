@@ -188,7 +188,8 @@ func (s *RetryPolicySuite) TestExpirationOverflow() {
 
 func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 	policy := NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithExpirationInterval(time.Minute).
+		// this interval should be bigger or equal than sum of all intervals in the test
+		WithExpirationInterval(time.Minute + 50*time.Millisecond).
 		WithMaximumInterval(10 * time.Second)
 
 	r, clock := createRetrier(policy)
