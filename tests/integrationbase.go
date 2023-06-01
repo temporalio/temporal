@@ -350,12 +350,59 @@ func (s *IntegrationBase) formatHistoryCompact(history *historypb.History) strin
 
 func (s *IntegrationBase) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
 	s.T().Helper()
-	expectedHistoryTrimmed := strings.Trim(expectedHistory, "\n")
+	expectedHistorySanitized := s.sanitizeHistory(expectedHistory)
 	actualHistoryStr := s.formatHistoryCompact(actualHistory)
-	s.Equal(expectedHistoryTrimmed, actualHistoryStr)
+	s.Equal(expectedHistorySanitized, actualHistoryStr)
 }
 
 func (s *IntegrationBase) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
 	s.T().Helper()
 	s.EqualHistory(expectedHistory, &historypb.History{Events: actualHistoryEvents})
+}
+
+// sanitizeHistory removes all empty new lines and comments from expectedHistory string.
+func (s *IntegrationBase) sanitizeHistory(expectedHistory string) string {
+	type state int
+	const (
+		stateStart state = iota
+		stateNormal
+		stateComment
+		stateNewLine
+	)
+
+	var ret strings.Builder
+	st := stateStart
+	spaceCounter := 0
+	for _, r := range expectedHistory {
+		switch r {
+		case '\n':
+			if st == stateStart {
+				continue
+			}
+			spaceCounter = 0
+			st = stateNewLine
+		case '/':
+			spaceCounter = 0
+			st = stateComment
+		case ' ':
+			if st == stateComment {
+				continue
+			}
+			spaceCounter++
+		default:
+			if st == stateComment {
+				continue
+			}
+			if st == stateNewLine {
+				ret.WriteRune('\n')
+			}
+			if spaceCounter > 0 {
+				ret.WriteString(strings.Repeat(" ", spaceCounter))
+				spaceCounter = 0
+			}
+			ret.WriteRune(r)
+			st = stateNormal
+		}
+	}
+	return ret.String()
 }

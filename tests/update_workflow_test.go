@@ -314,7 +314,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // Was speculative WT but was converted to normal WT.
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
   9 WorkflowExecutionUpdateAccepted
@@ -322,7 +322,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
- 14 WorkflowExecutionCompleted`, events)
+ 14 WorkflowExecutionCompleted
+`, events)
 		})
 	}
 }
