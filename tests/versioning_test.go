@@ -856,6 +856,93 @@ func (s *versioningIntegSuite) dispatchChildWorkflowUpgrade() {
 	s.Equal("v1.1", out)
 }
 
+func (s *versioningIntegSuite) TestDispatchQuery() {
+	s.testWithMatchingBehavior(s.dispatchQuery)
+}
+
+func (s *versioningIntegSuite) dispatchQuery() {
+	tq := s.randomizeStr(s.T().Name())
+
+	started := make(chan struct{}, 2)
+
+	wf1 := func(ctx workflow.Context) error {
+		workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v1", nil })
+		started <- struct{}{}
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		return nil
+	}
+	wf11 := func(ctx workflow.Context) error {
+		workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v1.1", nil })
+		started <- struct{}{}
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		return nil
+	}
+	wf2 := func(ctx workflow.Context) error {
+		workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v2", nil })
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	// wait for it to start on v1
+	s.waitForChan(ctx, started)
+
+	// now register v1.1 as compatible
+	// now register v11 as newer compatible with v1 AND v2 as a new default
+	s.addCompatibleBuildId(ctx, tq, "v11", "v1", false)
+	s.addNewDefaultBuildId(ctx, tq, "v2")
+	s.waitForPropagation(ctx, tq, "v2")
+	// add another 100ms to make sure it got to sticky queues also
+	time.Sleep(100 * time.Millisecond)
+
+	// start worker for v1.1 and v2
+	w11 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v11"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w11.Start())
+	defer w11.Stop()
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v2"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// wait for w1 long polls to all time out
+	time.Sleep(longPollTime)
+
+	// query
+	val, err := s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
+	s.NoError(err)
+	var out string
+	s.NoError(val.Get(&out))
+	s.Equal("v1.1", out)
+
+	// let the workflow exit
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+}
+
 func (s *versioningIntegSuite) TestDispatchContinueAsNew() {
 	s.testWithMatchingBehavior(s.dispatchContinueAsNew)
 }
