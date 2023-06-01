@@ -100,8 +100,7 @@ type (
 
 	TaskQueueUserDataEntry struct {
 		TaskQueueName string
-		Data          []byte
-		DataEncoding  string
+		VersionedBlob
 	}
 
 	// MatchingTaskQueue is the SQL persistence interface for matching task queues

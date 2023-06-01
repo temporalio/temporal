@@ -569,7 +569,7 @@ type (
 
 	TaskQueueUserDataEntry struct {
 		TaskQueue string
-		Data      *persistencespb.TaskQueueUserData
+		UserData  *persistencespb.VersionedTaskQueueUserData
 	}
 
 	ListTaskQueueUserDataEntriesResponse struct {

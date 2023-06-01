@@ -53,6 +53,9 @@ const (
 	historyScannerTaskQueueName  = "temporal-sys-history-scanner-taskqueue-0"
 	historyScavengerActivityName = "temporal-sys-history-scanner-scvg-activity"
 
+	buildIdScavengerWFID          = "temporal-sys-build-id-scavenger"
+	buildIdScavengerTaskQueueName = "temporal-sys-build-id-scavenger-taskqueue-0"
+
 	executionsScannerWFID           = "temporal-sys-executions-scanner"
 	executionsScannerWFTypeName     = "temporal-sys-executions-scanner-workflow"
 	executionsScannerTaskQueueName  = "temporal-sys-executions-scanner-taskqueue-0"
@@ -89,6 +92,12 @@ var (
 	historyScannerWFStartOptions = client.StartWorkflowOptions{
 		ID:                    historyScannerWFID,
 		TaskQueue:             historyScannerTaskQueueName,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		CronSchedule:          "0 */12 * * *",
+	}
+	buildIdScavengerWFStartOptions = client.StartWorkflowOptions{
+		ID:                    buildIdScavengerWFID,
+		TaskQueue:             buildIdScavengerTaskQueueName,
 		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		CronSchedule:          "0 */12 * * *",
 	}

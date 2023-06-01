@@ -281,6 +281,10 @@ func NewConfig(
 				dynamicconfig.TaskQueueScannerEnabled,
 				true,
 			),
+			BuildIdScavengerEnabled: dc.GetBoolProperty(
+				dynamicconfig.BuildIdScavengerEnabled,
+				true,
+			),
 			HistoryScannerEnabled: dc.GetBoolProperty(
 				dynamicconfig.HistoryScannerEnabled,
 				true,
@@ -501,9 +505,12 @@ func (s *Service) initScanner() error {
 		s.sdkClientFactory,
 		s.metricsHandler,
 		s.executionManager,
+		s.metadataManager,
+		s.visibilityManager,
 		s.taskManager,
 		s.historyClient,
 		adminClient,
+		s.matchingClient,
 		s.namespaceRegistry,
 	)
 	return nil

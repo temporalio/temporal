@@ -155,7 +155,7 @@ const (
 	(?           , ?       , ?)`
 	templateDeleteBuildIdTaskQueueMappingQuery = `DELETE FROM task_queue_user_data
 	WHERE namespace_id = ? AND build_id = ? AND task_queue_name = ?`
-	templateListTaskQueueUserDataQuery       = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ''`
+	templateListTaskQueueUserDataQuery       = `SELECT task_queue_name, data, data_encoding, version FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ''`
 	templateListTaskQueueNamesByBuildIdQuery = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ?`
 	templateCountTaskQueueByBuildIdQuery     = `SELECT COUNT(*) FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ?`
 
@@ -616,8 +616,7 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 		}
 		taskQueue, ok := taskQueueRaw.(string)
 		if !ok {
-			var stringType string
-			return nil, newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row)
+			return nil, newPersistedTypeMismatchError("task_queue_name", taskQueue, taskQueueRaw, row)
 		}
 
 		dataRaw, ok := row["data"]
@@ -626,9 +625,7 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 		}
 		data, ok := dataRaw.([]byte)
 		if !ok {
-			var byteSliceType []byte
-			return nil, newPersistedTypeMismatchError("data", byteSliceType, dataRaw, row)
-
+			return nil, newPersistedTypeMismatchError("data", data, dataRaw, row)
 		}
 
 		dataEncodingRaw, ok := row["data_encoding"]
@@ -637,11 +634,19 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 		}
 		dataEncoding, ok := dataEncodingRaw.(string)
 		if !ok {
-			var stringType string
-			return nil, newPersistedTypeMismatchError("data_encoding", stringType, dataEncodingRaw, row)
+			return nil, newPersistedTypeMismatchError("data_encoding", dataEncoding, dataEncodingRaw, row)
 		}
 
-		response.Entries = append(response.Entries, p.InternalTaskQueueUserDataEntry{TaskQueue: taskQueue, Data: p.NewDataBlob(data, dataEncoding)})
+		versionRaw, ok := row["version"]
+		if !ok {
+			return nil, newFieldNotFoundError("version", row)
+		}
+		version, ok := versionRaw.(int64)
+		if !ok {
+			return nil, newPersistedTypeMismatchError("version", version, versionRaw, row)
+		}
+
+		response.Entries = append(response.Entries, p.InternalTaskQueueUserDataEntry{TaskQueue: taskQueue, Data: p.NewDataBlob(data, dataEncoding), Version: version})
 
 		row = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
 	}
