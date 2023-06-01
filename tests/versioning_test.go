@@ -702,6 +702,74 @@ func (s *versioningIntegSuite) dispatchChildWorkflow() {
 	s.Equal("v1v2", out)
 }
 
+func (s *versioningIntegSuite) TestDispatchChildWorkflowUpgrade() {
+	s.testWithMatchingBehavior(s.dispatchChildWorkflowUpgrade)
+}
+
+func (s *versioningIntegSuite) dispatchChildWorkflowUpgrade() {
+	tq := s.randomizeStr(s.T().Name())
+
+	started := make(chan struct{}, 2)
+
+	child1 := func(workflow.Context) (string, error) { return "v1", nil }
+	child11 := func(workflow.Context) (string, error) { return "v1.1", nil }
+	wf1 := func(ctx workflow.Context) (string, error) {
+		started <- struct{}{}
+		// wait for signal
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		// run child
+		fut11 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{}), "child")
+		var val11 string
+		s.NoError(fut11.Get(ctx, &val11))
+		return val11, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterWorkflowWithOptions(child1, workflow.RegisterOptions{Name: "child"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	// wait for it to start on v1
+	s.waitForChan(ctx, started)
+
+	// now register v1.1 as compatible
+	s.addCompatibleBuildId(ctx, tq, "v1.1", "v1", false)
+	s.waitForPropagation(ctx, tq, "v1.1")
+	// start worker for v1.1
+	w11 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1.1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w11.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	w11.RegisterWorkflowWithOptions(child11, workflow.RegisterOptions{Name: "child"})
+	s.NoError(w11.Start())
+	defer w11.Stop()
+
+	// wait for w1 long polls to all time out
+	time.Sleep(longPollTime)
+
+	// unblock the workflow
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("v1.1", out)
+}
+
 func (s *versioningIntegSuite) TestDispatchContinueAsNew() {
 	s.testWithMatchingBehavior(s.dispatchContinueAsNew)
 }
