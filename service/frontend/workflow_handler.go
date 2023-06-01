@@ -3713,18 +3713,19 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Namespace: request.GetNamespace(),
 		Query:     batcher.OpenBatchOperationQuery,
 	})
+	openBatchOperationCount := 0
 	if err == nil {
-		if countResp.GetCount() >= int64(maxConcurrentBatchOperation) {
-			return nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, "Max concurrent batch operations is reached")
+		openBatchOperationCount = int(countResp.GetCount())
+	} else {
+		if !errors.Is(err, store.OperationNotSupportedErr) {
+			return nil, err
 		}
-	} else if errors.Is(err, store.OperationNotSupportedErr) {
 		// Some std visibility stores don't yet support CountWorkflowExecutions, even though some
 		// batch operations are still possible on those store (eg. by specyfing a list of Executions
 		// rather than a VisibilityQuery). Fallback to ListOpenWorkflowExecutions in these cases.
 		// TODO: Remove this once all std visibility stores support CountWorkflowExecutions.
-		openCount := 0
 		nextPageToken := []byte{}
-		for nextPageToken != nil && openCount < maxConcurrentBatchOperation {
+		for nextPageToken != nil && openBatchOperationCount < maxConcurrentBatchOperation {
 			listResp, err := wh.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
 				Namespace: request.GetNamespace(),
 				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
@@ -3732,20 +3733,18 @@ func (wh *WorkflowHandler) StartBatchOperation(
 						Name: batcher.BatchWFTypeName,
 					},
 				},
-				MaximumPageSize: int32(maxConcurrentBatchOperation - openCount),
+				MaximumPageSize: int32(maxConcurrentBatchOperation - openBatchOperationCount),
 				NextPageToken:   nextPageToken,
 			})
 			if err != nil {
 				return nil, err
 			}
-			openCount += len(listResp.Executions)
+			openBatchOperationCount += len(listResp.Executions)
 			nextPageToken = listResp.NextPageToken
 		}
-		if openCount >= maxConcurrentBatchOperation {
-			return nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, "Max concurrent batch operations is reached")
-		}
-	} else {
-		return nil, err
+	}
+	if openBatchOperationCount >= maxConcurrentBatchOperation {
+		return nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, "Max concurrent batch operations is reached")
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
