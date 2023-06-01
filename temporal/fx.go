@@ -129,12 +129,10 @@ type (
 	}
 )
 
-func NewServerFx(opts ...ServerOption) (*ServerFx, error) {
-	var s ServerFx
-	s.app = fx.New(
+var (
+	TopLevelModule = fx.Options(
 		pprof.Module,
 		fx.Provide(NewServerFxImpl),
-		fx.Supply(opts),
 		fx.Provide(ServerOptionsProvider),
 		TraceExportModule,
 
@@ -148,7 +146,14 @@ func NewServerFx(opts ...ServerOption) (*ServerFx, error) {
 		fx.Provide(ApplyClusterMetadataConfigProvider),
 		fx.Invoke(ServerLifetimeHooks),
 		FxLogAdapter,
+	)
+)
 
+func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (*ServerFx, error) {
+	var s ServerFx
+	s.app = fx.New(
+		topLevelModule,
+		fx.Supply(opts),
 		fx.Populate(&s.startupSynchronizationMode),
 		fx.Populate(&s.logger),
 	)
@@ -346,6 +351,17 @@ type (
 	}
 )
 
+func NewService(app *fx.App, serviceName primitives.ServiceName, logger log.Logger, stopChan chan struct{}) ServicesGroupOut {
+	return ServicesGroupOut{
+		Services: &ServicesMetadata{
+			app:         app,
+			serviceName: serviceName,
+			logger:      logger,
+			stopChan:    stopChan,
+		},
+	}
+}
+
 func HistoryServiceProvider(
 	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
@@ -393,14 +409,7 @@ func HistoryServiceProvider(
 		FxLogAdapter,
 	)
 
-	return ServicesGroupOut{
-		Services: &ServicesMetadata{
-			app:         app,
-			serviceName: serviceName,
-			logger:      params.Logger,
-			stopChan:    stopChan,
-		},
-	}, app.Err()
+	return NewService(app, serviceName, params.Logger, stopChan), app.Err()
 }
 
 func MatchingServiceProvider(
@@ -447,14 +456,7 @@ func MatchingServiceProvider(
 		FxLogAdapter,
 	)
 
-	return ServicesGroupOut{
-		Services: &ServicesMetadata{
-			app:         app,
-			serviceName: serviceName,
-			logger:      params.Logger,
-			stopChan:    stopChan,
-		},
-	}, app.Err()
+	return NewService(app, serviceName, params.Logger, stopChan), app.Err()
 }
 
 func FrontendServiceProvider(
@@ -531,14 +533,7 @@ func genericFrontendServiceProvider(
 		FxLogAdapter,
 	)
 
-	return ServicesGroupOut{
-		Services: &ServicesMetadata{
-			app:         app,
-			serviceName: serviceName,
-			logger:      params.Logger,
-			stopChan:    stopChan,
-		},
-	}, app.Err()
+	return NewService(app, serviceName, params.Logger, stopChan), app.Err()
 }
 
 func WorkerServiceProvider(
@@ -585,14 +580,7 @@ func WorkerServiceProvider(
 		FxLogAdapter,
 	)
 
-	return ServicesGroupOut{
-		Services: &ServicesMetadata{
-			app:         app,
-			serviceName: serviceName,
-			logger:      params.Logger,
-			stopChan:    stopChan,
-		},
-	}, app.Err()
+	return NewService(app, serviceName, params.Logger, stopChan), app.Err()
 }
 
 // ApplyClusterMetadataConfigProvider performs a config check against the configured persistence store for cluster metadata.

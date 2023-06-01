@@ -868,8 +868,8 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.Require().Len(incompletes, 2)
 
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
-	s.NoError(err)
-	s.Require().Len(mutation.UpsertUpdateInfos, 3,
+	s.Require().NoError(err)
+	s.Require().Len(mutation.ExecutionInfo.UpdateInfos, 3,
 		"expected 1 completed update + 2 accepted in mutation")
 }
 

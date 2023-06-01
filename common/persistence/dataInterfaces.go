@@ -360,8 +360,6 @@ type (
 		DeleteSignalInfos         map[int64]struct{}
 		UpsertSignalRequestedIDs  map[string]struct{}
 		DeleteSignalRequestedIDs  map[string]struct{}
-		UpsertUpdateInfos         map[string]*persistencespb.UpdateInfo
-		DeleteUpdateInfos         map[string]struct{}
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
@@ -386,7 +384,6 @@ type (
 		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
 		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
-		UpdateInfos         map[string]*persistencespb.UpdateInfo
 
 		Tasks map[tasks.Category][]tasks.Task
 
