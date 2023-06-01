@@ -311,6 +311,50 @@ func (s *versioningIntegSuite) dispatchNewWorkflow() {
 	s.Equal("done!", out)
 }
 
+func (s *versioningIntegSuite) TestDispatchNotUsingVersioning() {
+	s.testWithMatchingBehavior(s.dispatchNotUsingVersioning)
+}
+
+func (s *versioningIntegSuite) dispatchNotUsingVersioning() {
+	tq := s.randomizeStr(s.T().Name())
+
+	wf1nover := func(ctx workflow.Context) (string, error) {
+		return "done without versioning!", nil
+	}
+	wf1 := func(ctx workflow.Context) (string, error) {
+		return "done with versioning!", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+
+	w1nover := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          false,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1nover.RegisterWorkflowWithOptions(wf1nover, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1nover.Start())
+	defer w1nover.Stop()
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done with versioning!", out)
+}
+
 func (s *versioningIntegSuite) TestDispatchNewWorkflowStartWorkerFirst() {
 	s.testWithMatchingBehavior(s.dispatchNewWorkflowStartWorkerFirst)
 }
