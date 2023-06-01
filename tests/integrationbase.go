@@ -394,13 +394,13 @@ func (s *IntegrationBase) sanitizeHistory(expectedHistory string) string {
 				continue
 			}
 			if st == stateNewLine {
-				ret.WriteRune('\n')
+				_, _ = ret.WriteRune('\n')
 			}
 			if spaceCounter > 0 {
-				ret.WriteString(strings.Repeat(" ", spaceCounter))
+				_, _ = ret.WriteString(strings.Repeat(" ", spaceCounter))
 				spaceCounter = 0
 			}
-			ret.WriteRune(r)
+			_, _ = ret.WriteRune(r)
 			st = stateNormal
 		}
 	}
