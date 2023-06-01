@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
@@ -59,21 +60,27 @@ type (
 
 func (s *DynamicRateLimitSuite) SetupSuite() {
 	healthSignals := persistence.NewHealthSignalAggregatorImpl(
-		dynamicconfig.GetDurationPropertyFn(30*time.Second),
-		dynamicconfig.GetIntPropertyFn(1000),
+		30*time.Second,
+		1000,
 		metrics.NoopMetricsHandler,
 		dynamicconfig.GetIntPropertyFn(50),
 		s.Logger,
 	)
 
+	rateLimiterParams := dynamicconfig.GetMapPropertyFn(map[string]interface{}{
+		"enabled":              true,
+		"refreshInterval":      "5ms",
+		"latencyThreshold":     100,
+		"errorThreshold":       0.2,
+		"rateBackoffStepSize":  0.3,
+		"rateIncreaseStepSize": 0.1,
+	})
+
 	rateLimiter := client.NewHealthRequestRateLimiterImpl(
 		healthSignals,
-		5*time.Millisecond,
 		func() float64 { return float64(200) },
-		100,
-		0.2,
-		0.3,
-		0.1,
+		rateLimiterParams,
+		log.NewNoopLogger(),
 	)
 
 	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{FaultInjection: &config.FaultInjection{Rate: 0.0}})
@@ -98,7 +105,7 @@ func (s *DynamicRateLimitSuite) TearDownTest() {
 	s.cancel()
 }
 
-func (s *DynamicRateLimitSuite) TestNamespaceReplicationQueue() {
+func (s *DynamicRateLimitSuite) TestDynamicRateLimiterAdjustsRate() {
 	s.TestBase.FaultInjection.UpdateRate(0.5)
 	didReduce := false
 

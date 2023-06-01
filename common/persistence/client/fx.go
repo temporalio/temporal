@@ -46,35 +46,25 @@ type (
 	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
 
-	EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
-	DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
-	DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFn
-	DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFn
-	DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
-	DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
+	DynamicRateLimitingParams dynamicconfig.MapPropertyFn
 
 	ClusterName string
 
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory                        DataStoreFactory
-		Cfg                                     *config.Persistence
-		PersistenceMaxQPS                       PersistenceMaxQps
-		PersistenceNamespaceMaxQPS              PersistenceNamespaceMaxQps
-		PersistencePerShardNamespaceMaxQPS      PersistencePerShardNamespaceMaxQPS
-		EnablePriorityRateLimiting              EnablePriorityRateLimiting
-		ClusterName                             ClusterName
-		ServiceName                             primitives.ServiceName
-		MetricsHandler                          metrics.Handler
-		Logger                                  log.Logger
-		HealthSignals                           persistence.HealthSignalAggregator
-		EnableDynamicRateLimiting               EnableDynamicRateLimiting
-		DynamicRateLimitingRefreshInterval      DynamicRateLimitingRefreshInterval
-		DynamicRateLimitingLatencyThreshold     DynamicRateLimitingLatencyThreshold
-		DynamicRateLimitingErrorThreshold       DynamicRateLimitingErrorThreshold
-		DynamicRateLimitingRateBackoffStepSize  DynamicRateLimitingRateBackoffStepSize
-		DynamicRateLimitingRateIncreaseStepSize DynamicRateLimitingRateIncreaseStepSize
+		DataStoreFactory                   DataStoreFactory
+		Cfg                                *config.Persistence
+		PersistenceMaxQPS                  PersistenceMaxQps
+		PersistenceNamespaceMaxQPS         PersistenceNamespaceMaxQps
+		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
+		EnablePriorityRateLimiting         EnablePriorityRateLimiting
+		ClusterName                        ClusterName
+		ServiceName                        primitives.ServiceName
+		MetricsHandler                     metrics.Handler
+		Logger                             log.Logger
+		HealthSignals                      persistence.HealthSignalAggregator
+		DynamicRateLimitingParams          DynamicRateLimitingParams
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -97,27 +87,15 @@ func FactoryProvider(
 	var requestRatelimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
 		if params.EnablePriorityRateLimiting != nil && params.EnablePriorityRateLimiting() {
-			if params.EnableDynamicRateLimiting != nil && params.EnableDynamicRateLimiting() {
-				requestRatelimiter = NewDynamicPriorityRateLimiter(
-					params.PersistenceNamespaceMaxQPS,
-					params.PersistenceMaxQPS,
-					params.PersistencePerShardNamespaceMaxQPS,
-					RequestPriorityFn,
-					params.HealthSignals,
-					params.DynamicRateLimitingRefreshInterval,
-					params.DynamicRateLimitingLatencyThreshold,
-					params.DynamicRateLimitingErrorThreshold,
-					params.DynamicRateLimitingRateBackoffStepSize,
-					params.DynamicRateLimitingRateIncreaseStepSize,
-				)
-			} else {
-				requestRatelimiter = NewPriorityRateLimiter(
-					params.PersistenceNamespaceMaxQPS,
-					params.PersistenceMaxQPS,
-					params.PersistencePerShardNamespaceMaxQPS,
-					RequestPriorityFn,
-				)
-			}
+			requestRatelimiter = NewPriorityRateLimiter(
+				params.PersistenceNamespaceMaxQPS,
+				params.PersistenceMaxQPS,
+				params.PersistencePerShardNamespaceMaxQPS,
+				RequestPriorityFn,
+				params.HealthSignals,
+				params.DynamicRateLimitingParams,
+				params.Logger,
+			)
 		} else {
 			requestRatelimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
 		}
@@ -142,8 +120,8 @@ func HealthSignalAggregatorProvider(
 ) persistence.HealthSignalAggregator {
 	if dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalCollectionEnabled, true)() {
 		return persistence.NewHealthSignalAggregatorImpl(
-			dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 3*time.Second)(),
-			dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 500)(),
+			dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 10*time.Second)(),
+			dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 5000)(),
 			metricsHandler,
 			dynamicCollection.GetIntProperty(dynamicconfig.ShardRPSWarnLimit, 50),
 			logger,

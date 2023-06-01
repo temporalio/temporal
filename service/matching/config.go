@@ -41,17 +41,11 @@ type (
 		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
+		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
 		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		TestDisableSyncMatch                  dynamicconfig.BoolPropertyFn
 		RPS                                   dynamicconfig.IntPropertyFn
 		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
-
-		EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
-		DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
-		DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFn
-		DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFn
-		DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
-		DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
 
 		// taskQueueManager configuration
 
@@ -142,7 +136,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
-		EnableDynamicRateLimiting:             dynamicconfig.DisabledDynamicRateLimiting,
+		PersistenceDynamicRateLimitingParams:  dynamicconfig.DisabledDynamicRateLimiting,
 		SyncMatchWaitDuration:                 dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
 		TestDisableSyncMatch:                  dc.GetBoolProperty(dynamicconfig.TestMatchingDisableSyncMatch, false),
 		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),

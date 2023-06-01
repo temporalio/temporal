@@ -113,6 +113,7 @@ type (
 		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
+		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
 		EnableBatcher                         dynamicconfig.BoolPropertyFn
 		BatcherRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		BatcherConcurrency                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -125,13 +126,6 @@ type (
 		EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
-		EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
-		DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
-		DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFn
-		DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFn
-		DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
-		DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
 	}
 )
 
@@ -360,14 +354,13 @@ func NewConfig(
 			dynamicconfig.WorkerEnablePersistencePriorityRateLimiting,
 			true,
 		),
+		PersistenceDynamicRateLimitingParams: dynamicconfig.DisabledDynamicRateLimiting,
 
 		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, enableReadFromES),
 		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, enableReadFromES),
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, enableReadFromES),
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
-
-		EnableDynamicRateLimiting: dynamicconfig.DisabledDynamicRateLimiting,
 	}
 	return config
 }

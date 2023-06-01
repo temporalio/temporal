@@ -33,14 +33,9 @@ import (
 // BenchmarkArrayMovingWindowAvg
 // BenchmarkArrayMovingWindowAvg-10    	17021074	        66.27 ns/op
 
-// BenchmarkHealthRequestRateLimiter
-// BenchmarkHealthRequestRateLimiter-10    	15905046	        71.08 ns/op
-
 const (
 	testWindowSize = 10 * time.Millisecond
 	testBufferSize = 200
-
-	testRPS = 4000
 )
 
 func BenchmarkArrayMovingWindowAvg(b *testing.B) {

@@ -48,13 +48,7 @@ type Config struct {
 	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-
-	EnableDynamicRateLimiting               dynamicconfig.BoolPropertyFn
-	DynamicRateLimitingRefreshInterval      dynamicconfig.DurationPropertyFn
-	DynamicRateLimitingLatencyThreshold     dynamicconfig.FloatPropertyFn
-	DynamicRateLimitingErrorThreshold       dynamicconfig.FloatPropertyFn
-	DynamicRateLimitingRateBackoffStepSize  dynamicconfig.FloatPropertyFn
-	DynamicRateLimitingRateIncreaseStepSize dynamicconfig.FloatPropertyFn
+	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
 
 	VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -339,18 +333,12 @@ func NewConfig(
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS, 0),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistencePriorityRateLimiting, true),
+		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.HistoryPersistenceDynamicRateLimitingParams, dynamicconfig.DisabledDynamicRateLimiting()),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0*time.Second),
 		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
 		MaxTrackedBuildIds:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxTrackedBuildIds, DefaultHistoryMaxTrackedBuildIds),
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
-
-		EnableDynamicRateLimiting:               dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistenceDynamicRateLimiting, false),
-		DynamicRateLimitingRefreshInterval:      dc.GetDurationProperty(dynamicconfig.HistoryPersistenceDynamicRateLimitingRefreshInterval, 3*time.Second),
-		DynamicRateLimitingLatencyThreshold:     dc.GetFloat64Property(dynamicconfig.HistoryPersistenceDynamicRateLimitingLatencyThreshold, 500),
-		DynamicRateLimitingErrorThreshold:       dc.GetFloat64Property(dynamicconfig.HistoryPersistenceDynamicRateLimitingErrorThreshold, 0.5),
-		DynamicRateLimitingRateBackoffStepSize:  dc.GetFloat64Property(dynamicconfig.HistoryPersistenceDynamicRateLimitingBackoffStepSize, 0.3),
-		DynamicRateLimitingRateIncreaseStepSize: dc.GetFloat64Property(dynamicconfig.HistoryPersistenceDynamicRateLimitingIncreaseStepSize, 0.1),
 
 		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, advancedVisibilityStoreConfigExist),
 		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, advancedVisibilityStoreConfigExist),

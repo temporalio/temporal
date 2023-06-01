@@ -45,5 +45,5 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 	},
 }
 
-var DefaultPerShardNamespaceRPSMax = func(namespace string) int { return 0 }
-var DisabledDynamicRateLimiting = func() bool { return false }
+var DefaultPerShardNamespaceRPSMax = GetIntPropertyFilteredByNamespace(0)
+var DisabledDynamicRateLimiting = GetMapPropertyFn(map[string]interface{}{"enabled": false})
