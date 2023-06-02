@@ -48,7 +48,8 @@ import (
 	v110 "go.temporal.io/server/api/history/v1"
 	v111 "go.temporal.io/server/api/historyservice/v1"
 	v112 "go.temporal.io/server/api/persistence/v1"
-	v113 "go.temporal.io/server/api/workflow/v1"
+	v113 "go.temporal.io/server/api/update/v1"
+	v114 "go.temporal.io/server/api/workflow/v1"
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
@@ -1075,10 +1076,10 @@ func (mr *MockMutableStateMockRecorder) GetApproximatePersistedSize() *gomock.Ca
 }
 
 // GetBaseWorkflowInfo mocks base method.
-func (m *MockMutableState) GetBaseWorkflowInfo() *v113.BaseExecutionInfo {
+func (m *MockMutableState) GetBaseWorkflowInfo() *v114.BaseExecutionInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBaseWorkflowInfo")
-	ret0, _ := ret[0].(*v113.BaseExecutionInfo)
+	ret0, _ := ret[0].(*v114.BaseExecutionInfo)
 	return ret0
 }
 
@@ -2782,7 +2783,7 @@ func (mr *MockMutableStateMockRecorder) UpdateWorkflowStateStatus(state, status 
 }
 
 // VisitUpdates mocks base method.
-func (m *MockMutableState) VisitUpdates(visitor func(string, *v112.UpdateInfo)) {
+func (m *MockMutableState) VisitUpdates(visitor func(string, *v113.UpdateInfo)) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "VisitUpdates", visitor)
 }

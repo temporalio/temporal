@@ -49,6 +49,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -866,11 +867,11 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 
 	numCompleted := 0
 	numAccepted := 0
-	s.mutableState.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
-		if updInfo.GetCompletedPointer() != nil {
+	s.mutableState.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+		if updInfo.GetCompletion() != nil {
 			numCompleted++
 		}
-		if updInfo.GetAcceptancePointer() != nil {
+		if updInfo.GetAcceptance() != nil {
 			numAccepted++
 		}
 	})

@@ -20,48 +20,27 @@
 
 syntax = "proto3";
 
-package temporal.server.api.history.v1;
+package temporal.server.api.update.v1;
+option go_package = "go.temporal.io/server/api/update/v1;update";
 
-option go_package = "go.temporal.io/server/api/history/v1;history";
-
-import "google/protobuf/timestamp.proto";
-
-import "dependencies/gogoproto/gogo.proto";
-
-import "temporal/api/history/v1/message.proto";
-
-message TransientWorkflowTaskInfo {
-    reserved 1;
-    reserved 2;
-
-    // A list of history events that are to be appended to the "real" workflow history.
-    repeated temporal.api.history.v1.HistoryEvent history_suffix = 3;
-}
-
-// VersionHistoryItem contains signal eventId and the corresponding version.
-message VersionHistoryItem {
+// AcceptanceInfo contains information about an accepted update
+message AcceptanceInfo {
+    // the event ID of the WorkflowExecutionUpdateAcceptedEvent
     int64 event_id = 1;
-    int64 version = 2;
 }
 
-// VersionHistory contains the version history of a branch.
-message VersionHistory {
-    bytes branch_token = 1;
-    repeated VersionHistoryItem items = 2;
+// CompletionInfo contains information about a completed update
+message CompletionInfo {
+    // the event ID of the WorkflowExecutionUpdateCompletedEvent
+    int64 event_id = 1;
 }
 
-// VersionHistories contains all version histories from all branches.
-message VersionHistories {
-    int32 current_version_history_index = 1;
-    repeated VersionHistory histories = 2;
-}
-
-message TaskKey {
-    int64 task_id = 1;
-    google.protobuf.Timestamp fire_time = 2 [(gogoproto.stdtime) = true];
-}
-
-message TaskRange {
-    TaskKey inclusive_min_task_key = 1;
-    TaskKey exclusive_max_task_key = 2;
+// UpdateInfo is the persistent state of a single update
+message UpdateInfo {
+    oneof value {
+        // update has been accepted and this is the acceptance metadata
+        AcceptanceInfo acceptance = 1;
+        // update has been completed and this is the completion metadata
+        CompletionInfo completion = 2;
+    }
 }
