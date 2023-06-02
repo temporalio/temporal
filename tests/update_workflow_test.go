@@ -2847,3 +2847,141 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate()
 		})
 	}
 }
+
+func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat() {
+	tv := testvars.New(s.T().Name())
+
+	tv = s.startWorkflow(tv)
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Completes first WT with update unrelated command.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             tv.ActivityID(),
+					ActivityType:           tv.ActivityType(),
+					TaskQueue:              tv.TaskQueue(),
+					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+				}},
+			}}, nil
+		case 2:
+			// Last two events (6 and 7) are for speculative WT, but they won't disappear after reject because
+			// speculative WT is converted to normal during heartbeat.
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted`, history)
+			// Heartbeat from speculative WT (no messages, no commands).
+			return nil, nil
+		case 3:
+			// New WT (after heartbeat) is normal and won't disappear from the history after reject.
+			s.EqualHistory(`
+  8 WorkflowTaskCompleted
+  9 WorkflowTaskScheduled
+ 10 WorkflowTaskStarted`, history)
+			// Reject update.
+			return nil, nil
+		case 4:
+			s.EqualHistory(`
+ 11 WorkflowTaskCompleted
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted`, history)
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+			}}, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		case 2:
+			s.Len(task.Messages, 1)
+			return nil, nil
+		case 3:
+			updRequestMsg := task.Messages[0]
+			s.EqualValues(9, updRequestMsg.GetEventId())
+			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
+		case 4:
+			return nil, nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Drain exiting first WT.
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(err)
+
+	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+	go func() {
+		updateResultCh <- s.sendUpdateNoError(tv, "1")
+	}()
+
+	// Heartbeat from workflow.
+	_, heartbeatResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	s.NoError(err)
+
+	// Reject update from workflow.
+	updateResp, err := poller.HandlePartialWorkflowTask(heartbeatResp.GetWorkflowTask(), true)
+	s.NoError(err)
+	updateResult := <-updateResultCh
+	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
+	s.EqualValues(0, updateResp.ResetHistoryEventId, "History event Id shouldn't be reset")
+
+	// Complete workflow.
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	s.NoError(err)
+	s.NotNil(completeWorkflowResp)
+	s.Nil(completeWorkflowResp.GetWorkflowTask())
+	s.EqualValues(0, completeWorkflowResp.ResetHistoryEventId)
+
+	s.Equal(4, wtHandlerCalls)
+	s.Equal(4, msgHandlerCalls)
+
+	s.printWorkflowHistoryCompact(s.namespace, tv.WorkflowExecution())
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowTaskScheduled
+ 10 WorkflowTaskStarted
+ 11 WorkflowTaskCompleted
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted
+ 14 WorkflowTaskCompleted
+ 15 WorkflowExecutionCompleted`, events)
+}
