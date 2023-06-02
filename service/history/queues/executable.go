@@ -238,7 +238,7 @@ func (e *executableImpl) Execute() (retErr error) {
 
 func (e *executableImpl) HandleErr(err error) (retErr error) {
 	defer func() {
-		if errors.Is(retErr, consts.ErrResourceExhaustedBusyWorkflow) {
+		if !errors.Is(retErr, consts.ErrResourceExhaustedBusyWorkflow) {
 			// if err is due to workflow busy, do not take any latency related to this attempt into account
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
 		}

@@ -138,6 +138,11 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency() {
 	now = now.Add(time.Second)
 	s.timeSource.Update(now)
 
+	// use a different set of latencies to test we are calculating the latency for the second attempt
+	scheduleLatency = 200 * time.Millisecond
+	userLatency = 300 * time.Millisecond
+	attemptLatency = 500 * time.Millisecond
+
 	executable.SetScheduledTime(now)
 	now = now.Add(scheduleLatency)
 	s.timeSource.Update(now)
