@@ -505,12 +505,13 @@ func (b *HistoryBuilder) AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanc
 	return b.appendEvents(event)
 }
 
-func (b *HistoryBuilder) AddWorkflowExecutionUpdateCompletedEvent(updResp *updatepb.Response) *historypb.HistoryEvent {
+func (b *HistoryBuilder) AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateCompletedEventAttributes{
 		WorkflowExecutionUpdateCompletedEventAttributes: &historypb.WorkflowExecutionUpdateCompletedEventAttributes{
-			Meta:    updResp.GetMeta(),
-			Outcome: updResp.GetOutcome(),
+			AcceptedEventId: acceptedEventID,
+			Meta:            updResp.GetMeta(),
+			Outcome:         updResp.GetOutcome(),
 		},
 	}
 	return b.appendEvents(event)

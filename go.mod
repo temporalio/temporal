@@ -28,7 +28,7 @@ require (
 	github.com/pborman/uuid v1.2.1
 	github.com/prometheus/client_golang v1.15.1
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/stretchr/testify v1.8.3
+	github.com/stretchr/testify v1.8.4
 	github.com/temporalio/ringpop-go v0.0.0-20220818230611-30bf23b490b2
 	github.com/temporalio/tchannel-go v1.22.1-0.20220818200552-1be8d8cffa5b
 	github.com/temporalio/tctl-kit v0.0.0-20230213052353-2342ea1e7d14
@@ -44,7 +44,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.16.0
 	go.opentelemetry.io/otel/sdk v1.16.0
 	go.opentelemetry.io/otel/sdk/metric v0.39.0
-	go.temporal.io/api v1.21.0
+	go.temporal.io/api v1.22.0
 	go.temporal.io/sdk v1.23.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.10.0
