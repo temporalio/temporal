@@ -55,7 +55,7 @@ type (
 
 		// Find finds an existing update in this Registry but does not create a
 		// new update if no update is found.
-		Find(ctx context.Context, protocolInstanceID string) (*Update, bool, error)
+		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
 
 		// ReadOutgoingMessages polls each registered Update for outbound
 		// messages and returns them.
@@ -75,7 +75,7 @@ type (
 
 	// UpdateStore represents the update package's requirements for reading updates from the store.
 	UpdateStore interface {
-		VisitUpdates(ctx context.Context, visitor func(ctx context.Context, updID string, updInfo *persistencespb.UpdateInfo) error) error
+		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 	}
 
@@ -149,7 +149,7 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 		opt(r)
 	}
 
-	_ = store.VisitUpdates(context.Background(), func(ctx context.Context, updID string, updInfo *persistencespb.UpdateInfo) error {
+	store.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
 		// need to eager load here so that Len and admit are correct.
 		if updInfo.GetAcceptancePointer() != nil {
 			r.updates[updID] = newAccepted(updID, r.remover(updID), withInstrumentation(&r.instrumentation))
@@ -157,7 +157,6 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 		if updInfo.GetCompletedPointer() != nil {
 			r.completedCount++
 		}
-		return nil
 	})
 	return r
 }
@@ -165,22 +164,18 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 func (r *RegistryImpl) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	upd, found, err := r.findLocked(ctx, id)
-	if err != nil {
-		return nil, false, err
-	}
-	if found {
+	if upd, found := r.findLocked(ctx, id); found {
 		return upd, true, nil
 	}
-	if err = r.admit(ctx); err != nil {
+	if err := r.admit(ctx); err != nil {
 		return nil, false, err
 	}
-	upd = New(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
 	return upd, false, nil
 }
 
-func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool, error) {
+func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.findLocked(ctx, id)
@@ -261,31 +256,31 @@ func (r *RegistryImpl) admit(ctx context.Context) error {
 	return nil
 }
 
-func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool, error) {
+func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool) {
 
 	if upd, ok := r.updates[id]; ok {
-		return upd, true, nil
+		return upd, true
 	}
 
 	// update not found in ephemeral state, but could have already completed so
 	// check in registry storage
 	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
-	if err != nil {
-		// Swallow NotFound error because it means that update doesn't exist.
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			return nil, false, nil
-		}
-		// But pass through other errors which indicate broken state.
-		return nil, false, err
+
+	// Swallow NotFound error because it means that update doesn't exist.
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) {
+		return nil, false
 	}
+
+	// Other errors goes to the future of completed update because it means, that update exists, was found,
+	// but there is something broken in it.
 
 	// Completed, create the Update object but do not add to registry.
 	// This should not happen often.
-	fut := future.NewReadyFuture(updOutcome, nil)
+	fut := future.NewReadyFuture(updOutcome, err)
 	return newCompleted(
 		id,
 		fut,
 		withInstrumentation(&r.instrumentation),
-	), true, nil
+	), true
 }

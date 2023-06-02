@@ -715,13 +715,10 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
 }
 
-func (ms *MutableStateImpl) VisitUpdates(ctx context.Context, visitor func(ctx context.Context, updID string, updInfo *persistencespb.UpdateInfo) error) error {
+func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 	for updID, updInfo := range ms.executionInfo.GetUpdateInfos() {
-		if err := visitor(ctx, updID, updInfo); err != nil {
-			return err
-		}
+		visitor(updID, updInfo)
 	}
-	return nil
 }
 
 func (ms *MutableStateImpl) GetUpdateOutcome(

@@ -44,14 +44,14 @@ import (
 
 type mockUpdateStore struct {
 	update.UpdateStore
-	GetUpdateInfosFunc   func(context.Context) map[string]*persistencespb.UpdateInfo
+	VisitUpdatesFunc     func(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 	GetUpdateOutcomeFunc func(context.Context, string) (*updatepb.Outcome, error)
 }
 
-func (m mockUpdateStore) GetUpdateInfos(
-	ctx context.Context,
-) map[string]*persistencespb.UpdateInfo {
-	return m.GetUpdateInfosFunc(ctx)
+func (m mockUpdateStore) VisitUpdates(
+	visitor func(updID string, updInfo *persistencespb.UpdateInfo),
+) {
+	m.VisitUpdatesFunc(visitor)
 }
 
 func (m mockUpdateStore) GetUpdateOutcome(
@@ -62,8 +62,7 @@ func (m mockUpdateStore) GetUpdateOutcome(
 }
 
 var emptyUpdateStore = mockUpdateStore{
-	GetUpdateInfosFunc: func(context.Context) map[string]*persistencespb.UpdateInfo {
-		return nil
+	VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {
 	},
 	GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
 		return nil, serviceerror.NewNotFound("not found")
@@ -76,10 +75,10 @@ func TestFind(t *testing.T) {
 		ctx      = context.Background()
 		updateID = t.Name() + "-update-id"
 		store    = mockUpdateStore{
-			GetUpdateInfosFunc: func(
-				ctx context.Context,
-			) map[string]*persistencespb.UpdateInfo {
-				return nil
+			VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {
+			},
+			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
 		reg = update.NewRegistry(store)
@@ -101,10 +100,10 @@ func TestHasOutgoing(t *testing.T) {
 		ctx      = context.Background()
 		updateID = t.Name() + "-update-id"
 		store    = mockUpdateStore{
-			GetUpdateInfosFunc: func(
-				ctx context.Context,
-			) map[string]*persistencespb.UpdateInfo {
-				return nil
+			VisitUpdatesFunc: func(func(updID string, updInfo *persistencespb.UpdateInfo)) {
+			},
+			GetUpdateOutcomeFunc: func(context.Context, string) (*updatepb.Outcome, error) {
+				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
 		reg = update.NewRegistry(store)
@@ -149,10 +148,10 @@ func TestFindOrCreate(t *testing.T) {
 		}
 		// make a store with 1 accepted and 1 completed update
 		store = mockUpdateStore{
-			GetUpdateInfosFunc: func(
-				ctx context.Context,
-			) map[string]*persistencespb.UpdateInfo {
-				return storeData
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				for updID, updInfo := range storeData {
+					visitor(updID, updInfo)
+				}
 			},
 			GetUpdateOutcomeFunc: func(
 				ctx context.Context,
@@ -206,18 +205,15 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 		ctx                    = context.Background()
 		storedAcceptedUpdateID = t.Name() + "-accepted-update-id"
 		regStore               = mockUpdateStore{
-			GetUpdateInfosFunc: func(
-				context.Context,
-			) map[string]*persistencespb.UpdateInfo {
-				return map[string]*persistencespb.UpdateInfo{
-					storedAcceptedUpdateID: {
-						Value: &persistencespb.UpdateInfo_AcceptancePointer{
-							AcceptancePointer: &historyspb.HistoryEventPointer{
-								EventId: 120,
-							},
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				storedAcceptedUpdateInfo := &persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_AcceptancePointer{
+						AcceptancePointer: &historyspb.HistoryEventPointer{
+							EventId: 120,
 						},
 					},
 				}
+				visitor(storedAcceptedUpdateID, storedAcceptedUpdateInfo)
 			},
 		}
 		reg = update.NewRegistry(regStore)
@@ -423,16 +419,13 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 	completedUpdateID := t.Name() + "-completed-update-id"
 	expectError := fmt.Errorf("expected error in %s", t.Name())
 	regStore := mockUpdateStore{
-		GetUpdateInfosFunc: func(
-			ctx context.Context,
-		) map[string]*persistencespb.UpdateInfo {
-			return map[string]*persistencespb.UpdateInfo{
-				completedUpdateID: {
-					Value: &persistencespb.UpdateInfo_CompletedPointer{
-						CompletedPointer: &historyspb.HistoryEventPointer{EventId: 123},
-					},
+		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+			completedUpdateInfo := &persistencespb.UpdateInfo{
+				Value: &persistencespb.UpdateInfo_CompletedPointer{
+					CompletedPointer: &historyspb.HistoryEventPointer{EventId: 123},
 				},
 			}
+			visitor(completedUpdateID, completedUpdateInfo)
 		},
 		GetUpdateOutcomeFunc: func(
 			ctx context.Context,
