@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/environment"
@@ -97,6 +98,7 @@ type (
 		TaskIDGenerator           TransferTaskIDGenerator
 		ClusterMetadata           cluster.Metadata
 		SearchAttributesManager   searchattribute.Manager
+		PersistenceRateLimiter    quotas.RequestRateLimiter
 		PersistenceHealthSignals  persistence.HealthSignalAggregator
 		ReadLevel                 int64
 		ReplicationReadLevel      int64
@@ -188,6 +190,9 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	if clusterMetadataConfig == nil {
 		clusterMetadataConfig = cluster.NewTestClusterMetadataConfig(false, false)
 	}
+	if s.PersistenceHealthSignals == nil {
+		s.PersistenceHealthSignals = persistence.NoopHealthSignalAggregator
+	}
 
 	clusterName := clusterMetadataConfig.CurrentClusterName
 
@@ -202,7 +207,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopMetricsHandler, s.Logger, persistence.NoopHealthSignalAggregator)
+	factory := client.NewFactory(dataStoreFactory, &cfg, s.PersistenceRateLimiter, serialization.NewSerializer(), clusterName, metrics.NoopMetricsHandler, s.Logger, s.PersistenceHealthSignals)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)

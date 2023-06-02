@@ -26,6 +26,7 @@ package client
 
 import (
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/tasks"
@@ -85,16 +86,21 @@ func NewPriorityRateLimiter(
 	hostMaxQPS PersistenceMaxQps,
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	requestPriorityFn quotas.RequestPriorityFn,
+	healthSignals p.HealthSignalAggregator,
+	dynamicParams DynamicRateLimitingParams,
+	logger log.Logger,
 ) quotas.RequestRateLimiter {
-	hostRequestRateLimiter := newPriorityRateLimiter(
-		func() float64 { return float64(hostMaxQPS()) },
-		requestPriorityFn,
-	)
+	hostRateFn := func() float64 { return float64(hostMaxQPS()) }
 
 	return quotas.NewMultiRequestRateLimiter(
+		// per shardID+namespaceID rate limiters
 		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		// per namespaceID rate limiters
 		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
-		hostRequestRateLimiter,
+		// host-level dynamic rate limiter
+		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, healthSignals, dynamicParams, logger),
+		// basic host-level rate limiter
+		newPriorityRateLimiter(hostRateFn, requestPriorityFn),
 	)
 }
 
@@ -161,6 +167,25 @@ func newPriorityRateLimiter(
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
+	}
+
+	return quotas.NewPriorityRateLimiter(
+		requestPriorityFn,
+		rateLimiters,
+	)
+}
+
+func newPriorityDynamicRateLimiter(
+	rateFn quotas.RateFn,
+	requestPriorityFn quotas.RequestPriorityFn,
+	healthSignals p.HealthSignalAggregator,
+	dynamicParams DynamicRateLimitingParams,
+	logger log.Logger,
+) quotas.RequestRateLimiter {
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
+	for priority := range RequestPrioritiesOrdered {
+		// TODO: refactor this so dynamic rate adjustment is global for all priorities
+		rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, logger)
 	}
 
 	return quotas.NewPriorityRateLimiter(

@@ -173,7 +173,7 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 }
 
 func (s *contextSuite) TestAddTasks_Success() {
-	tasks := map[tasks.Category][]tasks.Task{
+	testTasks := map[tasks.Category][]tasks.Task{
 		tasks.CategoryTransfer:    {&tasks.ActivityTask{}},           // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
 		tasks.CategoryTimer:       {&tasks.ActivityRetryTimerTask{}}, // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
 		tasks.CategoryReplication: {&tasks.HistoryReplicationTask{}}, // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
@@ -186,11 +186,11 @@ func (s *contextSuite) TestAddTasks_Success() {
 		WorkflowID:  tests.WorkflowID,
 		RunID:       tests.RunID,
 
-		Tasks: tasks,
+		Tasks: testTasks,
 	}
 
 	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), addTasksRequest).Return(nil)
-	s.mockHistoryEngine.EXPECT().NotifyNewTasks(tasks)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(testTasks)
 
 	err := s.mockShard.AddTasks(context.Background(), addTasksRequest)
 	s.NoError(err)

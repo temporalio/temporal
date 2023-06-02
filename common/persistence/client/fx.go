@@ -45,7 +45,10 @@ type (
 	PersistenceNamespaceMaxQps         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
-	ClusterName                        string
+
+	DynamicRateLimitingParams dynamicconfig.MapPropertyFn
+
+	ClusterName string
 
 	NewFactoryParams struct {
 		fx.In
@@ -61,6 +64,7 @@ type (
 		MetricsHandler                     metrics.Handler
 		Logger                             log.Logger
 		HealthSignals                      persistence.HealthSignalAggregator
+		DynamicRateLimitingParams          DynamicRateLimitingParams
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -88,6 +92,9 @@ func FactoryProvider(
 				params.PersistenceMaxQPS,
 				params.PersistencePerShardNamespaceMaxQPS,
 				RequestPriorityFn,
+				params.HealthSignals,
+				params.DynamicRateLimitingParams,
+				params.Logger,
 			)
 		} else {
 			requestRatelimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
@@ -111,10 +118,11 @@ func HealthSignalAggregatorProvider(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) persistence.HealthSignalAggregator {
-	if dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalCollectionEnabled, true)() {
+	if dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalMetricsEnabled, true)() {
 		return persistence.NewHealthSignalAggregatorImpl(
-			dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 3*time.Second)(),
-			dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 500)(),
+			dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalAggregationEnabled, true)(),
+			dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 10*time.Second)(),
+			dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 5000)(),
 			metricsHandler,
 			dynamicCollection.GetIntProperty(dynamicconfig.ShardRPSWarnLimit, 50),
 			logger,
