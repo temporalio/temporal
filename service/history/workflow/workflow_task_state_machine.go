@@ -511,6 +511,8 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 	if len(request.GetMessages()) == 0 {
 		// If both commands & messages are empty, then this is heartbeat response.
 		// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
+		// In the future, if we decide not to write heartbeat WT to the history, this check should be removed,
+		// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
 		return false
 	}
 
