@@ -82,7 +82,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		metricsHandler := metrics.NoopMetricsHandler
 		out.conf = map[dynamicconfig.Key]any{}
 		out.ms = workflow.NewMockMutableState(gomock.NewController(t))
-		out.ms.EXPECT().GetAcceptedWorkflowExecutionUpdateIDs(gomock.Any()).Times(1).Return(nil)
+		out.ms.EXPECT().VisitUpdates(gomock.Any()).Times(1)
 		out.updates = update.NewRegistry(out.ms)
 		var effects effect.Buffer
 		config := configs.NewConfig(
@@ -98,7 +98,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			logger,
 		)
 		out.handler = newWorkflowTaskHandler( // 😲
-			t.Name(), //identity
+			t.Name(), // identity
 			123,      // workflowTaskCompletedID
 			out.ms,
 			out.updates,
@@ -111,7 +111,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			newWorkflowSizeChecker(
 				workflowSizeLimits{blobSizeLimitError: blobSizeLimit},
 				out.ms,
-				nil, //searchAttributesValidator
+				nil, // searchAttributesValidator
 				metricsHandler,
 				logger,
 			),
@@ -227,7 +227,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
-		tc.ms.EXPECT().GetUpdateInfo(gomock.Any(), msg.ProtocolInstanceId).Return(nil, false)
+		tc.ms.EXPECT().GetUpdateOutcome(gomock.Any(), "will not be found").Return(nil, serviceerror.NewNotFound(""))
 
 		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList(msg))
 		require.NoError(t, err)
@@ -254,7 +254,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		)
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
-		tc.ms.EXPECT().GetUpdateInfo(gomock.Any(), updateID).Return(nil, false)
+		tc.ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(nil, serviceerror.NewNotFound(""))
 
 		t.Log("create the expected protocol instance")
 		_, _, err := tc.updates.FindOrCreate(context.Background(), updateID)
@@ -290,7 +290,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		)
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})
-		tc.ms.EXPECT().GetUpdateInfo(gomock.Any(), updateID).Return(nil, false)
+		tc.ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).Return(nil, serviceerror.NewNotFound(""))
 
 		t.Log("create the expected protocol instance")
 		_, _, err := tc.updates.FindOrCreate(context.Background(), updateID)

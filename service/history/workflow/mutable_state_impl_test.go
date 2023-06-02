@@ -864,8 +864,18 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.Require().Error(err)
 	s.Require().IsType((*serviceerror.NotFound)(nil), err)
 
-	incompletes := s.mutableState.GetAcceptedWorkflowExecutionUpdateIDs(ctx)
-	s.Require().Len(incompletes, 2)
+	numCompleted := 0
+	numAccepted := 0
+	s.mutableState.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
+		if updInfo.GetCompletedPointer() != nil {
+			numCompleted++
+		}
+		if updInfo.GetAcceptancePointer() != nil {
+			numAccepted++
+		}
+	})
+	s.Require().Equal(numCompleted, 1, "expected 1 completed")
+	s.Require().Equal(numAccepted, 2, "expected 2 accepted")
 
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
 	s.Require().NoError(err)
