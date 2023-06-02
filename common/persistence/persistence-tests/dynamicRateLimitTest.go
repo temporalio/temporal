@@ -54,7 +54,8 @@ type (
 		ctx    context.Context
 		cancel context.CancelFunc
 
-		rateLimiter *client.HealthRequestRateLimiterImpl
+		healthSignals *persistence.HealthSignalAggregatorImpl
+		rateLimiter   *client.HealthRequestRateLimiterImpl
 	}
 )
 
@@ -67,6 +68,8 @@ func (s *DynamicRateLimitSuite) SetupSuite() {
 		s.Logger,
 		true,
 	)
+	healthSignals.Start()
+	s.healthSignals = healthSignals
 
 	rateLimiterParams := dynamicconfig.GetMapPropertyFn(map[string]interface{}{
 		"enabled":              true,
@@ -94,6 +97,7 @@ func (s *DynamicRateLimitSuite) SetupSuite() {
 
 func (s *DynamicRateLimitSuite) TearDownSuite() {
 	s.TearDownWorkflowStore()
+	s.healthSignals.Stop()
 }
 
 func (s *DynamicRateLimitSuite) SetupTest() {
