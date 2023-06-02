@@ -65,6 +65,7 @@ func (s *DynamicRateLimitSuite) SetupSuite() {
 		metrics.NoopMetricsHandler,
 		dynamicconfig.GetIntPropertyFn(50),
 		s.Logger,
+		true,
 	)
 
 	rateLimiterParams := dynamicconfig.GetMapPropertyFn(map[string]interface{}{

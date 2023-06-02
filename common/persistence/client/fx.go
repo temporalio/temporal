@@ -118,13 +118,14 @@ func HealthSignalAggregatorProvider(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) persistence.HealthSignalAggregator {
-	if dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalCollectionEnabled, true)() {
+	if dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalMetricsEnabled, true)() {
 		return persistence.NewHealthSignalAggregatorImpl(
 			dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 10*time.Second)(),
 			dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 5000)(),
 			metricsHandler,
 			dynamicCollection.GetIntProperty(dynamicconfig.ShardRPSWarnLimit, 50),
 			logger,
+			dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalAggregationEnabled, false)(),
 		)
 	}
 

@@ -57,8 +57,9 @@ type (
 		requestsPerShard map[int32]int64
 		requestsLock     sync.Mutex
 
-		latencyAverage aggregate.MovingWindowAverage
-		errorRatio     aggregate.MovingWindowAverage
+		aggregationEnabled bool
+		latencyAverage     aggregate.MovingWindowAverage
+		errorRatio         aggregate.MovingWindowAverage
 
 		metricsHandler       metrics.Handler
 		emitMetricsTimer     *time.Ticker
@@ -74,6 +75,7 @@ func NewHealthSignalAggregatorImpl(
 	metricsHandler metrics.Handler,
 	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
 	logger log.Logger,
+	aggregationEnabled bool,
 ) *HealthSignalAggregatorImpl {
 	return &HealthSignalAggregatorImpl{
 		status:               common.DaemonStatusInitialized,
@@ -85,6 +87,7 @@ func NewHealthSignalAggregatorImpl(
 		emitMetricsTimer:     time.NewTicker(emitMetricsInterval),
 		perShardRPSWarnLimit: perShardRPSWarnLimit,
 		logger:               logger,
+		aggregationEnabled:   aggregationEnabled,
 	}
 }
 
@@ -93,6 +96,10 @@ func (s *HealthSignalAggregatorImpl) Start() {
 		return
 	}
 	go s.emitMetricsLoop()
+	if !s.aggregationEnabled {
+		s.latencyAverage = aggregate.NoopMovingWindowAverage
+		s.errorRatio = aggregate.NoopMovingWindowAverage
+	}
 }
 
 func (s *HealthSignalAggregatorImpl) Stop() {
@@ -104,12 +111,14 @@ func (s *HealthSignalAggregatorImpl) Stop() {
 }
 
 func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, latency time.Duration, err error) {
-	s.latencyAverage.Record(latency.Milliseconds())
+	if s.aggregationEnabled {
+		s.latencyAverage.Record(latency.Milliseconds())
 
-	if isUnhealthyError(err) {
-		s.errorRatio.Record(1)
-	} else {
-		s.errorRatio.Record(0)
+		if isUnhealthyError(err) {
+			s.errorRatio.Record(1)
+		} else {
+			s.errorRatio.Record(0)
+		}
 	}
 
 	if callerSegment != CallerSegmentMissing {
