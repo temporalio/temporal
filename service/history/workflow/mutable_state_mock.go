@@ -999,20 +999,6 @@ func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks))
 }
 
-// GetAcceptedWorkflowExecutionUpdateIDs mocks base method.
-func (m *MockMutableState) GetAcceptedWorkflowExecutionUpdateIDs(arg0 context.Context) []string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAcceptedWorkflowExecutionUpdateIDs", arg0)
-	ret0, _ := ret[0].([]string)
-	return ret0
-}
-
-// GetAcceptedWorkflowExecutionUpdateIDs indicates an expected call of GetAcceptedWorkflowExecutionUpdateIDs.
-func (mr *MockMutableStateMockRecorder) GetAcceptedWorkflowExecutionUpdateIDs(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAcceptedWorkflowExecutionUpdateIDs", reflect.TypeOf((*MockMutableState)(nil).GetAcceptedWorkflowExecutionUpdateIDs), arg0)
-}
-
 // GetActivityByActivityID mocks base method.
 func (m *MockMutableState) GetActivityByActivityID(arg0 string) (*v112.ActivityInfo, bool) {
 	m.ctrl.T.Helper()
@@ -1563,21 +1549,6 @@ func (m *MockMutableState) GetUpdateCondition() (int64, int64) {
 func (mr *MockMutableStateMockRecorder) GetUpdateCondition() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateCondition", reflect.TypeOf((*MockMutableState)(nil).GetUpdateCondition))
-}
-
-// GetUpdateInfo mocks base method.
-func (m *MockMutableState) GetUpdateInfo(ctx context.Context, updateID string) (*v112.UpdateInfo, bool) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUpdateInfo", ctx, updateID)
-	ret0, _ := ret[0].(*v112.UpdateInfo)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
-}
-
-// GetUpdateInfo indicates an expected call of GetUpdateInfo.
-func (mr *MockMutableStateMockRecorder) GetUpdateInfo(ctx, updateID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateInfo", reflect.TypeOf((*MockMutableState)(nil).GetUpdateInfo), ctx, updateID)
 }
 
 // GetUpdateOutcome mocks base method.
@@ -2808,4 +2779,16 @@ func (m *MockMutableState) UpdateWorkflowStateStatus(state v19.WorkflowExecution
 func (mr *MockMutableStateMockRecorder) UpdateWorkflowStateStatus(state, status interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowStateStatus", reflect.TypeOf((*MockMutableState)(nil).UpdateWorkflowStateStatus), state, status)
+}
+
+// VisitUpdates mocks base method.
+func (m *MockMutableState) VisitUpdates(visitor func(string, *v112.UpdateInfo)) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "VisitUpdates", visitor)
+}
+
+// VisitUpdates indicates an expected call of VisitUpdates.
+func (mr *MockMutableStateMockRecorder) VisitUpdates(visitor interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VisitUpdates", reflect.TypeOf((*MockMutableState)(nil).VisitUpdates), visitor)
 }

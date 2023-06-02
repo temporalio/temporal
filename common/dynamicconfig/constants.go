@@ -610,6 +610,8 @@ const (
 
 	// WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.
 	WorkflowExecutionMaxInFlightUpdates = "history.maxInFlightUpdates"
+	// WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive.
+	WorkflowExecutionMaxTotalUpdates = "history.maxTotalUpdates"
 
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"

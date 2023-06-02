@@ -715,6 +715,12 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
 }
 
+func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+	for updID, updInfo := range ms.executionInfo.GetUpdateInfos() {
+		visitor(updID, updInfo)
+	}
+}
+
 func (ms *MutableStateImpl) GetUpdateOutcome(
 	ctx context.Context,
 	updateID string,
@@ -728,8 +734,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	}
 	compPtr := rec.GetCompletedPointer()
 	if compPtr == nil {
-		// not an error because update was found, but update has not completed
-		return nil, nil
+		return nil, serviceerror.NewInternal("update has not completed")
 	}
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(compPtr.EventId)
 	if err != nil {
@@ -3542,27 +3547,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(
 		return nil, err
 	}
 	return event, nil
-}
-
-func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string {
-	if ms.executionInfo.UpdateInfos == nil {
-		return nil
-	}
-	out := make([]string, 0)
-	for id, updateInfo := range ms.executionInfo.UpdateInfos {
-		if updateInfo.GetAcceptancePointer() != nil {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-func (ms *MutableStateImpl) GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool) {
-	if ms.executionInfo.UpdateInfos == nil {
-		return nil, false
-	}
-	info, ok := ms.executionInfo.UpdateInfos[updateID]
-	return info, ok
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
