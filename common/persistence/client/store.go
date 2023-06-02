@@ -90,7 +90,8 @@ func DataStoreFactoryProvider(
 
 	var faultInjection *FaultInjectionDataStoreFactory
 	if defaultCfg.FaultInjection != nil {
-		dataStoreFactory = NewFaultInjectionDatastoreFactory(defaultCfg.FaultInjection, dataStoreFactory)
+		faultInjection = NewFaultInjectionDatastoreFactory(defaultCfg.FaultInjection, dataStoreFactory)
+		dataStoreFactory = faultInjection
 	}
 
 	return dataStoreFactory, faultInjection
