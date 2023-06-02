@@ -500,7 +500,19 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	return startedEvent, workflowTask, err
 }
 func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskType enumsspb.WorkflowTaskType, request *workflowservice.RespondWorkflowTaskCompletedRequest) bool {
-	if workflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE || len(request.GetCommands()) != 0 {
+	if workflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// Only Speculative WT can skip WorkflowTaskCompletedEvent.
+		return false
+	}
+	if len(request.GetCommands()) != 0 {
+		// If worker returned commands, they will be converted to events, which must follow by WorkflowTaskCompletedEvent.
+		return false
+	}
+	if len(request.GetMessages()) == 0 {
+		// If both commands & messages are empty, then this is heartbeat response.
+		// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
+		// In the future, if we decide not to write heartbeat WT to the history, this check should be removed,
+		// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
 		return false
 	}
 
