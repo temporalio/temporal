@@ -122,7 +122,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectBackoff:                false,
 		},
 		{
-			taskErr:                      errors.New("some random error"),
+			taskErr:                      serviceerror.NewUnavailable("some random error"),
 			expectError:                  true,
 			expectedAttemptNoUserLatency: attemptNoUserLatency,
 			expectBackoff:                true,
