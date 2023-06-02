@@ -3542,12 +3542,13 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateAcceptedEvent(
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(
+	acceptedEventID int64,
 	updResp *updatepb.Response,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionUpdateCompleted); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionUpdateCompletedEvent(updResp)
+	event := ms.hBuilder.AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID, updResp)
 	if err := ms.ReplicateWorkflowExecutionUpdateCompletedEvent(event); err != nil {
 		return nil, err
 	}

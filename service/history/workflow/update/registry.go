@@ -150,8 +150,13 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 
 	store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
 		// need to eager load here so that Len and admit are correct.
-		if updInfo.GetAcceptance() != nil {
-			r.updates[updID] = newAccepted(updID, r.remover(updID), withInstrumentation(&r.instrumentation))
+		if acc := updInfo.GetAcceptance(); acc != nil {
+			r.updates[updID] = newAccepted(
+				updID,
+				acc.EventId,
+				r.remover(updID),
+				withInstrumentation(&r.instrumentation),
+			)
 		}
 		if updInfo.GetCompletion() != nil {
 			r.completedCount++

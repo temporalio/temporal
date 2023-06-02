@@ -697,18 +697,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionUpdateAcceptedEvent(
 }
 
 // AddWorkflowExecutionUpdateCompletedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowExecutionUpdateCompletedEvent(updResp *v15.Response) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *v15.Response) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowExecutionUpdateCompletedEvent", updResp)
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionUpdateCompletedEvent", acceptedEventID, updResp)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowExecutionUpdateCompletedEvent indicates an expected call of AddWorkflowExecutionUpdateCompletedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionUpdateCompletedEvent(updResp interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID, updResp interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionUpdateCompletedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionUpdateCompletedEvent), updResp)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionUpdateCompletedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionUpdateCompletedEvent), acceptedEventID, updResp)
 }
 
 // AddWorkflowPropertiesModifiedEvent mocks base method.

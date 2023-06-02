@@ -848,6 +848,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		Value: &updatepb.Outcome_Success{Success: testPayloads},
 	}
 	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		1234,
 		&updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: completedUpdateID},
 			Outcome: completedOutcome,
@@ -971,7 +972,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
-	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(&updatepb.Response{})
+	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(1234, &updatepb.Response{})
 	s.NoError(err)
 
 	_, err = s.mutableState.AddWorkflowExecutionSignaled(
