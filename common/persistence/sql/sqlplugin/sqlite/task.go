@@ -374,10 +374,6 @@ func (mdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlp
 	}
 
 	_, err := mdb.conn.ExecContext(ctx, query, params...)
-	if err == nil {
-		// TODO(bergundy)
-		panic("Build id removal should be properly tested once we support deletion")
-	}
 	return err
 }
 

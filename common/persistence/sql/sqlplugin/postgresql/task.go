@@ -107,9 +107,10 @@ task_queue_id = :task_queue_id
 
 	listTaskQueueUserDataQry = `SELECT task_queue_name, data, data_encoding, version FROM task_queue_user_data WHERE namespace_id = $1 AND task_queue_name > $2 LIMIT $3`
 
-	addBuildIdToTaskQueueMappingQry = `INSERT INTO build_id_to_task_queue (namespace_id, build_id, task_queue_name) VALUES `
-	listTaskQueuesByBuildIdQry      = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
-	countTaskQueuesByBuildIdQry     = `SELECT COUNT(*) FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
+	addBuildIdToTaskQueueMappingQry    = `INSERT INTO build_id_to_task_queue (namespace_id, build_id, task_queue_name) VALUES `
+	removeBuildIdToTaskQueueMappingQry = `DELETE FROM build_id_to_task_queue WHERE namespace_id = $1 AND task_queue_name = $2 AND build_id IN (`
+	listTaskQueuesByBuildIdQry         = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
+	countTaskQueuesByBuildIdQry        = `SELECT COUNT(*) FROM build_id_to_task_queue WHERE namespace_id = $1 AND build_id = $2`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -356,8 +357,22 @@ func (pdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplug
 }
 
 func (pdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveFromBuildIdToTaskQueueMapping) error {
-	// TODO(bergundy): implement when we support deletion
-	panic("not implemented")
+	query := removeBuildIdToTaskQueueMappingQry
+	// Golang doesn't support appending a string slice to an any slice which is essentially what we're doing here.
+	params := make([]any, len(request.BuildIds)+2)
+	params[0] = request.NamespaceID
+	params[1] = request.TaskQueueName
+	for idx, buildId := range request.BuildIds {
+		sep := ", "
+		if idx == len(request.BuildIds)-1 {
+			sep = ")"
+		}
+		query += fmt.Sprintf("$%d%s", idx+3, sep)
+		params[idx+2] = buildId
+	}
+
+	_, err := pdb.conn.ExecContext(ctx, query, params...)
+	return err
 }
 
 func (pdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplugin.ListTaskQueueUserDataEntriesRequest) ([]sqlplugin.TaskQueueUserDataEntry, error) {

@@ -108,6 +108,9 @@ type (
 	UserDataUpdateOptions struct {
 		Replicate                bool
 		TaskQueueLimitPerBuildId int
+		// Only perform the update if current version equals to supplied version.
+		// 0 is unset.
+		KnownVersion int64
 	}
 	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)
 
@@ -516,7 +519,7 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 }
 
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
-	newData, err := c.db.UpdateUserData(ctx, updateFn, options.TaskQueueLimitPerBuildId)
+	newData, err := c.db.UpdateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
 	if err != nil {
 		return err
 	}
@@ -530,7 +533,7 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 	if err != nil {
 		return err
 	}
-	if !ns.IsGlobalNamespace() || len(ns.ClusterNames()) < 2 {
+	if !ns.IsGlobalNamespace() {
 		return nil
 	}
 

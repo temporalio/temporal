@@ -43,6 +43,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/service/worker/scanner/build_ids"
 )
 
 type scannerTestSuite struct {
@@ -72,8 +73,8 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 		TaskQueueName: historyScannerTaskQueueName,
 	}
 	buildIdScavenger := expectedScanner{
-		WFTypeName:    buildIdScavengerWFID,
-		TaskQueueName: buildIdScavengerTaskQueueName,
+		WFTypeName:    build_ids.BuildIdScavangerWorkflowName,
+		TaskQueueName: build_ids.BuildIdScavengerTaskQueueName,
 	}
 
 	type testCase struct {

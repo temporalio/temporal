@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -192,19 +191,26 @@ func (s *Scanner) Start() error {
 
 	if s.context.cfg.BuildIdScavengerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, buildIdScavengerWFStartOptions, build_ids.BuildIdScavangerWorkflowName)
-		workerTaskQueueNames = append(workerTaskQueueNames, buildIdScavengerTaskQueueName)
-	}
+		go s.startWorkflowWithRetry(ctx, build_ids.BuildIdScavengerWFStartOptions, build_ids.BuildIdScavangerWorkflowName)
 
-	buildIdsActivities := build_ids.NewActivities(
-		s.context.logger,
-		s.context.taskManager,
-		s.context.metadataManager,
-		s.context.visibilityManager,
-		s.context.namespaceRegistry,
-		clock.NewRealTimeSource(),
-		s.context.matchingClient,
-	)
+		buildIdsActivities := build_ids.NewActivities(
+			s.context.logger,
+			s.context.taskManager,
+			s.context.metadataManager,
+			s.context.visibilityManager,
+			s.context.namespaceRegistry,
+			s.context.matchingClient,
+		)
+
+		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)
+		work.RegisterWorkflowWithOptions(build_ids.BuildIdScavangerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavangerWorkflowName})
+		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavangerActivityName})
+
+		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
+		if err := work.Start(); err != nil {
+			return err
+		}
+	}
 
 	// TODO: There's no reason to register all activities and workflows on every task queue.
 	for _, tl := range workerTaskQueueNames {
@@ -216,8 +222,6 @@ func (s *Scanner) Start() error {
 		work.RegisterActivityWithOptions(TaskQueueScavengerActivity, activity.RegisterOptions{Name: taskQueueScavengerActivityName})
 		work.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
 		work.RegisterActivityWithOptions(ExecutionsScavengerActivity, activity.RegisterOptions{Name: executionsScavengerActivityName})
-		work.RegisterWorkflowWithOptions(build_ids.BuildIdScavangerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavangerWorkflowName})
-		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavangerActivityName})
 
 		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
 		if err := work.Start(); err != nil {

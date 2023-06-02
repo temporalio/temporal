@@ -577,6 +577,7 @@ func (m *sqlTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, reque
 	for i, row := range rows {
 		entries[i].TaskQueue = rows[i].TaskQueueName
 		entries[i].Data = persistence.NewDataBlob(row.Data, row.DataEncoding)
+		entries[i].Version = rows[i].Version
 	}
 	response := &persistence.InternalListTaskQueueUserDataEntriesResponse{
 		Entries:       entries,

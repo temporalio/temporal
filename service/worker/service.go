@@ -283,7 +283,7 @@ func NewConfig(
 			),
 			BuildIdScavengerEnabled: dc.GetBoolProperty(
 				dynamicconfig.BuildIdScavengerEnabled,
-				true,
+				false,
 			),
 			HistoryScannerEnabled: dc.GetBoolProperty(
 				dynamicconfig.HistoryScannerEnabled,

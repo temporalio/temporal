@@ -63,8 +63,10 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker/scanner/build_ids"
 )
 
 const (
@@ -83,6 +85,8 @@ type advancedVisibilitySuite struct {
 	testSearchAttributeKey string
 	testSearchAttributeVal string
 	sdkClient              sdkclient.Client
+	// client for the system namespace
+	sysSDKClient sdkclient.Client
 }
 
 // This cluster use customized threshold for history config
@@ -93,6 +97,7 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
 		dynamicconfig.ReachabilityTaskQueueScanLimit:             2,
 		dynamicconfig.ReachabilityQueryBuildIdLimit:              1,
+		dynamicconfig.BuildIdScavengerEnabled:                    true,
 	}
 
 	switch TestFlags.PersistenceDriver {
@@ -122,6 +127,14 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
 	}
 	s.sdkClient = sdkClient
+	sysSDKClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  clientAddr,
+		Namespace: primitives.SystemLocalNamespace,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
+	s.sysSDKClient = sysSDKClient
 }
 
 func (s *advancedVisibilitySuite) TearDownSuite() {
@@ -2523,6 +2536,46 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	s.Require().NoError(err)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
+}
+
+func (s *advancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
+	ctx := NewContext()
+	tq := s.T().Name()
+	v0 := s.T().Name() + "-v0"
+	v1 := s.T().Name() + "-v1"
+	var err error
+
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v0,
+		},
+	})
+	s.Require().NoError(err)
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v1,
+		},
+	})
+	s.Require().NoError(err)
+
+	run, err := s.sysSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        s.T().Name() + "-scavenger",
+		TaskQueue: build_ids.BuildIdScavengerTaskQueueName,
+	}, build_ids.BuildIdScavangerWorkflowName)
+	s.Require().NoError(err)
+	err = run.Get(ctx, nil)
+	s.Require().NoError(err)
+
+	versionSets, err := s.sdkClient.GetWorkerBuildIdCompatibility(ctx, &sdkclient.GetWorkerBuildIdCompatibilityOptions{
+		TaskQueue: tq,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(versionSets.Sets))
+	s.Require().Equal([]string{v1}, versionSets.Sets[0].BuildIDs)
 }
 
 func (s *advancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {

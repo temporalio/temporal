@@ -200,8 +200,26 @@ message ListTaskQueuePartitionsResponse {
 // (-- api-linter: core::0134::request-resource-required=disabled
 //     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibilityRequest RPC doesn't follow Google API format. --)
 message UpdateWorkerBuildIdCompatibilityRequest {
+    // Apply request from public API
+    message ApplyPublicRequest {
+        temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest request = 1;
+    }
+
+    // Remove build ids (internal only)
+    message RemoveBuildIds {
+        // The last known user data version, used to prevent concurrent updates.
+        int64 known_user_data_version = 1;
+        // List of build ids to remove
+        repeated string build_ids = 2;
+    }
+
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest request = 2;
+    string task_queue = 2;
+
+    oneof operation {
+        ApplyPublicRequest apply_public_request = 3;
+        RemoveBuildIds remove_build_ids = 4;
+    }
 }
 message UpdateWorkerBuildIdCompatibilityResponse {}
 

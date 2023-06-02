@@ -352,10 +352,17 @@ func (db *taskQueueDB) getUserDataLocked(
 // Note that the user data's clock may be nil and should be initialized externally where there's access to the cluster
 // metadata and the cluster ID can be obtained.
 //
+// If knownVersion is non 0 and not equal to the current version, the update will fail.
+//
 // The DB write is performed remotely on an owning node for all user data updates in the namespace.
 //
 // On success returns a pointer to the updated data, which must *not* be mutated.
-func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error), taskQueueLimitPerBuildId int) (*persistencespb.VersionedTaskQueueUserData, error) {
+func (db *taskQueueDB) UpdateUserData(
+	ctx context.Context,
+	updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error),
+	knownVersion int64,
+	taskQueueLimitPerBuildId int,
+) (*persistencespb.VersionedTaskQueueUserData, error) {
 	if !db.DbStoresUserData() {
 		return nil, errUserDataNoMutateNonRoot
 	}
@@ -370,6 +377,9 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 	preUpdateData := userData.GetData()
 	if preUpdateData == nil {
 		preUpdateData = &persistencespb.TaskQueueUserData{}
+	}
+	if knownVersion > 0 && userData.GetVersion() != knownVersion {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", knownVersion, userData.GetVersion()))
 	}
 	updatedUserData, err := updateFn(preUpdateData)
 	if err != nil {

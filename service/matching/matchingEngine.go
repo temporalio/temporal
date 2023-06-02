@@ -820,7 +820,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
 ) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
-	taskQueueName := req.GetRequest().GetTaskQueue()
+	taskQueueName := req.GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
@@ -829,10 +829,18 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	updateOptions := UserDataUpdateOptions{
-		Replicate:                true,
-		TaskQueueLimitPerBuildId: e.config.TaskQueueLimitPerBuildId(),
+	updateOptions := UserDataUpdateOptions{Replicate: true}
+	operationCreatedTombstones := false
+	switch req.GetOperation().(type) {
+	case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
+		// Only apply the limit when request is initiated by a user.
+		updateOptions.TaskQueueLimitPerBuildId = e.config.TaskQueueLimitPerBuildId()
+	case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_:
+		updateOptions.KnownVersion = req.GetRemoveBuildIds().GetKnownUserDataVersion()
+	default:
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 	}
+
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		clock := data.GetClock()
 		if clock == nil {
@@ -840,13 +848,36 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 			clock = &tmp
 		}
 		updatedClock := hlc.Next(*clock, e.timeSource)
-		versioningData, err := UpdateVersionSets(
-			updatedClock,
-			data.GetVersioningData(),
-			req.GetRequest(),
-			e.config.VersionCompatibleSetLimitPerQueue(),
-			e.config.VersionBuildIdLimitPerQueue(),
-		)
+		var versioningData *persistencespb.VersioningData
+		var err error
+		switch req.GetOperation().(type) {
+		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
+			versioningData, err = UpdateVersionSets(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetApplyPublicRequest().GetRequest(),
+				e.config.VersionCompatibleSetLimitPerQueue(),
+				e.config.VersionBuildIdLimitPerQueue(),
+			)
+		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_:
+			ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+			if err != nil {
+				return nil, err
+			}
+			versioningData = RemoveBuildIds(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetRemoveBuildIds().GetBuildIds(),
+			)
+			if ns.IsGlobalNamespace() {
+				operationCreatedTombstones = true
+			} else {
+				// We don't need to keep the tombstones around if we're not replicating them.
+				versioningData = ClearTombstones(versioningData)
+			}
+		default:
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -858,6 +889,22 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Only clear tombstones after they have been replicated.
+	if operationCreatedTombstones {
+		updateOptions := UserDataUpdateOptions{Replicate: false}
+		err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+			updatedClock := hlc.Next(*data.GetClock(), e.timeSource)
+			// Avoid mutation
+			ret := *data
+			ret.Clock = &updatedClock
+			ret.VersioningData = ClearTombstones(data.VersioningData)
+			return &ret, nil
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil
 }
@@ -967,7 +1014,8 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	}
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
 		mergedUserData := *current
-		mergedUserData.VersioningData = MergeVersioningData(current.GetVersioningData(), req.GetUserData().GetVersioningData())
+		// No need to keep the tombstones around after replication
+		mergedUserData.VersioningData = ClearTombstones(MergeVersioningData(current.GetVersioningData(), req.GetUserData().GetVersioningData()))
 		return &mergedUserData, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err

@@ -50,14 +50,8 @@ import (
 	"google.golang.org/grpc"
 )
 
-func Test_processUserDataEntry_AcceptsNilVersioningData(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	timeSource := namespace.NewMockClock(ctrl)
-	timeSource.EXPECT().Now().AnyTimes()
-
-	a := &Activities{
-		timeSource: timeSource,
-	}
+func Test_findBuildIdsToRemove_AcceptsNilVersioningData(t *testing.T) {
+	a := &Activities{}
 
 	ctx := context.Background()
 	c0 := hlc.Zero(0)
@@ -66,7 +60,7 @@ func Test_processUserDataEntry_AcceptsNilVersioningData(t *testing.T) {
 		VersioningData: nil,
 	}
 
-	buildIdsRemoved, err := a.processUserDataEntry(ctx, nil, heartbeatDetails{}, namespace.NewNamespaceForTest(nil, nil, false, nil, 0), &persistence.TaskQueueUserDataEntry{
+	buildIdsRemoved, err := a.findBuildIdsToRemove(ctx, nil, heartbeatDetails{}, namespace.NewNamespaceForTest(nil, nil, false, nil, 0), &persistence.TaskQueueUserDataEntry{
 		TaskQueue: "test",
 		UserData: &persistencespb.VersionedTaskQueueUserData{
 			Version: 0,
@@ -78,19 +72,17 @@ func Test_processUserDataEntry_AcceptsNilVersioningData(t *testing.T) {
 	require.True(t, hlc.Equal(c0, *userData.Clock))
 }
 
-func Test_processUserDataEntry_PutsTombstonesOnEligableBuildIds(t *testing.T) {
+func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
 
 	ctrl := gomock.NewController(t)
 	visiblityManager := manager.NewMockVisibilityManager(ctrl)
 	rateLimiter := quotas.NewMockRateLimiter(ctrl)
-	timeSource := namespace.NewMockClock(ctrl)
 
 	a := &Activities{
 		logger:            log.NewCLILogger(),
 		visibilityManager: visiblityManager,
-		timeSource:        timeSource,
 	}
 
 	visiblityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Times(4).DoAndReturn(
@@ -106,7 +98,6 @@ func Test_processUserDataEntry_PutsTombstonesOnEligableBuildIds(t *testing.T) {
 		},
 	)
 	rateLimiter.EXPECT().Wait(gomock.Any()).Times(4)
-	timeSource.EXPECT().Now().AnyTimes()
 
 	heartbeatRecorded := false
 	env.SetOnActivityHeartbeatListener(func(activityInfo *activity.Info, details converter.EncodedValues) {
@@ -183,7 +174,7 @@ func Test_processUserDataEntry_PutsTombstonesOnEligableBuildIds(t *testing.T) {
 	}
 
 	act := func(ctx context.Context) ([]string, error) {
-		return a.processUserDataEntry(ctx, rateLimiter, heartbeatDetails{}, namespace.NewNamespaceForTest(nil, nil, false, nil, 0), &persistence.TaskQueueUserDataEntry{
+		return a.findBuildIdsToRemove(ctx, rateLimiter, heartbeatDetails{}, namespace.NewNamespaceForTest(nil, nil, false, nil, 0), &persistence.TaskQueueUserDataEntry{
 			TaskQueue: "test",
 			UserData: &persistencespb.VersionedTaskQueueUserData{
 				Version: 0,
@@ -198,150 +189,7 @@ func Test_processUserDataEntry_PutsTombstonesOnEligableBuildIds(t *testing.T) {
 	err = removedBuildIDsEncoded.Get(&removedBuildIDs)
 	require.NoError(t, err)
 	require.Equal(t, []string{"v1.1", "v1.2", "v2.0"}, removedBuildIDs)
-	c1 := c0
-	c1.Version++
-
-	expected := &persistencespb.TaskQueueUserData{
-		Clock: &c1,
-		VersioningData: &persistencespb.VersioningData{
-			VersionSets: []*persistencespb.CompatibleVersionSet{
-				{
-					SetIds: []string{"v1"},
-					BuildIds: []*persistencespb.BuildId{
-						{
-							Id:                   "v1.0",
-							State:                persistencespb.STATE_DELETED,
-							StateUpdateTimestamp: &c0,
-						},
-						{
-							Id:                   "v1.1",
-							State:                persistencespb.STATE_DELETED,
-							StateUpdateTimestamp: &c1,
-						},
-						{
-							Id:                   "v1.2",
-							State:                persistencespb.STATE_DELETED,
-							StateUpdateTimestamp: &c1,
-						},
-					},
-					DefaultUpdateTimestamp: &c0,
-				},
-				{
-					SetIds: []string{"v2"},
-					BuildIds: []*persistencespb.BuildId{
-						{
-							Id:                   "v2.0",
-							State:                persistencespb.STATE_DELETED,
-							StateUpdateTimestamp: &c1,
-						},
-					},
-					DefaultUpdateTimestamp: &c0,
-				},
-				{
-					SetIds: []string{"v3"},
-					BuildIds: []*persistencespb.BuildId{
-						{
-							Id:                   "v3.0",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
-						},
-						{
-							Id:                   "v3.1",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
-						},
-					},
-					DefaultUpdateTimestamp: &c0,
-				},
-				{
-					SetIds: []string{"v4"},
-					BuildIds: []*persistencespb.BuildId{
-						{
-							Id:                   "v4.0",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
-						},
-					},
-					DefaultUpdateTimestamp: &c0,
-				},
-			},
-			DefaultUpdateTimestamp: &c0,
-		},
-	}
-
-	require.Equal(t, expected, userData)
 	require.True(t, heartbeatRecorded)
-}
-
-func Test_clearTombstones(t *testing.T) {
-	c0 := hlc.Zero(0)
-	data := &persistencespb.VersioningData{
-		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
-				SetIds: []string{"v1"},
-				BuildIds: []*persistencespb.BuildId{
-					{
-						Id:                   "v1.0",
-						State:                persistencespb.STATE_DELETED,
-						StateUpdateTimestamp: &c0,
-					},
-					{
-						Id:                   "v1.1",
-						State:                persistencespb.STATE_DELETED,
-						StateUpdateTimestamp: &c0,
-					},
-				},
-				DefaultUpdateTimestamp: &c0,
-			},
-			{
-				SetIds: []string{"v2"},
-				BuildIds: []*persistencespb.BuildId{
-					{
-						Id:                   "v2.0",
-						State:                persistencespb.STATE_DELETED,
-						StateUpdateTimestamp: &c0,
-					},
-				},
-				DefaultUpdateTimestamp: &c0,
-			},
-			{
-				SetIds: []string{"v3"},
-				BuildIds: []*persistencespb.BuildId{
-					{
-						Id:                   "v3.0",
-						State:                persistencespb.STATE_DELETED,
-						StateUpdateTimestamp: &c0,
-					},
-					{
-						Id:                   "v3.1",
-						State:                persistencespb.STATE_ACTIVE,
-						StateUpdateTimestamp: &c0,
-					},
-				},
-				DefaultUpdateTimestamp: &c0,
-			},
-		},
-		DefaultUpdateTimestamp: &c0,
-	}
-	clearTombstones(data)
-
-	expected := &persistencespb.VersioningData{
-		VersionSets: []*persistencespb.CompatibleVersionSet{
-			{
-				SetIds: []string{"v3"},
-				BuildIds: []*persistencespb.BuildId{
-					{
-						Id:                   "v3.1",
-						State:                persistencespb.STATE_ACTIVE,
-						StateUpdateTimestamp: &c0,
-					},
-				},
-				DefaultUpdateTimestamp: &c0,
-			},
-		},
-		DefaultUpdateTimestamp: &c0,
-	}
-	require.Equal(t, expected, data)
 }
 
 func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
@@ -353,7 +201,6 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	visiblityManager := manager.NewMockVisibilityManager(ctrl)
 	rateLimiter := quotas.NewMockRateLimiter(ctrl)
-	timeSource := namespace.NewMockClock(ctrl)
 	metadataManager := persistence.NewMockMetadataManager(ctrl)
 	taskManager := persistence.NewMockTaskManager(ctrl)
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
@@ -362,7 +209,6 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	a := &Activities{
 		logger:            log.NewCLILogger(),
 		visibilityManager: visiblityManager,
-		timeSource:        timeSource,
 		metadataManager:   metadataManager,
 		taskManager:       taskManager,
 		namespaceRegistry: namespaceRegistry,
@@ -370,7 +216,6 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	}
 
 	rateLimiter.EXPECT().Wait(gomock.Any()).AnyTimes()
-	timeSource.EXPECT().Now().AnyTimes()
 	visiblityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).AnyTimes().Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 0,
 	}, nil)
@@ -477,120 +322,12 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 			}, nil
 		},
 	)
-	numUpdateCalls := 0
-	matchingClient.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).Times(3).DoAndReturn(
-		func(ctx context.Context, in *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
-			numUpdateCalls++
+	matchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(
+		func(ctx context.Context, in *matchingservice.UpdateWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 			require.Equal(t, "with-data", in.TaskQueue)
-			require.Equal(t, []string{"v1.0"}, in.BuildIdsRemoved)
-			if numUpdateCalls == 1 {
-				require.Equal(t, "local", in.NamespaceId)
-				require.Equal(t, &persistencespb.VersionedTaskQueueUserData{
-					Version: 2,
-					Data: &persistencespb.TaskQueueUserData{
-						Clock: &c1,
-						VersioningData: &persistencespb.VersioningData{
-							VersionSets: []*persistencespb.CompatibleVersionSet{
-								{
-									SetIds: []string{"v1"},
-									BuildIds: []*persistencespb.BuildId{
-										{
-											Id:                   "v1.1",
-											State:                persistencespb.STATE_ACTIVE,
-											StateUpdateTimestamp: &c0,
-										},
-									},
-									DefaultUpdateTimestamp: &c0,
-								},
-							},
-						},
-					},
-				}, in.UserData)
-			} else if numUpdateCalls == 2 {
-				require.Equal(t, "global", in.NamespaceId)
-				require.Equal(t, &persistencespb.VersionedTaskQueueUserData{
-					Version: 2,
-					Data: &persistencespb.TaskQueueUserData{
-						Clock: &c1,
-						VersioningData: &persistencespb.VersioningData{
-							VersionSets: []*persistencespb.CompatibleVersionSet{
-								{
-									SetIds: []string{"v1"},
-									BuildIds: []*persistencespb.BuildId{
-										{
-											Id:                   "v1.0",
-											State:                persistencespb.STATE_DELETED,
-											StateUpdateTimestamp: &c1,
-										},
-										{
-											Id:                   "v1.1",
-											State:                persistencespb.STATE_ACTIVE,
-											StateUpdateTimestamp: &c0,
-										},
-									},
-									DefaultUpdateTimestamp: &c0,
-								},
-							},
-						},
-					},
-				}, in.UserData)
-			} else {
-				require.Equal(t, "global", in.NamespaceId)
-				require.Equal(t, &persistencespb.VersionedTaskQueueUserData{
-					Version: 3,
-					Data: &persistencespb.TaskQueueUserData{
-						Clock: &c1,
-						VersioningData: &persistencespb.VersioningData{
-							VersionSets: []*persistencespb.CompatibleVersionSet{
-								{
-									SetIds: []string{"v1"},
-									BuildIds: []*persistencespb.BuildId{
-										{
-											Id:                   "v1.1",
-											State:                persistencespb.STATE_ACTIVE,
-											StateUpdateTimestamp: &c0,
-										},
-									},
-									DefaultUpdateTimestamp: &c0,
-								},
-							},
-						},
-					},
-				}, in.UserData)
-			}
-
-			return &matchingservice.UpdateTaskQueueUserDataResponse{}, nil
-		},
-	)
-	matchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
-		func(ctx context.Context, in *matchingservice.ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
-			require.Equal(t, "global", in.NamespaceId)
-			require.Equal(t, "with-data", in.TaskQueue)
-			require.Equal(t, &persistencespb.TaskQueueUserData{
-				Clock: &c1,
-				VersioningData: &persistencespb.VersioningData{
-					VersionSets: []*persistencespb.CompatibleVersionSet{
-						{
-							SetIds: []string{"v1"},
-							BuildIds: []*persistencespb.BuildId{
-								{
-									Id:                   "v1.0",
-									State:                persistencespb.STATE_DELETED,
-									StateUpdateTimestamp: &c1,
-								},
-								{
-									Id:                   "v1.1",
-									State:                persistencespb.STATE_ACTIVE,
-									StateUpdateTimestamp: &c0,
-								},
-							},
-							DefaultUpdateTimestamp: &c0,
-						},
-					},
-				},
-			}, in.UserData)
-
-			return &matchingservice.ReplicateTaskQueueUserDataResponse{}, nil
+			require.Equal(t, []string{"v1.0"}, in.GetRemoveBuildIds().GetBuildIds())
+			require.Equal(t, int64(1), in.GetRemoveBuildIds().GetKnownUserDataVersion())
+			return &matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil
 		},
 	)
 	env.SetHeartbeatDetails(initialHeartbeat)

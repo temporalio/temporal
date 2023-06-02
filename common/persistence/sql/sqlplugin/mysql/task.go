@@ -28,6 +28,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -106,9 +107,10 @@ task_queue_id = :task_queue_id
 
 	listTaskQueueUserDataQry = `SELECT task_queue_name, data, data_encoding, version FROM task_queue_user_data WHERE namespace_id = ? AND task_queue_name > ? LIMIT ?`
 
-	addBuildIdToTaskQueueMappingQry = `INSERT INTO build_id_to_task_queue (namespace_id, build_id, task_queue_name) VALUES `
-	listTaskQueuesByBuildIdQry      = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = ? AND build_id = ?`
-	countTaskQueuesByBuildIdQry     = `SELECT COUNT(*) FROM build_id_to_task_queue WHERE namespace_id = ? AND build_id = ?`
+	addBuildIdToTaskQueueMappingQry    = `INSERT INTO build_id_to_task_queue (namespace_id, build_id, task_queue_name) VALUES `
+	removeBuildIdToTaskQueueMappingQry = `DELETE FROM build_id_to_task_queue WHERE namespace_id = ? AND task_queue_name = ? AND build_id IN (`
+	listTaskQueuesByBuildIdQry         = `SELECT task_queue_name FROM build_id_to_task_queue WHERE namespace_id = ? AND build_id = ?`
+	countTaskQueuesByBuildIdQry        = `SELECT COUNT(*) FROM build_id_to_task_queue WHERE namespace_id = ? AND build_id = ?`
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -357,8 +359,17 @@ func (mdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplug
 }
 
 func (mdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveFromBuildIdToTaskQueueMapping) error {
-	// TODO(bergundy): implement when we support deletion
-	panic("not implemented")
+	query := removeBuildIdToTaskQueueMappingQry + strings.Repeat("?, ", len(request.BuildIds)-1) + "?)"
+	// Golang doesn't support appending a string slice to an any slice which is essentially what we're doing here.
+	params := make([]any, len(request.BuildIds)+2)
+	params[0] = request.NamespaceID
+	params[1] = request.TaskQueueName
+	for i, buildId := range request.BuildIds {
+		params[i+2] = buildId
+	}
+
+	_, err := mdb.conn.ExecContext(ctx, query, params...)
+	return err
 }
 
 func (mdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplugin.ListTaskQueueUserDataEntriesRequest) ([]sqlplugin.TaskQueueUserDataEntry, error) {

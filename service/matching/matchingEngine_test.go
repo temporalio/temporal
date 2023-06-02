@@ -1920,11 +1920,15 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		id := fmt.Sprintf("%d", i)
 		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-				Namespace: namespaceID.String(),
-				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-					AddNewBuildIdInNewDefaultSet: id,
+			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
+				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
+					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+						Namespace: namespaceID.String(),
+						TaskQueue: tq,
+						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+							AddNewBuildIdInNewDefaultSet: id,
+						},
+					},
 				},
 			},
 		})
@@ -1940,14 +1944,18 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		}
 		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-				Namespace: namespaceID.String(),
-				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
-					AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-						NewBuildId:                id,
-						ExistingCompatibleBuildId: prevCompat,
-						MakeSetDefault:            false,
+			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
+				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
+					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+						Namespace: namespaceID.String(),
+						TaskQueue: tq,
+						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+							AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
+								NewBuildId:                id,
+								ExistingCompatibleBuildId: prevCompat,
+								MakeSetDefault:            false,
+							},
+						},
 					},
 				},
 			},
@@ -2120,11 +2128,15 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-				Namespace: namespaceID.String(),
-				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-					AddNewBuildIdInNewDefaultSet: "v1",
+			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
+				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
+					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+						Namespace: namespaceID.String(),
+						TaskQueue: tq,
+						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+							AddNewBuildIdInNewDefaultSet: "v1",
+						},
+					},
 				},
 			},
 		})
@@ -2167,11 +2179,15 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-				Namespace: namespaceID.String(),
-				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-					AddNewBuildIdInNewDefaultSet: "v1",
+			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
+				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
+					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+						Namespace: namespaceID.String(),
+						TaskQueue: tq,
+						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+							AddNewBuildIdInNewDefaultSet: "v1",
+						},
+					},
 				},
 			},
 		})

@@ -31,13 +31,14 @@ import (
 	"time"
 
 	"github.com/xwb1989/sqlparser"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
-	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -50,6 +51,18 @@ import (
 const (
 	BuildIdScavangerWorkflowName = "build-id-scavenger"
 	BuildIdScavangerActivityName = "scavenge-build-ids"
+
+	BuildIdScavengerWFID          = "temporal-sys-build-id-scavenger"
+	BuildIdScavengerTaskQueueName = "temporal-sys-build-id-scavenger-taskqueue-0"
+)
+
+var (
+	BuildIdScavengerWFStartOptions = client.StartWorkflowOptions{
+		ID:                    BuildIdScavengerWFID,
+		TaskQueue:             BuildIdScavengerTaskQueueName,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		CronSchedule:          "0 */12 * * *",
+	}
 )
 
 type (
@@ -65,7 +78,6 @@ type (
 		metadataManager   persistence.MetadataManager
 		visibilityManager manager.VisibilityManager
 		namespaceRegistry namespace.Registry
-		timeSource        clock.TimeSource
 		matchingClient    matchingservice.MatchingServiceClient
 	}
 
@@ -83,7 +95,6 @@ func NewActivities(
 	metadataManager persistence.MetadataManager,
 	visibilityManager manager.VisibilityManager,
 	namespaceRegistry namespace.Registry,
-	timeSource clock.TimeSource,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *Activities {
 	return &Activities{
@@ -92,7 +103,6 @@ func NewActivities(
 		metadataManager:   metadataManager,
 		visibilityManager: visibilityManager,
 		namespaceRegistry: namespaceRegistry,
-		timeSource:        timeSource,
 		matchingClient:    matchingClient,
 	}
 }
@@ -125,8 +135,10 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 	setDefaults(&input)
 
 	var heartbeat heartbeatDetails
-	if err := activity.GetHeartbeatDetails(ctx, &heartbeat); err != nil {
-		return err
+	if activity.HasHeartbeatDetails(ctx) {
+		if err := activity.GetHeartbeatDetails(ctx, &heartbeat); err != nil {
+			return temporal.NewNonRetryableApplicationError("failed to load previous heartbeat details", "TypeError", err)
+		}
 	}
 	rateLimiter := quotas.NewRateLimiter(input.VisibilityRPS, int(math.Ceil(input.VisibilityRPS)))
 	for {
@@ -155,55 +167,24 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 				}
 				for heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
 					entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
-					buildIdsRemoved, err := a.processUserDataEntry(ctx, rateLimiter, heartbeat, ns, entry)
+					buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, heartbeat, ns, entry)
 					if err != nil {
 						return err
 					}
-					if len(buildIdsRemoved) > 0 {
-						// We don't need to keep the tombstones around if we're not replicating them.
-						if !ns.IsGlobalNamespace() {
-							clearTombstones(entry.UserData.Data.GetVersioningData())
-						}
-
-						_, err := a.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
+					if len(buildIdsToRemove) > 0 {
+						_, err := a.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 							NamespaceId: nsId,
 							TaskQueue:   entry.TaskQueue,
-							UserData: &persistencespb.VersionedTaskQueueUserData{
-								Version: entry.UserData.Version + 1,
-								Data:    entry.UserData.Data,
+							Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_{
+								RemoveBuildIds: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds{
+									KnownUserDataVersion: entry.UserData.Version,
+									BuildIds:             buildIdsToRemove,
+								},
 							},
-							BuildIdsRemoved: buildIdsRemoved,
 						})
 						if err != nil {
 							a.logger.Error("Failed to update task queue user data", tag.Error(err))
 							continue
-						}
-						if ns.IsGlobalNamespace() {
-							_, err = a.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
-								NamespaceId: nsId,
-								TaskQueue:   entry.TaskQueue,
-								UserData:    entry.UserData.Data,
-							})
-							if err != nil {
-								a.logger.Error("Failed to replicate task queue user data", tag.Error(err))
-								continue
-							}
-							// Only clear tombstones after they have been replicated.
-							if clearTombstones(entry.UserData.Data.VersioningData) {
-								_, err := a.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
-									NamespaceId: nsId,
-									TaskQueue:   entry.TaskQueue,
-									UserData: &persistencespb.VersionedTaskQueueUserData{
-										Version: entry.UserData.Version + 2,
-										Data:    entry.UserData.Data,
-									},
-									BuildIdsRemoved: buildIdsRemoved,
-								})
-								if err != nil {
-									a.logger.Error("Failed to perform second task queue user data update", tag.Error(err))
-									continue
-								}
-							}
 						}
 					}
 					heartbeat.TaskQueueIdx++
@@ -232,16 +213,15 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 // Process a single user data entry. Queries visibility for each build id and updates build id state with STATE_DELETED
 // (tombstone) for every build id that can safely be deleted.
 // Returns a list of build ids that were removed.
-func (a *Activities) processUserDataEntry(
+func (a *Activities) findBuildIdsToRemove(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
 	heartbeat heartbeatDetails,
 	ns *namespace.Namespace,
 	entry *persistence.TaskQueueUserDataEntry,
 ) ([]string, error) {
-	clk := hlc.Next(*entry.UserData.Data.Clock, a.timeSource)
 	versioningData := entry.UserData.Data.GetVersioningData()
-	var buildIdsRemoved []string
+	var buildIdsToRemove []string
 	for setIdx, set := range versioningData.GetVersionSets() {
 		setActive := len(set.BuildIds)
 		for buildIdIdx, buildId := range set.BuildIds {
@@ -265,7 +245,7 @@ func (a *Activities) processUserDataEntry(
 			query := fmt.Sprintf("%s = %s", searchattribute.BuildIds, escapedBuildId)
 
 			if err := rateLimiter.Wait(ctx); err != nil {
-				return buildIdsRemoved, err
+				return buildIdsToRemove, err
 			}
 			response, err := a.visibilityManager.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
 				NamespaceID: ns.ID(),
@@ -273,54 +253,20 @@ func (a *Activities) processUserDataEntry(
 				Query:       query,
 			})
 			if err != nil {
-				return buildIdsRemoved, err
+				return buildIdsToRemove, err
 			}
 			activity.RecordHeartbeat(ctx, heartbeat)
 			if response.Count == 0 {
-				a.logger.Info("Deleting build id",
+				a.logger.Info("Found build id to remove",
 					tag.NewStringTag("namespace", ns.Name().String()),
 					tag.NewStringTag("task-queue", entry.TaskQueue),
 					tag.NewStringTag("build-id", buildId.Id),
 				)
-				buildId.State = persistencespb.STATE_DELETED
-				buildId.StateUpdateTimestamp = &clk
-				entry.UserData.Data.Clock = &clk
-				buildIdsRemoved = append(buildIdsRemoved, buildId.Id)
+				buildIdsToRemove = append(buildIdsToRemove, buildId.Id)
 				setActive--
 			}
 		}
 	}
 
-	return buildIdsRemoved, nil
-}
-
-// Clear all tombstone build ids (with STATE_DELETED) from versioning data.
-// Returns true if any tombstones were cleared.
-func clearTombstones(versioningData *persistencespb.VersioningData) bool {
-	cleared := false
-	for setIdx := 0; setIdx < len(versioningData.GetVersionSets()); {
-		set := versioningData.VersionSets[setIdx]
-		for buildIdIdx := 0; buildIdIdx < len(set.BuildIds); {
-			buildId := set.BuildIds[buildIdIdx]
-			if buildId.State == persistencespb.STATE_DELETED {
-				set.BuildIds = removeIndex(set.BuildIds, buildIdIdx)
-				cleared = true
-			} else {
-				buildIdIdx++
-			}
-		}
-		if len(set.BuildIds) == 0 {
-			versioningData.VersionSets = removeIndex(versioningData.VersionSets, setIdx)
-			cleared = true
-		} else {
-			setIdx++
-		}
-	}
-	return cleared
-}
-
-func removeIndex[T any](s []T, index int) []T {
-	ret := make([]T, 0, len(s)-1)
-	ret = append(ret, s[:index]...)
-	return append(ret, s[index+1:]...)
+	return buildIdsToRemove, nil
 }
