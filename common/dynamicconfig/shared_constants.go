@@ -53,6 +53,7 @@ const (
 	dynamicRateLimitEnabledKey     = "enabled"
 	dynamicRateLimitEnabledDefault = false
 	// dynamicRateLimitRefreshIntervalKey is how often the rate limit and dynamic properties are refreshed. should be a string timestamp e.g. 10s
+	// even if the rate limiter is disabled, this property will still determine how often the dynamic config is reevaluated
 	dynamicRateLimitRefreshIntervalKey     = "refreshInterval"
 	dynamicRateLimitRefreshIntervalDefault = "10s"
 	// dynamicRateLimitLatencyThresholdKey is the maximum average latency in ms before the rate limiter should backoff

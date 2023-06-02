@@ -29,7 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -70,25 +69,33 @@ type (
 )
 
 func NewHealthSignalAggregatorImpl(
+	aggregationEnabled bool,
 	windowSize time.Duration,
 	maxBufferSize int,
 	metricsHandler metrics.Handler,
 	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
 	logger log.Logger,
-	aggregationEnabled bool,
 ) *HealthSignalAggregatorImpl {
-	return &HealthSignalAggregatorImpl{
+	ret := &HealthSignalAggregatorImpl{
 		status:               common.DaemonStatusInitialized,
 		shutdownCh:           make(chan struct{}),
 		requestsPerShard:     make(map[int32]int64),
-		latencyAverage:       aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		errorRatio:           aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
 		metricsHandler:       metricsHandler,
 		emitMetricsTimer:     time.NewTicker(emitMetricsInterval),
 		perShardRPSWarnLimit: perShardRPSWarnLimit,
 		logger:               logger,
 		aggregationEnabled:   aggregationEnabled,
 	}
+
+	if aggregationEnabled {
+		ret.latencyAverage = aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize)
+		ret.errorRatio = aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize)
+	} else {
+		ret.latencyAverage = aggregate.NoopMovingWindowAverage
+		ret.errorRatio = aggregate.NoopMovingWindowAverage
+	}
+
+	return ret
 }
 
 func (s *HealthSignalAggregatorImpl) Start() {
@@ -96,10 +103,6 @@ func (s *HealthSignalAggregatorImpl) Start() {
 		return
 	}
 	go s.emitMetricsLoop()
-	if !s.aggregationEnabled {
-		s.latencyAverage = aggregate.NoopMovingWindowAverage
-		s.errorRatio = aggregate.NoopMovingWindowAverage
-	}
 }
 
 func (s *HealthSignalAggregatorImpl) Stop() {
@@ -166,10 +169,13 @@ func isUnhealthyError(err error) bool {
 	if err == nil {
 		return false
 	}
+	if common.IsContextCanceledErr(err) {
+		return true
+	}
+
 	switch err.(type) {
 	case *AppendHistoryTimeoutError,
-		*TimeoutError,
-		*serviceerror.DeadlineExceeded:
+		*TimeoutError:
 		return true
 
 	default:
