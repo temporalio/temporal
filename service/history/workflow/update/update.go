@@ -85,11 +85,6 @@ type (
 	}
 
 	updateOpt func(*Update)
-
-	Summary struct {
-		AcceptedIDs  []string
-		CompletedIDs []string
-	}
 )
 
 // New creates a new Update instance with the provided ID that will call the

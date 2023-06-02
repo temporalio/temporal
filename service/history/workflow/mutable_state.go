@@ -155,7 +155,7 @@ type (
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, updAcceptance *updatepb.Acceptance) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
-		GetUpdateInfos(ctx context.Context) map[string]*persistencespb.UpdateInfo
+		VisitUpdates(ctx context.Context, visitor func(ctx context.Context, updID string, updInfo *persistencespb.UpdateInfo) error) error
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 
 		CheckResettable() error

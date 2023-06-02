@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/api"
@@ -61,8 +62,8 @@ func Invoke(
 		}
 		release := wfctx.GetReleaseFn()
 		defer release(nil)
-		upd, found := wfctx.GetUpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
-		return upd, found, nil
+		upd, found, err := wfctx.GetUpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
+		return upd, found, err
 	}()
 	if err != nil {
 		return nil, err

@@ -715,6 +715,15 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
 }
 
+func (ms *MutableStateImpl) VisitUpdates(ctx context.Context, visitor func(ctx context.Context, updID string, updInfo *persistencespb.UpdateInfo) error) error {
+	for updID, updInfo := range ms.executionInfo.GetUpdateInfos() {
+		if err := visitor(ctx, updID, updInfo); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (ms *MutableStateImpl) GetUpdateOutcome(
 	ctx context.Context,
 	updateID string,
@@ -728,8 +737,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	}
 	compPtr := rec.GetCompletedPointer()
 	if compPtr == nil {
-		// not an error because update was found, but update has not completed
-		return nil, nil
+		return nil, serviceerror.NewInternal("update has not completed")
 	}
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(compPtr.EventId)
 	if err != nil {
@@ -3542,10 +3550,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(
 		return nil, err
 	}
 	return event, nil
-}
-
-func (ms *MutableStateImpl) GetUpdateInfos(_ context.Context) map[string]*persistencespb.UpdateInfo {
-	return ms.executionInfo.GetUpdateInfos()
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(

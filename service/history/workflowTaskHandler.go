@@ -274,7 +274,7 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 	if err != nil {
 		return serviceerror.NewInvalidArgument(err.Error())
 	}
-	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
+	if err = handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		// TODO (alex-update): Should use MessageTypeTag here but then it needs to be another metric name too.
 		metrics.CommandTypeTag(msgType.String()),
 		message.Body.Size(),
@@ -285,13 +285,17 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 
 	switch protocolType {
 	case update.ProtocolV1:
-		upd, ok := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
-		if !ok {
+		upd, found, err := handler.updateRegistry.Find(ctx, message.ProtocolInstanceId)
+		if err != nil {
+			return handler.failWorkflowTask(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
+		}
+		if !found {
 			return handler.failWorkflowTask(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
 				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
 		}
-		if err := upd.OnMessage(ctx, message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
+		if err = upd.OnMessage(ctx, message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
 			return handler.failWorkflowTaskOnInvalidArgument(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 		}

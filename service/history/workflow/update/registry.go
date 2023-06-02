@@ -26,6 +26,7 @@ package update
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -54,7 +55,7 @@ type (
 
 		// Find finds an existing update in this Registry but does not create a
 		// new update if no update is found.
-		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
+		Find(ctx context.Context, protocolInstanceID string) (*Update, bool, error)
 
 		// ReadOutgoingMessages polls each registered Update for outbound
 		// messages and returns them.
@@ -72,10 +73,9 @@ type (
 		Len() int
 	}
 
-	// UpdateStore represents the update package's requirements for writing
-	// events and restoring ephemeral state from an event index.
+	// UpdateStore represents the update package's requirements for reading updates from the store.
 	UpdateStore interface {
-		GetUpdateInfos(ctx context.Context) map[string]*persistencespb.UpdateInfo
+		VisitUpdates(ctx context.Context, visitor func(ctx context.Context, updID string, updInfo *persistencespb.UpdateInfo) error) error
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 	}
 
@@ -149,33 +149,38 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 		opt(r)
 	}
 
-	// need to eager load here so that Len and admit are correct.
-	for id, updInfo := range store.GetUpdateInfos(context.Background()) {
+	_ = store.VisitUpdates(context.Background(), func(ctx context.Context, updID string, updInfo *persistencespb.UpdateInfo) error {
+		// need to eager load here so that Len and admit are correct.
 		if updInfo.GetAcceptancePointer() != nil {
-			r.updates[id] = newAccepted(id, r.remover(id), withInstrumentation(&r.instrumentation))
+			r.updates[updID] = newAccepted(updID, r.remover(updID), withInstrumentation(&r.instrumentation))
 		}
 		if updInfo.GetCompletedPointer() != nil {
 			r.completedCount++
 		}
-	}
+		return nil
+	})
 	return r
 }
 
 func (r *RegistryImpl) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if upd, ok := r.findLocked(ctx, id); ok {
-		return upd, true, nil
-	}
-	if err := r.admit(ctx); err != nil {
+	upd, found, err := r.findLocked(ctx, id)
+	if err != nil {
 		return nil, false, err
 	}
-	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	if found {
+		return upd, true, nil
+	}
+	if err = r.admit(ctx); err != nil {
+		return nil, false, err
+	}
+	upd = New(id, r.remover(id), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
 	return upd, false, nil
 }
 
-func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool) {
+func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.findLocked(ctx, id)
@@ -243,43 +248,44 @@ func (r *RegistryImpl) admit(ctx context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
 		return serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			fmt.Sprintf("number of concurrent in-flight updates limit has been reached (%v)", r.maxInFlight()),
+			fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
 		)
 	}
 
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		return serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("number of total updates limit has been reached (%v)", r.maxTotal()),
+			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
 		)
 	}
 
 	return nil
 }
 
-func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool) {
+func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool, error) {
 
 	if upd, ok := r.updates[id]; ok {
-		return upd, true
+		return upd, true, nil
 	}
 
 	// update not found in ephemeral state, but could have already completed so
 	// check in registry storage
-
-	updateInfos := r.store.GetUpdateInfos(ctx)
-	if updateInfos == nil {
-		return nil, false
-	}
-	if info, ok := updateInfos[id]; ok {
-		if info.GetCompletedPointer() != nil {
-			// Completed, create the Update object but do not add to registry. this
-			// should not happen often.
-			fut := future.NewReadyFuture(r.store.GetUpdateOutcome(ctx, id))
-			return newCompleted(
-				id,
-				fut,
-				withInstrumentation(&r.instrumentation),
-			), true
+	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
+	if err != nil {
+		// Swallow NotFound error because it means that update doesn't exist.
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil, false, nil
 		}
+		// But pass through other errors which indicate broken state.
+		return nil, false, err
 	}
-	return nil, false
+
+	// Completed, create the Update object but do not add to registry.
+	// This should not happen often.
+	fut := future.NewReadyFuture(updOutcome, nil)
+	return newCompleted(
+		id,
+		fut,
+		withInstrumentation(&r.instrumentation),
+	), true, nil
 }
