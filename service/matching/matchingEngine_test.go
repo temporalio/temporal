@@ -1932,7 +1932,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		s.NotNil(res)
 	}
 	// Make a long compat-versions chain
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 80; i++ {
 		id := fmt.Sprintf("9.%d", i)
 		prevCompat := fmt.Sprintf("9.%d", i-1)
 		if i == 0 {
@@ -1971,7 +1971,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NotNil(curDefault)
 	s.Equal("9", curDefault.GetBuildIds()[0])
 	lastNode := curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
-	s.Equal("9.99", lastNode)
+	s.Equal("9.79", lastNode)
 	s.Equal("0", majorSets[0].GetBuildIds()[0])
 
 	// Ensure depth limiting works
@@ -1988,7 +1988,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	curDefault = majorSets[len(majorSets)-1]
 	s.Equal("9", curDefault.GetBuildIds()[0])
 	lastNode = curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
-	s.Equal("9.99", lastNode)
+	s.Equal("9.79", lastNode)
 	s.Equal(1, len(majorSets))
 
 	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{

@@ -158,7 +158,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		ForwarderMaxChildrenPerNode:           dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0*time.Second),
 		VersionCompatibleSetLimitPerQueue:     dc.GetIntProperty(dynamicconfig.VersionCompatibleSetLimitPerQueue, 10),
-		VersionBuildIdLimitPerQueue:           dc.GetIntProperty(dynamicconfig.VersionBuildIdLimitPerQueue, 1000),
+		VersionBuildIdLimitPerQueue:           dc.GetIntProperty(dynamicconfig.VersionBuildIdLimitPerQueue, 100),
 		TaskQueueLimitPerBuildId:              dc.GetIntProperty(dynamicconfig.TaskQueuesPerBuildIdLimit, 20),
 		GetUserDataLongPollTimeout:            dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute),
 
