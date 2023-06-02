@@ -139,6 +139,7 @@ func (rl *HealthRequestRateLimiterImpl) maybeRefresh() {
 		if rl.enabled.Load() {
 			rl.refreshRate()
 		}
+		rl.updateRefreshTimer()
 
 	default:
 		// no-op
@@ -175,16 +176,18 @@ func (rl *HealthRequestRateLimiterImpl) refreshDynamicParams() {
 		return
 	}
 
-	if len(options.RefreshInterval) > 0 {
-		if refreshDuration, parseErr := timestamp.ParseDuration(options.RefreshInterval); parseErr != nil {
+	rl.enabled.Store(options.Enabled)
+	rl.curOptions = options
+}
+
+func (rl *HealthRequestRateLimiterImpl) updateRefreshTimer() {
+	if len(rl.curOptions.RefreshInterval) > 0 {
+		if refreshDuration, err := timestamp.ParseDurationDefaultSeconds(rl.curOptions.RefreshInterval); err != nil {
 			rl.logger.Warn("Error parsing dynamic rate limit refreshInterval timestamp. Using previous value.", tag.Error(err))
 		} else {
 			rl.refreshTimer.Reset(refreshDuration)
 		}
 	}
-
-	rl.enabled.Store(options.Enabled)
-	rl.curOptions = options
 }
 
 func (rl *HealthRequestRateLimiterImpl) latencyThresholdExceeded() bool {
