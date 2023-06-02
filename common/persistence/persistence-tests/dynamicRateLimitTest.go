@@ -61,12 +61,12 @@ type (
 
 func (s *DynamicRateLimitSuite) SetupSuite() {
 	healthSignals := persistence.NewHealthSignalAggregatorImpl(
+		true,
 		30*time.Second,
 		1000,
 		metrics.NoopMetricsHandler,
 		dynamicconfig.GetIntPropertyFn(50),
 		s.Logger,
-		true,
 	)
 	healthSignals.Start()
 	s.healthSignals = healthSignals
