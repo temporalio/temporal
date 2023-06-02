@@ -354,7 +354,7 @@ func NewConfig(
 			dynamicconfig.WorkerEnablePersistencePriorityRateLimiting,
 			true,
 		),
-		PersistenceDynamicRateLimitingParams: dynamicconfig.DisabledDynamicRateLimiting,
+		PersistenceDynamicRateLimitingParams: dc.GetMapProperty(dynamicconfig.WorkerPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
 
 		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, enableReadFromES),
 		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, enableReadFromES),

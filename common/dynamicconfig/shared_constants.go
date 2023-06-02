@@ -46,4 +46,34 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 }
 
 var DefaultPerShardNamespaceRPSMax = GetIntPropertyFilteredByNamespace(0)
-var DisabledDynamicRateLimiting = GetMapPropertyFn(map[string]interface{}{"enabled": false})
+
+const (
+	// dynamic config map keys and defaults for client.DynamicRateLimitingParams for controlling dynamic rate limiting options
+	// dynamicRateLimitEnabledKey toggles whether dynamic rate limiting is enabled
+	dynamicRateLimitEnabledKey     = "enabled"
+	dynamicRateLimitEnabledDefault = false
+	// dynamicRateLimitRefreshIntervalKey is how often the rate limit and dynamic properties are refreshed. should be a string timestamp e.g. 10s
+	dynamicRateLimitRefreshIntervalKey     = "refreshInterval"
+	dynamicRateLimitRefreshIntervalDefault = "10s"
+	// dynamicRateLimitLatencyThresholdKey is the maximum average latency in ms before the rate limiter should backoff
+	dynamicRateLimitLatencyThresholdKey     = "latencyThreshold"
+	dynamicRateLimitLatencyThresholdDefault = 0.0 // will not do backoff based on latency
+	// dynamicRateLimitErrorThresholdKey is the maximum ratio of errors:total_requests before the rate limiter should backoff. should be between 0 and 1
+	dynamicRateLimitErrorThresholdKey     = "errorThreshold"
+	dynamicRateLimitErrorThresholdDefault = 0.0 // will not do backoff based on errors
+	// dynamicRateLimitBackoffStepSizeKey is the amount the rate limit multiplier is reduced when backing off. should be between 0 and 1
+	dynamicRateLimitBackoffStepSizeKey     = "rateBackoffStepSize"
+	dynamicRateLimitBackoffStepSizeDefault = 0.3
+	// dynamicRateLimitIncreaseStepSizeKey the amount the rate limit multiplier is increased when the system is healthy. should be between 0 and 1
+	dynamicRateLimitIncreaseStepSizeKey     = "rateIncreaseStepSize"
+	dynamicRateLimitIncreaseStepSizeDefault = 0.1
+)
+
+var DefaultDynamicRateLimitingParams = map[string]interface{}{
+	dynamicRateLimitEnabledKey:          dynamicRateLimitEnabledDefault,
+	dynamicRateLimitRefreshIntervalKey:  dynamicRateLimitRefreshIntervalDefault,
+	dynamicRateLimitLatencyThresholdKey: dynamicRateLimitLatencyThresholdDefault,
+	dynamicRateLimitErrorThresholdKey:   dynamicRateLimitErrorThresholdDefault,
+	dynamicRateLimitBackoffStepSizeKey:  dynamicRateLimitBackoffStepSizeDefault,
+	dynamicRateLimitIncreaseStepSizeKey: dynamicRateLimitIncreaseStepSizeDefault,
+}
