@@ -93,12 +93,12 @@ func NewPriorityRateLimiter(
 	hostRateFn := func() float64 { return float64(hostMaxQPS()) }
 
 	return quotas.NewMultiRequestRateLimiter(
-		// host-level dynamic rate limiter
-		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, healthSignals, dynamicParams, logger),
 		// per shardID+namespaceID rate limiters
 		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn),
 		// per namespaceID rate limiters
 		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		// host-level dynamic rate limiter
+		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, healthSignals, dynamicParams, logger),
 		// basic host-level rate limiter
 		newPriorityRateLimiter(hostRateFn, requestPriorityFn),
 	)
@@ -184,6 +184,7 @@ func newPriorityDynamicRateLimiter(
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
+		// TODO: refactor this so dynamic rate adjustment is global for all priorities
 		rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, logger)
 	}
 

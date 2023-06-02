@@ -158,10 +158,9 @@ func isUnhealthyError(err error) bool {
 		return false
 	}
 	switch err.(type) {
-	case *ShardOwnershipLostError,
-		*AppendHistoryTimeoutError,
+	case *AppendHistoryTimeoutError,
 		*TimeoutError,
-		*serviceerror.Unavailable:
+		*serviceerror.DeadlineExceeded:
 		return true
 
 	default:
