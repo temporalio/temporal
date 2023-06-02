@@ -36,8 +36,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -75,7 +74,7 @@ type (
 
 	// UpdateStore represents the update package's requirements for reading updates from the store.
 	UpdateStore interface {
-		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
+		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 	}
 
@@ -149,12 +148,12 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 		opt(r)
 	}
 
-	store.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
+	store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
 		// need to eager load here so that Len and admit are correct.
-		if updInfo.GetAcceptancePointer() != nil {
+		if updInfo.GetAcceptance() != nil {
 			r.updates[updID] = newAccepted(updID, r.remover(updID), withInstrumentation(&r.instrumentation))
 		}
-		if updInfo.GetCompletedPointer() != nil {
+		if updInfo.GetCompletion() != nil {
 			r.completedCount++
 		}
 	})
