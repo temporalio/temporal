@@ -191,6 +191,14 @@ func (tv *TestVars) WithHandlerName(handlerName string, key ...string) *TestVars
 	return tv.cloneSet("handler_name", handlerName, key)
 }
 
+func (tv *TestVars) WorkerIdentity(key ...string) string {
+	return tv.getOrCreate("worker_identity", key)
+}
+
+func (tv *TestVars) WithWorkerIdentity(identity string, key ...string) *TestVars {
+	return tv.cloneSet("worker_identity", identity, key)
+}
+
 // ----------- Generic methods ------------
 
 func (tv *TestVars) InfiniteTimeout() *time.Duration {

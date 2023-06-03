@@ -36,6 +36,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
@@ -208,7 +209,7 @@ func (r *RegistryImpl) ReadOutgoingMessages(
 	}
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the
-	// event before WorkflowTaskStartedEvent.  SDKs are supposed to respect this
+	// event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
 	// and process messages (specifically, updates) after event with that ID.
 	// In the future, sequencing_id could point to some specific event
 	// (specifically, signal) after which the update should be processed.
