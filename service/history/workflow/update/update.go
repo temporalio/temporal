@@ -58,6 +58,7 @@ type (
 		// AddWorkflowExecutionUpdateCompletedEvent writes an update completed
 		// event. The data may not be durable when this function returns.
 		AddWorkflowExecutionUpdateCompletedEvent(
+			acceptedEventID int64,
 			resp *updatepb.Response,
 		) (*historypb.HistoryEvent, error)
 	}
@@ -76,6 +77,7 @@ type (
 		id              string
 		state           state
 		request         *protocolpb.Message // nil when not in stateRequested
+		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
 
@@ -116,10 +118,11 @@ func withInstrumentation(i *instrumentation) updateOpt {
 	}
 }
 
-func newAccepted(id string, opts ...updateOpt) *Update {
+func newAccepted(id string, acceptedEventID int64, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
 		state:           stateAccepted,
+		acceptedEventID: acceptedEventID,
 		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
@@ -276,12 +279,14 @@ func (u *Update) onAcceptanceMsg(
 		return err
 	}
 	u.instrumentation.CountAcceptanceMsg()
-	if _, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(u.id, acpt); err != nil {
+	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(u.id, acpt)
+	if err != nil {
 		return err
 	}
 	u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
 		u.request = nil
+		u.acceptedEventID = event.EventId
 		u.setState(stateAccepted)
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
 	})
@@ -337,7 +342,7 @@ func (u *Update) onResponseMsg(
 	if err := validateResponseMsg(u.id, res); err != nil {
 		return err
 	}
-	if _, err := eventStore.AddWorkflowExecutionUpdateCompletedEvent(res); err != nil {
+	if _, err := eventStore.AddWorkflowExecutionUpdateCompletedEvent(u.acceptedEventID, res); err != nil {
 		return err
 	}
 	u.instrumentation.CountResponseMsg()

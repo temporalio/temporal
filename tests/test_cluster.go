@@ -400,7 +400,6 @@ func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
-	tc.SetFaultInjectionRate(0)
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
 	if tc.host.esConfig != nil {

@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/unit"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -67,33 +66,33 @@ func TestMeter(t *testing.T) {
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: unit.Bytes,
+					Unit: "By",
 				},
 				sdkmetrics.Stream{
 					Aggregation: aggregation.ExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[string(unit.Bytes)],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries["By"],
 					},
 				},
 			),
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: unit.Dimensionless,
+					Unit: "1",
 				},
 				sdkmetrics.Stream{
 					Aggregation: aggregation.ExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[string(unit.Dimensionless)],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries["1"],
 					},
 				},
 			),
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: unit.Milliseconds,
+					Unit: "ms",
 				},
 				sdkmetrics.Stream{
 					Aggregation: aggregation.ExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[string(unit.Milliseconds)],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries["ms"],
 					},
 				},
 			),
@@ -102,7 +101,8 @@ func TestMeter(t *testing.T) {
 	p := NewOtelMetricsHandler(log.NewTestLogger(), &testProvider{meter: provider.Meter("test")}, defaultConfig)
 	recordMetrics(p)
 
-	got, err := rdr.Collect(ctx)
+	var got metricdata.ResourceMetrics
+	err := rdr.Collect(ctx, &got)
 	assert.Nil(t, err)
 
 	want := []metricdata.Metrics{
@@ -147,19 +147,19 @@ func TestMeter(t *testing.T) {
 		},
 		{
 			Name: "latency",
-			Data: metricdata.Histogram{
-				DataPoints: []metricdata.HistogramDataPoint{
+			Data: metricdata.Histogram[int64]{
+				DataPoints: []metricdata.HistogramDataPoint[int64]{
 					{
 						Count:        2,
 						BucketCounts: []uint64{0, 0, 0, 1, 1, 0},
-						Min:          metricdata.NewExtrema(minLatency),
-						Max:          metricdata.NewExtrema(maxLatency),
+						Min:          metricdata.NewExtrema[int64](int64(minLatency)),
+						Max:          metricdata.NewExtrema[int64](int64(maxLatency)),
 						Sum:          6503,
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
 			},
-			Unit: unit.Milliseconds,
+			Unit: "ms",
 		},
 		{
 			Name: "temp",
@@ -174,23 +174,23 @@ func TestMeter(t *testing.T) {
 		},
 		{
 			Name: "transmission",
-			Data: metricdata.Histogram{
-				DataPoints: []metricdata.HistogramDataPoint{
+			Data: metricdata.Histogram[int64]{
+				DataPoints: []metricdata.HistogramDataPoint[int64]{
 					{
 						Count:        1,
 						BucketCounts: []uint64{0, 0, 1},
-						Min:          metricdata.NewExtrema(testBytes),
-						Max:          metricdata.NewExtrema(testBytes),
-						Sum:          testBytes,
+						Min:          metricdata.NewExtrema[int64](int64(testBytes)),
+						Max:          metricdata.NewExtrema[int64](int64(testBytes)),
+						Sum:          int64(testBytes),
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
 			},
-			Unit: unit.Bytes,
+			Unit: "By",
 		},
 	}
 	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,
-		cmp.Comparer(func(e1, e2 metricdata.Extrema) bool {
+		cmp.Comparer(func(e1, e2 metricdata.Extrema[int64]) bool {
 			v1, ok1 := e1.Value()
 			v2, ok2 := e2.Value()
 			return ok1 && ok2 && v1 == v2
@@ -203,9 +203,9 @@ func TestMeter(t *testing.T) {
 		}),
 		cmpopts.IgnoreFields(metricdata.DataPoint[int64]{}, "StartTime", "Time"),
 		cmpopts.IgnoreFields(metricdata.DataPoint[float64]{}, "StartTime", "Time"),
-		cmpopts.IgnoreFields(metricdata.HistogramDataPoint{}, "StartTime", "Time", "Bounds"),
+		cmpopts.IgnoreFields(metricdata.HistogramDataPoint[int64]{}, "StartTime", "Time", "Bounds"),
 	); diff != "" {
-		t.Errorf("mismatch (-want, got):\n%s", diff)
+		t.Errorf("mismatch (-want, +got):\n%s", diff)
 	}
 }
 

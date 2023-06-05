@@ -103,59 +103,138 @@ func (s *executableSuite) TestExecute_TaskExecuted() {
 	s.NoError(executable.Execute())
 }
 
-func (s *executableSuite) TestExecute_InMemoryNoUserLatency() {
-	executable := s.newTestExecutable()
-
+func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 	scheduleLatency := 100 * time.Millisecond
 	userLatency := 500 * time.Millisecond
 	attemptLatency := time.Second
+	attemptNoUserLatency := scheduleLatency + attemptLatency - userLatency
+
+	testCases := []struct {
+		taskErr                      error
+		expectError                  bool
+		expectedAttemptNoUserLatency time.Duration
+		expectBackoff                bool
+	}{
+		{
+			taskErr:                      nil,
+			expectError:                  false,
+			expectedAttemptNoUserLatency: attemptNoUserLatency,
+			expectBackoff:                false,
+		},
+		{
+			taskErr:                      serviceerror.NewUnavailable("some random error"),
+			expectError:                  true,
+			expectedAttemptNoUserLatency: attemptNoUserLatency,
+			expectBackoff:                true,
+		},
+		{
+			taskErr:                      serviceerror.NewNotFound("not found error"),
+			expectError:                  false,
+			expectedAttemptNoUserLatency: attemptNoUserLatency,
+			expectBackoff:                false,
+		},
+		{
+			taskErr:                      consts.ErrResourceExhaustedBusyWorkflow,
+			expectError:                  true,
+			expectedAttemptNoUserLatency: 0,
+			expectBackoff:                false,
+		},
+	}
+
+	for _, tc := range testCases {
+		executable := s.newTestExecutable()
+
+		now := time.Now()
+		s.timeSource.Update(now)
+		executable.SetScheduledTime(now)
+
+		now = now.Add(scheduleLatency)
+		s.timeSource.Update(now)
+
+		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+			metrics.ContextCounterAdd(
+				ctx,
+				metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
+				int64(userLatency),
+			)
+
+			now = now.Add(attemptLatency)
+			s.timeSource.Update(now)
+		}).Return(nil, true, tc.taskErr)
+
+		err := executable.Execute()
+		if err != nil {
+			err = executable.HandleErr(err)
+		}
+
+		if tc.expectError {
+			s.Error(err)
+			s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
+			s.mockRescheduler.EXPECT().Add(executable, gomock.Any())
+			executable.Nack(err)
+		} else {
+			s.NoError(err)
+		}
+
+		actualAttemptNoUserLatency := executable.(*executableImpl).inMemoryNoUserLatency
+		if tc.expectBackoff {
+			// the backoff duration is random, so we can't compare the exact value
+			s.Less(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
+		} else {
+			s.Equal(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
+		}
+	}
+}
+
+func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
+	numAttempts := 3
+	scheduleLatencies := []time.Duration{100 * time.Millisecond, 150 * time.Millisecond, 200 * time.Millisecond}
+	userLatencies := []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 30 * time.Millisecond}
+	attemptLatencies := []time.Duration{time.Second, 2 * time.Second, 3 * time.Second}
+	taskErrors := []error{
+		serviceerror.NewUnavailable("test unavailable error"),
+		consts.ErrResourceExhaustedBusyWorkflow,
+		nil,
+	}
+	expectedInMemoryNoUserLatency := scheduleLatencies[0] + attemptLatencies[0] - userLatencies[0] +
+		scheduleLatencies[2] + attemptLatencies[2] - userLatencies[2]
+
+	executable := s.newTestExecutable()
 
 	now := time.Now()
 	s.timeSource.Update(now)
 	executable.SetScheduledTime(now)
 
-	now = now.Add(scheduleLatency)
-	s.timeSource.Update(now)
-
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
-		metrics.ContextCounterAdd(
-			ctx,
-			metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
-			int64(userLatency),
-		)
-
-		now = now.Add(attemptLatency)
+	for i := 0; i != numAttempts; i++ {
+		now = now.Add(scheduleLatencies[i])
 		s.timeSource.Update(now)
-	}).Return(nil, true, consts.ErrResourceExhaustedBusyWorkflow)
-	err := executable.HandleErr(executable.Execute())
-	s.Equal(consts.ErrResourceExhaustedBusyWorkflow, err)
 
-	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
-	s.mockRescheduler.EXPECT().Add(executable, gomock.Any())
-	executable.Nack(err)
+		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+			metrics.ContextCounterAdd(
+				ctx,
+				metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
+				int64(userLatencies[i]),
+			)
 
-	// backoff duration
-	now = now.Add(time.Second)
-	s.timeSource.Update(now)
+			now = now.Add(attemptLatencies[i])
+			s.timeSource.Update(now)
+		}).Return(nil, true, taskErrors[i])
 
-	executable.SetScheduledTime(now)
-	now = now.Add(scheduleLatency)
-	s.timeSource.Update(now)
+		err := executable.Execute()
+		if err != nil {
+			err = executable.HandleErr(err)
+		}
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
-		metrics.ContextCounterAdd(
-			ctx,
-			metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
-			int64(userLatency),
-		)
+		if taskErrors[i] != nil {
+			s.Error(err)
+			s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
+			executable.Nack(err)
+		} else {
+			s.NoError(err)
+		}
+	}
 
-		now = now.Add(attemptLatency)
-		s.timeSource.Update(now)
-	}).Return(nil, true, nil)
-	err = executable.HandleErr(executable.Execute())
-	s.NoError(err)
-
-	s.Equal(scheduleLatency+attemptLatency-userLatency, executable.(*executableImpl).inMemoryNoUserLatency)
+	s.Equal(expectedInMemoryNoUserLatency, executable.(*executableImpl).inMemoryNoUserLatency)
 }
 
 func (s *executableSuite) TestExecute_CapturePanic() {

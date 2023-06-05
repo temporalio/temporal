@@ -47,6 +47,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -715,6 +716,12 @@ func (ms *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 	return ms.QueryRegistry
 }
 
+func (ms *MutableStateImpl) VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
+	for updID, updInfo := range ms.executionInfo.GetUpdateInfos() {
+		visitor(updID, updInfo)
+	}
+}
+
 func (ms *MutableStateImpl) GetUpdateOutcome(
 	ctx context.Context,
 	updateID string,
@@ -726,10 +733,9 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	if !ok {
 		return nil, serviceerror.NewNotFound("update not found")
 	}
-	compPtr := rec.GetCompletedPointer()
+	compPtr := rec.GetCompletion()
 	if compPtr == nil {
-		// not an error because update was found, but update has not completed
-		return nil, nil
+		return nil, serviceerror.NewInternal("update has not completed")
 	}
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(compPtr.EventId)
 	if err != nil {
@@ -3510,59 +3516,43 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateAcceptedEvent(
 		return serviceerror.NewInternal("wrong event type in call to ReplicateWorkflowExecutionUpdateAcceptedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
+		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
+	var sizeDelta int
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		ui.Value = &persistencespb.UpdateInfo_AcceptancePointer{
-			AcceptancePointer: &historyspb.HistoryEventPointer{EventId: event.EventId},
+		sizeBefore := ui.Value.Size()
+		ui.Value = &updatespb.UpdateInfo_Acceptance{
+			Acceptance: &updatespb.AcceptanceInfo{EventId: event.EventId},
 		}
+		sizeDelta = ui.Value.Size() - sizeBefore
 	} else {
-		ui := persistencespb.UpdateInfo{
-			Value: &persistencespb.UpdateInfo_AcceptancePointer{
-				AcceptancePointer: &historyspb.HistoryEventPointer{EventId: event.EventId},
+		ui := updatespb.UpdateInfo{
+			Value: &updatespb.UpdateInfo_Acceptance{
+				Acceptance: &updatespb.AcceptanceInfo{EventId: event.EventId},
 			},
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
 		ms.executionInfo.UpdateCount++
-		ms.approximateSize += ui.Size() + len(updateID)
+		sizeDelta = ui.Size() + len(updateID)
 	}
+	ms.approximateSize += sizeDelta
 	ms.writeEventToCache(event)
 	return nil
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(
+	acceptedEventID int64,
 	updResp *updatepb.Response,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionUpdateCompleted); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionUpdateCompletedEvent(updResp)
+	event := ms.hBuilder.AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID, updResp)
 	if err := ms.ReplicateWorkflowExecutionUpdateCompletedEvent(event); err != nil {
 		return nil, err
 	}
 	return event, nil
-}
-
-func (ms *MutableStateImpl) GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string {
-	if ms.executionInfo.UpdateInfos == nil {
-		return nil
-	}
-	out := make([]string, 0)
-	for id, updateInfo := range ms.executionInfo.UpdateInfos {
-		if updateInfo.GetAcceptancePointer() != nil {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-func (ms *MutableStateImpl) GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool) {
-	if ms.executionInfo.UpdateInfos == nil {
-		return nil, false
-	}
-	info, ok := ms.executionInfo.UpdateInfos[updateID]
-	return info, ok
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
@@ -3573,23 +3563,27 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
 		return serviceerror.NewInternal("wrong event type in call to ReplicateWorkflowExecutionUpdateCompletedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
-		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
+		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
 	}
 	updateID := attrs.GetMeta().GetUpdateId()
+	var sizeDelta int
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-		ui.Value = &persistencespb.UpdateInfo_CompletedPointer{
-			CompletedPointer: &historyspb.HistoryEventPointer{EventId: event.EventId},
+		sizeBefore := ui.Value.Size()
+		ui.Value = &updatespb.UpdateInfo_Completion{
+			Completion: &updatespb.CompletionInfo{EventId: event.EventId},
 		}
+		sizeDelta = ui.Value.Size() - sizeBefore
 	} else {
-		ui := persistencespb.UpdateInfo{
-			Value: &persistencespb.UpdateInfo_CompletedPointer{
-				CompletedPointer: &historyspb.HistoryEventPointer{EventId: event.EventId},
+		ui := updatespb.UpdateInfo{
+			Value: &updatespb.UpdateInfo_Completion{
+				Completion: &updatespb.CompletionInfo{EventId: event.EventId},
 			},
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
 		ms.executionInfo.UpdateCount++
-		ms.approximateSize += ui.Size() + len(updateID)
+		sizeDelta = ui.Size() + len(updateID)
 	}
+	ms.approximateSize += sizeDelta
 	ms.writeEventToCache(event)
 	return nil
 }

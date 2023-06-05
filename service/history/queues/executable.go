@@ -221,6 +221,12 @@ func (e *executableImpl) Execute() (retErr error) {
 		priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 		priorityTaggedProvider.Counter(metrics.TaskRequests.GetMetricName()).Record(1)
 		priorityTaggedProvider.Timer(metrics.TaskScheduleLatency.GetMetricName()).Record(e.scheduleLatency)
+
+		if retErr == nil {
+			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
+		}
+		// if retErr is not nil, HandleErr will take care of the inMemoryNoUserLatency calculation
+		// Not doing it here as for certain errors latency for the attempt should not be counted
 	}()
 
 	metricsTags, isActive, err := e.executor.Execute(ctx, e)
@@ -237,8 +243,12 @@ func (e *executableImpl) Execute() (retErr error) {
 }
 
 func (e *executableImpl) HandleErr(err error) (retErr error) {
+	if err == nil {
+		return nil
+	}
+
 	defer func() {
-		if errors.Is(retErr, consts.ErrResourceExhaustedBusyWorkflow) {
+		if !errors.Is(retErr, consts.ErrResourceExhaustedBusyWorkflow) {
 			// if err is due to workflow busy, do not take any latency related to this attempt into account
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
 		}
@@ -254,10 +264,6 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			}
 		}
 	}()
-
-	if err == nil {
-		return nil
-	}
 
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	if errors.As(err, &resourceExhaustedErr) {

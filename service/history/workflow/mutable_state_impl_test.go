@@ -49,6 +49,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -847,6 +848,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		Value: &updatepb.Outcome_Success{Success: testPayloads},
 	}
 	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		1234,
 		&updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: completedUpdateID},
 			Outcome: completedOutcome,
@@ -864,8 +866,18 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.Require().Error(err)
 	s.Require().IsType((*serviceerror.NotFound)(nil), err)
 
-	incompletes := s.mutableState.GetAcceptedWorkflowExecutionUpdateIDs(ctx)
-	s.Require().Len(incompletes, 2)
+	numCompleted := 0
+	numAccepted := 0
+	s.mutableState.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+		if updInfo.GetCompletion() != nil {
+			numCompleted++
+		}
+		if updInfo.GetAcceptance() != nil {
+			numAccepted++
+		}
+	})
+	s.Require().Equal(numCompleted, 1, "expected 1 completed")
+	s.Require().Equal(numAccepted, 2, "expected 2 accepted")
 
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
 	s.Require().NoError(err)
@@ -960,7 +972,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
-	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(&updatepb.Response{})
+	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(1234, &updatepb.Response{})
 	s.NoError(err)
 
 	_, err = s.mutableState.AddWorkflowExecutionSignaled(
