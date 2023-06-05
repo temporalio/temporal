@@ -256,7 +256,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
 		)
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
-		m.ms.hBuilder.FlushAndCreateNewBatch()
 	}
 
 	event := m.ms.hBuilder.AddWorkflowTaskTimedOutEvent(
