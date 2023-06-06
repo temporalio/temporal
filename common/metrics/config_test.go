@@ -160,3 +160,37 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 		s.Equal(test.expectResult, config.PerUnitHistogramBoundaries)
 	}
 }
+
+func TestMetricsHandlerFromConfig(t *testing.T) {
+	t.Parallel()
+
+	for _, framework := range []string{
+		FrameworkOpentelemetry,
+		FrameworkTally,
+	} {
+		framework := framework
+		t.Run(framework, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			logger := log.NewMockLogger(ctrl)
+			if framework == FrameworkTally {
+				logger.EXPECT().Warn("error in prometheus reporter", gomock.Any())
+			}
+			prometheusConfig := &PrometheusConfig{
+				Framework:     framework,
+				ListenAddress: "localhost:0",
+			}
+			clientConfig := ClientConfig{}
+			cfg := &Config{
+				Prometheus:   prometheusConfig,
+				ClientConfig: clientConfig,
+			}
+			handler := MetricsHandlerFromConfig(logger, cfg)
+			defer func() {
+				handler.Stop(logger)
+			}()
+			handler.Counter(VersionCheckFailedCount.GetMetricName()).Record(1)
+		})
+	}
+}

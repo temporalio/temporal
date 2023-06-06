@@ -1274,10 +1274,13 @@ var (
 	HistoryCount                                  = NewDimensionlessHistogramDef("history_count")
 	SearchAttributesSize                          = NewBytesHistogramDef("search_attributes_size")
 	MemoSize                                      = NewBytesHistogramDef("memo_size")
-	TooManyPendingChildWorkflows                  = NewCounterDef("wf_too_many_pending_child_workflows")
-	TooManyPendingActivities                      = NewCounterDef("wf_too_many_pending_activities")
-	TooManyPendingCancelRequests                  = NewCounterDef("wf_too_many_pending_cancel_requests")
-	TooManyPendingSignalsToExternalWorkflows      = NewCounterDef("wf_too_many_pending_external_workflow_signals")
+	TooManyPendingChildWorkflows                  = NewCounterDef(
+		"wf_too_many_pending_child_workflows",
+		WithHelpText("The number of pending child workflows exceeds the per-workflow limit. See https://t.mp/limits"),
+	)
+	TooManyPendingActivities                 = NewCounterDef("wf_too_many_pending_activities")
+	TooManyPendingCancelRequests             = NewCounterDef("wf_too_many_pending_cancel_requests")
+	TooManyPendingSignalsToExternalWorkflows = NewCounterDef("wf_too_many_pending_external_workflow_signals")
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")

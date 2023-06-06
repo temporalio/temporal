@@ -30,14 +30,10 @@ type (
 	// MetricName is the name of the metric
 	MetricName string
 
-	// MetricType is the type of the metric
-	MetricType int
-
 	MetricUnit string
 
-	// metricDefinition contains the definition for a metric
-	metricDefinition struct {
-		metricType MetricType // metric type
+	// MetricDefinition contains the definition for a metric
+	MetricDefinition struct {
 		metricName MetricName // metric name
 		unit       MetricUnit
 	}
@@ -54,14 +50,6 @@ const (
 	Bytes         = "By"
 )
 
-// MetricTypes which are supported
-const (
-	Counter MetricType = iota
-	Timer
-	Gauge
-	Histogram
-)
-
 // Empty returns true if the metricName is an empty string
 func (mn MetricName) Empty() bool {
 	return mn == ""
@@ -72,34 +60,10 @@ func (mn MetricName) String() string {
 	return string(mn)
 }
 
-func (md metricDefinition) GetMetricType() MetricType {
-	return md.metricType
-}
-
-func (md metricDefinition) GetMetricName() string {
+func (md MetricDefinition) GetMetricName() string {
 	return md.metricName.String()
 }
 
-func (md metricDefinition) GetMetricUnit() MetricUnit {
+func (md MetricDefinition) GetMetricUnit() MetricUnit {
 	return md.unit
-}
-
-func NewTimerDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Timer, unit: Milliseconds}
-}
-
-func NewBytesHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Bytes}
-}
-
-func NewDimensionlessHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Dimensionless}
-}
-
-func NewCounterDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Counter}
-}
-
-func NewGaugeDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Gauge}
 }

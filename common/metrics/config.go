@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
-	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/m3"
 	"github.com/uber-go/tally/v4/prometheus"
@@ -425,9 +424,13 @@ func newPrometheusScope(
 	sanitizeOptions tally.SanitizeOptions,
 	clientConfig *ClientConfig,
 ) tally.Scope {
+	registry, err := BuildPrometheusRegistry()
+	if err != nil {
+		logger.Fatal("error creating prometheus Registry", tag.Error(err))
+	}
 	reporter, err := config.NewReporter(
 		prometheus.ConfigurationOptions{
-			Registry: prom.NewRegistry(),
+			Registry: registry,
 			OnError: func(err error) {
 				logger.Warn("error in prometheus reporter", tag.Error(err))
 			},

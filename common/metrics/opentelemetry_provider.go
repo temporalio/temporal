@@ -35,7 +35,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/aggregation"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -60,7 +59,10 @@ func NewOpenTelemetryProvider(
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
 ) (*openTelemetryProviderImpl, error) {
-	reg := prometheus.NewRegistry()
+	reg, err := BuildPrometheusRegistry()
+	if err != nil {
+		return nil, err
+	}
 	exporter, err := exporters.New(exporters.WithRegisterer(reg))
 	if err != nil {
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
