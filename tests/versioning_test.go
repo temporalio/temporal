@@ -1345,6 +1345,82 @@ func (s *versioningIntegSuite) TestDescribeTaskQueue() {
 }
 
 func (s *versioningIntegSuite) TestDescribeWorkflowExecution() {
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
+	v11 := s.prefixed("v11")
+
+	started1 := make(chan struct{}, 10)
+	started11 := make(chan struct{}, 10)
+
+	wf := func(ctx workflow.Context) (string, error) {
+		started1 <- struct{}{}
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		started11 <- struct{}{}
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		return "ok", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, v1)
+	s.waitForPropagation(ctx, tq, v1)
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 v1,
+		UseBuildIDForVersioning: true,
+	})
+	w1.RegisterWorkflow(wf)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
+	s.NoError(err)
+	// wait for it to start on v1
+	s.waitForChan(ctx, started1)
+
+	// describe and check build id
+	resp, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
+	s.NoError(err)
+	s.Equal(v1, resp.WorkflowExecutionInfo.MostRecentWorkerVersionStamp.BuildId)
+
+	// now register v11 as newer compatible with v1
+	s.addCompatibleBuildId(ctx, tq, v11, v1, false)
+	s.waitForPropagation(ctx, tq, v11)
+	// add another 100ms to make sure it got to sticky queues also
+	time.Sleep(100 * time.Millisecond)
+
+	// start worker for v11
+	w11 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 v11,
+		UseBuildIDForVersioning: true,
+	})
+	w11.RegisterWorkflow(wf)
+	s.NoError(w11.Start())
+	defer w11.Stop()
+
+	// wait for w1 long polls to all time out
+	time.Sleep(longPollTime)
+
+	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	s.waitForChan(ctx, started11)
+
+	resp, err = s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
+	s.NoError(err)
+	s.Equal(v11, resp.WorkflowExecutionInfo.MostRecentWorkerVersionStamp.BuildId)
+
+	// unblock. it should complete
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("ok", out)
 }
 
 // Add a per test prefix to avoid hitting the namespace limit of mapped task queue per build id
