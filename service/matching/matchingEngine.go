@@ -1102,6 +1102,13 @@ func (e *matchingEngineImpl) getTask(
 		defer e.pollMap.remove(pollerID)
 	}
 
+	identity, ok := ctx.Value(identityKey).(string)
+	if ok && identity != "" {
+		baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+		// update timestamp when long poll ends
+		defer baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+	}
+
 	taskQueue, err := e.redirectToVersionedQueueForPoll(
 		ctx,
 		baseTqm,

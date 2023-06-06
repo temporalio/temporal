@@ -133,6 +133,7 @@ type (
 		// UpdateUserData allows callers to update user data for this task queue
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
+		UpdatePollerInfo(pollerIdentity, *pollMetadata)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
 		// DescribeTaskQueue returns information about the target task queue
@@ -236,12 +237,15 @@ func newTaskQueueManager(
 		taskAckManager:       newAckManager(e.logger),
 		taskGC:               newTaskGC(db, taskQueueConfig),
 		config:               taskQueueConfig,
-		pollerHistory:        newPollerHistory(),
 		clusterMeta:          clusterMeta,
 		namespace:            nsName,
 		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),
 		userDataInitialFetch: future.NewFuture[struct{}](),
+	}
+	// poller history is only kept for the base task queue manager
+	if !tlMgr.managesSpecificVersionSet() {
+		tlMgr.pollerHistory = newPollerHistory()
 	}
 
 	tlMgr.liveness = newLiveness(
@@ -426,18 +430,6 @@ func (c *taskQueueManagerImpl) GetTask(
 	childCtx, cancel := newChildContext(ctx, c.config.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
-	c.currentPolls.Add(1)
-	defer c.currentPolls.Add(-1)
-
-	identity, ok := ctx.Value(identityKey).(string)
-	if ok && identity != "" {
-		c.pollerHistory.updatePollerInfo(pollerIdentity(identity), pollMetadata)
-		defer func() {
-			// to update timestamp when long poll ends
-			c.pollerHistory.updatePollerInfo(pollerIdentity(identity), pollMetadata)
-		}()
-	}
-
 	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.taskQueueID.namespaceID)
 	if err != nil {
 		return nil, err
@@ -526,14 +518,26 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 	return err
 }
 
+func (c *taskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
+	if c.pollerHistory != nil {
+		c.pollerHistory.updatePollerInfo(id, pollMetadata)
+	}
+}
+
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (c *taskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
+	if c.pollerHistory == nil {
+		return nil
+	}
 	return c.pollerHistory.getPollerInfo(time.Time{})
 }
 
 func (c *taskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {
 	if c.currentPolls.Load() > 0 {
 		return true
+	}
+	if c.pollerHistory == nil {
+		return false
 	}
 	recentPollers := c.pollerHistory.getPollerInfo(accessTime)
 	return len(recentPollers) > 0
