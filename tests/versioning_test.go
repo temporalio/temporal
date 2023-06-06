@@ -39,6 +39,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
@@ -1244,6 +1245,77 @@ func (s *versioningIntegSuite) dispatchCron() {
 	s.GreaterOrEqual(runs1.Load(), int32(3))
 	s.Zero(runs11.Load())
 	s.GreaterOrEqual(runs2.Load(), int32(3))
+}
+
+func (s *versioningIntegSuite) TestDescribeTaskQueue() {
+	// force one partition
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	tq := s.randomizeStr(s.T().Name())
+
+	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	v1 := s.prefixed("v1")
+	v11 := s.prefixed("v11")
+	v2 := s.prefixed("v2")
+
+	s.addNewDefaultBuildId(ctx, tq, v1)
+	s.addCompatibleBuildId(ctx, tq, v11, v1, false)
+	s.addNewDefaultBuildId(ctx, tq, v2)
+	s.waitForPropagation(ctx, tq, v2)
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 s.prefixed(v1),
+		UseBuildIDForVersioning: true,
+	})
+	w1.RegisterWorkflow(wf)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	w11 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 s.prefixed(v11),
+		UseBuildIDForVersioning: true,
+	})
+	w11.RegisterWorkflow(wf)
+	s.NoError(w11.Start())
+	defer w11.Stop()
+
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 s.prefixed(v2),
+		UseBuildIDForVersioning: true,
+	})
+	w2.RegisterWorkflow(wf)
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	s.Eventually(func() bool {
+		resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.namespace,
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		s.NoError(err)
+		havePoller := func(v string) bool {
+			for _, p := range resp.Pollers {
+				if v == p.WorkerVersionCapabilities.BuildId {
+					return true
+				}
+			}
+			return false
+		}
+		// v1 polls get rejected because v11 is newer
+		return !havePoller(v1) && havePoller(v11) && havePoller(v2)
+	}, 3*time.Second, 50*time.Millisecond)
+}
+
+func (s *versioningIntegSuite) TestDescribeWorkflowExecution() {
 }
 
 // Add a per test prefix to avoid hitting the namespace limit of mapped task queue per build id
