@@ -1053,7 +1053,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 		AnyTimes()
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
-	s.historyEngine.shard.GetConfig().NumPendingChildExecutionsLimit = func(namespace string) int {
+	s.historyEngine.shard.GetConfig().NumPendingChildWorkflowsLimit = func(namespace string) int {
 		return 5
 	}
 	_, err := s.historyEngine.RespondWorkflowTaskCompleted(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{

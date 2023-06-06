@@ -62,14 +62,22 @@ type (
 	}
 
 	workflowSizeLimits struct {
-		blobSizeLimitWarn              int
-		blobSizeLimitError             int
-		memoSizeLimitWarn              int
-		memoSizeLimitError             int
-		numPendingChildExecutionsLimit int
-		numPendingActivitiesLimit      int
-		numPendingSignalsLimit         int
-		numPendingCancelsRequestLimit  int
+		blobSizeLimitWarn  int
+		blobSizeLimitError int
+		memoSizeLimitWarn  int
+		memoSizeLimitError int
+
+		numPendingActivitiesLimit                     int
+		numPendingUserTimersLimit                     int
+		numPendingChildWorkflowsLimit                 int
+		numPendingRequestCancelExternalWorkflowsLimit int
+		numPendingSignalExternalLimit                 int
+
+		numTotalActivitiesLimit                     int
+		numTotalUserTimersLimit                     int
+		numTotalChildWorkflowsLimit                 int
+		numTotalRequestCancelExternalWorkflowsLimit int
+		numTotalSignalExternalLimit                 int
 	}
 
 	workflowSizeChecker struct {
@@ -185,6 +193,10 @@ func (c *workflowSizeChecker) checkCountConstraint(
 	metricName string,
 	resourceName string,
 ) error {
+	if withinLimit(numPending, errLimit) {
+		return nil
+	}
+
 	key := c.mutableState.GetWorkflowKey()
 	logger := log.With(
 		c.logger,
@@ -193,9 +205,6 @@ func (c *workflowSizeChecker) checkCountConstraint(
 		tag.WorkflowRunID(key.RunID),
 	)
 
-	if withinLimit(numPending, errLimit) {
-		return nil
-	}
 	c.metricsHandler.Counter(metricName).Record(1)
 	err := fmt.Errorf(
 		"the number of %s, %d, has reached the per-workflow limit of %d",
@@ -208,20 +217,18 @@ func (c *workflowSizeChecker) checkCountConstraint(
 }
 
 const (
-	PendingChildWorkflowExecutionsDescription = "pending child workflow executions"
-	PendingActivitiesDescription              = "pending activities"
-	PendingCancelRequestsDescription          = "pending requests to cancel external workflows"
-	PendingSignalsDescription                 = "pending signals to external workflows"
-)
+	PendingActivitiesDescription                     = "pending activities"
+	PendingUserTimersDescription                     = "pending workflow timers"
+	PendingChildWorkflowsDescription                 = "pending child workflows"
+	PendingRequestCancelExternalWorkflowsDescription = "pending requests to cancel external workflows"
+	PendingSignalExternalWorkflowsDescription        = "pending signals to external workflows"
 
-func (c *workflowSizeChecker) checkIfNumChildWorkflowsExceedsLimit() error {
-	return c.checkCountConstraint(
-		len(c.mutableState.GetPendingChildExecutionInfos()),
-		c.numPendingChildExecutionsLimit,
-		metrics.TooManyPendingChildWorkflows.GetMetricName(),
-		PendingChildWorkflowExecutionsDescription,
-	)
-}
+	TotalActivitiesDescription                     = "total activities"
+	TotalUserTimersDescription                     = "total workflow timers"
+	TotalChildWorkflowsDescription                 = "total child workflows"
+	TotalRequestCancelExternalWorkflowsDescription = "total requests to cancel external workflows"
+	TotalSignalExternalWorkflowsDescription        = "total signals to external workflows"
+)
 
 func (c *workflowSizeChecker) checkIfNumPendingActivitiesExceedsLimit() error {
 	return c.checkCountConstraint(
@@ -232,21 +239,84 @@ func (c *workflowSizeChecker) checkIfNumPendingActivitiesExceedsLimit() error {
 	)
 }
 
-func (c *workflowSizeChecker) checkIfNumPendingCancelRequestsExceedsLimit() error {
+func (c *workflowSizeChecker) checkIfNumPendingUserTimersExceedsLimit() error {
 	return c.checkCountConstraint(
-		len(c.mutableState.GetPendingRequestCancelExternalInfos()),
-		c.numPendingCancelsRequestLimit,
-		metrics.TooManyPendingCancelRequests.GetMetricName(),
-		PendingCancelRequestsDescription,
+		len(c.mutableState.GetPendingTimerInfos()),
+		c.numPendingUserTimersLimit,
+		metrics.TooManyPendingUserTimers.GetMetricName(),
+		PendingUserTimersDescription,
 	)
 }
 
-func (c *workflowSizeChecker) checkIfNumPendingSignalsExceedsLimit() error {
+func (c *workflowSizeChecker) checkIfNumPendingChildWorkflowsExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingChildExecutionInfos()),
+		c.numPendingChildWorkflowsLimit,
+		metrics.TooManyPendingChildWorkflows.GetMetricName(),
+		PendingChildWorkflowsDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumPendingCancelRequestsExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingRequestCancelExternalInfos()),
+		c.numPendingRequestCancelExternalWorkflowsLimit,
+		metrics.TooManyPendingRequestCancelExternalWorkflows.GetMetricName(),
+		PendingRequestCancelExternalWorkflowsDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumPendingSignalExternalExceedsLimit() error {
 	return c.checkCountConstraint(
 		len(c.mutableState.GetPendingSignalExternalInfos()),
-		c.numPendingSignalsLimit,
-		metrics.TooManyPendingSignalsToExternalWorkflows.GetMetricName(),
-		PendingSignalsDescription,
+		c.numPendingSignalExternalLimit,
+		metrics.TooManyPendingSignalExternalWorkflows.GetMetricName(),
+		PendingSignalExternalWorkflowsDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumTotalActivitiesExceedsLimit() error {
+	return c.checkCountConstraint(
+		int(c.mutableState.GetExecutionInfo().GetActivityCount()),
+		c.numTotalActivitiesLimit,
+		metrics.TooManyTotalActivities.GetMetricName(),
+		TotalActivitiesDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumTotalUserTimersExceedsLimit() error {
+	return c.checkCountConstraint(
+		int(c.mutableState.GetExecutionInfo().GetUserTimerCount()),
+		c.numTotalUserTimersLimit,
+		metrics.TooManyTotalUserTimers.GetMetricName(),
+		TotalUserTimersDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumTotalChildWorkflowsExceedsLimit() error {
+	return c.checkCountConstraint(
+		int(c.mutableState.GetExecutionInfo().GetChildExecutionCount()),
+		c.numTotalChildWorkflowsLimit,
+		metrics.TooManyTotalChildWorkflows.GetMetricName(),
+		TotalChildWorkflowsDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumTotalCancelRequestsExceedsLimit() error {
+	return c.checkCountConstraint(
+		int(c.mutableState.GetExecutionInfo().GetRequestCancelExternalCount()),
+		c.numTotalRequestCancelExternalWorkflowsLimit,
+		metrics.TooManyTotalRequestCancelExternalWorkflows.GetMetricName(),
+		TotalRequestCancelExternalWorkflowsDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumTotalSignalExternalExceedsLimit() error {
+	return c.checkCountConstraint(
+		int(c.mutableState.GetExecutionInfo().GetSignalExternalCount()),
+		c.numTotalSignalExternalLimit,
+		metrics.TooManyTotalSignalExternalWorkflows.GetMetricName(),
+		TotalSignalExternalWorkflowsDescription,
 	)
 }
 

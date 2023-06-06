@@ -98,10 +98,10 @@ func (s *clientIntegrationSuite) SetupSuite() {
 	s.maxPendingCancelRequests = limit
 	s.maxPendingSignals = limit
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.NumPendingChildExecutionsLimitError: s.maxPendingChildExecutions,
-		dynamicconfig.NumPendingActivitiesLimitError:      s.maxPendingActivities,
-		dynamicconfig.NumPendingCancelRequestsLimitError:  s.maxPendingCancelRequests,
-		dynamicconfig.NumPendingSignalsLimitError:         s.maxPendingSignals,
+		dynamicconfig.NumPendingChildWorkflowsLimitError:                 s.maxPendingChildExecutions,
+		dynamicconfig.NumPendingActivitiesLimitError:                     s.maxPendingActivities,
+		dynamicconfig.NumPendingRequestCancelExternalWorkflowsLimitError: s.maxPendingCancelRequests,
+		dynamicconfig.NumPendingSignalExternalWorkflowsLimitError:        s.maxPendingSignals,
 	}
 	s.setupSuite("testdata/clientintegrationtestcluster.yaml")
 

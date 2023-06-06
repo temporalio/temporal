@@ -65,6 +65,8 @@ require (
 	modernc.org/sqlite v1.21.0
 )
 
+replace go.temporal.io/api => /Users/ycyang/temporalio/api-go
+
 require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect

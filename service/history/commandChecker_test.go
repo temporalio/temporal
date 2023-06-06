@@ -891,13 +891,13 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 			}
 
 			checker := newWorkflowSizeChecker(workflowSizeLimits{
-				numPendingChildExecutionsLimit: c.PendingChildExecutionsLimit,
-				numPendingActivitiesLimit:      c.PendingActivitiesLimit,
-				numPendingCancelsRequestLimit:  c.PendingCancelRequestsLimit,
-				numPendingSignalsLimit:         c.PendingSignalsLimit,
+				numPendingChildWorkflowsLimit:                 c.PendingChildExecutionsLimit,
+				numPendingActivitiesLimit:                     c.PendingActivitiesLimit,
+				numPendingRequestCancelExternalWorkflowsLimit: c.PendingCancelRequestsLimit,
+				numPendingSignalExternalLimit:                 c.PendingSignalsLimit,
 			}, mutableState, nil, metricsHandler, logger)
 
-			err := checker.checkIfNumChildWorkflowsExceedsLimit()
+			err := checker.checkIfNumPendingChildWorkflowsExceedsLimit()
 			if len(c.ExpectedChildExecutionsErrorMsg) > 0 {
 				require.Error(t, err)
 				assert.Equal(t, c.ExpectedChildExecutionsErrorMsg, err.Error())
@@ -921,7 +921,7 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			err = checker.checkIfNumPendingSignalsExceedsLimit()
+			err = checker.checkIfNumPendingSignalExternalExceedsLimit()
 			if len(c.ExpectedSignalsErrorMsg) > 0 {
 				require.Error(t, err)
 				assert.Equal(t, c.ExpectedSignalsErrorMsg, err.Error())

@@ -367,6 +367,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	if err := handler.sizeLimitChecker.checkIfNumPendingActivitiesExceedsLimit(); err != nil {
 		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED, err)
 	}
+	if err := handler.sizeLimitChecker.checkIfNumTotalActivitiesExceedsLimit(); err != nil {
+		return nil, handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_TOTAL_ACTIVITIES_LIMIT_EXCEEDED, err)
+	}
 
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
 
@@ -541,6 +544,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 		},
 	); err != nil || handler.stopProcessing {
 		return err
+	}
+
+	// user timer limit
+	if err := handler.sizeLimitChecker.checkIfNumPendingUserTimersExceedsLimit(); err != nil {
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_TIMERS_LIMIT_EXCEEDED, err)
+	}
+	if err := handler.sizeLimitChecker.checkIfNumTotalUserTimersExceedsLimit(); err != nil {
+		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_TOTAL_TIMERS_LIMIT_EXCEEDED, err)
 	}
 
 	_, _, err := handler.mutableState.AddTimerStartedEvent(handler.workflowTaskCompletedID, attr)
@@ -791,6 +802,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	if err := handler.sizeLimitChecker.checkIfNumPendingCancelRequestsExceedsLimit(); err != nil {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED, err)
 	}
+	if err := handler.sizeLimitChecker.checkIfNumTotalCancelRequestsExceedsLimit(); err != nil {
+		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_TOTAL_REQUEST_CANCEL_LIMIT_EXCEEDED, err)
+	}
 
 	cancelRequestID := uuid.New()
 	_, _, err := handler.mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
@@ -1011,8 +1025,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	}
 
 	// child workflow limit
-	if err := handler.sizeLimitChecker.checkIfNumChildWorkflowsExceedsLimit(); err != nil {
+	if err := handler.sizeLimitChecker.checkIfNumPendingChildWorkflowsExceedsLimit(); err != nil {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED, err)
+	}
+	if err := handler.sizeLimitChecker.checkIfNumTotalChildWorkflowsExceedsLimit(); err != nil {
+		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_TOTAL_CHILD_WORKFLOWS_LIMIT_EXCEEDED, err)
 	}
 
 	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())
@@ -1064,8 +1081,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	); err != nil || handler.stopProcessing {
 		return err
 	}
-	if err := handler.sizeLimitChecker.checkIfNumPendingSignalsExceedsLimit(); err != nil {
+	if err := handler.sizeLimitChecker.checkIfNumPendingSignalExternalExceedsLimit(); err != nil {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED, err)
+	}
+	if err := handler.sizeLimitChecker.checkIfNumTotalSignalExternalExceedsLimit(); err != nil {
+		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_TOTAL_SIGNALS_LIMIT_EXCEEDED, err)
 	}
 
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(

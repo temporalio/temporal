@@ -199,10 +199,18 @@ type Config struct {
 	MutableStateActivityFailureSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateSizeLimitError                dynamicconfig.IntPropertyFn
 	MutableStateSizeLimitWarn                 dynamicconfig.IntPropertyFn
-	NumPendingChildExecutionsLimit            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingActivitiesLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingSignalsLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingCancelsRequestLimit             dynamicconfig.IntPropertyFnWithNamespaceFilter
+
+	// Entry count limit related settings
+	NumPendingActivitiesLimit                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingUserTimersLimit                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingChildWorkflowsLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingRequestCancelExternalWorkflowsLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingSignalExternalWorkflowsLimit        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumTotalActivitiesLimit                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumTotalUserTimersLimit                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumTotalChildWorkflowsLimit                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumTotalRequestCancelExternalWorkflowsLimit   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumTotalSignalExternalWorkflowsLimit          dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
@@ -454,10 +462,6 @@ func NewConfig(
 		BlobSizeLimitWarn:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
 		MemoSizeLimitError:                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitError, 2*1024*1024),
 		MemoSizeLimitWarn:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitWarn, 2*1024),
-		NumPendingChildExecutionsLimit:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingChildExecutionsLimitError, 2000),
-		NumPendingActivitiesLimit:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingActivitiesLimitError, 2000),
-		NumPendingSignalsLimit:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingSignalsLimitError, 2000),
-		NumPendingCancelsRequestLimit:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingCancelRequestsLimitError, 2000),
 		HistorySizeLimitError:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
 		HistorySizeLimitWarn:                      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
 		HistorySizeSuggestContinueAsNew:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeSuggestContinueAsNew, 4*1024*1024),
@@ -468,6 +472,17 @@ func NewConfig(
 		MutableStateActivityFailureSizeLimitWarn:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MutableStateActivityFailureSizeLimitWarn, 2*1024),
 		MutableStateSizeLimitError:                dc.GetIntProperty(dynamicconfig.MutableStateSizeLimitError, 8*1024*1024),
 		MutableStateSizeLimitWarn:                 dc.GetIntProperty(dynamicconfig.MutableStateSizeLimitWarn, 1*1024*1024),
+
+		NumPendingActivitiesLimit:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingActivitiesLimitError, 2000),
+		NumPendingUserTimersLimit:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingUserTimersLimitError, 2000),
+		NumPendingChildWorkflowsLimit:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingChildWorkflowsLimitError, 2000),
+		NumPendingRequestCancelExternalWorkflowsLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingRequestCancelExternalWorkflowsLimitError, 2000),
+		NumPendingSignalExternalWorkflowsLimit:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingSignalExternalWorkflowsLimitError, 2000),
+		NumTotalActivitiesLimit:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumTotalActivitiesLimitError, 10_000),
+		NumTotalUserTimersLimit:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumTotalUserTimersLimitError, 10_000),
+		NumTotalChildWorkflowsLimit:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumTotalChildWorkflowsLimitError, 10_000),
+		NumTotalRequestCancelExternalWorkflowsLimit:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumTotalRequestCancelExternalWorkflowsLimitError, 10_000),
+		NumTotalSignalExternalWorkflowsLimit:          dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumTotalSignalExternalWorkflowsLimitError, 10_000),
 
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),

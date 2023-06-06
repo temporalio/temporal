@@ -138,18 +138,37 @@ const (
 	MemoSizeLimitError = "limit.memoSize.error"
 	// MemoSizeLimitWarn is the per event memo size limit for warning
 	MemoSizeLimitWarn = "limit.memoSize.warn"
-	// NumPendingChildExecutionsLimitError is the maximum number of pending child workflows a workflow can have before
-	// StartChildWorkflowExecution commands will fail.
-	NumPendingChildExecutionsLimitError = "limit.numPendingChildExecutions.error"
 	// NumPendingActivitiesLimitError is the maximum number of pending activities a workflow can have before
-	// ScheduleActivityTask will fail.
+	// ScheduleActivityTask commands will fail.
 	NumPendingActivitiesLimitError = "limit.numPendingActivities.error"
-	// NumPendingSignalsLimitError is the maximum number of pending signals a workflow can have before
-	// SignalExternalWorkflowExecution commands from this workflow will fail.
-	NumPendingSignalsLimitError = "limit.numPendingSignals.error"
-	// NumPendingCancelRequestsLimitError is the maximum number of pending requests to cancel other workflows a workflow can have before
+	// NumPendingUserTimersLimitError is the maximum number of pending user timers a workflow can have before
+	// StartTimer commands will fail.
+	NumPendingUserTimersLimitError = "limit.numPendingUserTimers.error"
+	// NumPendingChildWorkflowsLimitError is the maximum number of pending child workflows a workflow can have before
+	// StartChildWorkflowExecution commands will fail.
+	NumPendingChildWorkflowsLimitError = "limit.numPendingChildExecutions.error"
+	// NumPendingRequestCancelExternalWorkflowsLimitError is the maximum number of pending requests to cancel other workflows a workflow can have before
 	// RequestCancelExternalWorkflowExecution commands will fail.
-	NumPendingCancelRequestsLimitError = "limit.numPendingCancelRequests.error"
+	NumPendingRequestCancelExternalWorkflowsLimitError = "limit.numPendingCancelRequests.error"
+	// NumPendingSignalExternalWorkflowsLimitError is the maximum number of pending signals a workflow can have before
+	// SignalExternalWorkflowExecution commands will fail.
+	NumPendingSignalExternalWorkflowsLimitError = "limit.numPendingSignals.error"
+	// NumTotalActivitiesLimitError is the maximum number of total activities a workflow can have.
+	// Workflow will be forcefully failed upon scheduling new activities if this limit is exceeded.
+	NumTotalActivitiesLimitError = "limit.numTotalActivities.error"
+	// NumTotalUserTimersLimitError is the maximum number of total user timers a workflow can have.
+	// Workflow will be forcefully failed upon starting new user timers if this limit is exceeded.
+	NumTotalUserTimersLimitError = "limit.numTotalUserTimers.error"
+	// NumTotalChildWorkflowsLimitError is the maximum number of pending child workflows a workflow can have.
+	// Workflow will be forcefully failed upon scheduling new child workflows if this limit is exceeded.
+	NumTotalChildWorkflowsLimitError = "limit.numTotalChildExecutions.error"
+	// NumTotalRequestCancelExternalWorkflowsLimitError is the maximum number of pending requests to cancel other workflows a workflow can have.
+	// Workflow will be forcefully failed upon new request cancel external workflow command if this limit is exceeded.
+	NumTotalRequestCancelExternalWorkflowsLimitError = "limit.numTotalRequestCancelExternalWorkflows.error"
+	// NumTotalSignalExternalWorkflowsLimitError is the maximum number of pending signals a workflow can have.
+	// Workflow will be forcefully failed upon new signal external workflow command if this limit is exceeded.
+	NumTotalSignalExternalWorkflowsLimitError = "limit.numTotalSignalExternalWorkflows.error"
+
 	// HistorySizeLimitError is the per workflow execution history size limit
 	HistorySizeLimitError = "limit.historySize.error"
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning
