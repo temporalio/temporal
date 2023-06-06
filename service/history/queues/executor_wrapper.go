@@ -26,9 +26,6 @@ package queues
 
 import (
 	"context"
-	"errors"
-
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -70,16 +67,12 @@ func (e *executorWrapper) Execute(
 
 	namespaceID := executable.GetNamespaceID()
 	entry, err := e.registry.GetNamespaceByID(namespace.ID(namespaceID))
-	var namespaceNotFoundErr *serviceerror.NamespaceNotFound
-	if err != nil && !errors.As(err, &namespaceNotFoundErr) {
-		e.logger.Error("Unable to find namespace.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
-		metricsTags := []metrics.Tag{
-			metrics.TaskTypeTag(executable.GetType().String()),
-		}
-		return metricsTags, false, err
+	if err != nil {
+		e.logger.Error("Unable to find namespace. Process task as active.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
+		return e.activeExecutor.Execute(ctx, executable)
 	}
 
-	if !e.isValidNamespace(entry) {
+	if !entry.IsOnCluster(e.currentClusterName) {
 		e.logger.Debug("Dropping task as namespace is not on current cluster", tag.WorkflowNamespaceID(executable.GetNamespaceID()), tag.Value(executable.GetTask()))
 		metricsTags := []metrics.Tag{
 			metrics.NamespaceTag(entry.Name().String()),
@@ -101,20 +94,11 @@ func (e *executorWrapper) isActiveTask(
 ) bool {
 	// Following is the existing task allocator logic for verifying active task
 	namespaceID := namespace.ID().String()
-	if namespace != nil && !namespace.ActiveInCluster(e.currentClusterName) {
+	if !namespace.ActiveInCluster(e.currentClusterName) {
 		e.logger.Debug("Process task as standby.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
 		return false
 	}
 
 	e.logger.Debug("Process task as active.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
-	return true
-}
-
-func (e *executorWrapper) isValidNamespace(
-	namespace *namespace.Namespace,
-) bool {
-	if namespace != nil {
-		return namespace.IsOnCluster(e.currentClusterName)
-	}
 	return true
 }
