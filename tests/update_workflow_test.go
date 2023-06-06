@@ -308,17 +308,18 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 
 			events := s.getHistory(s.namespace, tv.WorkflowExecution())
 
+			s.printWorkflowHistory(s.namespace, tv.WorkflowExecution())
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled // Was speculative WT but was converted to normal WT.
+  6 WorkflowTaskScheduled // Normal WT events were written for speculative WT at complete.
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
   9 WorkflowExecutionUpdateAccepted
- 10 WorkflowExecutionUpdateCompleted
+ 10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
