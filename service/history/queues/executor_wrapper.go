@@ -90,11 +90,11 @@ func (e *executorWrapper) Execute(
 
 func (e *executorWrapper) isActiveTask(
 	executable Executable,
-	namespace *namespace.Namespace,
+	namespaceEntry *namespace.Namespace,
 ) bool {
 	// Following is the existing task allocator logic for verifying active task
-	namespaceID := namespace.ID().String()
-	if !namespace.ActiveInCluster(e.currentClusterName) {
+	namespaceID := namespaceEntry.ID().String()
+	if !namespaceEntry.ActiveInCluster(e.currentClusterName) {
 		e.logger.Debug("Process task as standby.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
 		return false
 	}

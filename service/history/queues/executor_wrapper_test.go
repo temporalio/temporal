@@ -58,6 +58,7 @@ type (
 )
 
 func TestExecutorSuite(t *testing.T) {
+	t.Parallel()
 	s := new(executorSuite)
 	suite.Run(t, s)
 }
