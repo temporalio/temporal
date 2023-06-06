@@ -69,7 +69,7 @@ func TestMatcherSuite(t *testing.T) {
 func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
+	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 
 	n := mustFromBaseName("tl0").WithPartition(1)
 	t.taskQueue = newTestTaskQueueID(namespace.ID(uuid.New()), n.FullName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
