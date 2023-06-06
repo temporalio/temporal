@@ -575,7 +575,8 @@ func TestAcceptEventIDInCompletedEvent(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx      = context.Background()
-		store    = mockEventStore{Controller: effect.Immediate(ctx)}
+		effects  = effect.Buffer{}
+		store    = mockEventStore{Controller: &effects}
 		updateID = t.Name() + "-update-id"
 		upd      = update.New(updateID)
 		req      = updatepb.Request{
@@ -611,7 +612,9 @@ func TestAcceptEventIDInCompletedEvent(t *testing.T) {
 	}
 
 	require.NoError(t, upd.OnMessage(ctx, &req, store))
+	effects.Apply(ctx)
 	require.NoError(t, upd.OnMessage(ctx, &acpt, store))
 	require.NoError(t, upd.OnMessage(ctx, &resp, store))
+	effects.Apply(ctx)
 	require.Equal(t, wantAcceptedEventID, gotAcceptedEventID)
 }

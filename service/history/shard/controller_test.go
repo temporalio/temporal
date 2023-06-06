@@ -155,46 +155,15 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 	numShards := int32(8)
 	s.config.NumberOfShards = numShards
 
-	queueAckLevels := s.queueAckLevels()
-	queueStates := s.queueStates()
-
 	var myShards []int32
+	historyEngines := make(map[int32]*MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		hostID := shardID % 4
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
-			s.mockHistoryEngine.EXPECT().Start().Return()
-			// notification step is done after engine is created, so may not be called when test finishes
-			s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
-			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
-			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-			s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
-				&persistence.GetOrCreateShardResponse{
-					ShardInfo: &persistencespb.ShardInfo{
-						ShardId:                shardID,
-						Owner:                  s.hostInfo.Identity(),
-						RangeId:                5,
-						ReplicationDlqAckLevel: map[string]int64{},
-						QueueAckLevels:         queueAckLevels,
-						QueueStates:            queueStates,
-					},
-				}, nil)
-			s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
-				ShardInfo: &persistencespb.ShardInfo{
-					ShardId:                shardID,
-					Owner:                  s.hostInfo.Identity(),
-					RangeId:                6,
-					StolenSinceRenew:       1,
-					ReplicationDlqAckLevel: map[string]int64{},
-					QueueAckLevels:         queueAckLevels,
-					QueueStates:            queueStates,
-				},
-				PreviousRangeID: 5,
-			})).Return(nil)
-			s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
-				ShardID: shardID,
-				RangeID: 6,
-			}).Return(nil).AnyTimes()
+			mockEngine := NewMockEngine(s.controller)
+			historyEngines[shardID] = mockEngine
+			s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfoFromAddress(ownerHost), nil)
@@ -225,46 +194,15 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 		return 10
 	}
 
-	queueAckLevels := s.queueAckLevels()
-	queueStates := s.queueStates()
-
 	var myShards []int32
+	historyEngines := make(map[int32]*MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		hostID := shardID % 4
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
-			s.mockHistoryEngine.EXPECT().Start().Return()
-			// notification step is done after engine is created, so may not be called when test finishes
-			s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
-			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
-			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-			s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
-				&persistence.GetOrCreateShardResponse{
-					ShardInfo: &persistencespb.ShardInfo{
-						ShardId:                shardID,
-						Owner:                  s.hostInfo.Identity(),
-						RangeId:                5,
-						ReplicationDlqAckLevel: map[string]int64{},
-						QueueAckLevels:         queueAckLevels,
-						QueueStates:            queueStates,
-					},
-				}, nil)
-			s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
-				ShardInfo: &persistencespb.ShardInfo{
-					ShardId:                shardID,
-					Owner:                  s.hostInfo.Identity(),
-					RangeId:                6,
-					StolenSinceRenew:       1,
-					ReplicationDlqAckLevel: map[string]int64{},
-					QueueAckLevels:         queueAckLevels,
-					QueueStates:            queueStates,
-				},
-				PreviousRangeID: 5,
-			})).Return(nil)
-			s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
-				ShardID: shardID,
-				RangeID: 6,
-			}).Return(nil).AnyTimes()
+			mockEngine := NewMockEngine(s.controller)
+			historyEngines[shardID] = mockEngine
+			s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(
@@ -310,42 +248,11 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 	numShards := int32(2)
 	s.config.NumberOfShards = numShards
 
-	queueAckLevels := s.queueAckLevels()
-	queueStates := s.queueStates()
-
+	historyEngines := make(map[int32]*MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		s.mockHistoryEngine.EXPECT().Start().Return()
-		// notification step is done after engine is created, so may not be called when test finishes
-		s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
-		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
-		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-		s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
-			&persistence.GetOrCreateShardResponse{
-				ShardInfo: &persistencespb.ShardInfo{
-					ShardId:                shardID,
-					Owner:                  s.hostInfo.Identity(),
-					RangeId:                5,
-					ReplicationDlqAckLevel: map[string]int64{},
-					QueueAckLevels:         queueAckLevels,
-					QueueStates:            queueStates,
-				},
-			}, nil)
-		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:                shardID,
-				Owner:                  s.hostInfo.Identity(),
-				RangeId:                6,
-				StolenSinceRenew:       1,
-				ReplicationDlqAckLevel: map[string]int64{},
-				QueueAckLevels:         queueAckLevels,
-				QueueStates:            queueStates,
-			},
-			PreviousRangeID: 5,
-		})).Return(nil)
-		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
-			ShardID: shardID,
-			RangeID: 6,
-		}).Return(nil).AnyTimes()
+		mockEngine := NewMockEngine(s.controller)
+		historyEngines[shardID] = mockEngine
+		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
@@ -374,42 +281,11 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 	numShards := int32(2)
 	s.config.NumberOfShards = numShards
 
-	queueAckLevels := s.queueAckLevels()
-	queueStates := s.queueStates()
-
+	historyEngines := make(map[int32]*MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		s.mockHistoryEngine.EXPECT().Start().Return()
-		// notification step is done after engine is created, so may not be called when test finishes
-		s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
-		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
-		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-		s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
-			&persistence.GetOrCreateShardResponse{
-				ShardInfo: &persistencespb.ShardInfo{
-					ShardId:                shardID,
-					Owner:                  s.hostInfo.Identity(),
-					RangeId:                5,
-					ReplicationDlqAckLevel: map[string]int64{},
-					QueueAckLevels:         queueAckLevels,
-					QueueStates:            queueStates,
-				},
-			}, nil)
-		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:                shardID,
-				Owner:                  s.hostInfo.Identity(),
-				RangeId:                6,
-				StolenSinceRenew:       1,
-				ReplicationDlqAckLevel: map[string]int64{},
-				QueueAckLevels:         queueAckLevels,
-				QueueStates:            queueStates,
-			},
-			PreviousRangeID: 5,
-		})).Return(nil)
-		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
-			ShardID: shardID,
-			RangeID: 6,
-		}).Return(nil).AnyTimes()
+		mockEngine := NewMockEngine(s.controller)
+		historyEngines[shardID] = mockEngine
+		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
