@@ -99,3 +99,8 @@ func Max(a Clock, b Clock) Clock {
 func Equal(a Clock, b Clock) bool {
 	return Compare(a, b) == 0
 }
+
+// Ptr returns a pointer to a clock (to ease inlining the APIs in this package)
+func Ptr(c Clock) *Clock {
+	return &c
+}

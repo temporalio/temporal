@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -1132,7 +1133,7 @@ func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
 	versionedSearchAttribute := func(buildIds ...string) []string {
 		attrs := []string{}
 		for _, buildId := range buildIds {
-			attrs = append(attrs, common.VersionedBuildIdSearchAttribute(buildId))
+			attrs = append(attrs, worker_versioning.VersionedBuildIdSearchAttribute(buildId))
 		}
 		return attrs
 	}
@@ -1141,7 +1142,7 @@ func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
 	}
 	unversionedSearchAttribute := func(buildIds ...string) []string {
 		// assumed limit is 2
-		attrs := []string{common.UnversionedSearchAttribute, common.UnversionedBuildIdSearchAttribute(buildIds[len(buildIds)-1])}
+		attrs := []string{worker_versioning.UnversionedSearchAttribute, worker_versioning.UnversionedBuildIdSearchAttribute(buildIds[len(buildIds)-1])}
 		return attrs
 	}
 

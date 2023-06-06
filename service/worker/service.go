@@ -321,6 +321,10 @@ func NewConfig(
 				dynamicconfig.ExecutionScannerHistoryEventIdValidator,
 				true,
 			),
+			BuildIdScavengerRemovableBuildIdMinAge: dc.GetDurationProperty(
+				dynamicconfig.BuildIdScavengerRemovableBuildIdMinAge,
+				time.Hour*24, // 1 day
+			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),
@@ -512,6 +516,7 @@ func (s *Service) initScanner() error {
 		adminClient,
 		s.matchingClient,
 		s.namespaceRegistry,
+		currentCluster,
 	)
 	return nil
 }

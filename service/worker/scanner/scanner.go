@@ -89,23 +89,27 @@ type (
 		ExecutionScannerWorkerCount dynamicconfig.IntPropertyFn
 		// ExecutionScannerHistoryEventIdValidator indicates if the execution scavenger to validate history event id.
 		ExecutionScannerHistoryEventIdValidator dynamicconfig.BoolPropertyFn
+		// BuildIdScavengerRemovableBuildIdMinAge determines how old a build id has to be (based on its update
+		// timestamp) for it considered for removal.
+		BuildIdScavengerRemovableBuildIdMinAge dynamicconfig.DurationPropertyFn
 	}
 
 	// scannerContext is the context object that get's
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
-		cfg               *Config
-		logger            log.Logger
-		sdkClientFactory  sdk.ClientFactory
-		metricsHandler    metrics.Handler
-		executionManager  persistence.ExecutionManager
-		taskManager       persistence.TaskManager
-		visibilityManager manager.VisibilityManager
-		metadataManager   persistence.MetadataManager
-		historyClient     historyservice.HistoryServiceClient
-		matchingClient    matchingservice.MatchingServiceClient
-		adminClient       adminservice.AdminServiceClient
-		namespaceRegistry namespace.Registry
+		cfg                *Config
+		logger             log.Logger
+		sdkClientFactory   sdk.ClientFactory
+		metricsHandler     metrics.Handler
+		executionManager   persistence.ExecutionManager
+		taskManager        persistence.TaskManager
+		visibilityManager  manager.VisibilityManager
+		metadataManager    persistence.MetadataManager
+		historyClient      historyservice.HistoryServiceClient
+		matchingClient     matchingservice.MatchingServiceClient
+		adminClient        adminservice.AdminServiceClient
+		namespaceRegistry  namespace.Registry
+		currentClusterName string
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -136,21 +140,23 @@ func New(
 	adminClient adminservice.AdminServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 	registry namespace.Registry,
+	currentClusterName string,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
-			cfg:               cfg,
-			sdkClientFactory:  sdkClientFactory,
-			logger:            logger,
-			metricsHandler:    metricsHandler,
-			executionManager:  executionManager,
-			taskManager:       taskManager,
-			visibilityManager: visibilityManager,
-			metadataManager:   metadataManager,
-			historyClient:     historyClient,
-			matchingClient:    matchingClient,
-			adminClient:       adminClient,
-			namespaceRegistry: registry,
+			cfg:                cfg,
+			sdkClientFactory:   sdkClientFactory,
+			logger:             logger,
+			metricsHandler:     metricsHandler,
+			executionManager:   executionManager,
+			taskManager:        taskManager,
+			visibilityManager:  visibilityManager,
+			metadataManager:    metadataManager,
+			historyClient:      historyClient,
+			matchingClient:     matchingClient,
+			adminClient:        adminClient,
+			namespaceRegistry:  registry,
+			currentClusterName: currentClusterName,
 		},
 	}
 }
@@ -200,6 +206,8 @@ func (s *Scanner) Start() error {
 			s.context.visibilityManager,
 			s.context.namespaceRegistry,
 			s.context.matchingClient,
+			s.context.currentClusterName,
+			s.context.cfg.BuildIdScavengerRemovableBuildIdMinAge,
 		)
 
 		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)

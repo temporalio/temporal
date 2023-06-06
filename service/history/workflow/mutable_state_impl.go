@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -1901,7 +1902,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	}
 	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
 		limit := ms.config.MaxTrackedBuildIds(string(ms.namespaceEntry.Name()))
-		if err := ms.addBuildIdWithNoVisibilityTask(common.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId), limit); err != nil {
+		if err := ms.addBuildIdWithNoVisibilityTask(worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId), limit); err != nil {
 			return err
 		}
 	}
@@ -2103,13 +2104,13 @@ func (ms *MutableStateImpl) trackBuildIdFromCompletion(
 	if !version.GetUseVersioning() {
 		var added bool
 		// Make sure unversioned workflow tasks are easily locatable with just the prefix
-		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, common.UnversionedSearchAttribute, limits.MaxTrackedBuildIds)
+		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, worker_versioning.UnversionedSearchAttribute, limits.MaxTrackedBuildIds)
 		anyAdded = anyAdded || added
 	}
 	if version.GetBuildId() != "" {
 		var added bool
 		ms.addResetPointFromCompletion(version.GetBuildId(), eventID, limits.MaxResetPoints)
-		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, common.VersionStampToBuildIdSearchAttribute(version), limits.MaxTrackedBuildIds)
+		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, worker_versioning.VersionStampToBuildIdSearchAttribute(version), limits.MaxTrackedBuildIds)
 		anyAdded = anyAdded || added
 	}
 	if !anyAdded {
@@ -2155,11 +2156,11 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(searchAttributeVal
 		}
 	}
 	if len(searchAttributeValues) >= maxTrackedBuildIds {
-		hasUnversioned := searchAttributeValues[0] == common.UnversionedSearchAttribute
+		hasUnversioned := searchAttributeValues[0] == worker_versioning.UnversionedSearchAttribute
 		searchAttributeValues = searchAttributeValues[len(searchAttributeValues)-maxTrackedBuildIds+1:]
 		// Make sure not to lose the unversioned value, it's required for the reachability API
 		if hasUnversioned {
-			searchAttributeValues[0] = common.UnversionedSearchAttribute
+			searchAttributeValues[0] = worker_versioning.UnversionedSearchAttribute
 		}
 	}
 	return append(searchAttributeValues, searchAttributeValue), true

@@ -226,6 +226,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				mockAdminClient,
 				nil,
 				mockNamespaceRegistry,
+				"active-cluster",
 			)
 			var wg sync.WaitGroup
 			for _, sc := range c.ExpectedScanners {
@@ -300,6 +301,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		mockAdminClient,
 		nil,
 		mockNamespaceRegistry,
+		"active-cluster",
 	)
 	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()

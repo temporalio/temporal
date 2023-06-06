@@ -34,22 +34,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	sw "go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests"
 )
 
@@ -66,8 +74,9 @@ func TestUserDataReplicationTestSuite(t *testing.T) {
 
 func (s *userDataReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs: true,
-		dynamicconfig.BuildIdScavengerEnabled:                true,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
+		dynamicconfig.BuildIdScavengerEnabled:                    true,
 	}
 	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
 }
@@ -93,8 +102,7 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	}
 	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
+
 	description, err := activeFrontendClient.DescribeNamespace(tests.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
 	s.Require().NoError(err)
 
@@ -203,9 +211,8 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		Namespace: primitives.SystemLocalNamespace,
 	})
 	s.NoError(err)
-	workflowID4 := "force-replication-wf-4"
 	run, err := sysClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:                 workflowID4,
+		ID:                 "force-replication-wf",
 		TaskQueue:          sw.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
@@ -222,17 +229,22 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
-	numReplicationTasks := len(replicationResponse.GetMessages().ReplicationTasks)
-	s.Equal(numReplicationTasks, numTaskQueues*2+1)
+	var replicationTasks []*replicationspb.ReplicationTask
+	for _, task := range replicationResponse.GetMessages().ReplicationTasks {
+		if task.GetTaskQueueUserDataAttributes().GetNamespaceId() == description.GetNamespaceInfo().Id {
+			replicationTasks = append(replicationTasks, task)
+		}
+	}
+	numReplicationTasks := len(replicationTasks)
+	s.Equal(numReplicationTasks, numTaskQueues*2)
 
-	lastTasks := replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-numTaskQueues:]
+	lastTasks := replicationTasks[:numTaskQueues]
 	s.Equal(numTaskQueues, len(lastTasks))
 	seenTaskQueues := make(map[string]struct{}, numTaskQueues)
 	// Check the seeded messages
 	for _, task := range lastTasks {
 		s.Equal(enums.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
 		attrs := task.GetTaskQueueUserDataAttributes()
-		s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
 		seenTaskQueues[attrs.TaskQueueName] = struct{}{}
 	}
 
@@ -286,7 +298,10 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 		ID:                 workflowID,
 		TaskQueue:          build_ids.BuildIdScavengerTaskQueueName,
 		WorkflowRunTimeout: time.Second * 30,
-	}, build_ids.BuildIdScavangerWorkflowName)
+	}, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerInput{
+		// Effectively disable the min age check
+		BuildIdRemovalMinAge: time.Microsecond,
+	})
 	s.NoError(err)
 	err = run.Get(ctx, nil)
 	s.NoError(err)
@@ -386,4 +401,186 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
 	s.Equal("v4", attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].State)
+}
+
+func (s *userDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTombstones() {
+	// Advanced visibility only enabled by default in SQLite
+	if tests.TestFlags.PersistenceDriver != sqlite.PluginName {
+		s.T().Skip("Test requires advanced visibility")
+	}
+	ctx := tests.NewContext()
+	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
+	taskQueue := "test-task-queue"
+	activeFrontendClient := s.cluster1.GetFrontendClient()
+
+	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
+	})
+	s.Require().NoError(err)
+
+	// Create v0 and process a workflow with it - should be revived
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: "v0",
+		},
+	})
+	s.Require().NoError(err)
+
+	_, err = activeFrontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:  namespace,
+		WorkflowId: "test",
+		RequestId:  uuid.NewString(),
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "workflow",
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			Name: taskQueue,
+		},
+	})
+	s.Require().NoError(err)
+	task, err := activeFrontendClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: namespace,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			Name: taskQueue,
+		},
+		Identity: "test",
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			BuildId:       "v0",
+			UseVersioning: true,
+		},
+	})
+	s.Require().NoError(err)
+	_, err = activeFrontendClient.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: task.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+				},
+			},
+		},
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{
+			BuildId:       "v0",
+			UseVersioning: true,
+		},
+	})
+	s.Require().NoError(err)
+
+	// Create v0.1 as compatible with v0 - should not be revived
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
+				NewBuildId:                "v0.1",
+				ExistingCompatibleBuildId: "v0",
+			},
+		},
+	})
+	s.Require().NoError(err)
+
+	// Create v0.2 as compatible with v0 - check later that it is revived
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
+				NewBuildId:                "v0.2",
+				ExistingCompatibleBuildId: "v0",
+			},
+		},
+	})
+	s.Require().NoError(err)
+
+	// Create v1 as queue default - it never gets deleted
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: "v1",
+		},
+	})
+	s.Require().NoError(err)
+
+	// Wait for visibility propagation
+	s.Eventually(func() bool {
+		resp, err := activeFrontendClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: namespace,
+			Query:     fmt.Sprintf("TaskQueue = %q AND BuildIds = %q", taskQueue, worker_versioning.VersionedBuildIdSearchAttribute("v0")),
+		})
+		s.Require().NoError(err)
+		return resp.Count == 1
+	}, time.Second*15, time.Millisecond*150)
+
+	adminClient := s.cluster1.GetAdminClient()
+	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.Require().NoError(err)
+	attrsPreApply := replicationResponse.Messages.ReplicationTasks[len(replicationResponse.Messages.ReplicationTasks)-1].GetTaskQueueUserDataAttributes()
+	preApplyClock := *attrsPreApply.UserData.Clock
+
+	attrsPreApply.UserData.Clock.WallClock = time.Now().UnixMilli()
+	attrsPreApply.UserData.Clock.Version++
+	// Delete all v0 buildIds
+	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[0].State = persistencespb.STATE_DELETED
+	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[0].StateUpdateTimestamp = attrsPreApply.UserData.Clock
+	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[1].State = persistencespb.STATE_DELETED
+	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[1].StateUpdateTimestamp = attrsPreApply.UserData.Clock
+	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[2].State = persistencespb.STATE_DELETED
+	attrsPreApply.UserData.VersioningData.VersionSets[0].BuildIds[2].StateUpdateTimestamp = attrsPreApply.UserData.Clock
+
+	matchingClient := s.cluster1.GetMatchingClient()
+	_, err = matchingClient.ApplyTaskQueueUserDataReplicationEvent(ctx, &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
+		NamespaceId: attrsPreApply.NamespaceId,
+		TaskQueue:   taskQueue,
+		UserData:    attrsPreApply.UserData,
+	})
+	s.Require().NoError(err)
+
+	// Check that v0 and v2 were revived
+	compat, err := activeFrontendClient.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*taskqueuepb.CompatibleVersionSet{
+		{BuildIds: []string{"v0", "v0.2"}},
+		{BuildIds: []string{"v1"}},
+	}, compat.GetMajorVersionSets())
+
+	// Check that v0 and v2 were revived in the replication event
+	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.Require().NoError(err)
+
+	attrsPostApply := replicationResponse.Messages.ReplicationTasks[len(replicationResponse.Messages.ReplicationTasks)-1].GetTaskQueueUserDataAttributes()
+
+	s.Require().True(hybrid_logical_clock.Greater(*attrsPostApply.UserData.Clock, preApplyClock))
+
+	s.Require().Equal("v0", attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].Id)
+	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].State)
+	s.Require().True(hybrid_logical_clock.Greater(*attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].StateUpdateTimestamp, preApplyClock))
+
+	s.Require().Equal("v0.2", attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].Id)
+	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].State)
+	s.Require().True(hybrid_logical_clock.Greater(*attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].StateUpdateTimestamp, preApplyClock))
+
+	s.Require().Equal("v1", attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
+	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
+	s.Require().True(hybrid_logical_clock.Equal(*attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].StateUpdateTimestamp, preApplyClock))
 }

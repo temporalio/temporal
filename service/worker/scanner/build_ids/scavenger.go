@@ -26,11 +26,9 @@ package build_ids
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"time"
 
-	"github.com/xwb1989/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -38,14 +36,14 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 const (
@@ -70,15 +68,20 @@ type (
 		VisibilityRPS         float64
 		NamespaceListPageSize int
 		TaskQueueListPageSize int
+		// BuildIdRemovalMinAge is the minimum age (based on StateUpdatedTimestamp) for a build id to be considered for
+		// removal. Default is provided via dynamic config.
+		BuildIdRemovalMinAge time.Duration
 	}
 
 	Activities struct {
-		logger            log.Logger
-		taskManager       persistence.TaskManager
-		metadataManager   persistence.MetadataManager
-		visibilityManager manager.VisibilityManager
-		namespaceRegistry namespace.Registry
-		matchingClient    matchingservice.MatchingServiceClient
+		logger                 log.Logger
+		taskManager            persistence.TaskManager
+		metadataManager        persistence.MetadataManager
+		visibilityManager      manager.VisibilityManager
+		namespaceRegistry      namespace.Registry
+		matchingClient         matchingservice.MatchingServiceClient
+		currentClusterName     string
+		removableBuildIdMinAge dynamicconfig.DurationPropertyFn
 	}
 
 	heartbeatDetails struct {
@@ -96,14 +99,18 @@ func NewActivities(
 	visibilityManager manager.VisibilityManager,
 	namespaceRegistry namespace.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
+	currentClusterName string,
+	removableBuildIdMinAge dynamicconfig.DurationPropertyFn,
 ) *Activities {
 	return &Activities{
-		logger:            logger,
-		taskManager:       taskManager,
-		metadataManager:   metadataManager,
-		visibilityManager: visibilityManager,
-		namespaceRegistry: namespaceRegistry,
-		matchingClient:    matchingClient,
+		logger:                 logger,
+		taskManager:            taskManager,
+		metadataManager:        metadataManager,
+		visibilityManager:      visibilityManager,
+		namespaceRegistry:      namespaceRegistry,
+		matchingClient:         matchingClient,
+		currentClusterName:     currentClusterName,
+		removableBuildIdMinAge: removableBuildIdMinAge,
 	}
 }
 
@@ -118,7 +125,7 @@ func BuildIdScavangerWorkflow(ctx workflow.Context, input BuildIdScavangerInput)
 	return workflow.ExecuteActivity(activityCtx, BuildIdScavangerActivityName, input).Get(ctx, nil)
 }
 
-func setDefaults(input *BuildIdScavangerInput) {
+func (a *Activities) setDefaults(input *BuildIdScavangerInput) {
 	if input.NamespaceListPageSize == 0 {
 		input.NamespaceListPageSize = 100
 	}
@@ -128,11 +135,14 @@ func setDefaults(input *BuildIdScavangerInput) {
 	if input.VisibilityRPS == 0 {
 		input.VisibilityRPS = 1
 	}
+	if input.BuildIdRemovalMinAge == 0 {
+		input.BuildIdRemovalMinAge = a.removableBuildIdMinAge()
+	}
 }
 
 // ScavengeBuildIds scans all task queue user data entries in all namespaces and cleans up unused build ids.
 func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavangerInput) error {
-	setDefaults(&input)
+	a.setDefaults(&input)
 
 	var heartbeat heartbeatDetails
 	if activity.HasHeartbeatDetails(ctx) {
@@ -156,7 +166,9 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 			if err != nil {
 				return err
 			}
-			for {
+			// Only the active cluster for this namespace should perform the cleanup.
+			activeInCluster := ns.ActiveInCluster(a.currentClusterName)
+			for activeInCluster {
 				tqResponse, err := a.taskManager.ListTaskQueueUserDataEntries(ctx, &persistence.ListTaskQueueUserDataEntriesRequest{
 					NamespaceID:   nsId,
 					PageSize:      input.TaskQueueListPageSize,
@@ -167,7 +179,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 				}
 				for heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
 					entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
-					buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, heartbeat, ns, entry)
+					buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, heartbeat, ns, entry, input.BuildIdRemovalMinAge)
 					if err != nil {
 						return err
 					}
@@ -219,6 +231,7 @@ func (a *Activities) findBuildIdsToRemove(
 	heartbeat heartbeatDetails,
 	ns *namespace.Namespace,
 	entry *persistence.TaskQueueUserDataEntry,
+	removalMinAge time.Duration,
 ) ([]string, error) {
 	versioningData := entry.UserData.Data.GetVersioningData()
 	var buildIdsToRemove []string
@@ -240,23 +253,20 @@ func (a *Activities) findBuildIdsToRemove(
 					continue
 				}
 			}
-
-			escapedBuildId := sqlparser.String(sqlparser.NewStrVal([]byte(common.VersionedBuildIdSearchAttribute(buildId.Id))))
-			query := fmt.Sprintf("%s = %s", searchattribute.BuildIds, escapedBuildId)
+			buildIdAge := time.Now().UnixMilli() - buildId.StateUpdateTimestamp.WallClock
+			if buildIdAge < removalMinAge.Milliseconds() {
+				continue
+			}
 
 			if err := rateLimiter.Wait(ctx); err != nil {
 				return buildIdsToRemove, err
 			}
-			response, err := a.visibilityManager.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
-				NamespaceID: ns.ID(),
-				Namespace:   ns.Name(),
-				Query:       query,
-			})
+			exists, err := worker_versioning.WorkflowsExistForBuildId(ctx, a.visibilityManager, ns, entry.TaskQueue, buildId.Id)
 			if err != nil {
 				return buildIdsToRemove, err
 			}
 			activity.RecordHeartbeat(ctx, heartbeat)
-			if response.Count == 0 {
+			if !exists {
 				a.logger.Info("Found build id to remove",
 					tag.NewStringTag("namespace", ns.Name().String()),
 					tag.NewStringTag("task-queue", entry.TaskQueue),
