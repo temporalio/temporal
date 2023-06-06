@@ -141,6 +141,7 @@ type (
 		String() string
 		QueueID() *taskQueueID
 		TaskQueueKind() enumspb.TaskQueueKind
+		LongPollExpirationInterval() time.Duration
 	}
 
 	// Single task queue in memory state
@@ -423,13 +424,6 @@ func (c *taskQueueManagerImpl) GetTask(
 ) (*internalTask, error) {
 	c.liveness.markAlive()
 
-	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
-	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
-	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
-	// returned to the handler before a context timeout error is generated.
-	childCtx, cancel := newChildContext(ctx, c.config.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
-	defer cancel()
-
 	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.taskQueueID.namespaceID)
 	if err != nil {
 		return nil, err
@@ -443,10 +437,10 @@ func (c *taskQueueManagerImpl) GetTask(
 	c.matcher.UpdateRatelimit(pollMetadata.ratePerSecond)
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		return c.matcher.PollForQuery(childCtx, pollMetadata)
+		return c.matcher.PollForQuery(ctx, pollMetadata)
 	}
 
-	task, err := c.matcher.Poll(childCtx, pollMetadata)
+	task, err := c.matcher.Poll(ctx, pollMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -701,6 +695,10 @@ func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
 
 func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.kind
+}
+
+func (c *taskQueueManagerImpl) LongPollExpirationInterval() time.Duration {
+	return c.config.LongPollExpirationInterval()
 }
 
 func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {

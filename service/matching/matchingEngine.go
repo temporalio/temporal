@@ -1108,8 +1108,11 @@ func (e *matchingEngineImpl) getTask(
 		return nil, err
 	}
 
-	// TODO: combine with child cancellable context?
-	ctx, cancel := context.WithCancel(ctx)
+	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
+	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
+	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
+	// returned to the handler before a context timeout error is generated.
+	ctx, cancel := newChildContext(ctx, baseTqm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
