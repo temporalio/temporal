@@ -42,6 +42,9 @@ import (
 var (
 	// Error used to signal that a queue has no versioning data. This shouldn't escape matching.
 	errEmptyVersioningData = serviceerror.NewInternal("versioning data is empty")
+
+	// Temporary until we persist guessed set ids
+	errUnknownBuildId = serviceerror.NewFailedPrecondition("unknown build id")
 )
 
 // ToBuildIdOrderingResponse transforms the internal VersioningData representation to public representation.
@@ -373,6 +376,8 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string)
 		// Note data may be nil here, findVersion will return -1 then.
 		setIdx, _ := findVersion(data, buildId)
 		if setIdx < 0 {
+			// TODO: persist guessed set it and then remove this
+			return "", errUnknownBuildId
 			// A workflow has a build ID set, but we don't know about that build ID. This can
 			// happen in replication scenario: the workflow itself was migrated and we failed
 			// over, but the versioning data hasn't been migrated yet. Instead of rejecting it,
@@ -380,9 +385,6 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string)
 			// its set on the other side, then our guess is right and things will work out. If
 			// not, then we'll guess wrong, but when we get the replication event, we'll merge
 			// the sets and use both ids.
-			// TODO: this doesn't really work unless we persist the fact that we've created
-			// this set? we can do that on the root. on other partitions... let's notify the
-			// root?
 			// TODO: add metric and log to make this situation visible
 			guessedSetId := hashBuildId(buildId)
 			return guessedSetId, nil
