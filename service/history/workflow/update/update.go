@@ -34,6 +34,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	updatepb "go.temporal.io/api/update/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/internal/effect"
 )
@@ -283,14 +284,17 @@ func (u *Update) onAcceptanceMsg(
 	if err != nil {
 		return err
 	}
+	u.acceptedEventID = event.EventId
 	u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
 		u.request = nil
-		u.acceptedEventID = event.EventId
 		u.setState(stateAccepted)
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
 	})
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateRequested) })
+	eventStore.OnAfterRollback(func(context.Context) {
+		u.acceptedEventID = common.EmptyEventID
+		u.setState(stateRequested)
+	})
 	return nil
 }
 
