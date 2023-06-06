@@ -253,6 +253,30 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 			BuildIds: buildIDsCopy,
 		}
 		makeVersionInSetDefault(&modifiedData, targetSetIdx, versionInSetIdx, &timestamp)
+	} else if mergeSets := req.GetMergeSets(); mergeSets != nil {
+		if targetSetIdx == -1 {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted primary version %v not found", targetedVersion))
+		}
+		secondaryBuildID := mergeSets.GetSecondarySetBuildId()
+		secondarySetIdx, _ := findVersion(&modifiedData, secondaryBuildID)
+		if secondarySetIdx == -1 {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted secondary version %v not found", secondaryBuildID))
+		}
+		if targetSetIdx == secondarySetIdx {
+			// Nothing to be done
+			return existingData, nil
+		}
+		// Merge the sets together, preserving the primary set's default by making it have to most recent timestamp.
+		primarySet := modifiedData.VersionSets[targetSetIdx]
+		primarySet.DefaultUpdateTimestamp = &timestamp
+		justPrimaryData := &persistencespb.VersioningData{
+			VersionSets:            []*persistencespb.CompatibleVersionSet{primarySet},
+			DefaultUpdateTimestamp: modifiedData.DefaultUpdateTimestamp,
+		}
+		secondarySet := modifiedData.VersionSets[secondarySetIdx]
+		secondarySet.SetIds = mergeSetIDs(primarySet.SetIds, secondarySet.SetIds)
+		mergedData := MergeVersioningData(justPrimaryData, &modifiedData)
+		modifiedData = *mergedData
 	}
 
 	return &modifiedData, nil
@@ -265,13 +289,18 @@ func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatibilit
 		return req.GetPromoteSetByBuildId()
 	} else if req.GetPromoteBuildIdWithinSet() != "" {
 		return req.GetPromoteBuildIdWithinSet()
+	} else if req.GetAddNewBuildIdInNewDefaultSet() != "" {
+		return req.GetAddNewBuildIdInNewDefaultSet()
 	}
-	return req.GetAddNewBuildIdInNewDefaultSet()
+	return req.GetMergeSets().GetPrimarySetBuildId()
 }
 
 // Finds the version in the version sets, returning (set index, index within that set)
 // Returns -1, -1 if not found.
 func findVersion(data *persistencespb.VersioningData, buildID string) (setIndex, indexInSet int) {
+	if buildID == "" {
+		return -1, -1
+	}
 	for setIndex, set := range data.GetVersionSets() {
 		for indexInSet, version := range set.GetBuildIds() {
 			if version.Id == buildID {

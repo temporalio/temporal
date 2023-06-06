@@ -98,6 +98,16 @@ func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdCompatibility
 		},
 	}
 }
+func mkMergeSet(primaryId string, secondaryId string) *workflowservice.UpdateWorkerBuildIdCompatibilityRequest {
+	return &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_MergeSets_{
+			MergeSets: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_MergeSets{
+				PrimarySetBuildId:   primaryId,
+				SecondarySetBuildId: secondaryId,
+			},
+		},
+	}
+}
 
 func TestNewDefaultUpdate(t *testing.T) {
 	clock := hlc.Zero(1)
@@ -647,4 +657,44 @@ func TestGetBuildIdDeltas_AcceptsNils(t *testing.T) {
 	added, removed := GetBuildIdDeltas(nil, nil)
 	assert.Equal(t, []string(nil), removed)
 	assert.Equal(t, []string(nil), added)
+}
+
+func TestMergeSets(t *testing.T) {
+	clock := hlc.Zero(1)
+	initialData := mkInitialData(4, clock)
+
+	req := mkMergeSet("1", "2")
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	updatedData, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
+	assert.NoError(t, err)
+	// Should only be three sets now
+	assert.Equal(t, 3, len(updatedData.VersionSets))
+	// The overall default set should not have changed
+	assert.Equal(t, "3", updatedData.GetVersionSets()[2].GetBuildIds()[0].Id)
+	// But set 1 should now have 2, maintaining 1 as the default ID
+	assert.Equal(t, "1", updatedData.GetVersionSets()[1].GetBuildIds()[1].Id)
+	assert.Equal(t, "2", updatedData.GetVersionSets()[1].GetBuildIds()[0].Id)
+
+	// Same merge request must be idempotent
+	nextClock = hlc.Next(clock, commonclock.NewRealTimeSource())
+	updatedData2, err := UpdateVersionSets(nextClock, updatedData, req, 0, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(updatedData2.VersionSets))
+	assert.Equal(t, "3", updatedData2.GetVersionSets()[2].GetBuildIds()[0].Id)
+	assert.Equal(t, "1", updatedData2.GetVersionSets()[1].GetBuildIds()[1].Id)
+	assert.Equal(t, "2", updatedData2.GetVersionSets()[1].GetBuildIds()[0].Id)
+}
+
+func TestMergeInvalidTargets(t *testing.T) {
+	clock := hlc.Zero(1)
+	initialData := mkInitialData(4, clock)
+
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	req := mkMergeSet("lol", "2")
+	_, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
+	assert.Error(t, err)
+
+	req2 := mkMergeSet("2", "nope")
+	_, err2 := UpdateVersionSets(nextClock, initialData, req2, 0, 0)
+	assert.Error(t, err2)
 }
