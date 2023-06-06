@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -64,24 +63,7 @@ func (e *executorWrapper) Execute(
 	ctx context.Context,
 	executable Executable,
 ) ([]metrics.Tag, bool, error) {
-
-	namespaceID := executable.GetNamespaceID()
-	entry, err := e.registry.GetNamespaceByID(namespace.ID(namespaceID))
-	if err != nil {
-		e.logger.Error("Unable to find namespace. Process task as active.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
-		return e.activeExecutor.Execute(ctx, executable)
-	}
-
-	if !entry.IsOnCluster(e.currentClusterName) {
-		e.logger.Debug("Dropping task as namespace is not on current cluster", tag.WorkflowNamespaceID(executable.GetNamespaceID()), tag.Value(executable.GetTask()))
-		metricsTags := []metrics.Tag{
-			metrics.NamespaceTag(entry.Name().String()),
-			metrics.TaskTypeTag(executable.GetType().String()),
-		}
-		return metricsTags, false, consts.ErrTaskDiscarded
-	}
-
-	if e.isActiveTask(executable, entry) {
+	if e.isActiveTask(executable) {
 		return e.activeExecutor.Execute(ctx, executable)
 	}
 
@@ -90,11 +72,17 @@ func (e *executorWrapper) Execute(
 
 func (e *executorWrapper) isActiveTask(
 	executable Executable,
-	namespaceEntry *namespace.Namespace,
 ) bool {
 	// Following is the existing task allocator logic for verifying active task
-	namespaceID := namespaceEntry.ID().String()
-	if !namespaceEntry.ActiveInCluster(e.currentClusterName) {
+
+	namespaceID := executable.GetNamespaceID()
+	entry, err := e.registry.GetNamespaceByID(namespace.ID(namespaceID))
+	if err != nil {
+		e.logger.Warn("Unable to find namespace, process task as active.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
+		return true
+	}
+
+	if !entry.ActiveInCluster(e.currentClusterName) {
 		e.logger.Debug("Process task as standby.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
 		return false
 	}

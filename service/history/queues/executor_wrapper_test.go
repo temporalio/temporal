@@ -32,11 +32,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/consts"
 )
 
 const (
@@ -105,23 +103,5 @@ func (s *executorSuite) TestExecute_Standby() {
 	s.standbyExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil, false, nil).Times(1)
 	_, isActive, err := s.executor.Execute(context.Background(), executable)
 	s.NoError(err)
-	s.False(isActive)
-}
-
-func (s *executorSuite) TestExecute_Discard() {
-	executable := NewMockExecutable(s.ctrl)
-	executable.EXPECT().GetNamespaceID().Return("namespace_id").Times(2)
-	executable.EXPECT().GetTask().Return(nil)
-	executable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER)
-	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencepb.NamespaceReplicationConfig{
-		ActiveClusterName: nonCurrentCluster,
-		Clusters:          []string{nonCurrentCluster},
-	}, 1)
-	s.registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
-	s.activeExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Times(0)
-	s.standbyExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Times(0)
-	_, isActive, err := s.executor.Execute(context.Background(), executable)
-
-	s.ErrorIs(err, consts.ErrTaskDiscarded)
 	s.False(isActive)
 }
