@@ -26,9 +26,7 @@ package replication
 
 import (
 	"context"
-	"fmt"
 
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -60,7 +58,7 @@ func (p *StreamBiDirectionStreamClientProvider) Get(
 	serverShardKey ClusterShardKey,
 ) (BiDirectionStreamClient[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse], error) {
 	allClusterInfo := p.clusterMetadata.GetAllClusterInfo()
-	clusterName, err := clusterIDToClusterName(allClusterInfo, serverShardKey.ClusterID)
+	clusterName, _, err := ClusterIDToClusterNameShardCount(allClusterInfo, serverShardKey.ClusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -79,16 +77,4 @@ func (p *StreamBiDirectionStreamClientProvider) Get(
 		},
 	))
 	return adminClient.StreamWorkflowReplicationMessages(ctx)
-}
-
-func clusterIDToClusterName(
-	allClusterInfo map[string]cluster.ClusterInformation,
-	clusterID int32,
-) (string, error) {
-	for clusterName, clusterInfo := range allClusterInfo {
-		if int32(clusterInfo.InitialFailoverVersion) == clusterID {
-			return clusterName, nil
-		}
-	}
-	return "", serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
 }

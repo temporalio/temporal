@@ -55,7 +55,7 @@ type (
 		stream          *mockStream
 		taskScheduler   *mockScheduler
 
-		streamReceiver *StreamReceiver
+		streamReceiver *StreamReceiverImpl
 	}
 
 	mockStream struct {

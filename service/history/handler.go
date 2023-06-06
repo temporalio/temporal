@@ -63,7 +63,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
-	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -1910,10 +1909,41 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	if err != nil {
 		return h.convertError(err)
 	}
-	err = replicationapi.StreamReplicationTasks(server, shardContext, clientClusterShardID, serverClusterShardID)
+	engine, err := shardContext.GetEngine(server.Context())
 	if err != nil {
-		return h.convertError(err)
+		return err
 	}
+	allClusterInfo := shardContext.GetClusterMetadata().GetAllClusterInfo()
+	clientClusterName, clientShardCount, err := replication.ClusterIDToClusterNameShardCount(allClusterInfo, clientClusterShardID.ClusterID)
+	if err != nil {
+		return err
+	}
+	_, serverShardCount, err := replication.ClusterIDToClusterNameShardCount(allClusterInfo, int32(shardContext.GetClusterMetadata().GetClusterID()))
+	if err != nil {
+		return err
+	}
+	err = common.VerifyShardIDMapping(clientShardCount, serverShardCount, clientClusterShardID.ShardID, serverClusterShardID.ShardID)
+	if err != nil {
+		return err
+	}
+	streamSender := replication.NewStreamSender(
+		server,
+		shardContext,
+		engine,
+		replication.NewSourceTaskConvertor(
+			engine,
+			shardContext.GetNamespaceRegistry(),
+			clientShardCount,
+			clientClusterName,
+			replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
+		),
+		replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
+		replication.NewClusterShardKey(serverClusterShardID.ClusterID, serverClusterShardID.ShardID),
+	)
+	h.streamReceiverMonitor.RegisterInboundStream(streamSender)
+	streamSender.Start()
+	defer streamSender.Stop()
+	streamSender.Wait()
 	return nil
 }
 
