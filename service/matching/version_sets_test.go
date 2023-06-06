@@ -674,15 +674,32 @@ func TestMergeSets(t *testing.T) {
 	// But set 1 should now have 2, maintaining 1 as the default ID
 	assert.Equal(t, "1", updatedData.GetVersionSets()[1].GetBuildIds()[1].Id)
 	assert.Equal(t, "2", updatedData.GetVersionSets()[1].GetBuildIds()[0].Id)
+	assert.Equal(t, initialData.DefaultUpdateTimestamp, updatedData.DefaultUpdateTimestamp)
+	assert.Equal(t, nextClock, *updatedData.GetVersionSets()[1].DefaultUpdateTimestamp)
 
 	// Same merge request must be idempotent
-	nextClock = hlc.Next(clock, commonclock.NewRealTimeSource())
-	updatedData2, err := UpdateVersionSets(nextClock, updatedData, req, 0, 0)
+	nextClock2 := hlc.Next(nextClock, commonclock.NewRealTimeSource())
+	updatedData2, err := UpdateVersionSets(nextClock2, updatedData, req, 0, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, 3, len(updatedData2.VersionSets))
 	assert.Equal(t, "3", updatedData2.GetVersionSets()[2].GetBuildIds()[0].Id)
 	assert.Equal(t, "1", updatedData2.GetVersionSets()[1].GetBuildIds()[1].Id)
 	assert.Equal(t, "2", updatedData2.GetVersionSets()[1].GetBuildIds()[0].Id)
+	assert.Equal(t, initialData.DefaultUpdateTimestamp, updatedData2.DefaultUpdateTimestamp)
+	// Clock shouldn't have changed
+	assert.Equal(t, nextClock, *updatedData2.GetVersionSets()[1].DefaultUpdateTimestamp)
+
+	// Verify merging into the current default maintains that set as the default
+	req = mkMergeSet("3", "0")
+	nextClock3 := hlc.Next(nextClock2, commonclock.NewRealTimeSource())
+	updatedData3, err := UpdateVersionSets(nextClock3, initialData, req, 0, 0)
+	assert.Equal(t, 2, len(updatedData3.VersionSets))
+	assert.Equal(t, "3", updatedData3.GetVersionSets()[1].GetBuildIds()[1].Id)
+	assert.Equal(t, "0", updatedData3.GetVersionSets()[1].GetBuildIds()[0].Id)
+	assert.Equal(t, "1", updatedData3.GetVersionSets()[0].GetBuildIds()[1].Id)
+	assert.Equal(t, "2", updatedData3.GetVersionSets()[0].GetBuildIds()[0].Id)
+	assert.Equal(t, initialData.DefaultUpdateTimestamp, updatedData3.DefaultUpdateTimestamp)
+	assert.Equal(t, nextClock3, *updatedData3.GetVersionSets()[1].DefaultUpdateTimestamp)
 }
 
 func TestMergeInvalidTargets(t *testing.T) {
