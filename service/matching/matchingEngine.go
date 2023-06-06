@@ -1093,22 +1093,6 @@ func (e *matchingEngineImpl) getTask(
 		return nil, err
 	}
 
-	// TODO: combine with child cancellable context?
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
-		e.pollMap.add(pollerID, cancel)
-		defer e.pollMap.remove(pollerID)
-	}
-
-	identity, ok := ctx.Value(identityKey).(string)
-	if ok && identity != "" {
-		baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-		// update timestamp when long poll ends
-		defer baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-	}
-
 	taskQueue, err := e.redirectToVersionedQueueForPoll(
 		ctx,
 		baseTqm,
@@ -1123,6 +1107,22 @@ func (e *matchingEngineImpl) getTask(
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO: combine with child cancellable context?
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
+		e.pollMap.add(pollerID, cancel)
+		defer e.pollMap.remove(pollerID)
+	}
+
+	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
+		baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+		// update timestamp when long poll ends
+		defer baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+	}
+
 	return tqm.GetTask(ctx, pollMetadata)
 }
 
