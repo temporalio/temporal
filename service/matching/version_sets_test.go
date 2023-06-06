@@ -702,6 +702,9 @@ func TestMergeSets(t *testing.T) {
 	// But set 1 should now have 2, maintaining 1 as the default ID
 	assert.Equal(t, "1", updatedData.GetVersionSets()[1].GetBuildIds()[1].Id)
 	assert.Equal(t, "2", updatedData.GetVersionSets()[1].GetBuildIds()[0].Id)
+	// Ensure it has the set ids of both sets
+	bothSetIds := mergeSetIDs([]string{hashBuildId("1")}, []string{hashBuildId("2")})
+	assert.Equal(t, bothSetIds, updatedData.GetVersionSets()[1].GetSetIds())
 	assert.Equal(t, initialData.DefaultUpdateTimestamp, updatedData.DefaultUpdateTimestamp)
 	assert.Equal(t, nextClock, *updatedData.GetVersionSets()[1].DefaultUpdateTimestamp)
 
