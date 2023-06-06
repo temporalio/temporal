@@ -733,11 +733,11 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	if !ok {
 		return nil, serviceerror.NewNotFound("update not found")
 	}
-	compPtr := rec.GetCompletion()
-	if compPtr == nil {
+	completion := rec.GetCompletion()
+	if completion == nil {
 		return nil, serviceerror.NewInternal("update has not completed")
 	}
-	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(compPtr.EventId)
+	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(completion.EventId)
 	if err != nil {
 		return nil, err
 	}
@@ -745,10 +745,10 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
 		WorkflowID:  ms.executionInfo.WorkflowId,
 		RunID:       ms.executionState.RunId,
-		EventID:     compPtr.EventId,
+		EventID:     completion.EventId,
 		Version:     version,
 	}
-	event, err := ms.eventsCache.GetEvent(ctx, eventKey, compPtr.EventId-1, currentBranchToken)
+	event, err := ms.eventsCache.GetEvent(ctx, eventKey, completion.EventBatchId, currentBranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -3548,8 +3548,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(
 	if err := ms.checkMutability(tag.WorkflowActionUpdateCompleted); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID, updResp)
-	if err := ms.ReplicateWorkflowExecutionUpdateCompletedEvent(event); err != nil {
+	event, batchID := ms.hBuilder.AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID, updResp)
+	if err := ms.ReplicateWorkflowExecutionUpdateCompletedEvent(event, batchID); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -3557,6 +3557,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateCompletedEvent(
 
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
 	event *historypb.HistoryEvent,
+	batchID int64,
 ) error {
 	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
 	if attrs == nil {
@@ -3570,7 +3571,10 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionUpdateCompletedEvent(
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		sizeBefore := ui.Value.Size()
 		ui.Value = &updatespb.UpdateInfo_Completion{
-			Completion: &updatespb.CompletionInfo{EventId: event.EventId},
+			Completion: &updatespb.CompletionInfo{
+				EventId:      event.EventId,
+				EventBatchId: batchID,
+			},
 		}
 		sizeDelta = ui.Value.Size() - sizeBefore
 	} else {

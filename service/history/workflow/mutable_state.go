@@ -274,7 +274,7 @@ type (
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionUpdateCompletedEvent(*historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *HistoryBuilder)
 		SetHistoryTree(ctx context.Context, executionTimeout *time.Duration, runTimeout *time.Duration, treeID string) error

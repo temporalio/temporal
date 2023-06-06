@@ -869,7 +869,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	numCompleted := 0
 	numAccepted := 0
 	s.mutableState.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
-		if updInfo.GetCompletion() != nil {
+		if comp := updInfo.GetCompletion(); comp != nil {
 			numCompleted++
 		}
 		if updInfo.GetAcceptance() != nil {
