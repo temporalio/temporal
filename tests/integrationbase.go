@@ -234,13 +234,13 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 
 func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
-	fmt.Println(s.formatHistory(&historypb.History{Events: events}))
+	_, _ = fmt.Println(s.formatHistory(&historypb.History{Events: events}))
 }
 
 //lint:ignore U1000 used for debugging.
 func (s *IntegrationBase) printWorkflowHistoryCompact(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
-	fmt.Println(s.formatHistoryCompact(&historypb.History{Events: events}))
+	_, _ = fmt.Println(s.formatHistoryCompact(&historypb.History{Events: events}))
 }
 
 func (s *IntegrationBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
@@ -343,7 +343,7 @@ func (s *IntegrationBase) formatHistoryCompact(history *historypb.History) strin
 	s.T().Helper()
 	var sb strings.Builder
 	for _, event := range history.Events {
-		sb.WriteString(fmt.Sprintf("%3d %s\n", event.GetEventId(), event.GetEventType()))
+		_, _ = sb.WriteString(fmt.Sprintf("%3d %s\n", event.GetEventId(), event.GetEventType()))
 	}
 	if sb.Len() > 0 {
 		return sb.String()[:sb.Len()-1]
@@ -359,7 +359,7 @@ func (s *IntegrationBase) formatHistory(history *historypb.History) string {
 		eventAttrsMap := s.structToMap(eventAttrs)
 		eventAttrsJson, err := json.Marshal(eventAttrsMap)
 		s.NoError(err)
-		sb.WriteString(fmt.Sprintf("%3d %s %s\n", event.GetEventId(), event.GetEventType(), string(eventAttrsJson)))
+		_, _ = sb.WriteString(fmt.Sprintf("%3d %s %s\n", event.GetEventId(), event.GetEventType(), string(eventAttrsJson)))
 	}
 	if sb.Len() > 0 {
 		return sb.String()[:sb.Len()-1]
@@ -471,7 +471,7 @@ func (s *IntegrationBase) parseHistory(expectedHistory string) (string, map[int6
 			if strings.HasPrefix(fields[i], "//") {
 				break
 			}
-			jb.WriteString(fields[i])
+			_, _ = jb.WriteString(fields[i])
 		}
 		if jb.Len() > 0 {
 			var eventAttrs map[string]any
