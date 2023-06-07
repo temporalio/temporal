@@ -288,10 +288,13 @@ func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 ) *interceptor.RateLimitInterceptor {
 	rateFn := func() float64 { return float64(serviceConfig.RPS()) }
+	namespaceReplicationInducingRateFn := func() float64 { return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS()) }
+
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 		),
 		map[string]int{},
@@ -304,15 +307,17 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.NamespaceRateLimitInterceptor {
-	var globalNamespaceRPS, globalNamespaceVisibilityRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	switch serviceName {
 	case primitives.FrontendService:
 		globalNamespaceRPS = serviceConfig.GlobalNamespaceRPS
 		globalNamespaceVisibilityRPS = serviceConfig.GlobalNamespaceVisibilityRPS
+		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.GlobalNamespaceNamespaceReplicationInducingAPIsRPS
 	case primitives.InternalFrontendService:
 		globalNamespaceRPS = serviceConfig.InternalFEGlobalNamespaceRPS
 		globalNamespaceVisibilityRPS = serviceConfig.InternalFEGlobalNamespaceVisibilityRPS
+		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.InternalFEGlobalNamespaceNamespaceReplicationInducingAPIsRPS
 	default:
 		panic("invalid service name")
 	}
@@ -334,11 +339,20 @@ func NamespaceRateLimitInterceptorProvider(
 			namespace,
 		)
 	}
+	namespaceReplicationInducingRateFn := func(namespace string) float64 {
+		return namespaceRPS(
+			serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
+			globalNamespaceNamespaceReplicationInducingAPIsRPS,
+			frontendServiceResolver,
+			namespace,
+		)
+	}
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
 			)
 		},
