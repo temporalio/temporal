@@ -1026,6 +1026,8 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		_, buildIdsRemoved := GetBuildIdDeltas(current.GetVersioningData(), req.GetUserData().GetVersioningData())
 		var buildIdsToRevive []string
 		for _, buildId := range buildIdsRemoved {
+			// We accept that the user data is locked for updates while running these visibility queries.
+			// Nothing else is _supposed_ to update it on follower (standby) clusters.
 			exists, err := worker_versioning.WorkflowsExistForBuildId(ctx, e.visibilityManager, ns, req.TaskQueue, buildId)
 			if err != nil {
 				return nil, false, err
