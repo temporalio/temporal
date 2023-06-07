@@ -707,6 +707,12 @@ func TestMergeSets(t *testing.T) {
 	assert.Equal(t, bothSetIds, updatedData.GetVersionSets()[1].GetSetIds())
 	assert.Equal(t, initialData.DefaultUpdateTimestamp, updatedData.DefaultUpdateTimestamp)
 	assert.Equal(t, nextClock, *updatedData.GetVersionSets()[1].DefaultUpdateTimestamp)
+	// Initial data should not have changed
+	assert.Equal(t, 4, len(initialData.VersionSets))
+	for _, set := range initialData.VersionSets {
+		assert.Equal(t, 1, len(set.GetSetIds()))
+		assert.Equal(t, clock, *set.DefaultUpdateTimestamp)
+	}
 
 	// Same merge request must be idempotent
 	nextClock2 := hlc.Next(nextClock, commonclock.NewRealTimeSource())
@@ -723,7 +729,7 @@ func TestMergeSets(t *testing.T) {
 	// Verify merging into the current default maintains that set as the default
 	req = mkMergeSet("3", "0")
 	nextClock3 := hlc.Next(nextClock2, commonclock.NewRealTimeSource())
-	updatedData3, err := UpdateVersionSets(nextClock3, initialData, req, 0, 0)
+	updatedData3, err := UpdateVersionSets(nextClock3, updatedData2, req, 0, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(updatedData3.VersionSets))
 	assert.Equal(t, "3", updatedData3.GetVersionSets()[1].GetBuildIds()[1].Id)

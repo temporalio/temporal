@@ -266,15 +266,22 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 			// Nothing to be done
 			return existingData, nil
 		}
-		// Merge the sets together, preserving the primary set's default by making it have to most recent timestamp.
+		// Merge the sets together, preserving the primary set's default by making it have the most recent timestamp.
 		primarySet := modifiedData.VersionSets[targetSetIdx]
-		primarySet.DefaultUpdateTimestamp = &timestamp
 		justPrimaryData := &persistencespb.VersioningData{
-			VersionSets:            []*persistencespb.CompatibleVersionSet{primarySet},
+			VersionSets: []*persistencespb.CompatibleVersionSet{{
+				SetIds:                 primarySet.SetIds,
+				BuildIds:               primarySet.BuildIds,
+				DefaultUpdateTimestamp: &timestamp,
+			}},
 			DefaultUpdateTimestamp: modifiedData.DefaultUpdateTimestamp,
 		}
 		secondarySet := modifiedData.VersionSets[secondarySetIdx]
-		secondarySet.SetIds = mergeSetIDs(primarySet.SetIds, secondarySet.SetIds)
+		modifiedData.VersionSets[secondarySetIdx] = &persistencespb.CompatibleVersionSet{
+			SetIds:                 mergeSetIDs(primarySet.SetIds, secondarySet.SetIds),
+			BuildIds:               secondarySet.BuildIds,
+			DefaultUpdateTimestamp: secondarySet.DefaultUpdateTimestamp,
+		}
 		mergedData := MergeVersioningData(justPrimaryData, &modifiedData)
 		modifiedData = *mergedData
 	}
