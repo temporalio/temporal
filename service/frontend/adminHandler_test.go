@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
 
 	"google.golang.org/grpc/health"
@@ -62,7 +63,6 @@ import (
 	clientmocks "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -120,7 +120,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resourcetest.NewTest(s.controller, metrics.Frontend)
+	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockExecutionMgr = s.mockResource.ExecutionMgr

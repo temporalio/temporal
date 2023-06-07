@@ -41,9 +41,6 @@ type (
 		metricName MetricName // metric name
 		unit       MetricUnit
 	}
-
-	// ServiceIdx is an index that uniquely identifies the service
-	ServiceIdx int
 )
 
 // MetricUnit supported values
