@@ -411,10 +411,12 @@ func (db *taskQueueDB) UpdateUserData(
 		BuildIdsAdded:   added,
 		BuildIdsRemoved: removed,
 	})
+	var updatedVersionedData *persistencespb.VersionedTaskQueueUserData
 	if err == nil {
-		db.setUserDataLocked(&persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData})
+		updatedVersionedData = &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData}
+		db.setUserDataLocked(updatedVersionedData)
 	}
-	return db.userData, shouldReplicate, err
+	return updatedVersionedData, shouldReplicate, err
 }
 
 func (db *taskQueueDB) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {

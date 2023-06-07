@@ -2565,17 +2565,19 @@ func (s *advancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	run, err := s.sysSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name() + "-scavenger",
 		TaskQueue: build_ids.BuildIdScavengerTaskQueueName,
-	}, build_ids.BuildIdScavangerWorkflowName)
+	}, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerInput{
+		BuildIdRemovalMinAge: time.Microsecond,
+	})
 	s.Require().NoError(err)
 	err = run.Get(ctx, nil)
 	s.Require().NoError(err)
 
-	versionSets, err := s.sdkClient.GetWorkerBuildIdCompatibility(ctx, &sdkclient.GetWorkerBuildIdCompatibilityOptions{
+	compatibility, err := s.sdkClient.GetWorkerBuildIdCompatibility(ctx, &sdkclient.GetWorkerBuildIdCompatibilityOptions{
 		TaskQueue: tq,
 	})
 	s.Require().NoError(err)
-	s.Require().Equal(1, len(versionSets.Sets))
-	s.Require().Equal([]string{v1}, versionSets.Sets[0].BuildIDs)
+	s.Require().Equal(1, len(compatibility.Sets))
+	s.Require().Equal([]string{v1}, compatibility.Sets[0].BuildIDs)
 }
 
 func (s *advancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {

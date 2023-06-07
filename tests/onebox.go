@@ -546,7 +546,14 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
-		c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
+		c.logger.Fatal("Failed to copy persistence config for matching", tag.Error(err))
+	}
+	if c.esConfig != nil {
+		esDataStoreName := "es-visibility"
+		persistenceConfig.AdvancedVisibilityStore = esDataStoreName
+		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
+			Elasticsearch: c.esConfig,
+		}
 	}
 
 	stoppedCh := make(chan struct{})
