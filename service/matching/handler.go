@@ -108,6 +108,7 @@ func NewHandler(
 
 // Start starts the handler
 func (h *Handler) Start() {
+	h.engine.Start()
 	h.startWG.Done()
 }
 

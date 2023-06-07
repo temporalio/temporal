@@ -145,7 +145,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		case sqlite.PluginName:
 			options.DBPort = 0
 		default:
-			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
+			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
 		}
 	}
 	if options.DBHost == "" {
@@ -157,7 +157,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		case sqlite.PluginName:
 			options.DBHost = environment.Localhost
 		default:
-			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
+			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
 		}
 	}
 	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.ConnectAttributes, options.SchemaDir, options.FaultInjection, logger)

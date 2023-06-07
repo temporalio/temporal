@@ -204,6 +204,8 @@ func (e *matchingEngineImpl) Stop() {
 		return
 	}
 
+	e.visibilityManager.Close()
+
 	for _, l := range e.getTaskQueues(math.MaxInt32) {
 		l.Stop()
 	}
