@@ -75,6 +75,11 @@ func (s *versioningIntegSuite) SetupSuite() {
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode:        partitionTreeDegree,
 		dynamicconfig.TaskQueuesPerBuildIdLimit:                  3,
 
+		// Make sure we don't hit the rate limiter in tests
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: 1000,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
+
 		// The dispatch tests below rely on being able to see the effects of changing
 		// versioning data relatively quickly. In general we only promise to act on new
 		// versioning data "soon", i.e. after a long poll interval. We can reduce the long poll
