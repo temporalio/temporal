@@ -91,7 +91,6 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	visiblityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Times(4).DoAndReturn(
 		func(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
 			count := 0
-			fmt.Println(request.Query)
 			if strings.Contains(request.Query, fmt.Sprintf("'%s'", worker_versioning.VersionedBuildIdSearchAttribute("v3.0"))) {
 				count = 1
 			}

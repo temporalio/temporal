@@ -2217,6 +2217,34 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	s.NotNil(res.UserData.Data.VersioningData)
 }
 
+func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
+
+	userData := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
+	}
+	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: namespaceID.String(),
+			TaskQueue:   tq,
+			UserData:    userData,
+		})
+
+	_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   tq,
+		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_{
+			RemoveBuildIds: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds{
+				KnownUserDataVersion: 1,
+			},
+		},
+	})
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPreconditionError)
+}
+
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
