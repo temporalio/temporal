@@ -680,7 +680,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				return nil, err
 			}
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
-			if err := b.mutableState.ReplicateWorkflowExecutionUpdateCompletedEvent(event); err != nil {
+			if err := b.mutableState.ReplicateWorkflowExecutionUpdateCompletedEvent(event, firstEvent.GetEventId()); err != nil {
 				return nil, err
 			}
 

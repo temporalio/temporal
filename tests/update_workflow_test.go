@@ -314,15 +314,16 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // Normal WT events were written for speculative WT at complete.
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
   9 WorkflowExecutionUpdateAccepted
- 10 WorkflowExecutionUpdateCompleted
+ 10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
- 14 WorkflowExecutionCompleted`, events)
+ 14 WorkflowExecutionCompleted
+`, events)
 		})
 	}
 }
@@ -2965,8 +2966,6 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 	s.Equal(4, wtHandlerCalls)
 	s.Equal(4, msgHandlerCalls)
 
-	s.printWorkflowHistoryCompact(s.namespace, tv.WorkflowExecution())
-
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -3082,6 +3081,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTas
 	// Close shard, Speculative WT with update will be lost.
 	s.closeShard(tv.WorkflowID())
 
+	// Ensure, there is no new WT.
 	pollCtx, cancel := context.WithTimeout(NewContext(), common.MinLongPollTimeout+100*time.Millisecond)
 	defer cancel()
 	pollResponse, err := s.engine.PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -3092,6 +3092,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTas
 	s.NoError(err)
 	s.Nil(pollResponse.Messages)
 
+	// Wait for update API call to timeout.
 	<-updateResultCh
 
 	// Send signal to schedule new WT.
@@ -3268,4 +3269,428 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
   8 WorkflowTaskStarted
   9 WorkflowTaskCompleted
  10 WorkflowExecutionCompleted`, events)
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_DeduplicateID() {
+	tv := testvars.New(s.T().Name())
+
+	tv = s.startWorkflow(tv)
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Completes first WT with update unrelated command.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             tv.ActivityID(),
+					ActivityType:           tv.ActivityType(),
+					TaskQueue:              tv.TaskQueue(),
+					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+				}},
+			}}, nil
+		case 2:
+			// Speculative WT, with update.Request message.
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted`, history)
+			return s.acceptCompleteUpdateCommands(tv, "1"), nil
+		case 3:
+			s.EqualHistory(`
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionUpdateAccepted
+ 10 WorkflowExecutionUpdateCompleted
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted`, history)
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+			}}, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		case 2:
+			s.Len(task.Messages, 1, "2nd update must be deduplicated by ID")
+			updRequestMsg := task.Messages[0]
+
+			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+		case 3:
+			s.Empty(task.Messages, "2nd update must be deduplicated by ID")
+			return nil, nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Drain exiting first workflow task.
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(err)
+
+	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+	go func() {
+		updateResultCh <- s.sendUpdateNoError(tv, "1")
+	}()
+
+	// Send second update with the same ID.
+	updateResultCh2 := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+	go func() {
+		updateResultCh2 <- s.sendUpdateNoError(tv, "1")
+	}()
+
+	// Process update in workflow.
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	s.NoError(err)
+	updateResult := <-updateResultCh
+	updateResult2 := <-updateResultCh2
+	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
+	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult2.GetOutcome().GetSuccess()))
+	s.EqualValues(0, updateResp.ResetHistoryEventId)
+
+	// Complete workflow.
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	s.NoError(err)
+	s.NotNil(completeWorkflowResp)
+	s.Nil(completeWorkflowResp.GetWorkflowTask())
+	s.EqualValues(0, completeWorkflowResp.ResetHistoryEventId)
+
+	s.Equal(3, wtHandlerCalls)
+	s.Equal(3, msgHandlerCalls)
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionUpdateAccepted
+ 10 WorkflowExecutionUpdateCompleted
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted
+ 14 WorkflowExecutionCompleted`, events)
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_DeduplicateID() {
+	tv := testvars.New(s.T().Name())
+
+	tv = s.startWorkflow(tv)
+
+	updateResultCh2 := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Completes first WT with update unrelated command.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             tv.ActivityID(),
+					ActivityType:           tv.ActivityType(),
+					TaskQueue:              tv.TaskQueue(),
+					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+				}},
+			}}, nil
+		case 2:
+			// Send second update with the same ID when WT is started but not completed.
+			go func() {
+				updateResultCh2 <- s.sendUpdateNoError(tv, "1")
+			}()
+
+			// Speculative WT, with update.Request message.
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted`, history)
+			return s.acceptCompleteUpdateCommands(tv, "1"), nil
+		case 3:
+			s.EqualHistory(`
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionUpdateAccepted
+ 10 WorkflowExecutionUpdateCompleted
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted`, history)
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+			}}, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		case 2:
+			s.Len(task.Messages, 1, "2nd update should not has reached server yet")
+			updRequestMsg := task.Messages[0]
+			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+		case 3:
+			s.Empty(task.Messages, "2nd update must be deduplicated by ID ")
+			return nil, nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Drain exiting first workflow task.
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(err)
+
+	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+	go func() {
+		updateResultCh <- s.sendUpdateNoError(tv, "1")
+	}()
+
+	// Process update in workflow.
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	s.NoError(err)
+	updateResult := <-updateResultCh
+	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
+	s.EqualValues(0, updateResp.ResetHistoryEventId)
+
+	updateResult2 := <-updateResultCh2
+	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult2.GetOutcome().GetSuccess()))
+
+	// Complete workflow.
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	s.NoError(err)
+	s.NotNil(completeWorkflowResp)
+	s.Nil(completeWorkflowResp.GetWorkflowTask())
+	s.EqualValues(0, completeWorkflowResp.ResetHistoryEventId)
+
+	s.Equal(3, wtHandlerCalls)
+	s.Equal(3, msgHandlerCalls)
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionUpdateAccepted
+ 10 WorkflowExecutionUpdateCompleted
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted
+ 14 WorkflowExecutionCompleted`, events)
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_DeduplicateID() {
+	testCases := []struct {
+		Name       string
+		CloseShard bool
+	}{
+		{
+			Name:       "no shard reload",
+			CloseShard: false,
+		},
+		{
+			Name:       "with shard reload",
+			CloseShard: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.Name, func() {
+			tv := testvars.New(s.T().Name())
+
+			tv = s.startWorkflow(tv)
+
+			wtHandlerCalls := 0
+			wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+				wtHandlerCalls++
+				switch wtHandlerCalls {
+				case 1:
+					// Completes first WT with update unrelated command.
+					return []*commandpb.Command{{
+						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             tv.ActivityID(),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+						}},
+					}}, nil
+				case 2:
+					// Speculative WT, with update.Request message.
+					s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted`, history)
+					return s.acceptCompleteUpdateCommands(tv, "1"), nil
+				case 3:
+					return []*commandpb.Command{{
+						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+					}}, nil
+				default:
+					s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+					return nil, nil
+				}
+			}
+
+			msgHandlerCalls := 0
+			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+				msgHandlerCalls++
+				switch msgHandlerCalls {
+				case 1:
+					return nil, nil
+				case 2:
+					updRequestMsg := task.Messages[0]
+					return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+				case 3:
+					s.Empty(task.Messages, "2nd update must be deduplicated by ID ")
+					return nil, nil
+				default:
+					s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+					return nil, nil
+				}
+			}
+
+			poller := &TaskPoller{
+				Engine:              s.engine,
+				Namespace:           s.namespace,
+				TaskQueue:           tv.TaskQueue(),
+				WorkflowTaskHandler: wtHandler,
+				MessageHandler:      msgHandler,
+				Logger:              s.Logger,
+				T:                   s.T(),
+			}
+
+			// Drain exiting first workflow task.
+			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			s.NoError(err)
+
+			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+			go func() {
+				updateResultCh <- s.sendUpdateNoError(tv, "1")
+			}()
+
+			// Process update in workflow.
+			_, err = poller.PollAndProcessWorkflowTask(false, false)
+			s.NoError(err)
+			updateResult := <-updateResultCh
+			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
+
+			if tc.CloseShard {
+				// Close shard to make sure that for completed updates deduplication works even after shard reload.
+				s.closeShard(tv.WorkflowID())
+			}
+
+			// Send second update with the same ID.
+			updateResultCh2 := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+			go func() {
+				updateResultCh2 <- s.sendUpdateNoError(tv, "1")
+			}()
+
+			// Ensure, there is no new WT.
+			pollCtx, cancel := context.WithTimeout(NewContext(), common.MinLongPollTimeout+100*time.Millisecond)
+			defer cancel()
+			pollResponse, err := s.engine.PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+				Namespace: s.namespace,
+				TaskQueue: tv.TaskQueue(),
+				Identity:  tv.WorkerIdentity(),
+			})
+			s.NoError(err)
+			s.Nil(pollResponse.Messages)
+
+			// But results of the first update are available.
+			updateResult2 := <-updateResultCh2
+			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult2.GetOutcome().GetSuccess()))
+
+			// Send signal to schedule new WT.
+			err = s.sendSignal(s.namespace, tv.WorkflowExecution(), tv.Any(), payloads.EncodeString(tv.Any()), tv.Any())
+			s.NoError(err)
+
+			// Complete workflow.
+			completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+			s.NoError(err)
+			s.NotNil(completeWorkflowResp)
+
+			s.Equal(3, wtHandlerCalls)
+			s.Equal(3, msgHandlerCalls)
+
+			events := s.getHistory(s.namespace, tv.WorkflowExecution())
+
+			s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionUpdateAccepted
+ 10 WorkflowExecutionUpdateCompleted
+ 11 WorkflowExecutionSignaled
+ 12 WorkflowTaskScheduled
+ 13 WorkflowTaskStarted
+ 14 WorkflowTaskCompleted
+ 15 WorkflowExecutionCompleted`, events)
+		})
+	}
 }

@@ -2456,17 +2456,17 @@ func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionUpdateAccepted
 }
 
 // ReplicateWorkflowExecutionUpdateCompletedEvent mocks base method.
-func (m *MockMutableState) ReplicateWorkflowExecutionUpdateCompletedEvent(arg0 *v13.HistoryEvent) error {
+func (m *MockMutableState) ReplicateWorkflowExecutionUpdateCompletedEvent(event *v13.HistoryEvent, batchID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateWorkflowExecutionUpdateCompletedEvent", arg0)
+	ret := m.ctrl.Call(m, "ReplicateWorkflowExecutionUpdateCompletedEvent", event, batchID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReplicateWorkflowExecutionUpdateCompletedEvent indicates an expected call of ReplicateWorkflowExecutionUpdateCompletedEvent.
-func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionUpdateCompletedEvent(arg0 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionUpdateCompletedEvent(event, batchID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowExecutionUpdateCompletedEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateWorkflowExecutionUpdateCompletedEvent), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowExecutionUpdateCompletedEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateWorkflowExecutionUpdateCompletedEvent), event, batchID)
 }
 
 // ReplicateWorkflowPropertiesModifiedEvent mocks base method.

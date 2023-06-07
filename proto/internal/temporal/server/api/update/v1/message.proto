@@ -33,6 +33,9 @@ message AcceptanceInfo {
 message CompletionInfo {
     // the event ID of the WorkflowExecutionUpdateCompletedEvent
     int64 event_id = 1;
+
+    // the ID of the event batch containing the event_id above
+    int64 event_batch_id = 2;
 }
 
 // UpdateInfo is the persistent state of a single update
