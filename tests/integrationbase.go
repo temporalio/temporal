@@ -403,9 +403,11 @@ func (s *IntegrationBase) EqualHistory(expectedHistory string, actualHistory *hi
 	expectedCompactHistory, expectedEventsAttributes := s.parseHistory(expectedHistory)
 	actualCompactHistory := s.formatHistoryCompact(actualHistory)
 	s.Equal(expectedCompactHistory, actualCompactHistory)
-	for eventID, expectedEventAttributes := range expectedEventsAttributes {
-		actualEventAttributes := reflect.ValueOf(actualHistory.Events[eventID-1].Attributes).Elem().Field(0).Elem()
-		s.equalStructToMap(expectedEventAttributes, actualEventAttributes, eventID, "")
+	for _, actualHistoryEvent := range actualHistory.Events {
+		if expectedEventAttributes, ok := expectedEventsAttributes[actualHistoryEvent.EventId]; ok {
+			actualEventAttributes := reflect.ValueOf(actualHistoryEvent.Attributes).Elem().Field(0).Elem()
+			s.equalStructToMap(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.EventId, "")
+		}
 	}
 }
 
@@ -448,14 +450,14 @@ func (s *IntegrationBase) parseHistory(expectedHistory string) (string, map[int6
 			continue
 		}
 		if len(fields) < 2 {
-			s.FailNowf("", "Not enough fields in line %d", lineNum+1)
+			s.FailNowf("", "Not enough fields on line %d", lineNum+1)
 		}
 		eventID, err := strconv.Atoi(fields[0])
 		if err != nil {
-			s.FailNowf(err.Error(), "Failed to parse EventID in line %d", lineNum+1)
+			s.FailNowf(err.Error(), "Failed to parse EventID on line %d", lineNum+1)
 		}
 		if eventID != prevEventID+1 && prevEventID != 0 {
-			s.FailNowf("", "Wrong EventID sequence after EventID %d in line %d", prevEventID, lineNum+1)
+			s.FailNowf("", "Wrong EventID sequence after EventID %d on line %d", prevEventID, lineNum+1)
 		}
 		prevEventID = eventID
 		eventType, ok := enumspb.EventType_value[fields[1]]
