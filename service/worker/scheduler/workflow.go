@@ -180,7 +180,7 @@ var (
 	errUpdateConflict = errors.New("conflicting concurrent update")
 )
 
-func SchedulerWorkflow(ctx workflow.Context, args *schedspb.StartScheduleArgs) error {
+func SchedulerWorkflow(ctx workflow.Context, args *schedspb.StartScheduleArgs) (*schedspb.StartScheduleArgs, error) {
 	scheduler := &scheduler{
 		StartScheduleArgs: *args,
 		ctx:               ctx,
@@ -191,16 +191,16 @@ func SchedulerWorkflow(ctx workflow.Context, args *schedspb.StartScheduleArgs) e
 	return scheduler.run()
 }
 
-func (s *scheduler) run() error {
+func (s *scheduler) run() (*schedspb.StartScheduleArgs, error) {
 	s.updateTweakables()
 	s.ensureFields()
 	s.compileSpec()
 
 	if err := workflow.SetQueryHandler(s.ctx, QueryNameDescribe, s.handleDescribeQuery); err != nil {
-		return err
+		return nil, err
 	}
 	if err := workflow.SetQueryHandler(s.ctx, QueryNameListMatchingTimes, s.handleListMatchingTimesQuery); err != nil {
-		return err
+		return nil, err
 	}
 
 	if s.State.LastProcessedTime == nil {
@@ -248,9 +248,15 @@ func (s *scheduler) run() error {
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
-		// if run out of actions, finish the schedule workflow
-		if s.hasMinVersion(FinishIdleSchedule) && (nextWakeup.IsZero() || (!s.Schedule.State.Paused && !s.canTakeScheduledAction(false, false))) {
-			return nil
+		// if run out of actions or no more jobs to run, finish the schedule workflow
+		for s.hasMinVersion(FinishIdleSchedule) && (nextWakeup.IsZero() || (!s.Schedule.State.Paused && !s.canTakeScheduledAction(false, false))) {
+			// handle signals before closing
+			scheduleChanged = s.processSignals()
+			if !scheduleChanged {
+				s.logger.Info("Closing schedule")
+				return &s.StartScheduleArgs, nil
+			}
+			nextWakeup = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false)
 		}
 		// sleep returns on any of:
 		// 1. requested time elapsed
@@ -264,7 +270,7 @@ func (s *scheduler) run() error {
 	// Any watcher activities will get cancelled automatically if running.
 
 	s.logger.Debug("Schedule doing continue-as-new")
-	return workflow.NewContinueAsNewError(s.ctx, WorkflowType, &s.StartScheduleArgs)
+	return nil, workflow.NewContinueAsNewError(s.ctx, WorkflowType, &s.StartScheduleArgs)
 }
 
 func (s *scheduler) ensureFields() {

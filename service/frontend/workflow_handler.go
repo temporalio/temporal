@@ -2876,6 +2876,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	wh.addInitialScheduleMemo(request, input)
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
+
 		Namespace:             request.Namespace,
 		WorkflowId:            workflowID,
 		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
@@ -2985,9 +2986,12 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	}
 
 	executionInfo := describeResponse.GetWorkflowExecutionInfo()
-	if executionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		// only treat running schedules as existing
+	switch executionInfo.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+	default:
 		return nil, serviceerror.NewNotFound("schedule not found")
+
 	}
 
 	// map search attributes
@@ -3036,6 +3040,10 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 
 		// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
 
+		// proceed only if the schedule workflow is still running
+		if executionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			return nil
+		}
 		// for all running workflows started by the schedule, we should check that they're
 		// still running, and if not, poke the schedule to refresh
 		needRefresh := false
@@ -3167,13 +3175,51 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	input := &schedspb.FullUpdateRequest{
+	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
+
+	// describe to get memo, search attributes, and execution info
+	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: request.Namespace,
+			Execution: execution,
+		},
+	})
+	if err != nil {
+		// TODO: rewrite "workflow" in error messages to "schedule"
+		return nil, err
+	}
+
+	executionInfo := describeResponse.GetWorkflowExecutionInfo()
+	switch executionInfo.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+	default:
+		return nil, serviceerror.NewNotFound("schedule not found")
+	}
+
+	// Set up input to scheduler workflow
+	input := &schedspb.StartScheduleArgs{
+		Schedule: request.Schedule,
+		State: &schedspb.InternalState{
+			Namespace:     namespaceName.String(),
+			NamespaceId:   namespaceID.String(),
+			ScheduleId:    request.ScheduleId,
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+	}
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
+	if err != nil {
+		return nil, err
+	}
+
+	signalInput := &schedspb.FullUpdateRequest{
 		Schedule: request.Schedule,
 	}
 	if len(request.ConflictToken) >= 8 {
-		input.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
+		signalInput.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
 	}
-	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
+	signalInputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(signalInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3181,7 +3227,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 	if err := common.CheckEventBlobSizeLimit(
-		inputPayloads.Size(),
+		signalInputPayloads.Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID.String(),
@@ -3194,15 +3240,21 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+	_, err = wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-			SignalName:        scheduler.SignalNameUpdate,
-			Input:             inputPayloads,
-			Identity:          request.Identity,
-			RequestId:         request.RequestId,
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			Namespace:             request.Namespace,
+			WorkflowId:            workflowID,
+			WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+			TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			Input:                 inputPayloads,
+			SignalName:            scheduler.SignalNameUpdate,
+			SignalInput:           signalInputPayloads,
+			Identity:              request.Identity,
+			RequestId:             request.RequestId,
+			SearchAttributes:      executionInfo.SearchAttributes,
+			Memo:                  executionInfo.GetMemo(),
 		},
 	})
 	if err != nil {
@@ -3240,7 +3292,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, errNotesTooLong
 	}
 
-	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(request.Patch)
+	signalInputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(request.Patch)
 	if err != nil {
 		return nil, err
 	}
@@ -3248,7 +3300,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 	if err := common.CheckEventBlobSizeLimit(
-		inputPayloads.Size(),
+		signalInputPayloads.Size(),
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID.String(),
@@ -3261,15 +3313,78 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, err
 	}
 
-	_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
+
+	// describe to get memo, search attributes, and execution info
+	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-			SignalName:        scheduler.SignalNamePatch,
-			Input:             inputPayloads,
-			Identity:          request.Identity,
-			RequestId:         request.RequestId,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: request.Namespace,
+			Execution: execution,
+		},
+	})
+	if err != nil {
+		// TODO: rewrite "workflow" in error messages to "schedule"
+		return nil, err
+	}
+
+	executionInfo := describeResponse.GetWorkflowExecutionInfo()
+	var startScheduleArgs schedspb.StartScheduleArgs
+	switch executionInfo.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		reverseHistory, err := wh.GetWorkflowExecutionHistoryReverse(ctx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+			Namespace:       request.Namespace,
+			Execution:       execution,
+			MaximumPageSize: 1,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if reverseHistory.History.GetEvents()[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+			return nil, serviceerror.NewInternal("schedule result cannot be loaded")
+
+		}
+		err = sdk.PreferProtoDataConverter.FromPayloads(reverseHistory.History.GetEvents()[0].GetWorkflowExecutionCompletedEventAttributes().Result, &startScheduleArgs)
+		if err != nil {
+			return nil, err
+		}
+
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+	default:
+		return nil, serviceerror.NewNotFound("schedule not found")
+	}
+
+	// Set up input to scheduler workflow
+	input := &schedspb.StartScheduleArgs{
+		Schedule:     startScheduleArgs.Schedule,
+		InitialPatch: request.Patch,
+		State: &schedspb.InternalState{
+			Namespace:     request.Namespace,
+			NamespaceId:   namespaceID.String(),
+			ScheduleId:    request.ScheduleId,
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+	}
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			Namespace:             request.Namespace,
+			WorkflowId:            workflowID,
+			Input:                 inputPayloads,
+			SignalName:            scheduler.SignalNamePatch,
+			SignalInput:           signalInputPayloads,
+			Identity:              request.Identity,
+			RequestId:             request.RequestId,
+			WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+			TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			SearchAttributes:      executionInfo.SearchAttributes,
+			Memo:                  executionInfo.GetMemo(),
 		},
 	})
 	if err != nil {
@@ -3396,26 +3511,25 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
-	if err != nil {
-		return nil, err
-	}
 
 	if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
 		return nil, errListNotAllowed
 	}
 
-	persistenceResp, err := wh.visibilityMrg.ListOpenWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
-		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{
-			NamespaceID:       namespaceID,
-			Namespace:         namespaceName,
-			NamespaceDivision: scheduler.NamespaceDivision,
-			PageSize:          int(request.GetMaximumPageSize()),
-			NextPageToken:     request.NextPageToken,
-			EarliestStartTime: minTime,
-			LatestStartTime:   maxTime,
-		},
-		WorkflowTypeName: scheduler.WorkflowType,
+	persistenceResp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace:     namespaceName.String(),
+		PageSize:      int32(request.GetMaximumPageSize()),
+		NextPageToken: request.NextPageToken,
+		Query: fmt.Sprintf("%s = '%s' and %s = '%s' and (%s = '%s' or %s = '%s')",
+			searchattribute.WorkflowType,
+			scheduler.WorkflowType,
+			searchattribute.TemporalNamespaceDivision,
+			scheduler.NamespaceDivision,
+			searchattribute.ExecutionStatus,
+			enumspb.WorkflowExecutionStatus_name[int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)],
+			searchattribute.ExecutionStatus,
+			enumspb.WorkflowExecutionStatus_name[int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)],
+		),
 	})
 	if err != nil {
 		return nil, err
