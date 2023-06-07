@@ -1842,7 +1842,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionUpdateComp
 			WorkflowExecutionUpdateCompletedEventAttributes: &historypb.WorkflowExecutionUpdateCompletedEventAttributes{},
 		},
 	}
-	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionUpdateCompletedEvent(event).Return(nil)
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionUpdateCompletedEvent(event, event.EventId).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
