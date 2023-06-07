@@ -314,15 +314,16 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // Normal WT events were written for speculative WT at complete.
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
   9 WorkflowExecutionUpdateAccepted
- 10 WorkflowExecutionUpdateCompleted
+ 10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
- 14 WorkflowExecutionCompleted`, events)
+ 14 WorkflowExecutionCompleted
+`, events)
 		})
 	}
 }
@@ -2965,8 +2966,6 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 	s.Equal(4, wtHandlerCalls)
 	s.Equal(4, msgHandlerCalls)
 
-	s.printWorkflowHistoryCompact(s.namespace, tv.WorkflowExecution())
-
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -3636,14 +3635,10 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 
-			s.printWorkflowHistoryCompact(s.namespace, tv.WorkflowExecution())
-
 			if tc.CloseShard {
 				// Close shard to make sure that for completed updates deduplication works even after shard reload.
 				s.closeShard(tv.WorkflowID())
 			}
-
-			s.printWorkflowHistoryCompact(s.namespace, tv.WorkflowExecution())
 
 			// Send second update with the same ID.
 			updateResultCh2 := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
