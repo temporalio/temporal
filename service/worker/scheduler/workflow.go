@@ -249,14 +249,8 @@ func (s *scheduler) run() (*schedspb.StartScheduleArgs, error) {
 		}
 		s.updateMemoAndSearchAttributes()
 		// if run out of actions or no more jobs to run, finish the schedule workflow
-		for s.hasMinVersion(FinishIdleSchedule) && (nextWakeup.IsZero() || (!s.Schedule.State.Paused && !s.canTakeScheduledAction(false, false))) {
-			// handle signals before closing
-			scheduleChanged = s.processSignals()
-			if !scheduleChanged {
-				s.logger.Info("Closing schedule")
-				return &s.StartScheduleArgs, nil
-			}
-			nextWakeup = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false)
+		if s.hasMinVersion(FinishIdleSchedule) && (nextWakeup.IsZero() || (!s.Schedule.State.Paused && !s.canTakeScheduledAction(false, false))) {
+			return &s.StartScheduleArgs, nil
 		}
 		// sleep returns on any of:
 		// 1. requested time elapsed

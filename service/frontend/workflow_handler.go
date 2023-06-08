@@ -2985,6 +2985,8 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return nil, err
 	}
 
+	// only treat running or completed schedules as existing
+	// users can only interact with schedules in these two states
 	executionInfo := describeResponse.GetWorkflowExecutionInfo()
 	switch executionInfo.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
@@ -3040,10 +3042,6 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 
 		// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
 
-		// proceed only if the schedule workflow is still running
-		if executionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			return nil
-		}
 		// for all running workflows started by the schedule, we should check that they're
 		// still running, and if not, poke the schedule to refresh
 		needRefresh := false
@@ -3083,6 +3081,10 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		}
 		signalsLeft--
 
+		// proceed only if the schedule workflow is still running
+		if executionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			return errWaitForRefresh
+		}
 		// poke to refresh
 		_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
 			NamespaceId: namespaceID.String(),
@@ -3175,40 +3177,13 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
-
-	// describe to get memo, search attributes, and execution info
-	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: request.Namespace,
-			Execution: execution,
-		},
-	})
+	executionInfo, startScheduledArgs, err := wh.getScheduleExecutionInfoAndSchedulingArgs(ctx, workflowID, namespaceName.String(), namespaceID)
 	if err != nil {
-		// TODO: rewrite "workflow" in error messages to "schedule"
 		return nil, err
 	}
+	startScheduledArgs.Schedule = request.Schedule
 
-	executionInfo := describeResponse.GetWorkflowExecutionInfo()
-	switch executionInfo.GetStatus() {
-	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
-	default:
-		return nil, serviceerror.NewNotFound("schedule not found")
-	}
-
-	// Set up input to scheduler workflow
-	input := &schedspb.StartScheduleArgs{
-		Schedule: request.Schedule,
-		State: &schedspb.InternalState{
-			Namespace:     namespaceName.String(),
-			NamespaceId:   namespaceID.String(),
-			ScheduleId:    request.ScheduleId,
-			ConflictToken: scheduler.InitialConflictToken,
-		},
-	}
-	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startScheduledArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -3313,59 +3288,13 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, err
 	}
 
-	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
-
-	// describe to get memo, search attributes, and execution info
-	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: request.Namespace,
-			Execution: execution,
-		},
-	})
+	executionInfo, startScheduledArgs, err := wh.getScheduleExecutionInfoAndSchedulingArgs(ctx, workflowID, request.Namespace, namespaceID)
 	if err != nil {
-		// TODO: rewrite "workflow" in error messages to "schedule"
 		return nil, err
 	}
+	startScheduledArgs.InitialPatch = request.Patch
 
-	executionInfo := describeResponse.GetWorkflowExecutionInfo()
-	var startScheduleArgs schedspb.StartScheduleArgs
-	switch executionInfo.GetStatus() {
-	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-		reverseHistory, err := wh.GetWorkflowExecutionHistoryReverse(ctx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
-			Namespace:       request.Namespace,
-			Execution:       execution,
-			MaximumPageSize: 1,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if reverseHistory.History.GetEvents()[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
-			return nil, serviceerror.NewInternal("schedule result cannot be loaded")
-
-		}
-		err = sdk.PreferProtoDataConverter.FromPayloads(reverseHistory.History.GetEvents()[0].GetWorkflowExecutionCompletedEventAttributes().Result, &startScheduleArgs)
-		if err != nil {
-			return nil, err
-		}
-
-	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
-	default:
-		return nil, serviceerror.NewNotFound("schedule not found")
-	}
-
-	// Set up input to scheduler workflow
-	input := &schedspb.StartScheduleArgs{
-		Schedule:     startScheduleArgs.Schedule,
-		InitialPatch: request.Patch,
-		State: &schedspb.InternalState{
-			Namespace:     request.Namespace,
-			NamespaceId:   namespaceID.String(),
-			ScheduleId:    request.ScheduleId,
-			ConflictToken: scheduler.InitialConflictToken,
-		},
-	}
-	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startScheduledArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -5091,4 +5020,47 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 	}
 
 	return &newRequest, nil
+}
+
+func (wh *WorkflowHandler) getScheduleExecutionInfoAndSchedulingArgs(ctx context.Context, workflowID string, namespace string, namespaceID namespace.ID) (*workflowpb.WorkflowExecutionInfo, *schedspb.StartScheduleArgs, error) {
+	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
+	// describe to get memo, search attributes, and execution info
+	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespace,
+			Execution: execution,
+		},
+	})
+	if err != nil {
+		// TODO: rewrite "workflow" in error messages to "schedule"
+		return nil, nil, err
+	}
+
+	executionInfo := describeResponse.GetWorkflowExecutionInfo()
+	var startScheduleArgs schedspb.StartScheduleArgs
+	switch executionInfo.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		reverseHistory, err := wh.GetWorkflowExecutionHistoryReverse(ctx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+			Namespace:       namespace,
+			Execution:       execution,
+			MaximumPageSize: 1,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		if reverseHistory.History.GetEvents()[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+			return nil, nil, serviceerror.NewInternal("schedule result cannot be loaded")
+
+		}
+		err = sdk.PreferProtoDataConverter.FromPayloads(reverseHistory.History.GetEvents()[0].GetWorkflowExecutionCompletedEventAttributes().Result, &startScheduleArgs)
+		if err != nil {
+			return nil, nil, err
+		}
+
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+	default:
+		return nil, nil, serviceerror.NewNotFound("schedule not found")
+	}
+	return executionInfo, &startScheduleArgs, nil
 }
