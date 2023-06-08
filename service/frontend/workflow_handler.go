@@ -4871,9 +4871,10 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commo
 
 	delete(fields, searchattribute.TemporalSchedulePaused)
 	delete(fields, "TemporalScheduleInfoJSON") // used by older version, clean this up if present
-	// this isn't schedule-related but isn't relevant to the user for
+	// these aren't schedule-related but they aren't relevant to the user for
 	// scheduler workflows since it's the server worker
 	delete(fields, searchattribute.BinaryChecksums)
+	delete(fields, searchattribute.BuildIds)
 
 	if len(fields) == 0 {
 		return nil
