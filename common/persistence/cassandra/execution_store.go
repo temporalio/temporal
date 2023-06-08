@@ -28,9 +28,12 @@ import (
 	"context"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // Guidelines for creating new special UUID constants
@@ -134,6 +137,9 @@ func (d *ExecutionStore) CreateWorkflowExecution(
 		if err := d.AppendHistoryNodes(ctx, req); err != nil {
 			return nil, err
 		}
+		if err := d.insertHistoryTree(ctx, req); err != nil {
+			return nil, err
+		}
 	}
 
 	return d.MutableStateStore.CreateWorkflowExecution(ctx, request)
@@ -150,6 +156,9 @@ func (d *ExecutionStore) UpdateWorkflowExecution(
 	}
 	for _, req := range request.NewWorkflowNewEvents {
 		if err := d.AppendHistoryNodes(ctx, req); err != nil {
+			return err
+		}
+		if err := d.insertHistoryTree(ctx, req); err != nil {
 			return err
 		}
 	}
@@ -175,6 +184,9 @@ func (d *ExecutionStore) ConflictResolveWorkflowExecution(
 		if err := d.AppendHistoryNodes(ctx, req); err != nil {
 			return err
 		}
+		if err := d.insertHistoryTree(ctx, req); err != nil {
+			return err
+		}
 	}
 
 	return d.MutableStateStore.ConflictResolveWorkflowExecution(ctx, request)
@@ -194,4 +206,28 @@ func (d *ExecutionStore) Close() {
 	if d.MutableStateTaskStore.Session != nil {
 		d.MutableStateTaskStore.Session.Close()
 	}
+}
+
+func (d *ExecutionStore) insertHistoryTree(
+	ctx context.Context,
+	req *p.InternalAppendHistoryNodesRequest,
+) error {
+	branchInfo, err := d.GetHistoryBranchUtil().ParseHistoryBranchInfo(req.BranchToken)
+	if err != nil {
+		return err
+	}
+	treeInfo, err := serialization.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
+		BranchToken: req.BranchToken,
+		BranchInfo:  branchInfo,
+		ForkTime:    timestamp.TimeNowPtrUtc(),
+		Info:        req.Info,
+	})
+	if err != nil {
+		return err
+	}
+	return d.InsertHistoryTree(ctx, &p.InternalInsertHistoryTreeRequest{
+		BranchInfo: branchInfo,
+		TreeInfo:   &treeInfo,
+		ShardID:    req.ShardID,
+	})
 }

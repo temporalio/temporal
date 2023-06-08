@@ -33,6 +33,15 @@ import (
 	"go.temporal.io/server/common/codec"
 )
 
+func HistoryTreeInfoToBlob(info *persistencespb.HistoryTreeInfo) (commonpb.DataBlob, error) {
+	return proto3Encode(info)
+}
+
+func HistoryTreeInfoFromBlob(blob []byte, encoding string) (*persistencespb.HistoryTreeInfo, error) {
+	result := &persistencespb.HistoryTreeInfo{}
+	return result, proto3Decode(blob, encoding, result)
+}
+
 func HistoryBranchToBlob(info *persistencespb.HistoryBranch) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
