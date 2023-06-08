@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination stream_receiver_mock.go
+
 package replication
 
 import (
@@ -41,17 +43,12 @@ import (
 )
 
 type (
-	ClusterShardKey struct {
-		ClusterID int32
-		ShardID   int32
+	StreamReceiver interface {
+		common.Daemon
+		IsValid() bool
+		Key() ClusterShardKeyPair
 	}
-	ClusterShardKeyPair struct {
-		Client ClusterShardKey
-		Server ClusterShardKey
-	}
-
-	Stream         BiDirectionStream[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse]
-	StreamReceiver struct {
+	StreamReceiverImpl struct {
 		ProcessToolBox
 
 		status         int32
@@ -78,10 +75,10 @@ func NewStreamReceiver(
 	processToolBox ProcessToolBox,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
-) *StreamReceiver {
+) *StreamReceiverImpl {
 	logger := log.With(processToolBox.Logger, tag.ShardID(clientShardKey.ShardID))
 	taskTracker := NewExecutableTaskTracker(logger)
-	return &StreamReceiver{
+	return &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 
 		status:         common.DaemonStatusInitialized,
@@ -99,7 +96,7 @@ func NewStreamReceiver(
 }
 
 // Start starts the processor
-func (r *StreamReceiver) Start() {
+func (r *StreamReceiverImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
 		common.DaemonStatusInitialized,
@@ -115,7 +112,7 @@ func (r *StreamReceiver) Start() {
 }
 
 // Stop stops the processor
-func (r *StreamReceiver) Stop() {
+func (r *StreamReceiverImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
 		common.DaemonStatusStarted,
@@ -131,11 +128,18 @@ func (r *StreamReceiver) Stop() {
 	r.logger.Info("StreamReceiver shutting down.")
 }
 
-func (r *StreamReceiver) IsValid() bool {
+func (r *StreamReceiverImpl) IsValid() bool {
 	return atomic.LoadInt32(&r.status) == common.DaemonStatusStarted
 }
 
-func (r *StreamReceiver) sendEventLoop() {
+func (r *StreamReceiverImpl) Key() ClusterShardKeyPair {
+	return ClusterShardKeyPair{
+		Client: r.clientShardKey,
+		Server: r.serverShardKey,
+	}
+}
+
+func (r *StreamReceiverImpl) sendEventLoop() {
 	defer r.Stop()
 	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
@@ -154,14 +158,14 @@ func (r *StreamReceiver) sendEventLoop() {
 	}
 }
 
-func (r *StreamReceiver) recvEventLoop() {
+func (r *StreamReceiverImpl) recvEventLoop() {
 	defer r.Stop()
 
 	err := r.processMessages(r.stream)
 	r.logger.Error("StreamReceiver exit recv loop", tag.Error(err))
 }
 
-func (r *StreamReceiver) ackMessage(
+func (r *StreamReceiverImpl) ackMessage(
 	stream Stream,
 ) error {
 	watermarkInfo := r.taskTracker.LowWatermark()
@@ -194,11 +198,11 @@ func (r *StreamReceiver) ackMessage(
 	return nil
 }
 
-func (r *StreamReceiver) processMessages(
+func (r *StreamReceiverImpl) processMessages(
 	stream Stream,
 ) error {
 	allClusterInfo := r.ClusterMetadata.GetAllClusterInfo()
-	clusterName, err := clusterIDToClusterName(allClusterInfo, r.serverShardKey.ClusterID)
+	clusterName, _, err := ClusterIDToClusterNameShardCount(allClusterInfo, r.serverShardKey.ClusterID)
 	if err != nil {
 		return err
 	}
