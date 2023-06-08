@@ -117,6 +117,7 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	if f.metricsHandler != nil && f.healthSignals != nil {
 		result = p.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
 	}
+	result = p.NewTaskPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
