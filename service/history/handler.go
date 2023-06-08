@@ -1911,20 +1911,20 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	}
 	engine, err := shardContext.GetEngine(server.Context())
 	if err != nil {
-		return err
+		return h.convertError(err)
 	}
 	allClusterInfo := shardContext.GetClusterMetadata().GetAllClusterInfo()
 	clientClusterName, clientShardCount, err := replication.ClusterIDToClusterNameShardCount(allClusterInfo, clientClusterShardID.ClusterID)
 	if err != nil {
-		return err
+		return h.convertError(err)
 	}
 	_, serverShardCount, err := replication.ClusterIDToClusterNameShardCount(allClusterInfo, int32(shardContext.GetClusterMetadata().GetClusterID()))
 	if err != nil {
-		return err
+		return h.convertError(err)
 	}
 	err = common.VerifyShardIDMapping(clientShardCount, serverShardCount, clientClusterShardID.ShardID, serverClusterShardID.ShardID)
 	if err != nil {
-		return err
+		return h.convertError(err)
 	}
 	streamSender := replication.NewStreamSender(
 		server,
