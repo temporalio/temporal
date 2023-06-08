@@ -5,7 +5,7 @@ linters:
     - goerr113
     - errcheck
     - goimports
-    - paralleltest
+    # - paralleltest # missing the call to method parallel, but testify does not seem to work well with parallel test: https://github.com/stretchr/testify/issues/187
     - revive # revive supersedes golint, which is now archived
     - staticcheck
     - vet
