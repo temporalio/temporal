@@ -381,7 +381,8 @@ func (c *taskQueueManagerImpl) AddTask(
 		c.liveness.markAlive()
 	}
 
-	if c.QueueID().IsRoot() && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
+	// TODO: make this work for versioned queues too
+	if c.QueueID().IsRoot() && c.QueueID().VersionSet() == "" && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
 		c.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 	}
