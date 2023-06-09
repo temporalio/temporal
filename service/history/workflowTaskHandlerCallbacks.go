@@ -608,7 +608,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			activityNotStartedCancelled {
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		} else if weContext.UpdateRegistry(ctx).HasOutgoing() {
-			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
+				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+			} else {
+				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+			}
 		}
 	}
 
