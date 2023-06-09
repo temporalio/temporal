@@ -1487,7 +1487,7 @@ func (*UpdateWorkerBuildIdCompatibilityRequest) XXX_OneofWrappers() []interface{
 	}
 }
 
-// Apply request from public API
+// Apply request from public API.
 type UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest struct {
 	Request *v1.UpdateWorkerBuildIdCompatibilityRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
 }
@@ -1537,7 +1537,7 @@ func (m *UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) GetRequest(
 type UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds struct {
 	// The last known user data version, used to prevent concurrent updates.
 	KnownUserDataVersion int64 `protobuf:"varint,1,opt,name=known_user_data_version,json=knownUserDataVersion,proto3" json:"known_user_data_version,omitempty"`
-	// List of build ids to remove
+	// List of build ids to remove.
 	BuildIds []string `protobuf:"bytes,2,rep,name=build_ids,json=buildIds,proto3" json:"build_ids,omitempty"`
 }
 
