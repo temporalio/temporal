@@ -98,6 +98,16 @@ func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdCompatibility
 		},
 	}
 }
+func mkMergeSet(primaryId string, secondaryId string) *workflowservice.UpdateWorkerBuildIdCompatibilityRequest {
+	return &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_MergeSets_{
+			MergeSets: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_MergeSets{
+				PrimarySetBuildId:   primaryId,
+				SecondarySetBuildId: secondaryId,
+			},
+		},
+	}
+}
 
 func TestNewDefaultUpdate(t *testing.T) {
 	t.Parallel()
@@ -809,4 +819,73 @@ func Test_ClearTombstones(t *testing.T) {
 	assert.Equal(t, expected, actual)
 	// Method does not mutate original data
 	assert.Equal(t, makeData(), original)
+}
+
+func TestMergeSets(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	initialData := mkInitialData(4, clock)
+
+	req := mkMergeSet("1", "2")
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	updatedData, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
+	assert.NoError(t, err)
+	// Should only be three sets now
+	assert.Equal(t, 3, len(updatedData.VersionSets))
+	// The overall default set should not have changed
+	assert.Equal(t, "3", updatedData.GetVersionSets()[2].GetBuildIds()[0].Id)
+	// But set 1 should now have 2, maintaining 1 as the default ID
+	assert.Equal(t, "1", updatedData.GetVersionSets()[1].GetBuildIds()[1].Id)
+	assert.Equal(t, "2", updatedData.GetVersionSets()[1].GetBuildIds()[0].Id)
+	// Ensure it has the set ids of both sets
+	bothSetIds := mergeSetIDs([]string{hashBuildId("1")}, []string{hashBuildId("2")})
+	assert.Equal(t, bothSetIds, updatedData.GetVersionSets()[1].GetSetIds())
+	assert.Equal(t, initialData.DefaultUpdateTimestamp, updatedData.DefaultUpdateTimestamp)
+	assert.Equal(t, nextClock, *updatedData.GetVersionSets()[1].DefaultUpdateTimestamp)
+	// Initial data should not have changed
+	assert.Equal(t, 4, len(initialData.VersionSets))
+	for _, set := range initialData.VersionSets {
+		assert.Equal(t, 1, len(set.GetSetIds()))
+		assert.Equal(t, clock, *set.DefaultUpdateTimestamp)
+	}
+
+	// Same merge request must be idempotent
+	nextClock2 := hlc.Next(nextClock, commonclock.NewRealTimeSource())
+	updatedData2, err := UpdateVersionSets(nextClock2, updatedData, req, 0, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(updatedData2.VersionSets))
+	assert.Equal(t, "3", updatedData2.GetVersionSets()[2].GetBuildIds()[0].Id)
+	assert.Equal(t, "1", updatedData2.GetVersionSets()[1].GetBuildIds()[1].Id)
+	assert.Equal(t, "2", updatedData2.GetVersionSets()[1].GetBuildIds()[0].Id)
+	assert.Equal(t, initialData.DefaultUpdateTimestamp, updatedData2.DefaultUpdateTimestamp)
+	// Clock shouldn't have changed
+	assert.Equal(t, nextClock, *updatedData2.GetVersionSets()[1].DefaultUpdateTimestamp)
+
+	// Verify merging into the current default maintains that set as the default
+	req = mkMergeSet("3", "0")
+	nextClock3 := hlc.Next(nextClock2, commonclock.NewRealTimeSource())
+	updatedData3, err := UpdateVersionSets(nextClock3, updatedData2, req, 0, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(updatedData3.VersionSets))
+	assert.Equal(t, "3", updatedData3.GetVersionSets()[1].GetBuildIds()[1].Id)
+	assert.Equal(t, "0", updatedData3.GetVersionSets()[1].GetBuildIds()[0].Id)
+	assert.Equal(t, "1", updatedData3.GetVersionSets()[0].GetBuildIds()[1].Id)
+	assert.Equal(t, "2", updatedData3.GetVersionSets()[0].GetBuildIds()[0].Id)
+	assert.Equal(t, initialData.DefaultUpdateTimestamp, updatedData3.DefaultUpdateTimestamp)
+	assert.Equal(t, nextClock3, *updatedData3.GetVersionSets()[1].DefaultUpdateTimestamp)
+}
+
+func TestMergeInvalidTargets(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Zero(1)
+	initialData := mkInitialData(4, clock)
+
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	req := mkMergeSet("lol", "2")
+	_, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
+	assert.Error(t, err)
+
+	req2 := mkMergeSet("2", "nope")
+	_, err2 := UpdateVersionSets(nextClock, initialData, req2, 0, 0)
+	assert.Error(t, err2)
 }
