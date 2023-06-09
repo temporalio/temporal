@@ -458,7 +458,7 @@ func (m *executionManagerImpl) serializeWorkflowEvents(
 		request.Info = BuildHistoryGarbageCleanupInfo(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID)
 	}
 
-	return m.serializeAppendHistoryNodesRequest(request)
+	return m.serializeAppendHistoryNodesRequest(ctx, request)
 }
 
 func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport

@@ -45,46 +45,6 @@ const (
 	MaxTxnID int64 = math.MinInt64 + 1 // int overflow
 )
 
-func (m *sqlExecutionStore) InsertHistoryTree(
-	ctx context.Context,
-	request *p.InternalInsertHistoryTreeRequest,
-) error {
-	branchInfo := request.BranchInfo
-
-	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
-	if err != nil {
-		return err
-	}
-	branchIDBytes, err := primitives.ParseUUID(branchInfo.GetBranchId())
-	if err != nil {
-		return err
-	}
-
-	treeInfoBlob := request.TreeInfo
-	treeRow := &sqlplugin.HistoryTreeRow{
-		ShardID:      request.ShardID,
-		TreeID:       treeIDBytes,
-		BranchID:     branchIDBytes,
-		Data:         treeInfoBlob.Data,
-		DataEncoding: treeInfoBlob.EncodingType.String(),
-	}
-
-	_, err = m.Db.InsertIntoHistoryTree(ctx, treeRow)
-	switch err {
-	case nil:
-		return nil
-	case context.DeadlineExceeded, context.Canceled:
-		return &p.InsertHistoryTimeoutError{
-			Msg: err.Error(),
-		}
-	default:
-		if m.Db.IsDupEntryError(err) {
-			return &p.ConditionFailedError{Msg: fmt.Sprintf("InsertHistoryTree: row already exist: %v", err)}
-		}
-		return serviceerror.NewUnavailable(fmt.Sprintf("InsertHistoryTree: %v", err))
-	}
-}
-
 // AppendHistoryNodes add(or override) a node to a history branch
 func (m *sqlExecutionStore) AppendHistoryNodes(
 	ctx context.Context,
@@ -113,20 +73,64 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 		ShardID:      request.ShardID,
 	}
 
-	_, err = m.Db.InsertIntoHistoryNode(ctx, nodeRow)
-	switch err {
-	case nil:
-		return nil
-	case context.DeadlineExceeded, context.Canceled:
-		return &p.AppendHistoryTimeoutError{
-			Msg: err.Error(),
+	if !request.IsNewBranch {
+		_, err = m.Db.InsertIntoHistoryNode(ctx, nodeRow)
+		switch err {
+		case nil:
+			return nil
+		case context.DeadlineExceeded, context.Canceled:
+			return &p.AppendHistoryTimeoutError{
+				Msg: err.Error(),
+			}
+		default:
+			if m.Db.IsDupEntryError(err) {
+				return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
+			}
+			return serviceerror.NewUnavailable(fmt.Sprintf("AppendHistoryNodes: %v", err))
 		}
-	default:
-		if m.Db.IsDupEntryError(err) {
-			return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
-		}
-		return serviceerror.NewUnavailable(fmt.Sprintf("AppendHistoryNodes: %v", err))
 	}
+
+	treeInfoBlob := request.TreeInfo
+	treeRow := &sqlplugin.HistoryTreeRow{
+		ShardID:      request.ShardID,
+		TreeID:       treeIDBytes,
+		BranchID:     branchIDBytes,
+		Data:         treeInfoBlob.Data,
+		DataEncoding: treeInfoBlob.EncodingType.String(),
+	}
+
+	return m.txExecute(ctx, "AppendHistoryNodes", func(tx sqlplugin.Tx) error {
+		result, err := tx.InsertIntoHistoryNode(ctx, nodeRow)
+		if err != nil {
+			return err
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if !(rowsAffected == 1 || rowsAffected == 2) {
+			return fmt.Errorf("expected 1 or 2 row to be affected for node table, got %v", rowsAffected)
+		}
+
+		result, err = tx.InsertIntoHistoryTree(ctx, treeRow)
+		switch err {
+		case nil:
+			rowsAffected, err = result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if !(rowsAffected == 1 || rowsAffected == 2) {
+				return fmt.Errorf("expected 1 or 2 rows to be affected for tree table as we allow upserts, got %v", rowsAffected)
+			}
+			return nil
+		case context.DeadlineExceeded, context.Canceled:
+			return &p.AppendHistoryTimeoutError{
+				Msg: err.Error(),
+			}
+		default:
+			return serviceerror.NewUnavailable(fmt.Sprintf("AppendHistoryNodes: %v", err))
+		}
+	})
 }
 
 func (m *sqlExecutionStore) DeleteHistoryNodes(
