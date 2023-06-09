@@ -858,3 +858,18 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
 }
+
+func TestDisableLoadUserData_NonRootDoesNotRequestUserDataFromRoot(t *testing.T) {
+	ctx := context.Background()
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	taskQueueId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = taskQueueId
+	manager := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).Times(0)
+	manager.config.LoadUserData = func() bool { return false }
+	manager.Start()
+	manager.WaitUntilInitialized(ctx)
+}

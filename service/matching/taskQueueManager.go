@@ -315,6 +315,8 @@ func (c *taskQueueManagerImpl) Start() {
 	c.taskReader.Start()
 	if c.shouldFetchUserData() {
 		c.goroGroup.Go(c.fetchUserDataLoop)
+	} else {
+		c.userDataInitialFetch.Set(struct{}{}, nil)
 	}
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
@@ -366,7 +368,7 @@ func (c *taskQueueManagerImpl) managesSpecificVersionSet() bool {
 func (c *taskQueueManagerImpl) shouldFetchUserData() bool {
 	// 1. If the db stores it, then we definitely should not be fetching.
 	// 2. Additionally, we should not fetch for "versioned" tqms.
-	return !c.db.DbStoresUserData() && !c.managesSpecificVersionSet()
+	return c.config.LoadUserData() && !c.db.DbStoresUserData() && !c.managesSpecificVersionSet()
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -517,11 +519,17 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 	if c.managesSpecificVersionSet() {
 		return nil, nil, errNoUserDataOnVersionedTQM
 	}
+	if !c.config.LoadUserData() {
+		return nil, nil, nil
+	}
 	return c.db.GetUserData(ctx)
 }
 
 // UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
+	if !c.config.LoadUserData() {
+		return serviceerror.NewFailedPrecondition("Task queue user data operations are disabled")
+	}
 	newData, shouldReplicate, err := c.db.UpdateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
 	if err != nil {
 		return err
