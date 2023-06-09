@@ -3177,7 +3177,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	executionInfo, startScheduledArgs, err := wh.getScheduleExecutionInfoAndSchedulingArgs(ctx, workflowID, namespaceName.String(), namespaceID)
+	executionInfo, startScheduleArgs, err := wh.getScheduleExecutionInfoAndSchedulingArgs(ctx, workflowID, namespaceName.String(), namespaceID)
 	if err != nil {
 		return nil, err
 	}
