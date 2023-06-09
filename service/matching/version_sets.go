@@ -286,13 +286,13 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 			SetIds:   existingData.VersionSets[targetSetIdx].SetIds,
 			BuildIds: buildIDsCopy,
 		}
-		makeVersionInSetDefault(&modifiedData, targetSetIdx, versionInSetIdx, &timestamp)
+		makeVersionInSetDefault(modifiedData, targetSetIdx, versionInSetIdx, &timestamp)
 	} else if mergeSets := req.GetMergeSets(); mergeSets != nil {
 		if targetSetIdx == -1 {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted primary version %v not found", targetedVersion))
 		}
 		secondaryBuildID := mergeSets.GetSecondarySetBuildId()
-		secondarySetIdx, _ := findVersion(&modifiedData, secondaryBuildID)
+		secondarySetIdx, _ := findVersion(modifiedData, secondaryBuildID)
 		if secondarySetIdx == -1 {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted secondary version %v not found", secondaryBuildID))
 		}
@@ -316,8 +316,8 @@ func updateImpl(timestamp hlc.Clock, existingData *persistencespb.VersioningData
 			BuildIds:               secondarySet.BuildIds,
 			DefaultUpdateTimestamp: secondarySet.DefaultUpdateTimestamp,
 		}
-		mergedData := MergeVersioningData(justPrimaryData, &modifiedData)
-		modifiedData = *mergedData
+		mergedData := MergeVersioningData(justPrimaryData, modifiedData)
+		modifiedData = mergedData
 	}
 
 	return modifiedData, nil

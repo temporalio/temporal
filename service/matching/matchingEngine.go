@@ -1514,9 +1514,9 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 	stamp := hlc.Next(prevStamp, e.timeSource)
 	stamp.ClusterId = e.clusterMeta.GetClusterID()
 	e.logger.Info("Revived build id while applying replication event",
-		tag.NewStringTag("namespace", ns.Name().String()),
-		tag.NewStringTag("task-queue", taskQueue),
-		tag.NewStringTag("build-id", buildId.Id))
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.WorkflowTaskQueueName(taskQueue),
+		tag.BuildId(buildId.Id))
 	return &persistencespb.BuildId{
 		Id:                   buildId.GetId(),
 		State:                persistencespb.STATE_ACTIVE,

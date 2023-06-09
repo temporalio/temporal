@@ -929,3 +929,7 @@ func DeletedExecutionsErrorCount(count int) ZapTag {
 func Endpoint(endpoint string) ZapTag {
 	return NewStringTag("endpoint", endpoint)
 }
+
+func BuildId(buildId string) ZapTag {
+	return NewStringTag("build-id", buildId)
+}

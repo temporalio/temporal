@@ -203,7 +203,10 @@ func (a *Activities) processNamespaceEntry(
 			entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
 			if err := a.processUserDataEntry(ctx, rateLimiter, *heartbeat, ns, entry); err != nil {
 				// Intentionally don't fail the activity on single entry.
-				a.logger.Error("Failed to update task queue user data", tag.Error(err))
+				a.logger.Error("Failed to update task queue user data",
+					tag.WorkflowNamespace(ns.Name().String()),
+					tag.WorkflowTaskQueueName(entry.TaskQueue),
+					tag.Error(err))
 				continue
 			}
 			heartbeat.TaskQueueIdx++
@@ -228,7 +231,7 @@ func (a *Activities) processUserDataEntry(
 ) error {
 	buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, heartbeat, ns, entry)
 	if err != nil {
-		return nil
+		return err
 	}
 	if len(buildIdsToRemove) == 0 {
 		return nil
@@ -280,9 +283,9 @@ func (a *Activities) findBuildIdsToRemove(
 			a.recordHeartbeat(ctx, heartbeat)
 			if !exists {
 				a.logger.Info("Found build id to remove",
-					tag.NewStringTag("namespace", ns.Name().String()),
-					tag.NewStringTag("task-queue", entry.TaskQueue),
-					tag.NewStringTag("build-id", buildId.Id),
+					tag.WorkflowNamespace(ns.Name().String()),
+					tag.WorkflowTaskQueueName(entry.TaskQueue),
+					tag.BuildId(buildId.Id),
 				)
 				buildIdsToRemove = append(buildIdsToRemove, buildId.Id)
 				setActive--
