@@ -425,6 +425,9 @@ func (c *taskQueueManagerImpl) GetTask(
 ) (*internalTask, error) {
 	c.liveness.markAlive()
 
+	c.currentPolls.Add(1)
+	defer c.currentPolls.Add(-1)
+
 	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.taskQueueID.namespaceID)
 	if err != nil {
 		return nil, err
