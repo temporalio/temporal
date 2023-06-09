@@ -5023,7 +5023,7 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 	return &newRequest, nil
 }
 
-func (wh *WorkflowHandler) getScheduleExecutionInfoAndSchedulingArgs(ctx context.Context, workflowID string, namespace string, namespaceID namespace.ID) (*workflowpb.WorkflowExecutionInfo, *schedspb.StartScheduleArgs, error) {
+func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, workflowID string, namespace string, namespaceID namespace.ID) (*workflowpb.WorkflowExecutionInfo, *schedspb.StartScheduleArgs, error) {
 	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
 	// describe to get memo, search attributes, and execution info
 	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
