@@ -25,17 +25,6 @@
 
 package metrics
 
-// Service names for all services that emit metrics.
-const (
-	Common ServiceIdx = iota
-	Frontend
-	History
-	Matching
-	Worker
-	Server
-	UnitTestService
-)
-
 // Common tags for all services
 const (
 	OperationTagName           = "operation"

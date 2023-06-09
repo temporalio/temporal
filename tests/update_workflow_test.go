@@ -220,15 +220,15 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 						}},
 					}}, nil
 				case 2:
-					// Speculative WT, with update.Request message.
 					s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
+  7 WorkflowTaskStarted
+`, history)
 					return s.acceptCompleteUpdateCommands(tv, "1"), nil
 				case 3:
 					s.EqualHistory(`
@@ -280,7 +280,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 				T:                   s.T(),
 			}
 
-			// Drain exiting first workflow task.
+			// Drain first WT.
 			_, err := poller.PollAndProcessWorkflowTask(true, false)
 			s.NoError(err)
 
@@ -314,10 +314,10 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled // Normal WT events were written for speculative WT at complete.
+  6 WorkflowTaskScheduled // Was speculative WT...
   7 WorkflowTaskStarted
-  8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateAccepted
+  8 WorkflowTaskCompleted // ...and events were written to the history when WT completes.  
+  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
  10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
@@ -361,7 +361,8 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalStartedWorkflowTask_Acc
 					s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted`, history)
+  3 WorkflowTaskStarted // First normal WT. No speculative WT was created.
+`, history)
 					return s.acceptCompleteUpdateCommands(tv, "1"), nil
 				case 2:
 					s.EqualHistory(`
@@ -443,8 +444,8 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalStartedWorkflowTask_Acc
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
-  6 WorkflowExecutionUpdateCompleted
+  5 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 2} // WTScheduled event which delivered update to the worker.
+  6 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 5}
   7 WorkflowTaskScheduled
   8 WorkflowTaskStarted
   9 WorkflowTaskCompleted
@@ -501,7 +502,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Accept
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
   6 WorkflowExecutionSignaled
-  7 WorkflowTaskScheduled
+  7 WorkflowTaskScheduled // This WT was already created by signal and no speculative WT was created.
   8 WorkflowTaskStarted`, history)
 					return s.acceptCompleteUpdateCommands(tv, "1"), nil
 				case 3:
@@ -599,8 +600,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Accept
   7 WorkflowTaskScheduled
   8 WorkflowTaskStarted
   9 WorkflowTaskCompleted
- 10 WorkflowExecutionUpdateAccepted
- 11 WorkflowExecutionUpdateCompleted
+ 10 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 7} // WTScheduled event which delivered update to the worker.
+ 11 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 10}
  12 WorkflowTaskScheduled
  13 WorkflowTaskStarted
  14 WorkflowTaskCompleted
@@ -652,7 +653,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 				updRequest := unmarshalAny[*updatepb.Request](s, reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
-						Id:                 tv.Any(), // Random message Id.
+						Id:                 tv.Any(),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
 						Body: marshalAny(s, &updatepb.Acceptance{
@@ -945,7 +946,6 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			// Process update in workflow.
 			_, err := poller.PollAndProcessWorkflowTask(false, false)
 			if tc.RespondWorkflowTaskError != "" {
-				// respond workflow task should return error
 				require.Error(s.T(), err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
 				require.Contains(s.T(), err.Error(), tc.RespondWorkflowTaskError)
 			} else {
@@ -996,12 +996,11 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 						}},
 					}}, nil
 				case 2:
-					// Speculative WT, with update.Request message.
-					// This WT contains partial history because it is sticky enabled.
+					// This WT contains partial history because sticky was enabled.
 					s.EqualHistory(`
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // Speculative WT.
   7 WorkflowTaskStarted`, history)
 					return s.acceptCompleteUpdateCommands(tv, "1"), nil
 				case 3:
@@ -1094,8 +1093,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateAccepted
- 10 WorkflowExecutionUpdateCompleted
+  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
+ 10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
@@ -1125,7 +1124,6 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 				}},
 			}}, nil
 		case 2:
-			// Speculative WT, with update.Request message.
 			// Worker gets full history because update was issued after sticky worker is gone.
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
@@ -1133,8 +1131,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Speculative WT.
+  7 WorkflowTaskStarted
+`, history)
 			return s.acceptCompleteUpdateCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
@@ -1232,8 +1231,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateAccepted
- 10 WorkflowExecutionUpdateCompleted
+  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
+ 10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
@@ -1327,10 +1326,10 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTask_Reject() {
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
+  2 WorkflowTaskScheduled // First normal WT was scheduled before update and therefore all 3 events have to be written even if update was rejected.
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-  5 WorkflowTaskScheduled
+  5 WorkflowTaskScheduled // Empty completed WT. No new events were created after it.
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted
   8 WorkflowExecutionCompleted`, events)
@@ -1362,12 +1361,13 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject(
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Speculative WT.
+  7 WorkflowTaskStarted
+`, history)
 			return nil, nil
 		case 3:
 			s.EqualHistory(`
-  4 WorkflowTaskCompleted
+  4 WorkflowTaskCompleted // Speculative WT was dropped and history starts from 4 again.
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted`, history)
@@ -1414,7 +1414,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject(
 		T:                   s.T(),
 	}
 
-	// Drain existing first WT.
+	// Drain first WT.
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
@@ -1447,7 +1447,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject(
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // Speculative WT is not present in the history.
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
   9 WorkflowExecutionCompleted`, events)
@@ -1474,28 +1474,28 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1s
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
-  6 WorkflowTaskScheduled
+  5 WorkflowExecutionUpdateAccepted // 1st update is accepted.
+  6 WorkflowTaskScheduled // New speculative WT is created because of the 2nd update.
   7 WorkflowTaskStarted`, history)
 			return s.acceptUpdateCommands(tv, "2"), nil
 		case 3:
 			s.EqualHistory(`
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateAccepted
+  9 WorkflowExecutionUpdateAccepted // 2nd update is accepted.
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted`, history)
 			return s.completeUpdateCommands(tv, "2"), nil
 		case 4:
 			s.EqualHistory(`
  12 WorkflowTaskCompleted
- 13 WorkflowExecutionUpdateCompleted
+ 13 WorkflowExecutionUpdateCompleted // 2nd update is completed.
  14 WorkflowTaskScheduled
  15 WorkflowTaskStarted`, history)
 			return s.completeUpdateCommands(tv, "1"), nil
 		case 5:
 			s.EqualHistory(`
  16 WorkflowTaskCompleted
- 17 WorkflowExecutionUpdateCompleted
+ 17 WorkflowExecutionUpdateCompleted // 1st update is completed.
  18 WorkflowTaskScheduled
  19 WorkflowTaskStarted`, history)
 			return []*commandpb.Command{{
@@ -1604,19 +1604,19 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1s
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
+  5 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 2} // WTScheduled event which delivered update to the worker.
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateAccepted
+  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted
  12 WorkflowTaskCompleted
- 13 WorkflowExecutionUpdateCompleted
+ 13 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
  14 WorkflowTaskScheduled
  15 WorkflowTaskStarted
  16 WorkflowTaskCompleted
- 17 WorkflowExecutionUpdateCompleted
+ 17 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 5}
  18 WorkflowTaskScheduled
  19 WorkflowTaskStarted
  20 WorkflowTaskCompleted
@@ -1644,23 +1644,23 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  5 WorkflowExecutionUpdateAccepted // 1st update is accepted.
+  6 WorkflowTaskScheduled // Speculative WT. Will disappear from the history because update is rejected.
+  7 WorkflowTaskStarted
+`, history)
 			// Message handler rejects 2nd update.
 			return nil, nil
 		case 3:
-			// WT2 was speculative.
 			s.EqualHistory(`
-  4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
+  4 WorkflowTaskCompleted // WT2 (events 6 and 7) was speculative.
+  5 WorkflowExecutionUpdateAccepted 
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted`, history)
 			return s.completeUpdateCommands(tv, "1"), nil
 		case 4:
 			s.EqualHistory(`
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateCompleted
+  9 WorkflowExecutionUpdateCompleted // 1st update is completed.
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted`, history)
 			return []*commandpb.Command{{
@@ -1760,11 +1760,11 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
+  5 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 2} // WTScheduled event which delivered update to the worker.
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateCompleted
+  9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 5}
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted
  12 WorkflowTaskCompleted
@@ -1842,7 +1842,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 			return []*protocolpb.Message{
 				{
 					Id:                 tv.MessageID("update-accepted", "1"),
-					ProtocolInstanceId: tv.Any(), // Random update Id.
+					ProtocolInstanceId: tv.Any(),
 					SequencingId:       nil,
 					Body: marshalAny(s, &updatepb.Acceptance{
 						AcceptedRequestMessageId:         updRequestMsg.GetId(),
@@ -1906,8 +1906,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailWorkflowTask() {
 			},
 		})
 		assert.Error(s.T(), err1)
-		// UpdateWorkflowExecution is timed out after 2 seconds.
-		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1))
+		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), "UpdateWorkflowExecution must timeout after 2 seconds")
 		assert.Nil(s.T(), updateResponse)
 		updateResultCh <- struct{}{}
 	}
@@ -1977,15 +1976,15 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowT
 				}},
 			}}, nil
 		case 2:
-			// Speculative WT, with update.Request message.
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Speculative WT. Events 6 and 7 are written into the history when signal is received.
+  7 WorkflowTaskStarted
+`, history)
 			// Send signal which will be buffered. This will persist MS and speculative WT must be converted to normal.
 			err := s.sendSignal(s.namespace, tv.WorkflowExecution(), tv.Any(), payloads.EncodeString(tv.Any()), tv.Any())
 			s.NoError(err)
@@ -1993,7 +1992,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowT
 		case 3:
 			s.EqualHistory(`
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionSignaled
+  9 WorkflowExecutionSignaled // It was buffered and got to the history after WT is completed.
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted`, history)
 			return []*commandpb.Command{{
@@ -2073,7 +2072,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowT
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskCompleted
+  8 WorkflowTaskCompleted // Update was rejected but events 6-8 are in the history because of buffered signal.
   9 WorkflowExecutionSignaled
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted
@@ -2102,14 +2101,13 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflo
 				}},
 			}}, nil
 		case 2:
-			// Speculative WT was already converted to normal because of the signal.
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // It was initially speculative WT but was already converted to normal when signal was received.
   7 WorkflowExecutionSignaled
   8 WorkflowTaskStarted`, history)
 			return nil, nil
@@ -2203,7 +2201,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflo
   6 WorkflowTaskScheduled
   7 WorkflowExecutionSignaled
   8 WorkflowTaskStarted
-  9 WorkflowTaskCompleted
+  9 WorkflowTaskCompleted // Update was rejected but events 6,8,9 are in the history because of signal.
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted
  12 WorkflowTaskCompleted
@@ -2243,15 +2241,15 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
 				}},
 			}}, nil
 		case 2:
-			// Speculative WT, with update.Request message.
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Speculative WT.
+  7 WorkflowTaskStarted
+`, history)
 			// Emulate slow worker: sleep more than WT timeout.
 			time.Sleep(1*time.Second + 100*time.Millisecond)
 			// This doesn't matter because WT times out before update is applied.
@@ -2267,7 +2265,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskTimedOut
-  9 WorkflowTaskScheduled
+  9 WorkflowTaskScheduled {"Attempt":2 } // Transient WT.
  10 WorkflowTaskStarted`, history)
 			commands := append(s.acceptUpdateCommands(tv, "1"),
 				&commandpb.Command{
@@ -2314,7 +2312,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
 		T:                   s.T(),
 	}
 
-	// Start activity using existing workflow task.
+	// Drain first WT.
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
@@ -2350,12 +2348,12 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskTimedOut
-  9 WorkflowTaskScheduled
+  8 WorkflowTaskTimedOut // Timeout of speculative WT writes events 6-8
+  9 WorkflowTaskScheduled {"Attempt":2 }
  10 WorkflowTaskStarted
  11 WorkflowTaskCompleted
- 12 WorkflowExecutionUpdateAccepted
- 13 WorkflowExecutionUpdateCompleted
+ 12 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 9} // WTScheduled event which delivered update to the worker.
+ 13 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 12} 
  14 WorkflowExecutionCompleted`, events)
 }
 
@@ -2380,16 +2378,16 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeW
 				}},
 			}}, nil
 		case 2:
-			// Speculative WT, timed out on sticky task queue. Server sent full history with sticky timeout event.
+			// Speculative WT timed out on sticky task queue. Server sent full history with sticky timeout event.
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // Speculative WT.
   7 WorkflowTaskTimedOut
-  8 WorkflowTaskScheduled
+  8 WorkflowTaskScheduled {"Attempt":1} // Normal WT.
   9 WorkflowTaskStarted`, history)
 			return nil, nil
 		case 3:
@@ -2470,11 +2468,11 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeW
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // Speculative WT was written into the history because of timeout.
   7 WorkflowTaskTimedOut
-  8 WorkflowTaskScheduled
+  8 WorkflowTaskScheduled {"Attempt":1} // Second attempt WT is normal WT (clear stickiness reset attempts count).
   9 WorkflowTaskStarted
- 10 WorkflowTaskCompleted
+ 10 WorkflowTaskCompleted // Normal WT is completed and events are in the history even update was rejected.
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
@@ -2516,7 +2514,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // Speculative WT.
   7 WorkflowTaskStarted`, history)
 			return s.acceptCompleteUpdateCommands(tv, "1"), nil
 		default:
@@ -2596,7 +2594,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
+  6 WorkflowTaskScheduled // Speculative WT was converted to normal WT during termination.
   7 WorkflowTaskStarted
   8 WorkflowTaskFailed
   9 WorkflowExecutionTerminated`, events)
@@ -2606,8 +2604,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
 		Execution: tv.WorkflowExecution(),
 	})
 	s.NoError(err)
-	// completion_event_batch_id should point to WTFailed event.
-	s.EqualValues(8, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId())
+	s.EqualValues(8, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WTFailed event")
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_TerminateWorkflow() {
@@ -2707,15 +2704,15 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowExecutionTerminated`, events)
+  6 WorkflowExecutionTerminated // Speculative WTScheduled event is not written to history if WF is terminated.
+`, events)
 
 	msResp, err := s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace,
 		Execution: tv.WorkflowExecution(),
 	})
 	s.NoError(err)
-	// completion_event_batch_id should point to WFTerminated event.
-	s.EqualValues(6, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId())
+	s.EqualValues(6, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() {
@@ -2806,7 +2803,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate()
 				T:                   s.T(),
 			}
 
-			// Drain exiting first workflow task.
+			// Drain first WT.
 			_, err := poller.PollAndProcessWorkflowTask(true, false)
 			s.NoError(err)
 
@@ -2870,24 +2867,23 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 				}},
 			}}, nil
 		case 2:
-			// Last two events (6 and 7) are for speculative WT, but they won't disappear after reject because
-			// speculative WT is converted to normal during heartbeat.
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Events (6 and 7) are for speculative WT, but they won't disappear after reject because speculative WT is converted to normal during heartbeat.
+  7 WorkflowTaskStarted
+`, history)
 			// Heartbeat from speculative WT (no messages, no commands).
 			return nil, nil
 		case 3:
-			// New WT (after heartbeat) is normal and won't disappear from the history after reject.
 			s.EqualHistory(`
   8 WorkflowTaskCompleted
-  9 WorkflowTaskScheduled
- 10 WorkflowTaskStarted`, history)
+  9 WorkflowTaskScheduled // New WT (after heartbeat) is normal and won't disappear from the history after reject.
+ 10 WorkflowTaskStarted
+`, history)
 			// Reject update.
 			return nil, nil
 		case 4:
@@ -2936,7 +2932,7 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 		T:                   s.T(),
 	}
 
-	// Drain exiting first WT.
+	// Drain first WT.
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
@@ -2967,6 +2963,7 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 	s.Equal(4, msgHandlerCalls)
 
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -2975,10 +2972,10 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
   5 ActivityTaskScheduled
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskCompleted
+  8 WorkflowTaskCompleted // Heartbeat response.
   9 WorkflowTaskScheduled
  10 WorkflowTaskStarted
- 11 WorkflowTaskCompleted
+ 11 WorkflowTaskCompleted // After heartbeat new normal WT was created and events are written into the history even update is rejected.
  12 WorkflowTaskScheduled
  13 WorkflowTaskStarted
  14 WorkflowTaskCompleted
@@ -3050,7 +3047,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTas
 		T:                   s.T(),
 	}
 
-	// Drain exiting first workflow task.
+	// Drain first WT.
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
@@ -3143,17 +3140,17 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 				}},
 			}}, nil
 		case 2:
-			// Speculative WT, with update.Request message.
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Speculative WT. Events 6 and 7 will be lost.
+  7 WorkflowTaskStarted
+`, history)
 
-			// Close shard, Speculative WT (6 and 7) will be lost, and NotFound error will be returned to RespondWorkflowTaskCompleted.
+			// Close shard. NotFound error will be returned to RespondWorkflowTaskCompleted.
 			s.closeShard(tv.WorkflowID())
 
 			return s.acceptCompleteUpdateCommands(tv, "1"), nil
@@ -3207,7 +3204,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 		T:                   s.T(),
 	}
 
-	// Drain exiting first workflow task.
+	// Drain first WT.
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
@@ -3292,15 +3289,15 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_D
 				}},
 			}}, nil
 		case 2:
-			// Speculative WT, with update.Request message.
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Speculative WT.
+  7 WorkflowTaskStarted
+`, history)
 			return s.acceptCompleteUpdateCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
@@ -3349,7 +3346,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_D
 		T:                   s.T(),
 	}
 
-	// Drain exiting first workflow task.
+	// Drain first WT.
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
@@ -3394,8 +3391,8 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_D
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateAccepted
- 10 WorkflowExecutionUpdateCompleted
+  9 WorkflowExecutionUpdateAccepted  {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
+ 10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
@@ -3430,15 +3427,15 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ded
 				updateResultCh2 <- s.sendUpdateNoError(tv, "1")
 			}()
 
-			// Speculative WT, with update.Request message.
 			s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Speculative WT.
+  7 WorkflowTaskStarted
+`, history)
 			return s.acceptCompleteUpdateCommands(tv, "1"), nil
 		case 3:
 			s.EqualHistory(`
@@ -3486,7 +3483,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ded
 		T:                   s.T(),
 	}
 
-	// Drain exiting first workflow task.
+	// Drain first WT.
 	_, err := poller.PollAndProcessWorkflowTask(true, false)
 	s.NoError(err)
 
@@ -3526,8 +3523,8 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ded
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateAccepted
- 10 WorkflowExecutionUpdateCompleted
+  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
+ 10 WorkflowExecutionUpdateCompleted  {"AcceptedEventId": 9}
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
@@ -3571,15 +3568,15 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 						}},
 					}}, nil
 				case 2:
-					// Speculative WT, with update.Request message.
 					s.EqualHistory(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted`, history)
+  6 WorkflowTaskScheduled // Speculative WT.
+  7 WorkflowTaskStarted
+`, history)
 					return s.acceptCompleteUpdateCommands(tv, "1"), nil
 				case 3:
 					return []*commandpb.Command{{
@@ -3620,7 +3617,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 				T:                   s.T(),
 			}
 
-			// Drain exiting first workflow task.
+			// Drain first WT.
 			_, err := poller.PollAndProcessWorkflowTask(true, false)
 			s.NoError(err)
 
@@ -3655,11 +3652,13 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 				Identity:  tv.WorkerIdentity(),
 			})
 			s.NoError(err)
-			s.Nil(pollResponse.Messages)
+			s.Nil(pollResponse.Messages, "there must be no new WT")
 
-			// But results of the first update are available.
 			updateResult2 := <-updateResultCh2
-			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult2.GetOutcome().GetSuccess()))
+			s.EqualValues(
+				tv.String("success-result", "1"),
+				decodeString(s, updateResult2.GetOutcome().GetSuccess()),
+				"results of the first update must be available")
 
 			// Send signal to schedule new WT.
 			err = s.sendSignal(s.namespace, tv.WorkflowExecution(), tv.Any(), payloads.EncodeString(tv.Any()), tv.Any())
@@ -3684,8 +3683,8 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateAccepted
- 10 WorkflowExecutionUpdateCompleted
+  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
+ 10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
  11 WorkflowExecutionSignaled
  12 WorkflowTaskScheduled
  13 WorkflowTaskStarted

@@ -33,6 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/primitives"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -40,7 +41,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
@@ -84,7 +84,7 @@ func (s *taskFetcherSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.mockResource = resourcetest.NewTest(s.controller, metrics.History)
+	s.mockResource = resourcetest.NewTest(s.controller, primitives.HistoryService)
 	s.frontendClient = s.mockResource.RemoteAdminClient
 	s.logger = log.NewNoopLogger()
 	s.config = tests.NewDynamicConfig()
