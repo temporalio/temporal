@@ -3083,7 +3083,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 
 		// proceed only if the schedule workflow is still running
 		if executionInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			return errWaitForRefresh
+			return nil
 		}
 		// poke to refresh
 		_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
@@ -3177,13 +3177,14 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	executionInfo, startScheduleArgs, err := wh.getScheduleExecutionInfoAndSchedulingArgs(ctx, workflowID, namespaceName.String(), namespaceID)
+	executionInfo, startScheduleArgs, err := wh.getScheduleExecutionInfoAndArgs(ctx, workflowID, namespaceName.String(), namespaceID)
 	if err != nil {
 		return nil, err
 	}
-	startScheduledArgs.Schedule = request.Schedule
+	startScheduleArgs.Schedule = request.Schedule
+	startScheduleArgs.Info.UpdateTime = timestamp.TimePtr(time.Now().UTC())
 
-	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startScheduledArgs)
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startScheduleArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -3199,6 +3200,8 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// we only have to check the size of the signal input, not the workflow input,
+	// because the signal input is at least as large
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
 	if err := common.CheckEventBlobSizeLimit(
@@ -3272,23 +3275,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, err
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
-	if err := common.CheckEventBlobSizeLimit(
-		signalInputPayloads.Size(),
-		sizeLimitWarn,
-		sizeLimitError,
-		namespaceID.String(),
-		workflowID,
-		"", // don't have runid yet
-		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("PatchSchedule"),
-	); err != nil {
-		return nil, err
-	}
-
-	executionInfo, startScheduledArgs, err := wh.getScheduleExecutionInfoAndSchedulingArgs(ctx, workflowID, request.Namespace, namespaceID)
+	executionInfo, startScheduledArgs, err := wh.getScheduleExecutionInfoAndArgs(ctx, workflowID, request.Namespace, namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -3297,6 +3284,24 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startScheduledArgs)
 	if err != nil {
 		return nil, err
+	}
+
+	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
+	for payloadSize := range []int{inputPayloads.Size(), signalInputPayloads.Size()} {
+		if err := common.CheckEventBlobSizeLimit(
+			payloadSize,
+			sizeLimitWarn,
+			sizeLimitError,
+			namespaceID.String(),
+			workflowID,
+			"", // don't have runid yet
+			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.throttledLogger,
+			tag.BlobSizeViolationOperation("PatchSchedule"),
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	_, err = wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
@@ -3406,17 +3411,58 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	_, err = wh.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
+	// describe to get memo, search attributes, and execution info
+	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
-		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-			Reason:            "terminated by DeleteSchedule",
-			Identity:          request.Identity,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: request.Namespace,
+			Execution: execution,
 		},
 	})
 	if err != nil {
+		// TODO: rewrite "workflow" in error messages to "schedule"
 		return nil, err
+	}
+
+	executionInfo := describeResponse.GetWorkflowExecutionInfo()
+	switch executionInfo.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		_, err = wh.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+			NamespaceId: namespaceID.String(),
+			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
+				Namespace:         request.Namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+				Reason:            "terminated by DeleteSchedule",
+				Identity:          request.Identity,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		_, err = wh.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+			NamespaceId:        namespaceID.String(),
+			WorkflowExecution:  execution,
+			ClosedWorkflowOnly: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		_, err = wh.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+			NamespaceId: namespaceID.String(),
+			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
+				Namespace:         request.Namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+				Reason:            "terminated by DeleteSchedule",
+				Identity:          request.Identity,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, serviceerror.NewNotFound("schedule not found")
 	}
 
 	return &workflowservice.DeleteScheduleResponse{}, nil
@@ -5044,13 +5090,13 @@ func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, 
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 		reverseHistory, err := wh.GetWorkflowExecutionHistoryReverse(ctx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 			Namespace:       namespace,
-			Execution:       execution,
+			Execution:       &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: executionInfo.Execution.RunId},
 			MaximumPageSize: 1,
 		})
 		if err != nil {
 			return nil, nil, err
 		}
-		if reverseHistory.History.GetEvents()[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+		if len(reverseHistory.History.GetEvents()) == 0 || reverseHistory.History.GetEvents()[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
 			return nil, nil, serviceerror.NewInternal("schedule result cannot be loaded")
 
 		}

@@ -1483,7 +1483,6 @@ func (s *workflowSuite) TestCloseWorkflowWhenNoActions() {
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
-		fmt.Println("==========", s.now())
 		s.True(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
