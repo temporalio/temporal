@@ -141,7 +141,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.testNamespaceID = "e4f90ec0-1313-45be-9877-8aa41f72a45a"
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resourcetest.NewTest(s.controller, metrics.Frontend)
+	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata

@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/primitives"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -125,7 +126,7 @@ func (s *controllerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resourcetest.NewTest(s.controller, metrics.History)
+	s.mockResource = resourcetest.NewTest(s.controller, primitives.HistoryService)
 	s.mockHistoryEngine = NewMockEngine(s.controller)
 	s.mockEngineFactory = NewMockEngineFactory(s.controller)
 
