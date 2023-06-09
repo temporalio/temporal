@@ -30,14 +30,10 @@ type (
 	// MetricName is the name of the metric
 	MetricName string
 
-	// MetricType is the type of the metric
-	MetricType int
-
 	MetricUnit string
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		metricType MetricType // metric type
 		metricName MetricName // metric name
 		unit       MetricUnit
 	}
@@ -51,14 +47,6 @@ const (
 	Bytes         = "By"
 )
 
-// MetricTypes which are supported
-const (
-	Counter MetricType = iota
-	Timer
-	Gauge
-	Histogram
-)
-
 // Empty returns true if the metricName is an empty string
 func (mn MetricName) Empty() bool {
 	return mn == ""
@@ -67,10 +55,6 @@ func (mn MetricName) Empty() bool {
 // String returns string representation of this metric name
 func (mn MetricName) String() string {
 	return string(mn)
-}
-
-func (md metricDefinition) GetMetricType() MetricType {
-	return md.metricType
 }
 
 func (md metricDefinition) GetMetricName() string {
@@ -82,21 +66,21 @@ func (md metricDefinition) GetMetricUnit() MetricUnit {
 }
 
 func NewTimerDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Timer, unit: Milliseconds}
+	return metricDefinition{metricName: MetricName(name), unit: Milliseconds}
 }
 
 func NewBytesHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Bytes}
+	return metricDefinition{metricName: MetricName(name), unit: Bytes}
 }
 
 func NewDimensionlessHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Dimensionless}
+	return metricDefinition{metricName: MetricName(name), unit: Dimensionless}
 }
 
 func NewCounterDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Counter}
+	return metricDefinition{metricName: MetricName(name)}
 }
 
 func NewGaugeDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Gauge}
+	return metricDefinition{metricName: MetricName(name)}
 }

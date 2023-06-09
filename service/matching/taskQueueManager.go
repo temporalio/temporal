@@ -346,13 +346,12 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.unloadFromEngine()
 }
 
-// isVersioned returns true if this is a tqm for a "versioned [low-level] task queue". Note
-// that this is a different concept from the overall [high-level] task queue having versioning
-// data associated with it, which is the usual meaning of "versioned task queue". In this case,
-// it means whether this is a tqm processing a specific version set id. Unlike non-root
-// partitions which are known (at some level) by other services, [low-level] task queues with a
-// version set should not be interacted with outside of the matching service.
-func (c *taskQueueManagerImpl) isVersioned() bool {
+// managesSpecificVersionSet returns true if this is a tqm for a specific version set in the
+// build-id-based versioning feature. Note that this is a different concept from the overall
+// task queue having versioning data associated with it, which is the usual meaning of
+// "versioned task queue". These task queues are not interacted with directly outside outside
+// of a single matching node.
+func (c *taskQueueManagerImpl) managesSpecificVersionSet() bool {
 	return c.taskQueueID.VersionSet() != ""
 }
 
@@ -362,7 +361,7 @@ func (c *taskQueueManagerImpl) isVersioned() bool {
 func (c *taskQueueManagerImpl) shouldFetchUserData() bool {
 	// 1. If the db stores it, then we definitely should not be fetching.
 	// 2. Additionally, we should not fetch for "versioned" tqms.
-	return !c.db.DbStoresUserData() && !c.isVersioned()
+	return !c.db.DbStoresUserData() && !c.managesSpecificVersionSet()
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -510,7 +509,7 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 // GetUserData returns the user data for the task queue if any.
 // Note: can return nil value with no error.
 func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
-	if c.isVersioned() {
+	if c.managesSpecificVersionSet() {
 		return nil, nil, errNoUserDataOnVersionedTQM
 	}
 	return c.db.GetUserData(ctx)

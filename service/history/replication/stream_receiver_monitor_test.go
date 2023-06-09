@@ -56,9 +56,6 @@ type (
 		clientBean      *client.MockBean
 		shardController *shard.MockController
 
-		clientClusterID int32
-		serverClusterID int32
-
 		streamReceiverMonitor *StreamReceiverMonitorImpl
 	}
 )
@@ -83,9 +80,6 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.clientBean = client.NewMockBean(s.controller)
 	s.shardController = shard.NewMockController(s.controller)
-
-	s.clientClusterID = int32(cluster.TestCurrentClusterInitialFailoverVersion)
-	s.serverClusterID = int32(cluster.TestAlternativeClusterInitialFailoverVersion)
 
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
 		ProcessToolBox{
@@ -124,98 +118,176 @@ func (s *streamReceiverMonitorSuite) TearDownTest() {
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	for serverKey, stream := range s.streamReceiverMonitor.streams {
+	for serverKey, stream := range s.streamReceiverMonitor.outboundStreams {
 		stream.Stop()
-		delete(s.streamReceiverMonitor.streams, serverKey)
+		delete(s.streamReceiverMonitor.outboundStreams, serverKey)
 	}
 }
 
-func (s *streamReceiverMonitorSuite) TestGenerateStreamKeys_1To4() {
-	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(s.clientClusterID)).AnyTimes()
+func (s *streamReceiverMonitorSuite) TestGenerateInboundStreamKeys_1From4() {
+	s.clusterMetadata.EXPECT().GetClusterID().Return(cluster.TestAlternativeClusterInitialFailoverVersion).AnyTimes()
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
 		cluster.TestCurrentClusterName: {
 			Enabled:                true,
-			InitialFailoverVersion: int64(s.clientClusterID),
+			InitialFailoverVersion: cluster.TestAlternativeClusterInitialFailoverVersion,
 			RPCAddress:             cluster.TestCurrentClusterFrontendAddress,
 			ShardCount:             1,
 		},
 		cluster.TestAlternativeClusterName: {
 			Enabled:                true,
-			InitialFailoverVersion: int64(s.serverClusterID),
+			InitialFailoverVersion: cluster.TestCurrentClusterInitialFailoverVersion,
 			RPCAddress:             cluster.TestAlternativeClusterFrontendAddress,
 			ShardCount:             4,
 		},
 	}).AnyTimes()
 	s.shardController.EXPECT().ShardIDs().Return([]int32{1}).AnyTimes()
 
-	streamKeys := s.streamReceiverMonitor.generateStreamKeys()
+	streamKeys := s.streamReceiverMonitor.generateInboundStreamKeys()
 	s.Equal(map[ClusterShardKeyPair]struct{}{
 		ClusterShardKeyPair{
-			Client: NewClusterShardKey(s.clientClusterID, 1),
-			Server: NewClusterShardKey(s.serverClusterID, 1),
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
 		}: {},
 		ClusterShardKeyPair{
-			Client: NewClusterShardKey(s.clientClusterID, 1),
-			Server: NewClusterShardKey(s.serverClusterID, 2),
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 2),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
 		}: {},
 		ClusterShardKeyPair{
-			Client: NewClusterShardKey(s.clientClusterID, 1),
-			Server: NewClusterShardKey(s.serverClusterID, 3),
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 3),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
 		}: {},
 		ClusterShardKeyPair{
-			Client: NewClusterShardKey(s.clientClusterID, 1),
-			Server: NewClusterShardKey(s.serverClusterID, 4),
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 4),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
 		}: {},
 	}, streamKeys)
 }
 
-func (s *streamReceiverMonitorSuite) TestGenerateStreamKeys_4To1() {
-	s.clusterMetadata.EXPECT().GetClusterID().Return(int64(s.clientClusterID)).AnyTimes()
+func (s *streamReceiverMonitorSuite) TestGenerateInboundStreamKeys_4From1() {
+	s.clusterMetadata.EXPECT().GetClusterID().Return(cluster.TestAlternativeClusterInitialFailoverVersion).AnyTimes()
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
 		cluster.TestCurrentClusterName: {
 			Enabled:                true,
-			InitialFailoverVersion: int64(s.clientClusterID),
+			InitialFailoverVersion: cluster.TestAlternativeClusterInitialFailoverVersion,
 			RPCAddress:             cluster.TestCurrentClusterFrontendAddress,
 			ShardCount:             4,
 		},
 		cluster.TestAlternativeClusterName: {
 			Enabled:                true,
-			InitialFailoverVersion: int64(s.serverClusterID),
+			InitialFailoverVersion: cluster.TestCurrentClusterInitialFailoverVersion,
 			RPCAddress:             cluster.TestAlternativeClusterFrontendAddress,
 			ShardCount:             1,
 		},
 	}).AnyTimes()
 	s.shardController.EXPECT().ShardIDs().Return([]int32{1, 2, 3, 4}).AnyTimes()
 
-	streamKeys := s.streamReceiverMonitor.generateStreamKeys()
+	streamKeys := s.streamReceiverMonitor.generateInboundStreamKeys()
 	s.Equal(map[ClusterShardKeyPair]struct{}{
 		ClusterShardKeyPair{
-			Client: NewClusterShardKey(s.clientClusterID, 1),
-			Server: NewClusterShardKey(s.serverClusterID, 1),
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
 		}: {},
 		ClusterShardKeyPair{
-			Client: NewClusterShardKey(s.clientClusterID, 2),
-			Server: NewClusterShardKey(s.serverClusterID, 1),
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 2),
 		}: {},
 		ClusterShardKeyPair{
-			Client: NewClusterShardKey(s.clientClusterID, 3),
-			Server: NewClusterShardKey(s.serverClusterID, 1),
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 3),
 		}: {},
 		ClusterShardKeyPair{
-			Client: NewClusterShardKey(s.clientClusterID, 4),
-			Server: NewClusterShardKey(s.serverClusterID, 1),
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 4),
 		}: {},
 	}, streamKeys)
 }
 
-func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Add() {
+func (s *streamReceiverMonitorSuite) TestGenerateOutboundStreamKeys_1To4() {
+	s.clusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: cluster.TestCurrentClusterInitialFailoverVersion,
+			RPCAddress:             cluster.TestCurrentClusterFrontendAddress,
+			ShardCount:             1,
+		},
+		cluster.TestAlternativeClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: cluster.TestAlternativeClusterInitialFailoverVersion,
+			RPCAddress:             cluster.TestAlternativeClusterFrontendAddress,
+			ShardCount:             4,
+		},
+	}).AnyTimes()
+	s.shardController.EXPECT().ShardIDs().Return([]int32{1}).AnyTimes()
+
+	streamKeys := s.streamReceiverMonitor.generateOutboundStreamKeys()
+	s.Equal(map[ClusterShardKeyPair]struct{}{
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 2),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 3),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 4),
+		}: {},
+	}, streamKeys)
+}
+
+func (s *streamReceiverMonitorSuite) TestGenerateOutboundStreamKeys_4To1() {
+	s.clusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: cluster.TestCurrentClusterInitialFailoverVersion,
+			RPCAddress:             cluster.TestCurrentClusterFrontendAddress,
+			ShardCount:             4,
+		},
+		cluster.TestAlternativeClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: cluster.TestAlternativeClusterInitialFailoverVersion,
+			RPCAddress:             cluster.TestAlternativeClusterFrontendAddress,
+			ShardCount:             1,
+		},
+	}).AnyTimes()
+	s.shardController.EXPECT().ShardIDs().Return([]int32{1, 2, 3, 4}).AnyTimes()
+
+	streamKeys := s.streamReceiverMonitor.generateOutboundStreamKeys()
+	s.Equal(map[ClusterShardKeyPair]struct{}{
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 1),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 2),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 3),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
+		}: {},
+		ClusterShardKeyPair{
+			Client: NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), 4),
+			Server: NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), 1),
+		}: {},
+	}, streamKeys)
+}
+
+func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Add() {
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	clientKey := NewClusterShardKey(s.clientClusterID, rand.Int31())
-	serverKey := NewClusterShardKey(s.serverClusterID, rand.Int31())
+	clientKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
 
 	s.streamReceiverMonitor.Lock()
-	s.Equal(0, len(s.streamReceiverMonitor.streams))
+	s.Equal(0, len(s.streamReceiverMonitor.inboundStreams))
 	s.streamReceiverMonitor.Unlock()
 
 	streamKeys := map[ClusterShardKeyPair]struct{}{
@@ -224,12 +296,108 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Add() {
 			Server: serverKey,
 		}: {},
 	}
-	s.streamReceiverMonitor.doReconcileStreams(streamKeys)
+	streamSender := NewMockStreamSender(s.controller)
+	streamSender.EXPECT().Key().Return(ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}).AnyTimes()
+	streamSender.EXPECT().IsValid().Return(true)
+	s.streamReceiverMonitor.RegisterInboundStream(streamSender)
+	s.streamReceiverMonitor.doReconcileInboundStreams(streamKeys)
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(1, len(s.streamReceiverMonitor.streams))
-	stream, ok := s.streamReceiverMonitor.streams[ClusterShardKeyPair{
+	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	stream, ok := s.streamReceiverMonitor.inboundStreams[ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}]
+	s.True(ok)
+	s.Equal(streamSender, stream)
+}
+
+func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Remove() {
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	clientKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	streamSender := NewMockStreamSender(s.controller)
+	streamSender.EXPECT().Key().Return(ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}).AnyTimes()
+	streamSender.EXPECT().IsValid().Return(false)
+	streamSender.EXPECT().Stop()
+	s.streamReceiverMonitor.RegisterInboundStream(streamSender)
+
+	s.streamReceiverMonitor.Lock()
+	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	s.streamReceiverMonitor.Unlock()
+
+	s.streamReceiverMonitor.doReconcileInboundStreams(map[ClusterShardKeyPair]struct{}{})
+
+	s.streamReceiverMonitor.Lock()
+	defer s.streamReceiverMonitor.Unlock()
+	s.Equal(0, len(s.streamReceiverMonitor.inboundStreams))
+}
+
+func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Reactivate() {
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	clientKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	streamSenderStale := NewMockStreamSender(s.controller)
+	streamSenderStale.EXPECT().Key().Return(ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}).AnyTimes()
+	streamSenderStale.EXPECT().Stop()
+	s.streamReceiverMonitor.RegisterInboundStream(streamSenderStale)
+
+	s.streamReceiverMonitor.Lock()
+	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	s.streamReceiverMonitor.Unlock()
+
+	streamSenderValid := NewMockStreamSender(s.controller)
+	streamSenderValid.EXPECT().Key().Return(ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}).AnyTimes()
+	s.streamReceiverMonitor.RegisterInboundStream(streamSenderValid)
+
+	s.streamReceiverMonitor.Lock()
+	defer s.streamReceiverMonitor.Unlock()
+	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	stream, ok := s.streamReceiverMonitor.inboundStreams[ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}]
+	s.True(ok)
+	s.Equal(streamSenderValid, stream)
+}
+
+func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	clientKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+
+	s.streamReceiverMonitor.Lock()
+	s.Equal(0, len(s.streamReceiverMonitor.outboundStreams))
+	s.streamReceiverMonitor.Unlock()
+
+	streamKeys := map[ClusterShardKeyPair]struct{}{
+		ClusterShardKeyPair{
+			Client: clientKey,
+			Server: serverKey,
+		}: {},
+	}
+	s.streamReceiverMonitor.doReconcileOutboundStreams(streamKeys)
+
+	s.streamReceiverMonitor.Lock()
+	defer s.streamReceiverMonitor.Unlock()
+	s.Equal(1, len(s.streamReceiverMonitor.outboundStreams))
+	stream, ok := s.streamReceiverMonitor.outboundStreams[ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,
 	}]
@@ -237,50 +405,56 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Add() {
 	s.True(stream.IsValid())
 }
 
-func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Remove() {
+func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Remove() {
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	clientKey := NewClusterShardKey(s.clientClusterID, rand.Int31())
-	serverKey := NewClusterShardKey(s.serverClusterID, rand.Int31())
-	stream := NewStreamReceiver(s.streamReceiverMonitor.ProcessToolBox, clientKey, serverKey)
-
-	s.streamReceiverMonitor.Lock()
-	s.Equal(0, len(s.streamReceiverMonitor.streams))
-	stream.Start()
-	s.True(stream.IsValid())
-	s.streamReceiverMonitor.streams[ClusterShardKeyPair{
+	clientKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	streamReceiver := NewMockStreamReceiver(s.controller)
+	streamReceiver.EXPECT().Key().Return(ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,
-	}] = stream
+	}).AnyTimes()
+	streamReceiver.EXPECT().IsValid().Return(true)
+	streamReceiver.EXPECT().Stop()
+
+	s.streamReceiverMonitor.Lock()
+	s.Equal(0, len(s.streamReceiverMonitor.outboundStreams))
+	s.streamReceiverMonitor.outboundStreams[ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}] = streamReceiver
 	s.streamReceiverMonitor.Unlock()
 
-	s.streamReceiverMonitor.doReconcileStreams(map[ClusterShardKeyPair]struct{}{})
+	s.streamReceiverMonitor.doReconcileOutboundStreams(map[ClusterShardKeyPair]struct{}{})
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(0, len(s.streamReceiverMonitor.streams))
-	s.False(stream.IsValid())
+	s.Equal(0, len(s.streamReceiverMonitor.outboundStreams))
 }
 
-func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Reactivate() {
+func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Reactivate() {
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	clientKey := NewClusterShardKey(s.clientClusterID, rand.Int31())
-	serverKey := NewClusterShardKey(s.serverClusterID, rand.Int31())
-	stream := NewStreamReceiver(s.streamReceiverMonitor.ProcessToolBox, clientKey, serverKey)
-
-	s.streamReceiverMonitor.Lock()
-	s.Equal(0, len(s.streamReceiverMonitor.streams))
-	stream.Start()
-	stream.Stop()
-	s.False(stream.IsValid())
-	s.streamReceiverMonitor.streams[ClusterShardKeyPair{
+	clientKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	streamReceiverStale := NewMockStreamReceiver(s.controller)
+	streamReceiverStale.EXPECT().Key().Return(ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,
-	}] = stream
+	}).AnyTimes()
+	streamReceiverStale.EXPECT().IsValid().Return(false)
+	streamReceiverStale.EXPECT().Stop()
+
+	s.streamReceiverMonitor.Lock()
+	s.Equal(0, len(s.streamReceiverMonitor.outboundStreams))
+	s.streamReceiverMonitor.outboundStreams[ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}] = streamReceiverStale
 	s.streamReceiverMonitor.Unlock()
 
-	s.streamReceiverMonitor.doReconcileStreams(map[ClusterShardKeyPair]struct{}{
+	s.streamReceiverMonitor.doReconcileOutboundStreams(map[ClusterShardKeyPair]struct{}{
 		ClusterShardKeyPair{
 			Client: clientKey,
 			Server: serverKey,
@@ -289,8 +463,8 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileStreams_Reactivate() {
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(1, len(s.streamReceiverMonitor.streams))
-	stream, ok := s.streamReceiverMonitor.streams[ClusterShardKeyPair{
+	s.Equal(1, len(s.streamReceiverMonitor.outboundStreams))
+	stream, ok := s.streamReceiverMonitor.outboundStreams[ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,
 	}]
