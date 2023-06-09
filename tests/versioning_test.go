@@ -712,6 +712,62 @@ func (s *versioningIntegSuite) dispatchActivityCompatible() {
 	s.Equal("v1.1", out)
 }
 
+func (s *versioningIntegSuite) TestDispatchActivityCrossTQFails() {
+	dc := s.testCluster.host.dcClient
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	tq := s.randomizeStr(s.T().Name())
+	crosstq := s.randomizeStr(s.T().Name())
+
+	act := func() (string, error) { return "v1", nil }
+	wf := func(ctx workflow.Context) (string, error) {
+		fut := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 1 * time.Second,
+			TaskQueue:           crosstq,
+			VersioningIntent:    temporal.VersioningIntentCompatible,
+		}), "act")
+		var val string
+		s.NoError(fut.Get(ctx, &val))
+		return val, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.addNewDefaultBuildId(ctx, crosstq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+	s.waitForPropagation(ctx, crosstq, "v1")
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	w1cross := worker.New(s.sdkClient, crosstq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1cross.RegisterActivityWithOptions(act, activity.RegisterOptions{Name: "act"})
+	s.NoError(w1cross.Start())
+	defer w1cross.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+
+	// workflow should be terminated by invalid argument
+	var out string
+	s.Error(run.Get(ctx, &out))
+}
+
 func (s *versioningIntegSuite) TestDispatchChildWorkflow() {
 	s.testWithMatchingBehavior(s.dispatchChildWorkflow)
 }
@@ -856,6 +912,61 @@ func (s *versioningIntegSuite) dispatchChildWorkflowUpgrade() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v1.1", out)
+}
+
+func (s *versioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
+	dc := s.testCluster.host.dcClient
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	tq := s.randomizeStr(s.T().Name())
+	crosstq := s.randomizeStr(s.T().Name())
+
+	child := func(ctx workflow.Context) (string, error) { return "v1", nil }
+	wf := func(ctx workflow.Context) (string, error) {
+		fut := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			TaskQueue:        crosstq,
+			VersioningIntent: temporal.VersioningIntentCompatible,
+		}), "child")
+		var val string
+		s.NoError(fut.Get(ctx, &val))
+		return val, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, "v1")
+	s.addNewDefaultBuildId(ctx, crosstq, "v1")
+	s.waitForPropagation(ctx, tq, "v1")
+	s.waitForPropagation(ctx, crosstq, "v1")
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	w1cross := worker.New(s.sdkClient, crosstq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1cross.RegisterWorkflowWithOptions(child, workflow.RegisterOptions{Name: "child"})
+	s.NoError(w1cross.Start())
+	defer w1cross.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+
+	// workflow should be terminated by invalid argument
+	var out string
+	s.Error(run.Get(ctx, &out))
 }
 
 func (s *versioningIntegSuite) TestDispatchQuery() {

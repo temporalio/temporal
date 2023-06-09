@@ -357,6 +357,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		return nil, err
 	}
 
+	// TODO: relax this restriction after matching can support this
+	if attr.UseCompatibleVersion && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+		err := serviceerror.NewInvalidArgument("Activity with UseCompatibleVersion cannot run on different task queue.")
+		return nil, handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
+	}
+
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK.String()),
 		attr.GetInput().Size(),
@@ -870,6 +876,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
+	// TODO: relax this restriction after matching can support this
+	if attr.UseCompatibleVersion && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+		err := serviceerror.NewInvalidArgument("ContinueAsNew with UseCompatibleVersion cannot run on different task queue.")
+		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
+	}
+
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
@@ -983,6 +995,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		},
 	); err != nil || handler.stopProcessing {
 		return err
+	}
+
+	// TODO: relax this restriction after matching can support this
+	if attr.UseCompatibleVersion && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
+		err := serviceerror.NewInvalidArgument("StartChildWorkflowExecution with UseCompatibleVersion cannot run on different task queue.")
+		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
