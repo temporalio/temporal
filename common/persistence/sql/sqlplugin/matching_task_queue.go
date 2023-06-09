@@ -100,8 +100,7 @@ type (
 
 	TaskQueueUserDataEntry struct {
 		TaskQueueName string
-		Data          []byte
-		DataEncoding  string
+		VersionedBlob
 	}
 
 	// MatchingTaskQueue is the SQL persistence interface for matching task queues
@@ -117,8 +116,8 @@ type (
 		LockTaskQueues(ctx context.Context, filter TaskQueuesFilter) (int64, error)
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*VersionedBlob, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueDataRequest) error
-		AddBuildIdToTaskQueueMapping(ctx context.Context, request AddToBuildIdToTaskQueueMapping) error
-		RemoveBuildIdToTaskQueueMapping(ctx context.Context, request RemoveFromBuildIdToTaskQueueMapping) error
+		AddToBuildIdToTaskQueueMapping(ctx context.Context, request AddToBuildIdToTaskQueueMapping) error
+		RemoveFromBuildIdToTaskQueueMapping(ctx context.Context, request RemoveFromBuildIdToTaskQueueMapping) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) ([]TaskQueueUserDataEntry, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)
 		CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error)

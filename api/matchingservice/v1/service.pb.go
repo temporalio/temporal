@@ -155,6 +155,8 @@ type MatchingServiceClient interface {
 	// Force unloading a task queue. Used for testing only.
 	ForceUnloadTaskQueue(ctx context.Context, in *ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueueResponse, error)
 	// Update task queue user data in owning node for all updates in namespace.
+	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
+	// API.
 	// (-- api-linter: core::0134::response-message-name=disabled
 	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled
@@ -371,6 +373,8 @@ type MatchingServiceServer interface {
 	// Force unloading a task queue. Used for testing only.
 	ForceUnloadTaskQueue(context.Context, *ForceUnloadTaskQueueRequest) (*ForceUnloadTaskQueueResponse, error)
 	// Update task queue user data in owning node for all updates in namespace.
+	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
+	// API.
 	// (-- api-linter: core::0134::response-message-name=disabled
 	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::method-signature=disabled

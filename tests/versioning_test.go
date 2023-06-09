@@ -548,6 +548,7 @@ func (s *versioningIntegSuite) dispatchActivity(failMode activityFailMode) {
 		if act1state.Add(1) == 1 {
 			switch failMode {
 			case failActivity:
+				// nolint:goerr113
 				return "", errors.New("try again")
 			case timeoutActivity:
 				time.Sleep(5 * time.Second)
@@ -560,6 +561,7 @@ func (s *versioningIntegSuite) dispatchActivity(failMode activityFailMode) {
 		if act2state.Add(1) == 1 {
 			switch failMode {
 			case failActivity:
+				// nolint:goerr113
 				return "", errors.New("try again")
 			case timeoutActivity:
 				time.Sleep(5 * time.Second)
@@ -866,19 +868,25 @@ func (s *versioningIntegSuite) dispatchQuery() {
 	started := make(chan struct{}, 2)
 
 	wf1 := func(ctx workflow.Context) error {
-		workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v1", nil })
+		if err := workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v1", nil }); err != nil {
+			return err
+		}
 		started <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		return nil
 	}
 	wf11 := func(ctx workflow.Context) error {
-		workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v1.1", nil })
+		if err := workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v1.1", nil }); err != nil {
+			return err
+		}
 		started <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		return nil
 	}
 	wf2 := func(ctx workflow.Context) error {
-		workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v2", nil })
+		if err := workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v2", nil }); err != nil {
+			return err
+		}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		return nil
 	}

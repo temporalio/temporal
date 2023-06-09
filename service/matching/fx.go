@@ -32,35 +32,53 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
 )
 
 var Module = fx.Options(
+	resource.Module,
 	fx.Provide(dynamicconfig.NewCollection),
-	fx.Provide(NewConfig),
+	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),
-	resource.Module,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
+
+func ConfigProvider(
+	dc *dynamicconfig.Collection,
+	persistenceConfig config.Persistence,
+) *Config {
+	return NewConfig(
+		dc,
+		persistenceConfig.StandardVisibilityConfigExist(),
+		persistenceConfig.AdvancedVisibilityConfigExist(),
+	)
+}
 
 func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 	return interceptor.NewRetryableInterceptor(
@@ -128,6 +146,34 @@ func NamespaceReplicationQueueProvider(
 	return replicatorNamespaceReplicationQueue
 }
 
+func VisibilityManagerProvider(
+	logger log.Logger,
+	persistenceConfig *config.Persistence,
+	metricsHandler metrics.Handler,
+	serviceConfig *Config,
+	esClient esclient.Client,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
+	saProvider searchattribute.Provider,
+) (manager.VisibilityManager, error) {
+	return visibility.NewManager(
+		*persistenceConfig,
+		persistenceServiceResolver,
+		esClient,
+		nil, // matching visibility never writes
+		saProvider,
+		searchAttributesMapperProvider,
+		serviceConfig.VisibilityPersistenceMaxReadQPS,
+		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.EnableReadFromSecondaryVisibility,
+		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes
+		serviceConfig.VisibilityDisableOrderByClause,
+		serviceConfig.VisibilityEnableManualPagination,
+		metricsHandler,
+		logger,
+	)
+}
+
 func HandlerProvider(
 	config *Config,
 	logger log.SnTaggedLogger,
@@ -140,6 +186,7 @@ func HandlerProvider(
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue TaskQueueReplicatorNamespaceReplicationQueue,
+	visibilityManager manager.VisibilityManager,
 ) *Handler {
 	return NewHandler(
 		config,
@@ -153,6 +200,7 @@ func HandlerProvider(
 		namespaceRegistry,
 		clusterMetadata,
 		namespaceReplicationQueue,
+		visibilityManager,
 	)
 }
 

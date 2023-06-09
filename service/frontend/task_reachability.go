@@ -36,12 +36,12 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 // Helper for deduping GetWorkerBuildIdCompatibility matching requests.
@@ -180,10 +180,10 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		// Query for the unversioned worker
 		isDefaultInQueue = len(request.versionSets) == 0
 		// Query workflows that have completed tasks marked with a sentinel "unversioned" search attribute.
-		buildIdsFilter = fmt.Sprintf(`%s = "%s"`, searchattribute.BuildIds, common.UnversionedSearchAttribute)
+		buildIdsFilter = fmt.Sprintf(`%s = "%s"`, searchattribute.BuildIds, worker_versioning.UnversionedSearchAttribute)
 	} else {
 		// Query for a versioned worker
-		setIdx, buildIdIdx := common.FindBuildId(request.versionSets, request.buildId)
+		setIdx, buildIdIdx := worker_versioning.FindBuildId(request.versionSets, request.buildId)
 		if setIdx == -1 {
 			// build id not in set - unreachable
 			return &taskQueueReachability, nil
@@ -199,7 +199,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		isDefaultInQueue = setIdx == len(request.versionSets)-1
 		escapedBuildIds := make([]string, len(set.GetBuildIds()))
 		for i, buildId := range set.GetBuildIds() {
-			escapedBuildIds[i] = sqlparser.String(sqlparser.NewStrVal([]byte(common.VersionedBuildIdSearchAttribute(buildId))))
+			escapedBuildIds[i] = sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(buildId))))
 		}
 		buildIdsFilter = fmt.Sprintf("%s IN (%s)", searchattribute.BuildIds, strings.Join(escapedBuildIds, ","))
 	}
@@ -247,10 +247,12 @@ func (wh *WorkflowHandler) queryVisibilityForExisitingWorkflowsReachability(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unsupported reachability type: %v", reachabilityType))
 	}
 
+	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))
+
 	req := manager.CountWorkflowExecutionsRequest{
 		NamespaceID: ns.ID(),
 		Namespace:   ns.Name(),
-		Query:       fmt.Sprintf("%s = %q AND %s%s", searchattribute.TaskQueue, taskQueue, buildIdsFilter, statusFilter),
+		Query:       fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter),
 	}
 
 	// TODO(bergundy): is count more efficient than select with page size of 1?

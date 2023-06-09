@@ -108,7 +108,7 @@ task_queue_id = :task_queue_id
 		`(namespace_id, task_queue_name, data, data_encoding, version) ` +
 		`VALUES (?, ?, ?, ?, 1)`
 
-	listTaskQueueUserDataQry = `SELECT task_queue_name, data, data_encoding FROM task_queue_user_data WHERE namespace_id = ? AND task_queue_name > ? LIMIT ?`
+	listTaskQueueUserDataQry = `SELECT task_queue_name, data, data_encoding, version FROM task_queue_user_data WHERE namespace_id = ? AND task_queue_name > ? LIMIT ?`
 
 	addBuildIdToTaskQueueMappingQry    = `INSERT INTO build_id_to_task_queue (namespace_id, build_id, task_queue_name) VALUES `
 	removeBuildIdToTaskQueueMappingQry = `DELETE FROM build_id_to_task_queue WHERE namespace_id = ? AND task_queue_name = ? AND build_id IN (`
@@ -347,7 +347,7 @@ func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.U
 	return nil
 }
 
-func (mdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddToBuildIdToTaskQueueMapping) error {
+func (mdb *db) AddToBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddToBuildIdToTaskQueueMapping) error {
 	query := addBuildIdToTaskQueueMappingQry
 	var params []any
 	for idx, buildId := range request.BuildIds {
@@ -363,7 +363,7 @@ func (mdb *db) AddBuildIdToTaskQueueMapping(ctx context.Context, request sqlplug
 	return err
 }
 
-func (mdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveFromBuildIdToTaskQueueMapping) error {
+func (mdb *db) RemoveFromBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.RemoveFromBuildIdToTaskQueueMapping) error {
 	query := removeBuildIdToTaskQueueMappingQry + strings.Repeat("?, ", len(request.BuildIds)-1) + "?)"
 	// Golang doesn't support appending a string slice to an any slice which is essentially what we're doing here.
 	params := make([]any, len(request.BuildIds)+2)
@@ -374,10 +374,6 @@ func (mdb *db) RemoveBuildIdToTaskQueueMapping(ctx context.Context, request sqlp
 	}
 
 	_, err := mdb.conn.ExecContext(ctx, query, params...)
-	if err == nil {
-		// TODO(bergundy)
-		panic("Build id removal should be properly tested once we support deletion")
-	}
 	return err
 }
 

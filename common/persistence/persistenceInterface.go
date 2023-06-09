@@ -275,6 +275,7 @@ type (
 	InternalTaskQueueUserDataEntry struct {
 		TaskQueue string
 		Data      *commonpb.DataBlob
+		Version   int64
 	}
 
 	InternalListTaskQueueUserDataEntriesResponse struct {

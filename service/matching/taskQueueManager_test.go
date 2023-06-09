@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/internal/goro"
 )
@@ -217,7 +218,7 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
+	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error = nil
 	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
@@ -349,8 +350,10 @@ func createTestTaskQueueManagerWithConfig(
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns-name"), nil).AnyTimes()
+	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
+	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
-	me := newMatchingEngine(testOpts.config, tm, nil, logger, mockNamespaceCache, testOpts.matchingClientMock)
+	me := newMatchingEngine(testOpts.config, tm, nil, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
 	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, cmeta, opts...)
 	if err != nil {
 		return nil, err
@@ -420,7 +423,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
+	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
@@ -807,7 +810,9 @@ func TestTQMFetchesUserDataStickyToNormal(t *testing.T) {
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns-name"), nil).AnyTimes()
-	me := newMatchingEngine(tqCfg.config, tm, nil, logger, mockNamespaceCache, tqCfg.matchingClientMock)
+	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
+	mockVisibilityManager.EXPECT().Close().AnyTimes()
+	me := newMatchingEngine(tqCfg.config, tm, nil, logger, mockNamespaceCache, tqCfg.matchingClientMock, mockVisibilityManager)
 	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	stickyInfo := stickyInfo{
 		kind:       enumspb.TASK_QUEUE_KIND_STICKY,
@@ -836,8 +841,8 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
 	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	err = subTq.UpdateUserData(ctx, UserDataUpdateOptions{Replicate: false}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
-		return data, nil
+	err = subTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		return data, false, nil
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)
@@ -847,8 +852,8 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 	actTqCfg := defaultTqmTestOpts(controller)
 	actTqCfg.tqId = actTqId
 	actTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, actTqCfg)
-	err = actTq.UpdateUserData(ctx, UserDataUpdateOptions{Replicate: false}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
-		return data, nil
+	err = actTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		return data, false, nil
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, errUserDataNoMutateNonRoot)

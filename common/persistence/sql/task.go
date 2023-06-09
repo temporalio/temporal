@@ -518,7 +518,7 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 			return err
 		}
 		if len(request.BuildIdsAdded) > 0 {
-			err = tx.AddBuildIdToTaskQueueMapping(ctx, sqlplugin.AddToBuildIdToTaskQueueMapping{
+			err = tx.AddToBuildIdToTaskQueueMapping(ctx, sqlplugin.AddToBuildIdToTaskQueueMapping{
 				NamespaceID:   namespaceID,
 				TaskQueueName: request.TaskQueue,
 				BuildIds:      request.BuildIdsAdded,
@@ -528,7 +528,7 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 			}
 		}
 		if len(request.BuildIdsRemoved) > 0 {
-			err = tx.RemoveBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveFromBuildIdToTaskQueueMapping{
+			err = tx.RemoveFromBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveFromBuildIdToTaskQueueMapping{
 				NamespaceID:   namespaceID,
 				TaskQueueName: request.TaskQueue,
 				BuildIds:      request.BuildIdsRemoved,
@@ -577,6 +577,7 @@ func (m *sqlTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, reque
 	for i, row := range rows {
 		entries[i].TaskQueue = rows[i].TaskQueueName
 		entries[i].Data = persistence.NewDataBlob(row.Data, row.DataEncoding)
+		entries[i].Version = rows[i].Version
 	}
 	response := &persistence.InternalListTaskQueueUserDataEntriesResponse{
 		Entries:       entries,

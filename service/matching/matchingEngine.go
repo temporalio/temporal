@@ -58,8 +58,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 const (
@@ -120,6 +122,7 @@ type (
 		keyResolver          membership.ServiceResolver
 		clusterMeta          cluster.Metadata
 		timeSource           clock.TimeSource
+		visibilityManager    manager.VisibilityManager
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Disables concurrent task queue user data updates and replication requests (due to a cassandra limitation)
@@ -157,6 +160,7 @@ func NewEngine(
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	visibilityManager manager.VisibilityManager,
 ) Engine {
 
 	return &matchingEngineImpl{
@@ -175,6 +179,7 @@ func NewEngine(
 		keyResolver:               resolver,
 		clusterMeta:               clusterMeta,
 		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
+		visibilityManager:         visibilityManager,
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
 	}
@@ -820,7 +825,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
 ) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
-	taskQueueName := req.GetRequest().GetTaskQueue()
+	taskQueueName := req.GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
@@ -829,35 +834,81 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
-	updateOptions := UserDataUpdateOptions{
-		Replicate:                true,
-		TaskQueueLimitPerBuildId: e.config.TaskQueueLimitPerBuildId(),
+	updateOptions := UserDataUpdateOptions{}
+	operationCreatedTombstones := false
+	switch req.GetOperation().(type) {
+	case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
+		// Only apply the limit when request is initiated by a user.
+		updateOptions.TaskQueueLimitPerBuildId = e.config.TaskQueueLimitPerBuildId()
+	case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_:
+		updateOptions.KnownVersion = req.GetRemoveBuildIds().GetKnownUserDataVersion()
+	default:
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 	}
-	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+
+	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clock := data.GetClock()
 		if clock == nil {
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
 			clock = &tmp
 		}
 		updatedClock := hlc.Next(*clock, e.timeSource)
-		versioningData, err := UpdateVersionSets(
-			updatedClock,
-			data.GetVersioningData(),
-			req.GetRequest(),
-			e.config.VersionCompatibleSetLimitPerQueue(),
-			e.config.VersionBuildIdLimitPerQueue(),
-		)
-		if err != nil {
-			return nil, err
+		var versioningData *persistencespb.VersioningData
+		switch req.GetOperation().(type) {
+		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
+			var err error
+			versioningData, err = UpdateVersionSets(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetApplyPublicRequest().GetRequest(),
+				e.config.VersionCompatibleSetLimitPerQueue(),
+				e.config.VersionBuildIdLimitPerQueue(),
+			)
+			if err != nil {
+				return nil, false, err
+			}
+		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_:
+			ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+			if err != nil {
+				return nil, false, err
+			}
+			versioningData = RemoveBuildIds(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetRemoveBuildIds().GetBuildIds(),
+			)
+			if ns.IsGlobalNamespace() {
+				operationCreatedTombstones = true
+			} else {
+				// We don't need to keep the tombstones around if we're not replicating them.
+				versioningData = ClearTombstones(versioningData)
+			}
+		default:
+			return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 		}
 		// Avoid mutation
 		ret := *data
 		ret.Clock = &updatedClock
 		ret.VersioningData = versioningData
-		return &ret, nil
+		return &ret, true, nil
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Only clear tombstones after they have been replicated.
+	if operationCreatedTombstones {
+		err = tqMgr.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+			updatedClock := hlc.Next(*data.GetClock(), e.timeSource)
+			// Avoid mutation
+			ret := *data
+			ret.Clock = &updatedClock
+			ret.VersioningData = ClearTombstones(data.VersioningData)
+			return &ret, false, nil // Do not replicate the deletion of tombstones
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil
 }
@@ -951,6 +1002,10 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
 ) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
 	taskQueueName := req.GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
@@ -961,14 +1016,48 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		return nil, err
 	}
 	updateOptions := UserDataUpdateOptions{
-		Replicate: false,
 		// Avoid setting a limit to allow the replication event to always be applied
 		TaskQueueLimitPerBuildId: 0,
 	}
-	err = tqMgr.UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error) {
+	err = tqMgr.UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		mergedUserData := *current
-		mergedUserData.VersioningData = MergeVersioningData(current.GetVersioningData(), req.GetUserData().GetVersioningData())
-		return &mergedUserData, nil
+		_, buildIdsRemoved := GetBuildIdDeltas(current.GetVersioningData(), req.GetUserData().GetVersioningData())
+		var buildIdsToRevive []string
+		for _, buildId := range buildIdsRemoved {
+			// We accept that the user data is locked for updates while running these visibility queries.
+			// Nothing else is _supposed_ to update it on follower (standby) clusters.
+			exists, err := worker_versioning.WorkflowsExistForBuildId(ctx, e.visibilityManager, ns, req.TaskQueue, buildId)
+			if err != nil {
+				return nil, false, err
+			}
+			if exists {
+				buildIdsToRevive = append(buildIdsToRevive, buildId)
+			}
+		}
+		mergedData := MergeVersioningData(current.GetVersioningData(), req.GetUserData().GetVersioningData())
+
+		for _, buildId := range buildIdsToRevive {
+			setIdx, buildIdIdx := findVersion(mergedData, buildId)
+			if setIdx == -1 {
+				continue
+			}
+			set := mergedData.VersionSets[setIdx]
+			set.BuildIds[buildIdIdx] = e.reviveBuildId(ns, req.GetTaskQueue(), set.GetBuildIds()[buildIdIdx])
+			mergedUserData.Clock = hlc.Ptr(hlc.Max(*mergedUserData.Clock, *set.BuildIds[buildIdIdx].StateUpdateTimestamp))
+
+			setDefault := set.BuildIds[len(set.BuildIds)-1]
+			if setDefault.State == persistencespb.STATE_DELETED {
+				// We merged an update which removed (at least) two build ids: the default for set x and another one for set
+				// x. We discovered we're still using the other one, so we revive it. now we also have to revive the default
+				// for set x, or it will be left with the wrong default.
+				set.BuildIds[len(set.BuildIds)-1] = e.reviveBuildId(ns, req.GetTaskQueue(), setDefault)
+				mergedUserData.Clock = hlc.Ptr(hlc.Max(*mergedUserData.Clock, *setDefault.StateUpdateTimestamp))
+			}
+		}
+
+		// No need to keep the tombstones around after replication.
+		mergedUserData.VersioningData = ClearTombstones(mergedData)
+		return &mergedUserData, len(buildIdsToRevive) > 0, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
 }
@@ -1415,4 +1504,22 @@ func newRecordTaskStartedContext(
 	}
 
 	return context.WithTimeout(parentCtx, timeout)
+}
+
+// Revives a deleted build id updating its HLC timestamp.
+// Returns a new build id leaving the provided one untouched.
+func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue string, buildId *persistencespb.BuildId) *persistencespb.BuildId {
+	// Bump the stamp and ensure it's newer than the deletion stamp.
+	prevStamp := *buildId.StateUpdateTimestamp
+	stamp := hlc.Next(prevStamp, e.timeSource)
+	stamp.ClusterId = e.clusterMeta.GetClusterID()
+	e.logger.Info("Revived build id while applying replication event",
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.WorkflowTaskQueueName(taskQueue),
+		tag.BuildId(buildId.Id))
+	return &persistencespb.BuildId{
+		Id:                   buildId.GetId(),
+		State:                persistencespb.STATE_ACTIVE,
+		StateUpdateTimestamp: &stamp,
+	}
 }

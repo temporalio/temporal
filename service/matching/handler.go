@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
 type (
@@ -76,6 +77,7 @@ func NewHandler(
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	visibilityManager manager.VisibilityManager,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -93,6 +95,7 @@ func NewHandler(
 			matchingServiceResolver,
 			clusterMetadata,
 			namespaceReplicationQueue,
+			visibilityManager,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}
@@ -105,6 +108,7 @@ func NewHandler(
 
 // Start starts the handler
 func (h *Handler) Start() {
+	h.engine.Start()
 	h.startWG.Done()
 }
 

@@ -22,11 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package worker_versioning
 
 import (
+	"context"
+	"fmt"
+
+	"github.com/xwb1989/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -73,4 +81,20 @@ func FindBuildId(versionSets []*taskqueuepb.CompatibleVersionSet, buildId string
 		}
 	}
 	return setIndex, indexInSet
+}
+
+func WorkflowsExistForBuildId(ctx context.Context, visibilityManager manager.VisibilityManager, ns *namespace.Namespace, taskQueue, buildId string) (bool, error) {
+	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))
+	escapedBuildId := sqlparser.String(sqlparser.NewStrVal([]byte(VersionedBuildIdSearchAttribute(buildId))))
+	query := fmt.Sprintf("%s = %s AND %s = %s", searchattribute.TaskQueue, escapedTaskQueue, searchattribute.BuildIds, escapedBuildId)
+
+	response, err := visibilityManager.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: ns.ID(),
+		Namespace:   ns.Name(),
+		Query:       query,
+	})
+	if err != nil {
+		return false, err
+	}
+	return response.Count > 0, nil
 }
