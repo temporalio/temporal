@@ -37,6 +37,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/util"
 )
 
 var (
@@ -466,27 +467,13 @@ func ClearTombstones(versioningData *persistencespb.VersioningData) *persistence
 	for setIdx, set := range modifiedData.GetVersionSets() {
 		modifiedData.VersionSets[setIdx] = shallowCloneVersionSet(set)
 	}
-	for setIdx := 0; setIdx < len(modifiedData.GetVersionSets()); {
-		set := modifiedData.VersionSets[setIdx]
-		for buildIdIdx := 0; buildIdIdx < len(set.BuildIds); {
-			buildId := set.BuildIds[buildIdIdx]
-			if buildId.State == persistencespb.STATE_DELETED {
-				set.BuildIds = removeIndex(set.BuildIds, buildIdIdx)
-			} else {
-				buildIdIdx++
-			}
-		}
-		if len(set.BuildIds) == 0 {
-			modifiedData.VersionSets = removeIndex(modifiedData.VersionSets, setIdx)
-		} else {
-			setIdx++
-		}
+	for _, set := range modifiedData.GetVersionSets() {
+		set.BuildIds = util.FilterSlice(set.BuildIds, func(buildId *persistencespb.BuildId) bool {
+			return buildId.State != persistencespb.STATE_DELETED
+		})
 	}
+	modifiedData.VersionSets = util.FilterSlice(modifiedData.VersionSets, func(set *persistencespb.CompatibleVersionSet) bool {
+		return len(set.BuildIds) > 0
+	})
 	return modifiedData
-}
-
-func removeIndex[T any](s []T, index int) []T {
-	ret := make([]T, 0, len(s)-1)
-	ret = append(ret, s[:index]...)
-	return append(ret, s[index+1:]...)
 }

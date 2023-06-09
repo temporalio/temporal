@@ -69,7 +69,7 @@ func Test_findBuildIdsToRemove_AcceptsNilVersioningData(t *testing.T) {
 			Version: 0,
 			Data:    userData,
 		},
-	}, time.Hour)
+	})
 	require.NoError(t, err)
 	require.Equal(t, []string(nil), buildIdsRemoved)
 	require.True(t, hlc.Equal(c0, *userData.Clock))
@@ -107,8 +107,6 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	})
 
 	c0 := hlc.Zero(0)
-	cnow := c0
-	cnow.WallClock = time.Now().UnixMilli()
 	userData := &persistencespb.TaskQueueUserData{
 		Clock: &c0,
 		VersioningData: &persistencespb.VersioningData{
@@ -162,22 +160,10 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 					DefaultUpdateTimestamp: &c0,
 				},
 				{
-					// This build ID is to "new" to be removed.
 					SetIds: []string{"v4"},
 					BuildIds: []*persistencespb.BuildId{
 						{
 							Id:                   "v4.0",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &cnow,
-						},
-					},
-					DefaultUpdateTimestamp: &cnow,
-				},
-				{
-					SetIds: []string{"v5"},
-					BuildIds: []*persistencespb.BuildId{
-						{
-							Id:                   "v5.0",
 							State:                persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp: &c0,
 						},
@@ -196,7 +182,7 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 				Version: 0,
 				Data:    userData,
 			},
-		}, time.Hour)
+		})
 	}
 	env.RegisterActivity(act)
 	removedBuildIDsEncoded, err := env.ExecuteActivity(act)

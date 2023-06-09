@@ -25,6 +25,8 @@
 package hybrid_logical_clock
 
 import (
+	"time"
+
 	clockpb "go.temporal.io/server/api/clock/v1"
 	commonclock "go.temporal.io/server/common/clock"
 )
@@ -103,4 +105,9 @@ func Equal(a Clock, b Clock) bool {
 // Ptr returns a pointer to a clock (to ease inlining the APIs in this package).
 func Ptr(c Clock) *Clock {
 	return &c
+}
+
+// UTC returns UTC time of a clock in millisecond resolution.
+func UTC(c Clock) time.Time {
+	return time.Unix(c.WallClock/1000, c.WallClock%1000*1000000).UTC()
 }

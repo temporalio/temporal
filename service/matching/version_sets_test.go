@@ -100,6 +100,7 @@ func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdCompatibility
 }
 
 func TestNewDefaultUpdate(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(2, clock)
 
@@ -136,6 +137,7 @@ func TestNewDefaultUpdate(t *testing.T) {
 }
 
 func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(0, clock)
 
@@ -159,6 +161,7 @@ func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
 }
 
 func TestNewDefaultSetUpdateCompatWithCurDefault(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(2, clock)
 
@@ -190,6 +193,7 @@ func TestNewDefaultSetUpdateCompatWithCurDefault(t *testing.T) {
 }
 
 func TestNewDefaultSetUpdateCompatWithNonDefaultSet(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(2, clock)
 
@@ -221,6 +225,7 @@ func TestNewDefaultSetUpdateCompatWithNonDefaultSet(t *testing.T) {
 }
 
 func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	initialData := mkInitialData(2, clock)
 
@@ -255,6 +260,7 @@ func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
 }
 
 func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
+	t.Parallel()
 	clock0 := hlc.Zero(1)
 	data := mkInitialData(2, clock0)
 
@@ -320,6 +326,7 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 }
 
 func TestCompatibleTargetsNotFound(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(1, clock)
 
@@ -331,6 +338,7 @@ func TestCompatibleTargetsNotFound(t *testing.T) {
 }
 
 func TestMakeExistingSetDefault(t *testing.T) {
+	t.Parallel()
 	clock0 := hlc.Zero(1)
 	data := mkInitialData(3, clock0)
 
@@ -397,6 +405,7 @@ func TestMakeExistingSetDefault(t *testing.T) {
 }
 
 func TestSayVersionIsCompatWithDifferentSetThanItsAlreadyCompatWithNotAllowed(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
@@ -411,6 +420,7 @@ func TestSayVersionIsCompatWithDifferentSetThanItsAlreadyCompatWithNotAllowed(t 
 }
 
 func TestLimitsMaxSets(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	maxSets := 10
 	data := mkInitialData(maxSets, clock)
@@ -422,6 +432,7 @@ func TestLimitsMaxSets(t *testing.T) {
 }
 
 func TestLimitsMaxBuildIds(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	maxBuildIds := 10
 	data := mkInitialData(maxBuildIds, clock)
@@ -433,6 +444,7 @@ func TestLimitsMaxBuildIds(t *testing.T) {
 }
 
 func TestPromoteWithinVersion(t *testing.T) {
+	t.Parallel()
 	clock0 := hlc.Zero(1)
 	data := mkInitialData(2, clock0)
 
@@ -472,6 +484,7 @@ func TestPromoteWithinVersion(t *testing.T) {
 }
 
 func TestAddNewDefaultAlreadyExtantVersionWithNoConflictSucceeds(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	original := mkInitialData(3, clock)
 
@@ -482,6 +495,7 @@ func TestAddNewDefaultAlreadyExtantVersionWithNoConflictSucceeds(t *testing.T) {
 }
 
 func TestAddToExistingSetAlreadyExtantVersionWithNoConflictSucceeds(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	req := mkNewCompatReq("1.1", "1", false)
 	original, err := UpdateVersionSets(clock, mkInitialData(3, clock), req, 0, 0)
@@ -492,6 +506,7 @@ func TestAddToExistingSetAlreadyExtantVersionWithNoConflictSucceeds(t *testing.T
 }
 
 func TestAddToExistingSetAlreadyExtantVersionErrorsIfNotDefault(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	req := mkNewCompatReq("1.1", "1", true)
 	original, err := UpdateVersionSets(clock, mkInitialData(3, clock), req, 0, 0)
@@ -503,6 +518,7 @@ func TestAddToExistingSetAlreadyExtantVersionErrorsIfNotDefault(t *testing.T) {
 }
 
 func TestAddToExistingSetAlreadyExtantVersionErrorsIfNotDefaultSet(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	req := mkNewCompatReq("1.1", "1", false)
 	original, err := UpdateVersionSets(clock, mkInitialData(3, clock), req, 0, 0)
@@ -514,6 +530,7 @@ func TestAddToExistingSetAlreadyExtantVersionErrorsIfNotDefaultSet(t *testing.T)
 }
 
 func TestPromoteWithinSetAlreadyPromotedIsANoop(t *testing.T) {
+	t.Parallel()
 	clock0 := hlc.Zero(1)
 	original := mkInitialData(3, clock0)
 	req := mkPromoteInSet("1")
@@ -524,6 +541,7 @@ func TestPromoteWithinSetAlreadyPromotedIsANoop(t *testing.T) {
 }
 
 func TestPromoteSetAlreadyPromotedIsANoop(t *testing.T) {
+	t.Parallel()
 	clock0 := hlc.Zero(1)
 	original := mkInitialData(3, clock0)
 	req := mkExistingDefault("2")
@@ -534,6 +552,7 @@ func TestPromoteSetAlreadyPromotedIsANoop(t *testing.T) {
 }
 
 func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
@@ -544,6 +563,7 @@ func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
 }
 
 func TestAddAlreadyExtantVersionToAnotherSetErrors(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
@@ -554,6 +574,7 @@ func TestAddAlreadyExtantVersionToAnotherSetErrors(t *testing.T) {
 }
 
 func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
@@ -564,6 +585,7 @@ func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
 }
 
 func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 
@@ -574,6 +596,7 @@ func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
 }
 
 func TestToBuildIdOrderingResponseTrimsResponse(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	data := mkInitialData(3, clock)
 	actual := ToBuildIdOrderingResponse(data, 2)
@@ -582,6 +605,7 @@ func TestToBuildIdOrderingResponseTrimsResponse(t *testing.T) {
 }
 
 func TestToBuildIdOrderingResponseOmitsDeleted(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(1)
 	data := &persistencespb.VersioningData{
 		DefaultUpdateTimestamp: &clock,
@@ -602,11 +626,13 @@ func TestToBuildIdOrderingResponseOmitsDeleted(t *testing.T) {
 }
 
 func TestHashBuildId(t *testing.T) {
+	t.Parallel()
 	// This function should never change.
 	assert.Equal(t, "ftrPuUeORv2JD4Wp2wTU", hashBuildId("my-build-id"))
 }
 
 func TestGetBuildIdDeltas(t *testing.T) {
+	t.Parallel()
 	clock := hlc.Zero(0)
 	prev := &persistencespb.VersioningData{
 		DefaultUpdateTimestamp: &clock,
@@ -644,12 +670,14 @@ func TestGetBuildIdDeltas(t *testing.T) {
 }
 
 func TestGetBuildIdDeltas_AcceptsNils(t *testing.T) {
+	t.Parallel()
 	added, removed := GetBuildIdDeltas(nil, nil)
 	assert.Equal(t, []string(nil), removed)
 	assert.Equal(t, []string(nil), added)
 }
 
 func Test_RemoveBuildIds_PutsTombstonesOnSuppliedBuildIds(t *testing.T) {
+	t.Parallel()
 	c0 := hlc.Zero(0)
 	data := mkInitialData(3, c0)
 	c1 := c0
@@ -701,6 +729,7 @@ func Test_RemoveBuildIds_PutsTombstonesOnSuppliedBuildIds(t *testing.T) {
 }
 
 func Test_ClearTombstones(t *testing.T) {
+	t.Parallel()
 	c0 := hlc.Zero(0)
 
 	makeData := func() *persistencespb.VersioningData {

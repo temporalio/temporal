@@ -204,8 +204,6 @@ func (e *matchingEngineImpl) Stop() {
 		return
 	}
 
-	e.visibilityManager.Close()
-
 	for _, l := range e.getTaskQueues(math.MaxInt32) {
 		l.Stop()
 	}
@@ -1043,14 +1041,16 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			if setIdx == -1 {
 				continue
 			}
-			set := mergedData.GetVersionSets()[setIdx]
+			set := mergedData.VersionSets[setIdx]
 			set.BuildIds[buildIdIdx] = e.reviveBuildId(ns, req.GetTaskQueue(), set.GetBuildIds()[buildIdIdx])
 			mergedUserData.Clock = hlc.Ptr(hlc.Max(*mergedUserData.Clock, *set.BuildIds[buildIdIdx].StateUpdateTimestamp))
 
-			// Make sure we don't delete set defaults for any revived sets.
-			setDefault := set.GetBuildIds()[len(set.GetBuildIds())-1]
+			setDefault := set.BuildIds[len(set.BuildIds)-1]
 			if setDefault.State == persistencespb.STATE_DELETED {
-				set.BuildIds[len(set.GetBuildIds())-1] = e.reviveBuildId(ns, req.GetTaskQueue(), setDefault)
+				// We merged an update which removed (at least) two build ids: the default for set x and another one for set
+				// x. We discovered we're still using the other one, so we revive it. now we also have to revive the default
+				// for set x, or it will be left with the wrong default.
+				set.BuildIds[len(set.BuildIds)-1] = e.reviveBuildId(ns, req.GetTaskQueue(), setDefault)
 				mergedUserData.Clock = hlc.Ptr(hlc.Max(*mergedUserData.Clock, *setDefault.StateUpdateTimestamp))
 			}
 		}
@@ -1506,6 +1506,8 @@ func newRecordTaskStartedContext(
 	return context.WithTimeout(parentCtx, timeout)
 }
 
+// Revives a deleted build id updating its HLC timestamp.
+// Returns a new build id leaving the provided one untouched.
 func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue string, buildId *persistencespb.BuildId) *persistencespb.BuildId {
 	// Bump the stamp and ensure it's newer than the deletion stamp.
 	prevStamp := *buildId.StateUpdateTimestamp

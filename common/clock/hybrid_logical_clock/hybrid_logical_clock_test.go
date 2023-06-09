@@ -29,12 +29,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	commonclock "go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/clock"
 )
 
 func Test_Next_ReturnsGreaterClock(t *testing.T) {
+	t.Parallel()
 	t0 := Zero(1)
-	timesource := commonclock.NewEventTimeSource()
+	timesource := clock.NewEventTimeSource()
 
 	// Same wallclock
 	timesource.Update(time.Unix(0, 0).UTC())
@@ -47,6 +48,7 @@ func Test_Next_ReturnsGreaterClock(t *testing.T) {
 }
 
 func Test_Compare(t *testing.T) {
+	t.Parallel()
 	var t0 Clock
 	var t1 Clock
 
@@ -74,6 +76,7 @@ func Test_Compare(t *testing.T) {
 }
 
 func Test_Max_ReturnsMaximum(t *testing.T) {
+	t.Parallel()
 	t0 := Zero(1)
 	t1 := Zero(2)
 
@@ -82,4 +85,14 @@ func Test_Max_ReturnsMaximum(t *testing.T) {
 	// Just in case it doesn't work in reverse order...
 	max = Max(t1, t0)
 	assert.Equal(t, max, t1)
+}
+
+func Test_UTC_ReturnsTimeInUTC(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, time.Unix(0, 0).UTC(), UTC(Zero(0)))
+
+	timesource := clock.NewEventTimeSource()
+	now := time.Date(1999, 12, 31, 23, 59, 59, 999000000, time.UTC)
+	timesource.Update(now)
+	assert.Equal(t, now, UTC(Next(Zero(0), timesource)))
 }

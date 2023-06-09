@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -68,9 +69,6 @@ type (
 		VisibilityRPS         float64
 		NamespaceListPageSize int
 		TaskQueueListPageSize int
-		// BuildIdRemovalMinAge is the minimum age (based on StateUpdatedTimestamp) for a build id to be considered for
-		// removal. Default is provided via dynamic config.
-		BuildIdRemovalMinAge time.Duration
 	}
 
 	Activities struct {
@@ -100,17 +98,15 @@ func NewActivities(
 	namespaceRegistry namespace.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
 	currentClusterName string,
-	removableBuildIdMinAge dynamicconfig.DurationPropertyFn,
 ) *Activities {
 	return &Activities{
-		logger:                 logger,
-		taskManager:            taskManager,
-		metadataManager:        metadataManager,
-		visibilityManager:      visibilityManager,
-		namespaceRegistry:      namespaceRegistry,
-		matchingClient:         matchingClient,
-		currentClusterName:     currentClusterName,
-		removableBuildIdMinAge: removableBuildIdMinAge,
+		logger:             logger,
+		taskManager:        taskManager,
+		metadataManager:    metadataManager,
+		visibilityManager:  visibilityManager,
+		namespaceRegistry:  namespaceRegistry,
+		matchingClient:     matchingClient,
+		currentClusterName: currentClusterName,
 	}
 }
 
@@ -120,7 +116,7 @@ func BuildIdScavangerWorkflow(ctx workflow.Context, input BuildIdScavangerInput)
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		// Give the activity enough time to scan the entire namespace
 		StartToCloseTimeout: 6 * time.Hour,
-		HeartbeatTimeout:    10 * time.Second,
+		HeartbeatTimeout:    30 * time.Second,
 	})
 	return workflow.ExecuteActivity(activityCtx, BuildIdScavangerActivityName, input).Get(ctx, nil)
 }
@@ -135,9 +131,10 @@ func (a *Activities) setDefaults(input *BuildIdScavangerInput) {
 	if input.VisibilityRPS == 0 {
 		input.VisibilityRPS = 1
 	}
-	if input.BuildIdRemovalMinAge == 0 {
-		input.BuildIdRemovalMinAge = a.removableBuildIdMinAge()
-	}
+}
+
+func (a *Activities) recordHeartbeat(ctx context.Context, heartbeat heartbeatDetails) {
+	activity.RecordHeartbeat(ctx, heartbeat)
 }
 
 // ScavengeBuildIds scans all task queue user data entries in all namespaces and cleans up unused build ids.
@@ -162,76 +159,100 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 		}
 		for heartbeat.NamespaceIdx < len(nsResponse.Namespaces) {
 			nsId := nsResponse.Namespaces[heartbeat.NamespaceIdx].Namespace.Info.Id
-			ns, err := a.namespaceRegistry.GetNamespaceByID(namespace.ID(nsId))
-			if err != nil {
+			if err := a.processNamespaceEntry(ctx, rateLimiter, input, &heartbeat, nsId); err != nil {
 				return err
 			}
-			// Only the active cluster for this namespace should perform the cleanup.
-			activeInCluster := ns.ActiveInCluster(a.currentClusterName)
-			for activeInCluster {
-				tqResponse, err := a.taskManager.ListTaskQueueUserDataEntries(ctx, &persistence.ListTaskQueueUserDataEntriesRequest{
-					NamespaceID:   nsId,
-					PageSize:      input.TaskQueueListPageSize,
-					NextPageToken: heartbeat.TaskQueueNextPageToken,
-				})
-				if err != nil {
-					return err
-				}
-				for heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
-					entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
-					buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, heartbeat, ns, entry, input.BuildIdRemovalMinAge)
-					if err != nil {
-						return err
-					}
-					if len(buildIdsToRemove) > 0 {
-						_, err := a.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
-							NamespaceId: nsId,
-							TaskQueue:   entry.TaskQueue,
-							Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_{
-								RemoveBuildIds: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds{
-									KnownUserDataVersion: entry.UserData.Version,
-									BuildIds:             buildIdsToRemove,
-								},
-							},
-						})
-						if err != nil {
-							a.logger.Error("Failed to update task queue user data", tag.Error(err))
-							continue
-						}
-					}
-					heartbeat.TaskQueueIdx++
-					activity.RecordHeartbeat(ctx, heartbeat)
-				}
-				heartbeat.TaskQueueIdx = 0
-				heartbeat.TaskQueueNextPageToken = tqResponse.NextPageToken
-				if len(heartbeat.TaskQueueNextPageToken) == 0 {
-					break
-				}
-				activity.RecordHeartbeat(ctx, heartbeat)
-			}
 			heartbeat.NamespaceIdx++
-			activity.RecordHeartbeat(ctx, heartbeat)
+			a.recordHeartbeat(ctx, heartbeat)
 		}
 		heartbeat.NamespaceIdx = 0
 		heartbeat.NamespaceNextPageToken = nsResponse.NextPageToken
 		if len(heartbeat.NamespaceNextPageToken) == 0 {
 			break
 		}
-		activity.RecordHeartbeat(ctx, heartbeat)
+		a.recordHeartbeat(ctx, heartbeat)
 	}
 	return nil
 }
 
-// Process a single user data entry. Queries visibility for each build id and updates build id state with STATE_DELETED
-// (tombstone) for every build id that can safely be deleted.
-// Returns a list of build ids that were removed.
+func (a *Activities) processNamespaceEntry(
+	ctx context.Context,
+	rateLimiter quotas.RateLimiter,
+	input BuildIdScavangerInput,
+	heartbeat *heartbeatDetails,
+	nsId string,
+) error {
+	ns, err := a.namespaceRegistry.GetNamespaceByID(namespace.ID(nsId))
+	if err != nil {
+		return err
+	}
+	// Only the active cluster for this namespace should perform the cleanup.
+	if !ns.ActiveInCluster(a.currentClusterName) {
+		return nil
+	}
+	for {
+		tqResponse, err := a.taskManager.ListTaskQueueUserDataEntries(ctx, &persistence.ListTaskQueueUserDataEntriesRequest{
+			NamespaceID:   nsId,
+			PageSize:      input.TaskQueueListPageSize,
+			NextPageToken: heartbeat.TaskQueueNextPageToken,
+		})
+		if err != nil {
+			return err
+		}
+		for heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
+			entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
+			if err := a.processUserDataEntry(ctx, rateLimiter, *heartbeat, ns, entry); err != nil {
+				// Intentionally don't fail the activity on single entry.
+				a.logger.Error("Failed to update task queue user data", tag.Error(err))
+				continue
+			}
+			heartbeat.TaskQueueIdx++
+			a.recordHeartbeat(ctx, *heartbeat)
+		}
+		heartbeat.TaskQueueIdx = 0
+		heartbeat.TaskQueueNextPageToken = tqResponse.NextPageToken
+		if len(heartbeat.TaskQueueNextPageToken) == 0 {
+			break
+		}
+		a.recordHeartbeat(ctx, *heartbeat)
+	}
+	return nil
+}
+
+func (a *Activities) processUserDataEntry(
+	ctx context.Context,
+	rateLimiter quotas.RateLimiter,
+	heartbeat heartbeatDetails,
+	ns *namespace.Namespace,
+	entry *persistence.TaskQueueUserDataEntry,
+) error {
+	buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, heartbeat, ns, entry)
+	if err != nil {
+		return nil
+	}
+	if len(buildIdsToRemove) == 0 {
+		return nil
+	}
+	_, err = a.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		NamespaceId: ns.ID().String(),
+		TaskQueue:   entry.TaskQueue,
+		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_{
+			RemoveBuildIds: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds{
+				KnownUserDataVersion: entry.UserData.Version,
+				BuildIds:             buildIdsToRemove,
+			},
+		},
+	})
+	return err
+}
+
+// Queries visibility for each build id in versioning data and returns a list of those that are safe for removal.
 func (a *Activities) findBuildIdsToRemove(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
 	heartbeat heartbeatDetails,
 	ns *namespace.Namespace,
 	entry *persistence.TaskQueueUserDataEntry,
-	removalMinAge time.Duration,
 ) ([]string, error) {
 	versioningData := entry.UserData.Data.GetVersioningData()
 	var buildIdsToRemove []string
@@ -242,19 +263,10 @@ func (a *Activities) findBuildIdsToRemove(
 				setActive--
 				continue
 			}
-			// Set default
-			if buildIdIdx == len(set.BuildIds)-1 {
-				// Can't delete the queue default
-				if setIdx == len(versioningData.VersionSets)-1 {
-					continue
-				}
-				// There's another active build id in this set
-				if setActive > 1 {
-					continue
-				}
-			}
-			buildIdAge := time.Now().UnixMilli() - buildId.StateUpdateTimestamp.WallClock
-			if buildIdAge < removalMinAge.Milliseconds() {
+			buildIdIsSetDefault := buildIdIdx == len(set.BuildIds)-1
+			setIsQueueDefault := setIdx == len(versioningData.VersionSets)-1
+			// Don't remove if build id is the queue default of there's another active build id in this set.
+			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
 				continue
 			}
 
@@ -265,7 +277,7 @@ func (a *Activities) findBuildIdsToRemove(
 			if err != nil {
 				return buildIdsToRemove, err
 			}
-			activity.RecordHeartbeat(ctx, heartbeat)
+			a.recordHeartbeat(ctx, heartbeat)
 			if !exists {
 				a.logger.Info("Found build id to remove",
 					tag.NewStringTag("namespace", ns.Name().String()),

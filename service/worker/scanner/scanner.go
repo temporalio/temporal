@@ -89,12 +89,9 @@ type (
 		ExecutionScannerWorkerCount dynamicconfig.IntPropertyFn
 		// ExecutionScannerHistoryEventIdValidator indicates if the execution scavenger to validate history event id.
 		ExecutionScannerHistoryEventIdValidator dynamicconfig.BoolPropertyFn
-		// BuildIdScavengerRemovableBuildIdMinAge determines how old a build id has to be (based on its update
-		// timestamp) for it considered for removal.
-		BuildIdScavengerRemovableBuildIdMinAge dynamicconfig.DurationPropertyFn
 	}
 
-	// scannerContext is the context object that get's
+	// scannerContext is the context object that gets
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
 		cfg                *Config
@@ -207,7 +204,6 @@ func (s *Scanner) Start() error {
 			s.context.namespaceRegistry,
 			s.context.matchingClient,
 			s.context.currentClusterName,
-			s.context.cfg.BuildIdScavengerRemovableBuildIdMinAge,
 		)
 
 		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)

@@ -298,10 +298,7 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 		ID:                 workflowID,
 		TaskQueue:          build_ids.BuildIdScavengerTaskQueueName,
 		WorkflowRunTimeout: time.Second * 30,
-	}, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerInput{
-		// Effectively disable the min age check
-		BuildIdRemovalMinAge: time.Microsecond,
-	})
+	}, build_ids.BuildIdScavangerWorkflowName)
 	s.NoError(err)
 	err = run.Get(ctx, nil)
 	s.NoError(err)

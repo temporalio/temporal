@@ -811,9 +811,6 @@ const (
 	ExecutionScannerWorkerCount = "worker.executionScannerWorkerCount"
 	// ExecutionScannerHistoryEventIdValidator is the flag to enable history event id validator
 	ExecutionScannerHistoryEventIdValidator = "worker.executionEnableHistoryEventIdValidator"
-	// BuildIdScavengerRemovableBuildIdMinAge determines how old a build id has to be (based on its update
-	// timestamp) for it to be considered for removal.
-	BuildIdScavengerRemovableBuildIdMinAge = "worker.buildIdScavengerRemovableBuildIdMinAge"
 	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
 	TaskQueueScannerEnabled = "worker.taskQueueScannerEnabled"
 	// BuildIdScavengerEnabled indicates if the build id scavenger should be started as part of worker.Scanner
