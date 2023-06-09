@@ -3200,41 +3200,22 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	// we only have to check the size of the signal input, not the workflow input,
-	// because the signal input is at least as large
-	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
-	if err := common.CheckEventBlobSizeLimit(
-		signalInputPayloads.Size(),
-		sizeLimitWarn,
-		sizeLimitError,
-		namespaceID.String(),
-		workflowID,
-		"", // don't have runid yet
-		wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-		wh.throttledLogger,
-		tag.BlobSizeViolationOperation("UpdateSchedule"),
-	); err != nil {
-		return nil, err
+	signalWithStartRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:             request.Namespace,
+		WorkflowId:            workflowID,
+		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		SignalName:            scheduler.SignalNameUpdate,
+		Identity:              request.Identity,
+		RequestId:             request.RequestId,
+		SearchAttributes:      executionInfo.SearchAttributes,
+		Memo:                  executionInfo.Memo,
+		Input:                 inputPayloads,
+		SignalInput:           signalInputPayloads,
 	}
 
-	_, err = wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID.String(),
-		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:             request.Namespace,
-			WorkflowId:            workflowID,
-			WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-			TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			Input:                 inputPayloads,
-			SignalName:            scheduler.SignalNameUpdate,
-			SignalInput:           signalInputPayloads,
-			Identity:              request.Identity,
-			RequestId:             request.RequestId,
-			SearchAttributes:      executionInfo.SearchAttributes,
-			Memo:                  executionInfo.GetMemo(),
-		},
-	})
+	err = wh.signalWithStartScheduleWorkflow(ctx, workflowID, request.GetNamespace(), namespaceID, signalWithStartRequest, "UpdateSchedule")
 	if err != nil {
 		return nil, err
 	}
@@ -3285,42 +3266,22 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	if err != nil {
 		return nil, err
 	}
-
-	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
-	for payloadSize := range []int{inputPayloads.Size(), signalInputPayloads.Size()} {
-		if err := common.CheckEventBlobSizeLimit(
-			payloadSize,
-			sizeLimitWarn,
-			sizeLimitError,
-			namespaceID.String(),
-			workflowID,
-			"", // don't have runid yet
-			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-			wh.throttledLogger,
-			tag.BlobSizeViolationOperation("PatchSchedule"),
-		); err != nil {
-			return nil, err
-		}
+	signalWithStartRequest := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:             request.Namespace,
+		WorkflowId:            workflowID,
+		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		SignalName:            scheduler.SignalNamePatch,
+		Identity:              request.Identity,
+		RequestId:             request.RequestId,
+		SearchAttributes:      executionInfo.SearchAttributes,
+		Memo:                  executionInfo.Memo,
+		Input:                 inputPayloads,
+		SignalInput:           signalInputPayloads,
 	}
 
-	_, err = wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID.String(),
-		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:             request.Namespace,
-			WorkflowId:            workflowID,
-			Input:                 inputPayloads,
-			SignalName:            scheduler.SignalNamePatch,
-			SignalInput:           signalInputPayloads,
-			Identity:              request.Identity,
-			RequestId:             request.RequestId,
-			WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-			TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			SearchAttributes:      executionInfo.SearchAttributes,
-			Memo:                  executionInfo.GetMemo(),
-		},
-	})
+	err = wh.signalWithStartScheduleWorkflow(ctx, workflowID, request.GetNamespace(), namespaceID, signalWithStartRequest, "PatchSchedule")
 	if err != nil {
 		return nil, err
 	}
@@ -5110,4 +5071,38 @@ func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, 
 		return nil, nil, serviceerror.NewNotFound("schedule not found")
 	}
 	return executionInfo, &startScheduleArgs, nil
+}
+
+func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, workflowID string, namespace string, namespaceID namespace.ID, signalWithStarRequest *workflowservice.SignalWithStartWorkflowExecutionRequest, operationName string) error {
+
+	sizeLimitError := wh.config.BlobSizeLimitError(namespace)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespace)
+	for payloadSize := range []int{signalWithStarRequest.Input.Size(), signalWithStarRequest.SignalInput.Size()} {
+		if err := common.CheckEventBlobSizeLimit(
+			payloadSize,
+			sizeLimitWarn,
+			sizeLimitError,
+			namespaceID.String(),
+			workflowID,
+			"", // don't have runid yet
+			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.throttledLogger,
+			tag.BlobSizeViolationOperation(operationName),
+		); err != nil {
+			return err
+		}
+	}
+
+	// TODO: there is a rare race condition where the schedule could be running when we desribe it in patch or update, but completed when
+	// we try to send a signal to it. This leads to the "input" payload being empty, which results in creating a schedule with no spec.
+	// This race condition is rare enough that we don't need to worry about it in short term, but we should fix it eventually.
+	_, err := wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId:            namespaceID.String(),
+		SignalWithStartRequest: signalWithStarRequest,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
