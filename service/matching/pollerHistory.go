@@ -77,7 +77,6 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 		entry := ite.Next()
 		key := entry.Key().(pollerIdentity)
 		value := entry.Value().(*pollerInfo)
-		// TODO add IP, T1396795
 		lastAccessTime := entry.CreateTime()
 		if earliestAccessTime.Before(lastAccessTime) {
 			result = append(result, &taskqueuepb.PollerInfo{
