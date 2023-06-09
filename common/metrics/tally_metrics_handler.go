@@ -75,7 +75,7 @@ func (tmp *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	}
 }
 
-// Counter obtains a counter for the given name and MetricOptions.
+// Counter obtains a counter for the given name.
 func (tmp *tallyMetricsHandler) Counter(counter string) CounterIface {
 	return CounterFunc(func(i int64, t ...Tag) {
 		scope := tmp.scope
@@ -86,7 +86,7 @@ func (tmp *tallyMetricsHandler) Counter(counter string) CounterIface {
 	})
 }
 
-// Gauge obtains a gauge for the given name and MetricOptions.
+// Gauge obtains a gauge for the given name.
 func (tmp *tallyMetricsHandler) Gauge(gauge string) GaugeIface {
 	return GaugeFunc(func(f float64, t ...Tag) {
 		scope := tmp.scope
@@ -97,7 +97,7 @@ func (tmp *tallyMetricsHandler) Gauge(gauge string) GaugeIface {
 	})
 }
 
-// Timer obtains a timer for the given name and MetricOptions.
+// Timer obtains a timer for the given name.
 func (tmp *tallyMetricsHandler) Timer(timer string) TimerIface {
 	return TimerFunc(func(d time.Duration, t ...Tag) {
 		scope := tmp.scope
@@ -108,7 +108,7 @@ func (tmp *tallyMetricsHandler) Timer(timer string) TimerIface {
 	})
 }
 
-// Histogram obtains a histogram for the given name and MetricOptions.
+// Histogram obtains a histogram for the given name.
 func (tmp *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
 	return HistogramFunc(func(i int64, t ...Tag) {
 		scope := tmp.scope

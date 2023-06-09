@@ -35,8 +35,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-// MetricsHandler is an event.Handler for OpenTelemetry metrics.
-// Its Event method handles Metric events and ignores all others.
+// otelMetricsHandler is an adapter around an OpenTelemetry [metric.Meter] that implements the [Handler] interface.
 type otelMetricsHandler struct {
 	l           log.Logger
 	tags        []Tag
@@ -54,8 +53,8 @@ func NewOtelMetricsHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConf
 	}
 }
 
-// WithTags creates a new MetricProvder with provided []Tag
-// Tags are merged with registered Tags from the source MetricsHandler
+// WithTags creates a new Handler with the provided Tag list.
+// Tags are merged with the existing tags.
 func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
 	return &otelMetricsHandler{
 		provider:    omp.provider,
@@ -64,7 +63,7 @@ func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
 	}
 }
 
-// Counter obtains a counter for the given name and MetricOptions.
+// Counter obtains a counter for the given name.
 func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 	c, err := omp.provider.GetMeter().Int64Counter(counter)
 	if err != nil {
@@ -77,7 +76,7 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 	})
 }
 
-// Gauge obtains a gauge for the given name and MetricOptions.
+// Gauge obtains a gauge for the given name.
 func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 	c, err := omp.provider.GetMeter().Float64ObservableGauge(gauge)
 	if err != nil {
@@ -96,7 +95,7 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 	})
 }
 
-// Timer obtains a timer for the given name and MetricOptions.
+// Timer obtains a timer for the given name.
 func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 	c, err := omp.provider.GetMeter().Int64Histogram(timer, metric.WithUnit(Milliseconds))
 	if err != nil {
@@ -109,7 +108,7 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 	})
 }
 
-// Histogram obtains a histogram for the given name and MetricOptions.
+// Histogram obtains a histogram for the given name.
 func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
 	c, err := omp.provider.GetMeter().Int64Histogram(histogram, metric.WithUnit(string(unit)))
 	if err != nil {
