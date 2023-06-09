@@ -34,8 +34,6 @@ var (
 )
 
 // ObserveCompletion exporses withOnComplete to unit tests
-//
-//revive:disable-next-line:unexported-return for testing
 func ObserveCompletion(b *bool) updateOpt {
 	return withCompletionCallback(func() { *b = true })
 }
