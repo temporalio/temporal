@@ -66,6 +66,7 @@ func (s *userDataReplicationTestSuite) SetupSuite() {
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: 1000,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
 	}
 	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
 }
