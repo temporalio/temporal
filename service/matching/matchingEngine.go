@@ -1203,8 +1203,14 @@ func (e *matchingEngineImpl) getTask(
 	stickyInfo stickyInfo,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	if err != nil {
+		return nil, err
+	}
+
 	taskQueue, err := e.redirectToVersionedQueueForPoll(
 		ctx,
+		baseTqm,
 		origTaskQueue,
 		pollMetadata.workerVersionCapabilities,
 		stickyInfo,
@@ -1212,7 +1218,7 @@ func (e *matchingEngineImpl) getTask(
 	if err != nil {
 		return nil, err
 	}
-	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1221,7 +1227,7 @@ func (e *matchingEngineImpl) getTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	ctx, cancel := newChildContext(ctx, tlMgr.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	ctx, cancel := newChildContext(ctx, baseTqm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
@@ -1229,7 +1235,13 @@ func (e *matchingEngineImpl) getTask(
 		defer e.pollMap.remove(pollerID)
 	}
 
-	return tlMgr.GetTask(ctx, pollMetadata)
+	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
+		baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+		// update timestamp when long poll ends
+		defer baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+	}
+
+	return tqm.GetTask(ctx, pollMetadata)
 }
 
 func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
@@ -1421,6 +1433,7 @@ func (e *matchingEngineImpl) emitForwardedSourceStats(
 
 func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 	ctx context.Context,
+	baseTqm taskQueueManager,
 	taskQueue *taskQueueID,
 	workerVersionCapabilities *commonpb.WorkerVersionCapabilities,
 	stickyInfo stickyInfo,
@@ -1431,14 +1444,10 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 		return taskQueue, nil
 	}
 
-	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
-	if err != nil {
-		return nil, err
-	}
 	// We don't need the userDataChanged channel here because polls have a timeout and the
 	// client will retry, so if we're blocked on the wrong matcher it'll just take one poll
 	// timeout to fix itself.
-	userData, _, err := unversionedTQM.GetUserData(ctx)
+	userData, _, err := baseTqm.GetUserData(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1496,11 +1505,11 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	}
 
 	// Have to look up versioning data.
-	unversionedTQM, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	baseTqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return nil, nil, err
 	}
-	userData, userDataChanged, err := unversionedTQM.GetUserData(ctx)
+	userData, userDataChanged, err := baseTqm.GetUserData(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
