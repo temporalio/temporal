@@ -73,6 +73,13 @@ func (s *quotasSuite) TestVisibilityAPIToPriorityMapping() {
 	}
 }
 
+func (s *quotasSuite) TestNamespaceReplicationInducingAPIToPriorityMapping() {
+	for _, priority := range NamespaceReplicationInducingAPIToPriority {
+		index := slices.Index(NamespaceReplicationInducingAPIPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
+	}
+}
+
 func (s *quotasSuite) TestOtherAPIToPriorityMapping() {
 	for _, priority := range OtherAPIToPriority {
 		index := slices.Index(OtherAPIPrioritiesOrdered, priority)
@@ -89,6 +96,12 @@ func (s *quotasSuite) TestExecutionAPIPrioritiesOrdered() {
 func (s *quotasSuite) TestVisibilityAPIPrioritiesOrdered() {
 	for idx := range VisibilityAPIPrioritiesOrdered[1:] {
 		s.True(VisibilityAPIPrioritiesOrdered[idx] < VisibilityAPIPrioritiesOrdered[idx+1])
+	}
+}
+
+func (s *quotasSuite) TestNamespaceReplicationInducingAPIPrioritiesOrdered() {
+	for idx := range NamespaceReplicationInducingAPIPrioritiesOrdered[1:] {
+		s.True(NamespaceReplicationInducingAPIPrioritiesOrdered[idx] < NamespaceReplicationInducingAPIPrioritiesOrdered[idx+1])
 	}
 }
 
@@ -120,17 +133,16 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"RespondActivityTaskCompletedById": {},
 		"RespondWorkflowTaskCompleted":     {},
 
-		"ResetWorkflowExecution":           {},
-		"DescribeWorkflowExecution":        {},
-		"RespondWorkflowTaskFailed":        {},
-		"QueryWorkflow":                    {},
-		"RespondQueryTaskCompleted":        {},
-		"PollWorkflowTaskQueue":            {},
-		"PollActivityTaskQueue":            {},
-		"GetWorkerBuildIdCompatibility":    {},
-		"UpdateWorkerBuildIdCompatibility": {},
-		"GetWorkerTaskReachability":        {},
-		"DeleteWorkflowExecution":          {},
+		"ResetWorkflowExecution":        {},
+		"DescribeWorkflowExecution":     {},
+		"RespondWorkflowTaskFailed":     {},
+		"QueryWorkflow":                 {},
+		"RespondQueryTaskCompleted":     {},
+		"PollWorkflowTaskQueue":         {},
+		"PollActivityTaskQueue":         {},
+		"GetWorkerBuildIdCompatibility": {},
+		"GetWorkerTaskReachability":     {},
+		"DeleteWorkflowExecution":       {},
 
 		"ResetStickyTaskQueue":    {},
 		"DescribeTaskQueue":       {},
@@ -172,6 +184,24 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 	s.Equal(apiToPriority, VisibilityAPIToPriority)
 }
 
+func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
+	apis := map[string]struct{}{
+		"UpdateWorkerBuildIdCompatibility": {},
+		"UpdateNamespace":                  {},
+	}
+
+	var service workflowservice.WorkflowServiceServer
+	t := reflect.TypeOf(&service).Elem()
+	apiToPriority := make(map[string]int, t.NumMethod())
+	for i := 0; i < t.NumMethod(); i++ {
+		apiName := t.Method(i).Name
+		if _, ok := apis[apiName]; ok {
+			apiToPriority[apiName] = NamespaceReplicationInducingAPIToPriority[apiName]
+		}
+	}
+	s.Equal(apiToPriority, NamespaceReplicationInducingAPIToPriority)
+}
+
 func (s *quotasSuite) TestOtherAPIs() {
 	apis := map[string]struct{}{
 		"GetClusterInfo":      {},
@@ -179,7 +209,6 @@ func (s *quotasSuite) TestOtherAPIs() {
 		"GetSearchAttributes": {},
 
 		"RegisterNamespace":  {},
-		"UpdateNamespace":    {},
 		"DescribeNamespace":  {},
 		"ListNamespaces":     {},
 		"DeprecateNamespace": {},
@@ -223,6 +252,9 @@ func (s *quotasSuite) TestAllAPIs() {
 		actualAPIs[api] = struct{}{}
 	}
 	for api := range VisibilityAPIToPriority {
+		actualAPIs[api] = struct{}{}
+	}
+	for api := range NamespaceReplicationInducingAPIToPriority {
 		actualAPIs[api] = struct{}{}
 	}
 	for api := range OtherAPIToPriority {

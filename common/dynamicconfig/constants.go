@@ -217,6 +217,10 @@ const (
 	FrontendHistoryMaxPageSize = "frontend.historyMaxPageSize"
 	// FrontendRPS is workflow rate limit per second
 	FrontendRPS = "frontend.rps"
+	// FrontendNamespaceReplicationInducingAPIsRPS limits the per second request rate for namespace replication inducing
+	// APIs (e.g. UpdateNamespace, UpdateWorkerBuildIdCompatibility).
+	// This config is EXPERIMENTAL and may be changed or removed in a later release.
+	FrontendNamespaceReplicationInducingAPIsRPS = "frontend.rps.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceRPSPerInstance is workflow namespace rate limit per second
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
 	// FrontendMaxNamespaceBurstPerInstance is workflow namespace burst limit
@@ -226,9 +230,17 @@ const (
 	// FrontendMaxNamespaceVisibilityRPSPerInstance is namespace rate limit per second for visibility APIs.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityRPSPerInstance = "frontend.namespaceRPS.visibility"
+	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance is a per host/per namespace RPS limit for
+	// namespace replication inducing APIs (e.g. UpdateNamespace, UpdateWorkerBuildIdCompatibility).
+	// This config is EXPERIMENTAL and may be changed or removed in a later release.
+	FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance = "frontend.namespaceRPS.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceVisibilityBurstPerInstance is namespace burst limit for visibility APIs.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityBurstPerInstance = "frontend.namespaceBurst.visibility"
+	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance is a per host/per namespace burst limit for
+	// namespace replication inducing APIs (e.g. UpdateNamespace, UpdateWorkerBuildIdCompatibility).
+	// This config is EXPERIMENTAL and may be changed or removed in a later release.
+	FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance = "frontend.namespaceBurst.namespaceReplicationInducingAPIs"
 	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster.
 	// The limit is evenly distributed among available frontend service instances.
 	// If this is set, it overwrites per instance limit "frontend.namespaceRPS".
@@ -241,6 +253,13 @@ const (
 	// If this is set, it overwrites per instance limit "frontend.namespaceRPS.visibility".
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendGlobalNamespaceVisibilityRPS = "frontend.globalNamespaceRPS.visibility"
+	// FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS is a cluster global, per namespace RPS limit for
+	// namespace replication inducing APIs (e.g. UpdateNamespace, UpdateWorkerBuildIdCompatibility).
+	// The limit is evenly distributed among available frontend service instances.
+	// If this is set, it overwrites the per instance limit configured with
+	// "frontend.namespaceRPS.namespaceReplicationInducingAPIs".
+	// This config is EXPERIMENTAL and may be changed or removed in a later release.
+	FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS = "frontend.globalNamespaceRPS.namespaceReplicationInducingAPIs"
 	// InternalFrontendGlobalNamespaceVisibilityRPS is workflow namespace rate limit per second
 	// across all internal-frontends.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
@@ -365,6 +384,11 @@ const (
 	MatchingLongPollExpirationInterval = "matching.longPollExpirationInterval"
 	// MatchingSyncMatchWaitDuration is to wait time for sync match
 	MatchingSyncMatchWaitDuration = "matching.syncMatchWaitDuration"
+	// MatchingLoadUserData can be used to entirely disable loading user data from persistence (and the inter node RPCs
+	// that propoagate it). When turned off, features that rely on user data (e.g. worker versioning) will essentially
+	// be disabled. When disabled, matching will drop tasks for versioned workflows and activities to avoid breaking
+	// versioning semantics. Operator intervention will be required to reschedule the dropped tasks.
+	MatchingLoadUserData = "matching.loadUserData"
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval = "matching.updateAckInterval"
 	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded

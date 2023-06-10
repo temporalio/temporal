@@ -49,11 +49,13 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
+	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -2244,6 +2246,75 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 	})
 	var failedPreconditionError *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPreconditionError)
+}
+
+func (s *matchingEngineSuite) TestAddWorkflowTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
+	namespaceId := uuid.New()
+	tq := taskqueuepb.TaskQueue{
+		Name: "test",
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+
+	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &matchingservice.AddWorkflowTaskRequest{
+		NamespaceId: namespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test",
+			RunId:      uuid.New(),
+		},
+		TaskQueue:        &tq,
+		ScheduledEventId: 7,
+		Source:           enums.TASK_SOURCE_HISTORY,
+		VersionDirective: &taskqueue.TaskVersionDirective{
+			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+		},
+	})
+	s.Require().NoError(err)
+}
+
+func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
+	namespaceId := uuid.New()
+	tq := taskqueuepb.TaskQueue{
+		Name: "test",
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+
+	_, err := s.matchingEngine.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
+		NamespaceId: namespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test",
+			RunId:      uuid.New(),
+		},
+		TaskQueue:        &tq,
+		ScheduledEventId: 7,
+		Source:           enums.TASK_SOURCE_HISTORY,
+		VersionDirective: &taskqueue.TaskVersionDirective{
+			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+		},
+	})
+	s.Require().NoError(err)
+}
+
+func (s *matchingEngineSuite) TestDispatchSpooledTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
+	namespaceId := namespace.ID(uuid.New())
+	tqId, err := newTaskQueueID(namespaceId, "foo", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.Require().NoError(err)
+	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+
+	err = s.matchingEngine.DispatchSpooledTask(context.Background(), &internalTask{
+		event: &genericTaskInfo{
+			&persistencespb.AllocatedTaskInfo{
+				Data: &persistencespb.TaskInfo{
+					VersionDirective: &taskqueue.TaskVersionDirective{
+						Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+					},
+				},
+			},
+			func(ati *persistencespb.AllocatedTaskInfo, err error) {},
+		},
+	}, tqId, stickyInfo{})
+	s.Require().NoError(err)
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {

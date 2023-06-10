@@ -456,8 +456,8 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string)
 			// not, then we'll guess wrong, but when we get the replication event, we'll merge
 			// the sets and use both ids.
 			// TODO: add metric and log to make this situation visible
-			guessedSetId := hashBuildId(buildId)
-			return guessedSetId, nil
+			// guessedSetId := hashBuildId(buildId)
+			// return guessedSetId, nil
 		}
 		set = data.VersionSets[setIdx]
 	}
