@@ -317,7 +317,8 @@ func NamespaceRateLimitInterceptorProvider(
 	case primitives.InternalFrontendService:
 		globalNamespaceRPS = serviceConfig.InternalFEGlobalNamespaceRPS
 		globalNamespaceVisibilityRPS = serviceConfig.InternalFEGlobalNamespaceVisibilityRPS
-		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.InternalFEGlobalNamespaceNamespaceReplicationInducingAPIsRPS
+		// Internal frontend has no special limit for this set of APIs
+		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.InternalFEGlobalNamespaceRPS
 	default:
 		panic("invalid service name")
 	}

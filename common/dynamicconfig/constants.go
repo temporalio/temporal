@@ -264,12 +264,6 @@ const (
 	// across all internal-frontends.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	InternalFrontendGlobalNamespaceVisibilityRPS = "internal-frontend.globalNamespaceRPS.visibility"
-	// InternalFrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS is a cluster global, per namespace RPS limit
-	// for namespace replication inducing APIs (e.g. UpdateNamespace, UpdateWorkerBuildIdCompatibility).
-	// The limit is evenly distributed among available internal-frontend service instances. If this is set, it
-	// overwrites the per instance limit configured with "internal-frontend.namespaceRPS.namespaceReplicationInducingAPIs".
-	// This config is EXPERIMENTAL and may be changed or removed in a later release.
-	InternalFrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS = "internal-frontend.globalNamespaceRPS.namespaceReplicationInducingAPIs"
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	FrontendThrottledLogRPS = "frontend.throttledLogRPS"
 	// FrontendShutdownDrainDuration is the duration of traffic drain during shutdown
