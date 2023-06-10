@@ -384,6 +384,11 @@ const (
 	MatchingLongPollExpirationInterval = "matching.longPollExpirationInterval"
 	// MatchingSyncMatchWaitDuration is to wait time for sync match
 	MatchingSyncMatchWaitDuration = "matching.syncMatchWaitDuration"
+	// MatchingLoadUserData can be used to entirely disable loading user data from persistence (and the inter node RPCs
+	// that propoagate it). When turned off, features that rely on user data (e.g. worker versioning) will essentially
+	// be disabled. When disabled, matching will drop tasks for versioned workflows and activities to avoid breaking
+	// versioning semantics. Operator intervention will be required to reschedule the dropped tasks.
+	MatchingLoadUserData = "matching.loadUserData"
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval = "matching.updateAckInterval"
 	// MatchingMaxTaskQueueIdleTime is the time after which an idle task queue will be unloaded
