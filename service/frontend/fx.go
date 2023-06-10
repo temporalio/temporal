@@ -340,12 +340,12 @@ func NamespaceRateLimitInterceptorProvider(
 			namespace,
 		)
 	}
-	namespaceReplicationInducingRateFn := func(namespace string) float64 {
+	namespaceReplicationInducingRateFn := func(ns string) float64 {
 		return namespaceRPS(
 			serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
 			globalNamespaceNamespaceReplicationInducingAPIsRPS,
 			frontendServiceResolver,
-			namespace,
+			ns,
 		)
 	}
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
