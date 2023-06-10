@@ -74,9 +74,13 @@ func TestUserDataReplicationTestSuite(t *testing.T) {
 
 func (s *userDataReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
-		dynamicconfig.BuildIdScavengerEnabled:                    true,
+		// Make sure we don't hit the rate limiter in tests
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: 1000,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:                               true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:                           true,
+		dynamicconfig.BuildIdScavengerEnabled:                                              true,
 	}
 	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
 }
