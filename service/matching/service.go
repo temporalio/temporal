@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
 // Service represents the matching service
@@ -57,6 +58,7 @@ type Service struct {
 	metricsHandler                 metrics.Handler
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 	healthServer                   *health.Server
+	visibilityManager              manager.VisibilityManager
 }
 
 func NewService(
@@ -70,6 +72,7 @@ func NewService(
 	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
+	visibilityManager manager.VisibilityManager,
 ) *Service {
 	return &Service{
 		status:                         common.DaemonStatusInitialized,
@@ -83,6 +86,7 @@ func NewService(
 		metricsHandler:                 metricsHandler,
 		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
 		healthServer:                   healthServer,
+		visibilityManager:              visibilityManager,
 	}
 }
 
@@ -129,6 +133,8 @@ func (s *Service) Stop() {
 	s.server.Stop()
 
 	s.handler.Stop()
+
+	s.visibilityManager.Close()
 
 	s.logger.Info("matching stopped")
 }

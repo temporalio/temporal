@@ -120,10 +120,7 @@ const (
 var testHostInfo = membership.NewHostInfoFromAddress(testHostName)
 
 // NewTest returns a new test resource instance
-func NewTest(
-	controller *gomock.Controller,
-	serviceMetricsIndex metrics.ServiceIdx,
-) *Test {
+func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) *Test {
 	logger := log.NewTestLogger()
 
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
@@ -169,7 +166,6 @@ func NewTest(
 	membershipMonitor.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
-	serviceName, _ := metrics.MetricsServiceIdxToServiceName(serviceMetricsIndex)
 	metricsHandler := metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
 		metrics.ServiceNameTag(serviceName),
 	)

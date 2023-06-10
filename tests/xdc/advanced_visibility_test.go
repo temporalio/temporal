@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
 )
@@ -331,7 +332,7 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 					var buildIds []string
 					err = payload.Decode(buildIdsBytes, &buildIds)
 					s.NoError(err)
-					s.Equal([]string{common.UnversionedSearchAttribute}, buildIds)
+					s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
 
 					verified = true
 					break

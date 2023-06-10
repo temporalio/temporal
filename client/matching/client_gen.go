@@ -208,7 +208,7 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}

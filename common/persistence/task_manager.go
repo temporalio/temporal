@@ -292,7 +292,10 @@ func (m *taskManagerImpl) ListTaskQueueUserDataEntries(ctx context.Context, requ
 		}
 		entries[i] = &TaskQueueUserDataEntry{
 			TaskQueue: entry.TaskQueue,
-			Data:      data,
+			UserData: &persistencespb.VersionedTaskQueueUserData{
+				Data:    data,
+				Version: entry.Version,
+			},
 		}
 	}
 	return &ListTaskQueueUserDataEntriesResponse{

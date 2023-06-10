@@ -106,10 +106,15 @@ type (
 	}
 
 	UserDataUpdateOptions struct {
-		Replicate                bool
 		TaskQueueLimitPerBuildId int
+		// Only perform the update if current version equals to supplied version.
+		// 0 is unset.
+		KnownVersion int64
 	}
-	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error)
+	// UserDataUpdateFunc accepts the current user data for a task queue and returns the updated user data, a boolean
+	// indicating whether this data should be replicated, and an error.
+	// Extra care should be taken to avoid mutating the current user data to avoid keeping uncommitted data in memory.
+	UserDataUpdateFunc func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error)
 
 	taskQueueManager interface {
 		Start()
@@ -131,7 +136,7 @@ type (
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		// GetUserData returns the verioned user data for this task queue
 		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
-		// UpdateUserData allows callers to update user data for this task queue
+		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
 		CancelPoller(pollerID string)
@@ -515,13 +520,14 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 	return c.db.GetUserData(ctx)
 }
 
+// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
-	newData, err := c.db.UpdateUserData(ctx, updateFn, options.TaskQueueLimitPerBuildId)
+	newData, shouldReplicate, err := c.db.UpdateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
 	if err != nil {
 		return err
 	}
 	c.signalIfFatal(err)
-	if !options.Replicate {
+	if !shouldReplicate {
 		return nil
 	}
 
@@ -530,7 +536,7 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 	if err != nil {
 		return err
 	}
-	if !ns.IsGlobalNamespace() || len(ns.ClusterNames()) < 2 {
+	if !ns.IsGlobalNamespace() {
 		return nil
 	}
 

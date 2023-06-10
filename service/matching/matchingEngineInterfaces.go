@@ -34,6 +34,7 @@ import (
 type (
 	// Engine exposes interfaces for clients to interact with the matching engine
 	Engine interface {
+		Start()
 		Stop()
 		AddWorkflowTask(ctx context.Context, addRequest *matchingservice.AddWorkflowTaskRequest) (syncMatch bool, err error)
 		AddActivityTask(ctx context.Context, addRequest *matchingservice.AddActivityTaskRequest) (syncMatch bool, err error)

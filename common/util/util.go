@@ -132,3 +132,14 @@ func MapConcurrent[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([
 	}
 	return results, nil
 }
+
+// FilterSlice iterates over elements of a slice, returning a new slice of all elements predicate returns true for.
+func FilterSlice[T any](in []T, predicate func(T) bool) []T {
+	var out []T
+	for _, elem := range in {
+		if predicate(elem) {
+			out = append(out, elem)
+		}
+	}
+	return out
+}
