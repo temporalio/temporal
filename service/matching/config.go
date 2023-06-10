@@ -84,6 +84,8 @@ type (
 		EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueInfoFilters
 	}
 
 	forwarderConfig struct {
@@ -119,6 +121,11 @@ type (
 		AdminNamespaceToPartitionDispatchRate func() float64
 		// partition qps = AdminNamespaceTaskQueueToPartitionDispatchRate(namespace, task_queue)
 		AdminNamespaceTaskQueueToPartitionDispatchRate func() float64
+
+		// If set to false, matching does not load user data from DB for root partitions or fetch it via RPC from the
+		// root. When disbled, features that rely on user data (e.g. worker versioning) will essentially be disabled.
+		// See the documentation for constants.MatchingLoadUserData for the implications on versioning.
+		LoadUserData func() bool
 	}
 )
 
@@ -150,6 +157,7 @@ func NewConfig(
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.MatchingPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
 		SyncMatchWaitDuration:                 dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
 		TestDisableSyncMatch:                  dc.GetBoolProperty(dynamicconfig.TestMatchingDisableSyncMatch, false),
+		LoadUserData:                          dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLoadUserData, true),
 		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                             100000,
 		GetTasksBatchSize:                     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
@@ -206,6 +214,9 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 			return config.SyncMatchWaitDuration(namespace.String(), taskQueueName, taskType)
 		},
 		TestDisableSyncMatch: config.TestDisableSyncMatch,
+		LoadUserData: func() bool {
+			return config.LoadUserData(namespace.String(), taskQueueName, taskType)
+		},
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(namespace.String(), taskQueueName, taskType)
 		},

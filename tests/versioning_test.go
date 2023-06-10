@@ -39,14 +39,14 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/server/api/matchingservice/v1"
+	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -1370,6 +1370,122 @@ func (s *versioningIntegSuite) dispatchCron() {
 	s.GreaterOrEqual(runs2.Load(), int32(3))
 }
 
+func (s *versioningIntegSuite) TestDisableLoadUserData() {
+	tq := s.T().Name()
+	v1 := s.prefixed("v1")
+	v2 := s.prefixed("v2")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// First insert some data (we'll try to read it below)
+	s.addNewDefaultBuildId(ctx, tq, v1)
+
+	dc := s.testCluster.host.dcClient
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+
+	// Verify update fails
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v2,
+		},
+	})
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	s.Require().ErrorAs(err, &failedPreconditionError)
+
+	s.unloadTaskQueue(ctx, tq)
+
+	// Verify read returns empty
+	res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(0, len(res.GetMajorVersionSets()))
+}
+
+func (s *versioningIntegSuite) TestWorkflowGetsStuckWhenDisablingLoadingUserData() {
+	tq := s.T().Name()
+	v1 := "v1"
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.addNewDefaultBuildId(ctx, tq, v1)
+
+	dc := s.testCluster.host.dcClient
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+
+	s.unloadTaskQueue(ctx, tq)
+
+	var runs atomic.Int32
+	wf := func(ctx workflow.Context) error {
+		runs.Add(1)
+		return nil
+	}
+	wrk := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	wrk.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(wrk.Start())
+	defer wrk.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue:                tq,
+		WorkflowExecutionTimeout: 5 * time.Second,
+	}, "wf")
+	s.Require().NoError(err)
+	err = run.Get(ctx, nil)
+	var timeoutError *temporal.TimeoutError
+	s.Require().ErrorAs(err, &timeoutError)
+	s.Require().Equal(int32(0), runs.Load())
+}
+
+func (s *versioningIntegSuite) TestWorkflowQueryTimesOutWhenDisablingLoadingUserData() {
+	tq := s.T().Name()
+	v1 := "v1"
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.addNewDefaultBuildId(ctx, tq, v1)
+
+	var runs atomic.Int32
+	wf := func(ctx workflow.Context) error {
+		return workflow.SetQueryHandler(ctx, "query", func() (string, error) {
+			runs.Add(1)
+			return "response", nil
+		})
+	}
+	wrk := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          s.prefixed("v1"),
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	wrk.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(wrk.Start())
+	defer wrk.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue:                tq,
+		WorkflowExecutionTimeout: 5 * time.Second,
+	}, "wf")
+	s.Require().NoError(err)
+
+	dc := s.testCluster.host.dcClient
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+
+	s.unloadTaskQueue(ctx, tq)
+
+	_, err = s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
+	var deadlineExceededError *serviceerror.DeadlineExceeded
+	s.Require().ErrorAs(err, &deadlineExceededError)
+	s.Require().Equal(int32(0), runs.Load())
+}
+
 // Add a per test prefix to avoid hitting the namespace limit of mapped task queue per build id
 func (s *versioningIntegSuite) prefixed(buildId string) string {
 	return fmt.Sprintf("t%x:%s", 0xffff&farm.Hash32([]byte(s.T().Name())), buildId)
@@ -1452,6 +1568,15 @@ func (s *versioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}
 	case <-ctx.Done():
 		s.FailNow("context timeout")
 	}
+}
+
+func (s *versioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
+	_, err := s.testCluster.GetMatchingClient().ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
+		NamespaceId:   s.getNamespaceID(s.namespace),
+		TaskQueue:     tq,
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	})
+	s.Require().NoError(err)
 }
 
 func containsBuildId(data *persistencespb.VersioningData, buildId string) bool {
