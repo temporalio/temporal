@@ -867,9 +867,10 @@ func TestDisableLoadUserData_NonRootDoesNotRequestUserDataFromRoot(t *testing.T)
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = taskQueueId
-	manager := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	mgr := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).Times(0)
-	manager.config.LoadUserData = func() bool { return false }
-	manager.Start()
-	manager.WaitUntilInitialized(ctx)
+	mgr.config.LoadUserData = func() bool { return false }
+	mgr.Start()
+	err = mgr.WaitUntilInitialized(ctx)
+	require.NoError(t, err)
 }
