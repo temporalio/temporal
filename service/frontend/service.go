@@ -210,14 +210,15 @@ func NewConfig(
 		MaxNamespaceCountPerInstance:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
 		MaxNamespaceVisibilityRPSPerInstance:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
 		MaxNamespaceVisibilityBurstPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
-		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance, 5),
-		MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance, 5),
+		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance, 1),
+		MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance, 10),
 
 		GlobalNamespaceRPS:                                           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		InternalFEGlobalNamespaceRPS:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceRPS, 0),
 		GlobalNamespaceVisibilityRPS:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceVisibilityRPS, 0),
 		InternalFEGlobalNamespaceVisibilityRPS:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceVisibilityRPS, 0),
-		GlobalNamespaceNamespaceReplicationInducingAPIsRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 0),
+		// Overshoot since these low rate limits don't work well in an uncoordinated global limiter.
+		GlobalNamespaceNamespaceReplicationInducingAPIsRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 10),
 		InternalFEGlobalNamespaceNamespaceReplicationInducingAPIsRPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 0),
 		MaxIDLengthLimit:                                             dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		WorkerBuildIdSizeLimit:                                       dc.GetIntProperty(dynamicconfig.WorkerBuildIdSizeLimit, 255),
