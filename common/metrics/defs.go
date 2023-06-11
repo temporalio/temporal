@@ -27,15 +27,12 @@ package metrics
 
 // types used/defined by the package
 type (
-	// MetricName is the name of the metric
-	MetricName string
-
 	MetricUnit string
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		metricName MetricName // metric name
-		unit       MetricUnit
+		name string
+		unit MetricUnit
 	}
 )
 
@@ -47,18 +44,8 @@ const (
 	Bytes         = "By"
 )
 
-// Empty returns true if the metricName is an empty string
-func (mn MetricName) Empty() bool {
-	return mn == ""
-}
-
-// String returns string representation of this metric name
-func (mn MetricName) String() string {
-	return string(mn)
-}
-
 func (md metricDefinition) GetMetricName() string {
-	return md.metricName.String()
+	return md.name
 }
 
 func (md metricDefinition) GetMetricUnit() MetricUnit {
@@ -66,21 +53,21 @@ func (md metricDefinition) GetMetricUnit() MetricUnit {
 }
 
 func NewTimerDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), unit: Milliseconds}
+	return metricDefinition{name: name, unit: Milliseconds}
 }
 
 func NewBytesHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), unit: Bytes}
+	return metricDefinition{name: name, unit: Bytes}
 }
 
 func NewDimensionlessHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), unit: Dimensionless}
+	return metricDefinition{name: name, unit: Dimensionless}
 }
 
 func NewCounterDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name)}
+	return metricDefinition{name: name}
 }
 
 func NewGaugeDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name)}
+	return metricDefinition{name: name}
 }
