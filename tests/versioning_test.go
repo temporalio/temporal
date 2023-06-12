@@ -737,6 +737,7 @@ func (s *versioningIntegSuite) TestDispatchActivityCrossTQFails() {
 
 	tq := s.randomizeStr(s.T().Name())
 	crosstq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
 
 	act := func() (string, error) { return "v1", nil }
 	wf := func(ctx workflow.Context) (string, error) {
@@ -753,13 +754,13 @@ func (s *versioningIntegSuite) TestDispatchActivityCrossTQFails() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.addNewDefaultBuildId(ctx, tq, "v1")
-	s.addNewDefaultBuildId(ctx, crosstq, "v1")
-	s.waitForPropagation(ctx, tq, "v1")
-	s.waitForPropagation(ctx, crosstq, "v1")
+	s.addNewDefaultBuildId(ctx, tq, v1)
+	s.addNewDefaultBuildId(ctx, crosstq, v1)
+	s.waitForPropagation(ctx, tq, v1)
+	s.waitForPropagation(ctx, crosstq, v1)
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          s.prefixed("v1"),
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
@@ -768,7 +769,7 @@ func (s *versioningIntegSuite) TestDispatchActivityCrossTQFails() {
 	defer w1.Stop()
 
 	w1cross := worker.New(s.sdkClient, crosstq, worker.Options{
-		BuildID:                          s.prefixed("v1"),
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
@@ -943,6 +944,7 @@ func (s *versioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 
 	tq := s.randomizeStr(s.T().Name())
 	crosstq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
 
 	child := func(ctx workflow.Context) (string, error) { return "v1", nil }
 	wf := func(ctx workflow.Context) (string, error) {
@@ -958,13 +960,13 @@ func (s *versioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.addNewDefaultBuildId(ctx, tq, "v1")
-	s.addNewDefaultBuildId(ctx, crosstq, "v1")
-	s.waitForPropagation(ctx, tq, "v1")
-	s.waitForPropagation(ctx, crosstq, "v1")
+	s.addNewDefaultBuildId(ctx, tq, v1)
+	s.addNewDefaultBuildId(ctx, crosstq, v1)
+	s.waitForPropagation(ctx, tq, v1)
+	s.waitForPropagation(ctx, crosstq, v1)
 
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          s.prefixed("v1"),
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
@@ -973,7 +975,7 @@ func (s *versioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	defer w1.Stop()
 
 	w1cross := worker.New(s.sdkClient, crosstq, worker.Options{
-		BuildID:                          s.prefixed("v1"),
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
