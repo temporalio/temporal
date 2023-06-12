@@ -67,7 +67,8 @@ func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
 func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 	c, err := omp.provider.GetMeter().Int64Counter(counter)
 	if err != nil {
-		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", counter), tag.Error(err))
+		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", counter), tag.Error(err))
+		return CounterFunc(func(i int64, t ...Tag) {})
 	}
 
 	return CounterFunc(func(i int64, t ...Tag) {
@@ -80,7 +81,8 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 	c, err := omp.provider.GetMeter().Float64ObservableGauge(gauge)
 	if err != nil {
-		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+		return GaugeFunc(func(i float64, t ...Tag) {})
 	}
 
 	return GaugeFunc(func(i float64, t ...Tag) {
@@ -90,7 +92,7 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 			return nil
 		}, c)
 		if err != nil {
-			omp.l.Fatal("error setting callback metric update", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+			omp.l.Error("error setting callback metric update", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 		}
 	})
 }
@@ -99,7 +101,8 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 	c, err := omp.provider.GetMeter().Int64Histogram(timer, metric.WithUnit(Milliseconds))
 	if err != nil {
-		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
+		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
+		return TimerFunc(func(i time.Duration, t ...Tag) {})
 	}
 
 	return TimerFunc(func(i time.Duration, t ...Tag) {
@@ -112,10 +115,11 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
 	c, err := omp.provider.GetMeter().Int64Histogram(histogram, metric.WithUnit(string(unit)))
 	if err != nil {
-		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
+		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
+		return HistogramFunc(func(i int64, t ...Tag) {})
 	}
 
-	return CounterFunc(func(i int64, t ...Tag) {
+	return HistogramFunc(func(i int64, t ...Tag) {
 		option := metric.WithAttributes(tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 		c.Record(context.Background(), i, option)
 	})
