@@ -39,14 +39,15 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
-	matchingservice "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -1513,6 +1514,76 @@ func (s *versioningIntegSuite) TestWorkflowQueryTimesOutWhenDisablingLoadingUser
 	var deadlineExceededError *serviceerror.DeadlineExceeded
 	s.Require().ErrorAs(err, &deadlineExceededError)
 	s.Require().Equal(int32(0), runs.Load())
+}
+
+func (s *versioningIntegSuite) TestDescribeTaskQueue() {
+	// force one partition since DescribeTaskQueue only goes to the root
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
+	v11 := s.prefixed("v11")
+	v2 := s.prefixed("v2")
+
+	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, v1)
+	s.addCompatibleBuildId(ctx, tq, v11, v1, false)
+	s.addNewDefaultBuildId(ctx, tq, v2)
+	s.waitForPropagation(ctx, tq, v2)
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 v1,
+		UseBuildIDForVersioning: true,
+		Identity:                s.randomizeStr("id"),
+	})
+	w1.RegisterWorkflow(wf)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	w11 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 v11,
+		UseBuildIDForVersioning: true,
+		Identity:                s.randomizeStr("id"),
+	})
+	w11.RegisterWorkflow(wf)
+	s.NoError(w11.Start())
+	defer w11.Stop()
+
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                 v2,
+		UseBuildIDForVersioning: true,
+		Identity:                s.randomizeStr("id"),
+	})
+	w2.RegisterWorkflow(wf)
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	s.Eventually(func() bool {
+		resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.namespace,
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		s.NoError(err)
+		havePoller := func(v string) bool {
+			for _, p := range resp.Pollers {
+				if p.WorkerVersionCapabilities.UseVersioning && v == p.WorkerVersionCapabilities.BuildId {
+					return true
+				}
+			}
+			return false
+		}
+		// v1 polls get rejected because v11 is newer
+		return !havePoller(v1) && havePoller(v11) && havePoller(v2)
+	}, 3*time.Second, 50*time.Millisecond)
 }
 
 func (s *versioningIntegSuite) TestDescribeWorkflowExecution() {
