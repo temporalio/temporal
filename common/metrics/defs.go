@@ -64,6 +64,10 @@ func NewDimensionlessHistogramDef(name string) metricDefinition {
 	return metricDefinition{name: name, unit: Dimensionless}
 }
 
+func NewTimeHistogramDef(name string) metricDefinition {
+	return metricDefinition{name: name, unit: Milliseconds}
+}
+
 func NewCounterDef(name string) metricDefinition {
 	return metricDefinition{name: name}
 }
