@@ -4972,13 +4972,13 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 	return &newRequest, nil
 }
 
-func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, workflowID string, namespace string, namespaceID namespace.ID) (*workflowpb.WorkflowExecutionInfo, *schedspb.StartScheduleArgs, error) {
+func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, workflowID string, namespaceName string, namespaceID namespace.ID) (*workflowpb.WorkflowExecutionInfo, *schedspb.StartScheduleArgs, error) {
 	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
 	// describe to get memo, search attributes, and execution info
 	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: namespace,
+			Namespace: namespaceName,
 			Execution: execution,
 		},
 	})
@@ -4992,7 +4992,7 @@ func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, 
 	switch executionInfo.GetStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 		reverseHistory, err := wh.GetWorkflowExecutionHistoryReverse(ctx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
-			Namespace:       namespace,
+			Namespace:       namespaceName,
 			Execution:       &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: executionInfo.Execution.RunId},
 			MaximumPageSize: 1,
 		})
@@ -5015,10 +5015,10 @@ func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, 
 	return executionInfo, &startScheduleArgs, nil
 }
 
-func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, workflowID string, namespace string, namespaceID namespace.ID, signalWithStarRequest *workflowservice.SignalWithStartWorkflowExecutionRequest, operationName string) error {
+func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, workflowID string, namespaceName string, namespaceID namespace.ID, signalWithStarRequest *workflowservice.SignalWithStartWorkflowExecutionRequest, operationName string) error {
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespace)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespace)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
 	for payloadSize := range []int{signalWithStarRequest.Input.Size(), signalWithStarRequest.SignalInput.Size()} {
 		if err := common.CheckEventBlobSizeLimit(
 			payloadSize,
