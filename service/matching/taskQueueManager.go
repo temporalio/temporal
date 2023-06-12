@@ -514,7 +514,7 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 	if err != nil {
 		return err
 	}
-	if !ns.IsGlobalNamespace() {
+	if ns.ReplicationPolicy() != namespace.ReplicationPolicyMultiCluster {
 		return nil
 	}
 
