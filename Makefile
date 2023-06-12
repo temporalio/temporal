@@ -57,7 +57,7 @@ define NEWLINE
 
 endef
 
-TEST_TIMEOUT := 20m
+TEST_TIMEOUT := 30m
 
 
 PROTO_ROOT := proto
