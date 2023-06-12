@@ -1217,7 +1217,10 @@ const (
 )
 
 var (
-	ServiceRequests                               = NewCounterDef("service_requests")
+	ServiceRequests = NewCounterDef(
+		"service_requests",
+		WithDescription("The number of gRPC requests received by the service."),
+	)
 	ServicePendingRequests                        = NewGaugeDef("service_pending_requests")
 	ServiceFailures                               = NewCounterDef("service_errors")
 	ServiceErrorWithType                          = NewCounterDef("service_error_with_type")
