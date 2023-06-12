@@ -72,7 +72,6 @@ var (
 		"PollActivityTaskQueue":              2,
 		"GetWorkflowExecutionHistoryReverse": 2,
 		"GetWorkerBuildIdCompatibility":      2,
-		"UpdateWorkerBuildIdCompatibility":   2,
 		"GetWorkerTaskReachability":          2,
 		"DeleteWorkflowExecution":            2,
 
@@ -95,13 +94,22 @@ var (
 
 	VisibilityAPIPrioritiesOrdered = []int{0}
 
+	// Special rate limiting for APIs that may insert replication tasks into a namespace replication queue.
+	// The replication queue is used to propagate critical failover messages and this mapping prevents flooding the
+	// queue and delaying failover.
+	NamespaceReplicationInducingAPIToPriority = map[string]int{
+		"UpdateNamespace":                  0,
+		"UpdateWorkerBuildIdCompatibility": 1,
+	}
+
+	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1}
+
 	OtherAPIToPriority = map[string]int{
 		"GetClusterInfo":      0,
 		"GetSystemInfo":       0,
 		"GetSearchAttributes": 0,
 
 		"RegisterNamespace":  0,
-		"UpdateNamespace":    0,
 		"DescribeNamespace":  0,
 		"ListNamespaces":     0,
 		"DeprecateNamespace": 0,
@@ -157,12 +165,14 @@ func (c *NamespaceRateBurstImpl) Burst() int {
 func NewRequestToRateLimiter(
 	executionRateBurstFn quotas.RateBurst,
 	visibilityRateBurstFn quotas.RateBurst,
+	namespaceReplicationInducingRateBurstFn quotas.RateBurst,
 	otherRateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	mapping := make(map[string]quotas.RequestRateLimiter)
 
 	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn)
 	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn)
+	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn)
 	otherRateLimiter := NewOtherAPIPriorityRateLimiter(otherRateBurstFn)
 
 	for api := range ExecutionAPIToPriority {
@@ -170,6 +180,9 @@ func NewRequestToRateLimiter(
 	}
 	for api := range VisibilityAPIToPriority {
 		mapping[api] = visibilityRateLimiter
+	}
+	for api := range NamespaceReplicationInducingAPIToPriority {
+		mapping[api] = namespaceReplicationInducingRateLimiter
 	}
 	for api := range OtherAPIToPriority {
 		mapping[api] = otherRateLimiter
@@ -205,6 +218,21 @@ func NewVisibilityPriorityRateLimiter(
 			return priority
 		}
 		return VisibilityAPIPrioritiesOrdered[len(VisibilityAPIPrioritiesOrdered)-1]
+	}, rateLimiters)
+}
+
+func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
+	rateBurstFn quotas.RateBurst,
+) quotas.RequestRateLimiter {
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
+	for priority := range NamespaceReplicationInducingAPIPrioritiesOrdered {
+		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
+	}
+	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+		if priority, ok := NamespaceReplicationInducingAPIToPriority[req.API]; ok {
+			return priority
+		}
+		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
 	}, rateLimiters)
 }
 

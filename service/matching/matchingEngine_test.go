@@ -49,11 +49,13 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
+	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -67,6 +69,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -77,10 +80,11 @@ import (
 type (
 	matchingEngineSuite struct {
 		suite.Suite
-		controller         *gomock.Controller
-		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
-		mockMatchingClient *matchingservicemock.MockMatchingServiceClient
-		mockNamespaceCache *namespace.MockRegistry
+		controller            *gomock.Controller
+		mockHistoryClient     *historyservicemock.MockHistoryServiceClient
+		mockMatchingClient    *matchingservicemock.MockMatchingServiceClient
+		mockNamespaceCache    *namespace.MockRegistry
+		mockVisibilityManager *manager.MockVisibilityManager
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -123,6 +127,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
+	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
+	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -136,12 +142,13 @@ func (s *matchingEngineSuite) TearDownTest() {
 func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
-	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient)
+	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager)
 }
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
 	logger log.Logger, mockNamespaceCache namespace.Registry, mockMatchingClient matchingservice.MatchingServiceClient,
+	mockVisibilityManager manager.VisibilityManager,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:       taskMgr,
@@ -156,6 +163,7 @@ func newMatchingEngine(
 		namespaceRegistry: mockNamespaceCache,
 		clusterMeta:       cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:        clock.NewRealTimeSource(),
+		visibilityManager: mockVisibilityManager,
 	}
 }
 
@@ -1920,11 +1928,16 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		id := fmt.Sprintf("%d", i)
 		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-				Namespace: namespaceID.String(),
-				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-					AddNewBuildIdInNewDefaultSet: id,
+			TaskQueue:   tq,
+			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
+				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
+					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+						Namespace: namespaceID.String(),
+						TaskQueue: tq,
+						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+							AddNewBuildIdInNewDefaultSet: id,
+						},
+					},
 				},
 			},
 		})
@@ -1940,14 +1953,19 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		}
 		res, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-				Namespace: namespaceID.String(),
-				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
-					AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-						NewBuildId:                id,
-						ExistingCompatibleBuildId: prevCompat,
-						MakeSetDefault:            false,
+			TaskQueue:   tq,
+			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
+				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
+					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+						Namespace: namespaceID.String(),
+						TaskQueue: tq,
+						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+							AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
+								NewBuildId:                id,
+								ExistingCompatibleBuildId: prevCompat,
+								MakeSetDefault:            false,
+							},
+						},
 					},
 				},
 			},
@@ -2120,11 +2138,16 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-				Namespace: namespaceID.String(),
-				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-					AddNewBuildIdInNewDefaultSet: "v1",
+			TaskQueue:   tq,
+			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
+				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
+					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+						Namespace: namespaceID.String(),
+						TaskQueue: tq,
+						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+							AddNewBuildIdInNewDefaultSet: "v1",
+						},
+					},
 				},
 			},
 		})
@@ -2167,11 +2190,16 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-				Namespace: namespaceID.String(),
-				TaskQueue: tq,
-				Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-					AddNewBuildIdInNewDefaultSet: "v1",
+			TaskQueue:   tq,
+			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_{
+				ApplyPublicRequest: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{
+					Request: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+						Namespace: namespaceID.String(),
+						TaskQueue: tq,
+						Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+							AddNewBuildIdInNewDefaultSet: "v1",
+						},
+					},
 				},
 			},
 		})
@@ -2189,6 +2217,104 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	s.True(res.TaskQueueHasUserData)
 	s.True(hybrid_logical_clock.Greater(*res.UserData.Data.Clock, *userData.Data.Clock))
 	s.NotNil(res.UserData.Data.VersioningData)
+}
+
+func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
+
+	userData := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
+	}
+	err := s.taskManager.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: namespaceID.String(),
+			TaskQueue:   tq,
+			UserData:    userData,
+		})
+	s.NoError(err)
+
+	_, err = s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   tq,
+		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_{
+			RemoveBuildIds: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds{
+				KnownUserDataVersion: 1,
+			},
+		},
+	})
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPreconditionError)
+}
+
+func (s *matchingEngineSuite) TestAddWorkflowTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
+	namespaceId := uuid.New()
+	tq := taskqueuepb.TaskQueue{
+		Name: "test",
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+
+	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &matchingservice.AddWorkflowTaskRequest{
+		NamespaceId: namespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test",
+			RunId:      uuid.New(),
+		},
+		TaskQueue:        &tq,
+		ScheduledEventId: 7,
+		Source:           enums.TASK_SOURCE_HISTORY,
+		VersionDirective: &taskqueue.TaskVersionDirective{
+			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+		},
+	})
+	s.Require().NoError(err)
+}
+
+func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
+	namespaceId := uuid.New()
+	tq := taskqueuepb.TaskQueue{
+		Name: "test",
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+
+	_, err := s.matchingEngine.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
+		NamespaceId: namespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test",
+			RunId:      uuid.New(),
+		},
+		TaskQueue:        &tq,
+		ScheduledEventId: 7,
+		Source:           enums.TASK_SOURCE_HISTORY,
+		VersionDirective: &taskqueue.TaskVersionDirective{
+			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+		},
+	})
+	s.Require().NoError(err)
+}
+
+func (s *matchingEngineSuite) TestDispatchSpooledTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
+	namespaceId := namespace.ID(uuid.New())
+	tqId, err := newTaskQueueID(namespaceId, "foo", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.Require().NoError(err)
+	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+
+	err = s.matchingEngine.DispatchSpooledTask(context.Background(), &internalTask{
+		event: &genericTaskInfo{
+			&persistencespb.AllocatedTaskInfo{
+				Data: &persistencespb.TaskInfo{
+					VersionDirective: &taskqueue.TaskVersionDirective{
+						Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+					},
+				},
+			},
+			func(ati *persistencespb.AllocatedTaskInfo, err error) {},
+		},
+	}, tqId, stickyInfo{})
+	s.Require().NoError(err)
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
@@ -2625,7 +2751,7 @@ func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 }
 
 func defaultTestConfig() *Config {
-	config := NewConfig(dynamicconfig.NewNoopCollection())
+	config := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(1)
 	return config

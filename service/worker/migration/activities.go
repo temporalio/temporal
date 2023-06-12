@@ -465,7 +465,7 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 					TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
 						NamespaceId:   request.NamespaceID,
 						TaskQueueName: entry.TaskQueue,
-						UserData:      entry.Data,
+						UserData:      entry.UserData.GetData(),
 					},
 				},
 			})

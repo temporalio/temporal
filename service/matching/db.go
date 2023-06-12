@@ -352,28 +352,39 @@ func (db *taskQueueDB) getUserDataLocked(
 // Note that the user data's clock may be nil and should be initialized externally where there's access to the cluster
 // metadata and the cluster ID can be obtained.
 //
+// If knownVersion is non 0 and not equal to the current version, the update will fail.
+//
 // The DB write is performed remotely on an owning node for all user data updates in the namespace.
 //
-// On success returns a pointer to the updated data, which must *not* be mutated.
-func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, error), taskQueueLimitPerBuildId int) (*persistencespb.VersionedTaskQueueUserData, error) {
+// On success returns a pointer to the updated data, which must *not* be mutated, and a boolean indicating whether the
+// data should be replicated.
+func (db *taskQueueDB) UpdateUserData(
+	ctx context.Context,
+	updateFn UserDataUpdateFunc,
+	knownVersion int64,
+	taskQueueLimitPerBuildId int,
+) (*persistencespb.VersionedTaskQueueUserData, bool, error) {
 	if !db.DbStoresUserData() {
-		return nil, errUserDataNoMutateNonRoot
+		return nil, false, errUserDataNoMutateNonRoot
 	}
 	db.Lock()
 	defer db.Unlock()
 
 	userData, _, err := db.getUserDataLocked(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	preUpdateData := userData.GetData()
 	if preUpdateData == nil {
 		preUpdateData = &persistencespb.TaskQueueUserData{}
 	}
-	updatedUserData, err := updateFn(preUpdateData)
+	if knownVersion > 0 && userData.GetVersion() != knownVersion {
+		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", knownVersion, userData.GetVersion()))
+	}
+	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	added, removed := GetBuildIdDeltas(preUpdateData.GetVersioningData(), updatedUserData.GetVersioningData())
 	if taskQueueLimitPerBuildId > 0 && len(added) > 0 {
@@ -385,10 +396,10 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 				BuildID:     buildId,
 			})
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			if numTaskQueues >= taskQueueLimitPerBuildId {
-				return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build id: %d", taskQueueLimitPerBuildId))
+				return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build id: %d", taskQueueLimitPerBuildId))
 			}
 		}
 	}
@@ -400,10 +411,12 @@ func (db *taskQueueDB) UpdateUserData(ctx context.Context, updateFn func(*persis
 		BuildIdsAdded:   added,
 		BuildIdsRemoved: removed,
 	})
+	var updatedVersionedData *persistencespb.VersionedTaskQueueUserData
 	if err == nil {
-		db.setUserDataLocked(&persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData})
+		updatedVersionedData = &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData}
+		db.setUserDataLocked(updatedVersionedData)
 	}
-	return db.userData, err
+	return updatedVersionedData, shouldReplicate, err
 }
 
 func (db *taskQueueDB) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {

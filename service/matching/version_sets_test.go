@@ -686,6 +686,141 @@ func TestGetBuildIdDeltas_AcceptsNils(t *testing.T) {
 	assert.Equal(t, []string(nil), added)
 }
 
+func Test_RemoveBuildIds_PutsTombstonesOnSuppliedBuildIds(t *testing.T) {
+	t.Parallel()
+	c0 := hlc.Zero(0)
+	data := mkInitialData(3, c0)
+	c1 := c0
+	c1.Version++
+
+	expected := &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{
+			{
+				SetIds: []string{hashBuildId("0")},
+				BuildIds: []*persistencespb.BuildId{
+					{
+						Id:                   "0",
+						State:                persistencespb.STATE_DELETED,
+						StateUpdateTimestamp: &c1,
+					},
+				},
+				DefaultUpdateTimestamp: &c0,
+			},
+			{
+				SetIds: []string{hashBuildId("1")},
+				BuildIds: []*persistencespb.BuildId{
+					{
+						Id:                   "1",
+						State:                persistencespb.STATE_DELETED,
+						StateUpdateTimestamp: &c1,
+					},
+				},
+				DefaultUpdateTimestamp: &c0,
+			},
+			{
+				SetIds: []string{hashBuildId("2")},
+				BuildIds: []*persistencespb.BuildId{
+					{
+						Id:                   "2",
+						State:                persistencespb.STATE_ACTIVE,
+						StateUpdateTimestamp: &c0,
+					},
+				},
+				DefaultUpdateTimestamp: &c0,
+			},
+		},
+		DefaultUpdateTimestamp: &c0,
+	}
+
+	actual := RemoveBuildIds(c1, data, []string{"0", "1"})
+	assert.Equal(t, expected, actual)
+	// Method does not mutate original data
+	assert.Equal(t, mkInitialData(3, c0), data)
+}
+
+func Test_ClearTombstones(t *testing.T) {
+	t.Parallel()
+	c0 := hlc.Zero(0)
+
+	makeData := func() *persistencespb.VersioningData {
+		return &persistencespb.VersioningData{
+			VersionSets: []*persistencespb.CompatibleVersionSet{
+				{
+					SetIds: []string{hashBuildId("0")},
+					BuildIds: []*persistencespb.BuildId{
+						{
+							Id:                   "0",
+							State:                persistencespb.STATE_DELETED,
+							StateUpdateTimestamp: &c0,
+						},
+					},
+					DefaultUpdateTimestamp: &c0,
+				},
+				{
+					SetIds: []string{hashBuildId("1")},
+					BuildIds: []*persistencespb.BuildId{
+						{
+							Id:                   "1",
+							State:                persistencespb.STATE_DELETED,
+							StateUpdateTimestamp: &c0,
+						},
+						{
+							Id:                   "1.1",
+							State:                persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp: &c0,
+						},
+					},
+					DefaultUpdateTimestamp: &c0,
+				},
+				{
+					SetIds: []string{hashBuildId("2")},
+					BuildIds: []*persistencespb.BuildId{
+						{
+							Id:                   "2",
+							State:                persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp: &c0,
+						},
+					},
+					DefaultUpdateTimestamp: &c0,
+				},
+			},
+			DefaultUpdateTimestamp: &c0,
+		}
+	}
+	expected := &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{
+			{
+				SetIds: []string{hashBuildId("1")},
+				BuildIds: []*persistencespb.BuildId{
+					{
+						Id:                   "1.1",
+						State:                persistencespb.STATE_ACTIVE,
+						StateUpdateTimestamp: &c0,
+					},
+				},
+				DefaultUpdateTimestamp: &c0,
+			},
+			{
+				SetIds: []string{hashBuildId("2")},
+				BuildIds: []*persistencespb.BuildId{
+					{
+						Id:                   "2",
+						State:                persistencespb.STATE_ACTIVE,
+						StateUpdateTimestamp: &c0,
+					},
+				},
+				DefaultUpdateTimestamp: &c0,
+			},
+		},
+		DefaultUpdateTimestamp: &c0,
+	}
+	original := makeData()
+	actual := ClearTombstones(original)
+	assert.Equal(t, expected, actual)
+	// Method does not mutate original data
+	assert.Equal(t, makeData(), original)
+}
+
 func TestMergeSets(t *testing.T) {
 	t.Parallel()
 	clock := hlc.Zero(1)
