@@ -309,7 +309,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	c.goroGroup.Go(c.fetchUserDataLoop)
+	c.goroGroup.Go(c.fetchUserData)
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
@@ -738,7 +738,7 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 	return parent.FullName(), nil
 }
 
-func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
+func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
 	if !c.config.LoadUserData() {
