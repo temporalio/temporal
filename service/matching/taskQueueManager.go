@@ -309,11 +309,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	if c.shouldFetchUserData() {
-		c.goroGroup.Go(c.fetchUserDataLoop)
-	} else {
-		c.userDataInitialFetch.Set(struct{}{}, nil)
-	}
+	c.goroGroup.Go(c.fetchUserDataLoop)
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
@@ -356,15 +352,6 @@ func (c *taskQueueManagerImpl) Stop() {
 // of a single matching node.
 func (c *taskQueueManagerImpl) managesSpecificVersionSet() bool {
 	return c.taskQueueID.VersionSet() != ""
-}
-
-// shouldFetchUserData consolidates the logic for when to fetch user data from another task
-// queue or (maybe) read it from the db. We set the userDataInitialFetch future from two
-// places, so they need to agree on which one should set it.
-func (c *taskQueueManagerImpl) shouldFetchUserData() bool {
-	// 1. If the db stores it, then we definitely should not be fetching.
-	// 2. Additionally, we should not fetch for "versioned" tqms.
-	return c.config.LoadUserData() && !c.db.DbStoresUserData() && !c.managesSpecificVersionSet()
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -753,6 +740,25 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 
 func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
+
+	if !c.config.LoadUserData() {
+		// if disabled, mark ready now
+		c.userDataInitialFetch.Set(struct{}{}, nil)
+		return nil
+	}
+	if c.managesSpecificVersionSet() {
+		// tqm for specific version set doesn't have its own user data
+		c.userDataInitialFetch.Set(struct{}{}, nil)
+		return nil
+	}
+	if c.db.DbStoresUserData() {
+		// root workflow partition "owns" user data, read it from db
+		err := c.db.loadUserData(ctx)
+		c.userDataInitialFetch.Set(struct{}{}, err)
+		return err
+	}
+
+	// otherwise fetch from parent partition
 
 	fetchSource, err := c.userDataFetchSource()
 	if err != nil {

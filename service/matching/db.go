@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -36,6 +35,7 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -145,18 +145,16 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		response.TaskQueueInfo.Kind = db.taskQueueKind
 		response.TaskQueueInfo.ExpiryTime = db.expiryTime()
 		response.TaskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-		_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+		if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 			RangeID:       response.RangeID + 1,
 			TaskQueueInfo: response.TaskQueueInfo,
 			PrevRangeID:   response.RangeID,
-		})
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 		db.ackLevel = response.TaskQueueInfo.AckLevel
 		db.rangeID = response.RangeID + 1
-		_, _, err = db.getUserDataLocked(ctx)
-		return err
+		return nil
 
 	case *serviceerror.NotFound:
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
@@ -166,8 +164,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			return err
 		}
 		db.rangeID = initialRangeID
-		_, _, err = db.getUserDataLocked(ctx)
-		return err
+		return nil
 
 	default:
 		return err
@@ -310,7 +307,7 @@ func (db *taskQueueDB) GetUserData(
 ) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	db.Lock()
 	defer db.Unlock()
-	return db.getUserDataLocked(ctx)
+	return db.userData, db.userDataChanged, nil
 }
 
 func (db *taskQueueDB) setUserDataLocked(userData *persistencespb.VersionedTaskQueueUserData) {
@@ -319,32 +316,29 @@ func (db *taskQueueDB) setUserDataLocked(userData *persistencespb.VersionedTaskQ
 	db.userDataChanged = make(chan struct{})
 }
 
-// db.Lock() must be held before calling.
-// Returns in-memory cached value or reads from DB and updates the cached value.
-// Note: can return nil value with no error.
-func (db *taskQueueDB) getUserDataLocked(
-	ctx context.Context,
-) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
-	if db.userData == nil {
-		if !db.DbStoresUserData() {
-			return nil, db.userDataChanged, nil
-		}
-
-		response, err := db.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
-			NamespaceID: db.namespaceID.String(),
-			TaskQueue:   db.taskQueue.BaseNameString(),
-		})
-		if err != nil {
-			var notFoundError *serviceerror.NotFound
-			if errors.As(err, &notFoundError) {
-				return nil, db.userDataChanged, nil
-			}
-			return nil, nil, err
-		}
-		db.setUserDataLocked(response.UserData)
+// Loads user data from db (called only on initialization of taskQueueManager).
+func (db *taskQueueDB) loadUserData(ctx context.Context) error {
+	if !db.DbStoresUserData() {
+		return nil
 	}
 
-	return db.userData, db.userDataChanged, nil
+	response, err := db.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
+		NamespaceID: db.namespaceID.String(),
+		TaskQueue:   db.taskQueue.BaseNameString(),
+	})
+	if common.IsNotFoundError(err) {
+		// not all task queues have user data
+		response, err = &persistence.GetTaskQueueUserDataResponse{}, nil
+	}
+	if err != nil {
+		return err
+	}
+
+	db.Lock()
+	defer db.Unlock()
+	db.setUserDataLocked(response.UserData)
+
+	return nil
 }
 
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed
@@ -370,17 +364,13 @@ func (db *taskQueueDB) UpdateUserData(
 	db.Lock()
 	defer db.Unlock()
 
-	userData, _, err := db.getUserDataLocked(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-
-	preUpdateData := userData.GetData()
+	preUpdateData := db.userData.GetData()
+	preUpdateVersion := db.userData.GetVersion()
 	if preUpdateData == nil {
 		preUpdateData = &persistencespb.TaskQueueUserData{}
 	}
-	if knownVersion > 0 && userData.GetVersion() != knownVersion {
-		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", knownVersion, userData.GetVersion()))
+	if knownVersion > 0 && preUpdateVersion != knownVersion {
+		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", knownVersion, preUpdateVersion))
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err != nil {
@@ -407,13 +397,13 @@ func (db *taskQueueDB) UpdateUserData(
 	_, err = db.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
 		NamespaceId:     db.namespaceID.String(),
 		TaskQueue:       db.cachedQueueInfo().Name,
-		UserData:        &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion(), Data: updatedUserData},
+		UserData:        &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion, Data: updatedUserData},
 		BuildIdsAdded:   added,
 		BuildIdsRemoved: removed,
 	})
 	var updatedVersionedData *persistencespb.VersionedTaskQueueUserData
 	if err == nil {
-		updatedVersionedData = &persistencespb.VersionedTaskQueueUserData{Version: userData.GetVersion() + 1, Data: updatedUserData}
+		updatedVersionedData = &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
 		db.setUserDataLocked(updatedVersionedData)
 	}
 	return updatedVersionedData, shouldReplicate, err
