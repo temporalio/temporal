@@ -190,6 +190,7 @@ func (r *BranchMgrImpl) flushBufferedEvents(
 	if err := targetWorkflow.FlushBufferedEvents(); err != nil {
 		return nil, 0, err
 	}
+
 	// the workflow must be updated as active, to send out replication tasks
 	if err := targetWorkflow.context.UpdateWorkflowExecutionAsActive(
 		ctx,
