@@ -26,9 +26,11 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
@@ -37,6 +39,7 @@ import (
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.temporal.io/server/common/log/tag"
 
 	"go.temporal.io/server/common/log"
 )
@@ -225,4 +228,45 @@ func recordMetrics(mp Handler) {
 	histogram.Record(int64(testBytes))
 	hitsTaggedCounter.Record(11, TaskQueueTag("__sticky__"))
 	hitsTaggedExcludedCounter.Record(14, TaskQueueTag("filtered"))
+}
+
+type erroneousMeter struct {
+	metric.Meter
+	err error
+}
+
+func (t erroneousMeter) Int64Counter(string, ...metric.Int64CounterOption) (metric.Int64Counter, error) {
+	return nil, t.err
+}
+
+func (t erroneousMeter) Int64Histogram(string, ...metric.Int64HistogramOption) (metric.Int64Histogram, error) {
+	return nil, t.err
+}
+
+func (t erroneousMeter) Float64ObservableGauge(string, ...metric.Float64ObservableGaugeOption) (metric.Float64ObservableGauge, error) {
+	return nil, t.err
+}
+
+var testErr = errors.New("test error")
+
+func TestOtelMetricsHandler_Error(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	logger := log.NewMockLogger(ctrl)
+	meter := erroneousMeter{err: testErr}
+	provider := &testProvider{meter: meter}
+	cfg := ClientConfig{}
+	handler := NewOtelMetricsHandler(logger, provider, cfg)
+	msg := "error getting metric"
+	errTag := tag.Error(testErr)
+
+	logger.EXPECT().Error(msg, tag.NewStringTag("MetricName", "counter"), errTag)
+	handler.Counter("counter").Record(1)
+	logger.EXPECT().Error(msg, tag.NewStringTag("MetricName", "timer"), errTag)
+	handler.Timer("timer").Record(time.Second)
+	logger.EXPECT().Error(msg, tag.NewStringTag("MetricName", "gauge"), errTag)
+	handler.Gauge("gauge").Record(1.0)
+	logger.EXPECT().Error(msg, tag.NewStringTag("MetricName", "histogram"), errTag)
+	handler.Histogram("histogram", Bytes).Record(1)
 }
