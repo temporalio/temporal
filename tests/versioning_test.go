@@ -1424,12 +1424,11 @@ func (s *versioningIntegSuite) TestDisableLoadUserData() {
 	s.unloadTaskQueue(ctx, tq)
 
 	// Verify read returns empty
-	res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+	_, err = s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
-	s.Require().NoError(err)
-	s.Require().Equal(0, len(res.GetMajorVersionSets()))
+	s.Require().ErrorAs(err, &failedPreconditionError)
 }
 
 func (s *versioningIntegSuite) TestWorkflowGetsStuckWhenDisablingLoadingUserData() {

@@ -477,7 +477,7 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 		return nil, nil, errNoUserDataOnVersionedTQM
 	}
 	if !c.config.LoadUserData() {
-		return nil, nil, nil
+		return nil, nil, errUserDataDisabled
 	}
 	return c.db.GetUserData(ctx)
 }
@@ -485,7 +485,7 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 // UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
 	if !c.config.LoadUserData() {
-		return serviceerror.NewFailedPrecondition("Task queue user data operations are disabled")
+		return errUserDataDisabled
 	}
 	newData, shouldReplicate, err := c.db.UpdateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
 	if err != nil {
