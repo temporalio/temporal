@@ -534,6 +534,40 @@ func TestTQMLoadsUserDataFromPersistenceOnInit(t *testing.T) {
 	tq.Stop()
 }
 
+func TestTQMLoadsUserDataFromPersistenceOnInitOnlyOnceWhenNoData(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = tqId
+
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tm := tq.engine.taskManager.(*testTaskManager)
+
+	require.Equal(t, 0, tm.getGetUserDataCount(tqId))
+
+	tq.Start()
+	require.NoError(t, tq.WaitUntilInitialized(ctx))
+
+	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
+
+	userData, _, err := tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Nil(t, userData)
+
+	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
+
+	userData, _, err = tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Nil(t, userData)
+
+	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
+
+	tq.Stop()
+}
+
 func TestTQMFetchesUserDataFromOnInit(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
