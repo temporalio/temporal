@@ -183,12 +183,7 @@ func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 	s.addNewDefaultBuildId(ctx, tq, s.prefixed("foo"))
 
 	// Unload task queue to make sure the data is there when we load it again.
-	_, err := s.testCluster.host.matchingClient.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
-		NamespaceId:   s.getNamespaceID(s.namespace),
-		TaskQueue:     tq,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-	})
-	s.NoError(err)
+	s.unloadTaskQueue(ctx, tq)
 
 	res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
