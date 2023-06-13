@@ -488,10 +488,10 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 		return serviceerror.NewFailedPrecondition("Task queue user data operations are disabled")
 	}
 	newData, shouldReplicate, err := c.db.UpdateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
+	c.signalIfFatal(err)
 	if err != nil {
 		return err
 	}
-	c.signalIfFatal(err)
 	if !shouldReplicate {
 		return nil
 	}
@@ -802,7 +802,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 			c.db.setUserDataForNonOwningPartition(res.GetUserData())
 		}
 		if firstCall {
-			c.userDataInitialFetch.Set(struct{}{}, err)
+			c.userDataInitialFetch.Set(struct{}{}, nil)
 			firstCall = false
 		}
 		return nil

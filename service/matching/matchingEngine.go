@@ -1129,6 +1129,12 @@ func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, reques
 		BuildIdsAdded:   request.BuildIdsAdded,
 		BuildIdsRemoved: request.BuildIdsRemoved,
 	})
+
+	var conditionFailedError *persistence.ConditionFailedError
+	if errors.As(err, &conditionFailedError) {
+		err = serviceerror.NewFailedPrecondition(conditionFailedError.Msg)
+	}
+
 	return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
 }
 

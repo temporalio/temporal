@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -401,6 +402,11 @@ func (db *taskQueueDB) UpdateUserData(
 		BuildIdsAdded:   added,
 		BuildIdsRemoved: removed,
 	})
+	// Convert failed precondition to persistence failure to flag loss of ownership for this task queue.
+	var failedPreconditionError *serviceerror.FailedPrecondition
+	if errors.As(err, &failedPreconditionError) {
+		err = &persistence.ConditionFailedError{Msg: failedPreconditionError.Message}
+	}
 	var updatedVersionedData *persistencespb.VersionedTaskQueueUserData
 	if err == nil {
 		updatedVersionedData = &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
