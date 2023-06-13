@@ -1623,9 +1623,11 @@ func (s *versioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.waitForChan(ctx, started1)
 
 	// describe and check build id
-	resp, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
-	s.NoError(err)
-	s.Equal(v1, resp.WorkflowExecutionInfo.MostRecentWorkerVersionStamp.BuildId)
+	s.Eventually(func() bool {
+		resp, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
+		s.NoError(err)
+		return v1 == resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId()
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// now register v11 as newer compatible with v1
 	s.addCompatibleBuildId(ctx, tq, v11, v1, false)
@@ -1649,9 +1651,11 @@ func (s *versioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 	s.waitForChan(ctx, started11)
 
-	resp, err = s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
-	s.NoError(err)
-	s.Equal(v11, resp.WorkflowExecutionInfo.MostRecentWorkerVersionStamp.BuildId)
+	s.Eventually(func() bool {
+		resp, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
+		s.NoError(err)
+		return v11 == resp.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId()
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// unblock. it should complete
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
