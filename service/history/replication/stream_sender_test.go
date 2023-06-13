@@ -138,11 +138,11 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_Success() {
 			}},
 		},
 	).Return(nil)
-	s.shardContext.EXPECT().UpdateRemoteClusterInfo(
-		string(s.clientShardKey.ClusterID),
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(
+		readerID,
 		replicationState.InclusiveLowWatermark-1,
 		*replicationState.InclusiveLowWatermarkTime,
-	)
+	).Return(nil)
 
 	err := s.streamSender.recvSyncReplicationState(replicationState)
 	s.NoError(err)

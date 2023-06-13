@@ -94,6 +94,7 @@ type (
 		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
 
 		UpdateRemoteClusterInfo(cluster string, ackTaskID int64, ackTimestamp time.Time)
+		UpdateRemoteReaderInfo(readerID int64, ackTaskID int64, ackTimestamp time.Time) error
 
 		SetCurrentTime(cluster string, currentTime time.Time)
 		GetCurrentTime(cluster string) time.Time
