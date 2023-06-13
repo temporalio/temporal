@@ -755,6 +755,10 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		// root workflow partition "owns" user data, read it from db
 		err := c.db.loadUserData(ctx)
 		c.userDataInitialFetch.Set(struct{}{}, err)
+		if err != nil {
+			// We can't recover from here without starting over, so unload the whole task queue
+			c.unloadFromEngine()
+		}
 		return err
 	}
 
