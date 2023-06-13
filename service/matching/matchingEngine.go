@@ -898,7 +898,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 				data.GetVersioningData(),
 				req.GetRemoveBuildIds().GetBuildIds(),
 			)
-			if ns.IsGlobalNamespace() {
+			if ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
 				operationCreatedTombstones = true
 			} else {
 				// We don't need to keep the tombstones around if we're not replicating them.
