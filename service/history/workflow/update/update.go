@@ -53,8 +53,9 @@ type (
 		// event. The data may not be durable when this function returns.
 		AddWorkflowExecutionUpdateAcceptedEvent(
 			updateID string,
+			acceptedRequestMessageId string,
+			acceptedRequestSequencingEventId int64,
 			acceptedRequest *updatepb.Request,
-			acceptance *updatepb.Acceptance,
 		) (*historypb.HistoryEvent, error)
 
 		// AddWorkflowExecutionUpdateCompletedEvent writes an update completed
@@ -224,30 +225,26 @@ func (u *Update) OnMessage(
 
 // ReadOutgoingMessages loads any outbound messages from this Update state
 // machine into the output slice provided.
-func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message, workflowTaskStartedEventID int64) {
+func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message, sequencingID *protocolpb.Message_EventId) {
 	if u.state != stateRequested {
 		// Update only sends messages to the workflow when it is in
 		// stateRequested
 		return
 	}
 
-	// TODO (alex-update): currently sequencing_id is simply pointing to the
-	//  event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
-	//  and process messages (specifically, updates) after event with that ID.
-	//  In the future, sequencing_id could point to some specific event
-	//  (specifically, signal) after which the update should be processed.
-	//  Currently, it is not possible due to buffered events reordering on server
-	//  and events reordering in some SDKs.
-	sequencingEventID := workflowTaskStartedEventID - 1
-
 	reqMessage := &protocolpb.Message{
 		ProtocolInstanceId: u.id,
-		Id:                 u.id + "/request",
-		SequencingId:       &protocolpb.Message_EventId{EventId: sequencingEventID},
+		Id:                 u.outgoingMessageID(),
+		SequencingId:       sequencingID,
 		Body:               u.request,
 	}
 
 	*out = append(*out, reqMessage)
+}
+
+// outgoingMessageID returns the ID of the message that is used to send the Update to the worker.
+func (u *Update) outgoingMessageID() string {
+	return u.id + "/request"
 }
 
 // onRequestMsg works if the Update is in any state but if the state is anything
@@ -301,7 +298,11 @@ func (u *Update) onAcceptanceMsg(
 		return internalErrorf("unable to unmarshal original request: %v", err)
 	}
 
-	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(u.id, acceptedRequest, acpt)
+	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
+		u.id,
+		u.outgoingMessageID(),
+		acpt.AcceptedRequestSequencingEventId, // Only AcceptedRequestSequencingEventId from Acceptance message is used.
+		acceptedRequest)
 	if err != nil {
 		return err
 	}

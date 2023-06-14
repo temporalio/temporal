@@ -200,13 +200,23 @@ func (r *RegistryImpl) HasOutgoing() bool {
 }
 
 func (r *RegistryImpl) ReadOutgoingMessages(
-	startedEventID int64,
+	workflowTaskStartedEventID int64,
 ) []*protocolpb.Message {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var out []*protocolpb.Message
+
+	// TODO (alex-update): currently sequencing_id is simply pointing to the
+	//  event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
+	//  and process messages (specifically, updates) after event with that ID.
+	//  In the future, sequencing_id could point to some specific event
+	//  (specifically, signal) after which the update should be processed.
+	//  Currently, it is not possible due to buffered events reordering on server
+	//  and events reordering in some SDKs.
+	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
+
 	for _, upd := range r.updates {
-		upd.ReadOutgoingMessages(&out, startedEventID)
+		upd.ReadOutgoingMessages(&out, sequencingEventID)
 	}
 	return out
 }

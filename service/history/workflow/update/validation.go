@@ -85,7 +85,6 @@ func validateRequestMsgPrefix(
 func validateAcceptanceMsg(msg *updatepb.Acceptance) error {
 	return validate(
 		notZero(msg, "body", msg),
-		notZero(msg.GetAcceptedRequestMessageId(), "accepted_request_message_id", msg),
 	)
 }
 

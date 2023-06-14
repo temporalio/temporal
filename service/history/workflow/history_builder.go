@@ -509,17 +509,18 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 
 func (b *HistoryBuilder) AddWorkflowExecutionUpdateAcceptedEvent(
 	protocolInstanceID string,
+	acceptedRequestMessageId string,
+	acceptedRequestSequencingEventId int64,
 	acceptedRequest *updatepb.Request,
-	acceptance *updatepb.Acceptance,
 ) *historypb.HistoryEvent {
 
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
 		WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
 			ProtocolInstanceId:               protocolInstanceID,
-			AcceptedRequestMessageId:         acceptance.AcceptedRequestMessageId,
-			AcceptedRequestSequencingEventId: acceptance.AcceptedRequestSequencingEventId,
-			AcceptedRequest:                  acceptedRequest, // Not acceptance.AcceptedRequest because it needs to be removed from Acceptance.
+			AcceptedRequestMessageId:         acceptedRequestMessageId,
+			AcceptedRequestSequencingEventId: acceptedRequestSequencingEventId,
+			AcceptedRequest:                  acceptedRequest,
 		},
 	}
 	event, _ = b.appendEvents(event)
