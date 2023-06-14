@@ -26,7 +26,6 @@
 package metrics
 
 import (
-	"errors"
 	"fmt"
 	"runtime/debug"
 
@@ -42,14 +41,9 @@ import (
 func CapturePanic(logger log.Logger, metricHandler Handler, retError *error) {
 	//revive:disable-next-line:defer
 	if panicObj := recover(); panicObj != nil {
-		var err error
-		switch t := panicObj.(type) {
-		case string:
-			err = errors.New(t)
-		case error:
-			err = t
-		default:
-			err = fmt.Errorf("panic: %v", panicObj)
+		err, ok := panicObj.(error)
+		if !ok {
+			err = serviceerror.NewInternal(fmt.Sprintf("panic: %v", panicObj))
 		}
 
 		st := string(debug.Stack())
