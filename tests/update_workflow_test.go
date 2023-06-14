@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -3399,6 +3400,125 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
   9 WorkflowExecutionCompleted`, events)
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_BecauseOfShardMove() {
+	tv := testvars.New(s.T().Name())
+
+	tv = s.startWorkflow(tv)
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+`, history)
+			// Close shard. InvalidArgument error will be returned to RespondWorkflowTaskCompleted.
+			s.closeShard(tv.WorkflowID())
+			return []*commandpb.Command{}, nil
+		case 2:
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled // New WT is scheduled after previous WT has failed. It doesn't have new events and messages.
+  6 WorkflowTaskStarted
+`, history)
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+			}}, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			updRequestMsg := task.Messages[0]
+			s.EqualValues(2, updRequestMsg.GetEventId())
+
+			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "1"), nil
+		case 2:
+			s.Empty(task.Messages, "update must be lost due to shard reload")
+			return nil, nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		Identity:            tv.WorkerIdentity(),
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	updateResultCh := make(chan struct{})
+	updateWorkflowFn := func() {
+		halfSecondTimeoutCtx, cancel := context.WithTimeout(NewContext(), 500*time.Millisecond)
+		defer cancel()
+
+		updateResponse, err1 := s.engine.UpdateWorkflowExecution(halfSecondTimeoutCtx, &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.namespace,
+			WorkflowExecution: tv.WorkflowExecution(),
+			Request: &updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+				Input: &updatepb.Input{
+					Name: tv.Any(),
+					Args: payloads.EncodeString(tv.Any()),
+				},
+			},
+		})
+		assert.Error(s.T(), err1)
+		assert.True(s.T(), common.IsContextDeadlineExceededErr(err1), err1)
+		assert.Nil(s.T(), updateResponse)
+
+		updateResultCh <- struct{}{}
+	}
+	go updateWorkflowFn()
+
+	// Process update in workflow. Update won't be found on server due to shard reload and server will fail WT.
+	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err, "workflow task failure must be an InvalidArgument error")
+	s.ErrorContains(err, fmt.Sprintf("update %q not found", tv.UpdateID("1")))
+
+	<-updateResultCh
+
+	// Complete workflow.
+	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+	s.NoError(err)
+	s.NotNil(completeWorkflowResp)
+
+	s.Equal(2, wtHandlerCalls)
+	s.Equal(2, msgHandlerCalls)
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 WorkflowExecutionCompleted`, events)
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_DeduplicateID() {
