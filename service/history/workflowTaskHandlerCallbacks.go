@@ -868,10 +868,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		}
 	}
 
-	response.Messages, err = updateRegistry.ReadOutgoingMessages(workflowTask.StartedEventID)
-	if err != nil {
-		return nil, err
-	}
+	response.Messages = updateRegistry.ReadOutgoingMessages(workflowTask.StartedEventID)
+
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
 		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
 	}

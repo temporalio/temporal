@@ -53,7 +53,9 @@ type (
 		// event. The data may not be durable when this function returns.
 		AddWorkflowExecutionUpdateAcceptedEvent(
 			updateID string,
-			accpt *updatepb.Acceptance,
+			acceptedRequestMessageId string,
+			acceptedRequestSequencingEventId int64,
+			acceptedRequest *updatepb.Request,
 		) (*historypb.HistoryEvent, error)
 
 		// AddWorkflowExecutionUpdateCompletedEvent writes an update completed
@@ -77,7 +79,7 @@ type (
 		// accessed only while holding workflow lock
 		id              string
 		state           state
-		request         *protocolpb.Message // nil when not in stateRequested
+		request         *types.Any // of type *updatepb.Request, nil when not in stateRequested
 		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
@@ -221,15 +223,28 @@ func (u *Update) OnMessage(
 	}
 }
 
-// ReadOutgoingMessages loads any oubound messages from this Update state
+// ReadOutgoingMessages loads any outbound messages from this Update state
 // machine into the output slice provided.
-func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message) {
+func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message, sequencingID *protocolpb.Message_EventId) {
 	if u.state != stateRequested {
 		// Update only sends messages to the workflow when it is in
 		// stateRequested
 		return
 	}
-	*out = append(*out, u.request)
+
+	reqMessage := &protocolpb.Message{
+		ProtocolInstanceId: u.id,
+		Id:                 u.outgoingMessageID(),
+		SequencingId:       sequencingID,
+		Body:               u.request,
+	}
+
+	*out = append(*out, reqMessage)
+}
+
+// outgoingMessageID returns the ID of the message that is used to send the Update to the worker.
+func (u *Update) outgoingMessageID() string {
+	return u.id + "/request"
 }
 
 // onRequestMsg works if the Update is in any state but if the state is anything
@@ -249,15 +264,12 @@ func (u *Update) onRequestMsg(
 		return err
 	}
 	u.instrumentation.CountRequestMsg()
-	body, err := types.MarshalAny(req)
+	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
+	reqAny, err := types.MarshalAny(req)
 	if err != nil {
-		return invalidArgf("could not marshal request: %v", err)
+		return invalidArgf("unable to marshal request: %v", err)
 	}
-	u.request = &protocolpb.Message{
-		ProtocolInstanceId: u.id,
-		Id:                 u.id + "/request",
-		Body:               body,
-	}
+	u.request = reqAny
 	u.setState(stateProvisionallyRequested)
 	eventStore.OnAfterCommit(func(context.Context) { u.setState(stateRequested) })
 	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateAdmitted) })
@@ -276,11 +288,21 @@ func (u *Update) onAcceptanceMsg(
 	if err := u.checkState(acpt, stateRequested); err != nil {
 		return err
 	}
-	if err := validateAcceptanceMsg(u.id, acpt); err != nil {
+	if err := validateAcceptanceMsg(acpt); err != nil {
 		return err
 	}
 	u.instrumentation.CountAcceptanceMsg()
-	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(u.id, acpt)
+
+	acceptedRequest := &updatepb.Request{}
+	if err := types.UnmarshalAny(u.request, acceptedRequest); err != nil {
+		return internalErrorf("unable to unmarshal original request: %v", err)
+	}
+
+	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
+		u.id,
+		u.outgoingMessageID(),
+		acpt.AcceptedRequestSequencingEventId, // Only AcceptedRequestSequencingEventId from Acceptance message is used.
+		acceptedRequest)
 	if err != nil {
 		return err
 	}
@@ -311,7 +333,7 @@ func (u *Update) onRejectionMsg(
 	if err := u.checkState(rej, stateRequested); err != nil {
 		return err
 	}
-	if err := validateRejectionMsg(u.id, rej); err != nil {
+	if err := validateRejectionMsg(rej); err != nil {
 		return err
 	}
 	u.instrumentation.CountRejectionMsg()

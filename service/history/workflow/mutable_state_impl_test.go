@@ -834,12 +834,10 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		updateID := fmt.Sprintf("%s-%d", acceptedUpdateID, i)
 		_, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
 			updateID,
-			&updatepb.Acceptance{
-				AcceptedRequestMessageId:         fmt.Sprintf("%s-%d", acceptedMsgID, i),
-				AcceptedRequestSequencingEventId: 1,
-				AcceptedRequest: &updatepb.Request{
-					Meta: &updatepb.Meta{UpdateId: updateID},
-				},
+			fmt.Sprintf("%s-%d", acceptedMsgID, i),
+			1,
+			&updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: updateID},
 			},
 		)
 		s.Require().NoError(err)
