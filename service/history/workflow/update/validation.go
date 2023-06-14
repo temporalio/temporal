@@ -82,13 +82,9 @@ func validateRequestMsgPrefix(
 	)
 }
 
-func validateAcceptanceMsg(updateID string, msg *updatepb.Acceptance) error {
+func validateAcceptanceMsg(msg *updatepb.Acceptance) error {
 	return validate(
 		notZero(msg, "body", msg),
-		func() error {
-			return validateRequestMsgPrefix(updateID, "accepted_request.", msg.GetAcceptedRequest())
-		},
-		notZero(msg.GetAcceptedRequestMessageId(), "accepted_request_message_id", msg),
 	)
 }
 
@@ -104,22 +100,8 @@ func validateResponseMsg(updateID string, msg *updatepb.Response) error {
 
 // ValidateWorkflowExecutionUpdateRejectionMessage validates the presence of
 // expected fields on updatepb.Rejection messages.
-func validateRejectionMsg(updateID string, msg *updatepb.Rejection) error {
+func validateRejectionMsg(msg *updatepb.Rejection) error {
 	return validate(
 		notZero(msg, "body", msg),
-		notZero(msg.GetRejectedRequest(), "rejected_request", msg),
-		notZero(msg.GetRejectedRequest().GetMeta(), "rejected_request.meta", msg),
-		notZero(
-			msg.GetRejectedRequest().GetMeta().GetUpdateId(),
-			"rejected_request.meta.update_id",
-			msg,
-		),
-		eq(
-			msg.RejectedRequest.GetMeta().GetUpdateId(),
-			"rejected_request.meta.update_id",
-			updateID,
-			updateID,
-			msg,
-		),
 	)
 }

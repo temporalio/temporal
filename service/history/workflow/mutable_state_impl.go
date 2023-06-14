@@ -3497,12 +3497,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 
 func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAcceptedEvent(
 	protocolInstanceID string,
-	updAcceptance *updatepb.Acceptance,
+	acceptedRequestMessageId string,
+	acceptedRequestSequencingEventId int64,
+	acceptedRequest *updatepb.Request,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionUpdateAccepted); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID, updAcceptance)
+	event := ms.hBuilder.AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID, acceptedRequestMessageId, acceptedRequestSequencingEventId, acceptedRequest)
 	if err := ms.ReplicateWorkflowExecutionUpdateAcceptedEvent(event); err != nil {
 		return nil, err
 	}

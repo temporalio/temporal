@@ -35,6 +35,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+
 	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -251,8 +252,7 @@ func TestMessageGathering(t *testing.T) {
 	require.NoError(t, err)
 	wftStartedEventID := int64(123)
 
-	msgs, err := reg.ReadOutgoingMessages(wftStartedEventID)
-	require.NoError(t, err)
+	msgs := reg.ReadOutgoingMessages(wftStartedEventID)
 	require.Empty(t, msgs)
 
 	evStore := mockEventStore{Controller: effect.Immediate(ctx)}
@@ -263,8 +263,7 @@ func TestMessageGathering(t *testing.T) {
 	}, evStore)
 	require.NoError(t, err)
 
-	msgs, err = reg.ReadOutgoingMessages(wftStartedEventID)
-	require.NoError(t, err)
+	msgs = reg.ReadOutgoingMessages(wftStartedEventID)
 	require.Len(t, msgs, 1)
 
 	err = upd2.OnMessage(ctx, &updatepb.Request{
@@ -273,8 +272,7 @@ func TestMessageGathering(t *testing.T) {
 	}, evStore)
 	require.NoError(t, err)
 
-	msgs, err = reg.ReadOutgoingMessages(wftStartedEventID)
-	require.NoError(t, err)
+	msgs = reg.ReadOutgoingMessages(wftStartedEventID)
 	require.Len(t, msgs, 2)
 
 	for _, msg := range msgs {
