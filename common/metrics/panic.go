@@ -26,6 +26,7 @@
 package metrics
 
 import (
+	"errors"
 	"fmt"
 	"runtime/debug"
 
@@ -39,9 +40,15 @@ import (
 // We have to use pointer is because in golang: "recover return nil if was not called directly by a deferred function."
 // And we have to set the returned error otherwise our handler will return nil as error which is incorrect
 func CapturePanic(logger log.Logger, metricHandler Handler, retError *error) {
+	//revive:disable-next-line:defer
 	if panicObj := recover(); panicObj != nil {
-		err, ok := panicObj.(error)
-		if !ok {
+		var err error
+		switch t := panicObj.(type) {
+		case string:
+			err = errors.New(t)
+		case error:
+			err = t
+		default:
 			err = fmt.Errorf("panic: %v", panicObj)
 		}
 
