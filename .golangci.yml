@@ -59,13 +59,15 @@ linters-settings:
         disabled: true
       - name: unexported-naming
         disabled: true
+      - name: unexported-return
+        disabled: true
+      - name: unused-parameter
+        disabled: true
       - name: unused-receiver
         disabled: true
       - name: use-any
         disabled: true
       - name: var-naming
-        disabled: true
-      - name: unused-parameter
         disabled: true
 
       # Rule tuning

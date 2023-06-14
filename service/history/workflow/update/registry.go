@@ -92,8 +92,6 @@ type (
 	regOpt func(*RegistryImpl)
 )
 
-//revive:disable:unexported-return I *want* it to be unexported
-
 // WithInFlightLimit provides an optional limit to the number of incomplete
 // updates that a Registry instance will allow.
 func WithInFlightLimit(f func() int) regOpt {
@@ -132,8 +130,6 @@ func WithTracerProvider(t trace.TracerProvider) regOpt {
 		r.instrumentation.tracer = t.Tracer(libraryName)
 	}
 }
-
-//revive:enable:unexported-return
 
 var _ Registry = (*RegistryImpl)(nil)
 
