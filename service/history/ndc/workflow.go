@@ -222,6 +222,12 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 	}
 
 	_, err = r.failWorkflowTask(lastWriteVersion)
+	if _, err := r.mutableState.AddWorkflowTaskScheduledEvent(
+		false,
+		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+	); err != nil {
+		return err
+	}
 	return err
 }
 
