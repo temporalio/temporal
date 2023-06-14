@@ -354,6 +354,22 @@ func (c *taskQueueManagerImpl) managesSpecificVersionSet() bool {
 	return c.taskQueueID.VersionSet() != ""
 }
 
+func (c *taskQueueManagerImpl) SetInitializedError(err error) {
+	c.initializedError.Set(struct{}{}, err)
+	if err != nil {
+		// We can't recover from here without starting over, so unload the whole task queue
+		c.unloadFromEngine()
+	}
+}
+
+func (c *taskQueueManagerImpl) SetUserDataInitialFetch(err error) {
+	c.userDataInitialFetch.Set(struct{}{}, err)
+	if err != nil {
+		// We can't recover from here without starting over, so unload the whole task queue
+		c.unloadFromEngine()
+	}
+}
+
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
 	if err != nil {
@@ -743,22 +759,18 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 
 	if !c.config.LoadUserData() {
 		// if disabled, mark ready now
-		c.userDataInitialFetch.Set(struct{}{}, nil)
+		c.SetUserDataInitialFetch(nil)
 		return nil
 	}
 	if c.managesSpecificVersionSet() {
 		// tqm for specific version set doesn't have its own user data
-		c.userDataInitialFetch.Set(struct{}{}, nil)
+		c.SetUserDataInitialFetch(nil)
 		return nil
 	}
 	if c.db.DbStoresUserData() {
 		// root workflow partition "owns" user data, read it from db
 		err := c.db.loadUserData(ctx)
-		c.userDataInitialFetch.Set(struct{}{}, err)
-		if err != nil {
-			// We can't recover from here without starting over, so unload the whole task queue
-			c.unloadFromEngine()
-		}
+		c.SetUserDataInitialFetch(err)
 		return err
 	}
 
@@ -768,7 +780,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	if err != nil {
 		if err == errMissingNormalQueueName {
 			// pretend we have no user data
-			c.userDataInitialFetch.Set(struct{}{}, nil)
+			c.SetUserDataInitialFetch(nil)
 		}
 		return err
 	}
@@ -802,7 +814,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 			c.db.setUserDataForNonOwningPartition(res.GetUserData())
 		}
 		if firstCall {
-			c.userDataInitialFetch.Set(struct{}{}, err)
+			c.SetUserDataInitialFetch(nil)
 			firstCall = false
 		}
 		return nil
