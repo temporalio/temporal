@@ -231,12 +231,11 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	); err != nil {
 		return err
 	}
-	s.shardContext.UpdateRemoteClusterInfo(
-		string(s.clientShardKey.ClusterID),
+	return s.shardContext.UpdateRemoteReaderInfo(
+		readerID,
 		inclusiveLowWatermark-1,
 		*inclusiveLowWatermarkTime,
 	)
-	return nil
 }
 
 func (s *StreamSenderImpl) sendCatchUp() (int64, error) {
