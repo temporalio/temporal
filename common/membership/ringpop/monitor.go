@@ -336,17 +336,9 @@ func (rpo *monitor) Stop() {
 	rpo.rp.stop()
 }
 
-// WhoAmI returns the address (host:port) and labels for a service
-// Ringpop implementation of WhoAmI return the address used by ringpop listener.
-// This is different from service address as we register ringpop handlers on a separate port.
-// For this reason we need to look up the port for the service and replace ringpop port with service port before
-// returning HostInfo back.
+// WhoAmI returns the HostInfo for the service.
 func (rpo *monitor) WhoAmI() (membership.HostInfo, error) {
-	address, err := rpo.rp.WhoAmI()
-	if err != nil {
-		return nil, err
-	}
-	labels, err := rpo.rp.Labels()
+	address, err := rpo.broadcastHostPortResolver()
 	if err != nil {
 		return nil, err
 	}
@@ -356,11 +348,14 @@ func (rpo *monitor) WhoAmI() (membership.HostInfo, error) {
 		return nil, membership.ErrUnknownService
 	}
 
+	// The broadcastHostPortResolver returns the host:port used to listen for
+	// ringpop messages. We use a different port for the service, so we
+	// replace that portion.
 	serviceAddress, err := replaceServicePort(address, servicePort)
 	if err != nil {
 		return nil, err
 	}
-	return newHostInfo(serviceAddress, labels.AsMap()), nil
+	return membership.NewHostInfoFromAddress(serviceAddress), nil
 }
 
 func (rpo *monitor) EvictSelf() error {

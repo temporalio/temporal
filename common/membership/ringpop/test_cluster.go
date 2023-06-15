@@ -63,6 +63,7 @@ func newTestCluster(
 	seed string,
 	serviceName primitives.ServiceName,
 	broadcastAddress string,
+	startMonitors bool,
 ) *testCluster {
 	logger := log.NewTestLogger()
 	ctrl := gomock.NewController(t)
@@ -146,8 +147,9 @@ func newTestCluster(
 		}).AnyTimes()
 
 	for i := 0; i < size; i++ {
+		node := i
 		resolver := func() (string, error) {
-			return buildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
+			return buildBroadcastHostPort(cluster.channels[node].PeerInfo(), broadcastAddress)
 		}
 
 		ringPop, err := ringpop.New(ringPopApp, ringpop.Channel(cluster.channels[i]), ringpop.AddressResolverFunc(resolver))
@@ -165,7 +167,9 @@ func newTestCluster(
 			mockMgr,
 			resolver,
 		)
-		cluster.rings[i].Start()
+		if startMonitors {
+			cluster.rings[i].Start()
+		}
 	}
 	return cluster
 }
