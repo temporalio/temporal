@@ -188,8 +188,11 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 	}
 
 	if len(namespaceEntry.ClusterNames()) == 1 {
+		//A: ActiveCluster:A ClusterList: [A]
+		//B: ActiveCluster:A ClusterList: [{A:connected},{B:}] Haifeng
+		//B: ActiveCluster:A ClusterList: [A] Yu
 		// do not do dc redirection if namespace is only targeting at 1 dc (effectively local namespace)
-		return policy.currentClusterName, false
+		return namespaceEntry.ActiveClusterName(), false
 	}
 
 	if !policy.config.EnableNamespaceNotActiveAutoForwarding(namespaceEntry.Name().String()) {

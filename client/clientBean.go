@@ -184,7 +184,7 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) (adminservice.Admi
 
 	clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
 	if !clusterFound {
-		return nil, &serviceerror.NotFound{
+		return nil, &serviceerror.Unavailable{
 			Message: fmt.Sprintf(
 				"Unknown cluster name: %v with given cluster information map: %v.",
 				cluster,
@@ -229,7 +229,7 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(clusterName string) (grpc.Clien
 
 	clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[clusterName]
 	if !clusterFound {
-		return nil, nil, &serviceerror.NotFound{
+		return nil, nil, &serviceerror.Unavailable{
 			Message: fmt.Sprintf(
 				"Unknown clusterName name: %v with given clusterName information map: %v.",
 				clusterName,
