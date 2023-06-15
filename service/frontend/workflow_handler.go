@@ -5008,7 +5008,7 @@ func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, 
 			return nil, nil, serviceerror.NewInternal("schedule result cannot be loaded")
 
 		}
-		err = sdk.PreferProtoDataConverter.FromPayloads(reverseHistory.History.GetEvents()[0].GetWorkflowExecutionCompletedEventAttributes().Result, &startScheduleArgs)
+		err = sdk.PreferProtoDataConverter.FromPayloads(events[0].GetWorkflowExecutionCompletedEventAttributes().Result, &startScheduleArgs)
 		if err != nil {
 			return nil, nil, err
 		}
