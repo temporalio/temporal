@@ -1483,6 +1483,11 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	}
 	userData, userDataChanged, err := baseTqm.GetUserData(ctx)
 	if err != nil {
+		if err == errUserDataDisabled && buildId == "" {
+			// Special case when user data disabled: we can send new workflows to the unversioned
+			// queue so they can potentially make progress.
+			return taskQueue, nil, nil
+		}
 		return nil, nil, err
 	}
 	data := userData.GetData().GetVersioningData()

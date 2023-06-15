@@ -125,6 +125,43 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 }
 
 func TestDeliverBufferTasks_RetriesVersionedTaskWhenUserInfoDisabled(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	tlm := mustCreateTestTaskQueueManager(t, controller)
+	tlm.config.LoadUserData = dynamicconfig.GetBoolPropertyFn(false)
+
+	scope := tally.NewTestScope("test", nil)
+	tlm.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope)
+
+	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{
+			VersionDirective: &taskqueue.TaskVersionDirective{
+				Value: &taskqueue.TaskVersionDirective_BuildId{BuildId: "asdf"},
+			},
+		},
+	}
+
+	tlm.initializedError.Set(struct{}{}, nil)
+	tlm.userDataInitialFetch.Set(struct{}{}, nil)
+	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
+
+	time.Sleep(3 * taskReaderOfferThrottleWait)
+
+	// count retries with this metric
+	errCount := scope.Snapshot().Counters()["test.buffer_throttle_count+"]
+	require.NotNil(t, errCount, "nil counter probably means dispatch did not get error and blocked trying to load new tqm")
+	require.GreaterOrEqual(t, errCount.Value(), int64(2))
+
+	tlm.taskReader.gorogrp.Cancel()
+	tlm.taskReader.gorogrp.Wait()
+}
+
+func TestDeliverBufferTasks_RetriesUseDefaultTaskWhenUserInfoDisabled(t *testing.T) {
+	t.Parallel()
+
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
@@ -146,12 +183,11 @@ func TestDeliverBufferTasks_RetriesVersionedTaskWhenUserInfoDisabled(t *testing.
 	tlm.userDataInitialFetch.Set(struct{}{}, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
-	time.Sleep(3 * taskReaderOfferThrottleWait)
+	time.Sleep(taskReaderOfferThrottleWait)
 
-	// count retries with this metric
-	errors := scope.Snapshot().Counters()["test.buffer_throttle_count+"]
-	require.NotNil(t, errors, "nil counter probably means dispatch did not get error and blocked trying to load new tqm")
-	require.GreaterOrEqual(t, errors.Value(), int64(2))
+	// should be no retries
+	errCount := scope.Snapshot().Counters()["test.buffer_throttle_count+"]
+	require.Nil(t, errCount)
 
 	tlm.taskReader.gorogrp.Cancel()
 	tlm.taskReader.gorogrp.Wait()
