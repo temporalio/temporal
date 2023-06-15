@@ -191,7 +191,7 @@ func (u *Update) WaitAccepted(ctx context.Context) (*updatepb.Outcome, error) {
 // *updatepb.Rejection, *updatepb.Acceptance, or a *protocolpb.Message whose
 // Body field contains an instance from the same list. Writes to the EventStore
 // occur synchronously but externally observable effects on this Update (e.g.
-// emmitting an Outcome or an Accepted) are registered with the EventStore to be
+// emitting an Outcome or an Accepted) are registered with the EventStore to be
 // applied after the durable updates are committed. If the EventStore rolls
 // back its effects, this state machine does the same.
 func (u *Update) OnMessage(
@@ -399,6 +399,7 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 	if u.state.Matches(allowed) {
 		return nil
 	}
+	u.instrumentation.CountInvalidStateTransition()
 	return invalidArgf("invalid state transition attempted: "+
 		"received %T message while in state %q", msg, u.state)
 }
