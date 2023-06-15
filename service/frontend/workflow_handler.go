@@ -5004,7 +5004,8 @@ func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, 
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(reverseHistory.History.GetEvents()) == 0 || reverseHistory.History.GetEvents()[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+    events := reverseHistory.History.GetEvents()
+		if len(events) == 0 || events[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED || events[0].GetWorkflowExecutionCompletedEventAttributes() == nil {
 			return nil, nil, serviceerror.NewInternal("schedule result cannot be loaded")
 
 		}
