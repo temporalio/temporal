@@ -5021,7 +5021,7 @@ func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, 
 	return executionInfo, &startScheduleArgs, nil
 }
 
-func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, workflowID string, namespaceName string, namespaceID namespace.ID, signalWithStarRequest *workflowservice.SignalWithStartWorkflowExecutionRequest, operationName string) error {
+func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, workflowID string, namespaceName string, namespaceID namespace.ID, signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest, operationName string) error {
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceName)
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceName)
