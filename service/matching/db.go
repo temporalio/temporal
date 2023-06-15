@@ -352,7 +352,7 @@ func (db *taskQueueDB) loadUserData(ctx context.Context) error {
 
 	response, err := db.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
 		NamespaceID: db.namespaceID.String(),
-		TaskQueue:   db.taskQueue.BaseNameString(),
+		TaskQueue:   db.taskQueue.FullName(),
 	})
 	if common.IsNotFoundError(err) {
 		// not all task queues have user data
