@@ -3198,7 +3198,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, err
 	}
 
-	executionInfo, startScheduledArgs, err := wh.getScheduleExecutionInfoAndArgs(ctx, workflowID, request.Namespace, namespaceID)
+	executionInfo, startScheduleArgs, err := wh.getScheduleExecutionInfoAndArgs(ctx, workflowID, request.Namespace, namespaceID)
 	if err != nil {
 		return nil, err
 	}
