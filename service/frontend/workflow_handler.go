@@ -5048,9 +5048,5 @@ func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, 
 		NamespaceId:            namespaceID.String(),
 		SignalWithStartRequest: signalWithStarRequest,
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
