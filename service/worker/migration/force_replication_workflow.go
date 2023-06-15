@@ -25,7 +25,6 @@
 package migration
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -251,7 +250,7 @@ func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params Task
 
 func validateAndSetForceReplicationParams(params *ForceReplicationParams) error {
 	if len(params.Namespace) == 0 {
-		return errors.New("InvalidArgument: Namespace is required")
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
 	if params.ConcurrentActivityCount <= 0 {
 		params.ConcurrentActivityCount = 1
