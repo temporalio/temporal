@@ -5014,6 +5014,7 @@ func (wh *WorkflowHandler) getScheduleExecutionInfoAndArgs(ctx context.Context, 
 		}
 
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		// leave startScheduleArgs empty
 	default:
 		return nil, nil, serviceerror.NewNotFound("schedule not found")
 	}
