@@ -49,6 +49,7 @@ func failWorkflowTask(
 	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
 ) (*historypb.HistoryEvent, error) {
 
+	// IMPORTANT: wtFailedEvent can be nil under some circumstances. Specifically, if WT is transient.
 	wtFailedEvent, err := mutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		workflowTaskFailureCause,
@@ -100,7 +101,9 @@ func RetryWorkflow(
 		if err != nil {
 			return nil, err
 		}
-		eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		}
 	}
 
 	_, newMutableState, err := mutableState.AddContinueAsNewEvent(
@@ -133,7 +136,9 @@ func TimeoutWorkflow(
 		if err != nil {
 			return err
 		}
-		eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		}
 	}
 
 	_, err := mutableState.AddTimeoutWorkflowEvent(
@@ -168,7 +173,9 @@ func TerminateWorkflow(
 		if err != nil {
 			return err
 		}
-		eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		}
 	}
 
 	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(
