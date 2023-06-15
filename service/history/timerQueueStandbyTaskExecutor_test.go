@@ -39,7 +39,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -270,13 +269,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -498,13 +490,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -841,13 +826,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -995,13 +973,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().UTC().Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -1120,13 +1091,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: timerTask.WorkflowID,
-			RunId:      timerTask.RunID,
-		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -1436,11 +1400,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	wt.StartedEventID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	taskqueue := "taskqueue"
 	activityID := "activity"
 	activityType := "activity type"
 	timerTimeout := 2 * time.Second
-	scheduledEvent, _ := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskqueue, nil,
+	scheduledEvent, _ := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, nil,
 		timerTimeout, timerTimeout, timerTimeout, timerTimeout)
 
 	timerSequence := workflow.NewTimerSequence(mutableState)
@@ -1476,10 +1439,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 
 	// resend history post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
-	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: s.namespaceEntry.ID().String(),
-		Execution:   &execution,
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		gomock.Any(),
 		s.clusterName,
@@ -1502,12 +1461,13 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 			NamespaceId: s.namespaceID.String(),
 			Execution:   &execution,
 			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskqueue,
+				Name: taskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			ScheduledEventId:       scheduledEvent.EventId,
 			ScheduleToStartTimeout: &timerTimeout,
 			Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
+			VersionDirective:       common.MakeVersionDirectiveForActivityTask(nil, false),
 		},
 		gomock.Any(),
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)

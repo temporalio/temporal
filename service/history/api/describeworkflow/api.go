@@ -104,6 +104,8 @@ func Invoke(
 			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,
 			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
+
+			MostRecentWorkerVersionStamp: executionInfo.WorkerVersionStamp,
 		},
 	}
 

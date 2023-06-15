@@ -63,7 +63,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
-	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -1854,6 +1853,33 @@ func (h *Handler) UpdateWorkflowExecution(
 	return engine.UpdateWorkflowExecution(ctx, request)
 }
 
+func (h *Handler) PollWorkflowExecutionUpdate(
+	ctx context.Context,
+	request *historyservice.PollWorkflowExecutionUpdateRequest,
+) (_ *historyservice.PollWorkflowExecutionUpdateResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetUpdateRef().GetWorkflowExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.PollWorkflowExecutionUpdate(ctx, request)
+}
+
 func (h *Handler) StreamWorkflowReplicationMessages(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 ) (retError error) {
@@ -1868,22 +1894,57 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	if !ok {
 		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
 	}
-	sourceClusterShardID, targetClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
 	if err != nil {
 		return err
 	}
-	if targetClusterShardID.ClusterName != h.clusterMetadata.GetCurrentClusterName() {
+	if serverClusterShardID.ClusterID != int32(h.clusterMetadata.GetClusterID()) {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf(
 			"wrong cluster: target: %v, current: %v",
-			targetClusterShardID.ClusterName,
-			h.clusterMetadata.GetCurrentClusterName(),
+			serverClusterShardID.ClusterID,
+			h.clusterMetadata.GetClusterID(),
 		))
 	}
-	shardContext, err := h.controller.GetShardByID(targetClusterShardID.ShardID)
+	shardContext, err := h.controller.GetShardByID(serverClusterShardID.ShardID)
 	if err != nil {
-		return err
+		return h.convertError(err)
 	}
-	return replicationapi.StreamReplicationTasks(server, shardContext, sourceClusterShardID, targetClusterShardID)
+	engine, err := shardContext.GetEngine(server.Context())
+	if err != nil {
+		return h.convertError(err)
+	}
+	allClusterInfo := shardContext.GetClusterMetadata().GetAllClusterInfo()
+	clientClusterName, clientShardCount, err := replication.ClusterIDToClusterNameShardCount(allClusterInfo, clientClusterShardID.ClusterID)
+	if err != nil {
+		return h.convertError(err)
+	}
+	_, serverShardCount, err := replication.ClusterIDToClusterNameShardCount(allClusterInfo, int32(shardContext.GetClusterMetadata().GetClusterID()))
+	if err != nil {
+		return h.convertError(err)
+	}
+	err = common.VerifyShardIDMapping(clientShardCount, serverShardCount, clientClusterShardID.ShardID, serverClusterShardID.ShardID)
+	if err != nil {
+		return h.convertError(err)
+	}
+	streamSender := replication.NewStreamSender(
+		server,
+		shardContext,
+		engine,
+		replication.NewSourceTaskConvertor(
+			engine,
+			shardContext.GetNamespaceRegistry(),
+			clientShardCount,
+			clientClusterName,
+			replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
+		),
+		replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
+		replication.NewClusterShardKey(serverClusterShardID.ClusterID, serverClusterShardID.ShardID),
+	)
+	h.streamReceiverMonitor.RegisterInboundStream(streamSender)
+	streamSender.Start()
+	defer streamSender.Stop()
+	streamSender.Wait()
+	return nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

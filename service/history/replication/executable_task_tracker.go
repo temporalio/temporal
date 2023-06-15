@@ -39,6 +39,7 @@ import (
 type (
 	TrackableExecutableTask interface {
 		ctasks.Task
+		QueueID() interface{}
 		TaskID() int64
 		TaskCreationTime() time.Time
 		MarkPoisonPill() error
@@ -48,18 +49,19 @@ type (
 		Timestamp time.Time
 	}
 	ExecutableTaskTracker interface {
-		TrackTasks(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask)
+		TrackTasks(exclusiveHighWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask
 		LowWatermark() *WatermarkInfo
+		Size() int
 		Cancel()
 	}
 	ExecutableTaskTrackerImpl struct {
 		logger log.Logger
 
 		sync.Mutex
-		cancelled         bool
-		highWatermarkInfo *WatermarkInfo // this is exclusive, i.e. source need to resend with this watermark / task ID
-		taskQueue         *list.List     // sorted by task ID
-		taskIDs           map[int64]struct{}
+		cancelled                  bool
+		exclusiveHighWatermarkInfo *WatermarkInfo // this is exclusive, i.e. source need to resend with this watermark / task ID
+		taskQueue                  *list.List     // sorted by task ID
+		taskIDs                    map[int64]struct{}
 	}
 )
 
@@ -71,24 +73,27 @@ func NewExecutableTaskTracker(
 	return &ExecutableTaskTrackerImpl{
 		logger: logger,
 
-		highWatermarkInfo: nil,
-		taskQueue:         list.New(),
-		taskIDs:           make(map[int64]struct{}),
+		exclusiveHighWatermarkInfo: nil,
+		taskQueue:                  list.New(),
+		taskIDs:                    make(map[int64]struct{}),
 	}
 }
 
-// TrackTasks add tasks for tracking,
+// TrackTasks add tasks for tracking, return valid tasks (dedup)
 // if task tracker is cancelled, then newly added tasks will also be cancelled
+// tasks should be sorted by task ID, all task IDs < exclusiveHighWatermarkInfo
 func (t *ExecutableTaskTrackerImpl) TrackTasks(
-	highWatermarkInfo WatermarkInfo,
+	exclusiveHighWatermarkInfo WatermarkInfo,
 	tasks ...TrackableExecutableTask,
-) {
+) []TrackableExecutableTask {
+	filteredTasks := make([]TrackableExecutableTask, 0, len(tasks))
+
 	t.Lock()
 	defer t.Unlock()
 
 	// need to assume source side send replication tasks in order
-	if t.highWatermarkInfo != nil && highWatermarkInfo.Watermark <= t.highWatermarkInfo.Watermark {
-		return
+	if t.exclusiveHighWatermarkInfo != nil && exclusiveHighWatermarkInfo.Watermark <= t.exclusiveHighWatermarkInfo.Watermark {
+		return filteredTasks
 	}
 
 	lastTaskID := int64(-1)
@@ -103,51 +108,59 @@ Loop:
 		}
 		t.taskQueue.PushBack(task)
 		t.taskIDs[task.TaskID()] = struct{}{}
+		filteredTasks = append(filteredTasks, task)
 		lastTaskID = task.TaskID()
 	}
 
-	if highWatermarkInfo.Watermark < lastTaskID {
+	if exclusiveHighWatermarkInfo.Watermark <= lastTaskID {
 		panic(fmt.Sprintf(
 			"ExecutableTaskTracker encountered lower high watermark: %v < %v",
-			highWatermarkInfo.Watermark,
+			exclusiveHighWatermarkInfo.Watermark,
 			lastTaskID,
 		))
 	}
-	t.highWatermarkInfo = &highWatermarkInfo
+	t.exclusiveHighWatermarkInfo = &exclusiveHighWatermarkInfo
 
 	if t.cancelled {
 		t.cancelLocked()
 	}
+	return filteredTasks
 }
 
 func (t *ExecutableTaskTrackerImpl) LowWatermark() *WatermarkInfo {
 	t.Lock()
 	defer t.Unlock()
 
+	element := t.taskQueue.Front()
 Loop:
-	for element := t.taskQueue.Front(); element != nil; element = element.Next() {
+	for element != nil {
 		task := element.Value.(TrackableExecutableTask)
 		taskState := task.State()
 		switch taskState {
 		case ctasks.TaskStateAcked:
+			nextElement := element.Next()
 			delete(t.taskIDs, task.TaskID())
 			t.taskQueue.Remove(element)
+			element = nextElement
 		case ctasks.TaskStateNacked:
 			if err := task.MarkPoisonPill(); err != nil {
 				// unable to save poison pill, retry later
-				break Loop
+				element = element.Next()
+				continue Loop
 			}
+			nextElement := element.Next()
 			delete(t.taskIDs, task.TaskID())
 			t.taskQueue.Remove(element)
+			element = nextElement
 		case ctasks.TaskStateAborted:
 			// noop, do not remove from queue, let it block low watermark
-			break Loop
+			element = element.Next()
 		case ctasks.TaskStateCancelled:
 			// noop, do not remove from queue, let it block low watermark
-			break Loop
+			element = element.Next()
 		case ctasks.TaskStatePending:
 			// noop, do not remove from queue, let it block low watermark
-			break Loop
+			element = element.Next()
 		default:
 			panic(fmt.Sprintf(
 				"ExecutableTaskTracker encountered unknown task state: %v",
@@ -157,17 +170,24 @@ Loop:
 	}
 
 	if element := t.taskQueue.Front(); element != nil {
-		lowWatermarkInfo := WatermarkInfo{
+		inclusiveLowWatermarkInfo := WatermarkInfo{
 			Watermark: element.Value.(TrackableExecutableTask).TaskID(),
 			Timestamp: element.Value.(TrackableExecutableTask).TaskCreationTime(),
 		}
-		return &lowWatermarkInfo
-	} else if t.highWatermarkInfo != nil {
-		lowWatermarkInfo := *t.highWatermarkInfo
-		return &lowWatermarkInfo
+		return &inclusiveLowWatermarkInfo
+	} else if t.exclusiveHighWatermarkInfo != nil {
+		inclusiveLowWatermarkInfo := *t.exclusiveHighWatermarkInfo
+		return &inclusiveLowWatermarkInfo
 	} else {
 		return nil
 	}
+}
+
+func (t *ExecutableTaskTrackerImpl) Size() int {
+	t.Lock()
+	defer t.Unlock()
+
+	return t.taskQueue.Len()
 }
 
 func (t *ExecutableTaskTrackerImpl) Cancel() {

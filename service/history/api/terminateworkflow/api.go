@@ -89,11 +89,8 @@ func Invoke(
 				}
 			}
 
-			eventBatchFirstEventID := mutableState.GetNextEventID()
-
 			return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 				mutableState,
-				eventBatchFirstEventID,
 				request.GetReason(),
 				request.GetDetails(),
 				request.GetIdentity(),

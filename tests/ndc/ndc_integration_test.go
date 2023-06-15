@@ -27,7 +27,6 @@ package ndc
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -94,7 +93,6 @@ type (
 )
 
 func TestNDCIntegrationTestSuite(t *testing.T) {
-
 	flag.Parse()
 	suite.Run(t, new(nDCIntegrationTestSuite))
 }
@@ -124,9 +122,9 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	mockStreamClient.EXPECT().Recv().Return(&adminservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
 			Messages: &repicationpb.WorkflowReplicationMessages{
-				ReplicationTasks: []*repicationpb.ReplicationTask{},
-				LastTaskId:       100,
-				LastTaskTime:     timestamp.TimePtr(time.Unix(0, 100)),
+				ReplicationTasks:           []*repicationpb.ReplicationTask{},
+				ExclusiveHighWatermark:     100,
+				ExclusiveHighWatermarkTime: timestamp.TimePtr(time.Unix(0, 100)),
 			},
 		},
 	}, nil).AnyTimes()
@@ -215,12 +213,14 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 
-	// active has initial version 0
+	// active has initial version 1
 	historyClient := s.active.GetHistoryClient()
 
-	versions := []int64{0, 102, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102}
+	versions := []int64{3, 13, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102}
 	for _, version := range versions {
 		runID := uuid.New()
+		historySize := int64(0)
+
 		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 
@@ -230,6 +230,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 			for _, event := range events {
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
+			historySize += s.sizeOfHistoryEvents(historyEvents.Events)
 			historyBatch = append(historyBatch, historyEvents)
 		}
 
@@ -243,57 +244,9 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 			historyBatch,
 			historyClient,
 		)
-
-		err := s.verifyEventHistory(workflowID, runID, historyBatch)
-		s.Require().NoError(err)
+		s.verifyEventHistorySize(workflowID, runID, historySize)
+		s.verifyEventHistory(workflowID, runID, historyBatch)
 	}
-}
-
-func (s *nDCIntegrationTestSuite) verifyEventHistory(
-	workflowID string,
-	runID string,
-	historyBatch []*historypb.History,
-) error {
-	// get replicated history events from passive side
-	passiveClient := s.active.GetFrontendClient()
-	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
-		tests.NewContext(),
-		&workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			MaximumPageSize:        1000,
-			NextPageToken:          nil,
-			WaitNewEvent:           false,
-			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
-		},
-	)
-
-	if err != nil {
-		return fmt.Errorf("failed to get history event from passive side: %v", err)
-	}
-
-	// compare origin events with replicated events
-	batchIndex := 0
-	batch := historyBatch[batchIndex].Events
-	eventIndex := 0
-	for _, event := range replicatedHistory.GetHistory().GetEvents() {
-		if eventIndex >= len(batch) {
-			batchIndex++
-			batch = historyBatch[batchIndex].Events
-			eventIndex = 0
-		}
-		originEvent := batch[eventIndex]
-		eventIndex++
-		if enumspb.EventType(originEvent.GetEventType()) != event.GetEventType() {
-			return fmt.Errorf("the replicated event (%v) and the origin event (%v) are not the same",
-				originEvent.GetEventType().String(), event.GetEventType().String())
-		}
-	}
-
-	return nil
 }
 
 func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
@@ -304,12 +257,13 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 
-	// active has initial version 0
+	// active has initial version 1
 	historyClient := s.active.GetHistoryClient()
 
 	versions := []int64{102, 2, 202}
 	for _, version := range versions {
 		runID := uuid.New()
+		historySize := int64(0)
 
 		var baseBranch []*historypb.History
 		baseGenerator := test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
@@ -321,6 +275,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 			for _, event := range events {
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
+			historySize += s.sizeOfHistoryEvents(historyEvents.Events)
 			baseBranch = append(baseBranch, historyEvents)
 		}
 		baseVersionHistory := s.eventBatchesToVersionHistory(nil, baseBranch)
@@ -334,6 +289,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 			for _, event := range events {
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
+			historySize += s.sizeOfHistoryEvents(historyEvents.Events)
 			branch1 = append(branch1, historyEvents)
 		}
 		branchVersionHistory1 = s.eventBatchesToVersionHistory(branchVersionHistory1, branch1)
@@ -348,6 +304,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 			for _, event := range events {
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
+			historySize += s.sizeOfHistoryEvents(historyEvents.Events)
 			branch2 = append(branch2, historyEvents)
 		}
 		branchVersionHistory2 = s.eventBatchesToVersionHistory(branchVersionHistory2, branch2)
@@ -379,6 +336,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 			branch2,
 			historyClient,
 		)
+		s.verifyEventHistorySize(workflowID, runID, historySize)
 	}
 }
 
@@ -388,7 +346,7 @@ func (s *nDCIntegrationTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 
-	// active has initial version 0
+	// active has initial version 1
 	historyClient := s.active.GetHistoryClient()
 
 	runID := uuid.New()
@@ -422,6 +380,8 @@ func (s *nDCIntegrationTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 	}
 	branchVersionHistory1 = s.eventBatchesToVersionHistory(branchVersionHistory1, branch1)
 
+	// TODO ?
+
 	s.applyEvents(
 		workflowID,
 		runID,
@@ -447,12 +407,13 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	s.setupRemoteFrontendClients()
 	workflowID := "ndc-handcrafted-multiple-branches-test" + uuid.New()
 	runID := uuid.New()
+	historySize := int64(0)
 
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 	identity := "worker-identity"
 
-	// active has initial version 0
+	// active has initial version 1
 	historyClient := s.active.GetHistoryClient()
 
 	eventsBatch1 := []*historypb.History{
@@ -730,6 +691,15 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 		}},
 	}
+	for _, eventBatch := range eventsBatch1 {
+		historySize += s.sizeOfHistoryEvents(eventBatch.Events)
+	}
+	for _, eventBatch := range eventsBatch2 {
+		historySize += s.sizeOfHistoryEvents(eventBatch.Events)
+	}
+	for _, eventBatch := range eventsBatch3 {
+		historySize += s.sizeOfHistoryEvents(eventBatch.Events)
+	}
 
 	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
 
@@ -772,6 +742,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		eventsBatch2,
 		historyClient,
 	)
+	s.verifyEventHistorySize(workflowID, runID, historySize)
 }
 
 func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieContinueAsNew() {
@@ -779,12 +750,13 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 	s.setupRemoteFrontendClients()
 	workflowID := "ndc-handcrafted-multiple-branches-with-continue-as-new-test" + uuid.New()
 	runID := uuid.New()
+	historySize := int64(0)
 
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 	identity := "worker-identity"
 
-	// active has initial version 0
+	// active has initial version 1
 	historyClient := s.active.GetHistoryClient()
 
 	eventsBatch1 := []*historypb.History{
@@ -1019,6 +991,15 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			},
 		}},
 	}
+	for _, eventBatch := range eventsBatch1 {
+		historySize += s.sizeOfHistoryEvents(eventBatch.Events)
+	}
+	for _, eventBatch := range eventsBatch2 {
+		historySize += s.sizeOfHistoryEvents(eventBatch.Events)
+	}
+	for _, eventBatch := range eventsBatch3 {
+		historySize += s.sizeOfHistoryEvents(eventBatch.Events)
+	}
 
 	versionHistory1 := s.eventBatchesToVersionHistory(nil, eventsBatch1)
 
@@ -1061,6 +1042,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		eventsBatch3,
 		historyClient,
 	)
+	s.verifyEventHistorySize(workflowID, runID, historySize)
 }
 
 func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
@@ -1070,11 +1052,12 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 
-	// active has initial version 0
+	// active has initial version 1
 	historyClient := s.active.GetHistoryClient()
 
 	version := int64(102)
 	runID := uuid.New()
+	historySize := int64(0)
 	historyBatch := []*historypb.History{}
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 
@@ -1084,6 +1067,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 		for _, event := range events {
 			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 		}
+		historySize += s.sizeOfHistoryEvents(historyEvents.Events)
 		historyBatch = append(historyBatch, historyEvents)
 	}
 
@@ -1097,13 +1081,15 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 		historyBatch,
 		historyClient,
 	)
+	s.verifyEventHistorySize(workflowID, runID, historySize)
 
 	version = int64(2)
 	runID = uuid.New()
+	historySize = int64(0)
 	historyBatch = []*historypb.History{}
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 
-	// verify two batches of zombie workflow are call reapply API
+	// verify two batches of zombie workflow call reapply API
 	reapplyCount := 0
 	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
@@ -1119,6 +1105,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 		if reapply {
 			reapplyCount += 1
 		}
+		historySize += s.sizeOfHistoryEvents(historyEvents.Events)
 		historyBatch = append(historyBatch, historyEvents)
 	}
 	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(
@@ -1139,12 +1126,14 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 		historyBatch,
 		historyClient,
 	)
+	s.verifyEventHistorySize(workflowID, runID, historySize)
 }
 
 func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 
 	workflowID := "ndc-single-branch-test" + uuid.New()
 	runID := uuid.New()
+	historySize := int64(0)
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 	version := int64(102)
@@ -1172,6 +1161,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 				isWorkflowFinished = true
 			}
 		}
+		historySize += s.sizeOfHistoryEvents(historyEvents.Events)
 		baseBranch = append(baseBranch, historyEvents)
 	}
 	if isWorkflowFinished {
@@ -1191,6 +1181,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		baseBranch,
 		historyClient,
 	)
+	s.verifyEventHistorySize(workflowID, runID, historySize)
 
 	newGenerator := s.generator.DeepCopy()
 	var newBranch []*historypb.History
@@ -1204,6 +1195,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 			taskID = history.GetTaskId()
 			historyEvents.Events = append(historyEvents.Events, history)
 		}
+		historySize += s.sizeOfHistoryEvents(historyEvents.Events)
 		newBranch = append(newBranch, historyEvents)
 	}
 	newVersionHistory = s.eventBatchesToVersionHistory(newVersionHistory, newBranch)
@@ -1216,6 +1208,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 		newBranch,
 		historyClient,
 	)
+	s.verifyEventHistorySize(workflowID, runID, historySize)
 
 	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil)
 	// Handcraft a stale signal event
@@ -1939,7 +1932,75 @@ func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
 	return versionHistory
 }
 
+func (s *nDCIntegrationTestSuite) verifyEventHistorySize(
+	workflowID string,
+	runID string,
+	historySize int64,
+) {
+	// get replicated history events from passive side
+	passiveClient := s.active.GetFrontendClient()
+	describeWorkflow, err := passiveClient.DescribeWorkflowExecution(
+		tests.NewContext(),
+		&workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+		},
+	)
+	s.NoError(err)
+	s.Equal(describeWorkflow.WorkflowExecutionInfo.HistorySizeBytes, historySize)
+}
+
+func (s *nDCIntegrationTestSuite) verifyEventHistory(
+	workflowID string,
+	runID string,
+	historyBatch []*historypb.History,
+) {
+	// get replicated history events from passive side
+	passiveClient := s.active.GetFrontendClient()
+	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
+		tests.NewContext(),
+		&workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+			MaximumPageSize:        1000,
+			NextPageToken:          nil,
+			WaitNewEvent:           false,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+		},
+	)
+	s.NoError(err)
+
+	// compare origin events with replicated events
+	batchIndex := 0
+	batch := historyBatch[batchIndex].Events
+	eventIndex := 0
+	for _, event := range replicatedHistory.GetHistory().GetEvents() {
+		if eventIndex >= len(batch) {
+			batchIndex++
+			batch = historyBatch[batchIndex].Events
+			eventIndex = 0
+		}
+		originEvent := batch[eventIndex]
+		eventIndex++
+		s.Equal(originEvent.GetEventType(), event.GetEventType())
+	}
+}
+
 func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
 	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).AnyTimes()
 	s.mockAdminClient["other"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).AnyTimes()
+}
+
+func (s *nDCIntegrationTestSuite) sizeOfHistoryEvents(
+	events []*historypb.HistoryEvent,
+) int64 {
+	blob, err := serialization.NewSerializer().SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+	return int64(len(blob.Data))
 }

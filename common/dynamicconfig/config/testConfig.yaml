@@ -24,6 +24,9 @@ testGetDurationPropertyKey:
 - value: 2
   constraints:
     namespace: samples-namespace
+- value: true
+  constraints:
+    namespace: broken-namespace
 testGetFloat64PropertyKey:
 - value: 12
   constraints: {}

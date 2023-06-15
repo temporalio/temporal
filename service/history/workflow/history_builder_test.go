@@ -41,7 +41,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -258,6 +257,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 				OriginalExecutionRunId:          originalRunID,
 				Memo:                            testMemo,
 				SearchAttributes:                testSearchAttributes,
+				WorkflowId:                      testWorkflowID,
 
 				ParentWorkflowNamespace:   testParentNamespaceName,
 				ParentWorkflowNamespaceId: testParentNamespaceID,
@@ -323,6 +323,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSignaled() {
 		testPayloads,
 		testIdentity,
 		testHeader,
+		false,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -675,6 +676,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 		startedEventID,
 		testIdentity,
 		checksum,
+		&commonpb.WorkerVersionStamp{BuildId: "build_id_9"},
 		sdkMetadata,
 		meteringMeta,
 	)
@@ -691,6 +693,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 				StartedEventId:   startedEventID,
 				Identity:         testIdentity,
 				BinaryChecksum:   checksum,
+				WorkerVersion:    &commonpb.WorkerVersionStamp{BuildId: "build_id_9"},
 				SdkMetadata:      sdkMetadata,
 				MeteringMetadata: meteringMeta,
 			},
@@ -2313,6 +2316,42 @@ func (s *historyBuilderSuite) TestReorder() {
 		append(nonReorderEvents, reorderEvents...),
 		s.historyBuilder.reorderBuffer(append(reorderEvents, nonReorderEvents...)),
 	)
+}
+
+func (s *historyBuilderSuite) TestBufferSize_Memory() {
+	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
+	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.historyBuilder.AddWorkflowExecutionSignaledEvent(
+		"signal-name",
+		&commonpb.Payloads{},
+		"identity",
+		&commonpb.Header{},
+		true,
+	)
+	s.Assert().Equal(1, s.historyBuilder.NumBufferedEvents())
+	// the size of the proto  is non-deterministic, so just assert that it's non-zero, and it isn't really high
+	s.Assert().Greater(s.historyBuilder.SizeInBytesOfBufferedEvents(), 0)
+	s.Assert().Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
+	s.flush()
+	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
+	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+}
+
+func (s *historyBuilderSuite) TestBufferSize_DB() {
+	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
+	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
+	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{{
+		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}}
+	s.Assert().Equal(1, s.historyBuilder.NumBufferedEvents())
+	// the size of the proto  is non-deterministic, so just assert that it's non-zero, and it isn't really high
+	s.Assert().Greater(s.historyBuilder.SizeInBytesOfBufferedEvents(), 0)
+	s.Assert().Less(s.historyBuilder.SizeInBytesOfBufferedEvents(), 100)
+	s.flush()
+	s.Assert().Zero(s.historyBuilder.NumBufferedEvents())
+	s.Assert().Zero(s.historyBuilder.SizeInBytesOfBufferedEvents())
 }
 
 func (s *historyBuilderSuite) assertEventIDTaskID(

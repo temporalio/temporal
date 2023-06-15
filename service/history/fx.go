@@ -224,7 +224,9 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
 
@@ -251,6 +253,7 @@ func VisibilityManagerProvider(
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.SecondaryVisibilityWritingMode,
 		serviceConfig.VisibilityDisableOrderByClause,
+		serviceConfig.VisibilityEnableManualPagination,
 		metricsHandler,
 		logger,
 	)

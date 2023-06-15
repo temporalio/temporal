@@ -292,10 +292,7 @@ func (p *taskProcessorImpl) applyReplicationTask(
 		p.logger.Error("failed to generate DLQ replication task", tag.Error(err))
 		return nil
 	}
-	if err := p.handleReplicationDLQTask(ctx, request); err != nil {
-		return err
-	}
-	return nil
+	return p.handleReplicationDLQTask(ctx, request)
 }
 
 func (p *taskProcessorImpl) handleSyncShardStatus(

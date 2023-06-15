@@ -278,7 +278,7 @@ func (s *Scavenger) handleTask(
 			return s.cleanUpWorkflowPastRetention(ctx, ms.GetDatabaseMutableState())
 		}
 		return nil
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		// case handled below
 	default:
 		s.logger.Error("encounter error when describing the mutable state", getTaskLoggingTags(err, task)...)

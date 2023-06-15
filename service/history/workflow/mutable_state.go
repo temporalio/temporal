@@ -45,6 +45,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	updatespb "go.temporal.io/server/api/update/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -99,6 +100,11 @@ type (
 		HistorySizeBytes     int64
 	}
 
+	WorkflowTaskCompletionLimits struct {
+		MaxResetPoints     int
+		MaxTrackedBuildIds int
+	}
+
 	MutableState interface {
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
@@ -115,9 +121,9 @@ type (
 		AddChildWorkflowExecutionTimedOutEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTimedOutEventAttributes) (*historypb.HistoryEvent, error)
 		AddCompletedWorkflowEvent(int64, *commandpb.CompleteWorkflowExecutionCommandAttributes, string) (*historypb.HistoryEvent, error)
 		AddContinueAsNewEvent(context.Context, int64, int64, namespace.Name, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, MutableState, error)
-		AddWorkflowTaskCompletedEvent(*WorkflowTaskInfo, *workflowservice.RespondWorkflowTaskCompletedRequest, int) (*historypb.HistoryEvent, error)
+		AddWorkflowTaskCompletedEvent(*WorkflowTaskInfo, *workflowservice.RespondWorkflowTaskCompletedRequest, WorkflowTaskCompletionLimits) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskFailedEvent(workflowTask *WorkflowTaskInfo, cause enumspb.WorkflowTaskFailedCause, failure *failurepb.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*historypb.HistoryEvent, error)
-		AddWorkflowTaskScheduleToStartTimeoutEvent(int64) (*historypb.HistoryEvent, error)
+		AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddFirstWorkflowTaskScheduled(parentClock *clockspb.VectorClock, event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *time.Time, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
@@ -142,19 +148,21 @@ type (
 		AddWorkflowPropertiesModifiedEvent(int64, *commandpb.ModifyWorkflowPropertiesCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(*historyservice.RequestCancelWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *commandpb.CancelWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header, skipGenerateWorkflowTask bool) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, updAcceptance *updatepb.Acceptance) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionUpdateCompletedEvent(updResp *updatepb.Response) (*historypb.HistoryEvent, error)
+
+		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
-		ClearStickyness()
+		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
+		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
 		GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
-		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
 		GetWorkflowKey() definition.WorkflowKey
@@ -171,7 +179,7 @@ type (
 		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetSignalExternalInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
-		GetFirstRunID() (string, error)
+		GetFirstRunID(ctx context.Context) (string, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetCurrentVersion() int64
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
@@ -198,18 +206,27 @@ type (
 		GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus)
 		GetQueryRegistry() QueryRegistry
 		GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
+		GetWorkerVersionStamp() *commonpb.WorkerVersionStamp
 		IsTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool
+		HasAnyBufferedEvent(filter BufferedEventFilter) bool
 		HasStartedWorkflowTask() bool
 		HasParentExecution() bool
 		HasPendingWorkflowTask() bool
 		HadOrHasWorkflowTask() bool
 		IsCancelRequested() bool
+		IsWorkflowCloseAttempted() bool
 		IsCurrentWorkflowGuaranteed() bool
 		IsSignalRequested(requestID string) bool
-		IsStickyTaskQueueEnabled() bool
-		TaskQueue() *taskqueuepb.TaskQueue
+		GetApproximatePersistedSize() int
+
+		CurrentTaskQueue() *taskqueuepb.TaskQueue
+		SetStickyTaskQueue(name string, scheduleToStartTimeout *time.Duration)
+		ClearStickyTaskQueue()
+		IsStickyTaskQueueSet() bool
+		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *time.Duration)
+
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
@@ -256,6 +273,8 @@ type (
 		ReplicateWorkflowExecutionStartedEvent(*clockspb.VectorClock, commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *HistoryBuilder)
 		SetHistoryTree(ctx context.Context, executionTimeout *time.Duration, runTimeout *time.Duration, treeID string) error
@@ -271,15 +290,22 @@ type (
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 
+		GetHistorySize() int64
+		AddHistorySize(size int64)
+
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 
+		SetSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error
+		CheckSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) bool
+		RemoveSpeculativeWorkflowTaskTimeoutTask()
+
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
-		GenerateMigrationTasks() (tasks.Task, error)
+		GenerateMigrationTasks() (tasks.Task, int64, error)
 
 		// ContinueAsNewMinBackoff calculate minimal backoff for next ContinueAsNew run.
 		// Input backoffDuration is current backoff for next run.

@@ -31,7 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -56,19 +56,7 @@ const (
 
 	delimiter                    = "~"
 	pointInTimeKeepAliveInterval = "1m"
-	scrollKeepAliveInterval      = "1m"
 )
-
-// Default sort by uses the sorting order defined in the index template, so no
-// additional sorting is needed during query.
-var defaultSorter = []elastic.Sorter{
-	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
-	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
-}
-
-var docSorter = []elastic.Sorter{
-	elastic.SortByDoc{},
-}
 
 type (
 	visibilityStore struct {
@@ -79,17 +67,19 @@ type (
 		processor                      Processor
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
 		disableOrderByClause           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		metricsHandler                 metrics.Handler
 	}
 
 	visibilityPageToken struct {
-		SearchAfter []interface{}
-
-		// For ScanWorkflowExecutions API.
-		// For ES<7.10.0 and "oss" flavor.
-		ScrollID string
-		// For ES>=7.10.0 and "default" flavor.
+		SearchAfter   []interface{}
 		PointInTimeID string
+	}
+
+	fieldSort struct {
+		name          string
+		desc          bool
+		missing_first bool
 	}
 )
 
@@ -97,6 +87,33 @@ var _ store.VisibilityStore = (*visibilityStore)(nil)
 
 var (
 	errUnexpectedJSONFieldType = errors.New("unexpected JSON field type")
+
+	// Default sorter uses the sorting order defined in the index template.
+	// It is indirectly built so buildPaginationQuery can have access to
+	// the fields names to build the page query from the token.
+	defaultSorterFields = []fieldSort{
+		{searchattribute.CloseTime, true, true},
+		{searchattribute.StartTime, true, true},
+	}
+
+	defaultSorter = func() []elastic.Sorter {
+		ret := make([]elastic.Sorter, 0, len(defaultSorterFields))
+		for _, item := range defaultSorterFields {
+			fs := elastic.NewFieldSort(item.name)
+			if item.desc {
+				fs.Desc()
+			}
+			if item.missing_first {
+				fs.Missing("_first")
+			}
+			ret = append(ret, fs)
+		}
+		return ret
+	}()
+
+	docSorter = []elastic.Sorter{
+		elastic.SortByDoc{},
+	}
 )
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
@@ -108,6 +125,7 @@ func NewVisibilityStore(
 	processor Processor,
 	processorAckTimeout dynamicconfig.DurationPropertyFn,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
 ) *visibilityStore {
 
@@ -119,6 +137,7 @@ func NewVisibilityStore(
 		processor:                      processor,
 		processorAckTimeout:            processorAckTimeout,
 		disableOrderByClause:           disableOrderByClause,
+		enableManualPagination:         enableManualPagination,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
 	}
 }
@@ -448,15 +467,6 @@ func (s *visibilityStore) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
-	if token != nil && len(token.SearchAfter) > 0 {
-		p.SearchAfter = token.SearchAfter
-	}
-
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ListWorkflowExecutions failed", err)
@@ -466,19 +476,6 @@ func (s *visibilityStore) ListWorkflowExecutions(
 }
 
 func (s *visibilityStore) ScanWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
-	// Elasticsearch 7.10+ can use "point in time" (PIT) instead of scroll to scan over all workflows without skipping or duplicating them.
-	// https://www.elastic.co/guide/en/elasticsearch/reference/7.10/point-in-time-api.html
-	if s.esClient.IsPointInTimeSupported(ctx) {
-		return s.scanWorkflowExecutionsWithPit(ctx, request)
-	}
-
-	return s.scanWorkflowExecutionsWithScroll(ctx, request)
-}
-
-func (s *visibilityStore) scanWorkflowExecutionsWithPit(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
@@ -494,16 +491,6 @@ func (s *visibilityStore) scanWorkflowExecutionsWithPit(
 			return nil, convertElasticsearchClientError("Unable to create point in time", err)
 		}
 		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval)
-	} else {
-		token, err := s.deserializePageToken(request.NextPageToken)
-		if err != nil {
-			return nil, err
-		}
-		if token.PointInTimeID == "" {
-			return nil, serviceerror.NewInvalidArgument("pointInTimeId must present in pagination token")
-		}
-		p.SearchAfter = token.SearchAfter
-		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(token.PointInTimeID, pointInTimeKeepAliveInterval)
 	}
 
 	searchResult, err := s.esClient.Search(ctx, p)
@@ -511,52 +498,11 @@ func (s *visibilityStore) scanWorkflowExecutionsWithPit(
 		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", err)
 	}
 
-	// Empty hits list indicate that this is a last page.
+	// Number hits smaller than the page size indicate that this is the last page.
 	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
-		_, err = s.esClient.ClosePointInTime(ctx, searchResult.PitId)
+		_, err := s.esClient.ClosePointInTime(ctx, searchResult.PitId)
 		if err != nil {
 			return nil, convertElasticsearchClientError("Unable to close point in time", err)
-		}
-	}
-
-	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
-}
-
-func (s *visibilityStore) scanWorkflowExecutionsWithScroll(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*store.InternalListWorkflowExecutionsResponse, error) {
-	var (
-		searchResult *elastic.SearchResult
-		scrollErr    error
-	)
-
-	// First call doesn't have token with ScrollID.
-	if len(request.NextPageToken) == 0 {
-		// First page.
-		p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
-		if err != nil {
-			return nil, err
-		}
-		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, scrollKeepAliveInterval)
-	} else {
-		token, err := s.deserializePageToken(request.NextPageToken)
-		if err != nil {
-			return nil, err
-		}
-		if token.ScrollID == "" {
-			return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
-		}
-		searchResult, scrollErr = s.esClient.Scroll(ctx, token.ScrollID, scrollKeepAliveInterval)
-	}
-
-	if scrollErr != nil && scrollErr != io.EOF {
-		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", scrollErr)
-	}
-
-	// Both io.IOF and empty hits list indicate that this is a last page.
-	if (searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize) ||
-		scrollErr == io.EOF {
-		err := s.esClient.CloseScroll(ctx, searchResult.ScrollId)
-		if err != nil {
-			return nil, convertElasticsearchClientError("Unable to close scroll", err)
 		}
 	}
 
@@ -567,12 +513,12 @@ func (s *visibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	boolQuery, _, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+	queryParams, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
 	if err != nil {
 		return nil, err
 	}
 
-	count, err := s.esClient.Count(ctx, s.index, boolQuery)
+	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
 	if err != nil {
 		return nil, convertElasticsearchClientError("CountWorkflowExecutions failed", err)
 	}
@@ -667,10 +613,9 @@ func (s *visibilityStore) buildSearchParameters(
 
 func (s *visibilityStore) buildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
-	getFieldSorter func([]*elastic.FieldSort) ([]elastic.Sorter, error),
+	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 ) (*client.SearchParameters, error) {
-
-	boolQuery, fieldSorts, err := s.convertQuery(
+	queryParams, err := s.convertQuery(
 		request.Namespace,
 		request.NamespaceID,
 		request.Query,
@@ -679,49 +624,117 @@ func (s *visibilityStore) buildSearchParametersV2(
 		return nil, err
 	}
 
+	searchParams := &client.SearchParameters{
+		Index:    s.index,
+		PageSize: request.PageSize,
+		Query:    queryParams.Query,
+	}
+
 	// TODO(rodrigozhou): investigate possible solutions to slow ORDER BY.
 	// ORDER BY clause can be slow if there is a large number of documents and
 	// using a field that was not indexed by ES. Since slow queries can block
 	// writes for unreasonably long, this option forbids the usage of ORDER BY
 	// clause to prevent slow down issues.
-	if s.disableOrderByClause(request.Namespace.String()) && len(fieldSorts) > 0 {
+	if s.disableOrderByClause(request.Namespace.String()) && len(queryParams.Sorter) > 0 {
 		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
-	sorter, err := getFieldSorter(fieldSorts)
+	if len(queryParams.Sorter) > 0 {
+		// If params.Sorter is not empty, then it's using custom order by.
+		s.metricsHandler.WithTags(metrics.NamespaceTag(request.Namespace.String())).
+			Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
+	}
+
+	searchParams.Sorter, err = getFieldSorter(queryParams.Sorter)
 	if err != nil {
 		return nil, err
 	}
 
-	params := &client.SearchParameters{
-		Index:    s.index,
-		Query:    boolQuery,
-		PageSize: request.PageSize,
-		Sorter:   sorter,
+	pageToken, err := s.deserializePageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+	err = s.processPageToken(searchParams, pageToken, request.Namespace)
+	if err != nil {
+		return nil, err
 	}
 
-	return params, nil
+	return searchParams, nil
+}
+
+func (s *visibilityStore) processPageToken(
+	params *client.SearchParameters,
+	pageToken *visibilityPageToken,
+	namespaceName namespace.Name,
+) error {
+	if pageToken == nil || len(pageToken.SearchAfter) == 0 {
+		return nil
+	}
+	if pageToken.PointInTimeID != "" {
+		params.SearchAfter = pageToken.SearchAfter
+		params.PointInTime = elastic.NewPointInTimeWithKeepAlive(
+			pageToken.PointInTimeID,
+			pointInTimeKeepAliveInterval,
+		)
+		return nil
+	}
+	if len(pageToken.SearchAfter) != len(params.Sorter) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"Invalid page token for given sort fields: expected %d fields, got %d",
+			len(params.Sorter),
+			len(pageToken.SearchAfter),
+		))
+	}
+	if !s.enableManualPagination(namespaceName.String()) || !isDefaultSorter(params.Sorter) {
+		params.SearchAfter = pageToken.SearchAfter
+		return nil
+	}
+
+	boolQuery, ok := params.Query.(*elastic.BoolQuery)
+	if !ok {
+		return serviceerror.NewInternal(fmt.Sprintf(
+			"Unexpected query type: expected *elastic.BoolQuery, got %T",
+			params.Query,
+		))
+	}
+
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		return serviceerror.NewUnavailable(
+			fmt.Sprintf("Unable to read search attribute types: %v", err),
+		)
+	}
+
+	// build pagination search query for default sorter
+	shouldQueries, err := buildPaginationQuery(defaultSorterFields, pageToken.SearchAfter, saTypeMap)
+	if err != nil {
+		return err
+	}
+
+	boolQuery.Should(shouldQueries...)
+	boolQuery.MinimumNumberShouldMatch(1)
+	return nil
 }
 
 func (s *visibilityStore) convertQuery(
 	namespace namespace.Name,
 	namespaceID namespace.ID,
 	requestQueryStr string,
-) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
+) (*query.QueryParams, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapperProvider)
 	queryConverter := newQueryConverter(nameInterceptor, NewValuesInterceptor())
-	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
+	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
 		var converterErr *query.ConverterError
 		if errors.As(err, &converterErr) {
-			return nil, nil, converterErr.ToInvalidArgument()
+			return nil, converterErr.ToInvalidArgument()
 		}
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Create new bool query because request query might have only "should" (="or") queries.
@@ -733,14 +746,15 @@ func (s *visibilityStore) convertQuery(
 		namespaceFilterQuery.MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision))
 	}
 
-	if requestQuery != nil {
-		namespaceFilterQuery.Filter(requestQuery)
+	if queryParams.Query != nil {
+		namespaceFilterQuery.Filter(queryParams.Query)
 	}
 
-	return namespaceFilterQuery, fieldSorts, nil
+	queryParams.Query = namespaceFilterQuery
+	return queryParams, nil
 }
 
-func (s *visibilityStore) getScanFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
+func (s *visibilityStore) getScanFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	// custom order is not supported by Scan API
 	if len(fieldSorts) > 0 {
 		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
@@ -749,11 +763,10 @@ func (s *visibilityStore) getScanFieldSorter(fieldSorts []*elastic.FieldSort) ([
 	return docSorter, nil
 }
 
-func (s *visibilityStore) getListFieldSorter(fieldSorts []*elastic.FieldSort) ([]elastic.Sorter, error) {
+func (s *visibilityStore) getListFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {
 	if len(fieldSorts) == 0 {
 		return defaultSorter, nil
 	}
-	s.metricsHandler.Counter(metrics.ElasticsearchCustomOrderByClauseCount.GetMetricName()).Record(1)
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
 	for i, fs := range fieldSorts {
 		res[i] = fs
@@ -796,7 +809,6 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter:   lastHitSort,
 			PointInTimeID: searchResult.PitId,
-			ScrollID:      searchResult.ScrollId,
 		})
 		if err != nil {
 			return nil, err
@@ -1080,4 +1092,166 @@ func detailedErrorMessage(err error) string {
 		}
 	}
 	return sb.String()
+}
+
+func isDefaultSorter(sorter []elastic.Sorter) bool {
+	if len(sorter) != len(defaultSorter) {
+		return false
+	}
+	for i := 0; i < len(defaultSorter); i++ {
+		if &sorter[i] != &defaultSorter[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// buildPaginationQuery builds the Elasticsearch conditions for the next page based on searchAfter.
+//
+// For example, if sorterFields = [A, B, C] and searchAfter = [lastA, lastB, lastC],
+// it will build the following conditions (assuming all values are non-null and orders are desc):
+// - k = 0: A < lastA
+// - k = 1: A = lastA AND B < lastB
+// - k = 2: A = lastA AND B = lastB AND C < lastC
+//
+//nolint:revive // cyclomatic complexity
+func buildPaginationQuery(
+	sorterFields []fieldSort,
+	searchAfter []any,
+	saTypeMap searchattribute.NameTypeMap,
+) ([]elastic.Query, error) {
+	n := len(sorterFields)
+	if len(sorterFields) != len(searchAfter) {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"Invalid page token for given sort fields: expected %d fields, got %d",
+			len(sorterFields),
+			len(searchAfter),
+		))
+	}
+
+	parsedSearchAfter := make([]any, n)
+	for i := 0; i < n; i++ {
+		tp, err := saTypeMap.GetType(sorterFields[i].name)
+		if err != nil {
+			return nil, err
+		}
+		parsedSearchAfter[i], err = parsePageTokenValue(sorterFields[i].name, searchAfter[i], tp)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Last field of sorter must be a tie breaker, and thus cannot contain null value.
+	if parsedSearchAfter[len(parsedSearchAfter)-1] == nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf(
+			"Last field of sorter cannot be a nullable field: %q has null values",
+			sorterFields[len(sorterFields)-1].name,
+		))
+	}
+
+	shouldQueries := make([]elastic.Query, 0, len(sorterFields))
+	for k := 0; k < len(sorterFields); k++ {
+		bq := elastic.NewBoolQuery()
+		for i := 0; i <= k; i++ {
+			field := sorterFields[i]
+			value := parsedSearchAfter[i]
+			if i == k {
+				if value == nil {
+					bq.Filter(elastic.NewExistsQuery(field.name))
+				} else if field.desc {
+					bq.Filter(elastic.NewRangeQuery(field.name).Lt(value))
+				} else {
+					bq.Filter(elastic.NewRangeQuery(field.name).Gt(value))
+				}
+			} else {
+				if value == nil {
+					bq.MustNot(elastic.NewExistsQuery(field.name))
+				} else {
+					bq.Filter(elastic.NewTermQuery(field.name, value))
+				}
+			}
+		}
+		shouldQueries = append(shouldQueries, bq)
+	}
+	return shouldQueries, nil
+}
+
+// parsePageTokenValue parses the page token values to be used in the search query.
+// The page token comes from the `sort` field from the previous response from Elasticsearch.
+// Depending on the type of the field, the null value is represented differently:
+//   - integer, bool, and datetime: MaxInt64 (desc) or MinInt64 (asc)
+//   - double: "Infinity" (desc) or "-Infinity" (asc)
+//   - keyword: nil
+//
+// Furthermore, for bool and datetime, they need to be converted to boolean or the RFC3339Nano
+// formats respectively.
+//
+//nolint:revive // cyclomatic complexity
+func parsePageTokenValue(
+	fieldName string, jsonValue any,
+	tp enumspb.IndexedValueType,
+) (any, error) {
+	switch tp {
+	case enumspb.INDEXED_VALUE_TYPE_INT,
+		enumspb.INDEXED_VALUE_TYPE_BOOL,
+		enumspb.INDEXED_VALUE_TYPE_DATETIME:
+		jsonNumber, ok := jsonValue.(json.Number)
+		if !ok {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+				"Invalid page token: expected interger type, got %q", jsonValue))
+		}
+		num, err := jsonNumber.Int64()
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+				"Invalid page token: expected interger type, got %v", jsonValue))
+		}
+		if num == math.MaxInt64 || num == math.MinInt64 {
+			return nil, nil
+		}
+		if tp == enumspb.INDEXED_VALUE_TYPE_BOOL {
+			return num != 0, nil
+		}
+		if tp == enumspb.INDEXED_VALUE_TYPE_DATETIME {
+			return time.Unix(0, num).UTC().Format(time.RFC3339Nano), nil
+		}
+		return num, nil
+
+	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
+		switch v := jsonValue.(type) {
+		case json.Number:
+			num, err := v.Float64()
+			if err != nil {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+					"Invalid page token: expected float type, got %v", jsonValue))
+			}
+			return num, nil
+		case string:
+			// it can be the string representation of infinity
+			if _, err := strconv.ParseFloat(v, 64); err != nil {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+					"Invalid page token: expected float type, got %q", jsonValue))
+			}
+			return nil, nil
+		default:
+			// it should never reach here
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+				"Invalid page token: expected float type, got %#v", jsonValue))
+		}
+
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+		if jsonValue == nil {
+			return nil, nil
+		}
+		if _, ok := jsonValue.(string); !ok {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+				"Invalid page token: expected string type, got %v", jsonValue))
+		}
+		return jsonValue, nil
+
+	default:
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"Invalid field type in sorter: cannot order by %q",
+			fieldName,
+		))
+	}
 }

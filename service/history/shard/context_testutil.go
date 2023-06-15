@@ -29,13 +29,13 @@ import (
 	"fmt"
 
 	"github.com/golang/mock/gomock"
+	"go.temporal.io/server/common/primitives"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
@@ -70,7 +70,7 @@ func NewTestContext(
 	shardInfo *persistencespb.ShardInfo,
 	config *configs.Config,
 ) *ContextTest {
-	resourceTest := resourcetest.NewTest(ctrl, metrics.History)
+	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
 	eventsCache := events.NewMockCache(ctrl)
 	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
@@ -80,6 +80,7 @@ func NewTestContext(
 	if shardInfo.QueueStates == nil {
 		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
 	}
+	shardInfo = loadShardInfoCompatibilityCheckWithoutReplication(shardInfo)
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
 		owner:               shardInfo.GetOwner(),

@@ -251,9 +251,11 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	checkSpec(describeResp.Schedule.Spec)
 
 	s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, describeResp.Schedule.Policies.OverlapPolicy) // set to default value
-	s.EqualValues(60, describeResp.Schedule.Policies.CatchupWindow.Seconds())                   // set to default value
+	s.EqualValues(365*24*3600, describeResp.Schedule.Policies.CatchupWindow.Seconds())          // set to default value
 
 	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BuildIds])
 	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)

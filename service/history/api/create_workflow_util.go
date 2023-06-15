@@ -95,6 +95,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetSignalInput(),
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
+			signalWithStartRequest.GetSkipGenerateWorkflowTask(),
 		); err != nil {
 			return nil, err
 		}
@@ -284,7 +285,7 @@ func ValidateStartWorkflowExecutionRequest(
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
 		return err
 	}
-	if err := ValidateStart(
+	return ValidateStart(
 		ctx,
 		shard,
 		namespaceEntry,
@@ -292,11 +293,7 @@ func ValidateStartWorkflowExecutionRequest(
 		request.GetInput().Size(),
 		request.GetMemo().Size(),
 		operation,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func OverrideStartWorkflowExecutionRequest(

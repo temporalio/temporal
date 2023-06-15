@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -144,6 +145,9 @@ type (
 		// State, ReplicationState, ActiveCluster, or isGlobalNamespace config changed.
 		RegisterStateChangeCallback(key any, cb StateChangeCallbackFn)
 		UnregisterStateChangeCallback(key any)
+		// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
+		// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
+		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)
 	}
 
 	registry struct {
@@ -172,6 +176,9 @@ type (
 		// readthroughNotFoundCache stores namespaces that missed the above caches
 		// AND was not found when reading through to the persistence layer
 		readthroughNotFoundCache cache.Cache
+
+		// Temporary solution to force read search attributes from persistence
+		forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -181,6 +188,7 @@ func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
 	refreshInterval dynamicconfig.DurationPropertyFn,
+	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Registry {
@@ -196,6 +204,8 @@ func NewRegistry(
 		refreshInterval:          refreshInterval,
 		stateChangeCallbacks:     make(map[any]StateChangeCallbackFn),
 		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughNotFoundCacheOpts),
+
+		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
 	}
 	return reg
 }
@@ -333,6 +343,24 @@ func (r *registry) GetNamespaceName(
 		return "", err
 	}
 	return ns.Name(), nil
+}
+
+// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
+// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
+func (r *registry) GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error) {
+	var ns *Namespace
+	var err error
+	if r.forceSearchAttributesCacheRefreshOnRead() {
+		r.readthroughLock.Lock()
+		defer r.readthroughLock.Unlock()
+		ns, err = r.getNamespaceByNamePersistence(name)
+	} else {
+		ns, err = r.GetNamespace(name)
+	}
+	if err != nil {
+		return CustomSearchAttributesMapper{}, err
+	}
+	return ns.CustomSearchAttributesMapper(), nil
 }
 
 func (r *registry) refreshLoop(ctx context.Context) error {

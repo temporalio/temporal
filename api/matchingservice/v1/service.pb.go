@@ -54,43 +54,49 @@ func init() {
 }
 
 var fileDescriptor_1a5c83076e651916 = []byte{
-	// 566 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x96, 0x3d, 0x6f, 0xd3, 0x40,
-	0x18, 0xc7, 0x7d, 0x0b, 0xc3, 0x49, 0xa8, 0xaa, 0x05, 0x42, 0x14, 0x71, 0x42, 0x0c, 0x8c, 0x8e,
-	0x0a, 0x6c, 0xb4, 0x40, 0x9a, 0x40, 0x08, 0x34, 0x6a, 0xca, 0x8b, 0x90, 0x58, 0xd0, 0x25, 0x7e,
-	0x08, 0xa7, 0x3a, 0x3e, 0x73, 0x3e, 0x1b, 0x65, 0xe3, 0x13, 0x20, 0x06, 0x26, 0x56, 0x24, 0xc4,
-	0xc0, 0xc4, 0xd4, 0x89, 0x15, 0xc6, 0x8c, 0x1d, 0x89, 0xb3, 0x30, 0xf6, 0x23, 0x20, 0xd7, 0xb9,
-	0x6b, 0xde, 0x7b, 0x71, 0xb2, 0x25, 0xce, 0xfd, 0x7f, 0xcf, 0xef, 0x1f, 0xdf, 0x49, 0x87, 0x6f,
-	0x4b, 0x68, 0x07, 0x5c, 0x50, 0xaf, 0x10, 0x82, 0x88, 0x41, 0x14, 0x68, 0xc0, 0x0a, 0x6d, 0x2a,
-	0x9b, 0x6f, 0x99, 0xdf, 0x4a, 0x1f, 0xb1, 0x26, 0x14, 0xe2, 0xcd, 0xc2, 0xe0, 0xa3, 0x13, 0x08,
-	0x2e, 0xb9, 0x7d, 0x43, 0xa5, 0x9c, 0x2c, 0xe5, 0xd0, 0x80, 0x39, 0x63, 0x29, 0x27, 0xde, 0xdc,
-	0xd8, 0x36, 0xa4, 0x0b, 0x78, 0x17, 0x41, 0x28, 0x5f, 0x0b, 0x08, 0x03, 0xee, 0x87, 0x83, 0x31,
-	0x37, 0x0f, 0xd7, 0xf1, 0x5a, 0x6d, 0xb0, 0xfa, 0x59, 0xb6, 0xda, 0xfe, 0x86, 0xf0, 0xc5, 0x3a,
-	0xf7, 0xbc, 0x97, 0x5c, 0x1c, 0xbc, 0xf1, 0xf8, 0xfb, 0xe7, 0x34, 0x3c, 0xd8, 0x8f, 0x20, 0x02,
-	0xbb, 0xec, 0x98, 0x59, 0x39, 0x53, 0xe3, 0x4f, 0x33, 0x85, 0x8d, 0x07, 0x4b, 0x52, 0xb2, 0x02,
-	0xd7, 0x2d, 0x2d, 0x5a, 0x6c, 0x4a, 0x16, 0x33, 0xd9, 0xc9, 0x29, 0x3a, 0x11, 0xcf, 0x25, 0x3a,
-	0x85, 0xa2, 0x45, 0x3f, 0x23, 0xbc, 0x56, 0x74, 0xdd, 0xe1, 0x2e, 0xf6, 0x5d, 0x53, 0xf8, 0x58,
-	0x50, 0xc9, 0xdd, 0xcb, 0x9d, 0x1f, 0xd7, 0x1a, 0x36, 0x5f, 0x48, 0x6b, 0x38, 0x98, 0x47, 0x6b,
-	0x34, 0xaf, 0xb5, 0x3e, 0x22, 0x7c, 0x7e, 0x3f, 0x02, 0xd1, 0x51, 0xda, 0xf6, 0x96, 0x29, 0x74,
-	0x24, 0xa6, 0x94, 0xb6, 0x73, 0xa6, 0xb5, 0xd0, 0x4f, 0x84, 0x2f, 0x67, 0x5f, 0xdd, 0x93, 0x25,
-	0xa9, 0x6f, 0x89, 0xb7, 0x03, 0x0f, 0x24, 0xb8, 0xf6, 0x23, 0x53, 0xfc, 0x4c, 0x84, 0x12, 0xad,
-	0xae, 0x80, 0x34, 0x72, 0x38, 0x4a, 0xd4, 0x6f, 0x82, 0xb7, 0x17, 0xc9, 0x50, 0x52, 0xdf, 0x65,
-	0x7e, 0x2b, 0xdd, 0xa8, 0xe6, 0x87, 0x63, 0x6a, 0x7c, 0xe1, 0xc3, 0x31, 0x83, 0xa2, 0x45, 0xbf,
-	0x20, 0xbc, 0x5e, 0x86, 0xb0, 0x29, 0x58, 0x03, 0x4e, 0x4f, 0xf0, 0x7d, 0x53, 0xfc, 0x44, 0x54,
-	0x09, 0x16, 0x97, 0x20, 0x68, 0xb9, 0x1f, 0x08, 0x5f, 0xda, 0x65, 0xa1, 0xd4, 0xbf, 0xd5, 0xa9,
-	0x90, 0x4c, 0x32, 0xee, 0x87, 0xf6, 0x43, 0xd3, 0x01, 0x33, 0x00, 0x4a, 0xb4, 0xb2, 0x34, 0x47,
-	0xeb, 0xfe, 0x46, 0xf8, 0xda, 0x8b, 0xc0, 0xa5, 0x12, 0xd2, 0x6d, 0x0c, 0x62, 0x27, 0x62, 0x9e,
-	0x5b, 0x75, 0xd3, 0xfd, 0x41, 0x25, 0x6b, 0x30, 0x8f, 0xc9, 0x8e, 0xbd, 0x67, 0x3a, 0xef, 0x2c,
-	0x92, 0x2a, 0x50, 0x5f, 0x1d, 0x50, 0x37, 0xf9, 0x85, 0xf0, 0xd5, 0x0a, 0xc8, 0x39, 0x35, 0x76,
-	0x4d, 0xa7, 0xce, 0xc5, 0xa8, 0x0e, 0xb5, 0x15, 0xd1, 0x74, 0x81, 0x43, 0x84, 0xaf, 0x54, 0xfd,
-	0x98, 0x7a, 0x2c, 0xed, 0xac, 0x5f, 0x5b, 0x0d, 0x24, 0x75, 0xa9, 0xa4, 0xf6, 0x63, 0xd3, 0x81,
-	0x73, 0x20, 0x4a, 0xfe, 0xc9, 0x4a, 0x58, 0x5a, 0xfd, 0x2b, 0xc2, 0x17, 0x2a, 0x20, 0x27, 0x9d,
-	0x4b, 0x0b, 0xfc, 0x49, 0x33, 0x65, 0xcb, 0xcb, 0x41, 0x94, 0xe5, 0x8e, 0xe8, 0xf6, 0x88, 0x75,
-	0xd4, 0x23, 0xd6, 0x71, 0x8f, 0xa0, 0x0f, 0x09, 0x41, 0xdf, 0x13, 0x82, 0xfe, 0x24, 0x04, 0x75,
-	0x13, 0x82, 0xfe, 0x26, 0x04, 0xfd, 0x4b, 0x88, 0x75, 0x9c, 0x10, 0xf4, 0xa9, 0x4f, 0xac, 0x6e,
-	0x9f, 0x58, 0x47, 0x7d, 0x62, 0xbd, 0xda, 0x6a, 0xf1, 0xd3, 0xf9, 0x8c, 0xcf, 0xbf, 0x35, 0xdd,
-	0x19, 0x7b, 0xd4, 0x38, 0x77, 0x72, 0x6b, 0xba, 0xf5, 0x3f, 0x00, 0x00, 0xff, 0xff, 0xc3, 0x39,
-	0x89, 0x97, 0xd4, 0x09, 0x00, 0x00,
+	// 663 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x97, 0x31, 0x6f, 0xd3, 0x4c,
+	0x1c, 0xc6, 0x7d, 0xcb, 0x3b, 0x9c, 0xf4, 0xaa, 0xc2, 0x02, 0x55, 0x54, 0xe2, 0x84, 0x18, 0x3a,
+	0x3a, 0x2a, 0xb0, 0xd1, 0x02, 0x69, 0xd3, 0x86, 0xa2, 0x56, 0x6d, 0x81, 0x80, 0xc4, 0x82, 0xae,
+	0xf6, 0x11, 0x4e, 0x75, 0x7c, 0xc7, 0xf9, 0x1c, 0x94, 0x8d, 0x4f, 0x80, 0x18, 0x98, 0x18, 0x58,
+	0x90, 0x10, 0x03, 0x13, 0x12, 0x2b, 0x2b, 0x8c, 0x19, 0xcb, 0x46, 0x9c, 0x85, 0xb1, 0x1f, 0x01,
+	0xb9, 0xce, 0x5d, 0xe2, 0xc4, 0x0e, 0xe7, 0x24, 0x5b, 0xeb, 0xdc, 0xf3, 0xbb, 0xdf, 0x3f, 0x7e,
+	0xce, 0x91, 0xe1, 0x4d, 0x49, 0x5a, 0x9c, 0x09, 0xec, 0x57, 0x42, 0x22, 0xda, 0x44, 0x54, 0x30,
+	0xa7, 0x95, 0x16, 0x96, 0xee, 0x0b, 0x1a, 0x34, 0x93, 0x4b, 0xd4, 0x25, 0x95, 0xf6, 0x5a, 0x65,
+	0xf0, 0xa7, 0xc3, 0x05, 0x93, 0xcc, 0x5e, 0x55, 0x29, 0x27, 0x4d, 0x39, 0x98, 0x53, 0x67, 0x2c,
+	0xe5, 0xb4, 0xd7, 0x56, 0x36, 0x0c, 0xe9, 0x82, 0xbc, 0x8c, 0x48, 0x28, 0x9f, 0x09, 0x12, 0x72,
+	0x16, 0x84, 0x83, 0x6d, 0xae, 0x7f, 0x58, 0x86, 0x4b, 0xfb, 0x83, 0xd5, 0x0f, 0xd3, 0xd5, 0xf6,
+	0x27, 0x00, 0x2f, 0x1d, 0x32, 0xdf, 0x7f, 0xc2, 0xc4, 0xc9, 0x73, 0x9f, 0xbd, 0x7a, 0x84, 0xc3,
+	0x93, 0xa3, 0x88, 0x44, 0xc4, 0xae, 0x39, 0x66, 0x56, 0x4e, 0x6e, 0xfc, 0x41, 0xaa, 0xb0, 0xb2,
+	0x3d, 0x27, 0x25, 0x1d, 0xe0, 0x9a, 0xa5, 0x45, 0xab, 0xae, 0xa4, 0x6d, 0x2a, 0x3b, 0x33, 0x8a,
+	0x4e, 0xc4, 0x67, 0x12, 0xcd, 0xa1, 0x68, 0xd1, 0x77, 0x00, 0x2e, 0x55, 0x3d, 0x6f, 0x74, 0x16,
+	0xfb, 0xb6, 0x29, 0x7c, 0x2c, 0xa8, 0xe4, 0xee, 0xcc, 0x9c, 0x1f, 0xd7, 0x1a, 0x35, 0x2f, 0xa5,
+	0x35, 0x1a, 0x9c, 0x45, 0x2b, 0x9b, 0xd7, 0x5a, 0x6f, 0x00, 0xfc, 0xff, 0x28, 0x22, 0xa2, 0xa3,
+	0xb4, 0xed, 0x75, 0x53, 0x68, 0x26, 0xa6, 0x94, 0x36, 0x66, 0x4c, 0x6b, 0xa1, 0xaf, 0x00, 0x5e,
+	0x4e, 0xff, 0xf5, 0xce, 0x97, 0x24, 0xbe, 0x5b, 0xac, 0xc5, 0x7d, 0x22, 0x89, 0x67, 0xdf, 0x33,
+	0xc5, 0x17, 0x22, 0x94, 0xe8, 0xee, 0x02, 0x48, 0x99, 0xc3, 0xb1, 0x85, 0x03, 0x97, 0xf8, 0x07,
+	0x91, 0x0c, 0x25, 0x0e, 0x3c, 0x1a, 0x34, 0x93, 0xa2, 0x9a, 0x1f, 0x8e, 0xdc, 0x78, 0xe9, 0xc3,
+	0x51, 0x40, 0xd1, 0xa2, 0xef, 0x01, 0xbc, 0x50, 0x23, 0xa1, 0x2b, 0xe8, 0x31, 0x19, 0x9e, 0xe0,
+	0xbb, 0xa6, 0xf8, 0x89, 0xa8, 0x12, 0xac, 0xce, 0x41, 0xd0, 0x72, 0x5f, 0x00, 0x5c, 0xde, 0xa3,
+	0xa1, 0xd4, 0x9f, 0x1d, 0x62, 0x21, 0xa9, 0xa4, 0x2c, 0x08, 0xed, 0x1d, 0xd3, 0x0d, 0x0a, 0x00,
+	0x4a, 0xb4, 0x3e, 0x37, 0x47, 0xeb, 0xfe, 0x00, 0xf0, 0x6a, 0x83, 0x7b, 0x58, 0x92, 0xa4, 0xc6,
+	0x44, 0x6c, 0x46, 0xd4, 0xf7, 0x76, 0xbd, 0xa4, 0x1f, 0x58, 0xd2, 0x63, 0xea, 0x53, 0xd9, 0xb1,
+	0x0f, 0x4c, 0xf7, 0xfb, 0x17, 0x49, 0x0d, 0x70, 0xb8, 0x38, 0xa0, 0x9e, 0xe4, 0x3b, 0x80, 0x57,
+	0xea, 0x44, 0x4e, 0x19, 0x63, 0xcf, 0x74, 0xd7, 0xa9, 0x18, 0x35, 0xc3, 0xfe, 0x82, 0x68, 0x7a,
+	0x80, 0x8f, 0x00, 0x5e, 0xac, 0x93, 0xe1, 0xfd, 0x6a, 0x84, 0x44, 0xd4, 0xb0, 0xc4, 0xf6, 0x56,
+	0x89, 0x9d, 0x26, 0xd2, 0x4a, 0xb7, 0x36, 0x1f, 0x44, 0x5b, 0xfe, 0x02, 0x70, 0xb5, 0xca, 0xb9,
+	0xdf, 0xc9, 0x59, 0xc4, 0x7d, 0xea, 0xe2, 0xa4, 0x61, 0xdb, 0x6d, 0x12, 0x48, 0xbb, 0x61, 0xfc,
+	0x64, 0x37, 0xe2, 0xa9, 0x49, 0x1e, 0x2f, 0x1a, 0xab, 0x67, 0xfb, 0x06, 0xe0, 0x4a, 0x9d, 0xc8,
+	0xc1, 0x7d, 0xd2, 0xc9, 0x7d, 0xcc, 0x39, 0x0d, 0x9a, 0xf6, 0x6e, 0x89, 0xaf, 0xb0, 0x80, 0xa1,
+	0x66, 0xb8, 0xbf, 0x08, 0x54, 0xa6, 0x39, 0x3b, 0x4c, 0xb8, 0xa4, 0x11, 0xf8, 0x0c, 0x0f, 0x57,
+	0x9a, 0x37, 0x27, 0x2f, 0x5d, 0xba, 0x39, 0xf9, 0x90, 0xcc, 0x93, 0x31, 0x3d, 0xcf, 0x93, 0x15,
+	0xdf, 0x29, 0xf7, 0x40, 0x28, 0x6c, 0x79, 0x7d, 0x6e, 0x4e, 0xa6, 0x0c, 0xaa, 0x2b, 0x39, 0xc6,
+	0x25, 0x7e, 0x7a, 0x8b, 0x18, 0xa5, 0xcb, 0x30, 0x0d, 0xa5, 0xbc, 0x37, 0x45, 0xb7, 0x87, 0xac,
+	0xd3, 0x1e, 0xb2, 0xce, 0x7a, 0x08, 0xbc, 0x8e, 0x11, 0xf8, 0x1c, 0x23, 0xf0, 0x33, 0x46, 0xa0,
+	0x1b, 0x23, 0xf0, 0x3b, 0x46, 0xe0, 0x4f, 0x8c, 0xac, 0xb3, 0x18, 0x81, 0xb7, 0x7d, 0x64, 0x75,
+	0xfb, 0xc8, 0x3a, 0xed, 0x23, 0xeb, 0xe9, 0x7a, 0x93, 0x0d, 0x2d, 0x28, 0x9b, 0xfe, 0x6e, 0x70,
+	0x6b, 0xec, 0xd2, 0xf1, 0x7f, 0xe7, 0xef, 0x06, 0x37, 0xfe, 0x06, 0x00, 0x00, 0xff, 0xff, 0x9e,
+	0x1f, 0xaf, 0x7b, 0xba, 0x0c, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -140,10 +146,24 @@ type MatchingServiceClient interface {
 	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
 	UpdateWorkerBuildIdCompatibility(ctx context.Context, in *UpdateWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*UpdateWorkerBuildIdCompatibilityResponse, error)
 	GetWorkerBuildIdCompatibility(ctx context.Context, in *GetWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatibilityResponse, error)
-	// Tell a task queue that some metadata has changed.
-	InvalidateTaskQueueMetadata(ctx context.Context, in *InvalidateTaskQueueMetadataRequest, opts ...grpc.CallOption) (*InvalidateTaskQueueMetadataResponse, error)
-	// Fetch some metadata about a task queue.
-	GetTaskQueueMetadata(ctx context.Context, in *GetTaskQueueMetadataRequest, opts ...grpc.CallOption) (*GetTaskQueueMetadataResponse, error)
+	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
+	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
+	// Apply a user data replication event.
+	ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, in *ApplyTaskQueueUserDataReplicationEventRequest, opts ...grpc.CallOption) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
+	// Gets all task queue names mapped to a given build ID
+	GetBuildIdTaskQueueMapping(ctx context.Context, in *GetBuildIdTaskQueueMappingRequest, opts ...grpc.CallOption) (*GetBuildIdTaskQueueMappingResponse, error)
+	// Force unloading a task queue. Used for testing only.
+	ForceUnloadTaskQueue(ctx context.Context, in *ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueueResponse, error)
+	// Update task queue user data in owning node for all updates in namespace.
+	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
+	// API.
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::method-signature=disabled
+	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error)
+	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
+	ReplicateTaskQueueUserData(ctx context.Context, in *ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*ReplicateTaskQueueUserDataResponse, error)
 }
 
 type matchingServiceClient struct {
@@ -253,18 +273,54 @@ func (c *matchingServiceClient) GetWorkerBuildIdCompatibility(ctx context.Contex
 	return out, nil
 }
 
-func (c *matchingServiceClient) InvalidateTaskQueueMetadata(ctx context.Context, in *InvalidateTaskQueueMetadataRequest, opts ...grpc.CallOption) (*InvalidateTaskQueueMetadataResponse, error) {
-	out := new(InvalidateTaskQueueMetadataResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/InvalidateTaskQueueMetadata", in, out, opts...)
+func (c *matchingServiceClient) GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error) {
+	out := new(GetTaskQueueUserDataResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/GetTaskQueueUserData", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *matchingServiceClient) GetTaskQueueMetadata(ctx context.Context, in *GetTaskQueueMetadataRequest, opts ...grpc.CallOption) (*GetTaskQueueMetadataResponse, error) {
-	out := new(GetTaskQueueMetadataResponse)
-	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/GetTaskQueueMetadata", in, out, opts...)
+func (c *matchingServiceClient) ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, in *ApplyTaskQueueUserDataReplicationEventRequest, opts ...grpc.CallOption) (*ApplyTaskQueueUserDataReplicationEventResponse, error) {
+	out := new(ApplyTaskQueueUserDataReplicationEventResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/ApplyTaskQueueUserDataReplicationEvent", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) GetBuildIdTaskQueueMapping(ctx context.Context, in *GetBuildIdTaskQueueMappingRequest, opts ...grpc.CallOption) (*GetBuildIdTaskQueueMappingResponse, error) {
+	out := new(GetBuildIdTaskQueueMappingResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/GetBuildIdTaskQueueMapping", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) ForceUnloadTaskQueue(ctx context.Context, in *ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueueResponse, error) {
+	out := new(ForceUnloadTaskQueueResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error) {
+	out := new(UpdateTaskQueueUserDataResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) ReplicateTaskQueueUserData(ctx context.Context, in *ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*ReplicateTaskQueueUserDataResponse, error) {
+	out := new(ReplicateTaskQueueUserDataResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -308,10 +364,24 @@ type MatchingServiceServer interface {
 	//     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
 	UpdateWorkerBuildIdCompatibility(context.Context, *UpdateWorkerBuildIdCompatibilityRequest) (*UpdateWorkerBuildIdCompatibilityResponse, error)
 	GetWorkerBuildIdCompatibility(context.Context, *GetWorkerBuildIdCompatibilityRequest) (*GetWorkerBuildIdCompatibilityResponse, error)
-	// Tell a task queue that some metadata has changed.
-	InvalidateTaskQueueMetadata(context.Context, *InvalidateTaskQueueMetadataRequest) (*InvalidateTaskQueueMetadataResponse, error)
-	// Fetch some metadata about a task queue.
-	GetTaskQueueMetadata(context.Context, *GetTaskQueueMetadataRequest) (*GetTaskQueueMetadataResponse, error)
+	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
+	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
+	// Apply a user data replication event.
+	ApplyTaskQueueUserDataReplicationEvent(context.Context, *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error)
+	// Gets all task queue names mapped to a given build ID
+	GetBuildIdTaskQueueMapping(context.Context, *GetBuildIdTaskQueueMappingRequest) (*GetBuildIdTaskQueueMappingResponse, error)
+	// Force unloading a task queue. Used for testing only.
+	ForceUnloadTaskQueue(context.Context, *ForceUnloadTaskQueueRequest) (*ForceUnloadTaskQueueResponse, error)
+	// Update task queue user data in owning node for all updates in namespace.
+	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
+	// API.
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::method-signature=disabled
+	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error)
+	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
+	ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error)
 }
 
 // UnimplementedMatchingServiceServer can be embedded to have forward compatible implementations.
@@ -351,11 +421,23 @@ func (*UnimplementedMatchingServiceServer) UpdateWorkerBuildIdCompatibility(ctx 
 func (*UnimplementedMatchingServiceServer) GetWorkerBuildIdCompatibility(ctx context.Context, req *GetWorkerBuildIdCompatibilityRequest) (*GetWorkerBuildIdCompatibilityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkerBuildIdCompatibility not implemented")
 }
-func (*UnimplementedMatchingServiceServer) InvalidateTaskQueueMetadata(ctx context.Context, req *InvalidateTaskQueueMetadataRequest) (*InvalidateTaskQueueMetadataResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method InvalidateTaskQueueMetadata not implemented")
+func (*UnimplementedMatchingServiceServer) GetTaskQueueUserData(ctx context.Context, req *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTaskQueueUserData not implemented")
 }
-func (*UnimplementedMatchingServiceServer) GetTaskQueueMetadata(ctx context.Context, req *GetTaskQueueMetadataRequest) (*GetTaskQueueMetadataResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetTaskQueueMetadata not implemented")
+func (*UnimplementedMatchingServiceServer) ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, req *ApplyTaskQueueUserDataReplicationEventRequest) (*ApplyTaskQueueUserDataReplicationEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyTaskQueueUserDataReplicationEvent not implemented")
+}
+func (*UnimplementedMatchingServiceServer) GetBuildIdTaskQueueMapping(ctx context.Context, req *GetBuildIdTaskQueueMappingRequest) (*GetBuildIdTaskQueueMappingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBuildIdTaskQueueMapping not implemented")
+}
+func (*UnimplementedMatchingServiceServer) ForceUnloadTaskQueue(ctx context.Context, req *ForceUnloadTaskQueueRequest) (*ForceUnloadTaskQueueResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ForceUnloadTaskQueue not implemented")
+}
+func (*UnimplementedMatchingServiceServer) UpdateTaskQueueUserData(ctx context.Context, req *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTaskQueueUserData not implemented")
+}
+func (*UnimplementedMatchingServiceServer) ReplicateTaskQueueUserData(ctx context.Context, req *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReplicateTaskQueueUserData not implemented")
 }
 
 func RegisterMatchingServiceServer(s *grpc.Server, srv MatchingServiceServer) {
@@ -560,38 +642,110 @@ func _MatchingService_GetWorkerBuildIdCompatibility_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_InvalidateTaskQueueMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(InvalidateTaskQueueMetadataRequest)
+func _MatchingService_GetTaskQueueUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTaskQueueUserDataRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).InvalidateTaskQueueMetadata(ctx, in)
+		return srv.(MatchingServiceServer).GetTaskQueueUserData(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/InvalidateTaskQueueMetadata",
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/GetTaskQueueUserData",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).InvalidateTaskQueueMetadata(ctx, req.(*InvalidateTaskQueueMetadataRequest))
+		return srv.(MatchingServiceServer).GetTaskQueueUserData(ctx, req.(*GetTaskQueueUserDataRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_GetTaskQueueMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTaskQueueMetadataRequest)
+func _MatchingService_ApplyTaskQueueUserDataReplicationEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyTaskQueueUserDataReplicationEventRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MatchingServiceServer).GetTaskQueueMetadata(ctx, in)
+		return srv.(MatchingServiceServer).ApplyTaskQueueUserDataReplicationEvent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/GetTaskQueueMetadata",
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/ApplyTaskQueueUserDataReplicationEvent",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).GetTaskQueueMetadata(ctx, req.(*GetTaskQueueMetadataRequest))
+		return srv.(MatchingServiceServer).ApplyTaskQueueUserDataReplicationEvent(ctx, req.(*ApplyTaskQueueUserDataReplicationEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_GetBuildIdTaskQueueMapping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBuildIdTaskQueueMappingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).GetBuildIdTaskQueueMapping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/GetBuildIdTaskQueueMapping",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).GetBuildIdTaskQueueMapping(ctx, req.(*GetBuildIdTaskQueueMappingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_ForceUnloadTaskQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForceUnloadTaskQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).ForceUnloadTaskQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueue",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).ForceUnloadTaskQueue(ctx, req.(*ForceUnloadTaskQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_UpdateTaskQueueUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateTaskQueueUserDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).UpdateTaskQueueUserData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).UpdateTaskQueueUserData(ctx, req.(*UpdateTaskQueueUserDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_ReplicateTaskQueueUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReplicateTaskQueueUserDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).ReplicateTaskQueueUserData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).ReplicateTaskQueueUserData(ctx, req.(*ReplicateTaskQueueUserDataRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -645,12 +799,28 @@ var _MatchingService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_GetWorkerBuildIdCompatibility_Handler,
 		},
 		{
-			MethodName: "InvalidateTaskQueueMetadata",
-			Handler:    _MatchingService_InvalidateTaskQueueMetadata_Handler,
+			MethodName: "GetTaskQueueUserData",
+			Handler:    _MatchingService_GetTaskQueueUserData_Handler,
 		},
 		{
-			MethodName: "GetTaskQueueMetadata",
-			Handler:    _MatchingService_GetTaskQueueMetadata_Handler,
+			MethodName: "ApplyTaskQueueUserDataReplicationEvent",
+			Handler:    _MatchingService_ApplyTaskQueueUserDataReplicationEvent_Handler,
+		},
+		{
+			MethodName: "GetBuildIdTaskQueueMapping",
+			Handler:    _MatchingService_GetBuildIdTaskQueueMapping_Handler,
+		},
+		{
+			MethodName: "ForceUnloadTaskQueue",
+			Handler:    _MatchingService_ForceUnloadTaskQueue_Handler,
+		},
+		{
+			MethodName: "UpdateTaskQueueUserData",
+			Handler:    _MatchingService_UpdateTaskQueueUserData_Handler,
+		},
+		{
+			MethodName: "ReplicateTaskQueueUserData",
+			Handler:    _MatchingService_ReplicateTaskQueueUserData_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

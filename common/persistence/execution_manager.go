@@ -458,7 +458,7 @@ func (m *executionManagerImpl) serializeWorkflowEvents(
 		request.Info = BuildHistoryGarbageCleanupInfo(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID)
 	}
 
-	return m.serializeAppendHistoryNodesRequest(request)
+	return m.serializeAppendHistoryNodesRequest(ctx, request)
 }
 
 func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
@@ -870,6 +870,13 @@ func (m *executionManagerImpl) RangeDeleteReplicationTaskFromDLQ(
 	request *RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 	return m.persistence.RangeDeleteReplicationTaskFromDLQ(ctx, request)
+}
+
+func (m *executionManagerImpl) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *GetReplicationTasksFromDLQRequest,
+) (bool, error) {
+	return m.persistence.IsReplicationDLQEmpty(ctx, request)
 }
 
 func (m *executionManagerImpl) Close() {

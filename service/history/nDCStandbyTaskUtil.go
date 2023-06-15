@@ -29,10 +29,10 @@ import (
 	"errors"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -107,13 +107,15 @@ type (
 
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
+		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
 
 	workflowTaskPostActionInfo struct {
 		*historyResendInfo
 
-		workflowTaskScheduleToStartTimeout int64
+		workflowTaskScheduleToStartTimeout *time.Duration
 		taskqueue                          taskqueuepb.TaskQueue
+		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
 
 	startChildExecutionPostActionInfo struct {
@@ -142,15 +144,19 @@ func newHistoryResendInfo(
 func newActivityTaskPostActionInfo(
 	mutableState workflow.MutableState,
 	activityScheduleToStartTimeout time.Duration,
+	useCompatibleVersion bool,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		versionDirective:                   directive,
 	}, nil
 }
 
@@ -158,22 +164,26 @@ func newActivityRetryTimePostActionInfo(
 	mutableState workflow.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
+	useCompatibleVersion bool,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		versionDirective:                   directive,
 	}, nil
 }
 
 func newWorkflowTaskPostActionInfo(
 	mutableState workflow.MutableState,
-	workflowTaskScheduleToStartTimeout int64,
+	workflowTaskScheduleToStartTimeout *time.Duration,
 	taskqueue taskqueuepb.TaskQueue,
 ) (*workflowTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
@@ -181,10 +191,16 @@ func newWorkflowTaskPostActionInfo(
 		return nil, err
 	}
 
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		mutableState.GetWorkerVersionStamp(),
+		mutableState.GetLastWorkflowTaskStartedEventID(),
+	)
+
 	return &workflowTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
+		versionDirective:                   directive,
 	}, nil
 }
 
@@ -230,23 +246,6 @@ func getStandbyPostActionFn(
 
 	// task start time + StandbyTaskMissingEventsResendDelay <= now
 	return discardTaskStandbyPostActionFn
-}
-
-func refreshTasks(
-	ctx context.Context,
-	adminClient adminservice.AdminServiceClient,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-) error {
-	_, err := adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
-		NamespaceId: namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-	})
-	return err
 }
 
 func getRemoteClusterName(

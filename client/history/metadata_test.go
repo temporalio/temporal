@@ -71,63 +71,63 @@ func (s *metadataSuite) TearDownTest() {
 }
 
 func (s *metadataSuite) TestClusterShardMD_Encode_Decode() {
-	sourceClusterShardID := ClusterShardID{
-		ClusterName: uuid.NewString(),
-		ShardID:     rand.Int31(),
+	clientClusterShardID := ClusterShardID{
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
 	}
-	targetClusterShardID := ClusterShardID{
-		ClusterName: uuid.NewString(),
-		ShardID:     rand.Int31(),
+	serverClusterShardID := ClusterShardID{
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
 	}
 
 	clusterShardMD := EncodeClusterShardMD(
-		sourceClusterShardID,
-		targetClusterShardID,
+		clientClusterShardID,
+		serverClusterShardID,
 	)
-	actualSourceClusterShardID, actualTargetClusterShardID, err := DecodeClusterShardMD(clusterShardMD)
+	actualClientClusterShardID, actualServerClusterShardID, err := DecodeClusterShardMD(clusterShardMD)
 	s.NoError(err)
-	s.Equal(sourceClusterShardID, actualSourceClusterShardID)
-	s.Equal(targetClusterShardID, actualTargetClusterShardID)
+	s.Equal(clientClusterShardID, actualClientClusterShardID)
+	s.Equal(serverClusterShardID, actualServerClusterShardID)
 }
 
 func (s *metadataSuite) TestClusterShardMD_Decode_Error() {
 	clusterShardMD := metadata.Pairs(
-		MetadataKeySourceShardID, strconv.Itoa(int(rand.Int31())),
-		MetadataKeyTargetClusterName, uuid.NewString(),
-		MetadataKeyTargetShardID, strconv.Itoa(int(rand.Int31())),
+		MetadataKeyClientShardID, strconv.Itoa(int(rand.Int31())),
+		MetadataKeyServerClusterID, uuid.NewString(),
+		MetadataKeyServerShardID, strconv.Itoa(int(rand.Int31())),
 	)
 	_, _, err := DecodeClusterShardMD(clusterShardMD)
 	s.Error(err)
 
 	clusterShardMD = metadata.Pairs(
-		MetadataKeySourceClusterName, uuid.NewString(),
-		MetadataKeyTargetClusterName, uuid.NewString(),
-		MetadataKeyTargetShardID, strconv.Itoa(int(rand.Int31())),
+		MetadataKeyClientClusterID, uuid.NewString(),
+		MetadataKeyServerClusterID, uuid.NewString(),
+		MetadataKeyServerShardID, strconv.Itoa(int(rand.Int31())),
 	)
 	_, _, err = DecodeClusterShardMD(clusterShardMD)
 	s.Error(err)
 
 	clusterShardMD = metadata.Pairs(
-		MetadataKeySourceClusterName, uuid.NewString(),
-		MetadataKeySourceShardID, strconv.Itoa(int(rand.Int31())),
-		MetadataKeyTargetShardID, strconv.Itoa(int(rand.Int31())),
+		MetadataKeyClientClusterID, uuid.NewString(),
+		MetadataKeyClientShardID, strconv.Itoa(int(rand.Int31())),
+		MetadataKeyServerShardID, strconv.Itoa(int(rand.Int31())),
 	)
 	_, _, err = DecodeClusterShardMD(clusterShardMD)
 	s.Error(err)
 
 	clusterShardMD = metadata.Pairs(
-		MetadataKeySourceClusterName, uuid.NewString(),
-		MetadataKeySourceShardID, strconv.Itoa(int(rand.Int31())),
-		MetadataKeyTargetClusterName, uuid.NewString(),
+		MetadataKeyClientClusterID, uuid.NewString(),
+		MetadataKeyClientShardID, strconv.Itoa(int(rand.Int31())),
+		MetadataKeyServerClusterID, uuid.NewString(),
 	)
 	_, _, err = DecodeClusterShardMD(clusterShardMD)
 	s.Error(err)
 
 	clusterShardMD = metadata.Pairs(
-		MetadataKeySourceClusterName, uuid.NewString(),
-		MetadataKeySourceShardID, uuid.NewString(),
-		MetadataKeyTargetClusterName, uuid.NewString(),
-		MetadataKeyTargetShardID, uuid.NewString(),
+		MetadataKeyClientClusterID, uuid.NewString(),
+		MetadataKeyClientShardID, uuid.NewString(),
+		MetadataKeyServerClusterID, uuid.NewString(),
+		MetadataKeyServerShardID, uuid.NewString(),
 	)
 	_, _, err = DecodeClusterShardMD(clusterShardMD)
 	s.Error(err)

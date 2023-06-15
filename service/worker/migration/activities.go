@@ -36,16 +36,30 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+
+	"go.temporal.io/sdk/temporal"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/util"
 )
 
+// TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
+// However, activity background context is per-worker, which means once set, all activities processed by the
+// worker will use CallerTypePreemptable, including those not related to migration. This is not ideal.
+// Using a different task queue and a dedicated worker for migration can solve the issue but requires
+// changing all existing tooling around namespace migration to start workflows & activities on the new task queue.
+// Another approach is to use separate workers for workflow tasks and activities and keep existing tooling unchanged.
+
 // GetMetadata returns history shard count and namespaceID for requested namespace.
-func (a *activities) GetMetadata(ctx context.Context, request metadataRequest) (*metadataResponse, error) {
+func (a *activities) GetMetadata(_ context.Context, request metadataRequest) (*metadataResponse, error) {
 	nsEntry, err := a.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
 	if err != nil {
 		return nil, err
@@ -59,6 +73,8 @@ func (a *activities) GetMetadata(ctx context.Context, request metadataRequest) (
 
 // GetMaxReplicationTaskIDs returns max replication task id per shard
 func (a *activities) GetMaxReplicationTaskIDs(ctx context.Context) (*replicationStatus, error) {
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
+
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{})
 	if err != nil {
 		return nil, err
@@ -71,6 +87,8 @@ func (a *activities) GetMaxReplicationTaskIDs(ctx context.Context) (*replication
 }
 
 func (a *activities) WaitReplication(ctx context.Context, waitRequest waitReplicationRequest) error {
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
+
 	for {
 		done, err := a.checkReplicationOnce(ctx, waitRequest)
 		if err != nil {
@@ -158,6 +176,10 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 }
 
 func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) error {
+	// Use the highest priority caller type for checking handover state
+	// since during handover state namespace has no availability
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(waitRequest.Namespace, headers.CallerTypeAPI, ""))
+
 	for {
 		done, err := a.checkHandoverOnce(ctx, waitRequest)
 		if err != nil {
@@ -236,12 +258,16 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	return readyShardCount == len(resp.Shards), nil
 }
 
-func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey definition.WorkflowKey) error {
+func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLimiter quotas.RateLimiter, wKey definition.WorkflowKey) error {
+	if err := rateLimiter.WaitN(ctx, 1); err != nil {
+		return err
+	}
+
 	// will generate replication task
 	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 
-	_, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
+	resp, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: wKey.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wKey.WorkflowID,
@@ -249,14 +275,27 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey d
 		},
 	})
 
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
-		// ignore NotFound error
+	switch err.(type) {
+	case nil:
+		stateTransitionCount := resp.StateTransitionCount
+		for stateTransitionCount > 0 {
+			token := util.Min(int(stateTransitionCount), rateLimiter.Burst())
+			stateTransitionCount -= int64(token)
+			_ = rateLimiter.ReserveN(time.Now(), token)
+		}
 		return nil
+	case *serviceerror.NotFound:
+		return nil
+	default:
+		return err
 	}
-	return err
 }
 
 func (a *activities) UpdateNamespaceState(ctx context.Context, req updateStateRequest) error {
+	// Use the highest priority caller type for updating namespace config
+	// since during handover state, namespace has no availability
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(req.Namespace, headers.CallerTypeAPI, ""))
+
 	descResp, err := a.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Namespace: req.Namespace,
 	})
@@ -278,6 +317,10 @@ func (a *activities) UpdateNamespaceState(ctx context.Context, req updateStateRe
 }
 
 func (a *activities) UpdateActiveCluster(ctx context.Context, req updateActiveClusterRequest) error {
+	// Use the highest priority caller type for updating namespace config
+	// since when both clusters think namespace are standby, namespace has no availability
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(req.Namespace, headers.CallerTypeAPI, ""))
+
 	descResp, err := a.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Namespace: req.Namespace,
 	})
@@ -299,6 +342,8 @@ func (a *activities) UpdateActiveCluster(ctx context.Context, req updateActiveCl
 }
 
 func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(request.Namespace, headers.CallerTypePreemptable, ""))
+
 	resp, err := a.frontendClient.ListWorkflowExecutions(ctx, request)
 	if err != nil {
 		return nil, err
@@ -321,6 +366,7 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 }
 
 func (a *activities) GenerateReplicationTasks(ctx context.Context, request *generateReplicationTasksRequest) error {
+	ctx = a.setCallerInfoForGenReplicationTask(ctx, namespace.ID(request.NamespaceID))
 	rateLimiter := quotas.NewRateLimiter(request.RPS, int(math.Ceil(request.RPS)))
 
 	startIndex := 0
@@ -332,11 +378,8 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	}
 
 	for i := startIndex; i < len(request.Executions); i++ {
-		if err := rateLimiter.Wait(ctx); err != nil {
-			return err
-		}
 		we := request.Executions[i]
-		err := a.generateWorkflowReplicationTask(ctx, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
+		err := a.generateWorkflowReplicationTask(ctx, rateLimiter, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
 		if err != nil {
 			a.logger.Info("Force replicate failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
 			return err
@@ -345,4 +388,97 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	}
 
 	return nil
+}
+
+func (a *activities) setCallerInfoForGenReplicationTask(
+	ctx context.Context,
+	namespaceID namespace.ID,
+) context.Context {
+
+	nsName, err := a.namespaceRegistry.GetNamespaceName(namespaceID)
+	if err != nil {
+		a.logger.Error("Failed to get namespace name when generating replication task",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.Error(err),
+		)
+		nsName = namespace.EmptyName
+	}
+	return headers.SetCallerInfo(ctx, headers.NewPreemptableCallerInfo(nsName.String()))
+}
+
+type seedReplicationQueueWithUserDataEntriesHeartbeatDetails struct {
+	NextPageToken []byte
+	IndexInPage   int
+}
+
+func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context, params TaskQueueUserDataReplicationParamsWithNamespace) error {
+	if len(params.Namespace) == 0 {
+		return temporal.NewNonRetryableApplicationError("namespace is required", "InvalidArgument", nil)
+	}
+	if params.PageSize == 0 {
+		params.PageSize = defaultPageSizeForTaskQueueUserDataReplication
+	}
+	if params.RPS == 0 {
+		params.RPS = defaultRPSForTaskQueueUserDataReplication
+	}
+
+	describeResponse, err := a.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: params.Namespace,
+	})
+	if err != nil {
+		return err
+	}
+
+	rateLimiter := quotas.NewRateLimiter(params.RPS, int(math.Ceil(params.RPS)))
+	heartbeatDetails := seedReplicationQueueWithUserDataEntriesHeartbeatDetails{}
+
+	if activity.HasHeartbeatDetails(ctx) {
+		if err := activity.GetHeartbeatDetails(ctx, &heartbeatDetails); err != nil {
+			return temporal.NewNonRetryableApplicationError("failed to load previous heartbeat details", "TypeError", err)
+		}
+	}
+
+	for {
+		if err := rateLimiter.Wait(ctx); err != nil {
+			return err
+		}
+
+		request := &persistence.ListTaskQueueUserDataEntriesRequest{
+			NamespaceID:   describeResponse.GetNamespaceInfo().Id,
+			NextPageToken: heartbeatDetails.NextPageToken,
+			PageSize:      params.PageSize,
+		}
+		response, err := a.taskManager.ListTaskQueueUserDataEntries(ctx, request)
+		if err != nil {
+			a.logger.Error("List task queue user data failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.Error(err))
+			return err
+		}
+		for idx, entry := range response.Entries {
+			if heartbeatDetails.IndexInPage > idx {
+				continue
+			}
+			heartbeatDetails.IndexInPage = idx
+			activity.RecordHeartbeat(ctx, heartbeatDetails)
+			err = a.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
+				TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
+				Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+					TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+						NamespaceId:   request.NamespaceID,
+						TaskQueueName: entry.TaskQueue,
+						UserData:      entry.UserData.GetData(),
+					},
+				},
+			})
+			if err != nil {
+				a.logger.Error("Inserting into namespace replication queue failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.Error(err))
+				return err
+			}
+		}
+		if len(response.NextPageToken) == 0 {
+			return nil
+		}
+		heartbeatDetails.NextPageToken = response.NextPageToken
+		heartbeatDetails.IndexInPage = 0
+		activity.RecordHeartbeat(ctx, heartbeatDetails)
+	}
 }

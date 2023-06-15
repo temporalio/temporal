@@ -264,11 +264,17 @@ func signalWorkflow(
 		request.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
+		// in-memory mutable state is still clean, release the lock with nil error to prevent
+		// clearing and reloading mutable state
+		workflowContext.GetReleaseFn()(nil)
 		return err
 	}
 
 	if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
 		// duplicate signal
+		// in-memory mutable state is still clean, release the lock with nil error to prevent
+		// clearing and reloading mutable state
+		workflowContext.GetReleaseFn()(nil)
 		return nil
 	}
 	if request.GetRequestId() != "" {
@@ -279,12 +285,13 @@ func signalWorkflow(
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
+		request.GetSkipGenerateWorkflowTask(),
 	); err != nil {
 		return err
 	}
 
 	// Create a transfer task to schedule a workflow task
-	if !mutableState.HasPendingWorkflowTask() {
+	if !mutableState.HasPendingWorkflowTask() && !request.GetSkipGenerateWorkflowTask() {
 		_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 		if err != nil {
 			return err
@@ -293,10 +300,7 @@ func signalWorkflow(
 
 	// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 	// the history and try the operation again.
-	if err := workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
+	return workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
 		ctx,
-	); err != nil {
-		return err
-	}
-	return nil
+	)
 }

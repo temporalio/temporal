@@ -89,11 +89,9 @@ func Invoke(
 				weCtx,
 				func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
 					mutableState := workflowContext.GetMutableState()
-					eventBatchFirstEventID := mutableState.GetNextEventID()
 
 					return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 						mutableState,
-						eventBatchFirstEventID,
 						"Delete workflow execution",
 						nil,
 						consts.IdentityHistoryService,

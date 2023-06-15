@@ -138,8 +138,8 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 
-	// need to clear the stickiness since workflow turned to passive
-	b.mutableState.ClearStickyness()
+	// Need to clear the sticky task queue because workflow turned to passive.
+	b.mutableState.ClearStickyTaskQueue()
 	executionInfo := b.mutableState.GetExecutionInfo()
 	executionInfo.LastFirstEventId = firstEvent.GetEventId()
 
@@ -674,14 +674,15 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				return nil, err
 			}
 
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
-			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
-			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
-			// TODO (alex-update): Async workflow update might require update to be restored in registry from Accepted event.
-			//  Completed event will remove it from registry and notify update result pollers.
-			//  For now, there is nothing to modify in mutable state and there are no tasks to generate for those events.
-
-			return nil, nil
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED:
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+			if err := b.mutableState.ReplicateWorkflowExecutionUpdateAcceptedEvent(event); err != nil {
+				return nil, err
+			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
+			if err := b.mutableState.ReplicateWorkflowExecutionUpdateCompletedEvent(event, firstEvent.GetEventId()); err != nil {
+				return nil, err
+			}
 
 		case enumspb.EVENT_TYPE_ACTIVITY_PROPERTIES_MODIFIED_EXTERNALLY,
 			enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY:

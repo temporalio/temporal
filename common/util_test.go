@@ -394,6 +394,33 @@ func TestMapShardID_ByNamespaceWorkflow_4And16(t *testing.T) {
 	require.True(t, found)
 }
 
+func TestMapShardID_1To4(t *testing.T) {
+	sourceShardCount := int32(1)
+	targetShardCount := int32(4)
+
+	targetShards := MapShardID(sourceShardCount, targetShardCount, 1)
+	require.Equal(t, []int32{
+		1, 2, 3, 4,
+	}, targetShards)
+}
+
+func TestMapShardID_4To1(t *testing.T) {
+	sourceShardCount := int32(4)
+	targetShardCount := int32(1)
+
+	targetShards := MapShardID(sourceShardCount, targetShardCount, 4)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 3)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 2)
+	require.Equal(t, []int32{1}, targetShards)
+
+	targetShards = MapShardID(sourceShardCount, targetShardCount, 1)
+	require.Equal(t, []int32{1}, targetShards)
+}
+
 func TestMapShardID_4To16(t *testing.T) {
 	sourceShardCount := int32(4)
 	targetShardCount := int32(16)
@@ -470,4 +497,23 @@ func TestMapShardID_16To4(t *testing.T) {
 
 	targetShards = MapShardID(sourceShardCount, targetShardCount, 1)
 	require.Equal(t, []int32{1}, targetShards)
+}
+
+func TestVerifyShardIDMapping_1VS4(t *testing.T) {
+	require.NoError(t, VerifyShardIDMapping(1, 4, 1, 1))
+	require.NoError(t, VerifyShardIDMapping(1, 4, 1, 2))
+	require.NoError(t, VerifyShardIDMapping(1, 4, 1, 3))
+	require.NoError(t, VerifyShardIDMapping(1, 4, 1, 4))
+}
+
+func TestVerifyShardIDMapping_2VS4(t *testing.T) {
+	require.NoError(t, VerifyShardIDMapping(2, 4, 1, 1))
+	require.Error(t, VerifyShardIDMapping(2, 4, 1, 2))
+	require.NoError(t, VerifyShardIDMapping(2, 4, 1, 3))
+	require.Error(t, VerifyShardIDMapping(2, 4, 1, 4))
+
+	require.Error(t, VerifyShardIDMapping(2, 4, 2, 1))
+	require.NoError(t, VerifyShardIDMapping(2, 4, 2, 2))
+	require.Error(t, VerifyShardIDMapping(2, 4, 2, 3))
+	require.NoError(t, VerifyShardIDMapping(2, 4, 2, 4))
 }

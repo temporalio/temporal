@@ -195,12 +195,12 @@ func (t *ForwarderTestSuite) TestForwardQueryTaskRateNotEnforced() {
 }
 
 func (t *ForwarderTestSuite) TestForwardPollError() {
-	_, err := t.fwdr.ForwardPoll(context.Background())
+	_, err := t.fwdr.ForwardPoll(context.Background(), &pollMetadata{})
 	t.Equal(tqname.ErrNoParent, err)
 
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	t.fwdr.taskQueueKind = enumspb.TASK_QUEUE_KIND_STICKY
-	_, err = t.fwdr.ForwardPoll(context.Background())
+	_, err = t.fwdr.ForwardPoll(context.Background(), &pollMetadata{})
 	t.Equal(errTaskQueueKind, err)
 
 }
@@ -220,7 +220,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 		},
 	).Return(resp, nil)
 
-	task, err := t.fwdr.ForwardPoll(ctx)
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{})
 	t.NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)
@@ -248,7 +248,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 		},
 	).Return(resp, nil)
 
-	task, err := t.fwdr.ForwardPoll(ctx)
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{})
 	t.NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)

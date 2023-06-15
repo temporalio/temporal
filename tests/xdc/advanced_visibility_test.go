@@ -58,6 +58,8 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
 )
@@ -67,11 +69,11 @@ type advVisCrossDCTestSuite struct {
 	// not merely log an error
 	*require.Assertions
 	suite.Suite
-	cluster1       *tests.TestCluster
-	cluster2       *tests.TestCluster
-	logger         log.Logger
-	clusterConfigs []*tests.TestClusterConfig
-	isElasticsearchEnabled       bool
+	cluster1               *tests.TestCluster
+	cluster2               *tests.TestCluster
+	logger                 log.Logger
+	clusterConfigs         []*tests.TestClusterConfig
+	isElasticsearchEnabled bool
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
@@ -314,7 +316,7 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 			if len(resp.GetExecutions()) == 1 {
 				execution := resp.GetExecutions()[0]
 				retrievedSearchAttr := execution.SearchAttributes
-				if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 2 {
+				if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 3 {
 					fields := retrievedSearchAttr.GetIndexedFields()
 					searchValBytes := fields[s.testSearchAttributeKey]
 					var searchVal string
@@ -325,6 +327,12 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 					var searchVal2 int
 					payload.Decode(searchValBytes2, &searchVal2)
 					s.Equal(123, searchVal2)
+
+					buildIdsBytes := fields[searchattribute.BuildIds]
+					var buildIds []string
+					err = payload.Decode(buildIdsBytes, &buildIds)
+					s.NoError(err)
+					s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
 
 					verified = true
 					break

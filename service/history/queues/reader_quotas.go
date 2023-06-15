@@ -78,7 +78,7 @@ func newReaderRequest(
 	readerID int64,
 ) quotas.Request {
 	// The priority is only based on readerID (caller),
-	// api, caller type and call initiation (origin)
+	// api, caller type, caller segment, and call initiation (origin)
 	// are the same for all the readers, and not related to
 	// priority so leaving those fields empty.
 	return quotas.NewRequest(
@@ -86,6 +86,7 @@ func newReaderRequest(
 		readerRequestToken,
 		strconv.FormatInt(readerID, 10),
 		"",
+		0,
 		"",
 	)
 }

@@ -474,6 +474,21 @@ func (mr *MockExecutionManagerMockRecorder) GetWorkflowExecution(ctx, request in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).GetWorkflowExecution), ctx, request)
 }
 
+// IsReplicationDLQEmpty mocks base method.
+func (m *MockExecutionManager) IsReplicationDLQEmpty(ctx context.Context, request *GetReplicationTasksFromDLQRequest) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsReplicationDLQEmpty", ctx, request)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsReplicationDLQEmpty indicates an expected call of IsReplicationDLQEmpty.
+func (mr *MockExecutionManagerMockRecorder) IsReplicationDLQEmpty(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsReplicationDLQEmpty", reflect.TypeOf((*MockExecutionManager)(nil).IsReplicationDLQEmpty), ctx, request)
+}
+
 // ListConcreteExecutions mocks base method.
 func (m *MockExecutionManager) ListConcreteExecutions(ctx context.Context, request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -738,6 +753,21 @@ func (mr *MockTaskManagerMockRecorder) CompleteTasksLessThan(ctx, request interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTasksLessThan", reflect.TypeOf((*MockTaskManager)(nil).CompleteTasksLessThan), ctx, request)
 }
 
+// CountTaskQueuesByBuildId mocks base method.
+func (m *MockTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *CountTaskQueuesByBuildIdRequest) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountTaskQueuesByBuildId", ctx, request)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountTaskQueuesByBuildId indicates an expected call of CountTaskQueuesByBuildId.
+func (mr *MockTaskManagerMockRecorder) CountTaskQueuesByBuildId(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountTaskQueuesByBuildId", reflect.TypeOf((*MockTaskManager)(nil).CountTaskQueuesByBuildId), ctx, request)
+}
+
 // CreateTaskQueue mocks base method.
 func (m *MockTaskManager) CreateTaskQueue(ctx context.Context, request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -811,6 +841,36 @@ func (mr *MockTaskManagerMockRecorder) GetTaskQueue(ctx, request interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueue), ctx, request)
 }
 
+// GetTaskQueueUserData mocks base method.
+func (m *MockTaskManager) GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueueUserData", ctx, request)
+	ret0, _ := ret[0].(*GetTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueUserData indicates an expected call of GetTaskQueueUserData.
+func (mr *MockTaskManagerMockRecorder) GetTaskQueueUserData(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueUserData", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueueUserData), ctx, request)
+}
+
+// GetTaskQueuesByBuildId mocks base method.
+func (m *MockTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueuesByBuildId", ctx, request)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueuesByBuildId indicates an expected call of GetTaskQueuesByBuildId.
+func (mr *MockTaskManagerMockRecorder) GetTaskQueuesByBuildId(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueuesByBuildId", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueuesByBuildId), ctx, request)
+}
+
 // GetTasks mocks base method.
 func (m *MockTaskManager) GetTasks(ctx context.Context, request *GetTasksRequest) (*GetTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -841,6 +901,21 @@ func (mr *MockTaskManagerMockRecorder) ListTaskQueue(ctx, request interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).ListTaskQueue), ctx, request)
 }
 
+// ListTaskQueueUserDataEntries mocks base method.
+func (m *MockTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTaskQueueUserDataEntries", ctx, request)
+	ret0, _ := ret[0].(*ListTaskQueueUserDataEntriesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTaskQueueUserDataEntries indicates an expected call of ListTaskQueueUserDataEntries.
+func (mr *MockTaskManagerMockRecorder) ListTaskQueueUserDataEntries(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueueUserDataEntries", reflect.TypeOf((*MockTaskManager)(nil).ListTaskQueueUserDataEntries), ctx, request)
+}
+
 // UpdateTaskQueue mocks base method.
 func (m *MockTaskManager) UpdateTaskQueue(ctx context.Context, request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -854,6 +929,20 @@ func (m *MockTaskManager) UpdateTaskQueue(ctx context.Context, request *UpdateTa
 func (mr *MockTaskManagerMockRecorder) UpdateTaskQueue(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).UpdateTaskQueue), ctx, request)
+}
+
+// UpdateTaskQueueUserData mocks base method.
+func (m *MockTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTaskQueueUserData", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateTaskQueueUserData indicates an expected call of UpdateTaskQueueUserData.
+func (mr *MockTaskManagerMockRecorder) UpdateTaskQueueUserData(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueUserData", reflect.TypeOf((*MockTaskManager)(nil).UpdateTaskQueueUserData), ctx, request)
 }
 
 // MockMetadataManager is a mock of MetadataManager interface.

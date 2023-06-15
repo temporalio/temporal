@@ -303,7 +303,7 @@ Loop:
 				Identity:                   p.Identity,
 				Commands:                   commands,
 				Messages:                   workerToServerMessages,
-				ReturnNewWorkflowTask:      forceCreateNewWorkflowTask,
+				ReturnNewWorkflowTask:      true,
 				ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
 				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
 			})
@@ -321,7 +321,7 @@ Loop:
 					WorkerTaskQueue:        p.StickyTaskQueue,
 					ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
 				},
-				ReturnNewWorkflowTask:      forceCreateNewWorkflowTask,
+				ReturnNewWorkflowTask:      true,
 				ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
 				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
 			},

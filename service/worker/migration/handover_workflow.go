@@ -25,7 +25,6 @@
 package migration
 
 import (
-	"errors"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -50,6 +49,9 @@ const (
 
 	minimumAllowedLaggingSeconds  = 5
 	minimumHandoverTimeoutSeconds = 30
+
+	defaultPageSizeForTaskQueueUserDataReplication = 20
+	defaultRPSForTaskQueueUserDataReplication      = 1.0
 )
 
 type (
@@ -66,13 +68,15 @@ type (
 	}
 
 	activities struct {
-		historyShardCount int32
-		executionManager  persistence.ExecutionManager
-		namespaceRegistry namespace.Registry
-		historyClient     historyservice.HistoryServiceClient
-		frontendClient    workflowservice.WorkflowServiceClient
-		logger            log.Logger
-		metricsHandler    metrics.Handler
+		historyShardCount         int32
+		executionManager          persistence.ExecutionManager
+		taskManager               persistence.TaskManager
+		namespaceRegistry         namespace.Registry
+		historyClient             historyservice.HistoryServiceClient
+		frontendClient            workflowservice.WorkflowServiceClient
+		logger                    log.Logger
+		metricsHandler            metrics.Handler
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 	}
 
 	replicationStatus struct {
@@ -215,10 +219,10 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 
 func validateAndSetNamespaceHandoverParams(params *NamespaceHandoverParams) error {
 	if len(params.Namespace) == 0 {
-		return errors.New("InvalidArgument: Namespace is required")
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
 	if len(params.RemoteCluster) == 0 {
-		return errors.New("InvalidArgument: RemoteCluster is required")
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: RemoteCluster is required", "InvalidArgument", nil)
 	}
 	if params.AllowedLaggingSeconds <= minimumAllowedLaggingSeconds {
 		params.AllowedLaggingSeconds = minimumAllowedLaggingSeconds

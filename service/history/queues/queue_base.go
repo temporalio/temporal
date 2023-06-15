@@ -144,7 +144,7 @@ func newQueueBase(
 		readerScopes = queueState.readerScopes
 		exclusiveReaderHighWatermark = queueState.exclusiveReaderHighWatermark
 	} else {
-		ackLevel := shard.GetQueueAckLevel(category)
+		ackLevel := tasks.NewKey(tasks.DefaultFireTime, 0)
 		if category.Type() == tasks.CategoryTypeImmediate {
 			// convert to exclusive ack level
 			ackLevel = ackLevel.Next()

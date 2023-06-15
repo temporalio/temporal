@@ -111,6 +111,15 @@ func QueueMetadataFromBlob(blob []byte, encoding string) (*persistencespb.QueueM
 	return result, decode(blob, encoding, result)
 }
 
+func QueueStateToBlob(info *persistencespb.QueueState) (commonpb.DataBlob, error) {
+	return proto3Encode(info)
+}
+
+func QueueStateFromBlob(blob []byte, encoding string) (*persistencespb.QueueState, error) {
+	result := &persistencespb.QueueState{}
+	return result, proto3Decode(blob, encoding, result)
+}
+
 func encode(
 	object proto.Message,
 	encoding enumspb.EncodingType,

@@ -37,7 +37,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
 )
 
 type (
@@ -84,6 +87,20 @@ func (s *integrationSuite) sendSignal(namespace string, execution *commonpb.Work
 	return err
 }
 
+func (s *integrationSuite) closeShard(wid string) {
+	s.T().Helper()
+
+	resp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: s.namespace,
+	})
+	s.NoError(err)
+
+	_, err = s.adminClient.CloseShard(NewContext(), &adminservice.CloseShardRequest{
+		ShardId: common.WorkflowIDToHistoryShard(resp.NamespaceInfo.Id, wid, s.testClusterConfig.HistoryConfig.NumHistoryShards),
+	})
+	s.NoError(err)
+}
+
 func unmarshalAny[T proto.Message](s *integrationSuite, a *types.Any) T {
 	s.T().Helper()
 	pb := new(T)
@@ -100,4 +117,12 @@ func marshalAny(s *integrationSuite, pb proto.Message) *types.Any {
 	a, err := types.MarshalAny(pb)
 	s.NoError(err)
 	return a
+}
+
+func decodeString(s *integrationSuite, pls *commonpb.Payloads) string {
+	s.T().Helper()
+	var str string
+	err := payloads.Decode(pls, &str)
+	s.NoError(err)
+	return str
 }

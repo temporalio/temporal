@@ -143,7 +143,7 @@ func NewNamespacePriorityScheduler(
 		if err != nil {
 			namespaceName = namespace.EmptyName
 		}
-		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[key.Priority], "")
+		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[key.Priority], 0, "")
 	}
 	taskChannelMetricsTagsFn := func(key TaskChannelKey) []metrics.Tag {
 		namespaceName, _ := namespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
@@ -211,7 +211,7 @@ func NewPriorityScheduler(
 		return weight[key.Priority]
 	}
 	channelQuotaRequestFn := func(key TaskChannelKey) quotas.Request {
-		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityName[key.Priority], "")
+		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityName[key.Priority], 0, "")
 	}
 	taskChannelMetricsTagsFn := func(key TaskChannelKey) []metrics.Tag {
 		return []metrics.Tag{

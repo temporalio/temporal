@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -52,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
@@ -197,28 +197,29 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
+	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), ai.UseCompatibleVersion)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushActivity(ctx, task, &timeout)
+	return t.pushActivity(ctx, task, &timeout, directive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	ctx context.Context,
-	task *tasks.WorkflowTask,
+	transferTask *tasks.WorkflowTask,
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, transferTask)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, transferTask, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -226,54 +227,40 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		return nil
 	}
 
-	workflowTask := mutableState.GetWorkflowTaskByID(task.ScheduledEventID)
+	workflowTask := mutableState.GetWorkflowTaskByID(transferTask.ScheduledEventID)
 	if workflowTask == nil {
 		return nil
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
+	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, transferTask.Version, transferTask)
 	if err != nil {
 		return err
 	}
 
-	executionInfo := mutableState.GetExecutionInfo()
+	// Task queue from transfer task (not current one from mutable state) must be used here.
+	// If current task queue becomes sticky since this transfer task was created,
+	// it can't be used here, because timeout timer was not created for it,
+	// because it used to be non-sticky when this transfer task was created .
+	taskQueue, scheduleToStartTimeout := mutableState.TaskQueueScheduleToStartTimeout(transferTask.TaskQueue)
 
-	// NOTE: previously this section check whether mutable state has enabled
-	// sticky workflowTask, if so convert the workflowTask to a sticky workflowTask.
-	// that logic has a bug which timer task for that sticky workflowTask is not generated
-	// the correct logic should check whether the workflow task is a sticky workflowTask
-	// task or not.
-	var taskQueue *taskqueuepb.TaskQueue
-	taskScheduleToStartTimeoutSeconds := int64(0)
-	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
-		// this workflowTask is an sticky workflowTask
-		// there shall already be an timer set
-		taskQueue = &taskqueuepb.TaskQueue{
-			Name: task.TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
-		}
-		taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
-	} else {
-		taskQueue = &taskqueuepb.TaskQueue{
-			Name: task.TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		}
-		workflowRunTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
-		taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
-	}
+	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
 
-	originalTaskQueue := mutableState.GetExecutionInfo().TaskQueue
-	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state and
-	// the rest of logic is making RPC call, which takes time.
+	directive := common.MakeVersionDirectiveForWorkflowTask(
+		mutableState.GetWorkerVersionStamp(),
+		mutableState.GetLastWorkflowTaskStartedEventID(),
+	)
+
+	// NOTE: Do not access mutableState after this lock is released.
+	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
+	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
 	release(nil)
 
-	err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
+	err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, directive)
 
 	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
-		// sticky worker is unavailable, switch to original task queue
+		// sticky worker is unavailable, switch to original normal task queue
 		taskQueue = &taskqueuepb.TaskQueue{
-			// do not use task.TaskQueue which is sticky, use original task queue from mutable state
-			Name: originalTaskQueue,
+			// do not use task.TaskQueue which is sticky, use original normal task queue from mutable state
+			Name: normalTaskQueueName,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 
@@ -282,7 +269,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
 		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
 		// will re-create a new non-sticky task and reset sticky.
-		err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
+		err = t.pushWorkflowTask(ctx, transferTask, taskQueue, scheduleToStartTimeout, directive)
 	}
 	return err
 }
@@ -828,6 +815,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName = namespaceEntry.Name()
 	}
 
+	// copy version stamp from parent to child if:
+	// - command says to use compatible version
+	// - parent is using versioning
+	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	if attributes.UseCompatibleVersion {
+		sourceVersionStamp = common.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
+	}
+
 	childRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
@@ -835,6 +830,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName,
 		childInfo.CreateRequestId,
 		attributes,
+		sourceVersionStamp,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -997,7 +993,8 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 
 	// NOTE: reset need to go through history which may take a longer time,
 	// so it's using its own timeout
-	if err := t.resetWorkflow(
+	return t.resetWorkflow(
+		ctx,
 		task,
 		reason,
 		resetPoint,
@@ -1005,10 +1002,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		currentContext,
 		currentMutableState,
 		logger,
-	); err != nil {
-		return err
-	}
-	return nil
+	)
 }
 
 func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
@@ -1100,7 +1094,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	targetWorkflowID string,
 	targetRunID string,
 ) error {
-	err := t.updateWorkflowExecution(ctx, context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow execution already completed.")
@@ -1120,8 +1114,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 			)
 			return err
 		})
-
-	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
@@ -1134,7 +1126,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	targetRunID string,
 	control string,
 ) error {
-	err := t.updateWorkflowExecution(ctx, context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow execution already completed.")
@@ -1155,7 +1147,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 			)
 			return err
 		})
-	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
@@ -1168,7 +1159,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	targetRunID string,
 	failedCause enumspb.CancelExternalWorkflowExecutionFailedCause,
 ) error {
-	err := t.updateWorkflowExecution(ctx, context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow execution already completed.")
@@ -1189,8 +1180,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 			)
 			return err
 		})
-
-	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
@@ -1204,7 +1193,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 	control string,
 	failedCause enumspb.SignalExternalWorkflowExecutionFailedCause,
 ) error {
-	err := t.updateWorkflowExecution(ctx, context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow is not running.")
@@ -1226,8 +1215,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 			)
 			return err
 		})
-
-	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
@@ -1329,6 +1316,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	targetNamespace namespace.Name,
 	childRequestID string,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
+	sourceVersionStamp *commonpb.WorkerVersionStamp,
 ) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1365,6 +1353,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		t.shard.GetTimeSource().Now(),
 	)
 
+	request.SourceVersionStamp = sourceVersionStamp
+
 	response, err := t.historyClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
 		return "", nil, err
@@ -1373,6 +1363,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 }
 
 func (t *transferQueueActiveTaskExecutor) resetWorkflow(
+	ctx context.Context,
 	task *tasks.ResetWorkflowTask,
 	reason string,
 	resetPoint *workflowpb.ResetPointInfo,
@@ -1381,8 +1372,10 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	currentMutableState workflow.MutableState,
 	logger log.Logger,
 ) error {
-	var err error
-	ctx, cancel := context.WithTimeout(context.Background(), taskHistoryOpTimeout)
+	// the actual reset operation needs to read history and may not be able to completed within
+	// the original context timeout.
+	// create a new context with a longer timeout, but retain all existing context values.
+	resetWorkflowCtx, cancel := rpc.ResetContextTimeout(ctx, taskHistoryOpTimeout)
 	defer cancel()
 
 	namespaceID := namespace.ID(task.NamespaceID)
@@ -1404,7 +1397,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	baseNextEventID := baseMutableState.GetNextEventID()
 
 	err = t.workflowResetter.ResetWorkflow(
-		ctx,
+		resetWorkflowCtx,
 		namespaceID,
 		workflowID,
 		baseRunID,
@@ -1415,7 +1408,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		resetRunID,
 		uuid.New(),
 		ndc.NewWorkflow(
-			ctx,
+			resetWorkflowCtx,
 			t.registry,
 			t.shard.GetClusterMetadata(),
 			currentContext,

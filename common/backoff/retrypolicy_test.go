@@ -25,6 +25,8 @@
 package backoff
 
 import (
+	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -42,6 +44,47 @@ type (
 		currentTime time.Time
 	}
 )
+
+// ExampleExponentialRetryPolicy_WithMaximumInterval demonstrates example delays with a backoff coefficient of 2 and a
+// maximum interval of 10 seconds. Keep in mind that there is a random jitter in these times, so they are not exactly
+// what you'd expect.
+func ExampleExponentialRetryPolicy_WithMaximumInterval() {
+	rand.Seed(42)
+	p1 := NewExponentialRetryPolicy(time.Second).
+		WithBackoffCoefficient(2.0).
+		WithMaximumInterval(0).
+		WithMaximumAttempts(0).
+		WithExpirationInterval(0)
+	p1copy := *p1
+	p2 := &p1copy
+	p2 = p2.WithMaximumInterval(time.Second * 10)
+	var e1, e2 time.Duration
+	fmt.Printf("%-10s| %15s| %15s\n", "Attempt", "Delay", "Capped Delay")
+	for attempts := 0; attempts < 10; attempts++ {
+		d1 := p1.ComputeNextDelay(e1, attempts)
+		d2 := p2.ComputeNextDelay(e2, attempts)
+		e1 += d1
+		e2 += d2
+		_, _ = fmt.Printf(
+			"%-10d| %14.1fs| %14.1fs\n",
+			attempts,
+			d1.Round(100*time.Millisecond).Seconds(),
+			d2.Round(100*time.Millisecond).Seconds(),
+		)
+	}
+	// Output:
+	// Attempt   |           Delay|    Capped Delay
+	// 0         |            0.0s|            0.0s
+	// 1         |            0.8s|            0.9s
+	// 2         |            1.7s|            1.6s
+	// 3         |            3.3s|            3.2s
+	// 4         |            7.2s|            7.2s
+	// 5         |           15.1s|            9.6s
+	// 6         |           26.2s|            8.8s
+	// 7         |           62.8s|            9.4s
+	// 8         |          112.8s|            9.5s
+	// 9         |          219.7s|            8.3s
+}
 
 func TestRetryPolicySuite(t *testing.T) {
 	suite.Run(t, new(RetryPolicySuite))
@@ -162,8 +205,7 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 		10000 * time.Millisecond,
 		10000 * time.Millisecond,
 		10000 * time.Millisecond,
-		6000 * time.Millisecond,
-		1300 * time.Millisecond,
+		7250 * time.Millisecond,
 		done,
 	}
 
@@ -172,9 +214,9 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 		if expected == done {
 			s.Equal(done, next, "backoff not done yet!!!")
 		} else {
-			min, _ := getNextBackoffRange(expected)
-			s.True(next >= min, "NextBackoff too low: actual: %v, expected: %v", next, expected)
-			// s.True(next < max, "NextBackoff too high: actual: %v, expected: %v", next, expected)
+			min, max := getNextBackoffRange(expected)
+			s.True(next >= min, "NextBackoff too low: actual: %v, min: %v", next, min)
+			s.True(next < max, "NextBackoff too high: actual: %v, max: %v", next, max)
 			clock.moveClock(expected)
 		}
 	}
@@ -188,7 +230,6 @@ func (s *RetryPolicySuite) TestNoMaxAttempts() {
 	r, clock := createRetrier(policy)
 	for i := 0; i < 100; i++ {
 		next := r.NextBackOff()
-		//print("Iter: ", i, ", Next Backoff: ", next.String(), "\n")
 		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
 		clock.moveClock(next)
 	}
@@ -200,7 +241,6 @@ func (s *RetryPolicySuite) TestUnbounded() {
 	r, clock := createRetrier(policy)
 	for i := 0; i < 100; i++ {
 		next := r.NextBackOff()
-		//print("Iter: ", i, ", Next Backoff: ", next.String(), "\n")
 		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
 		clock.moveClock(next)
 	}

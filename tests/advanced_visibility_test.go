@@ -47,9 +47,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -57,8 +62,11 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/worker/scanner/build_ids"
 )
 
 const (
@@ -76,10 +84,22 @@ type advancedVisibilitySuite struct {
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
+	sdkClient              sdkclient.Client
+	// client for the system namespace
+	sysSDKClient sdkclient.Client
 }
 
 // This cluster use customized threshold for history config
 func (s *advancedVisibilitySuite) SetupSuite() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.VisibilityDisableOrderByClause:             false,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
+		dynamicconfig.ReachabilityTaskQueueScanLimit:             2,
+		dynamicconfig.ReachabilityQueryBuildIdLimit:              1,
+		dynamicconfig.BuildIdScavengerEnabled:                    true,
+	}
+
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 		s.setupSuite("testdata/integration_test_cluster.yaml")
@@ -94,9 +114,31 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 		// Probably can be removed and replaced with assert on items count in response.
 		s.updateMaxResultWindow()
 	}
+
+	clientAddr := "127.0.0.1:7134"
+	if TestFlags.FrontendAddr != "" {
+		clientAddr = TestFlags.FrontendAddr
+	}
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  clientAddr,
+		Namespace: s.namespace,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
+	s.sdkClient = sdkClient
+	sysSDKClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  clientAddr,
+		Namespace: primitives.SystemLocalNamespace,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
+	s.sysSDKClient = sysSDKClient
 }
 
 func (s *advancedVisibilitySuite) TearDownSuite() {
+	s.sdkClient.Close()
 	s.tearDownSuite()
 }
 
@@ -293,7 +335,8 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	}
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
-	s.Equal(len(searchAttributes.GetIndexedFields()), len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
+	// Add one for BuildIds={unversioned}
+	s.Equal(len(searchAttributes.GetIndexedFields())+1, len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
 	for attrName, expectedPayload := range searchAttributes.GetIndexedFields() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
 		s.True(ok)
@@ -815,19 +858,19 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrderBy() {
 			s.NoError(err)
 			switch searchAttrKey {
 			case "CustomIntField":
-				v1, _ := prevVal.(json.Number).Int64()
-				v2, _ := currVal.(json.Number).Int64()
-				s.Greater(v1, v2)
+				val1, _ := prevVal.(json.Number).Int64()
+				val2, _ := currVal.(json.Number).Int64()
+				s.Greater(val1, val2)
 			case "CustomDoubleField":
-				v1, _ := prevVal.(json.Number).Float64()
-				v2, _ := currVal.(json.Number).Float64()
-				s.Greater(v1, v2)
+				val1, _ := prevVal.(json.Number).Float64()
+				val2, _ := currVal.(json.Number).Float64()
+				s.Greater(val1, val2)
 			case "CustomKeywordField":
 				s.Greater(prevVal.(string), currVal.(string))
 			case "CustomDatetimeField":
-				v1, _ := time.Parse(time.RFC3339Nano, prevVal.(string))
-				v2, _ := time.Parse(time.RFC3339Nano, currVal.(string))
-				s.Greater(v1, v2)
+				val1, _ := time.Parse(time.RFC3339Nano, prevVal.(string))
+				val2, _ := time.Parse(time.RFC3339Nano, currVal.(string))
+				s.Greater(val1, val2)
 			}
 			prevVal = currVal
 		}
@@ -1387,6 +1430,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		map[string]interface{}{
 			"CustomDoubleField":             22.0878,
 			searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+			searchattribute.BuildIds:        []string{worker_versioning.UnversionedSearchAttribute},
 		},
 		nil,
 	)
@@ -1674,7 +1718,7 @@ func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 			s.Nil(resp.NextPageToken)
 			execution := resp.GetExecutions()[0]
 			retrievedSearchAttr := execution.SearchAttributes
-			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 4 {
+			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 5 {
 				fields := retrievedSearchAttr.GetIndexedFields()
 				searchValBytes := fields[s.testSearchAttributeKey]
 				var searchVal string
@@ -1699,6 +1743,12 @@ func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 				err = payload.Decode(binaryChecksumsBytes, &binaryChecksums)
 				s.NoError(err)
 				s.Equal([]string{"binary-v1", "binary-v2"}, binaryChecksums)
+
+				buildIdsBytes := fields[searchattribute.BuildIds]
+				var buildIds []string
+				err = payload.Decode(buildIdsBytes, &buildIds)
+				s.NoError(err)
+				s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
 
 				verified = true
 				break
@@ -1814,6 +1864,771 @@ func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
 
 	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
+}
+
+func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWorker() {
+	ctx := NewContext()
+	id := s.randomizeStr(s.T().Name())
+	workflowType := "integration-build-id"
+	taskQueue := s.randomizeStr(s.T().Name())
+
+	request := s.createStartWorkflowExecutionRequest(id, workflowType, taskQueue)
+	_, err := s.engine.StartWorkflowExecution(ctx, request)
+	s.NoError(err)
+
+	pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{Namespace: s.namespace, TaskQueue: request.TaskQueue, Identity: id}
+	task, err := s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
+	s.NoError(err)
+	s.Greater(len(task.TaskToken), 0)
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.namespace,
+		Identity:           id,
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.0"},
+		TaskToken:          task.TaskToken,
+	})
+	s.NoError(err)
+
+	buildIDs := s.getBuildIds(ctx, task.WorkflowExecution)
+	s.Equal([]string{
+		worker_versioning.UnversionedSearchAttribute,
+		worker_versioning.UnversionedBuildIdSearchAttribute("1.0"),
+	}, buildIDs)
+
+	_, err = s.engine.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: s.namespace, WorkflowExecution: task.WorkflowExecution, SignalName: "continue"})
+	s.NoError(err)
+
+	task, err = s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
+	s.NoError(err)
+	s.Greater(len(task.TaskToken), 0)
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.namespace,
+		Identity:           id,
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.1"},
+		TaskToken:          task.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+				ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType: task.WorkflowType,
+					TaskQueue:    request.TaskQueue,
+				},
+			},
+		}},
+	})
+	s.NoError(err)
+
+	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
+	s.Equal([]string{
+		worker_versioning.UnversionedSearchAttribute,
+		worker_versioning.UnversionedBuildIdSearchAttribute("1.0"),
+		worker_versioning.UnversionedBuildIdSearchAttribute("1.1"),
+	}, buildIDs)
+
+	task, err = s.engine.PollWorkflowTaskQueue(ctx, pollRequest)
+	s.NoError(err)
+	s.Greater(len(task.TaskToken), 0)
+
+	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
+	s.Equal([]string{}, buildIDs)
+
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.namespace,
+		Identity:           id,
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.2"},
+		TaskToken:          task.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+			},
+		}},
+	})
+	s.NoError(err)
+
+	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
+	s.Equal([]string{worker_versioning.UnversionedSearchAttribute, worker_versioning.UnversionedBuildIdSearchAttribute("1.2")}, buildIDs)
+
+	for minor := 1; minor <= 2; minor++ {
+		s.Eventually(func() bool {
+			response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.namespace,
+				Query:     fmt.Sprintf("BuildIds = '%s'", worker_versioning.UnversionedBuildIdSearchAttribute(fmt.Sprintf("1.%d", minor))),
+				PageSize:  defaultPageSize,
+			})
+			if err != nil {
+				return false
+			}
+			if len(response.Executions) == 0 {
+				return false
+			}
+			s.Equal(id, response.Executions[0].Execution.WorkflowId)
+			return true
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+}
+
+func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorker() {
+	// Use only one partition to avoid having to wait for user data propagation later
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	ctx := NewContext()
+	id := s.randomizeStr(s.T().Name())
+	childId1 := "child1-" + id
+	childId2 := "child2-" + id
+	workflowType := "integration-build-id"
+	taskQueue := s.randomizeStr(s.T().Name())
+	v1 := s.T().Name() + "-v1"
+	v11 := s.T().Name() + "-v11"
+
+	startedCh := make(chan string, 1)
+
+	wf := func(ctx workflow.Context) error {
+		info := workflow.GetInfo(ctx)
+		if info.ContinuedExecutionRunID == "" {
+			if !workflow.IsReplaying(ctx) {
+				startedCh <- info.WorkflowExecution.RunID
+			}
+			workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
+
+			// Start compatible child
+			c1Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId1, TaskQueue: taskQueue, VersioningIntent: temporal.VersioningIntentCompatible})
+			if err := workflow.ExecuteChildWorkflow(c1Ctx, "doesnt-exist").GetChildWorkflowExecution().Get(ctx, nil); err != nil {
+				return err
+			}
+			// Start default child
+			c2Ctx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{WorkflowID: childId2, TaskQueue: taskQueue, VersioningIntent: temporal.VersioningIntentDefault})
+			if err := workflow.ExecuteChildWorkflow(c2Ctx, "doesnt-exist").GetChildWorkflowExecution().Get(ctx, nil); err != nil {
+				return err
+			}
+			// First continue-as-new to compatible set
+			return workflow.NewContinueAsNewError(ctx, workflowType, 1)
+		}
+		if !workflow.IsReplaying(ctx) {
+			startedCh <- info.WorkflowExecution.RunID
+		}
+		workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
+		useDefault := workflow.WithWorkflowVersioningIntent(ctx, temporal.VersioningIntentDefault)
+		// Finally continue-as-new to latest
+		return workflow.NewContinueAsNewError(useDefault, "doesnt-exist")
+	}
+
+	// Declare v1
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v1,
+		},
+	})
+	s.Require().NoError(err)
+
+	// Start first worker
+	w1 := worker.New(s.sdkClient, taskQueue, worker.Options{
+		BuildID:                      v1,
+		UseBuildIDForVersioning:      true,
+		StickyScheduleToStartTimeout: time.Second,
+	})
+	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+	s.Require().NoError(w1.Start())
+
+	// Start the workflow and wait for first WFT
+	startOptions := sdkclient.StartWorkflowOptions{
+		ID:        id,
+		TaskQueue: taskQueue,
+	}
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, workflowType)
+	s.NoError(err)
+
+	<-startedCh
+	w1.Stop()
+
+	// Verify first WFT was processed by our v1 worker
+	s.Eventually(func() bool {
+		buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id})
+		if len(buildIDs) == 0 {
+			return false
+		}
+		s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
+		return true
+	}, time.Second*15, time.Millisecond*100)
+
+	// Update sets with v1.1
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
+				ExistingCompatibleBuildId: v1,
+				NewBuildId:                v11,
+			},
+		},
+	})
+	s.Require().NoError(err)
+
+	// Start v1.1 worker
+	w11 := worker.New(s.sdkClient, taskQueue, worker.Options{
+		BuildID:                 v11,
+		UseBuildIDForVersioning: true,
+	})
+	w11.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+	s.Require().NoError(w11.Start())
+
+	defer w11.Stop()
+
+	// Resume workflow execution and wait for first task after CAN
+	err = s.sdkClient.SignalWorkflow(ctx, id, "", "continue", nil)
+	s.Require().NoError(err)
+
+	err = run.GetWithOptions(ctx, nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
+	var canError *workflow.ContinueAsNewError
+	s.Require().ErrorAs(err, &canError)
+
+	secondRunId := <-startedCh
+
+	// Verify both workers appear in the search attribute for first run in chain
+	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id, RunId: run.GetRunID()})
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1), worker_versioning.VersionedBuildIdSearchAttribute(v11)}, buildIDs)
+
+	// Check search attribute is propagated after first continue as new
+	buildIDs = s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id})
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v11)}, buildIDs)
+
+	// Resume and wait for the workflow CAN for the last time
+	err = s.sdkClient.SignalWorkflow(ctx, id, "", "continue", nil)
+	s.Require().NoError(err)
+
+	run = s.sdkClient.GetWorkflow(ctx, id, secondRunId)
+	err = run.GetWithOptions(ctx, nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
+	s.Require().ErrorAs(err, &canError)
+
+	// Check search attribute is not propagated after second continue as new
+	buildIDs = s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id})
+	s.Equal([]string{}, buildIDs)
+
+	// Check search attribute is propagated to first child
+	buildIDs = s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: childId1})
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v11)}, buildIDs)
+
+	// Check search attribute is not propagated to second child
+	buildIDs = s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: childId2})
+	s.Equal([]string{}, buildIDs)
+
+	// We should have 3 runs with the v1.1 search attribute: First and second run in chain, and single child
+	s.Eventually(func() bool {
+		response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(v11)),
+			PageSize:  defaultPageSize,
+		})
+		if err != nil {
+			return false
+		}
+		if len(response.Executions) != 3 {
+			return false
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
+	// Use only one partition to avoid having to wait for user data propagation later
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	ctx := NewContext()
+	id := s.randomizeStr(s.T().Name())
+	workflowType := "integration-build-id"
+	taskQueue := s.randomizeStr(s.T().Name())
+	v1 := s.T().Name() + "-v1"
+
+	startedCh := make(chan struct{})
+	wf := func(ctx workflow.Context) error {
+		// Continue-as-new once
+		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+			return workflow.NewContinueAsNewError(ctx, workflowType)
+		}
+		if err := workflow.Sleep(ctx, time.Millisecond); err != nil {
+			return err
+		}
+		startedCh <- struct{}{}
+		return nil
+	}
+
+	// Declare v1
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v1,
+		},
+	})
+	s.Require().NoError(err)
+
+	// Start a worker
+	w := worker.New(s.sdkClient, taskQueue, worker.Options{
+		BuildID:                      v1,
+		UseBuildIDForVersioning:      true,
+		StickyScheduleToStartTimeout: time.Second,
+	})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+	s.Require().NoError(w.Start())
+	defer w.Stop()
+
+	// Start the workflow and wait for CAN
+	startOptions := sdkclient.StartWorkflowOptions{
+		ID:        id,
+		TaskQueue: taskQueue,
+	}
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, workflowType)
+	s.Require().NoError(err)
+
+	err = run.GetWithOptions(ctx, nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
+	var canError *workflow.ContinueAsNewError
+	s.Require().ErrorAs(err, &canError)
+
+	// Confirm first WFT is complete before resetting
+	<-startedCh
+
+	resetResult, err := s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.namespace,
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: id},
+		WorkflowTaskFinishEventId: 3,
+	})
+	s.Require().NoError(err)
+	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id, RunId: resetResult.RunId})
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
+
+	s.Eventually(func() bool {
+		response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     fmt.Sprintf("BuildIds = %q AND RunId = %q", worker_versioning.VersionedBuildIdSearchAttribute(v1), resetResult.RunId),
+			PageSize:  defaultPageSize,
+		})
+		if err != nil {
+			return false
+		}
+		if len(response.Executions) != 1 {
+			return false
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
+	// Use only one partition to avoid having to wait for user data propagation later
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	ctx := NewContext()
+	id := s.randomizeStr(s.T().Name())
+	workflowType := "integration-build-id"
+	taskQueue := s.randomizeStr(s.T().Name())
+	v1 := s.T().Name() + "-v1"
+
+	wf := func(ctx workflow.Context) error {
+		return fmt.Errorf("fail")
+	}
+
+	// Declare v1
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v1,
+		},
+	})
+	s.Require().NoError(err)
+
+	// Start a worker
+	w := worker.New(s.sdkClient, taskQueue, worker.Options{
+		BuildID:                      v1,
+		UseBuildIDForVersioning:      true,
+		StickyScheduleToStartTimeout: time.Second,
+	})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+	s.Require().NoError(w.Start())
+	defer w.Stop()
+
+	// Start the workflow and wait for CAN
+	startOptions := sdkclient.StartWorkflowOptions{
+		ID:        id,
+		TaskQueue: taskQueue,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Millisecond,
+			MaximumAttempts: 2,
+		},
+	}
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, workflowType)
+	s.Require().NoError(err)
+	s.Require().Error(run.Get(ctx, nil))
+
+	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id})
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
+
+	s.Eventually(func() bool {
+		response, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(v1)),
+			PageSize:  defaultPageSize,
+		})
+		if err != nil {
+			return false
+		}
+		// Both runs should be associated with this build id
+		if len(response.Executions) != 2 {
+			return false
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
+	ctx := NewContext()
+	tq1 := s.T().Name()
+	tq2 := s.T().Name() + "-2"
+	tq3 := s.T().Name() + "-3"
+	v0 := s.T().Name() + "-v0"
+	v01 := s.T().Name() + "-v0.1"
+	v1 := s.T().Name() + "-v1"
+	var err error
+
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq1,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v0,
+		},
+	})
+	s.Require().NoError(err)
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq1,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
+			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
+				ExistingCompatibleBuildId: v0,
+				NewBuildId:                v01,
+			},
+		},
+	})
+	s.Require().NoError(err)
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq2,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v0,
+		},
+	})
+	s.Require().NoError(err)
+
+	// Map v0 to a third queue to test limit enforcement
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq3,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v0,
+		},
+	})
+	s.Require().NoError(err)
+
+	var reachabilityResponse *workflowservice.GetWorkerTaskReachabilityResponse
+
+	reachabilityResponse, err = s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace:    s.namespace,
+		BuildIds:     []string{v0},
+		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+		BuildId: v0,
+		TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{
+			{TaskQueue: tq1, Reachability: []enumspb.TaskReachability(nil)},
+			{TaskQueue: tq2, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_NEW_WORKFLOWS}},
+			{TaskQueue: tq3, Reachability: []enumspb.TaskReachability{enumspb.TASK_REACHABILITY_UNSPECIFIED}},
+		},
+	}}, reachabilityResponse.BuildIdReachability)
+
+	// Start a workflow on tq1 and verify it affects the reachability of v0.1
+	_, err = s.engine.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    uuid.New(),
+		Namespace:    s.namespace,
+		WorkflowId:   s.randomizeStr(s.T().Name()),
+		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq1},
+	})
+	s.Require().NoError(err)
+
+	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
+	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_OPEN_WORKFLOWS)
+
+	// Complete the workflow and verify it affects reachability of v0.1
+	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:                 s.namespace,
+		TaskQueue:                 &taskqueuepb.TaskQueue{Name: tq1},
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{BuildId: v01, UseVersioning: true},
+	})
+	s.Require().NoError(err)
+	s.Require().NotEmpty(task.GetTaskToken())
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.namespace,
+		TaskToken:          task.TaskToken,
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: v01, UseVersioning: true},
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+		}},
+	})
+	s.Require().NoError(err)
+
+	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
+	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
+
+	// Make v1 default for queue 1
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq1,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v1,
+		},
+	})
+	s.Require().NoError(err)
+
+	// Verify new workflows aren't reachable
+	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
+	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
+
+}
+
+func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInNamespace() {
+	ctx := NewContext()
+	buildId := s.T().Name() + "v0"
+
+	reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace:    s.namespace,
+		BuildIds:     []string{buildId},
+		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+		BuildId:               buildId,
+		TaskQueueReachability: []*taskqueuepb.TaskQueueReachability(nil),
+	}}, reachabilityResponse.BuildIdReachability)
+}
+
+func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTaskQueue() {
+	ctx := NewContext()
+	tq := s.T().Name()
+	v0 := s.T().Name() + "v0"
+	v01 := s.T().Name() + "v0.1"
+
+	checkReachability := func() {
+		reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+			Namespace:  s.namespace,
+			BuildIds:   []string{v01},
+			TaskQueues: []string{tq},
+		})
+		s.Require().NoError(err)
+		s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+			BuildId:               v01,
+			TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{{TaskQueue: tq, Reachability: []enumspb.TaskReachability(nil)}},
+		}}, reachabilityResponse.BuildIdReachability)
+	}
+
+	// Check once with an unversioned task queue
+	checkReachability()
+
+	// Same but with a versioned task queue
+	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v0,
+		},
+	})
+	s.Require().NoError(err)
+	checkReachability()
+}
+
+func (s *advancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds() {
+	ctx := NewContext()
+
+	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace: s.namespace,
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *advancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
+	ctx := NewContext()
+
+	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace: s.namespace,
+		BuildIds:  []string{"", "v1"},
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNamespace() {
+	ctx := NewContext()
+
+	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace: s.namespace,
+		BuildIds:  []string{""},
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQueue() {
+	ctx := NewContext()
+	tq := s.T().Name()
+
+	_, err := s.engine.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    uuid.New(),
+		Namespace:    s.namespace,
+		WorkflowId:   s.randomizeStr(s.T().Name()),
+		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq},
+	})
+	s.Require().NoError(err)
+
+	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
+	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_OPEN_WORKFLOWS)
+
+	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tq},
+	})
+	s.Require().NoError(err)
+	s.Require().NotEmpty(task.GetTaskToken())
+	_, err = s.engine.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.namespace,
+		TaskToken: task.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+		}},
+	})
+	s.Require().NoError(err)
+
+	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
+	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
+
+	// Make the task queue versioned and rerun our assertion
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: s.T().Name() + "-v0",
+		},
+	})
+	s.Require().NoError(err)
+	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
+	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
+}
+
+func (s *advancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
+	ctx := NewContext()
+	tq := s.T().Name()
+	v0 := s.T().Name() + "-v0"
+	v1 := s.T().Name() + "-v1"
+	var err error
+
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v0,
+		},
+	})
+	s.Require().NoError(err)
+	_, err = s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+			AddNewBuildIdInNewDefaultSet: v1,
+		},
+	})
+	s.Require().NoError(err)
+
+	run, err := s.sysSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        s.T().Name() + "-scavenger",
+		TaskQueue: build_ids.BuildIdScavengerTaskQueueName,
+	}, build_ids.BuildIdScavangerWorkflowName)
+	s.Require().NoError(err)
+	err = run.Get(ctx, nil)
+	s.Require().NoError(err)
+
+	compatibility, err := s.sdkClient.GetWorkerBuildIdCompatibility(ctx, &sdkclient.GetWorkerBuildIdCompatibilityOptions{
+		TaskQueue: tq,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(compatibility.Sets))
+	s.Require().Equal([]string{v1}, compatibility.Sets[0].BuildIDs)
+	// Make sure the build ID was removed from the build id->task queue mapping
+	res, err := s.sdkClient.WorkflowService().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace: s.namespace,
+		BuildIds:  []string{v0},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(0, len(res.BuildIdReachability[0].TaskQueueReachability))
+}
+
+func (s *advancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {
+	s.Require().Eventually(func() bool {
+		reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+			Namespace:    s.namespace,
+			BuildIds:     []string{buildId},
+			TaskQueues:   []string{taskQueue},
+			Reachability: expectedReachability[len(expectedReachability)-1],
+		})
+		s.Require().NoError(err)
+		if len(reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability) != len(expectedReachability) {
+			return false
+		}
+		actualReachability := reachabilityResponse.BuildIdReachability[0].TaskQueueReachability[0].Reachability
+		for i, expected := range expectedReachability {
+			actual := actualReachability[i]
+			if expected != actual {
+				return false
+			}
+		}
+		s.Require().Equal(
+			[]*taskqueuepb.BuildIdReachability{{
+				BuildId: buildId,
+				TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{
+					{TaskQueue: taskQueue, Reachability: expectedReachability},
+				},
+			}}, reachabilityResponse.BuildIdReachability)
+		return true
+	}, 15*time.Second, 100*time.Millisecond)
+}
+
+func (s *advancedVisibilitySuite) getBuildIds(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
+	description, err := s.engine.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: execution,
+	})
+	s.NoError(err)
+	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.BuildIds]
+	if !found {
+		return []string{}
+	}
+	var buildIDs []string
+	err = payload.Decode(attr, &buildIDs)
+	s.NoError(err)
+	return buildIDs
 }
 
 func (s *advancedVisibilitySuite) updateMaxResultWindow() {

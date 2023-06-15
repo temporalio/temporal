@@ -277,9 +277,10 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 
 	id := "test-query-failed-workflow-task"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 id,
-		TaskQueue:          s.taskQueue,
-		WorkflowRunTimeout: 20 * time.Second,
+		ID:                  id,
+		TaskQueue:           s.taskQueue,
+		WorkflowTaskTimeout: time.Second * 1, // use shorter wft timeout to make this test faster
+		WorkflowRunTimeout:  20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -291,9 +292,10 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
-	// wait for workflow to fail
-	time.Sleep(time.Second * 2)
+	// wait for workflow task to fail 3 times
+	time.Sleep(time.Second * 3) // 1st_attempt, 0_delay, 2nd_attempt, 1s_delay, 3rd_attempt
 	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
 	s.Error(err)
-	s.IsType(&serviceerror.FailedPrecondition{}, err)
+	s.IsType(&serviceerror.WorkflowNotReady{}, err)
+
 }

@@ -31,7 +31,6 @@ import "temporal/server/api/matchingservice/v1/request_response.proto";
 // commands.  For each ActivityTask, application is expected to execute the actual logic for that task and respond back
 // with completion or failure.
 service MatchingService {
-
     // PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
     // WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
     rpc PollWorkflowTaskQueue (PollWorkflowTaskQueueRequest) returns (PollWorkflowTaskQueueResponse) {
@@ -85,8 +84,27 @@ service MatchingService {
     //     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
     rpc UpdateWorkerBuildIdCompatibility (UpdateWorkerBuildIdCompatibilityRequest) returns (UpdateWorkerBuildIdCompatibilityResponse) {}
     rpc GetWorkerBuildIdCompatibility (GetWorkerBuildIdCompatibilityRequest) returns (GetWorkerBuildIdCompatibilityResponse) {}
-    // Tell a task queue that some metadata has changed.
-    rpc InvalidateTaskQueueMetadata (InvalidateTaskQueueMetadataRequest) returns (InvalidateTaskQueueMetadataResponse) {}
-    // Fetch some metadata about a task queue.
-    rpc GetTaskQueueMetadata (GetTaskQueueMetadataRequest) returns (GetTaskQueueMetadataResponse) {}
+    // Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
+    rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
+
+    // Apply a user data replication event.
+    rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns (ApplyTaskQueueUserDataReplicationEventResponse) {}
+
+    // Gets all task queue names mapped to a given build ID
+    rpc GetBuildIdTaskQueueMapping (GetBuildIdTaskQueueMappingRequest) returns (GetBuildIdTaskQueueMappingResponse) {}
+
+    // Force unloading a task queue. Used for testing only.
+    rpc ForceUnloadTaskQueue (ForceUnloadTaskQueueRequest) returns (ForceUnloadTaskQueueResponse) {}
+
+    // Update task queue user data in owning node for all updates in namespace.
+    // All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
+    // API.
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+    rpc UpdateTaskQueueUserData(UpdateTaskQueueUserDataRequest) returns (UpdateTaskQueueUserDataResponse) {}
+
+    // Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
+    rpc ReplicateTaskQueueUserData(ReplicateTaskQueueUserDataRequest) returns (ReplicateTaskQueueUserDataResponse) {}
 }

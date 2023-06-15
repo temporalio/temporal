@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -107,7 +106,7 @@ func (r *workflowRebuilderImpl) rebuild(
 	branchToken := currentVersionHistory.BranchToken
 	stateTransitionCount := mutableState.GetExecutionInfo().StateTransitionCount
 
-	rebuildMutableState, rebuildHistorySize, err := r.replayResetWorkflow(
+	rebuildMutableState, err := r.replayResetWorkflow(
 		ctx,
 		workflowKey,
 		branchToken,
@@ -118,7 +117,7 @@ func (r *workflowRebuilderImpl) rebuild(
 	if err != nil {
 		return err
 	}
-	return r.persistToDB(ctx, rebuildMutableState, rebuildHistorySize)
+	return r.persistToDB(ctx, rebuildMutableState)
 }
 
 func (r *workflowRebuilderImpl) replayResetWorkflow(
@@ -128,7 +127,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	stateTransitionCount int64,
 	dbRecordVersion int64,
 	requestID string,
-) (workflow.MutableState, int64, error) {
+) (workflow.MutableState, error) {
 
 	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).Rebuild(
 		ctx,
@@ -142,20 +141,20 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 		requestID,
 	)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	// note: this is an admin API, for operator to recover a corrupted mutable state, so state transition count
 	// should remain the same, the -= 1 exists here since later CloseTransactionAsSnapshot will += 1 to state transition count
 	rebuildMutableState.GetExecutionInfo().StateTransitionCount = stateTransitionCount - 1
+	rebuildMutableState.AddHistorySize(rebuildHistorySize)
 	rebuildMutableState.SetUpdateCondition(rebuildMutableState.GetNextEventID(), dbRecordVersion)
-	return rebuildMutableState, rebuildHistorySize, nil
+	return rebuildMutableState, nil
 }
 
 func (r *workflowRebuilderImpl) persistToDB(
 	ctx context.Context,
 	mutableState workflow.MutableState,
-	historySize int64,
 ) error {
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
 		workflow.TransactionPolicyPassive,
@@ -167,14 +166,8 @@ func (r *workflowRebuilderImpl) persistToDB(
 		return serviceerror.NewInternal("workflowRebuilder encountered new events when rebuilding mutable state")
 	}
 
-	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-		HistorySize: historySize,
-	}
-	if err := r.transaction.SetWorkflowExecution(
+	return r.transaction.SetWorkflowExecution(
 		ctx,
 		resetWorkflowSnapshot,
-	); err != nil {
-		return err
-	}
-	return nil
+	)
 }

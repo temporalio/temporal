@@ -33,7 +33,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/unit"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 
@@ -73,7 +72,7 @@ func NewOpenTelemetryProvider(
 		views = append(views, sdkmetrics.NewView(
 			sdkmetrics.Instrument{
 				Kind: sdkmetrics.InstrumentKindHistogram,
-				Unit: unit.Unit(u),
+				Unit: u,
 			},
 			sdkmetrics.Stream{
 				Aggregation: aggregation.ExplicitBucketHistogram{

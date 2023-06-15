@@ -320,7 +320,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	// and it might not have access to typeMap (i.e. type needs to be embedded).
 	searchattribute.ApplyTypeMap(req.ArchiveRequest.SearchAttributes, saTypeMap)
 
-	ctx, cancel := context.WithTimeout(context.Background(), m.config.TimerProcessorArchivalTimeLimit())
+	ctx, cancel := context.WithTimeout(ctx, m.config.TimerProcessorArchivalTimeLimit())
 	defer cancel()
 	resp, err := m.archivalClient.Archive(ctx, req)
 	if err != nil {

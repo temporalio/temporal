@@ -58,30 +58,39 @@ type Config struct {
 	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
+	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
 
 	VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HistoryMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RPS                                    dynamicconfig.IntPropertyFn
-	MaxNamespaceRPSPerInstance             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceBurstPerInstance           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceCountPerInstance           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceVisibilityRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceVisibilityBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceRPS                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	InternalFEGlobalNamespaceRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceVisibilityRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	InternalFEGlobalNamespaceVisibilityRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit                       dynamicconfig.IntPropertyFn
-	WorkerBuildIdSizeLimit                 dynamicconfig.IntPropertyFn
-	DisallowQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
-	ShutdownFailHealthCheckDuration        dynamicconfig.DurationPropertyFn
+	HistoryMaxPageSize                                           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RPS                                                          dynamicconfig.IntPropertyFn
+	NamespaceReplicationInducingAPIsRPS                          dynamicconfig.IntPropertyFn
+	MaxNamespaceRPSPerInstance                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceBurstPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceCountPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceVisibilityRPSPerInstance                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceVisibilityBurstPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS                                           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	InternalFEGlobalNamespaceRPS                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceVisibilityRPS                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	InternalFEGlobalNamespaceVisibilityRPS                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceNamespaceReplicationInducingAPIsRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit                                             dynamicconfig.IntPropertyFn
+	WorkerBuildIdSizeLimit                                       dynamicconfig.IntPropertyFn
+	ReachabilityTaskQueueScanLimit                               dynamicconfig.IntPropertyFn
+	ReachabilityQueryBuildIdLimit                                dynamicconfig.IntPropertyFn
+	DisallowQuery                                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                                        dynamicconfig.DurationPropertyFn
+	ShutdownFailHealthCheckDuration                              dynamicconfig.DurationPropertyFn
 
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -163,8 +172,11 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	EnableUpdateWorkflowExecution dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableWorkerVersioning        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableUpdateWorkflowExecution              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableUpdateWorkflowExecutionAsyncAccepted dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -179,27 +191,39 @@ func NewConfig(
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceNamespaceMaxQPS, 0),
+		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
+		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.FrontendPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
 
 		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, enableReadFromES),
 		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, enableReadFromES),
 		VisibilityMaxPageSize:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, enableReadFromES),
-		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, false),
+		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
+		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
 
-		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
-		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
-		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
-		MaxNamespaceBurstPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerInstance, 4800),
-		MaxNamespaceCountPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
-		MaxNamespaceVisibilityRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
-		MaxNamespaceVisibilityBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
+		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
+		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
+		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
+
+		MaxNamespaceRPSPerInstance:                                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
+		MaxNamespaceBurstPerInstance:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerInstance, 4800),
+		MaxNamespaceCountPerInstance:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
+		MaxNamespaceVisibilityRPSPerInstance:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
+		MaxNamespaceVisibilityBurstPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
+		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance, 1),
+		MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance, 10),
+
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		InternalFEGlobalNamespaceRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceRPS, 0),
 		GlobalNamespaceVisibilityRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceVisibilityRPS, 0),
 		InternalFEGlobalNamespaceVisibilityRPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceVisibilityRPS, 0),
+		// Overshoot since these low rate limits don't work well in an uncoordinated global limiter.
+		GlobalNamespaceNamespaceReplicationInducingAPIsRPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 10),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
-		WorkerBuildIdSizeLimit:                 dc.GetIntProperty(dynamicconfig.WorkerBuildIdSizeLimit, 1000),
+		WorkerBuildIdSizeLimit:                 dc.GetIntProperty(dynamicconfig.WorkerBuildIdSizeLimit, 255),
+		ReachabilityTaskQueueScanLimit:         dc.GetIntProperty(dynamicconfig.ReachabilityTaskQueueScanLimit, 20),
+		ReachabilityQueryBuildIdLimit:          dc.GetIntProperty(dynamicconfig.ReachabilityQueryBuildIdLimit, 5),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
 		DisableListVisibilityByFilter:          dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisableListVisibilityByFilter, false),
 		BlobSizeLimitError:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
@@ -238,8 +262,11 @@ func NewConfig(
 		MaxConcurrentBatchOperation:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
 		MaxExecutionCountBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace, 1000),
 
-		EnableUpdateWorkflowExecution: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
-		EnableWorkerVersioning:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableWorkerVersioning, false),
+		EnableUpdateWorkflowExecution:              dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
+		EnableUpdateWorkflowExecutionAsyncAccepted: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted, false),
+
+		EnableWorkerVersioningData:     dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
+		EnableWorkerVersioningWorkflow: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, false),
 	}
 }
 
@@ -356,10 +383,12 @@ func (s *Service) Stop() {
 	s.visibilityManager.Close()
 
 	logger.Info("ShutdownHandler: Draining traffic")
-	time.Sleep(requestDrainTime)
-
-	// TODO: Change this to GracefulStop when integration tests are refactored.
-	s.server.Stop()
+	t := time.AfterFunc(requestDrainTime, func() {
+		logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
+		s.server.Stop()
+	})
+	s.server.GracefulStop()
+	t.Stop()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(logger)

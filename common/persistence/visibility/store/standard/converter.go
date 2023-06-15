@@ -68,7 +68,7 @@ func newQueryConverter() *converter {
 }
 
 func (c *converter) GetFilter(whereOrderBy string) (*sqlplugin.VisibilitySelectFilter, error) {
-	_, _, err := c.ConvertWhereOrderBy(whereOrderBy)
+	_, err := c.ConvertWhereOrderBy(whereOrderBy)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors.
 		var converterErr *query.ConverterError

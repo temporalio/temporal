@@ -30,10 +30,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/blang/semver/v4"
 	"github.com/olivere/elastic/v7"
 	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -46,18 +44,7 @@ type (
 	clientImpl struct {
 		esClient *elastic.Client
 		url      url.URL
-
-		initIsPointInTimeSupported sync.Once
-		isPointInTimeSupported     bool
 	}
-)
-
-const (
-	pointInTimeSupportedFlavor = "default" // the other flavor is "oss".
-)
-
-var (
-	pointInTimeSupportedIn = semver.MustParseRange(">=7.10.0")
 )
 
 var _ Client = (*clientImpl)(nil)
@@ -73,6 +60,7 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
 		// Critical to ensure decode of int64 won't lose precision.
 		elastic.SetDecoder(&elastic.NumberDecoder{}),
+		elastic.SetGzip(true),
 	}
 
 	options = append(options, getLoggerOptions(cfg.LogLevel, logger)...)
@@ -142,60 +130,12 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 	}
 
 	searchService := c.esClient.Search().SearchSource(searchSource)
-	// When pit.id is specified index must not be used.
+	// If pit is specified, index must not be used.
 	if p.PointInTime == nil {
 		searchService.Index(p.Index)
 	}
 
 	return searchService.Do(ctx)
-}
-
-func (c *clientImpl) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
-	scrollService := elastic.NewScrollService(c.esClient).
-		Index(p.Index).
-		Query(p.Query).
-		SortBy(p.Sorter...).
-		KeepAlive(keepAliveInterval)
-
-	if p.PageSize != 0 {
-		scrollService.Size(p.PageSize)
-	}
-
-	searchResult, err := scrollService.Do(ctx)
-	return searchResult, err
-}
-
-func (c *clientImpl) Scroll(ctx context.Context, scrollID string, keepAliveInterval string) (*elastic.SearchResult, error) {
-	scrollService := elastic.NewScrollService(c.esClient)
-	result, err := scrollService.ScrollId(scrollID).KeepAlive(keepAliveInterval).Do(ctx)
-	return result, err
-}
-
-func (c *clientImpl) CloseScroll(ctx context.Context, id string) error {
-	err := elastic.NewScrollService(c.esClient).ScrollId(id).Clear(ctx)
-	return err
-}
-
-func (c *clientImpl) IsPointInTimeSupported(ctx context.Context) bool {
-	c.initIsPointInTimeSupported.Do(func() {
-		c.isPointInTimeSupported = c.queryPointInTimeSupported(ctx)
-	})
-	return c.isPointInTimeSupported
-}
-
-func (c *clientImpl) queryPointInTimeSupported(ctx context.Context) bool {
-	result, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
-	if err != nil {
-		return false
-	}
-	if result == nil || result.Version.BuildFlavor != pointInTimeSupportedFlavor {
-		return false
-	}
-	esVersion, err := semver.ParseTolerant(result.Version.Number)
-	if err != nil {
-		return false
-	}
-	return pointInTimeSupportedIn(esVersion)
 }
 
 func (c *clientImpl) OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error) {

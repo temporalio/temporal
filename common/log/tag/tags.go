@@ -307,6 +307,11 @@ func WorkflowTaskQueueName(taskQueueName string) ZapTag {
 
 // size limit
 
+// BlobSize returns tag for BlobSize
+func BlobSize(blobSize int64) ZapTag {
+	return NewInt64("blob-size", blobSize)
+}
+
 // WorkflowSize returns tag for WorkflowSize
 func WorkflowSize(workflowSize int64) ZapTag {
 	return NewInt64("wf-size", workflowSize)
@@ -325,6 +330,11 @@ func WorkflowHistorySize(historySize int) ZapTag {
 // WorkflowHistorySizeBytes returns tag for HistorySizeBytes
 func WorkflowHistorySizeBytes(historySizeBytes int) ZapTag {
 	return NewInt("wf-history-size-bytes", historySizeBytes)
+}
+
+// WorkflowMutableStateSize returns tag for MutableStateSize
+func WorkflowMutableStateSize(mutableStateSize int) ZapTag {
+	return NewInt("wf-mutable-state-size", mutableStateSize)
 }
 
 // WorkflowEventCount returns tag for EventCount
@@ -918,4 +928,8 @@ func DeletedExecutionsErrorCount(count int) ZapTag {
 
 func Endpoint(endpoint string) ZapTag {
 	return NewStringTag("endpoint", endpoint)
+}
+
+func BuildId(buildId string) ZapTag {
+	return NewStringTag("build-id", buildId)
 }

@@ -5,7 +5,7 @@ log:
 persistence:
   defaultStore: cass-default
   visibilityStore: es-visibility
-  numHistoryShards: 32
+  numHistoryShards: 16
   datastores:
     cass-default:
       cassandra:
@@ -92,7 +92,6 @@ clusterMetadata:
 
 dcRedirectionPolicy:
   policy: "selected-apis-forwarding"
-  toDC: ""
 
 archival:
   history:

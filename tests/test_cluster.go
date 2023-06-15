@@ -35,6 +35,7 @@ import (
 	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
@@ -399,7 +400,6 @@ func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
-	tc.SetFaultInjectionRate(0)
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
 	if tc.host.esConfig != nil {
@@ -433,6 +433,11 @@ func (tc *TestCluster) GetOperatorClient() operatorservice.OperatorServiceClient
 // GetHistoryClient returns a history client from the test cluster
 func (tc *TestCluster) GetHistoryClient() HistoryClient {
 	return tc.host.GetHistoryClient()
+}
+
+// GetMatchingClient returns a matching client from the test cluster
+func (tc *TestCluster) GetMatchingClient() matchingservice.MatchingServiceClient {
+	return tc.host.GetMatchingClient()
 }
 
 // GetExecutionManager returns an execution manager factory from the test cluster

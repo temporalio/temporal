@@ -43,9 +43,11 @@ type (
 	PersistenceRateLimitingParams struct {
 		fx.Out
 
-		PersistenceMaxQps          persistenceClient.PersistenceMaxQps
-		PersistenceNamespaceMaxQps persistenceClient.PersistenceNamespaceMaxQps
-		EnablePriorityRateLimiting persistenceClient.EnablePriorityRateLimiting
+		PersistenceMaxQps                  persistenceClient.PersistenceMaxQps
+		PersistenceNamespaceMaxQps         persistenceClient.PersistenceNamespaceMaxQps
+		PersistencePerShardNamespaceMaxQPS persistenceClient.PersistencePerShardNamespaceMaxQPS
+		EnablePriorityRateLimiting         persistenceClient.EnablePriorityRateLimiting
+		DynamicRateLimitingParams          persistenceClient.DynamicRateLimitingParams
 	}
 )
 
@@ -53,12 +55,16 @@ func NewPersistenceRateLimitingParams(
 	maxQps dynamicconfig.IntPropertyFn,
 	globalMaxQps dynamicconfig.IntPropertyFn,
 	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
+	dynamicRateLimitingParams dynamicconfig.MapPropertyFn,
 ) PersistenceRateLimitingParams {
 	return PersistenceRateLimitingParams{
-		PersistenceMaxQps:          PersistenceMaxQpsFn(maxQps, globalMaxQps),
-		PersistenceNamespaceMaxQps: persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
-		EnablePriorityRateLimiting: persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
+		PersistenceMaxQps:                  PersistenceMaxQpsFn(maxQps, globalMaxQps),
+		PersistenceNamespaceMaxQps:         persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
+		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
+		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
+		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(dynamicRateLimitingParams),
 	}
 }
 
@@ -102,9 +108,12 @@ func GrpcServerOptionsProvider(
 			grpc.UnaryServerInterceptor(tracingInterceptor),
 			metrics.NewServerMetricsContextInjectorInterceptor(),
 			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
-			telemetryInterceptor.Intercept,
+			telemetryInterceptor.UnaryIntercept,
 			rateLimitInterceptor.Intercept,
 			retryableInterceptor.Intercept,
+		),
+		grpc.ChainStreamInterceptor(
+			telemetryInterceptor.StreamIntercept,
 		),
 	)
 }

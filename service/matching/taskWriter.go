@@ -37,7 +37,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -107,7 +106,7 @@ func (w *taskWriter) Start() {
 		return
 	}
 
-	w.writeLoop = goro.NewHandle(w.initContext())
+	w.writeLoop = goro.NewHandle(w.tlMgr.callerInfoContext(context.Background()))
 	w.writeLoop.Go(w.taskWriterLoop)
 }
 
@@ -222,7 +221,7 @@ func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
 	w.tlMgr.initializedError.Set(struct{}{}, err)
 	if err != nil {
 		// We can't recover from here without starting over, so unload the whole task queue
-		w.tlMgr.signalFatalProblem(w.tlMgr)
+		w.tlMgr.unloadFromEngine()
 		return err
 	}
 writerLoop:
@@ -325,10 +324,4 @@ func (w *taskWriter) allocTaskIDBlock(ctx context.Context, prevBlockEnd int64) (
 		return taskIDBlock{}, err
 	}
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
-}
-
-func (w *taskWriter) initContext() context.Context {
-	namespace, _ := w.tlMgr.namespaceRegistry.GetNamespaceName(w.tlMgr.taskQueueID.namespaceID)
-
-	return headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(namespace.String()))
 }

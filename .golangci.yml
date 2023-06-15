@@ -2,8 +2,10 @@
 linters:
   disable-all: true
   enable:
+    - goerr113
     - errcheck
     - goimports
+    # - paralleltest # missing the call to method parallel, but testify does not seem to work well with parallel test: https://github.com/stretchr/testify/issues/187
     - revive # revive supersedes golint, which is now archived
     - staticcheck
     - vet
@@ -57,13 +59,15 @@ linters-settings:
         disabled: true
       - name: unexported-naming
         disabled: true
+      - name: unexported-return
+        disabled: true
+      - name: unused-parameter
+        disabled: true
       - name: unused-receiver
         disabled: true
       - name: use-any
         disabled: true
       - name: var-naming
-        disabled: true
-      - name: unused-parameter
         disabled: true
 
       # Rule tuning

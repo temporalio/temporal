@@ -42,7 +42,7 @@ type (
 	pollerIdentity string
 
 	pollerInfo struct {
-		ratePerSecond float64
+		pollMetadata
 	}
 )
 
@@ -64,12 +64,8 @@ func newPollerHistory() *pollerHistory {
 	}
 }
 
-func (pollers *pollerHistory) updatePollerInfo(id pollerIdentity, ratePerSecond *float64) {
-	rps := defaultTaskDispatchRPS
-	if ratePerSecond != nil {
-		rps = *ratePerSecond
-	}
-	pollers.history.Put(id, &pollerInfo{ratePerSecond: rps})
+func (pollers *pollerHistory) updatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
+	pollers.history.Put(id, &pollerInfo{pollMetadata: *pollMetadata})
 }
 
 func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*taskqueuepb.PollerInfo {
@@ -81,16 +77,23 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 		entry := ite.Next()
 		key := entry.Key().(pollerIdentity)
 		value := entry.Value().(*pollerInfo)
-		// TODO add IP, T1396795
 		lastAccessTime := entry.CreateTime()
 		if earliestAccessTime.Before(lastAccessTime) {
 			result = append(result, &taskqueuepb.PollerInfo{
-				Identity:       string(key),
-				LastAccessTime: &lastAccessTime,
-				RatePerSecond:  value.ratePerSecond,
+				Identity:                  string(key),
+				LastAccessTime:            &lastAccessTime,
+				RatePerSecond:             defaultValue(value.ratePerSecond, defaultTaskDispatchRPS),
+				WorkerVersionCapabilities: value.workerVersionCapabilities,
 			})
 		}
 	}
 
 	return result
+}
+
+func defaultValue[T any, P ~*T](p P, def T) T {
+	if p == nil {
+		return def
+	}
+	return *p
 }

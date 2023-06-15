@@ -175,7 +175,7 @@ func GrpcServerOptionsProvider(
 	if err != nil {
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
-	interceptors := []grpc.UnaryServerInterceptor{
+	unaryInterceptors := []grpc.UnaryServerInterceptor{
 		// Service Error Interceptor should be the most outer interceptor on error handling
 		rpc.ServiceErrorInterceptor,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
@@ -183,7 +183,7 @@ func GrpcServerOptionsProvider(
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		redirectionInterceptor.Intercept,
-		telemetryInterceptor.Intercept,
+		telemetryInterceptor.UnaryIntercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -200,16 +200,21 @@ func GrpcServerOptionsProvider(
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
-		interceptors = append(interceptors, customInterceptors...)
+		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
 	// retry interceptor should be the most inner interceptor
-	interceptors = append(interceptors, retryableInterceptor.Intercept)
+	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
+
+	streamInterceptor := []grpc.StreamServerInterceptor{
+		telemetryInterceptor.StreamIntercept,
+	}
 
 	return append(
 		grpcServerOptions,
 		grpc.KeepaliveParams(kp),
 		grpc.KeepaliveEnforcementPolicy(kep),
-		grpc.ChainUnaryInterceptor(interceptors...),
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
 }
 
@@ -283,10 +288,13 @@ func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 ) *interceptor.RateLimitInterceptor {
 	rateFn := func() float64 { return float64(serviceConfig.RPS()) }
+	namespaceReplicationInducingRateFn := func() float64 { return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS()) }
+
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 		),
 		map[string]int{},
@@ -299,15 +307,18 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.NamespaceRateLimitInterceptor {
-	var globalNamespaceRPS, globalNamespaceVisibilityRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	switch serviceName {
 	case primitives.FrontendService:
 		globalNamespaceRPS = serviceConfig.GlobalNamespaceRPS
 		globalNamespaceVisibilityRPS = serviceConfig.GlobalNamespaceVisibilityRPS
+		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.GlobalNamespaceNamespaceReplicationInducingAPIsRPS
 	case primitives.InternalFrontendService:
 		globalNamespaceRPS = serviceConfig.InternalFEGlobalNamespaceRPS
 		globalNamespaceVisibilityRPS = serviceConfig.InternalFEGlobalNamespaceVisibilityRPS
+		// Internal frontend has no special limit for this set of APIs
+		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.InternalFEGlobalNamespaceRPS
 	default:
 		panic("invalid service name")
 	}
@@ -329,11 +340,20 @@ func NamespaceRateLimitInterceptorProvider(
 			namespace,
 		)
 	}
-	namespaceRateLimiter := quotas.NewNamespaceRateLimiter(
+	namespaceReplicationInducingRateFn := func(ns string) float64 {
+		return namespaceRPS(
+			serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
+			globalNamespaceNamespaceReplicationInducingAPIsRPS,
+			frontendServiceResolver,
+			ns,
+		)
+	}
+	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
 			)
 		},
@@ -382,7 +402,9 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
 
@@ -408,6 +430,7 @@ func VisibilityManagerProvider(
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
+		serviceConfig.VisibilityEnableManualPagination,
 		metricsHandler,
 		logger,
 	)

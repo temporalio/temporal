@@ -477,6 +477,132 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 	return int(nRows), nil
 }
 
+func (m *sqlTaskManager) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueUserDataResponse, error) {
+	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to parse namespace ID as UUID: %v", err))
+	}
+	response, err := m.Db.GetTaskQueueUserData(ctx, &sqlplugin.GetTaskQueueUserDataRequest{
+		NamespaceID:   namespaceID,
+		TaskQueueName: request.TaskQueue,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("task queue user data not found for %v.%v", request.NamespaceID, request.TaskQueue))
+		}
+		return nil, err
+	}
+	return &persistence.InternalGetTaskQueueUserDataResponse{
+		Version:  response.Version,
+		UserData: persistence.NewDataBlob(response.Data, response.DataEncoding),
+	}, nil
+}
+
+func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *persistence.InternalUpdateTaskQueueUserDataRequest) error {
+	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("failed to parse namespace ID as UUID: %v", err))
+	}
+	err = m.txExecute(ctx, "UpdateTaskQueueUserData", func(tx sqlplugin.Tx) error {
+		err := tx.UpdateTaskQueueUserData(ctx, &sqlplugin.UpdateTaskQueueDataRequest{
+			NamespaceID:   namespaceID,
+			TaskQueueName: request.TaskQueue,
+			Data:          request.UserData.Data,
+			DataEncoding:  request.UserData.EncodingType.String(),
+			Version:       request.Version,
+		})
+		if m.Db.IsDupEntryError(err) {
+			return &persistence.ConditionFailedError{Msg: err.Error()}
+		}
+		if err != nil {
+			return err
+		}
+		if len(request.BuildIdsAdded) > 0 {
+			err = tx.AddToBuildIdToTaskQueueMapping(ctx, sqlplugin.AddToBuildIdToTaskQueueMapping{
+				NamespaceID:   namespaceID,
+				TaskQueueName: request.TaskQueue,
+				BuildIds:      request.BuildIdsAdded,
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if len(request.BuildIdsRemoved) > 0 {
+			err = tx.RemoveFromBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveFromBuildIdToTaskQueueMapping{
+				NamespaceID:   namespaceID,
+				TaskQueueName: request.TaskQueue,
+				BuildIds:      request.BuildIdsRemoved,
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return err
+}
+
+func (m *sqlTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.InternalListTaskQueueUserDataEntriesResponse, error) {
+	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, serviceerror.NewInternal(err.Error())
+	}
+
+	lastQueueName := ""
+	if len(request.NextPageToken) != 0 {
+		token, err := deserializeUserDataListNextPageToken(request.NextPageToken)
+		if err != nil {
+			return nil, err
+		}
+		lastQueueName = token.LastTaskQueueName
+	}
+
+	rows, err := m.Db.ListTaskQueueUserDataEntries(ctx, &sqlplugin.ListTaskQueueUserDataEntriesRequest{
+		NamespaceID:       namespaceID,
+		LastTaskQueueName: lastQueueName,
+		Limit:             request.PageSize,
+	})
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListTaskQueueUserDataEntries operation failed. Failed to get rows. Error: %v", err))
+	}
+
+	var nextPageToken []byte
+	if len(rows) == request.PageSize {
+		nextPageToken, err = serializeUserDataListNextPageToken(&userDataListNextPageToken{LastTaskQueueName: rows[request.PageSize-1].TaskQueueName})
+		if err != nil {
+			return nil, serviceerror.NewInternal(err.Error())
+		}
+	}
+	entries := make([]persistence.InternalTaskQueueUserDataEntry, len(rows))
+	for i, row := range rows {
+		entries[i].TaskQueue = rows[i].TaskQueueName
+		entries[i].Data = persistence.NewDataBlob(row.Data, row.DataEncoding)
+		entries[i].Version = rows[i].Version
+	}
+	response := &persistence.InternalListTaskQueueUserDataEntriesResponse{
+		Entries:       entries,
+		NextPageToken: nextPageToken,
+	}
+
+	return response, nil
+}
+
+func (m *sqlTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, serviceerror.NewInternal(err.Error())
+	}
+	return m.Db.GetTaskQueuesByBuildId(ctx, &sqlplugin.GetTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
+}
+
+func (m *sqlTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
+	namespaceID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return 0, serviceerror.NewInternal(err.Error())
+	}
+	return m.Db.CountTaskQueuesByBuildId(ctx, &sqlplugin.CountTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
+}
+
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
 func (m *sqlTaskManager) taskQueueIdAndHash(
 	namespaceID primitives.UUID,
@@ -537,6 +663,22 @@ func serializeMatchingTaskPageToken(token *matchingTaskPageToken) ([]byte, error
 
 func deserializeMatchingTaskPageToken(payload []byte) (*matchingTaskPageToken, error) {
 	var token matchingTaskPageToken
+	if err := json.Unmarshal(payload, &token); err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+type userDataListNextPageToken struct {
+	LastTaskQueueName string
+}
+
+func serializeUserDataListNextPageToken(token *userDataListNextPageToken) ([]byte, error) {
+	return json.Marshal(token)
+}
+
+func deserializeUserDataListNextPageToken(payload []byte) (*userDataListNextPageToken, error) {
+	var token userDataListNextPageToken
 	if err := json.Unmarshal(payload, &token); err != nil {
 		return nil, err
 	}

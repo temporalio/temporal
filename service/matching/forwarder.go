@@ -154,6 +154,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			Source:                 task.source,
 			ScheduleToStartTimeout: &expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.FullName(),
+			VersionDirective:       task.event.Data.GetVersionDirective(),
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -168,6 +169,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			Source:                 task.source,
 			ScheduleToStartTimeout: &expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.FullName(),
+			VersionDirective:       task.event.Data.GetVersionDirective(),
 		})
 	default:
 		return errInvalidTaskQueueType
@@ -206,7 +208,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 }
 
 // ForwardPoll forwards a poll request to parent task queue partition if it exist
-func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
+func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	if fwdr.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		return nil, errTaskQueueKind
 	}
@@ -230,7 +232,8 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 					Name: target.FullName(),
 					Kind: fwdr.taskQueueKind,
 				},
-				Identity: identity,
+				Identity:                  identity,
+				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 			},
 			ForwardedSource: fwdr.taskQueueID.FullName(),
 		})
@@ -247,7 +250,8 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 					Name: target.FullName(),
 					Kind: fwdr.taskQueueKind,
 				},
-				Identity: identity,
+				Identity:                  identity,
+				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 			},
 			ForwardedSource: fwdr.taskQueueID.FullName(),
 		})

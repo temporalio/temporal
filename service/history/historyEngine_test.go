@@ -89,18 +89,19 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller              *gomock.Controller
-		mockShard               *shard.ContextTest
-		mockTxProcessor         *queues.MockQueue
-		mockTimerProcessor      *queues.MockQueue
-		mockVisibilityProcessor *queues.MockQueue
-		mockArchivalProcessor   *queues.MockQueue
-		mockNamespaceCache      *namespace.MockRegistry
-		mockMatchingClient      *matchingservicemock.MockMatchingServiceClient
-		mockHistoryClient       *historyservicemock.MockHistoryServiceClient
-		mockClusterMetadata     *cluster.MockMetadata
-		mockEventsReapplier     *ndc.MockEventsReapplier
-		mockWorkflowResetter    *ndc.MockWorkflowResetter
+		controller               *gomock.Controller
+		mockShard                *shard.ContextTest
+		mockTxProcessor          *queues.MockQueue
+		mockTimerProcessor       *queues.MockQueue
+		mockVisibilityProcessor  *queues.MockQueue
+		mockArchivalProcessor    *queues.MockQueue
+		mockMemoryScheduledQueue *queues.MockQueue
+		mockNamespaceCache       *namespace.MockRegistry
+		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
+		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
+		mockClusterMetadata      *cluster.MockMetadata
+		mockEventsReapplier      *ndc.MockEventsReapplier
+		mockWorkflowResetter     *ndc.MockWorkflowResetter
 
 		workflowCache     wcache.Cache
 		mockHistoryEngine *historyEngineImpl
@@ -134,14 +135,18 @@ func (s *engineSuite) SetupTest() {
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
 	s.mockArchivalProcessor = queues.NewMockQueue(s.controller)
+	s.mockMemoryScheduledQueue = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
 	s.mockArchivalProcessor.EXPECT().Category().Return(tasks.CategoryArchival).AnyTimes()
+	s.mockMemoryScheduledQueue.EXPECT().Category().Return(tasks.CategoryMemoryTimer).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockMemoryScheduledQueue.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -200,10 +205,11 @@ func (s *engineSuite) SetupTest() {
 		eventNotifier:      eventNotifier,
 		config:             s.config,
 		queueProcessors: map[tasks.Category]queues.Queue{
-			s.mockTxProcessor.Category():         s.mockTxProcessor,
-			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
-			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
-			s.mockArchivalProcessor.Category():   s.mockArchivalProcessor,
+			s.mockTxProcessor.Category():          s.mockTxProcessor,
+			s.mockTimerProcessor.Category():       s.mockTimerProcessor,
+			s.mockVisibilityProcessor.Category():  s.mockVisibilityProcessor,
+			s.mockArchivalProcessor.Category():    s.mockArchivalProcessor,
+			s.mockMemoryScheduledQueue.Category(): s.mockMemoryScheduledQueue,
 		},
 		eventsReapplier:            s.mockEventsReapplier,
 		workflowResetter:           s.mockWorkflowResetter,
@@ -1664,6 +1670,78 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 	s.Equal(10*time.Second, timestamp.DurationValue(activity1Attributes.ScheduleToStartTimeout))
 	s.Equal(50*time.Second, timestamp.DurationValue(activity1Attributes.StartToCloseTimeout))
 	s.Equal(5*time.Second, timestamp.DurationValue(activity1Attributes.HeartbeatTimeout))
+}
+
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_SignalTaskGeneration() {
+	resp := s.testRespondWorkflowTaskCompletedSignalGeneration(false)
+	s.NotNil(resp.GetStartedResponse())
+}
+
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_SkipSignalTaskGeneration() {
+	resp := s.testRespondWorkflowTaskCompletedSignalGeneration(true)
+	s.Nil(resp.GetStartedResponse())
+}
+
+func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration(skipGenerateTask bool) *historyservice.RespondWorkflowTaskCompletedResponse {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+	tl := "testTaskQueue"
+	tt := &tokenspb.Task{
+		Attempt:          1,
+		NamespaceId:      tests.NamespaceID.String(),
+		WorkflowId:       tests.WorkflowID,
+		RunId:            we.GetRunId(),
+		ScheduledEventId: 2,
+	}
+	taskToken, _ := tt.Marshal()
+	identity := "testIdentity"
+
+	signal := workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:                tests.NamespaceID.String(),
+		WorkflowExecution:        &we,
+		Identity:                 identity,
+		SignalName:               "test signal name",
+		Input:                    payloads.EncodeString("test input"),
+		SkipGenerateWorkflowTask: skipGenerateTask,
+		RequestId:                uuid.New(),
+	}
+	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+		NamespaceId:   tests.NamespaceID.String(),
+		SignalRequest: &signal,
+	}
+
+	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
+		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
+	wt := addWorkflowTaskScheduledEvent(ms)
+	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
+
+	wfMs := workflow.TestCloneToProto(ms)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).AnyTimes()
+
+	_, err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	s.NoError(err)
+
+	var commands []*commandpb.Command
+	resp, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			TaskToken:             taskToken,
+			Commands:              commands,
+			Identity:              identity,
+			ReturnNewWorkflowTask: true,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms.GetExecutionState().State)
+
+	return resp
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_NotCancelled() {
@@ -5166,7 +5244,7 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	})
 
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(), s.mockShard.GetMetricsHandler(), s.mockShard.Resource.Logger)
-	response, err := i.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
 			Attempt:     1,
@@ -5200,7 +5278,7 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 	})
 
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(), s.mockShard.GetMetricsHandler(), s.mockShard.Resource.Logger)
-	response, err := i.Intercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		firstWorkflowTaskBackoff := time.Second
 		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId:              tests.NamespaceID.String(),
@@ -5312,7 +5390,7 @@ func addWorkflowTaskCompletedEvent(s *suite.Suite, ms workflow.MutableState, sch
 
 	event, _ := ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: identity,
-	}, configs.DefaultHistoryMaxAutoResetPoints)
+	}, defaultWorkflowTaskCompletionLimits)
 
 	ms.FlushBufferedEvents()
 

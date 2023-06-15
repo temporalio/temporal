@@ -34,13 +34,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"flag"
-	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -57,18 +55,14 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"gopkg.in/yaml.v3"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/environment"
 	sw "go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests"
@@ -76,25 +70,7 @@ import (
 
 type (
 	integrationClustersTestSuite struct {
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-		// not merely log an error
-		*require.Assertions
-		suite.Suite
-		cluster1 *tests.TestCluster
-		cluster2 *tests.TestCluster
-		logger   log.Logger
-	}
-)
-
-var (
-	clusterName              = []string{"active", "standby"}
-	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfig{
-		{
-			ClusterName: clusterName[0],
-		},
-		{
-			ClusterName: clusterName[1],
-		},
+		xdcBaseSuite
 	}
 )
 
@@ -104,58 +80,15 @@ func TestIntegrationClustersTestSuite(t *testing.T) {
 }
 
 func (s *integrationClustersTestSuite) SetupSuite() {
-	s.logger = log.NewTestLogger()
-
-	fileName := "../testdata/xdc_integration_test_clusters.yaml"
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
-	}
-	environment.SetupEnv()
-
-	confContent, err := os.ReadFile(fileName)
-	s.Require().NoError(err)
-	confContent = []byte(os.ExpandEnv(string(confContent)))
-
-	var clusterConfigs []*tests.TestClusterConfig
-	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-
-	c, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
-	s.Require().NoError(err)
-	s.cluster1 = c
-
-	c, err = tests.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterName[1])))
-	s.Require().NoError(err)
-	s.cluster2 = c
-
-	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
-	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
-	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(
-		tests.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               cluster2Address,
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
-
-	_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(
-		tests.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               cluster1Address,
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
-	// Wait for cluster metadata to refresh new added clusters
-	time.Sleep(time.Millisecond * 200)
+	s.setupSuite([]string{"integ_active", "integ_standby"})
 }
 
 func (s *integrationClustersTestSuite) SetupTest() {
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+	s.setupTest()
 }
 
 func (s *integrationClustersTestSuite) TearDownSuite() {
-	s.NoError(s.cluster1.TearDownCluster())
-	s.NoError(s.cluster2.TearDownCluster())
+	s.tearDownSuite()
 }
 
 func (s *integrationClustersTestSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
@@ -169,8 +102,8 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -191,14 +124,14 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	updated := false
 	var resp3 *workflowservice.DescribeNamespaceResponse
 	for i := 0; i < 30; i++ {
 		resp3, err = client2.DescribeNamespace(tests.NewContext(), descReq)
 		s.NoError(err)
-		if resp3.ReplicationConfig.GetActiveClusterName() == clusterName[1] {
+		if resp3.ReplicationConfig.GetActiveClusterName() == s.clusterNames[1] {
 			updated = true
 			break
 		}
@@ -244,8 +177,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespaceName,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -432,7 +365,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
-	s.failover(namespaceName, clusterName[1], int64(2), client1)
+	s.failover(namespaceName, s.clusterNames[1], int64(2), client1)
 
 	// check history matched
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -525,8 +458,8 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -642,7 +575,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	})
 	s.NoError(err)
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	_, err = poller2.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 5)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -661,7 +594,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	})
 	s.NoError(err)
 
-	s.failover(namespace, clusterName[0], int64(11), client2)
+	s.failover(namespace, s.clusterNames[0], int64(11), client2)
 
 	_, err = poller1.PollAndProcessWorkflowTask(false, false)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -675,8 +608,8 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespaceName,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -762,7 +695,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.NoError(err)
 	s.Equal(1, workflowCompleteTimes)
 
-	s.failover(namespaceName, clusterName[1], int64(2), client1)
+	s.failover(namespaceName, s.clusterNames[1], int64(2), client1)
 
 	// start the same workflow in cluster 2 is not allowed if policy is AllowDuplicateFailedOnly
 	startReq.RequestId = uuid.New()
@@ -798,8 +731,8 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -893,7 +826,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	// terminate workflow at cluster 2
 	terminateReason := "terminate reason"
@@ -969,8 +902,8 @@ func (s *integrationClustersTestSuite) TestResetWorkflowFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -1092,7 +1025,7 @@ func (s *integrationClustersTestSuite) TestResetWorkflowFailover() {
 	})
 	s.NoError(err)
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	_, err = poller2.PollAndProcessWorkflowTask(false, false)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -1126,8 +1059,8 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -1228,7 +1161,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		s.NoError(err, strconv.Itoa(i))
 	}
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	// finish the rest in cluster 2
 	for i := 0; i < 2; i++ {
@@ -1250,8 +1183,8 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -1295,6 +1228,9 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	eventSignaled := false
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		if previousStartedEventID == 0 {
+			return []*commandpb.Command{}, nil
+		}
 		if !eventSignaled {
 			for _, event := range history.Events[previousStartedEventID:] {
 				if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
@@ -1332,6 +1268,25 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		T:                   s.T(),
 	}
 
+	// Process start event in cluster 1
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.NoError(err)
+	s.False(eventSignaled)
+
+	// Send a signal without a task in cluster 1
+	_, err = client1.SignalWorkflowExecution(tests.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		},
+		SignalName:               "signal without task",
+		Input:                    payloads.EncodeString("my signal input without task"),
+		Identity:                 identity,
+		SkipGenerateWorkflowTask: true,
+	})
+	s.NoError(err)
+
 	// Send a signal in cluster 1
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
@@ -1354,7 +1309,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.NoError(err)
 	s.True(eventSignaled)
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	// check history matched
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -1367,7 +1322,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	eventsReplicated := false
 	for i := 0; i < 15; i++ {
 		historyResponse, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 5 {
+		if err == nil && len(historyResponse.History.Events) == 9 {
 			eventsReplicated = true
 			break
 		}
@@ -1375,6 +1330,20 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	}
 	s.NoError(err)
 	s.True(eventsReplicated)
+
+	// Send another signal without a task in cluster 2
+	_, err = client2.SignalWorkflowExecution(tests.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		},
+		SignalName:               "signal without task",
+		Input:                    payloads.EncodeString("my signal input without task"),
+		Identity:                 identity,
+		SkipGenerateWorkflowTask: true,
+	})
+	s.NoError(err)
 
 	// Send another signal in cluster 2
 	signalName2 := "my signal 2"
@@ -1401,7 +1370,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	eventsReplicated = false
 	for i := 0; i < 15; i++ {
 		historyResponse, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 9 {
+		if err == nil && len(historyResponse.History.Events) == 14 {
 			eventsReplicated = true
 			break
 		}
@@ -1417,8 +1386,8 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -1558,7 +1527,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	}
 	s.True(timerCreated)
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	for i := 1; i < 20; i++ {
 		if !workflowCompleted {
@@ -1575,8 +1544,8 @@ func (s *integrationClustersTestSuite) TestForceWorkflowTaskClose_WithClusterRec
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -1649,7 +1618,7 @@ func (s *integrationClustersTestSuite) TestForceWorkflowTaskClose_WithClusterRec
 	_, err = poller1.PollAndProcessWorkflowTask(false, true)
 	s.NoError(err)
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
@@ -1659,7 +1628,7 @@ func (s *integrationClustersTestSuite) TestForceWorkflowTaskClose_WithClusterRec
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			Clusters: []*replicationpb.ClusterReplicationConfig{
 				{
-					ClusterName: clusterName[1],
+					ClusterName: s.clusterNames[1],
 				},
 			},
 		},
@@ -1698,10 +1667,10 @@ func (s *integrationClustersTestSuite) TestForceWorkflowTaskClose_WithClusterRec
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			Clusters: []*replicationpb.ClusterReplicationConfig{
 				{
-					ClusterName: clusterName[1],
+					ClusterName: s.clusterNames[1],
 				},
 				{
-					ClusterName: clusterName[0],
+					ClusterName: s.clusterNames[0],
 				},
 			},
 		},
@@ -1727,8 +1696,8 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -1818,7 +1787,7 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	_, err = poller1.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	// for failover transient workflow task, it is guaranteed that the transient workflow task
 	// after the failover has attempt 1
@@ -1834,8 +1803,8 @@ func (s *integrationClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -1900,7 +1869,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowStartAndFailover() {
 		T:                   s.T(),
 	}
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	_, err = poller2.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
@@ -1924,8 +1893,8 @@ func (s *integrationClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -2007,7 +1976,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	s.Equal(int64(1), events[0].GetVersion())
 	s.Equal(int64(1), events[len(events)-1].GetVersion())
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	_, err = poller2.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
@@ -2031,8 +2000,8 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -2101,7 +2070,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 		T:                   s.T(),
 	}
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	// First attempt
 	_, err = poller2.PollAndProcessWorkflowTask(false, false)
@@ -2128,8 +2097,8 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
@@ -2216,7 +2185,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
 	_, err = poller2.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
@@ -2256,8 +2225,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 			HeartbeatTimeout:    time.Second * 3,
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
-		err := workflow.ExecuteActivity(ctx, activityWithHB).Get(ctx, nil)
-		return err
+		return workflow.ExecuteActivity(ctx, activityWithHB).Get(ctx, nil)
 	}
 	worker1.RegisterWorkflow(testWorkflowFn)
 	worker1.RegisterActivity(activityWithHB)
@@ -2279,7 +2247,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	time.Sleep(time.Second * 4) // wait for heartbeat from activity to be reported and activity timed out on heartbeat
 
 	worker1.Stop() // stop worker1 so cluster 1 won't make any progress
-	s.failover(namespace, clusterName[1], int64(2), s.cluster1.GetFrontendClient())
+	s.failover(namespace, s.clusterNames[1], int64(2), s.cluster1.GetFrontendClient())
 
 	// verify things are replicated over
 	resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
@@ -2291,7 +2259,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.True(shard.ShardLocalTime.Before(time.Now()))
 	s.True(shard.ShardLocalTime.After(startTime))
 	s.NotNil(shard.RemoteClusters)
-	standbyAckInfo, ok := shard.RemoteClusters[clusterName[1]]
+	standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
 	s.True(ok)
 	s.Equal(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
 	s.NotNil(standbyAckInfo.AckedTaskVisibilityTime)
@@ -2355,8 +2323,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context, sleepInterval time.Duration) error {
-		err := workflow.Sleep(ctx, sleepInterval)
-		return err
+		return workflow.Sleep(ctx, sleepInterval)
 	}
 
 	worker1.RegisterWorkflow(testWorkflowFn)
@@ -2564,7 +2531,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	_, err = frontendClient1.UpdateNamespace(testCtx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			Clusters: clusterReplicationConfig,
+			Clusters: s.clusterReplicationConfig(),
 		},
 	})
 	s.NoError(err)
@@ -2638,7 +2605,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 		WorkflowRunTimeout: time.Second * 30,
 	}, "namespace-handover", migration.NamespaceHandoverParams{
 		Namespace:              namespace,
-		RemoteCluster:          clusterName[1],
+		RemoteCluster:          s.clusterNames[1],
 		AllowedLaggingSeconds:  10,
 		HandoverTimeoutSeconds: 30,
 	})
@@ -2654,7 +2621,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	s.NoError(err)
 	s.True(nsResp2.IsGlobalNamespace)
 	s.Equal(2, len(nsResp2.ReplicationConfig.Clusters))
-	s.Equal(clusterName[1], nsResp2.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.clusterNames[1], nsResp2.ReplicationConfig.ActiveClusterName)
 
 	// verify all wf in ns is now available in cluster2
 	client2, err := sdkclient.Dial(sdkclient.Options{
@@ -2737,7 +2704,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	_, err = frontendClient1.UpdateNamespace(testCtx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			Clusters: clusterReplicationConfig,
+			Clusters: s.clusterReplicationConfig(),
 		},
 	})
 	s.NoError(err)
@@ -2786,7 +2753,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	_, err = frontendClient2.UpdateNamespace(testCtx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			ActiveClusterName: clusterName[1],
+			ActiveClusterName: s.clusterNames[1],
 		},
 	})
 	s.NoError(err)
@@ -2797,7 +2764,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 		Namespace: namespace,
 	})
 	s.NoError(err)
-	s.Equal(clusterName[1], nsResp.ReplicationConfig.ActiveClusterName)
+	s.Equal(s.clusterNames[1], nsResp.ReplicationConfig.ActiveClusterName)
 
 	worker2.RegisterWorkflow(testWorkflowFn)
 	s.NoError(worker2.Start())
@@ -2876,7 +2843,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	_, err = frontendClient1.UpdateNamespace(testCtx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			Clusters: clusterReplicationConfig,
+			Clusters: s.clusterReplicationConfig(),
 		},
 	})
 	s.NoError(err)
@@ -2977,16 +2944,16 @@ func (s *integrationClustersTestSuite) failover(
 }
 
 func (s *integrationClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace bool) {
-	clusters := clusterReplicationConfig
+	clusters := s.clusterReplicationConfig()
 	if !isGlobalNamespace {
-		clusters = clusterReplicationConfig[0:1]
+		clusters = s.clusterReplicationConfig()[0:1]
 	}
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                isGlobalNamespace,
 		Clusters:                         clusters,
-		ActiveClusterName:                clusterName[0],
+		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)

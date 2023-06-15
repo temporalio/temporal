@@ -72,7 +72,6 @@ var (
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
 	errCronNotAllowed                                     = serviceerror.NewInvalidArgument("Scheduled workflow must not contain CronSchedule")
 	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
-	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
 	errUnableDeleteSystemNamespace                        = serviceerror.NewInvalidArgument("Unable to delete system namespace.")
 	errBatchJobIDNotSet                                   = serviceerror.NewInvalidArgument("JobId is not set on request.")
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
@@ -81,6 +80,9 @@ var (
 	errCronAndStartDelaySet                               = serviceerror.NewInvalidArgument("CronSchedule and WorkflowStartDelay may not be used together.")
 	errInvalidWorkflowStartDelaySeconds                   = serviceerror.NewInvalidArgument("An invalid WorkflowStartDelaySeconds is set on request.")
 	errRaceConditionAddingSearchAttributes                = serviceerror.NewUnavailable("Generated search attributes mapping unavailble.")
+	errUseVersioningWithoutBuildId                        = serviceerror.NewInvalidArgument("WorkerVersionStamp must be present if UseVersioning is true.")
+	errUseVersioningWithoutNormalName                     = serviceerror.NewInvalidArgument("NormalName must be set on sticky queue if UseVersioning is true.")
+	errBuildIdTooLong                                     = serviceerror.NewInvalidArgument("Build ID exceeds configured limit.workerBuildIdSize, use a shorter build ID.")
 
 	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
 	errUpdateInputNotSet      = serviceerror.NewInvalidArgument("Update input is not set on request.")
@@ -116,6 +118,9 @@ var (
 	errBatchOpsWorkflowFiltersNotAllowed = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are both set on request. Only one of them is allowed.")
 	errBatchOpsMaxWorkflowExecutionCount = serviceerror.NewInvalidArgument("Workflow executions count exceeded.")
 
-	errUpdateWorkflowExecutionAPINotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
-	errWorkerVersioningNotAllowed           = serviceerror.NewPermissionDenied("Worker versioning operations is disabled on this namespace.", "")
+	errUpdateWorkflowExecutionAPINotAllowed           = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
+	errUpdateWorkflowExecutionAsyncAcceptedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update accepted is disabled on this namespace", "")
+	errUpdateWorkflowExecutionAsyncAdmittedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update admitted is disabled on this namespace", "")
+
+	errWorkerVersioningNotAllowed = serviceerror.NewPermissionDenied("Worker versioning is disabled on this namespace.", "")
 )

@@ -25,25 +25,33 @@
 package matching
 
 import (
+	"context"
+
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
 	// Engine exposes interfaces for clients to interact with the matching engine
 	Engine interface {
+		Start()
 		Stop()
-		AddWorkflowTask(hCtx *handlerContext, addRequest *matchingservice.AddWorkflowTaskRequest) (syncMatch bool, err error)
-		AddActivityTask(hCtx *handlerContext, addRequest *matchingservice.AddActivityTaskRequest) (syncMatch bool, err error)
-		PollWorkflowTaskQueue(hCtx *handlerContext, request *matchingservice.PollWorkflowTaskQueueRequest) (*matchingservice.PollWorkflowTaskQueueResponse, error)
-		PollActivityTaskQueue(hCtx *handlerContext, request *matchingservice.PollActivityTaskQueueRequest) (*matchingservice.PollActivityTaskQueueResponse, error)
-		QueryWorkflow(hCtx *handlerContext, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		RespondQueryTaskCompleted(hCtx *handlerContext, request *matchingservice.RespondQueryTaskCompletedRequest) error
-		CancelOutstandingPoll(hCtx *handlerContext, request *matchingservice.CancelOutstandingPollRequest) error
-		DescribeTaskQueue(hCtx *handlerContext, request *matchingservice.DescribeTaskQueueRequest) (*matchingservice.DescribeTaskQueueResponse, error)
-		ListTaskQueuePartitions(hCtx *handlerContext, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error)
-		UpdateWorkerBuildIdCompatibility(ctx *handlerContext, request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error)
-		GetWorkerBuildIdCompatibility(ctx *handlerContext, request *matchingservice.GetWorkerBuildIdCompatibilityRequest) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error)
-		InvalidateTaskQueueMetadata(ctx *handlerContext, request *matchingservice.InvalidateTaskQueueMetadataRequest) (*matchingservice.InvalidateTaskQueueMetadataResponse, error)
-		GetTaskQueueMetadata(ctx *handlerContext, request *matchingservice.GetTaskQueueMetadataRequest) (*matchingservice.GetTaskQueueMetadataResponse, error)
+		AddWorkflowTask(ctx context.Context, addRequest *matchingservice.AddWorkflowTaskRequest) (syncMatch bool, err error)
+		AddActivityTask(ctx context.Context, addRequest *matchingservice.AddActivityTaskRequest) (syncMatch bool, err error)
+		PollWorkflowTaskQueue(ctx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollWorkflowTaskQueueResponse, error)
+		PollActivityTaskQueue(ctx context.Context, request *matchingservice.PollActivityTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollActivityTaskQueueResponse, error)
+		QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
+		RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest, opMetrics metrics.Handler) error
+		CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest) error
+		DescribeTaskQueue(ctx context.Context, request *matchingservice.DescribeTaskQueueRequest) (*matchingservice.DescribeTaskQueueResponse, error)
+		ListTaskQueuePartitions(ctx context.Context, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error)
+		UpdateWorkerBuildIdCompatibility(ctx context.Context, request *matchingservice.UpdateWorkerBuildIdCompatibilityRequest) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error)
+		GetWorkerBuildIdCompatibility(ctx context.Context, request *matchingservice.GetWorkerBuildIdCompatibilityRequest) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error)
+		GetTaskQueueUserData(ctx context.Context, request *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
+		ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error)
+		GetBuildIdTaskQueueMapping(ctx context.Context, request *matchingservice.GetBuildIdTaskQueueMappingRequest) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error)
+		ForceUnloadTaskQueue(ctx context.Context, request *matchingservice.ForceUnloadTaskQueueRequest) (*matchingservice.ForceUnloadTaskQueueResponse, error)
+		UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error)
+		ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error)
 	}
 )

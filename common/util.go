@@ -35,6 +35,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,6 +43,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -84,9 +86,6 @@ const (
 	completeTaskRetryInitialInterval = 100 * time.Millisecond
 	completeTaskRetryMaxInterval     = 1 * time.Second
 	completeTaskRetryMaxAttempts     = 10
-
-	taskProcessingRetryInitialInterval = 50 * time.Millisecond
-	taskProcessingRetryMaxAttempts     = 1
 
 	taskRescheduleInitialInterval    = 1 * time.Second
 	taskRescheduleBackoffCoefficient = 1.1
@@ -131,8 +130,10 @@ const (
 	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
 	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
-	// FailureReasonSizeExceedsLimit is reason to fail workflow when history size or count exceed limit
-	FailureReasonSizeExceedsLimit = "Workflow history size / count exceeds limit."
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size or count exceed limit
+	FailureReasonHistorySizeExceedsLimit = "Workflow history size / count exceeds limit."
+	// FailureReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
+	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
 	FailureReasonTransactionSizeExceedsLimit = "Transaction size exceeds limit."
 )
@@ -231,12 +232,6 @@ func CreateCompleteTaskRetryPolicy() backoff.RetryPolicy {
 		WithMaximumAttempts(completeTaskRetryMaxAttempts)
 }
 
-// CreateTaskProcessingRetryPolicy creates a retry policy for task processing
-func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(taskProcessingRetryInitialInterval).
-		WithMaximumAttempts(taskProcessingRetryMaxAttempts)
-}
-
 // CreateTaskReschedulePolicy creates a retry policy for rescheduling task with errors not equal to ErrTaskRetry
 func CreateTaskReschedulePolicy() backoff.RetryPolicy {
 	return backoff.NewExponentialRetryPolicy(taskRescheduleInitialInterval).
@@ -330,9 +325,12 @@ func IsServiceClientTransientError(err error) bool {
 		return true
 	}
 
-	switch err.(type) {
-	case *serviceerror.ResourceExhausted,
-		*serviceerrors.ShardOwnershipLost:
+	switch err := err.(type) {
+	case *serviceerror.ResourceExhausted:
+		if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			return true
+		}
+	case *serviceerrors.ShardOwnershipLost:
 		return true
 	}
 	return false
@@ -375,6 +373,12 @@ func IsInternalError(err error) bool {
 	return errors.As(err, &internalErr)
 }
 
+// IsNotFoundError checks if the error is a not found error.
+func IsNotFoundError(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	return errors.As(err, &notFoundErr)
+}
+
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
 func WorkflowIDToHistoryShard(
 	namespaceID string,
@@ -409,7 +413,7 @@ func MapShardID(
 		ratio := targetShardCount / sourceShardCount
 		targetShardIDs := make([]int32, ratio)
 		for i := range targetShardIDs {
-			targetShardIDs[i] = sourceShardID + int32(i)*ratio + 1
+			targetShardIDs[i] = sourceShardID + int32(i)*sourceShardCount + 1
 		}
 		return targetShardIDs
 	} else if sourceShardCount > targetShardCount {
@@ -418,6 +422,31 @@ func MapShardID(
 	} else {
 		return []int32{sourceShardID + 1}
 	}
+}
+
+func VerifyShardIDMapping(
+	thisShardCount int32,
+	thatShardCount int32,
+	thisShardID int32,
+	thatShardID int32,
+) error {
+	if thisShardCount%thatShardCount != 0 && thatShardCount%thisShardCount != 0 {
+		panic(fmt.Sprintf("cannot verify shard ID mapping between diff shard count: %v vs %v",
+			thisShardCount, thatShardCount))
+	}
+	shardCountMin := thisShardCount
+	if shardCountMin > thatShardCount {
+		shardCountMin = thatShardCount
+	}
+	if thisShardID%shardCountMin == thatShardID%shardCountMin {
+		return nil
+	}
+	return serviceerror.NewInternal(
+		fmt.Sprintf("shard ID mapping verification failed; shard count: %v vs %v, shard ID: %v vs %v",
+			thisShardCount, thatShardCount,
+			thisShardID, thatShardID,
+		),
+	)
 }
 
 func PrettyPrint[T proto.Message](msgs []T, header ...string) {
@@ -754,6 +783,44 @@ func OverrideWorkflowTaskTimeout(
 	}
 
 	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
+}
+
+// StampIfUsingVersioning returns the given WorkerVersionStamp if it is using versioning,
+// otherwise returns nil.
+func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.WorkerVersionStamp {
+	if stamp.GetUseVersioning() {
+		return stamp
+	}
+	return nil
+}
+
+func MakeVersionDirectiveForWorkflowTask(
+	stamp *commonpb.WorkerVersionStamp,
+	lastWorkflowTaskStartedEventID int64,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
+	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
+		// first workflow task
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	}
+	// else: unversioned queue
+	return &directive
+}
+
+func MakeVersionDirectiveForActivityTask(
+	stamp *commonpb.WorkerVersionStamp,
+	useCompatibleVersion bool,
+) *taskqueuespb.TaskVersionDirective {
+	var directive taskqueuespb.TaskVersionDirective
+	if !useCompatibleVersion {
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
+		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
+	}
+	// else: unversioned queue
+	return &directive
 }
 
 // CloneProto is a generic typed version of proto.Clone from gogoproto.

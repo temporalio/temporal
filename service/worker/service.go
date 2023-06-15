@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -51,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
@@ -97,6 +99,7 @@ type (
 		workerManager             *workerManager
 		perNamespaceWorkerManager *perNamespaceWorkerManager
 		scanner                   *scanner.Scanner
+		matchingClient            matchingservice.MatchingServiceClient
 	}
 
 	// Config contains all the service config for worker
@@ -108,7 +111,9 @@ type (
 		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
 		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
+		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
 		EnableBatcher                         dynamicconfig.BoolPropertyFn
 		BatcherRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		BatcherConcurrency                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -120,6 +125,7 @@ type (
 		VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
 		EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -145,6 +151,7 @@ func NewService(
 	workerManager *workerManager,
 	perNamespaceWorkerManager *perNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,
+	matchingClient resource.MatchingClient,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(primitives.WorkerService)
 	if err != nil {
@@ -177,6 +184,7 @@ func NewService(
 
 		workerManager:             workerManager,
 		perNamespaceWorkerManager: perNamespaceWorkerManager,
+		matchingClient:            matchingClient,
 	}
 	if err := s.initScanner(); err != nil {
 		return nil, err
@@ -273,6 +281,10 @@ func NewConfig(
 				dynamicconfig.TaskQueueScannerEnabled,
 				true,
 			),
+			BuildIdScavengerEnabled: dc.GetBoolProperty(
+				dynamicconfig.BuildIdScavengerEnabled,
+				false,
+			),
 			HistoryScannerEnabled: dc.GetBoolProperty(
 				dynamicconfig.HistoryScannerEnabled,
 				true,
@@ -341,15 +353,18 @@ func NewConfig(
 			dynamicconfig.WorkerPersistenceNamespaceMaxQPS,
 			0,
 		),
+		PersistencePerShardNamespaceMaxQPS: dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(
 			dynamicconfig.WorkerEnablePersistencePriorityRateLimiting,
 			true,
 		),
+		PersistenceDynamicRateLimitingParams: dc.GetMapProperty(dynamicconfig.WorkerPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
 
 		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, enableReadFromES),
 		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, enableReadFromES),
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, enableReadFromES),
-		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, false),
+		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
+		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
 	}
 	return config
 }
@@ -490,10 +505,14 @@ func (s *Service) initScanner() error {
 		s.sdkClientFactory,
 		s.metricsHandler,
 		s.executionManager,
+		s.metadataManager,
+		s.visibilityManager,
 		s.taskManager,
 		s.historyClient,
 		adminClient,
+		s.matchingClient,
 		s.namespaceRegistry,
+		currentCluster,
 	)
 	return nil
 }
@@ -522,6 +541,7 @@ func (s *Service) startReplicator() {
 		s.workerServiceResolver,
 		s.namespaceReplicationQueue,
 		namespaceReplicationTaskExecutor,
+		s.matchingClient,
 	)
 	msgReplicator.Start()
 }

@@ -25,6 +25,8 @@
 package client
 
 import (
+	"time"
+
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -32,29 +34,37 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 )
 
 type (
-	PersistenceMaxQps          dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnablePriorityRateLimiting dynamicconfig.BoolPropertyFn
-	ClusterName                string
+	PersistenceMaxQps                  dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQps         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
+
+	DynamicRateLimitingParams dynamicconfig.MapPropertyFn
+
+	ClusterName string
 
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory           DataStoreFactory
-		Cfg                        *config.Persistence
-		PersistenceMaxQPS          PersistenceMaxQps
-		PersistenceNamespaceMaxQPS PersistenceNamespaceMaxQps
-		EnablePriorityRateLimiting EnablePriorityRateLimiting
-		ClusterName                ClusterName
-		ServiceName                primitives.ServiceName
-		MetricsHandler             metrics.Handler
-		Logger                     log.Logger
+		DataStoreFactory                   DataStoreFactory
+		Cfg                                *config.Persistence
+		PersistenceMaxQPS                  PersistenceMaxQps
+		PersistenceNamespaceMaxQPS         PersistenceNamespaceMaxQps
+		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
+		EnablePriorityRateLimiting         EnablePriorityRateLimiting
+		ClusterName                        ClusterName
+		ServiceName                        primitives.ServiceName
+		MetricsHandler                     metrics.Handler
+		Logger                             log.Logger
+		HealthSignals                      persistence.HealthSignalAggregator
+		DynamicRateLimitingParams          DynamicRateLimitingParams
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -64,6 +74,7 @@ var Module = fx.Options(
 	BeanModule,
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(DataStoreFactoryProvider),
+	fx.Provide(HealthSignalAggregatorProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -79,7 +90,11 @@ func FactoryProvider(
 			requestRatelimiter = NewPriorityRateLimiter(
 				params.PersistenceNamespaceMaxQPS,
 				params.PersistenceMaxQPS,
+				params.PersistencePerShardNamespaceMaxQPS,
 				RequestPriorityFn,
+				params.HealthSignals,
+				params.DynamicRateLimitingParams,
+				params.Logger,
 			)
 		} else {
 			requestRatelimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
@@ -94,5 +109,25 @@ func FactoryProvider(
 		string(params.ClusterName),
 		params.MetricsHandler,
 		params.Logger,
+		params.HealthSignals,
 	)
+}
+
+func HealthSignalAggregatorProvider(
+	dynamicCollection *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) persistence.HealthSignalAggregator {
+	if dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalMetricsEnabled, true)() {
+		return persistence.NewHealthSignalAggregatorImpl(
+			dynamicCollection.GetBoolProperty(dynamicconfig.PersistenceHealthSignalAggregationEnabled, true)(),
+			dynamicCollection.GetDurationProperty(dynamicconfig.PersistenceHealthSignalWindowSize, 10*time.Second)(),
+			dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 5000)(),
+			metricsHandler,
+			dynamicCollection.GetIntProperty(dynamicconfig.ShardRPSWarnLimit, 50),
+			logger,
+		)
+	}
+
+	return persistence.NoopHealthSignalAggregator
 }

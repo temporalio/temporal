@@ -67,6 +67,18 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 	return m.recorder
 }
 
+// AddSpeculativeWorkflowTaskTimeoutTask mocks base method.
+func (m *MockEngine) AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddSpeculativeWorkflowTaskTimeoutTask", task)
+}
+
+// AddSpeculativeWorkflowTaskTimeoutTask indicates an expected call of AddSpeculativeWorkflowTaskTimeoutTask.
+func (mr *MockEngineMockRecorder) AddSpeculativeWorkflowTaskTimeoutTask(task interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpeculativeWorkflowTaskTimeoutTask", reflect.TypeOf((*MockEngine)(nil).AddSpeculativeWorkflowTaskTimeoutTask), task)
+}
+
 // ConvertReplicationTask mocks base method.
 func (m *MockEngine) ConvertReplicationTask(ctx context.Context, task tasks.Task) (*repication.ReplicationTask, error) {
 	m.ctrl.T.Helper()
@@ -284,6 +296,21 @@ func (m *MockEngine) PollMutableState(ctx context.Context, request *historyservi
 func (mr *MockEngineMockRecorder) PollMutableState(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollMutableState", reflect.TypeOf((*MockEngine)(nil).PollMutableState), ctx, request)
+}
+
+// PollWorkflowExecutionUpdate mocks base method.
+func (m *MockEngine) PollWorkflowExecutionUpdate(ctx context.Context, request *historyservice.PollWorkflowExecutionUpdateRequest) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollWorkflowExecutionUpdate", ctx, request)
+	ret0, _ := ret[0].(*historyservice.PollWorkflowExecutionUpdateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollWorkflowExecutionUpdate indicates an expected call of PollWorkflowExecutionUpdate.
+func (mr *MockEngineMockRecorder) PollWorkflowExecutionUpdate(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowExecutionUpdate", reflect.TypeOf((*MockEngine)(nil).PollWorkflowExecutionUpdate), ctx, request)
 }
 
 // PurgeDLQMessages mocks base method.

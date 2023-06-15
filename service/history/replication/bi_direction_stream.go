@@ -63,6 +63,7 @@ type (
 		Send(Req) error
 		Recv() (<-chan StreamResp[Resp], error)
 		Close()
+		IsValid() bool
 	}
 	StreamResp[Resp any] struct {
 		Resp Resp
@@ -133,6 +134,12 @@ func (s *BiDirectionStreamImpl[Req, Resp]) Close() {
 	defer s.Unlock()
 
 	s.closeLocked()
+}
+
+func (s *BiDirectionStreamImpl[Req, Resp]) IsValid() bool {
+	s.Lock()
+	defer s.Unlock()
+	return s.status != streamStatusClosed
 }
 
 func (s *BiDirectionStreamImpl[Req, Resp]) closeLocked() {

@@ -25,10 +25,13 @@
 package api
 
 import (
+	"context"
+
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 type WorkflowContext interface {
@@ -38,6 +41,7 @@ type WorkflowContext interface {
 
 	GetNamespaceEntry() *namespace.Namespace
 	GetWorkflowKey() definition.WorkflowKey
+	GetUpdateRegistry(context.Context) update.Registry
 }
 
 type WorkflowContextImpl struct {
@@ -95,4 +99,8 @@ func (w *WorkflowContextImpl) GetNamespaceEntry() *namespace.Namespace {
 
 func (w *WorkflowContextImpl) GetWorkflowKey() definition.WorkflowKey {
 	return w.context.GetWorkflowKey()
+}
+
+func (w *WorkflowContextImpl) GetUpdateRegistry(ctx context.Context) update.Registry {
+	return w.context.UpdateRegistry(ctx)
 }

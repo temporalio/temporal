@@ -22,11 +22,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination stream_receiver_mock.go
+
 package replication
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,73 +35,68 @@ import (
 	repicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
 type (
-	ClusterShardKey struct {
-		ClusterName string
-		ShardID     int32
+	StreamReceiver interface {
+		common.Daemon
+		IsValid() bool
+		Key() ClusterShardKeyPair
 	}
-	ClusterShardKeyPair struct {
-		Source ClusterShardKey
-		Target ClusterShardKey
-	}
-
-	Stream         BiDirectionStream[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse]
-	StreamReceiver struct {
+	StreamReceiverImpl struct {
 		ProcessToolBox
 
 		status         int32
-		sourceShardKey ClusterShardKey
-		targetShardKey ClusterShardKey
+		clientShardKey ClusterShardKey
+		serverShardKey ClusterShardKey
 		taskTracker    ExecutableTaskTracker
 		shutdownChan   channel.ShutdownOnce
-
-		sync.Mutex
-		streamCreationTime time.Time
-		stream             Stream
+		logger         log.Logger
+		stream         Stream
 	}
 )
 
 func NewClusterShardKey(
-	ClusterName string,
+	ClusterID int32,
 	ClusterShardID int32,
 ) ClusterShardKey {
 	return ClusterShardKey{
-		ClusterName: ClusterName,
-		ShardID:     ClusterShardID,
+		ClusterID: ClusterID,
+		ShardID:   ClusterShardID,
 	}
 }
 
 func NewStreamReceiver(
 	processToolBox ProcessToolBox,
-	sourceShardKey ClusterShardKey,
-	targetShardKey ClusterShardKey,
-) *StreamReceiver {
-	taskTracker := NewExecutableTaskTracker(processToolBox.Logger)
-	return &StreamReceiver{
+	clientShardKey ClusterShardKey,
+	serverShardKey ClusterShardKey,
+) *StreamReceiverImpl {
+	logger := log.With(processToolBox.Logger, tag.ShardID(clientShardKey.ShardID))
+	taskTracker := NewExecutableTaskTracker(logger)
+	return &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 
 		status:         common.DaemonStatusInitialized,
-		sourceShardKey: sourceShardKey,
-		targetShardKey: targetShardKey,
+		clientShardKey: clientShardKey,
+		serverShardKey: serverShardKey,
 		taskTracker:    taskTracker,
 		shutdownChan:   channel.NewShutdownOnce(),
-
-		streamCreationTime: time.Now().UTC(),
+		logger:         logger,
 		stream: newStream(
 			processToolBox,
-			sourceShardKey,
-			targetShardKey,
+			clientShardKey,
+			serverShardKey,
 		),
 	}
 }
 
 // Start starts the processor
-func (r *StreamReceiver) Start() {
+func (r *StreamReceiverImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
 		common.DaemonStatusInitialized,
@@ -112,11 +108,11 @@ func (r *StreamReceiver) Start() {
 	go r.sendEventLoop()
 	go r.recvEventLoop()
 
-	r.Logger.Info("StreamReceiver started.")
+	r.logger.Info("StreamReceiver started.")
 }
 
 // Stop stops the processor
-func (r *StreamReceiver) Stop() {
+func (r *StreamReceiverImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
 		common.DaemonStatusStarted,
@@ -129,14 +125,21 @@ func (r *StreamReceiver) Stop() {
 	r.stream.Close()
 	r.taskTracker.Cancel()
 
-	r.Logger.Info("StreamReceiver shutting down.")
+	r.logger.Info("StreamReceiver shutting down.")
 }
 
-func (r *StreamReceiver) IsValid() bool {
+func (r *StreamReceiverImpl) IsValid() bool {
 	return atomic.LoadInt32(&r.status) == common.DaemonStatusStarted
 }
 
-func (r *StreamReceiver) sendEventLoop() {
+func (r *StreamReceiverImpl) Key() ClusterShardKeyPair {
+	return ClusterShardKeyPair{
+		Client: r.clientShardKey,
+		Server: r.serverShardKey,
+	}
+}
+
+func (r *StreamReceiverImpl) sendEventLoop() {
 	defer r.Stop()
 	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
@@ -145,116 +148,115 @@ func (r *StreamReceiver) sendEventLoop() {
 		select {
 		case <-timer.C:
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
-			r.Lock()
-			stream := r.stream
-			r.Unlock()
-			r.ackMessage(stream)
+			if err := r.ackMessage(r.stream); err != nil {
+				r.logger.Error("StreamReceiver exit send loop", tag.Error(err))
+				return
+			}
 		case <-r.shutdownChan.Channel():
 			return
 		}
 	}
 }
 
-func (r *StreamReceiver) recvEventLoop() {
+func (r *StreamReceiverImpl) recvEventLoop() {
 	defer r.Stop()
 
-	for !r.shutdownChan.IsShutdown() {
-		r.Lock()
-		streamCreationTime := r.streamCreationTime
-		stream := r.stream
-		r.Unlock()
-
-		_ = r.processMessages(stream)
-		delay := streamCreationTime.Add(r.Config.ReplicationStreamMinReconnectDuration()).Sub(time.Now().UTC())
-		if delay > 0 {
-			select {
-			case <-time.After(delay):
-			case <-r.shutdownChan.Channel():
-			}
-		}
-
-		r.Lock()
-		r.streamCreationTime = time.Now().UTC()
-		r.stream = newStream(
-			r.ProcessToolBox,
-			r.sourceShardKey,
-			r.targetShardKey,
-		)
-		r.Unlock()
-	}
+	err := r.processMessages(r.stream)
+	r.logger.Error("StreamReceiver exit recv loop", tag.Error(err))
 }
 
-func (r *StreamReceiver) ackMessage(
+func (r *StreamReceiverImpl) ackMessage(
 	stream Stream,
-) {
+) error {
 	watermarkInfo := r.taskTracker.LowWatermark()
+	size := r.taskTracker.Size()
 	if watermarkInfo == nil {
-		return
+		return nil
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &repicationpb.SyncReplicationState{
-				LastProcessedMessageId:   watermarkInfo.Watermark,
-				LastProcessedMessageTime: timestamp.TimePtr(watermarkInfo.Timestamp),
+				InclusiveLowWatermark:     watermarkInfo.Watermark,
+				InclusiveLowWatermarkTime: timestamp.TimePtr(watermarkInfo.Timestamp),
 			},
 		},
 	}); err != nil {
-		r.Logger.Error("StreamReceiver unable to send message, err", tag.Error(err))
+		r.logger.Error("StreamReceiver unable to send message, err", tag.Error(err))
+		return err
 	}
+	r.MetricsHandler.Histogram(metrics.ReplicationTasksRecvBacklog.GetMetricName(), metrics.ReplicationTasksRecvBacklog.GetMetricUnit()).Record(
+		int64(size),
+		metrics.FromClusterIDTag(r.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(r.clientShardKey.ClusterID),
+	)
+	r.MetricsHandler.Counter(metrics.ReplicationTasksSend.GetMetricName()).Record(
+		int64(1),
+		metrics.FromClusterIDTag(r.clientShardKey.ClusterID),
+		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),
+		metrics.OperationTag(metrics.SyncWatermarkScope),
+	)
+	return nil
 }
 
-func (r *StreamReceiver) processMessages(
+func (r *StreamReceiverImpl) processMessages(
 	stream Stream,
 ) error {
+	allClusterInfo := r.ClusterMetadata.GetAllClusterInfo()
+	clusterName, _, err := ClusterIDToClusterNameShardCount(allClusterInfo, r.serverShardKey.ClusterID)
+	if err != nil {
+		return err
+	}
+
 	streamRespChen, err := stream.Recv()
 	if err != nil {
-		r.Logger.Error("StreamReceiver unable to recv message, err", tag.Error(err))
+		r.logger.Error("StreamReceiver unable to recv message, err", tag.Error(err))
 		return err
 	}
 	for streamResp := range streamRespChen {
 		if streamResp.Err != nil {
-			r.Logger.Error("StreamReceiver recv stream encountered unexpected err", tag.Error(streamResp.Err))
+			r.logger.Error("StreamReceiver recv stream encountered unexpected err", tag.Error(streamResp.Err))
 			return streamResp.Err
 		}
 		tasks := r.ConvertTasks(
-			r.targetShardKey.ClusterName, // data come from target
+			clusterName,
+			r.clientShardKey,
+			r.serverShardKey,
 			streamResp.Resp.GetMessages().ReplicationTasks...,
 		)
-		highWatermark := streamResp.Resp.GetMessages().LastTaskId
-		highWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().LastTaskTime)
-		r.taskTracker.TrackTasks(WatermarkInfo{
-			Watermark: highWatermark,
-			Timestamp: highWatermarkTime,
-		}, tasks...)
-		for _, task := range tasks {
+		exclusiveHighWatermark := streamResp.Resp.GetMessages().ExclusiveHighWatermark
+		exclusiveHighWatermarkTime := timestamp.TimeValue(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime)
+		for _, task := range r.taskTracker.TrackTasks(WatermarkInfo{
+			Watermark: exclusiveHighWatermark,
+			Timestamp: exclusiveHighWatermarkTime,
+		}, tasks...) {
 			r.ProcessToolBox.TaskScheduler.Submit(task)
 		}
 	}
-	r.Logger.Error("StreamReceiver encountered channel close")
+	r.logger.Error("StreamReceiver encountered channel close")
 	return nil
 }
 
 func newStream(
 	processToolBox ProcessToolBox,
-	sourceShardKey ClusterShardKey,
-	targetShardKey ClusterShardKey,
+	clientShardKey ClusterShardKey,
+	serverShardKey ClusterShardKey,
 ) Stream {
 	var clientProvider BiDirectionStreamClientProvider[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse] = &streamClientProvider{
 		processToolBox: processToolBox,
-		sourceShardKey: sourceShardKey,
-		targetShardKey: targetShardKey,
+		clientShardKey: clientShardKey,
+		serverShardKey: serverShardKey,
 	}
 	return NewBiDirectionStream(
 		clientProvider,
 		processToolBox.MetricsHandler,
-		processToolBox.Logger,
+		log.With(processToolBox.Logger, tag.ShardID(clientShardKey.ShardID)),
 	)
 }
 
 type streamClientProvider struct {
 	processToolBox ProcessToolBox
-	sourceShardKey ClusterShardKey
-	targetShardKey ClusterShardKey
+	clientShardKey ClusterShardKey
+	serverShardKey ClusterShardKey
 }
 
 var _ BiDirectionStreamClientProvider[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse] = (*streamClientProvider)(nil)
@@ -262,7 +264,10 @@ var _ BiDirectionStreamClientProvider[*adminservice.StreamWorkflowReplicationMes
 func (p *streamClientProvider) Get(
 	ctx context.Context,
 ) (BiDirectionStreamClient[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse], error) {
-	return NewStreamBiDirectionStreamClientProvider(p.processToolBox.ClientBean).Get(ctx, p.sourceShardKey, p.targetShardKey)
+	return NewStreamBiDirectionStreamClientProvider(
+		p.processToolBox.ClusterMetadata,
+		p.processToolBox.ClientBean,
+	).Get(ctx, p.clientShardKey, p.serverShardKey)
 }
 
 type noopSchedulerMonitor struct {

@@ -56,6 +56,8 @@ type (
 		streamClient BiDirectionStreamClient[int, int]
 	}
 	mockStreamClient struct {
+		shutdownChan chan struct{}
+
 		requests []int
 
 		responseCount int
@@ -86,6 +88,7 @@ func (s *biDirectionStreamSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.streamClient = &mockStreamClient{
+		shutdownChan:  make(chan struct{}),
 		requests:      nil,
 		responseCount: 10,
 		responses:     nil,
@@ -114,43 +117,48 @@ func (s *biDirectionStreamSuite) TestLazyInit() {
 	s.biDirectionStream.Unlock()
 	s.NoError(err)
 	s.Equal(s.streamClient, s.biDirectionStream.streamingClient)
+	s.True(s.biDirectionStream.IsValid())
 
 	s.biDirectionStream.Lock()
 	err = s.biDirectionStream.lazyInitLocked()
 	s.biDirectionStream.Unlock()
 	s.NoError(err)
 	s.Equal(s.streamClient, s.biDirectionStream.streamingClient)
+	s.True(s.biDirectionStream.IsValid())
 
 	s.biDirectionStream.Close()
 	s.biDirectionStream.Lock()
 	err = s.biDirectionStream.lazyInitLocked()
 	s.biDirectionStream.Unlock()
 	s.Error(err)
+	s.False(s.biDirectionStream.IsValid())
 }
 
 func (s *biDirectionStreamSuite) TestSend() {
+	defer close(s.streamClient.shutdownChan)
+
 	reqs := []int{rand.Int(), rand.Int(), rand.Int(), rand.Int()}
 	for _, req := range reqs {
 		err := s.biDirectionStream.Send(req)
 		s.NoError(err)
 	}
 	s.Equal(reqs, s.streamClient.requests)
-	s.biDirectionStream.Lock()
-	defer s.biDirectionStream.Unlock()
-	s.Equal(streamStatusOpen, s.biDirectionStream.status)
+	s.True(s.biDirectionStream.IsValid())
 }
 
 func (s *biDirectionStreamSuite) TestSend_Err() {
+	defer close(s.streamClient.shutdownChan)
+
 	s.streamClientProvider.streamClient = s.streamErrClient
 
 	err := s.biDirectionStream.Send(rand.Int())
 	s.Error(err)
-	s.biDirectionStream.Lock()
-	defer s.biDirectionStream.Unlock()
-	s.Equal(streamStatusClosed, s.biDirectionStream.status)
+	s.False(s.biDirectionStream.IsValid())
 }
 
 func (s *biDirectionStreamSuite) TestRecv() {
+	close(s.streamClient.shutdownChan)
+
 	var resps []int
 	streamRespChan, err := s.biDirectionStream.Recv()
 	s.NoError(err)
@@ -159,12 +167,11 @@ func (s *biDirectionStreamSuite) TestRecv() {
 		resps = append(resps, streamResp.Resp)
 	}
 	s.Equal(s.streamClient.responses, resps)
-	s.biDirectionStream.Lock()
-	defer s.biDirectionStream.Unlock()
-	s.Equal(streamStatusClosed, s.biDirectionStream.status)
+	s.False(s.biDirectionStream.IsValid())
 }
 
 func (s *biDirectionStreamSuite) TestRecv_Err() {
+	close(s.streamClient.shutdownChan)
 	s.streamClientProvider.streamClient = s.streamErrClient
 
 	streamRespChan, err := s.biDirectionStream.Recv()
@@ -173,9 +180,8 @@ func (s *biDirectionStreamSuite) TestRecv_Err() {
 	s.Error(streamResp.Err)
 	_, ok := <-streamRespChan
 	s.False(ok)
-	s.biDirectionStream.Lock()
-	defer s.biDirectionStream.Unlock()
-	s.Equal(streamStatusClosed, s.biDirectionStream.status)
+	s.False(s.biDirectionStream.IsValid())
+
 }
 
 func (p *mockStreamClientProvider) Get(
@@ -191,6 +197,7 @@ func (c *mockStreamClient) Send(req int) error {
 
 func (c *mockStreamClient) Recv() (int, error) {
 	if len(c.responses) >= c.responseCount {
+		<-c.shutdownChan
 		return 0, io.EOF
 	}
 

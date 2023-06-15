@@ -186,7 +186,7 @@ func SetupNewWorkflowForRetryOrCron(
 		RunId:      newRunID,
 	}
 
-	firstRunID, err := previousMutableState.GetFirstRunID()
+	firstRunID, err := previousMutableState.GetFirstRunID(ctx)
 	if err != nil {
 		return err
 	}
@@ -241,6 +241,13 @@ func SetupNewWorkflowForRetryOrCron(
 		attempt = previousExecutionInfo.Attempt + 1
 	}
 
+	// For retry: propagate build-id version info to new workflow.
+	// For cron: do not propagate (always start on latest version).
+	var sourceVersionStamp *commonpb.WorkerVersionStamp
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+		sourceVersionStamp = common.StampIfUsingVersioning(previousMutableState.GetWorkerVersionStamp())
+	}
+
 	req := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            newMutableState.GetNamespaceEntry().ID().String(),
 		StartRequest:           createRequest,
@@ -251,6 +258,7 @@ func SetupNewWorkflowForRetryOrCron(
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
 		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(&backoffInterval),
 		Attempt:                  attempt,
+		SourceVersionStamp:       sourceVersionStamp,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

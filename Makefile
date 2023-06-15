@@ -57,7 +57,7 @@ define NEWLINE
 
 endef
 
-TEST_TIMEOUT := 20m
+TEST_TIMEOUT := 30m
 
 
 PROTO_ROOT := proto
@@ -69,6 +69,10 @@ PROTO_OUT := api
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
+
+MAIN_BRANCH	   = master
+MERGE_BASE     ?= $(shell git merge-base $(MAIN_BRANCH) HEAD)
+MODIFIED_FILES := $(shell git diff --name-status $(MERGE_BASE) -- | cut -f2)
 
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 FUNCTIONAL_TEST_ROOT          := ./tests
@@ -105,6 +109,7 @@ SQL_PASSWORD ?= temporal
 #   Packages are specified as import paths.
 INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/...,$(MODULE_ROOT)/tools/..."
 FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/...,$(MODULE_ROOT)/tools/..."
+
 ##### Tools #####
 update-goimports:
 	@printf $(COLOR) "Install/update goimports..."
@@ -161,7 +166,7 @@ protoc: $(PROTO_OUT)
 # Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),\
 		protoc --fatal_warnings $(PROTO_IMPORTS) \
-		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
+		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
 			$(PROTO_DIR)*.proto \
 	$(NEWLINE))
 
@@ -229,9 +234,15 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
+goimports:
+	@printf $(COLOR) "Run goimports for modified files..."
+	@printf "Merge base: $(MERGE_BASE)\n"
+	@printf "Modified files: $(MODIFIED_FILES)\n"
+	@goimports -w $(filter %.go, $(MODIFIED_FILES))
+
 lint:
 	@printf $(COLOR) "Run linters..."
-	@golangci-lint run --verbose --timeout 10m --fix=false --new-from-rev=HEAD~ --config=.golangci.yml
+	@golangci-lint run --verbose --timeout 10m --fix=true --new-from-rev=$(MAIN_BRANCH) --config=.golangci.yml
 
 api-linter:
 	@printf $(COLOR) "Run api-linter..."

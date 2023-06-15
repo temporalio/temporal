@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -140,7 +141,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.testNamespaceID = "e4f90ec0-1313-45be-9877-8aa41f72a45a"
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resourcetest.NewTest(s.controller, metrics.Frontend)
+	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
@@ -2224,7 +2225,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Signal() {
 	s.NoError(err)
 }
 
-func (s *workflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Singal() {
+func (s *workflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.New())
 	executions := []*commonpb.WorkflowExecution{
@@ -2287,6 +2288,65 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Singal
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
+}
+
+func (s *workflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMany() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.New())
+	executions := []*commonpb.WorkflowExecution{
+		{
+			WorkflowId: uuid.New(),
+			RunId:      uuid.New(),
+		},
+	}
+	reason := "reason"
+	identity := "identity"
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	// Simulate std visibility, which does not support CountWorkflowExecutions
+	// TODO: remove this once every visibility implementation supports CountWorkflowExecutions
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(nil, store.OperationNotSupportedErr)
+	s.mockVisibilityMgr.EXPECT().ListOpenWorkflowExecutionsByType(
+		gomock.Any(),
+		gomock.Any(),
+	).DoAndReturn(
+		func(
+			_ context.Context,
+			request *manager.ListWorkflowExecutionsByTypeRequest,
+		) (*manager.ListWorkflowExecutionsResponse, error) {
+			s.Equal(testNamespace, request.Namespace)
+			s.Equal(batcher.BatchWFTypeName, request.WorkflowTypeName)
+			s.Equal(int(config.MaxConcurrentBatchOperation(testNamespace.String())), request.PageSize)
+			s.Equal([]byte{}, request.NextPageToken)
+			return &manager.ListWorkflowExecutionsResponse{
+				Executions: []*workflowpb.WorkflowExecutionInfo{
+					{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: testWorkflowID,
+							RunId:      testRunID,
+						},
+					},
+				},
+				NextPageToken: nil,
+			}, nil
+		},
+	)
+
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace: testNamespace.String(),
+		JobId:     uuid.New(),
+		Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
+			CancellationOperation: &batchpb.BatchOperationCancellation{
+				Identity: identity,
+			},
+		},
+		Reason:     reason,
+		Executions: executions,
+	}
+
+	_, err := wh.StartBatchOperation(context.Background(), request)
+	s.EqualError(err, "Max concurrent batch operations is reached")
 }
 
 func (s *workflowHandlerSuite) TestStartBatchOperation_InvalidRequest() {
