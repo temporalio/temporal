@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/worker_versioning"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -251,7 +252,7 @@ func queryDirectlyThroughMatching(
 		metricsHandler.Timer(metrics.DirectQueryDispatchLatency.GetMetricName()).Record(time.Since(startTime))
 	}()
 
-	directive := common.MakeVersionDirectiveForWorkflowTask(
+	directive := worker_versioning.MakeDirectiveForWorkflowTask(
 		msResp.GetWorkerVersionStamp(),
 		msResp.GetPreviousStartedEventId(),
 	)

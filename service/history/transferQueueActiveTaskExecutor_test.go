@@ -70,6 +70,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -2501,7 +2502,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
-		VersionDirective:       common.MakeVersionDirectiveForActivityTask(nil, false),
+		VersionDirective:       worker_versioning.MakeDirectiveForActivityTask(nil, false),
 	}
 }
 
@@ -2648,7 +2649,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		timeout = executionInfo.StickyScheduleToStartTimeout
 	}
 
-	directive := common.MakeVersionDirectiveForWorkflowTask(
+	directive := worker_versioning.MakeDirectiveForWorkflowTask(
 		mutableState.GetWorkerVersionStamp(),
 		mutableState.GetLastWorkflowTaskStartedEventID(),
 	)
