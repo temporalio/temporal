@@ -118,7 +118,7 @@ type (
 
 	taskQueueManager interface {
 		Start()
-		Stop()
+		Stop(bool)
 		WaitUntilInitialized(context.Context) error
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
@@ -260,7 +260,7 @@ func newTaskQueueManager(
 	tlMgr.liveness = newLiveness(
 		clockwork.NewRealClock(),
 		taskQueueConfig.MaxTaskQueueIdleTime,
-		tlMgr.unloadFromEngine,
+		func() { tlMgr.unloadFromEngine(false) },
 	)
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
@@ -280,8 +280,8 @@ func newTaskQueueManager(
 }
 
 // unloadFromEngine asks the MatchingEngine to unload this task queue. It will cause Stop to be called.
-func (c *taskQueueManagerImpl) unloadFromEngine() {
-	c.engine.unloadTaskQueue(c)
+func (c *taskQueueManagerImpl) unloadFromEngine(lostOwnership bool) {
+	c.engine.unloadTaskQueue(c, lostOwnership)
 }
 
 // signalIfFatal calls unloadFromEngine on this taskQueueManagerImpl instance
@@ -295,7 +295,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
 		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.GetMetricName()).Record(1)
-		c.unloadFromEngine()
+		c.unloadFromEngine(true)
 		return true
 	}
 	return false
@@ -317,7 +317,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
 
-func (c *taskQueueManagerImpl) Stop() {
+func (c *taskQueueManagerImpl) Stop(lostOwnership bool) {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
 		common.DaemonStatusStarted,
@@ -325,17 +325,18 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-	// ackLevel in taskAckManager is initialized to -1 and then set to a real value (>= 0) once
-	// we've successfully acquired a lease. If it's still -1, then we don't have current
-	// metadata. UpdateState would fail on the lease check, but don't even bother calling it.
+	// Maybe try to write one final update of ack level and GC some tasks.
+	// Skip the update if we never initialized (ackLevel will be -1 in that case).
+	// Also skip if we're stopping due to lost ownership (the update will fail in that case).
+	// Ignore any errors.
+	// Note that it's fine to GC even if the update ack level fails because we did match the
+	// tasks, the next owner will just read over an empty range.
 	ackLevel := c.taskAckManager.getAckLevel()
-	if ackLevel >= 0 {
+	if ackLevel >= 0 && !lostOwnership {
 		ctx, cancel := c.newIOContext()
 		defer cancel()
 
-		if err := c.db.UpdateState(ctx, ackLevel); err != nil {
-			c.logger.Error("Failed to update task queue state", tag.Error(err))
-		}
+		_ = c.db.UpdateState(ctx, ackLevel)
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.liveness.Stop()
@@ -345,7 +346,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
-	c.unloadFromEngine()
+	c.unloadFromEngine(lostOwnership)
 }
 
 // managesSpecificVersionSet returns true if this is a tqm for a specific version set in the
@@ -361,7 +362,7 @@ func (c *taskQueueManagerImpl) SetInitializedError(err error) {
 	c.initializedError.Set(struct{}{}, err)
 	if err != nil {
 		// We can't recover from here without starting over, so unload the whole task queue
-		c.unloadFromEngine()
+		c.unloadFromEngine(true)
 	}
 }
 
@@ -369,7 +370,7 @@ func (c *taskQueueManagerImpl) SetUserDataInitialFetch(err error) {
 	c.userDataInitialFetch.Set(struct{}{}, err)
 	if err != nil {
 		// We can't recover from here without starting over, so unload the whole task queue
-		c.unloadFromEngine()
+		c.unloadFromEngine(true)
 	}
 }
 
@@ -646,7 +647,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.FullName()),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.unloadFromEngine()
+			c.unloadFromEngine(true)
 			return
 		}
 		c.taskReader.Signal()
