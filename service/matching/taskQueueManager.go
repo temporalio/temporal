@@ -771,7 +771,7 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 
 	degree := c.config.ForwarderMaxChildrenPerNode()
 	parent, err := c.taskQueueID.Parent(degree)
-	if err == tqname.ErrNoParent {
+	if err == tqname.ErrNoParent { // nolint:goerr113
 		// we're the root activity task queue, ask the root workflow task queue
 		return c.taskQueueID.FullName(), nil
 	} else if err != nil {
@@ -805,7 +805,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 
 	fetchSource, err := c.userDataFetchSource()
 	if err != nil {
-		if err == errMissingNormalQueueName {
+		if err == errMissingNormalQueueName { // nolint:goerr113
 			// pretend we have no user data
 			c.SetUserDataInitialFetch(nil)
 		}

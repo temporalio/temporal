@@ -471,7 +471,7 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 			return err
 		}
 		err = tqm.DispatchSpooledTask(ctx, task, userDataChanged)
-		if err != errInterrupted {
+		if err != errInterrupted { // nolint:goerr113
 			return err
 		}
 	}
@@ -1515,7 +1515,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	}
 
 	versionSet, err := lookupVersionSetForAdd(data, buildId)
-	if err == errEmptyVersioningData {
+	if err == errEmptyVersioningData { // nolint:goerr113
 		// default was requested for an unversioned queue
 		return taskQueue, userDataChanged, nil
 	} else if err != nil {
