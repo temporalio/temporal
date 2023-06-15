@@ -2806,8 +2806,8 @@ func (ms *MutableStateImpl) AddFailWorkflowEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddFailWorkflowEvent(workflowTaskCompletedEventID, retryState, command, newExecutionRunID)
-	if err := ms.ReplicateWorkflowExecutionFailedEvent(workflowTaskCompletedEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddFailWorkflowEvent(workflowTaskCompletedEventID, retryState, command, newExecutionRunID)
+	if err := ms.ReplicateWorkflowExecutionFailedEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation

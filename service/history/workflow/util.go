@@ -161,7 +161,9 @@ func TerminateWorkflow(
 	// if there is started WT which needs to be failed before.
 	// Failing speculative WT creates 3 events: WTScheduled, WTStarted, and WTFailed.
 	// First 2 goes to separate batch and eventBatchFirstEventID has to point to WTFailed event.
-	// If there is no started WT, then eventBatchFirstEventID points to TerminateWorkflow event (which is next event).
+	// Failing transient WT doesn't create any events at all and wtFailedEvent is nil.
+	// WTFailed event wasn't created (because there were no WT or WT was transient),
+	// then eventBatchFirstEventID points to TerminateWorkflow event (which is next event).
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {

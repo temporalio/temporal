@@ -573,8 +573,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
-		var nextEventBatchId int64
-		ms, nextEventBatchId, err = failWorkflowTask(ctx, weContext, currentWorkflowTask, wtFailedCause, request)
+		var workflowTaskCompletedEventID int64
+		ms, workflowTaskCompletedEventID, err = failWorkflowTask(ctx, weContext, currentWorkflowTask, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
@@ -588,7 +588,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
 				Failure: wtFailedCause.workflowFailure,
 			}
-			if _, err := ms.AddFailWorkflowEvent(nextEventBatchId, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
+			if _, err := ms.AddFailWorkflowEvent(workflowTaskCompletedEventID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
 				return nil, err
 			}
 			wtFailedShouldCreateNewTask = false
@@ -1003,8 +1003,17 @@ func failWorkflowTask(
 		return nil, common.EmptyEventID, err
 	}
 
-	// Return new mutable state back to the caller for further updates
-	return mutableState, wtFailedEvent.GetEventId(), nil
+	var workflowTaskCompletedEventID int64
+	if wtFailedEvent != nil {
+		// If WTFailed event was added to the history then use its ID as workflowTaskCompletedEventID.
+		workflowTaskCompletedEventID = wtFailedEvent.GetEventId()
+	} else {
+		// Otherwise, if it was transient WT, last event should be WTFailed event from the 1st attempt.
+		workflowTaskCompletedEventID = mutableState.GetNextEventID() - 1
+	}
+
+	// Return reloaded mutable state back to the caller for further updates.
+	return mutableState, workflowTaskCompletedEventID, nil
 }
 
 // Filter function to be passed to mutable_state.HasAnyBufferedEvent
