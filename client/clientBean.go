@@ -184,7 +184,11 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) (adminservice.Admi
 
 	clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
 	if !clusterFound {
-		return nil, &serviceerror.Unavailable{
+		// We intentionally return internal error here.
+		// This error could only happen with internal mis-configuration.
+		// This can happen when a namespace is config for multiple clusters. But those clusters are not connected.
+		// We also have logic in task processing to drop tasks when namespace cluster exclude a local cluster.
+		return nil, &serviceerror.Internal{
 			Message: fmt.Sprintf(
 				"Unknown cluster name: %v with given cluster information map: %v.",
 				cluster,
@@ -229,7 +233,11 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(clusterName string) (grpc.Clien
 
 	clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[clusterName]
 	if !clusterFound {
-		return nil, nil, &serviceerror.Unavailable{
+		// We intentionally return internal error here.
+		// This error could only happen with internal mis-configuration.
+		// This can happen when a namespace is config for multiple clusters. But those clusters are not connected.
+		// We also have logic in task processing to drop tasks when namespace cluster exclude a local cluster.
+		return nil, nil, &serviceerror.Internal{
 			Message: fmt.Sprintf(
 				"Unknown clusterName name: %v with given clusterName information map: %v.",
 				clusterName,
