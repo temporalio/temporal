@@ -1466,9 +1466,7 @@ var (
 	ReplicationTasksLag = NewTimeHistogramDef("replication_tasks_lag")
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	// It has the same unit issue as ReplicationTasksLag.
-	ReplicationTasksFetched = NewTimeHistogramDef("replication_tasks_fetched")
-	// ReplicationTasksReturned is the same as ReplicationTasksFetched.
-	ReplicationTasksReturned                       = NewTimeHistogramDef("replication_tasks_returned")
+	ReplicationTasksFetched                        = NewTimeHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
 	ReplicationTasksAppliedLatency                 = NewTimerDef("replication_tasks_applied_latency")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
