@@ -3759,6 +3759,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	var identity string
 	var operationType string
 	var signalParams batcher.SignalParams
+	var resetParams batcher.ResetParams
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		identity = op.TerminationOperation.GetIdentity()
@@ -3777,6 +3778,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
 		identity = op.ResetOperation.GetIdentity()
 		operationType = batcher.BatchTypeReset
+		resetParams.ResetType = op.ResetOperation.GetResetType()
+		resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
@@ -3791,7 +3794,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		CancelParams:    batcher.CancelParams{},
 		SignalParams:    signalParams,
 		DeleteParams:    batcher.DeleteParams{},
-		ResetParams:     batcher.ResetParams{},
+		ResetParams:     resetParams,
 	}
 	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
