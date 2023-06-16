@@ -289,7 +289,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 			s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 			// Complete workflow.
-			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 			s.NoError(err)
 			s.NotNil(completeWorkflowResp)
 			s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -437,7 +437,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComple
 			s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 			// Complete workflow.
-			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 			s.NoError(err)
 			s.NotNil(completeWorkflowResp)
 			s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -559,17 +559,15 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalStartedWorkflowTask_Acc
 			}()
 
 			// Process update in workflow.
-			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 			s.NoError(err)
 
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, updateResp.ResetHistoryEventId)
-			lastWorkflowTask := updateResp.GetWorkflowTask()
 
-			s.NotNil(lastWorkflowTask)
 			// Complete workflow.
-			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(lastWorkflowTask, true)
+			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 			s.NoError(err)
 			s.NotNil(completeWorkflowResp)
 			s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -702,17 +700,15 @@ func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Accept
 			}()
 
 			// Process update in workflow. It will be attached to existing WT.
-			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 			s.NoError(err)
 
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, updateResp.ResetHistoryEventId)
-			lastWorkflowTask := updateResp.GetWorkflowTask()
 
-			s.NotNil(lastWorkflowTask)
 			// Complete workflow.
-			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(lastWorkflowTask, true)
+			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 			s.NoError(err)
 			s.NotNil(completeWorkflowResp)
 			s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -1191,14 +1187,14 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 			}()
 
 			// Process update in workflow task (it is sticky).
-			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, true, false, 1, 5, true, nil)
+			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, true, false, 1, 1, true, nil)
 			s.NoError(err)
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 			// Complete workflow.
-			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 			s.NoError(err)
 			s.NotNil(completeWorkflowResp)
 			s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -1304,7 +1300,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 	}
 
 	// Drain existing WT from regular task queue, but respond with sticky enabled response to enable stick task queue.
-	_, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 5)
+	_, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 1)
 	s.NoError(err)
 
 	s.Logger.Info("Sleep 10 seconds to make sure stickyPollerUnavailableWindow time has passed.")
@@ -1320,14 +1316,14 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 	}()
 
 	// Process update in workflow task from non-sticky task queue.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 	s.NoError(err)
 	updateResult := <-updateResultCh
 	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -1422,14 +1418,14 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalStartedWorkflowTask_Rej
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 	s.NoError(err)
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -1531,14 +1527,14 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject(
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 	s.NoError(err)
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(3, updateResp.ResetHistoryEventId)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -1648,14 +1644,14 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 	s.NoError(err)
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(0, updateResp.ResetHistoryEventId, "no reset of event ID should happened after update rejection if it was delivered with normal workflow task")
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -1816,7 +1812,7 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1s
 	s.EqualValues(0, updateCompleteResp1.ResetHistoryEventId)
 
 	// Complete WF in WT5.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateCompleteResp1.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateCompleteResp1.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -1972,7 +1968,7 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
 	s.EqualValues(0, updateCompleteResp1.ResetHistoryEventId)
 
 	// Complete WT4.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateCompleteResp1.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateCompleteResp1.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -2261,14 +2257,14 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowT
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 	s.NoError(err)
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -2380,14 +2376,14 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflo
 	s.NoError(err)
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 	s.NoError(err)
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -2518,13 +2514,13 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
 	}()
 
 	// Try to process update in workflow, but it takes more than WT timeout. So, WT times out.
-	_, _, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, _, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
 	s.Error(err)
 	s.Equal("Workflow task not found.", err.Error())
 
 	// New normal WT was created on server after speculative WT has timed out.
 	// It will accept and complete update first and workflow itself with the same WT.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
 	s.NoError(err)
 	updateResult := <-updateResultCh
 	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
@@ -2623,7 +2619,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeW
 	}
 
 	// Drain first WT and respond with sticky enabled response to enable sticky task queue.
-	_, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 5)
+	_, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 1)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -2635,14 +2631,15 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeW
 	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
 
 	// Try to process update in workflow, poll from normal task queue.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
 	s.NoError(err)
 	s.NotNil(updateResp)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
+	s.Nil(completeWorkflowResp.GetWorkflowTask())
 
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
@@ -2754,7 +2751,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
 	go updateWorkflowFn()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 5, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
 	s.Error(err)
 	s.IsType(err, (*serviceerror.NotFound)(nil))
 	s.ErrorContains(err, "Workflow task not found.")
@@ -3107,7 +3104,7 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 	s.EqualValues(0, updateResp.ResetHistoryEventId, "no reset of event ID should happened after update rejection because of heartbeat")
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -3368,7 +3365,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 	go updateWorkflowFn()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.ErrorContains(err, "Workflow task not found")
@@ -3616,7 +3613,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_D
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
@@ -3738,7 +3735,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ded
 	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult2.GetOutcome().GetSuccess()))
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), true)
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
