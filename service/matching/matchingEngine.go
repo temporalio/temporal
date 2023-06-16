@@ -325,7 +325,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	// - if we spool to db, we'll re-resolve when it comes out of the db
 	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
 	if err != nil {
-		if err == errUserDataDisabled {
+		if errors.Is(err, errUserDataDisabled) {
 			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
 			// to avoid breaking versioning semantics and dispatching tasks to the wrong workers.
 			err = nil
@@ -362,11 +362,16 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		VersionDirective: addRequest.VersionDirective,
 	}
 
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	if err != nil {
+		return false, err
+	}
 	return tqm.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
+		baseTqm:       baseTqm,
 	})
 }
 
@@ -390,7 +395,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	// - if we spool to db, we'll re-resolve when it comes out of the db
 	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
 	if err != nil {
-		if err == errUserDataDisabled {
+		if errors.Is(err, errUserDataDisabled) {
 			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
 			// to avoid breaking versioning semantics and dispatching tasks to the wrong workers.
 			err = nil
@@ -422,11 +427,17 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 	}
 
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	if err != nil {
+		return false, err
+	}
+
 	return tlMgr.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
+		baseTqm:       baseTqm,
 	})
 }
 
@@ -447,7 +458,12 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 		taskQueue, userDataChanged, err := e.redirectToVersionedQueueForAdd(
 			ctx, unversionedOrigTaskQueue, directive, stickyInfo)
 		if err != nil {
-			return err
+			// Return error for tasks with compatiblity constraints when user data is disabled so they can be retried later.
+			// "default" directive tasks become unversioned.
+			if !errors.Is(err, errUserDataDisabled) || directive.GetBuildId() != "" {
+				return err
+			}
+			err = nil
 		}
 		sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
 		tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
@@ -683,7 +699,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	// or fail with a relatively short timeout.
 	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, queryRequest.VersionDirective, stickyInfo)
 	if err != nil {
-		if err == errUserDataDisabled {
+		if errors.Is(err, errUserDataDisabled) {
 			// Rewrite to nicer error message
 			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 		}
@@ -1204,7 +1220,7 @@ func (e *matchingEngineImpl) getTask(
 		stickyInfo,
 	)
 	if err != nil {
-		if err == errUserDataDisabled {
+		if errors.Is(err, errUserDataDisabled) {
 			// Rewrite to nicer error message
 			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 		}
@@ -1476,19 +1492,15 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 		return taskQueue, nil, nil
 	}
 
-	// Have to look up versioning data.
 	baseTqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Have to look up versioning data.
 	userData, userDataChanged, err := baseTqm.GetUserData(ctx)
 	if err != nil {
-		if err == errUserDataDisabled && buildId == "" {
-			// Special case when user data disabled: we can send new workflows to the unversioned
-			// queue so they can potentially make progress.
-			return taskQueue, nil, nil
-		}
-		return nil, nil, err
+		return taskQueue, userDataChanged, err
 	}
 	data := userData.GetData().GetVersioningData()
 
