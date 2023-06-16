@@ -42,7 +42,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -94,11 +93,11 @@ type (
 	}
 
 	addTaskParams struct {
-		execution      *commonpb.WorkflowExecution
-		taskInfo       *persistencespb.TaskInfo
-		source         enumsspb.TaskSource
-		forwardedFrom  string
-		unversionedTqm taskQueueManager
+		execution     *commonpb.WorkflowExecution
+		taskInfo      *persistencespb.TaskInfo
+		source        enumsspb.TaskSource
+		forwardedFrom string
+		baseTqm       taskQueueManager
 	}
 
 	stickyInfo struct {
@@ -129,7 +128,7 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
-		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is availalble.
+		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(params addTaskParams) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
@@ -412,8 +411,8 @@ func (c *taskQueueManagerImpl) AddTask(
 	// The task queue default set is dynamic and applies only at dispatch time. Putting "default" tasks into version set
 	// specific queues could cause them to get stuck behind "compatible" tasks when they should be able to progress
 	// independently.
-	if _, ok := taskInfo.VersionDirective.GetValue().(*taskqueuespb.TaskVersionDirective_UseDefault); ok {
-		err = params.unversionedTqm.SpoolTask(params)
+	if taskInfo.VersionDirective.GetUseDefault() != nil {
+		err = params.baseTqm.SpoolTask(params)
 	} else {
 		err = c.SpoolTask(params)
 	}
