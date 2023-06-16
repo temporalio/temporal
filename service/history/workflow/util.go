@@ -49,6 +49,7 @@ func failWorkflowTask(
 	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
 ) (*historypb.HistoryEvent, error) {
 
+	// IMPORTANT: wtFailedEvent can be nil under some circumstances. Specifically, if WT is transient.
 	wtFailedEvent, err := mutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		workflowTaskFailureCause,
@@ -100,7 +101,9 @@ func RetryWorkflow(
 		if err != nil {
 			return nil, err
 		}
-		eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		}
 	}
 
 	_, newMutableState, err := mutableState.AddContinueAsNewEvent(
@@ -133,7 +136,9 @@ func TimeoutWorkflow(
 		if err != nil {
 			return err
 		}
-		eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		}
 	}
 
 	_, err := mutableState.AddTimeoutWorkflowEvent(
@@ -156,7 +161,9 @@ func TerminateWorkflow(
 	// if there is started WT which needs to be failed before.
 	// Failing speculative WT creates 3 events: WTScheduled, WTStarted, and WTFailed.
 	// First 2 goes to separate batch and eventBatchFirstEventID has to point to WTFailed event.
-	// If there is no started WT, then eventBatchFirstEventID points to TerminateWorkflow event (which is next event).
+	// Failing transient WT doesn't create any events at all and wtFailedEvent is nil.
+	// WTFailed event wasn't created (because there were no WT or WT was transient),
+	// then eventBatchFirstEventID points to TerminateWorkflow event (which is next event).
 	eventBatchFirstEventID := mutableState.GetNextEventID()
 
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
@@ -168,7 +175,9 @@ func TerminateWorkflow(
 		if err != nil {
 			return err
 		}
-		eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
+		}
 	}
 
 	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(
