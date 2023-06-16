@@ -40,6 +40,7 @@ const (
 	visibilityTypeTagName      = "visibility_type"
 	ErrorTypeTagName           = "error_type"
 	httpStatusTagName          = "http_status"
+	versionedTagName           = "versioned"
 	resourceExhaustedTag       = "resource_exhausted_cause"
 	standardVisibilityTagValue = "standard_visibility"
 	advancedVisibilityTagValue = "advanced_visibility"
