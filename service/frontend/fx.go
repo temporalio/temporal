@@ -112,6 +112,7 @@ func NewServiceProvider(
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
+	membershipMonitor membership.Monitor,
 ) *Service {
 	return NewService(
 		serviceConfig,
@@ -126,6 +127,7 @@ func NewServiceProvider(
 		grpcListener,
 		metricsHandler,
 		faultInjectionDataStoreFactory,
+		membershipMonitor,
 	)
 }
 

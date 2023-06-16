@@ -109,11 +109,15 @@ func (s *Service) Start() {
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	listener := s.grpcListener
-	logger.Info("Starting to serve on history listener")
-	if err := s.server.Serve(listener); err != nil {
-		logger.Fatal("Failed to serve on history listener", tag.Error(err))
-	}
+	go func() {
+		logger.Info("Starting to serve on history listener")
+		if err := s.server.Serve(s.grpcListener); err != nil {
+			logger.Fatal("Failed to serve on history listener", tag.Error(err))
+		}
+	}()
+
+	s.membershipMonitor.Start()
+	logger.Info("history started")
 }
 
 // Stop stops the service
