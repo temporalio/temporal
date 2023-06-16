@@ -379,7 +379,6 @@ func (s *processorSuite) TestBulkAfterAction_Error() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	counterMetric := metrics.NewMockCounterIface(s.controller)
 	s.mockMetricHandler.EXPECT().Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Return(counterMetric)
 	counterMetric.EXPECT().Record(int64(1), metrics.HttpStatusTag(400))
