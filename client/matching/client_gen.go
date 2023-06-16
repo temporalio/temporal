@@ -103,7 +103,7 @@ func (c *clientImpl) GetBuildIdTaskQueueMapping(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: fmt.Sprintf("not-applicable-%s", rand.Int())}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: fmt.Sprintf("not-applicable-%d", rand.Int())}, enumspb.TASK_QUEUE_TYPE_UNSPECIFIED)
 	if err != nil {
 		return nil, err
 	}
