@@ -323,9 +323,9 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match or sticky worker unavailable, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
+	taskQueue, unversionedTqm, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
 	if err != nil {
-		if err == errUserDataDisabled {
+		if errors.Is(err, errUserDataDisabled) {
 			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
 			// to avoid breaking versioning semantics and dispatching tasks to the wrong workers.
 			err = nil
@@ -363,10 +363,11 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	return tqm.AddTask(ctx, addTaskParams{
-		execution:     addRequest.Execution,
-		taskInfo:      taskInfo,
-		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedSource(),
+		execution:      addRequest.Execution,
+		taskInfo:       taskInfo,
+		source:         addRequest.GetSource(),
+		forwardedFrom:  addRequest.GetForwardedSource(),
+		unversionedTqm: unversionedTqm,
 	})
 }
 
@@ -388,9 +389,9 @@ func (e *matchingEngineImpl) AddActivityTask(
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
+	taskQueue, unversionedTqm, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
 	if err != nil {
-		if err == errUserDataDisabled {
+		if errors.Is(err, errUserDataDisabled) {
 			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
 			// to avoid breaking versioning semantics and dispatching tasks to the wrong workers.
 			err = nil
@@ -423,10 +424,11 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	return tlMgr.AddTask(ctx, addTaskParams{
-		execution:     addRequest.Execution,
-		taskInfo:      taskInfo,
-		source:        addRequest.GetSource(),
-		forwardedFrom: addRequest.GetForwardedSource(),
+		execution:      addRequest.Execution,
+		taskInfo:       taskInfo,
+		source:         addRequest.GetSource(),
+		forwardedFrom:  addRequest.GetForwardedSource(),
+		unversionedTqm: unversionedTqm,
 	})
 }
 
@@ -444,10 +446,16 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		taskQueue, userDataChanged, err := e.redirectToVersionedQueueForAdd(
+		taskQueue, _, userDataChanged, err := e.redirectToVersionedQueueForAdd(
 			ctx, unversionedOrigTaskQueue, directive, stickyInfo)
 		if err != nil {
-			return err
+			if errors.Is(err, errUserDataDisabled) && directive.GetBuildId() == "" {
+				// Only fail tasks with compatiblity constraints when user data is disabled.
+				// "default" directive tasks become unversioned.
+				err = nil
+			} else {
+				return err
+			}
 		}
 		sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
 		tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
@@ -681,9 +689,9 @@ func (e *matchingEngineImpl) QueryWorkflow(
 
 	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
 	// or fail with a relatively short timeout.
-	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, queryRequest.VersionDirective, stickyInfo)
+	taskQueue, _, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, queryRequest.VersionDirective, stickyInfo)
 	if err != nil {
-		if err == errUserDataDisabled {
+		if errors.Is(err, errUserDataDisabled) {
 			// Rewrite to nicer error message
 			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 		}
@@ -1204,7 +1212,7 @@ func (e *matchingEngineImpl) getTask(
 		stickyInfo,
 	)
 	if err != nil {
-		if err == errUserDataDisabled {
+		if errors.Is(err, errUserDataDisabled) {
 			// Rewrite to nicer error message
 			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 		}
@@ -1464,8 +1472,13 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	taskQueue *taskQueueID,
 	directive *taskqueuespb.TaskVersionDirective,
 	stickyInfo stickyInfo,
-) (*taskQueueID, chan struct{}, error) {
+) (*taskQueueID, taskQueueManager, chan struct{}, error) {
 	var buildId string
+	baseTqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	switch dir := directive.GetValue().(type) {
 	case *taskqueuespb.TaskVersionDirective_UseDefault:
 		// leave buildId = "", lookupVersionSetForAdd understands that to mean "default"
@@ -1473,22 +1486,13 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 		buildId = dir.BuildId
 	default:
 		// Unversioned task, leave on unversioned queue.
-		return taskQueue, nil, nil
+		return taskQueue, baseTqm, nil, nil
 	}
 
 	// Have to look up versioning data.
-	baseTqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
-	if err != nil {
-		return nil, nil, err
-	}
 	userData, userDataChanged, err := baseTqm.GetUserData(ctx)
 	if err != nil {
-		if err == errUserDataDisabled && buildId == "" {
-			// Special case when user data disabled: we can send new workflows to the unversioned
-			// queue so they can potentially make progress.
-			return taskQueue, nil, nil
-		}
-		return nil, nil, err
+		return taskQueue, baseTqm, userDataChanged, err
 	}
 	data := userData.GetData().GetVersioningData()
 
@@ -1496,17 +1500,17 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 		// In the sticky case we don't redirect, but we may kick off this worker if there's a
 		// newer one.
 		err := checkVersionForStickyAdd(data, buildId)
-		return taskQueue, userDataChanged, err
+		return taskQueue, baseTqm, userDataChanged, err
 	}
 
 	versionSet, err := lookupVersionSetForAdd(data, buildId)
 	if err == errEmptyVersioningData {
 		// default was requested for an unversioned queue
-		return taskQueue, userDataChanged, nil
+		return taskQueue, baseTqm, userDataChanged, nil
 	} else if err != nil {
-		return nil, nil, err
+		return nil, baseTqm, nil, err
 	}
-	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), userDataChanged, nil
+	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), baseTqm, userDataChanged, nil
 }
 
 func (m *lockableQueryTaskMap) put(key string, value chan *queryResult) {

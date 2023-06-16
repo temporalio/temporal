@@ -42,6 +42,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -93,10 +94,11 @@ type (
 	}
 
 	addTaskParams struct {
-		execution     *commonpb.WorkflowExecution
-		taskInfo      *persistencespb.TaskInfo
-		source        enumsspb.TaskSource
-		forwardedFrom string
+		execution      *commonpb.WorkflowExecution
+		taskInfo       *persistencespb.TaskInfo
+		source         enumsspb.TaskSource
+		forwardedFrom  string
+		unversionedTqm taskQueueManager
 	}
 
 	stickyInfo struct {
@@ -127,6 +129,8 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is availalble.
+		SpoolTask(params addTaskParams) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
 		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged chan struct{}) error
@@ -401,12 +405,28 @@ func (c *taskQueueManagerImpl) AddTask(
 		return false, errRemoteSyncMatchFailed
 	}
 
-	_, err = c.taskWriter.appendTask(params.execution, taskInfo)
+	// Ensure that tasks with the "default" versioning directive get spooled in the unversioned queue as they not
+	// associated with any version set until their execution is touched by a version specific worker.
+	// "compatible" tasks OTOH are associated with a specific version set and should be stored along with all tasks for
+	// that version set.
+	// The task queue default set is dynamic and applies only at dispatch time. Putting "default" tasks into version set
+	// specific queues could cause them to get stuck behind "compatible" tasks when they should be able to progress
+	// independently.
+	if _, ok := taskInfo.VersionDirective.GetValue().(*taskqueuespb.TaskVersionDirective_UseDefault); ok {
+		err = params.unversionedTqm.SpoolTask(params)
+	} else {
+		err = c.SpoolTask(params)
+	}
+	return false, err
+}
+
+func (c *taskQueueManagerImpl) SpoolTask(params addTaskParams) error {
+	_, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
 	c.signalIfFatal(err)
 	if err == nil {
 		c.taskReader.Signal()
 	}
-	return false, err
+	return err
 }
 
 // GetTask blocks waiting for a task.
