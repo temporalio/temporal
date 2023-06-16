@@ -1574,10 +1574,11 @@ func (s *clientIntegrationSuite) TestBatchSignal() {
 func (s *clientIntegrationSuite) TestBatchReset() {
 
 	var count int32
+
 	activityFn := func(ctx context.Context) (int32, error) {
 		val := atomic.LoadInt32(&count)
 		if val == 0 {
-			return 0, fmt.Errorf("some random error")
+			return 0, temporal.NewApplicationError("some random error", "", false, nil)
 		}
 		return val, nil
 	}
@@ -1616,8 +1617,7 @@ func (s *clientIntegrationSuite) TestBatchReset() {
 		Namespace: s.namespace,
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
 			ResetOperation: &batch.BatchOperationReset{
-				ResetType:        enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK,
-				ResetReapplyType: enumspb.RESET_REAPPLY_TYPE_NONE,
+				ResetType: enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK,
 			},
 		},
 		Executions: []*commonpb.WorkflowExecution{
