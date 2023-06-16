@@ -115,14 +115,14 @@ func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
 	ctx = tr.tlMgr.callerInfoContext(ctx)
 
 dispatchLoop:
-	for {
+	for ctx.Err() == nil {
 		select {
 		case taskInfo, ok := <-tr.taskBuffer:
 			if !ok { // Task queue getTasks pump is shutdown
 				break dispatchLoop
 			}
 			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
-			for {
+			for ctx.Err() == nil {
 				// We checked if the task was expired before putting it in the buffer, but it
 				// might have expired while it sat in the buffer, so we should check again.
 				if taskqueue.IsTaskExpired(taskInfo) {
@@ -136,19 +136,24 @@ dispatchLoop:
 					break
 				}
 				if err == context.Canceled {
-					tr.tlMgr.logger.Info("Taskqueue manager context is cancelled, shutting down")
-					return err
+					break dispatchLoop
 				}
 				// this should never happen unless there is a bug - don't drop the task
 				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
-				tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
-				time.Sleep(taskReaderOfferThrottleWait)
+				if err == errUserDataDisabled {
+					// We're trying to dispatch a versioned task but user data isn't loaded.
+					// Don't log here since it would be too spammy.
+				} else {
+					tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
+				}
+				common.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
 			}
 
 		case <-ctx.Done():
-			return nil
+			break dispatchLoop
 		}
 	}
+	tr.tlMgr.logger.Info("Taskqueue manager context is cancelled, shutting down")
 	return nil
 }
 

@@ -174,6 +174,14 @@ func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 	}
 }
 
+// InterruptibleSleep is like time.Sleep but can be interrupted by a context.
+func InterruptibleSleep(ctx context.Context, timeout time.Duration) {
+	select {
+	case <-time.After(timeout):
+	case <-ctx.Done():
+	}
+}
+
 // CreatePersistenceClientRetryPolicy creates a retry policy for calls to persistence
 func CreatePersistenceClientRetryPolicy() backoff.RetryPolicy {
 	return backoff.NewExponentialRetryPolicy(persistenceClientRetryInitialInterval).
