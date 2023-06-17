@@ -208,6 +208,10 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_RealAct
 			return nil, nil
 		case 3:
 			fmt.Println(s.formatHistory(history))
+			// reject update
+			return nil, nil
+		case 4:
+			fmt.Println(s.formatHistory(history))
 			commands := s.acceptUpdateCommands(tv, "1")
 			commands = append(commands, &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -219,11 +223,11 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_RealAct
 				}},
 			})
 			return commands, nil
-		case 4:
+		case 5:
 			fmt.Println(s.formatHistory(history))
 			commands := s.completeUpdateCommands(tv, "1")
 			return commands, nil
-		case 5:
+		case 6:
 			fmt.Println(s.formatHistory(history))
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -247,10 +251,14 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_RealAct
 		case 3:
 			updRequestMsg = task.Messages[0]
 			// s.EqualValues(5, updRequestMsg.GetEventId())
-			return s.acceptUpdateMessages(tv, updRequestMsg, "1"), nil
+			return s.rejectUpdateMessages(tv, updRequestMsg, "2"), nil
 		case 4:
-			return s.completeUpdateMessages(tv, updRequestMsg, "1"), nil
+			updRequestMsg = task.Messages[0]
+			// s.EqualValues(5, updRequestMsg.GetEventId())
+			return s.acceptUpdateMessages(tv, updRequestMsg, "1"), nil
 		case 5:
+			return s.completeUpdateMessages(tv, updRequestMsg, "1"), nil
+		case 6:
 			return nil, nil
 		default:
 			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
@@ -283,6 +291,14 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_RealAct
 	s.NoError(err)
 	s.EqualValues(0, wt1Resp.ResetHistoryEventId)
 
+	// reject update 2
+	update2ResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+	go func() {
+		update2ResultCh <- s.sendUpdateNoError(tv, "2")
+	}()
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.NoError(err)
+
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 	go func() {
 		updateResultCh <- s.sendUpdateNoError(tv, "1")
@@ -310,8 +326,8 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_RealAct
 	s.Nil(completeWorkflowResp.GetWorkflowTask())
 	s.EqualValues(0, completeWorkflowResp.ResetHistoryEventId)
 
-	s.Equal(5, wtHandlerCalls)
-	s.Equal(5, msgHandlerCalls)
+	s.Equal(6, wtHandlerCalls)
+	s.Equal(6, msgHandlerCalls)
 
 	s.printWorkflowHistory(s.namespace, tv.WorkflowExecution())
 	// 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
