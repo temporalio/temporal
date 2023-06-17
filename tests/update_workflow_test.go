@@ -330,23 +330,33 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_RealAct
 	s.Equal(6, msgHandlerCalls)
 
 	s.printWorkflowHistory(s.namespace, tv.WorkflowExecution())
-	// 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
-	//
-	// 	s.EqualHistoryEvents(`
-	//   1 WorkflowExecutionStarted
-	//   2 WorkflowTaskScheduled
-	//   3 WorkflowTaskStarted
-	//   4 WorkflowTaskCompleted
-	//   5 WorkflowTaskScheduled // Was speculative WT...
-	//   6 WorkflowTaskStarted
-	//   7 WorkflowTaskCompleted // ...and events were written to the history when WT completes.
-	//   8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
-	//   9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
-	//  10 WorkflowTaskScheduled
-	//  11 WorkflowTaskStarted
-	//  12 WorkflowTaskCompleted
-	//  13 WorkflowExecutionCompleted
-	// `, events)
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted 
+  5 ActivityTaskScheduled 
+  6 WorkflowTaskScheduled 
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted 
+  9 WorkflowTaskScheduled 
+ 10 ActivityTaskStarted
+ 11 ActivityTaskCompleted 
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted 
+ 14 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId":11}
+ 15 ActivityTaskScheduled 
+ 16 WorkflowTaskScheduled 
+ 17 WorkflowTaskStarted
+ 18 WorkflowTaskCompleted 
+ 19 WorkflowExecutionUpdateCompleted
+ 20 WorkflowTaskScheduled 
+ 21 WorkflowTaskStarted
+ 22 WorkflowTaskCompleted 
+ 23 WorkflowExecutionCompleted
+	`, events)
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptComplete() {
