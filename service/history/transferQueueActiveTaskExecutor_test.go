@@ -125,7 +125,7 @@ type (
 	}
 )
 
-var defaultWorkflowTaskCompletionLimits = workflow.WorkflowTaskCompletionLimits{MaxResetPoints: configs.DefaultHistoryMaxAutoResetPoints, MaxTrackedBuildIds: configs.DefaultHistoryMaxTrackedBuildIds}
+var defaultWorkflowTaskCompletionLimits = workflow.WorkflowTaskCompletionLimits{MaxResetPoints: configs.DefaultHistoryMaxAutoResetPoints, MaxSearchAttributeValueSize: 2048}
 
 func TestTransferQueueActiveTaskExecutorSuite(t *testing.T) {
 	s := new(transferQueueActiveTaskExecutorSuite)

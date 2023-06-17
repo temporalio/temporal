@@ -420,9 +420,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
 	}
 
+	nsName := namespaceEntry.Name().String()
 	limits := workflow.WorkflowTaskCompletionLimits{
-		MaxResetPoints:     handler.config.MaxAutoResetPoints(namespaceEntry.Name().String()),
-		MaxTrackedBuildIds: handler.config.MaxTrackedBuildIds(namespaceEntry.Name().String()),
+		MaxResetPoints:              handler.config.MaxAutoResetPoints(nsName),
+		MaxSearchAttributeValueSize: handler.config.SearchAttributesSizeOfValueLimit(nsName),
 	}
 	// TODO: this metric is inaccurate, it should only be emitted if a new binary checksum (or build ID) is added in this completion.
 	if ms.GetExecutionInfo().AutoResetPoints != nil && limits.MaxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {
